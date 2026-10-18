@@ -36,6 +36,8 @@ export interface AuthorizationCode {
   readonly codeChallenge: string;
   readonly resource: string;
   readonly scope: string | null;
+  /** The party the client is: the proxy ship its token calls the fleet as. */
+  readonly party: string;
   readonly expiresAt: Date;
 }
 
@@ -53,6 +55,7 @@ export interface TokenPair {
   readonly clientId: string;
   readonly resource: string;
   readonly scope: string | null;
+  readonly party: string;
   readonly accessHash: string;
   readonly accessExpiresAt: Date;
   readonly refreshHash: string;

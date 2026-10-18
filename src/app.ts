@@ -44,7 +44,8 @@ import { createReadFleet } from './core/installation/read-fleet.js';
 import { createIsServed } from './core/installation/served.js';
 import { createSetFleetEnabled } from './core/installation/set-fleet-enabled.js';
 import { createAuthenticateOperator } from './core/operator/authenticate-operator.js';
-import { createApproveParty, type ApproveParty } from './core/parties/approve-party.js';
+import { createApproveClientParty, createApproveParty, type ApproveParty } from './core/parties/approve-party.js';
+import { createReadClientParty } from './core/parties/read-client-party.js';
 import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
 import { createListParties } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
@@ -175,7 +176,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     fleetUrl: options.fleetUrl,
     authenticateOperator,
     readAuthorization,
-    approveAuthorization: createApproveAuthorization({ readAuthorization, codes: authorizationCodes, secrets: oauthSecrets, clock, issuer }),
+    approveAuthorization: createApproveAuthorization({
+      readAuthorization,
+      codes: authorizationCodes,
+      secrets: oauthSecrets,
+      clock,
+      issuer,
+      parties,
+      approveClientParty: createApproveClientParty({ connections, parties, door, hasher: sha256RequestHasher, clock }),
+    }),
+    readClientParty: createReadClientParty({ parties }),
     exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: createPrismaIssuedTokens(prisma), secrets: oauthSecrets, clock, resource }),
   });
 

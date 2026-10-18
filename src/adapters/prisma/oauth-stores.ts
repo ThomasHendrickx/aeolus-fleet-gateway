@@ -35,8 +35,8 @@ export function createPrismaAuthorizationCodes(db: Db): AuthorizationCodes {
       if (!row) {
         return undefined;
       }
-      const { codeHash: hash, clientId, redirectUri, codeChallenge, resource, scope, expiresAt } = row;
-      return { code: { codeHash: hash, fleetId: idSchema('fleet').parse(row.fleetId), clientId, redirectUri, codeChallenge, resource, scope, expiresAt }, wasUsed: marked.count === 0 };
+      const { codeHash: hash, clientId, redirectUri, codeChallenge, resource, scope, party, expiresAt } = row;
+      return { code: { codeHash: hash, fleetId: idSchema('fleet').parse(row.fleetId), clientId, redirectUri, codeChallenge, resource, scope, party, expiresAt }, wasUsed: marked.count === 0 };
     },
   };
 }

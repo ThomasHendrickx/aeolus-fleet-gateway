@@ -183,15 +183,15 @@ describe('argo approves a client as a party: the proxy ship it calls the fleet a
   it("says why when the party's proxy ship could not be crewed, issuing no code", async () => {
     fleet.state.isAnswering = false;
 
-    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true, newParty: NEW_PARTY })).resolves.toMatchObject({
-      isOk: false,
-      error: { kind: 'partyRefused', message: expect.stringContaining('did not answer') as unknown },
-    });
+    const approved = await approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true, newParty: NEW_PARTY });
+
+    expect(!approved.isOk && approved.error.kind === 'partyRefused' && approved.error.message).toMatch(/did not answer/);
     expect(codes.held.size).toBe(0);
   });
 
   it('refuses a party whose proxy ship awaits crew, until argo hands its secret over', async () => {
     fleet.state.isLosingNextAnswer = true;
+    await approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true, newParty: NEW_PARTY });
 
     await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true, newParty: NEW_PARTY })).resolves.toMatchObject({ isOk: false, error: { kind: 'partyRefused' } });
     await expect(parties.findByClient(FLEET_ID, CIMD_CLIENT)).resolves.toMatchObject({ state: 'awaitingCrew', proxyShipId: PROXY_SHIP_ID });

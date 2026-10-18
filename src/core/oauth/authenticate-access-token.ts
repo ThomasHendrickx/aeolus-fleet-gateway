@@ -8,6 +8,8 @@ import type { IssuedTokens, OAuthSecrets } from './ports.js';
 export interface AccessTokenHolder {
   readonly fleetId: FleetId;
   readonly clientId: string;
+  /** The party the client is: the proxy ship it calls the fleet as. */
+  readonly party: string;
   readonly scope: string | null;
 }
 
@@ -23,6 +25,6 @@ export function createAuthenticateAccessToken(deps: { tokens: IssuedTokens; secr
     if (pair?.state !== 'active' || pair.resource !== deps.resource || pair.accessExpiresAt.getTime() <= deps.clock.now().getTime()) {
       return err({ kind: 'invalidToken' });
     }
-    return ok({ fleetId: pair.fleetId, clientId: pair.clientId, scope: pair.scope });
+    return ok({ fleetId: pair.fleetId, clientId: pair.clientId, party: pair.party, scope: pair.scope });
   };
 }

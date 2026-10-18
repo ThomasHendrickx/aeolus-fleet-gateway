@@ -7,16 +7,22 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
-import type { ApproveAuthorization } from '../../core/oauth/approve-authorization.js';
+import { idSchema, type FleetId } from '@aeolus-fleet/common';
+
+import type { ApprovalRefusal, ApproveAuthorization } from '../../core/oauth/approve-authorization.js';
 import type { ExchangeToken } from '../../core/oauth/exchange-token.js';
 import type { AuthorizationRefusal, AuthorizationRequest, ReadAuthorization } from '../../core/oauth/read-authorization.js';
 import type { AuthenticateOperator } from '../../core/operator/authenticate-operator.js';
+import type { ReadClientParty } from '../../core/parties/read-client-party.js';
+import type { ShownParty } from '../../core/parties/shown-party.js';
 import { acceptForms, escaped, isSameOrigin, layout } from './html.js';
+import { randomUUID } from 'node:crypto';
 
 const HTTP_FOUND = 302;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
+const HTTP_CONFLICT = 409;
 
 /** The parameters of an authorization request the page carries from its query to its form. */
 const AUTHORIZATION_PARAMETERS = ['response_type', 'client_id', 'redirect_uri', 'code_challenge', 'code_challenge_method', 'resource', 'state', 'scope'] as const;
@@ -33,6 +39,7 @@ export interface OAuthRoutesDeps {
   readAuthorization: ReadAuthorization;
   approveAuthorization: ApproveAuthorization;
   exchangeToken: ExchangeToken;
+  readClientParty: ReadClientParty;
 }
 
 function fieldsOf(value: unknown): Record<string, string> {
@@ -63,14 +70,30 @@ function sendBack(reply: FastifyReply, answer: { refusal: AuthorizationRefusal; 
   return reply.code(HTTP_FOUND).header('location', url.toString()).send();
 }
 
-function approvalForm(request: Record<string, string | undefined>, authorization: AuthorizationRequest): string {
+/** What the page shows and asks: the client, and its party, or the fields to name one at its first approval. */
+interface ApprovalPage {
+  request: Record<string, string | undefined>;
+  authorization: AuthorizationRequest;
+  party: ShownParty | undefined;
+  error?: string;
+}
+
+function approvalForm({ request, authorization, party, error }: ApprovalPage): string {
   const hidden = Object.entries(request)
     .flatMap(([name, value]) => (value === undefined ? [] : [`<input type="hidden" name="${escaped(name)}" value="${escaped(value)}">`]))
     .join('');
+  const asParty =
+    party === undefined
+      ? `<p>It is no party of your fleet yet. Name its proxy ship, the ship it calls the fleet as, and the owner who answers for it.</p>
+<input type="hidden" name="partyRequestId" value="${randomUUID()}">
+<label>Name, the proxy ship's<input name="partyName" required></label>
+<label>Owner's ship id (a person's ship, or argo)<input name="ownerShipId" required></label>`
+      : `<p>It calls the fleet as the party <strong>${escaped(party.name)}</strong>.</p>`;
   return `<h1>Approve an MCP client</h1>
+${error === undefined ? '' : `<p class="error">${escaped(error)}</p>`}
 <p><strong>${escaped(authorization.clientName)}</strong> asks to call your fleet's ships through the gateway.</p>
 <p class="muted">Client ${escaped(authorization.clientId)}, sent back to ${escaped(authorization.redirectUri)}.</p>
-<form method="post" action="/authorize" class="inline">${hidden}<button name="decision" value="approve">Approve</button><button name="decision" value="deny">Deny</button></form>`;
+<form method="post" action="/authorize">${hidden}${asParty}<div class="inline"><button name="decision" value="approve">Approve</button> <button name="decision" value="deny" formnovalidate>Deny</button></div></form>`;
 }
 
 /** Client credentials in an HTTP Basic header (RFC 6749, 2.3.1): each part form-urlencoded. */
@@ -132,7 +155,8 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
     if (!read.isOk) {
       return sendBack(reply, { refusal: read.error, issuer: deps.issuer });
     }
-    return htmlPage(reply, { status: 200, body: approvalForm(parameters, read.value) });
+    const party = await deps.readClientParty({ fleetId: argo.fleetId, clientId: read.value.clientId });
+    return htmlPage(reply, { status: 200, body: approvalForm({ request: parameters, authorization: read.value, party }) });
   });
 
   server.post('/authorize', async (request, reply) => {
@@ -144,12 +168,30 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
       return argo.refused;
     }
     const fields = fieldsOf(request.body);
-    const decided = await deps.approveAuthorization({ fleetId: argo.fleetId, request: authorizationRequestOf(fields), isApproved: fields.decision === 'approve' });
+    const parameters = authorizationRequestOf(fields);
+    const owner = idSchema('ship').safeParse(fields.ownerShipId);
+    const newParty = fields.partyName === undefined || fields.partyRequestId === undefined || !owner.success ? undefined : { requestId: fields.partyRequestId, name: fields.partyName, ownerShipId: owner.data };
+    const decided = await deps.approveAuthorization({ fleetId: argo.fleetId, request: parameters, isApproved: fields.decision === 'approve', ...(newParty === undefined ? {} : { newParty }) });
     if (!decided.isOk) {
-      return sendBack(reply, { refusal: decided.error, issuer: deps.issuer });
+      return refusedApproval(reply, { refusal: decided.error, request: parameters, fleetId: argo.fleetId });
     }
     return reply.code(HTTP_FOUND).header('location', decided.value.redirectTo).send();
   });
+
+  /** A refused approval: back to the client, or the page again with what argo must fix. */
+  const refusedApproval = async (reply: FastifyReply, refused: { refusal: ApprovalRefusal; request: Record<string, string | undefined>; fleetId: FleetId }): Promise<FastifyReply> => {
+    const { refusal } = refused;
+    if (refusal.kind === 'invalidClient' || refusal.kind === 'redirect') {
+      return sendBack(reply, { refusal, issuer: deps.issuer });
+    }
+    const read = await deps.readAuthorization(refused.request);
+    if (!read.isOk) {
+      return sendBack(reply, { refusal: read.error, issuer: deps.issuer });
+    }
+    const party = await deps.readClientParty({ fleetId: refused.fleetId, clientId: read.value.clientId });
+    const error = refusal.kind === 'needsParty' ? "Name the client's party and its owner (a ship id, shp_...)" : refusal.message;
+    return htmlPage(reply, { status: refusal.kind === 'needsParty' ? HTTP_BAD_REQUEST : HTTP_CONFLICT, body: approvalForm({ request: refused.request, authorization: read.value, party, error }) });
+  };
 
   server.post('/token', async (request, reply) => {
     const exchanged = await deps.exchangeToken({ ...fieldsOf(request.body), ...basicCredentials(request.headers.authorization) });

@@ -73,6 +73,10 @@ export function createPrismaPartyStore(db: Db): PartyStore & { crewed(): Promise
       const row = await db.party.findUnique({ where: { fleetId_name: { fleetId, name } } });
       return row ? partyOf(row) : undefined;
     },
+    findByClient: async (fleetId, clientId) => {
+      const row = await db.party.findUnique({ where: { fleetId_clientId: { fleetId, clientId } } });
+      return row ? partyOf(row) : undefined;
+    },
     list: async (fleetId) => (await db.party.findMany({ where: { fleetId }, orderBy: { name: 'asc' } })).map(partyOf),
     save: async (party) => {
       const columns = {

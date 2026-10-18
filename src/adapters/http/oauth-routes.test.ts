@@ -9,6 +9,11 @@ import { createExchangeToken } from '../../core/oauth/exchange-token.js';
 import { createReadAuthorization } from '../../core/oauth/read-authorization.js';
 import type { AuthenticateOperator } from '../../core/operator/authenticate-operator.js';
 import { err, ok } from '../../core/shared/result.js';
+import { createApproveClientParty } from '../../core/parties/approve-party.js';
+import { createReadClientParty } from '../../core/parties/read-client-party.js';
+import { SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
+import { plainHasher } from '../../../test/support/memory-installation.js';
+import { OWNER_SHIP_ID, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { registerOAuthRoutes } from './oauth-routes.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
@@ -29,6 +34,7 @@ const authenticateOperator: AuthenticateOperator = (cookie) => {
 };
 
 let server: FastifyInstance;
+let parties: ReturnType<typeof memoryPartyStore>;
 
 beforeEach(async () => {
   const clients = memoryOAuthClients();
@@ -37,6 +43,10 @@ beforeEach(async () => {
   const secrets = fakeSecrets();
   const clock = { now: () => new Date('2026-10-19T09:00:00.000Z') };
   const readAuthorization = createReadAuthorization({ clients, documents: fakeClientMetadataDocuments(), resource: RESOURCE });
+  parties = memoryPartyStore();
+  const connections = memoryConnectionStore();
+  await connections.save({ fleetId: FLEET, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-19T09:00:00.000Z') });
+  const approveClientParty = createApproveClientParty({ connections, parties, door: fakeProxyShipFleet().door, hasher: plainHasher, clock });
   server = Fastify({ logger: false });
   registerOAuthRoutes(server, {
     issuer: ISSUER,
@@ -44,7 +54,8 @@ beforeEach(async () => {
     fleetUrl: 'https://fleet.example.com',
     authenticateOperator,
     readAuthorization,
-    approveAuthorization: createApproveAuthorization({ readAuthorization, codes, secrets, clock, issuer: ISSUER }),
+    approveAuthorization: createApproveAuthorization({ readAuthorization, codes, secrets, clock, issuer: ISSUER, parties, approveClientParty }),
+    readClientParty: createReadClientParty({ parties }),
     exchangeToken: createExchangeToken({ clients, codes, tokens: memoryIssuedTokens(), secrets, clock, resource: RESOURCE }),
   });
   await server.ready();
@@ -53,6 +64,9 @@ beforeEach(async () => {
 afterEach(async () => {
   await server.close();
 });
+
+/** The party argo names for the client at its first approval. */
+const NEW_PARTY = { partyRequestId: 'r-1', partyName: 'cursor', ownerShipId: OWNER_SHIP_ID };
 
 const REQUEST = { response_type: 'code', client_id: CLIENT, redirect_uri: CALLBACK, code_challenge: 'S256(verifier-1)', code_challenge_method: 'S256', resource: RESOURCE, state: 'state-1' };
 
@@ -138,10 +152,30 @@ describe('argo approves an MCP client at /authorize, signed in to the console', 
   });
 
   it('sends the client back with a code once argo approves', async () => {
-    const answer = await decide({ ...REQUEST, decision: 'approve' });
+    const answer = await decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve' });
 
     expect(answer.statusCode).toBe(302);
     expect(String(answer.headers.location)).toBe(`${CALLBACK}?code=secret-1&state=state-1&iss=${encodeURIComponent(ISSUER)}`);
+  });
+
+  it("asks argo to name the party of a client that is none yet", async () => {
+    const page = await authorizePage(ARGO);
+
+    expect(page.body).toContain('name="partyName"');
+  });
+
+  it('names the party of a client that is one, asking nothing more', async () => {
+    await decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve' });
+
+    const page = await authorizePage(ARGO);
+
+    expect({ isParty: page.body.includes('the party <strong>cursor</strong>'), isAsking: page.body.includes('name="partyName"') }).toEqual({ isParty: true, isAsking: false });
+  });
+
+  it('shows the page again, asking for the party, when argo approves a client that is none without naming it', async () => {
+    const answer = await decide({ ...REQUEST, decision: 'approve' });
+
+    expect({ status: answer.statusCode, isAsking: answer.body.includes('name="partyName"') }).toEqual({ status: 400, isAsking: true });
   });
 
   it('sends the client back with access_denied once argo denies', async () => {
@@ -151,7 +185,7 @@ describe('argo approves an MCP client at /authorize, signed in to the console', 
   });
 
   it('refuses a decision sent from another origin, or by a viewer', async () => {
-    const answers = await Promise.all([decide({ ...REQUEST, decision: 'approve', origin: 'https://evil.example.com' }), decide({ ...REQUEST, decision: 'approve', cookie: VIEWER })]);
+    const answers = await Promise.all([decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve', origin: 'https://evil.example.com' }), decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve', cookie: VIEWER })]);
 
     expect(answers.map((answer) => answer.statusCode)).toEqual([403, 403]);
   });
@@ -159,7 +193,7 @@ describe('argo approves an MCP client at /authorize, signed in to the console', 
 
 describe('a client takes its code for tokens at /token', () => {
   it('answers the tokens as JSON, never cached, the client authenticated with HTTP Basic', async () => {
-    await decide({ ...REQUEST, decision: 'approve' });
+    await decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve' });
 
     const answer = await token({ grant_type: 'authorization_code', code: 'secret-1', redirect_uri: CALLBACK, code_verifier: 'verifier-1', resource: RESOURCE }, { authorization: `Basic ${Buffer.from(`${CLIENT}:cursor-secret`).toString('base64')}` });
 
@@ -167,7 +201,7 @@ describe('a client takes its code for tokens at /token', () => {
   });
 
   it('takes the client secret in the form too', async () => {
-    await decide({ ...REQUEST, decision: 'approve' });
+    await decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve' });
 
     const answer = await token({ grant_type: 'authorization_code', code: 'secret-1', redirect_uri: CALLBACK, code_verifier: 'verifier-1', client_id: CLIENT, client_secret: 'cursor-secret' });
 

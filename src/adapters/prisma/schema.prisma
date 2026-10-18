@@ -129,6 +129,7 @@ model AuthorizationCode {
   codeChallenge String    @map("code_challenge")
   resource      String
   scope         String?
+  party         String
   expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
   usedAt        DateTime? @map("used_at") @db.Timestamptz(3)
 
@@ -146,6 +147,7 @@ model IssuedToken {
   clientId         String   @map("client_id")
   resource         String
   scope            String?
+  party            String
   accessExpiresAt  DateTime @map("access_expires_at") @db.Timestamptz(3)
   refreshExpiresAt DateTime @map("refresh_expires_at") @db.Timestamptz(3)
   state            String

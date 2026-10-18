@@ -2,8 +2,12 @@ import { auth, type OAuthClientProvider, type StoredOAuthTokens } from '@modelco
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
+import { idSchema } from '@aeolus-fleet/common';
+
+import { createPrismaClient } from '../src/adapters/prisma/client.js';
+import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
-import { signIn } from './support/argo.js';
+import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { mutate } from './support/gateway-api.js';
@@ -11,6 +15,10 @@ import { mutate } from './support/gateway-api.js';
 // An MCP client signs in to the gateway with the MCP TypeScript SDK, as
 // Claude or Cursor would: argo pre-registers it, approves it at /authorize
 // with a real console session, and the client takes its code for tokens.
+// Core 0.27 commissions no app ship for the gateway (aeolus-fleet#959), so
+// argo commissions the client's proxy ship in the console, the party is kept
+// awaiting crew as the gateway's commission leaves it, and argo hands its
+// secret over with parties.crew; the approval then takes that party.
 
 const CALLBACK = 'http://127.0.0.1:33418/callback';
 
@@ -18,13 +26,15 @@ let fleet: FleetServer;
 let app: GatewayApp;
 let address: string;
 let cookie: string;
+let databaseUrl: string;
 
 beforeEach(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
   cookie = await signIn(fleet);
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
-  app = createGatewayApp({ databaseUrl: await migratedDatabase(inject('postgresUrl')), fleetUrl: fleet.url, logger: false, publicUrl: address });
+  databaseUrl = await migratedDatabase(inject('postgresUrl'));
+  app = createGatewayApp({ databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address });
   await app.server.listen({ host: '127.0.0.1', port });
 });
 
@@ -73,13 +83,42 @@ async function approved(sentTo: URL): Promise<{ code: string; iss: string | null
   return { code: z.string().parse(back.searchParams.get('code')), iss: back.searchParams.get('iss') };
 }
 
+/** The client's party, crewed by the gateway: what 0.28's commission at its first approval leaves, made with 0.27's doors. */
+async function aCrewedParty(clientId: string): Promise<void> {
+  const proxy = await commission(fleet, { cookie, ship: { name: 'test-client', type: 'mcp-client', kind: 'app' } });
+  const agent = await commission(fleet, { cookie, ship: { name: 'owner', type: 'agent' } });
+  const whoami = await fetch(`${fleet.url}/api/v1/ship/whoami`, { headers: { authorization: `Bearer ${await register(fleet, agent)}` } });
+  const { fleetId } = z.object({ fleetId: idSchema('fleet') }).parse(await whoami.json());
+  const prisma = createPrismaClient(databaseUrl);
+  await createPrismaPartyStore(prisma).save({
+    fleetId,
+    name: 'test-client',
+    kind: 'mcpClient',
+    clientId,
+    // The owner is only kept by the gateway; core 0.28 checks it at the commission.
+    ownerShipId: agent.shipId,
+    state: 'awaitingCrew',
+    proxyShipId: proxy.shipId,
+    secret: null,
+    crewToken: null,
+    requestId: 'approve-test-client',
+    requestHash: 'h',
+    approvedAt: new Date(),
+  });
+  await prisma.$disconnect();
+  const crewed = await mutate(address, { procedure: 'parties.crew', cookie, body: { name: 'test-client', secret: proxy.secret } });
+  expect(crewed.status).toBe(200);
+}
+
 describe('an MCP client signs in to the gateway with the MCP TypeScript SDK', () => {
   it.each([
     ['a confidential client', true],
     ['a public client', false],
   ])('%s gets tokens once argo approves it', async (_what, isConfidential) => {
     const response = await mutate(address, { procedure: 'oauth.registerClient', cookie, body: { name: 'Test client', redirectUris: [CALLBACK], isConfidential } });
-    const client = aClient(registered.parse(await response.json()).result.data);
+    const information = registered.parse(await response.json()).result.data;
+    await aCrewedParty(information.clientId);
+    const client = aClient(information);
     const serverUrl = `${address}/mcp`;
 
     await expect(auth(client.provider, { serverUrl })).resolves.toBe('REDIRECT');
