@@ -22,7 +22,7 @@ function withBearer(token = MOCK_CRM_BEARER): McpServerConnection {
 }
 
 function withClientCredentials(clientSecret = MOCK_CRM_CLIENT.clientSecret): McpServerConnection {
-  return { url: crm.url, credential: { kind: 'clientCredentials', clientId: MOCK_CRM_CLIENT.clientId, clientSecret } };
+  return { url: crm.url, credential: { kind: 'clientCredentials', clientId: MOCK_CRM_CLIENT.clientId, clientSecret, issuer: new URL(crm.url).origin } };
 }
 
 describe('listing an outside MCP server\'s tools', () => {
@@ -45,7 +45,7 @@ describe('listing an outside MCP server\'s tools', () => {
       title: 'Create a deal',
       description: 'Opens a deal for a contact; each call opens one.',
       inputSchema: {
-        $schema: 'http://json-schema.org/draft-07/schema#',
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
         type: 'object',
         properties: { contactId: { type: 'string' }, title: { type: 'string' }, amount: { type: 'number' } },
         required: ['contactId', 'title', 'amount'],

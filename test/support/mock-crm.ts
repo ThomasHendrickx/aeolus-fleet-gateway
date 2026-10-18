@@ -218,6 +218,8 @@ export async function startMockCrm(options: MockCrmOptions = {}): Promise<MockCr
   server.get('/.well-known/oauth-protected-resource', () => ({ resource: crm.url, authorization_servers: [origin()] }));
   server.get('/.well-known/oauth-authorization-server', () => ({
     issuer: origin(),
+    // RFC 8414 asks for one even where no flow uses it.
+    authorization_endpoint: `${origin()}/authorize`,
     token_endpoint: `${origin()}/token`,
     grant_types_supported: ['client_credentials'],
     token_endpoint_auth_methods_supported: ['client_secret_basic'],
