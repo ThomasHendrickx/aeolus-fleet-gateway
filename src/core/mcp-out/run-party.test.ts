@@ -4,11 +4,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { aPushedDelivery, fakeProxyShipCrew } from '../../../test/support/mcp-out-fakes.js';
 import { OWNER_SHIP_ID, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
-import type { Party } from '../parties/party.js';
+import type { McpServerParty } from '../parties/party.js';
 import type { HandCall, HandOutcome } from './hand-call.js';
 import { createRunParty, type Sleep } from './run-party.js';
 
-const CRM: Party = {
+const CRM: McpServerParty = {
   fleetId: FLEET_ID,
   name: 'crm',
   kind: 'mcpServer',
@@ -69,7 +69,7 @@ beforeEach(() => {
   sleeps = [];
 });
 
-function run(party: Party = CRM) {
+function run(party: McpServerParty = CRM) {
   return createRunParty({ crew, handCall, sleep, pollMs: 2_000, againWaitsMs: [1_000, 5_000, 30_000] })({ party, signal: stop.signal });
 }
 

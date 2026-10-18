@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgetter.js';
 import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
-import type { Party } from '../src/core/parties/party.js';
+import type { McpServerParty } from '../src/core/parties/party.js';
 import { migratedDatabase } from './support/database.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
@@ -23,7 +23,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-function aParty(overrides: Partial<Party> = {}): Party {
+function aParty(overrides: Partial<McpServerParty> = {}): McpServerParty {
   return {
     fleetId: FLEET,
     name: 'crm',

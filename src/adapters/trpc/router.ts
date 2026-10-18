@@ -184,16 +184,11 @@ const credentialInputSchema = z.discriminatedUnion('kind', [
 ]);
 
 /** A party as argo reads it: never its credential or its crew token. */
-const shownPartySchema = z.object({
-  name: z.string(),
-  kind: z.literal('mcpServer'),
-  url: z.string(),
-  credentialKind: z.enum(['bearer', 'clientCredentials']),
-  ownerShipId: z.string(),
-  concurrencyLimit: z.int(),
-  state: z.enum(['commissioning', 'awaitingCrew', 'crewed']),
-  proxyShipId: z.string().nullable(),
-});
+const shownPartyBase = { name: z.string(), ownerShipId: z.string(), state: z.enum(['commissioning', 'awaitingCrew', 'crewed']), proxyShipId: z.string().nullable() };
+const shownPartySchema = z.discriminatedUnion('kind', [
+  z.object({ ...shownPartyBase, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
+  z.object({ ...shownPartyBase, kind: z.literal('mcpClient'), clientId: z.string() }),
+]);
 
 /** The connection as the console reads it: whether the gateway serves the fleet, and its connection. */
 const connectionStatusOutputSchema = z.object({

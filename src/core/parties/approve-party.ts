@@ -6,36 +6,12 @@ import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { McpServerCredential } from '../vault/credential.js';
-import type { Party, PartyState } from './party.js';
+import type { McpServerParty } from './party.js';
+import { shownPartyOf, type ShownParty } from './shown-party.js';
 import type { PartyStore, ProxyShipDoor } from './ports.js';
 
 /** The type of every outside MCP server's proxy ship. */
 export const MCP_SERVER_SHIP_TYPE = 'mcp-server';
-
-/** A party as argo reads it: never its credential or its crew token. */
-export interface ShownParty {
-  name: string;
-  kind: 'mcpServer';
-  url: string;
-  credentialKind: McpServerCredential['kind'];
-  ownerShipId: ShipId;
-  concurrencyLimit: number;
-  state: PartyState;
-  proxyShipId: ShipId | null;
-}
-
-export function shownPartyOf(party: Party): ShownParty {
-  return {
-    name: party.name,
-    kind: party.kind,
-    url: party.url,
-    credentialKind: party.credential.kind,
-    ownerShipId: party.ownerShipId,
-    concurrencyLimit: party.concurrencyLimit,
-    state: party.state,
-    proxyShipId: party.proxyShipId,
-  };
-}
 
 export type ApprovePartyRefusal = DomainError<'NOT_CONNECTED' | 'PARTY_EXISTS' | 'COMMISSION_REFUSED' | 'FLEET_UNAVAILABLE'>;
 
@@ -63,12 +39,12 @@ export type ApproveParty = (input: {
  */
 export function createApproveParty(deps: { connections: ConnectionStore; parties: PartyStore; door: ProxyShipDoor; hasher: RequestHasher; clock: Clock }): ApproveParty {
   /** Crews the party's commissioned proxy ship with the secret kept for it. */
-  const crewed = async (party: Party & { proxyShipId: ShipId; secret: string }): Promise<Result<ShownParty, ApprovePartyRefusal>> => {
+  const crewed = async (party: McpServerParty & { proxyShipId: ShipId; secret: string }): Promise<Result<ShownParty, ApprovePartyRefusal>> => {
     const registered = await deps.door.register({ shipId: party.proxyShipId, secret: party.secret });
     if (!registered.isOk) {
       return refuse('FLEET_UNAVAILABLE', `The fleet did not let the gateway crew the proxy ship: ${registered.error.message}`);
     }
-    const done: Party = { ...party, state: 'crewed', secret: null, crewToken: registered.value.crewToken };
+    const done: McpServerParty = { ...party, state: 'crewed', secret: null, crewToken: registered.value.crewToken };
     await deps.parties.save(done);
     return ok(shownPartyOf(done));
   };
@@ -81,10 +57,10 @@ export function createApproveParty(deps: { connections: ConnectionStore; parties
     }
     const requestHash = deps.hasher.hash(JSON.stringify([requestId, name, input.url, input.credential, input.ownerShipId, input.concurrencyLimit]));
     const earlier = await deps.parties.find(fleetId, name);
-    if (earlier && earlier.requestHash !== requestHash) {
+    if (earlier && (earlier.kind !== 'mcpServer' || earlier.requestHash !== requestHash)) {
       return refuse('PARTY_EXISTS', `A party named ${name} was approved already`);
     }
-    const party: Party = earlier ?? {
+    const party: McpServerParty = earlier ?? {
       fleetId,
       name,
       kind: 'mcpServer',
@@ -120,7 +96,7 @@ export function createApproveParty(deps: { connections: ConnectionStore; parties
       return refuse('COMMISSION_REFUSED', `The fleet refused the proxy ship: ${commissioned.error.message}`);
     }
     const { shipId, secret } = commissioned.value;
-    const awaiting: Party = { ...party, state: 'awaitingCrew', proxyShipId: shipId, secret };
+    const awaiting: McpServerParty = { ...party, state: 'awaitingCrew', proxyShipId: shipId, secret };
     await deps.parties.save(awaiting);
     return secret === null ? ok(shownPartyOf(awaiting)) : crewed({ ...awaiting, proxyShipId: shipId, secret });
   };

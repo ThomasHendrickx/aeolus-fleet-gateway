@@ -5,6 +5,7 @@ import type { Party } from '../../core/parties/party.js';
 import type { PartyStore } from '../../core/parties/ports.js';
 import type { McpServerCredential } from '../../core/vault/credential.js';
 import type { Db } from './client.js';
+import { Prisma } from './generated/client.js';
 
 /** A credential as the vault keeps it, read back. */
 const credentialSchema: z.ZodType<McpServerCredential> = z.discriminatedUnion('kind', [
@@ -16,10 +17,11 @@ interface Row {
   fleetId: string;
   name: string;
   kind: string;
-  url: string;
+  url: string | null;
   credential: unknown;
+  concurrencyLimit: number | null;
+  clientId: string | null;
   ownerShipId: string;
-  concurrencyLimit: number;
   state: string;
   proxyShipId: string | null;
   secret: string | null;
@@ -29,15 +31,13 @@ interface Row {
   approvedAt: Date;
 }
 
+const kindSchema = z.enum(['mcpServer', 'mcpClient']);
+
 function partyOf(row: Row): Party {
-  return {
+  const base = {
     fleetId: idSchema('fleet').parse(row.fleetId),
     name: row.name,
-    kind: z.literal('mcpServer').parse(row.kind),
-    url: row.url,
-    credential: credentialSchema.parse(row.credential),
     ownerShipId: idSchema('ship').parse(row.ownerShipId),
-    concurrencyLimit: row.concurrencyLimit,
     state: z.enum(['commissioning', 'awaitingCrew', 'crewed']).parse(row.state),
     proxyShipId: row.proxyShipId === null ? null : idSchema('ship').parse(row.proxyShipId),
     secret: row.secret,
@@ -46,6 +46,23 @@ function partyOf(row: Row): Party {
     requestHash: row.requestHash,
     approvedAt: row.approvedAt,
   };
+  const kind = kindSchema.parse(row.kind);
+  switch (kind) {
+    case 'mcpServer':
+      return { ...base, kind, url: z.string().parse(row.url), credential: credentialSchema.parse(row.credential), concurrencyLimit: z.int().parse(row.concurrencyLimit) };
+    case 'mcpClient':
+      return { ...base, kind, clientId: z.string().parse(row.clientId) };
+  }
+}
+
+/** The columns only one kind of party fills; the other kind leaves them empty. */
+function outsideColumnsOf(party: Party) {
+  switch (party.kind) {
+    case 'mcpServer':
+      return { url: party.url, credential: { ...party.credential }, concurrencyLimit: party.concurrencyLimit, clientId: null };
+    case 'mcpClient':
+      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: party.clientId };
+  }
 }
 
 /** The parties, one row per fleet and name, each with its vault; and every crewed one, whose calls the gateway takes from its start. */
@@ -60,10 +77,8 @@ export function createPrismaPartyStore(db: Db): PartyStore & { crewed(): Promise
     save: async (party) => {
       const columns = {
         kind: party.kind,
-        url: party.url,
-        credential: { ...party.credential },
+        ...outsideColumnsOf(party),
         ownerShipId: party.ownerShipId,
-        concurrencyLimit: party.concurrencyLimit,
         state: party.state,
         proxyShipId: party.proxyShipId,
         secret: party.secret,

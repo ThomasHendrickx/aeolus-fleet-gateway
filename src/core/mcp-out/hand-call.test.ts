@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { aPushedDelivery, CALLER_SHIP_ID, fakeMcpServers, fakeProxyShipCrew, memoryCalls, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
 import { OWNER_SHIP_ID, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
-import type { Party } from '../parties/party.js';
+import type { McpServerParty } from '../parties/party.js';
 import { createHandCall } from './hand-call.js';
 
-const CRM: Party = {
+const CRM: McpServerParty = {
   fleetId: FLEET_ID,
   name: 'crm',
   kind: 'mcpServer',

@@ -23,7 +23,7 @@ export function createPartyWorkers(deps: { parties: PartyStore; stateParty: Stat
 
   const work = async ({ fleetId, name }: { fleetId: FleetId; name: string }): Promise<void> => {
     const party = await deps.parties.find(fleetId, name);
-    if (party?.state !== 'crewed') {
+    if (party?.kind !== 'mcpServer' || party.state !== 'crewed') {
       return;
     }
     const stated = await deps.stateParty({ fleetId, name });
