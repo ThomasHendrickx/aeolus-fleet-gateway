@@ -9,7 +9,7 @@
  */
 import { timingSafeEqual } from 'node:crypto';
 
-import { idempotencyKeySchema, idSchema, type FleetId } from '@aeolus-fleet/common';
+import { idempotencyKeySchema, idSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
 import { initTRPC, TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
@@ -21,6 +21,9 @@ import type { ReadFleet } from '../../core/installation/read-fleet.js';
 import type { IsServed } from '../../core/installation/served.js';
 import type { SetFleetEnabled } from '../../core/installation/set-fleet-enabled.js';
 import type { AuthenticateOperator } from '../../core/operator/authenticate-operator.js';
+import type { ApproveParty } from '../../core/parties/approve-party.js';
+import type { CrewParty } from '../../core/parties/crew-party.js';
+import type { ListParties } from '../../core/parties/list-parties.js';
 
 export interface Context {
   /** The Cookie header the console's server or the gateway's page forwarded. */
@@ -37,6 +40,9 @@ export interface Context {
   deleteFleet: DeleteFleet;
   readConnection: ReadConnection;
   connect: Connect;
+  approveParty: ApproveParty;
+  crewParty: CrewParty;
+  listParties: ListParties;
 }
 
 /** What a caller reads of a failure: nothing of it, so no crew token, secret or query ever leaves; the log holds it whole. */
@@ -121,6 +127,50 @@ const SET_ENABLED_CODES = {
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
 } as const satisfies Record<string, TRPCError['code']>;
 
+/** The refusals of approving a party, as the API states them: a fleet that does not answer is tried again with the same request id. */
+const APPROVE_CODES = {
+  NOT_CONNECTED: 'PRECONDITION_FAILED',
+  PARTY_EXISTS: 'CONFLICT',
+  COMMISSION_REFUSED: 'BAD_REQUEST',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+} as const satisfies Record<string, TRPCError['code']>;
+
+/** The refusals of crewing a party's proxy ship with a new secret, as the API states them. */
+const CREW_CODES = {
+  NO_SUCH_PARTY: 'NOT_FOUND',
+  NOT_AWAITING_CREW: 'CONFLICT',
+  SECRET_REFUSED: 'BAD_REQUEST',
+} as const satisfies Record<string, TRPCError['code']>;
+
+/** The fewest and most calls the gateway has in flight to one party at once, and the default. */
+const CONCURRENCY_LIMIT_MIN = 1;
+const CONCURRENCY_LIMIT_MAX = 64;
+const CONCURRENCY_LIMIT_DEFAULT = 4;
+
+/** The credential argo gives the vault for a party: a static bearer, or OAuth client credentials. */
+const credentialInputSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('bearer'), token: z.string().min(1) }),
+  z.strictObject({
+    kind: z.literal('clientCredentials'),
+    clientId: z.string().min(1),
+    clientSecret: z.string().min(1),
+    issuer: z.url({ protocol: /^https?$/ }),
+    scope: z.string().min(1).optional(),
+  }),
+]);
+
+/** A party as argo reads it: never its credential or its crew token. */
+const shownPartySchema = z.object({
+  name: z.string(),
+  kind: z.literal('mcpServer'),
+  url: z.string(),
+  credentialKind: z.enum(['bearer', 'clientCredentials']),
+  ownerShipId: z.string(),
+  concurrencyLimit: z.int(),
+  state: z.enum(['commissioning', 'awaitingCrew', 'crewed']),
+  proxyShipId: z.string().nullable(),
+});
+
 /** The connection as the console reads it: whether the gateway serves the fleet, and its connection. */
 const connectionStatusOutputSchema = z.object({
   enabled: z.boolean(),
@@ -154,6 +204,46 @@ export const gatewayRouter = t.router({
         }
         // Answered as connection.status answers: connect works only while the gateway serves the fleet.
         return { enabled: true, ...connected.value };
+      }),
+  }),
+  parties: t.router({
+    /** The parties argo approved for its fleet, by name. A viewer reads them too. */
+    list: servedProcedure.output(z.array(shownPartySchema)).query(({ ctx }) => ctx.listParties(ctx.fleetId)),
+    /**
+     * argo approves an outside MCP server as a party: the gateway commissions
+     * its app proxy ship owned by the owner argo picked, crews it, and keeps
+     * the credential in its vault (interop I-5). A repeat with the same
+     * request id picks up where the last one stopped.
+     */
+    approve: managing(servedProcedure)
+      .input(
+        z.strictObject({
+          requestId: idempotencyKeySchema,
+          name: shipHandleSchema,
+          url: z.url({ protocol: /^https?$/ }),
+          credential: credentialInputSchema,
+          ownerShipId: idSchema('ship'),
+          concurrencyLimit: z.int().min(CONCURRENCY_LIMIT_MIN).max(CONCURRENCY_LIMIT_MAX).default(CONCURRENCY_LIMIT_DEFAULT),
+        }),
+      )
+      .output(shownPartySchema)
+      .mutation(async ({ ctx, input }) => {
+        const approved = await ctx.approveParty({ operatorFleetId: ctx.fleetId, ...input });
+        if (!approved.isOk) {
+          throw new TRPCError({ code: APPROVE_CODES[approved.error.kind], message: approved.error.message });
+        }
+        return approved.value;
+      }),
+    /** argo hands over a new secret, from a new starting prompt in the console, for a proxy ship that awaits crew. */
+    crew: managing(servedProcedure)
+      .input(z.strictObject({ name: shipHandleSchema, secret: z.string().min(1) }))
+      .output(shownPartySchema)
+      .mutation(async ({ ctx, input }) => {
+        const crewed = await ctx.crewParty({ operatorFleetId: ctx.fleetId, ...input });
+        if (!crewed.isOk) {
+          throw new TRPCError({ code: CREW_CODES[crewed.error.kind], message: crewed.error.message });
+        }
+        return crewed.value;
       }),
   }),
   installation: t.router({

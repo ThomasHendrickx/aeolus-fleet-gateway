@@ -7,10 +7,11 @@
  */
 import { setTimeout as wait } from 'node:timers/promises';
 
-import { busyWaitMs, FLEET_BUSY_WAITS_MS, fleetListOutputSchema, idSchema, shipDetailOutputSchema } from '@aeolus-fleet/common';
+import { busyWaitMs, commissionShipOutputSchema, FLEET_BUSY_WAITS_MS, fleetListOutputSchema, idSchema, shipDetailOutputSchema } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
 import type { FleetDoor, FleetRefusal } from '../../core/connection/ports.js';
+import type { ProxyShipDoor } from '../../core/parties/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
 
 const refusalSchema = z.object({ code: z.string(), message: z.string() });
@@ -78,7 +79,10 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
   return response.ok ? ok(request.answers.parse(body)) : err(refusalSchema.parse(body));
 }
 
-export function createRestFleetDoor(fleetUrl: string, options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {}): FleetDoor {
+export function createRestFleetDoor(
+  fleetUrl: string,
+  options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
+): FleetDoor & ProxyShipDoor {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   return {
@@ -98,6 +102,17 @@ export function createRestFleetDoor(fleetUrl: string, options: { busyWaitsMs?: r
       }
       const { status, scopes } = read.value;
       return ok({ status, scopes });
+    },
+    // An app ship owned by the owner argo picked: core 0.28's commission (aeolus-fleet#959).
+    commissionAppShip: async (crewToken, { name, type, owner, idempotencyKey }) => {
+      const commissioned = await call({
+        path: '/fleet/commission',
+        method: 'POST',
+        crewToken,
+        body: { name, type, kind: 'app', owner, idempotencyKey },
+        answers: commissionShipOutputSchema,
+      });
+      return commissioned.isOk ? ok({ shipId: commissioned.value.shipId, secret: commissioned.value.secret }) : commissioned;
     },
     deregister: async (crewToken) => {
       const ended = await call({ path: '/ship/deregister', method: 'POST', crewToken, body: {}, answers: z.unknown() });
