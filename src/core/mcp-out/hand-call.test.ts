@@ -24,6 +24,8 @@ const CRM: Party = {
 };
 
 const DEALS = { content: [{ type: 'text', text: '[]' }], structuredContent: { deals: [] }, isError: false };
+/** A reply's payload, read back. */
+const parsed = (payload: string): unknown => JSON.parse(payload);
 const MAY_HAVE_RUN = 'The call may have run; its answer was lost. Check the outside system, then resend or dismiss.';
 
 let crew: ReturnType<typeof fakeProxyShipCrew>;
@@ -95,10 +97,16 @@ describe('the gateway hands a call to its outside MCP server (interop 5.2)', () 
     expect(crew.log.map(([call]) => call)).toEqual(['handed']);
   });
 
-  it('hands a call that was not sent again with the next hand-over number', async () => {
-    await handCall({ party: CRM, delivery: aPushedDelivery({ state: 'handed', handOverNumber: 2 }) });
+  it('hands a call that was not sent again with the next hand-over number, whatever its tool', async () => {
+    servers.state.outcome = { kind: 'notSent', reason: 'connect ECONNREFUSED' };
+    await handCall({ party: CRM, delivery: aPushedDelivery() });
+    servers.state.outcome = { kind: 'answered', result: DEALS };
 
-    expect(crew.log[0]).toEqual(['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1', handOverNumber: 3 }]);
+    await expect(handCall({ party: CRM, delivery: aPushedDelivery({ state: 'handed', handOverNumber: 1 }) })).resolves.toEqual({ kind: 'handled' });
+    expect(crew.log.filter(([call]) => call === 'handed')).toEqual([
+      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1', handOverNumber: 1 }],
+      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1', handOverNumber: 2 }],
+    ]);
   });
 
   it("answers again when an unanswered call's tool is marked repeatable", async () => {
@@ -139,6 +147,7 @@ describe('the gateway hands a call to its outside MCP server (interop 5.2)', () 
 
   it('stops at the fifth attempt, which the fleet answers undeliverable, calling nothing', async () => {
     crew.state.handedState = 'undeliverable';
+    await marks.mark(FLEET_ID, { party: 'crm', tool: 'list_deals', isRepeatable: true });
 
     await expect(handCall({ party: CRM, delivery: aPushedDelivery({ state: 'handed', handOverNumber: 4 }) })).resolves.toEqual({ kind: 'undeliverable' });
     expect(servers.called).toEqual([]);
@@ -175,7 +184,7 @@ describe('a message that is no call the server can take', () => {
     await expect(handCall({ party: CRM, delivery: aPushedDelivery({ payload }) })).resolves.toEqual({ kind: 'handled' });
 
     expect(servers.called).toEqual([]);
-    expect(crew.sent().map((sent) => [sent.contentType, JSON.parse(sent.payload)])).toEqual([
+    expect(crew.sent().map((sent) => [sent.contentType, parsed(sent.payload)])).toEqual([
       ['application/vnd.aeolus.mcp-result+json; name=list_deals', { content: [{ type: 'text', text: 'The tool arguments must be a JSON object.' }], isError: true }],
     ]);
   });
@@ -184,7 +193,7 @@ describe('a message that is no call the server can take', () => {
     servers.state.outcome = { kind: 'answered', result: { content: [{ type: 'text', text: 'x'.repeat(70_000) }], isError: false } };
 
     await expect(handCall({ party: CRM, delivery: aPushedDelivery() })).resolves.toEqual({ kind: 'handled' });
-    expect(crew.sent().map((sent) => JSON.parse(sent.payload))).toEqual([
+    expect(crew.sent().map((sent) => parsed(sent.payload))).toEqual([
       { content: [{ type: 'text', text: 'The tool result is 70055 bytes as JSON, over the 65536 a message holds.' }], isError: true },
     ]);
   });
