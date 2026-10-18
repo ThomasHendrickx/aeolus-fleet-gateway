@@ -34,6 +34,7 @@
     "start": "node dist/bin/aeolus-gateway.js start"
   },
   "dependencies": {
+    "fastify": "^5.12.7",
     "zod": "^4.6.5"
   },
   "devDependencies": {
