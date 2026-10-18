@@ -165,10 +165,28 @@ model ClientCall {
   party      String
   handle     String
   shipId     String   @map("ship_id")
-  capability String
-  sentAt     DateTime @map("sent_at")
+  capability        String
+  outputContentType String?  @map("output_content_type")
+  sentAt            DateTime @map("sent_at")
+  deadlineAt        DateTime @map("deadline_at")
 
   @@id([fleetId, messageId])
   @@unique([fleetId, handle])
   @@map("client_calls")
+}
+
+/// The replies naming an outside client's call, each kept once per delivery before it is acknowledged.
+model ClientCallReply {
+  deliveryId     String   @id @map("delivery_id")
+  fleetId        String   @map("fleet_id")
+  callMessageId  String   @map("call_message_id")
+  messageId      String   @map("message_id")
+  contentType    String   @map("content_type")
+  payload        String
+  receivedAt     DateTime @map("received_at")
+  /// The order kept in, as receivedAt may tie.
+  sequence       Int      @default(autoincrement())
+
+  @@index([fleetId, callMessageId])
+  @@map("client_call_replies")
 }

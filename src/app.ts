@@ -33,6 +33,7 @@ import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
 import { createShipAliases } from './adapters/crypto/ship-aliases.js';
 import { createListTools } from './core/mcp-in/list-tools.js';
 import { createCallTool } from './core/mcp-in/call-tool.js';
+import { createCollectReplies } from './core/mcp-in/collect-replies.js';
 import { createReadClientCall } from './core/mcp-in/read-client-call.js';
 import { createCallKeys } from './adapters/crypto/call-keys.js';
 import { createPrismaClientCalls } from './adapters/prisma/client-calls.js';
@@ -52,7 +53,7 @@ import { createReadFleet } from './core/installation/read-fleet.js';
 import { createIsServed } from './core/installation/served.js';
 import { createSetFleetEnabled } from './core/installation/set-fleet-enabled.js';
 import { createAuthenticateOperator } from './core/operator/authenticate-operator.js';
-import { createApproveClientParty, createApproveParty, type ApproveParty } from './core/parties/approve-party.js';
+import { createApproveClientParty, createApproveParty, type ApproveClientParty, type ApproveParty } from './core/parties/approve-party.js';
 import { createReadClientParty } from './core/parties/read-client-party.js';
 import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
 import { createListParties } from './core/parties/list-parties.js';
@@ -89,6 +90,9 @@ const CLIENT_METADATA_TIMEOUT_MS = 5_000;
 
 /** How often a proxy ship's worker looks again while the fleet hands it only what it holds, or does not answer. */
 const POLL_MS = 2_000;
+
+/** How long an outside client's call waits for its answer before it fails: the fleet's 10 minutes for a handed delivery, while statements state no deadline. */
+const CLIENT_CALL_DEADLINE_MS = 10 * 60_000;
 
 /** How long a delivery answered again waits before it is handed with the next number, each longer than the last. */
 const AGAIN_WAITS_MS = [1_000, 10_000, 60_000, 300_000];
@@ -153,7 +157,14 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const stateParty = createStateParty({ parties, servers, door, marks });
   const markTool = createMarkTool({ parties, marks, stateParty });
   const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
-  const workers = createPartyWorkers({ parties, stateParty, runParty: createRunParty({ crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }), log: server.log });
+  const clientCalls = createPrismaClientCalls(prisma);
+  const workers = createPartyWorkers({
+    parties,
+    stateParty,
+    runParty: createRunParty({ crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
+    collectReplies: createCollectReplies({ crew: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
+    log: server.log,
+  });
   const approvePartyOnly = createApproveParty({ connections, parties, door, hasher: sha256RequestHasher, clock });
   const crewPartyOnly = createCrewParty({ parties, door });
   // A party crewed by approving it, or by a new secret, has its calls taken at once.
@@ -170,6 +181,15 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       await workers.start({ fleetId: input.operatorFleetId, name: crewed.value.name });
     }
     return crewed;
+  };
+  const approveClientPartyOnly = createApproveClientParty({ connections, parties, door, hasher: sha256RequestHasher, clock });
+  // A client party crewed at its first approval has the replies to its calls taken at once.
+  const approveClientParty: ApproveClientParty = async (input) => {
+    const approved = await approveClientPartyOnly(input);
+    if (approved.isOk) {
+      await workers.start({ fleetId: input.operatorFleetId, name: approved.value.name });
+    }
+    return approved;
   };
   const listParties = createListParties({ parties });
 
@@ -194,19 +214,18 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       clock,
       issuer,
       parties,
-      approveClientParty: createApproveClientParty({ connections, parties, door, hasher: sha256RequestHasher, clock }),
+      approveClientParty,
     }),
     readClientParty: createReadClientParty({ parties }),
     exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
   });
   const listTools = createListTools({ parties, discovery: door, aliases: createShipAliases(options.gatewaySecret) });
-  const clientCalls = createPrismaClientCalls(prisma);
   registerMcpEndpoint(server, {
     resource,
     authenticateAccessToken: createAuthenticateAccessToken({ tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
     listTools,
-    callTool: createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock }),
-    readClientCall: createReadClientCall({ calls: clientCalls }),
+    callTool: createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, deadlineMs: CLIENT_CALL_DEADLINE_MS }),
+    readClientCall: createReadClientCall({ calls: clientCalls, clock }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.

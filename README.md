@@ -80,7 +80,10 @@ Codes and tokens are kept only as hashes, and so are client secrets.
 - No tool states an output schema: a call may answer a handle, and MCP clients check every answer against it.
 - `tools/call` sends the arguments, without `aeolus_idempotency_key`, as a message from the client's proxy ship to the tool's ship, under the capability's first input type. The client is answered only once the fleet answered the send: `{"handle": "...", "state": "submitted"}`. A fleet that refuses the send gets a tool error, and one that cannot be reached gives no reason why.
 - The same `aeolus_idempotency_key` again sends no second message. The send's key is derived from it under `GATEWAY_SECRET`, and the handle from the message, so the client never sees a `msg_` id.
-- `aeolus_result({ handle })` reads the client's own call.
+- `aeolus_result({ handle })` reads the client's own call: `submitted`, `working` once a reply of another type came, its answer once completed, or a tool error once it failed (interop 3.4).
+- The first reply of the capability's first output type completes it; plain text completes a call to a ship that states no output type. An outside tool's result, as MCP out replies one, is answered as that result.
+- A call fails 10 minutes after it was sent without its answer: the gateway's default while statements state no deadline. A reply after that is kept and changes nothing.
+- Each client party's worker takes the replies of its proxy ship, keeps each on its call, then acknowledges and handles its delivery. With core 0.27 a message to the proxy ship that replies to no call stays unacknowledged, for a later slice's inbox. Ten of them would take every pushReceive answer and keep replies out, until core 0.28's `receiveReply` (aeolus-fleet#953) takes replies by message.
 
 ## Develop
 

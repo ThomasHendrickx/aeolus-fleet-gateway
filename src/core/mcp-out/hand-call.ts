@@ -16,6 +16,8 @@ export interface PushedDelivery {
   readonly payload: string;
   readonly state: 'received' | 'handed';
   readonly handOverNumber: number | null;
+  /** The message this one replies to, if any. */
+  readonly inReplyTo: MessageId | null;
 }
 
 /** A reply naming the request, sent as the proxy ship. */

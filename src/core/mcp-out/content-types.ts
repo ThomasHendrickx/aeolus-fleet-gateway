@@ -25,3 +25,8 @@ export function toolCalledBy(contentType: string): string | undefined {
   const name = parameters.find((parameter) => parameter.toLowerCase().startsWith('name='))?.slice('name='.length);
   return name === undefined || name === '' ? undefined : name;
 }
+
+/** Whether a message of this content type carries a tool's result. */
+export function isToolResultType(contentType: string): boolean {
+  return contentType.split(';')[0]?.trim().toLowerCase() === TOOL_RESULT;
+}

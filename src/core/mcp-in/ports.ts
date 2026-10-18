@@ -2,6 +2,7 @@ import type { FleetId, MessageId, ShipId, ShipKind } from '@aeolus-fleet/common'
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
+import type { CallReply, ClientCall } from './client-call.js';
 
 /** One thing a ship offers, as its statement says it (decision 0047): MCP's tool fields and A2A's modes. */
 export interface Capability {
@@ -58,21 +59,13 @@ export interface CallKeys {
   handleOf(fleetId: FleetId, messageId: MessageId): string;
 }
 
-/** An outside client's call: the message its proxy ship sent, and the handle the client knows it by. */
-export interface ClientCall {
-  fleetId: FleetId;
-  party: string;
-  messageId: MessageId;
-  handle: string;
-  shipId: ShipId;
-  capability: string;
-  sentAt: Date;
-}
-
-/** Outbound port: outside clients' calls, one per message. */
+/** Outbound port: outside clients' calls, one per message, each with the replies naming it. */
 export interface ClientCalls {
-  /** Keeps a call; a call kept for its message already stays as it was. */
-  save(call: ClientCall): Promise<void>;
+  /** Keeps a call with no replies; a call kept for its message already stays as it was. */
+  save(call: Omit<ClientCall, 'replies'>): Promise<void>;
+  /** Keeps a reply on the call its message names, once per delivery. */
+  addReply(call: { fleetId: FleetId; messageId: MessageId }, reply: CallReply): Promise<void>;
+  findByMessage(fleetId: FleetId, messageId: MessageId): Promise<ClientCall | undefined>;
   /** The party's call by its handle; none of another party's. */
   findByHandle(caller: { fleetId: FleetId; party: string }, handle: string): Promise<ClientCall | undefined>;
 }

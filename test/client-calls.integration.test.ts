@@ -63,7 +63,7 @@ describe("outside clients' calls in Postgres", () => {
     await calls.addReply({ fleetId: FLEET, messageId: call.messageId }, first);
     await calls.addReply({ fleetId: FLEET, messageId: call.messageId }, second);
 
-    const read = { ...call, replies: [first, second] };
+    const read = { ...call, replies: [second, first] };
     await expect(Promise.all([calls.findByHandle({ fleetId: FLEET, party: 'claude' }, 'handle-3'), calls.findByMessage(FLEET, call.messageId), calls.findByMessage(OTHER_FLEET, call.messageId)])).resolves.toEqual([read, read, undefined]);
   });
 
