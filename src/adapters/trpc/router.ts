@@ -24,6 +24,8 @@ import type { AuthenticateOperator } from '../../core/operator/authenticate-oper
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListParties } from '../../core/parties/list-parties.js';
+import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
+import type { StateParty } from '../../core/mcp-out/state-party.js';
 
 export interface Context {
   /** The Cookie header the console's server or the gateway's page forwarded. */
@@ -43,6 +45,8 @@ export interface Context {
   approveParty: ApproveParty;
   crewParty: CrewParty;
   listParties: ListParties;
+  stateParty: StateParty;
+  markTool: MarkTool;
 }
 
 /** What a caller reads of a failure: nothing of it, so no crew token, secret or query ever leaves; the log holds it whole. */
@@ -141,6 +145,20 @@ const CREW_CODES = {
   NOT_AWAITING_CREW: 'CONFLICT',
   SECRET_REFUSED: 'BAD_REQUEST',
 } as const satisfies Record<string, TRPCError['code']>;
+
+/** The refusals of stating a party's proxy ship, as the API states them. */
+const STATE_CODES = {
+  NO_SUCH_PARTY: 'NOT_FOUND',
+  NOT_CREWED: 'CONFLICT',
+  SERVER_UNREACHABLE: 'BAD_GATEWAY',
+  STATEMENT_REFUSED: 'BAD_REQUEST',
+} as const satisfies Record<string, TRPCError['code']>;
+
+/** The longest tool name MCP allows (2026-07-28), as a capability's name is capped too. */
+const TOOL_NAME_MAX_LENGTH = 128;
+
+/** What stating a party answers: the names of the capabilities its proxy ship now offers. */
+const statedOutputSchema = z.object({ capabilities: z.array(z.string()) });
 
 /** The fewest and most calls the gateway has in flight to one party at once, and the default. */
 const CONCURRENCY_LIMIT_MIN = 1;
@@ -244,6 +262,28 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: CREW_CODES[crewed.error.kind], message: crewed.error.message });
         }
         return crewed.value;
+      }),
+    /** The gateway states the party's proxy ship anew, from what its server lists now, with argo's marks. */
+    state: managing(servedProcedure)
+      .input(z.strictObject({ name: shipHandleSchema }))
+      .output(statedOutputSchema)
+      .mutation(async ({ ctx, input }) => {
+        const stated = await ctx.stateParty({ fleetId: ctx.fleetId, ...input });
+        if (!stated.isOk) {
+          throw new TRPCError({ code: STATE_CODES[stated.error.kind], message: stated.error.message });
+        }
+        return stated.value;
+      }),
+    /** argo marks a party's tool repeatable, or takes the mark off (interop 5.2): kept, then stated at once. */
+    markTool: managing(servedProcedure)
+      .input(z.strictObject({ name: shipHandleSchema, tool: z.string().min(1).max(TOOL_NAME_MAX_LENGTH), isRepeatable: z.boolean() }))
+      .output(statedOutputSchema)
+      .mutation(async ({ ctx, input }) => {
+        const stated = await ctx.markTool({ fleetId: ctx.fleetId, ...input });
+        if (!stated.isOk) {
+          throw new TRPCError({ code: STATE_CODES[stated.error.kind], message: stated.error.message });
+        }
+        return stated.value;
       }),
   }),
   installation: t.router({

@@ -81,3 +81,13 @@ model Party {
   @@id([fleetId, name])
   @@map("parties")
 }
+
+/// argo's repeatable marks: a tool of a party whose call may be handed again when it died unanswered (interop 5.2).
+model ToolMark {
+  fleetId String @map("fleet_id")
+  party   String
+  tool    String
+
+  @@id([fleetId, party, tool])
+  @@map("tool_marks")
+}
