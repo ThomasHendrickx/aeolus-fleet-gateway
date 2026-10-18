@@ -1,8 +1,8 @@
 /**
  * The images Testcontainers pulls for the tests, from mirrors outside Docker
  * Hub: CI runners share IPs, so anonymous Docker Hub pulls hit its rate limit
- * at random (#437). Both mirrors serve the same image as Docker Hub and need
- * no sign-in. ECR Public throttles anonymous pulls per IP too (#464), so CI
+ * at random (aeolus-fleet#437). Both mirrors serve the same image as Docker Hub and need
+ * no sign-in. ECR Public throttles anonymous pulls per IP too (aeolus-fleet#464), so CI
  * keeps the images in the Actions cache; it lists them by running this file
  * (see .github/actions/test-images).
  */

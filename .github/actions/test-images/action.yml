@@ -1,6 +1,6 @@
 # Puts the images Testcontainers starts on the runner from the Actions cache,
 # so a test job pulls nothing: ECR Public throttles anonymous pulls per IP, as
-# Docker Hub does, and CI runners share IPs (#464). On a cache miss, after the
+# Docker Hub does, and CI runners share IPs. On a cache miss, after the
 # image list changed or the cache expired, it pulls them once with retries and
 # caches them. Needs the repository checked out and Node set up.
 name: Test images
