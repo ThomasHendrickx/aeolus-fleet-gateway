@@ -54,7 +54,7 @@ const handCall: HandCall = async ({ delivery }) => {
 const sleep: Sleep = async (ms) => {
   sleeps.push(ms);
   await new Promise((resolve) => setImmediate(resolve));
-  if ((crew.state.waiting.length === 0 && releases.length === 0) || sleeps.length > 50) {
+  if (crew.state.waiting.length === 0 || sleeps.length > 50) {
     stop.abort();
   }
 };
