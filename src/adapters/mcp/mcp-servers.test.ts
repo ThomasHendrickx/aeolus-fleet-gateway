@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { MOCK_CRM_BEARER, MOCK_CRM_CLIENT, startMockCrm, type MockCrm } from '../../../test/support/mock-crm.js';
+import { MOCK_CRM_BEARER, MOCK_CRM_CLIENT, startMockCrm, type MockCrm } from '../../../test/fixtures/mock-crm/mock-crm.js';
 import type { McpServerConnection } from '../../core/mcp-out/ports.js';
 import { createMcpServers } from './mcp-servers.js';
 

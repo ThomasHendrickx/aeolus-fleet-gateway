@@ -16,7 +16,7 @@ Tests:
 - Commit scope is the area: `test(<area>): <rule> (red)`, then `feat(<area>): <rule>`.
 - Unit: Vitest beside the file, in-memory ports, no `vi.mock`, no `vi.fn` or `vi.spyOn` in `src/core`.
 - Integration: `test/*.integration.test.ts`, one Testcontainers Postgres 16 per run, each file its own database. A real core runs from the `@aeolus-fleet/core` devDependency's `aeolus-core` bin against it (`test/support/`).
-- The mock CRM MCP server (`test/support/mock-crm.ts`) is the outside party every MCP out test calls; it counts each call it ran.
+- The mock CRM MCP server (`test/fixtures/mock-crm/`) is the outside party every MCP out test calls; it counts each call it ran.
 - Guarantees to prove: nothing answers an outside call before the fleet's `send` answered OK; a call that may have run is never repeated unless marked repeatable; a restart loses no delivery.
 
 Fleet:

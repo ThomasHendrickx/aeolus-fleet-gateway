@@ -3,22 +3,7 @@
  * (interop 3.3, 5.2): its tools, and one call at a time.
  */
 import type { Result } from '../shared/result.js';
-
-/**
- * The credential the gateway calls an outside MCP server with, kept in the
- * vault. The server sees the gateway's credential, never the asker's.
- */
-export type McpServerCredential =
-  | { readonly kind: 'bearer'; readonly token: string }
-  | {
-      readonly kind: 'clientCredentials';
-      readonly clientId: string;
-      readonly clientSecret: string;
-      /** The authorization server's issuer: the credential goes to no other. */
-      readonly issuer: string;
-      /** The OAuth scope to ask the authorization server for, if the server needs one. */
-      readonly scope?: string;
-    };
+import type { McpServerCredential } from '../vault/credential.js';
 
 /** Where an outside MCP server is, and how the gateway signs in to it. */
 export interface McpServerConnection {
