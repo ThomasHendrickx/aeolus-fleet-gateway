@@ -97,22 +97,26 @@ export function fakeProxyShipCrew() {
     handedRefusal: FleetRefusal | undefined;
     notHandledRefusal: FleetRefusal | undefined;
     isSendAnswering: boolean;
+    receiveRefusal: FleetRefusal | undefined;
     waiting: PushedDelivery[];
-  } = { handedState: 'handed', handedRefusal: undefined, notHandledRefusal: undefined, isSendAnswering: true, waiting: [] };
+  } = { handedState: 'handed', handedRefusal: undefined, notHandledRefusal: undefined, isSendAnswering: true, receiveRefusal: undefined, waiting: [] };
+  const received: number[] = [];
   const log: CrewCall[] = [];
   const crewTokens: string[] = [];
   const done = (crewToken: string, call: CrewCall) => {
     crewTokens.push(crewToken);
     log.push(call);
   };
-  const crew: ProxyShipCrew & { state: typeof state; log: CrewCall[]; crewTokens: string[]; sent: () => Reply[] } = {
+  const crew: ProxyShipCrew & { state: typeof state; log: CrewCall[]; crewTokens: string[]; received: number[]; sent: () => Reply[] } = {
     state,
     log,
     crewTokens,
+    received,
     sent: () => log.flatMap((call) => (call[0] === 'send' ? [call[1]] : [])),
     pushReceive: (crewToken, max) => {
       crewTokens.push(crewToken);
-      return Promise.resolve(ok(state.waiting.slice(0, max)));
+      received.push(max);
+      return Promise.resolve(state.receiveRefusal === undefined ? ok(state.waiting.slice(0, max)) : err(state.receiveRefusal));
     },
     handed: (crewToken, handOver) => {
       if (state.handedRefusal !== undefined) {
