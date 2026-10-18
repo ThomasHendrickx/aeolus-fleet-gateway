@@ -35,6 +35,8 @@ export function memoryPartyStore(): PartyStore & { held: Map<string, Party> } {
 export function fakeProxyShipFleet() {
   const state = {
     isAnswering: true,
+    /** Whether a register is answered; the fleet may answer the commission and then go quiet. */
+    isRegisterAnswering: true,
     validOwners: new Set<ShipId>([OWNER_SHIP_ID]),
     commissioned: new Array<{ name: string; type: string; owner: ShipId; idempotencyKey: string }>(),
     keys: new Map<string, ShipId>(),
@@ -66,7 +68,7 @@ export function fakeProxyShipFleet() {
       return Promise.resolve(ok({ shipId: PROXY_SHIP_ID, secret: 'aeolus_sk_v1_proxy' }));
     },
     register: ({ shipId, secret }) => {
-      if (!state.isAnswering) {
+      if (!state.isAnswering || !state.isRegisterAnswering) {
         return unavailable();
       }
       if (state.secrets.get(shipId) !== secret || state.crewed.has(shipId)) {

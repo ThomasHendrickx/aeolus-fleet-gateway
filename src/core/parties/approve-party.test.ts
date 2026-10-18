@@ -92,11 +92,10 @@ describe('an approval the fleet did not answer', () => {
   });
 
   it('keeps the secret while its register is not answered, and crews the ship when approved again', async () => {
-    const answering = fleet.door.register;
-    fleet.door.register = () => Promise.resolve({ isOk: false, error: { code: 'UNAVAILABLE', message: 'The fleet did not answer' } });
+    fleet.state.isRegisterAnswering = false;
     await expect(approve(anApproval())).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
     await expect(parties.find(FLEET_ID, 'crm')).resolves.toMatchObject({ state: 'awaitingCrew', proxyShipId: PROXY_SHIP_ID });
-    fleet.door.register = answering;
+    fleet.state.isRegisterAnswering = true;
 
     await expect(approve(anApproval())).resolves.toMatchObject({ isOk: true, value: { state: 'crewed' } });
     await expect(parties.find(FLEET_ID, 'crm')).resolves.toMatchObject({ secret: null, crewToken: 'aeolus_ct_v1_proxy' });

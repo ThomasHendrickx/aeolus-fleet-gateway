@@ -9,7 +9,10 @@ export type DomainErrorKind =
   | 'NO_NETWORKING_PLUGIN'
   | 'NOT_THE_OPERATOR'
   | 'REQUEST_ID_USED'
-  | 'FLEET_UNAVAILABLE';
+  | 'FLEET_UNAVAILABLE'
+  | 'NOT_CONNECTED'
+  | 'PARTY_EXISTS'
+  | 'COMMISSION_REFUSED';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {
