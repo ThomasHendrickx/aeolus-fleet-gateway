@@ -82,7 +82,7 @@ const APPROVE_FORM = (requestId: string) => `<h2>Approve an MCP server</h2>
 <label>Issuer<input name="issuer" type="url"></label>
 <label>Scope<input name="scope"></label>
 <label>Owner's ship id (a person's ship, or argo)<input name="ownerShipId" required></label>
-<label>Calls at once<input name="concurrencyLimit" type="number" min="1" value="4"></label>
+<label>Calls at once<input name="concurrencyLimit" type="number" min="1" max="10" value="4"></label>
 <button>Approve</button>
 </form>`;
 

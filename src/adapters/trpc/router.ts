@@ -162,7 +162,8 @@ const statedOutputSchema = z.object({ capabilities: z.array(z.string()) });
 
 /** The fewest and most calls the gateway has in flight to one party at once, and the default. */
 const CONCURRENCY_LIMIT_MIN = 1;
-const CONCURRENCY_LIMIT_MAX = 64;
+// The most core 0.27's pushReceive hands at once, own deliveries in flight first (orchestrator-1 on aeolus-fleet#876, Q8).
+const CONCURRENCY_LIMIT_MAX = 10;
 const CONCURRENCY_LIMIT_DEFAULT = 4;
 
 /** The credential argo gives the vault for a party: a static bearer, or OAuth client credentials. */

@@ -97,10 +97,10 @@ describe('the gateway takes the calls of a proxy ship, as its crew (interop 5.2)
     expect(handed).toEqual([ONE, TWO, THREE]);
   });
 
-  it('asks the fleet for no more than the party takes at once, and never more than 10', async () => {
-    await run({ ...CRM, concurrencyLimit: 64 });
+  it('asks the fleet for as many as the party takes at once', async () => {
+    await run({ ...CRM, concurrencyLimit: 7 });
 
-    expect(crew.received.at(0)).toBe(10);
+    expect(crew.received.at(0)).toBe(7);
   });
 
   it('hands a delivery answered again once its wait passed, each wait longer than the last', async () => {
