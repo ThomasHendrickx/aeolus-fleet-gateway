@@ -60,7 +60,6 @@ describe("an MCP client's tools are the capabilities of the ships its party reac
           },
           required: ['contactId'],
         },
-        outputSchema: { type: 'object', properties: { deals: { type: 'array' } } },
         target: { shipId: 'shp_01m3tbfspe96yf1rnr4ank9cr2', capability: 'list_deals', contentType: 'application/vnd.aeolus.mcp-tool+json; name=list_deals', isText: false },
       },
     ]);
@@ -99,13 +98,8 @@ describe("an MCP client's tools are the capabilities of the ships its party reac
     await expect(toolsListed().then((tools) => tools.map((tool) => tool.name.length))).resolves.toEqual([128]);
   });
 
-  it.each([
-    ['a result type that is not JSON', { name: 'say', outputSchema: { type: 'object' }, outputModes: ['text/plain'] }],
-    ['a schema that is not an object, which MCP takes no other', { name: 'count', outputSchema: { type: 'number' } }],
-  ])('leaves out the output schema of %s', async (_what, capability) => {
-    discovery.state.ships = [aDiscoveredShip({ statement: { by: 'crew', summary: 's', capabilities: [capability] } })];
-
-    await expect(toolsListed().then((tools) => tools.map((tool) => tool.outputSchema))).resolves.toEqual([undefined]);
+  it("states no output schema, though the capability does: a call may answer a handle, which MCP clients check against it", async () => {
+    await expect(toolsListed().then((tools) => tools.map((tool) => 'outputSchema' in tool))).resolves.toEqual([false]);
   });
 
   it('refuses a party that is not crewed, or not a client', async () => {
