@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * `aeolus-gateway start`: checks that the fleet's core is new enough,
- * migrates the gateway's database, then serves until SIGINT or SIGTERM.
+ * migrates the gateway's database, connects again to every fleet with its
+ * kept crew token, then serves until SIGINT or SIGTERM.
  * `aeolus-gateway migrate`: migrates the database alone. Every setting
  * comes from environment variables (src/config.ts).
  */
@@ -16,7 +17,20 @@ async function start(): Promise<void> {
   const config = loadConfig(process.env);
   await requireCoreVersion(config.fleetUrl);
   await migrateDatabase(config.databaseUrl);
-  const app = createGatewayApp({ databaseUrl: config.databaseUrl, logger: { level: config.logLevel } });
+  const app = createGatewayApp({
+    databaseUrl: config.databaseUrl,
+    fleetUrl: config.fleetUrl,
+    logger: { level: config.logLevel },
+    ...(config.installationToken === undefined ? {} : { installationToken: config.installationToken }),
+  });
+  // Every fleet the gateway was connected to, connected again with its kept crew token.
+  const restored = await app.restoreConnections();
+  for (const { fleetId, ship } of restored) {
+    app.server.log.info({ fleet: fleetId, ship }, 'connected as the gateway ship');
+  }
+  if (restored.length === 0) {
+    app.server.log.warn('connected to no fleet: argo connects the gateway in the console');
+  }
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(signal, () => {
       void app.close().then(() => process.exit(0));
