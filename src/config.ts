@@ -1,11 +1,15 @@
 import { z } from 'zod';
 
+/** The shortest installation token the gateway takes, as the server does (decision 0020). */
+const INSTALLATION_TOKEN_MIN_LENGTH = 32;
+
 const environmentSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// or postgresql:// URL' }),
   FLEET_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }),
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(0).max(65_535).default(4200),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  INSTALLATION_TOKEN: z.string().min(INSTALLATION_TOKEN_MIN_LENGTH, { error: `must hold at least ${String(INSTALLATION_TOKEN_MIN_LENGTH)} characters` }).optional(),
 });
 
 /** What `aeolus-gateway migrate` reads: the database alone. */
@@ -19,6 +23,12 @@ export interface Config {
   host: string;
   port: number;
   logLevel: string;
+  /**
+   * The token a hosting service presents to the installation procedures
+   * (decision 0021). Unset, they are off and every fleet is served, as a
+   * self-hosted gateway needs; set, a fleet is served once switched on.
+   */
+  installationToken: string | undefined;
 }
 
 export class ConfigError extends Error {
@@ -42,6 +52,7 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     host: variables.HOST,
     port: variables.PORT,
     logLevel: variables.LOG_LEVEL,
+    installationToken: variables.INSTALLATION_TOKEN,
   };
 }
 

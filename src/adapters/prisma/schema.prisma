@@ -16,3 +16,42 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+/// The crew token the gateway holds for each fleet's gateway ship, so a restart
+/// crews it again without a new secret. One row per fleet: one install serves
+/// many fleets.
+model Connection {
+  fleetId   String   @id @map("fleet_id")
+  shipId    String   @map("ship_id")
+  shipName  String   @map("ship_name")
+  /// Null while the gateway is not connected: the fleet and ship stay, as the last connection.
+  crewToken String?  @map("crew_token")
+  crewedAt  DateTime @map("crewed_at") @db.Timestamptz(3)
+
+  @@map("connections")
+}
+
+/// Whether the hosting service switched the gateway on for a fleet (decision
+/// 0021). None before the first switch.
+model FleetSwitch {
+  fleetId   String   @id @map("fleet_id")
+  enabled   Boolean
+  changedAt DateTime @map("changed_at") @db.Timestamptz(3)
+
+  @@map("fleet_switches")
+}
+
+/// The installation's requests, by the caller's request id, so a replay answers
+/// what the first call answered. A switch names its fleet and goes with it; a
+/// delete keeps only the request's hash, so nothing of the deleted fleet stays.
+model InstallationRequest {
+  requestId   String   @id @map("request_id")
+  kind        String
+  requestHash String   @map("request_hash")
+  fleetId     String?  @map("fleet_id")
+  enabled     Boolean?
+  at          DateTime @db.Timestamptz(3)
+
+  @@index([fleetId])
+  @@map("installation_requests")
+}

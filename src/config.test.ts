@@ -12,6 +12,7 @@ describe('the gateway configuration from the environment', () => {
       host: '127.0.0.1',
       port: 4200,
       logLevel: 'info',
+      installationToken: undefined,
     });
   });
 
@@ -22,12 +23,19 @@ describe('the gateway configuration from the environment', () => {
       host: '0.0.0.0',
       port: 8080,
       logLevel: 'debug',
+      installationToken: undefined,
     });
   });
 
   it('refuses a missing fleet URL, naming the variable', () => {
     expect(() => loadConfig({ DATABASE_URL })).toThrow(ConfigError);
     expect(() => loadConfig({ DATABASE_URL })).toThrow(/^FLEET_URL: /);
+  });
+
+  it('reads an installation token of 32 characters, and refuses one of 31', () => {
+    const environment = { DATABASE_URL, FLEET_URL: 'https://fleet.example' };
+    expect(loadConfig({ ...environment, INSTALLATION_TOKEN: 'x'.repeat(32) }).installationToken).toBe('x'.repeat(32));
+    expect(() => loadConfig({ ...environment, INSTALLATION_TOKEN: 'x'.repeat(31) })).toThrow('INSTALLATION_TOKEN: must hold at least 32 characters');
   });
 
   it('refuses a missing database URL, naming the variable', () => {
