@@ -46,27 +46,21 @@ export function fakeStatementDoor() {
   return door;
 }
 
-/** argo's repeatable marks in memory, by fleet, party and tool. */
-export function memoryToolMarks(): ToolMarks & { held: Set<string> } {
-  const held = new Set<string>();
-  const key = (fleetId: FleetId, party: string, tool: string) => JSON.stringify([fleetId, party, tool]);
+/** argo's repeatable marks in memory: the marked tools of each party, by fleet and party. */
+export function memoryToolMarks(): ToolMarks & { held: Map<string, Set<string>> } {
+  const held = new Map<string, Set<string>>();
+  const key = (fleetId: FleetId, party: string) => JSON.stringify([fleetId, party]);
   return {
     held,
-    repeatable: (fleetId, party) =>
-      Promise.resolve(
-        new Set(
-          [...held].flatMap((each) => {
-            const [heldFleet, heldParty, tool] = JSON.parse(each) as [string, string, string];
-            return heldFleet === fleetId && heldParty === party ? [tool] : [];
-          }),
-        ),
-      ),
+    repeatable: (fleetId, party) => Promise.resolve(new Set(held.get(key(fleetId, party)))),
     mark: (fleetId, { party, tool, isRepeatable }) => {
+      const tools = held.get(key(fleetId, party)) ?? new Set<string>();
       if (isRepeatable) {
-        held.add(key(fleetId, party, tool));
+        tools.add(tool);
       } else {
-        held.delete(key(fleetId, party, tool));
+        tools.delete(tool);
       }
+      held.set(key(fleetId, party), tools);
       return Promise.resolve();
     },
   };
