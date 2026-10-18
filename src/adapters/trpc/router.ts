@@ -26,6 +26,7 @@ import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListParties } from '../../core/parties/list-parties.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { StateParty } from '../../core/mcp-out/state-party.js';
+import type { RegisterClient } from '../../core/oauth/register-client.js';
 
 export interface Context {
   /** The Cookie header the console's server or the gateway's page forwarded. */
@@ -47,6 +48,7 @@ export interface Context {
   listParties: ListParties;
   stateParty: StateParty;
   markTool: MarkTool;
+  registerClient: RegisterClient;
 }
 
 /** What a caller reads of a failure: nothing of it, so no crew token, secret or query ever leaves; the log holds it whole. */
@@ -153,6 +155,9 @@ const STATE_CODES = {
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
   STATEMENT_REFUSED: 'BAD_REQUEST',
 } as const satisfies Record<string, TRPCError['code']>;
+
+/** The longest name argo gives an MCP client. */
+const CLIENT_NAME_MAX_LENGTH = 200;
 
 /** The longest tool name MCP allows (2026-07-28), as a capability's name is capped too. */
 const TOOL_NAME_MAX_LENGTH = 128;
@@ -285,6 +290,22 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: STATE_CODES[stated.error.kind], message: stated.error.message });
         }
         return stated.value;
+      }),
+  }),
+  oauth: t.router({
+    /**
+     * argo pre-registers an MCP client for its fleet: its name and redirect
+     * URIs, and whether it keeps a secret. The secret is answered this once.
+     */
+    registerClient: managing(operatorProcedure)
+      .input(z.strictObject({ name: z.string().min(1).max(CLIENT_NAME_MAX_LENGTH), redirectUris: z.array(z.string()), isConfidential: z.boolean() }))
+      .output(z.object({ clientId: z.string(), clientSecret: z.string().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        const registered = await ctx.registerClient({ fleetId: ctx.fleetId, ...input });
+        if (!registered.isOk) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: registered.error.message });
+        }
+        return registered.value;
       }),
   }),
   installation: t.router({
