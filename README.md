@@ -70,6 +70,8 @@ The gateway is an OAuth 2.1 authorization server for outside MCP clients, such a
 
 Codes and tokens are kept only as hashes, and so are client secrets.
 
+Serve the gateway at its own origin, such as `https://gateway.example.com`, with `GATEWAY_PUBLIC_URL` set to it: RFC 8414 and RFC 9728 put the metadata at the origin's root, and `/authorize` and `/token` are served there.
+
 ## MCP clients list and call tools
 
 `<GATEWAY_PUBLIC_URL>/mcp` is the gateway's MCP endpoint (Streamable HTTP, stateless). A call without a token, or with one the gateway did not issue for it, gets 401 with `resource_metadata` naming where to sign in (RFC 9728).
