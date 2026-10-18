@@ -32,6 +32,10 @@ import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
 import { createShipAliases } from './adapters/crypto/ship-aliases.js';
 import { createListTools } from './core/mcp-in/list-tools.js';
+import { createCallTool } from './core/mcp-in/call-tool.js';
+import { createReadClientCall } from './core/mcp-in/read-client-call.js';
+import { createCallKeys } from './adapters/crypto/call-keys.js';
+import { createPrismaClientCalls } from './adapters/prisma/client-calls.js';
 import { createAuthenticateAccessToken } from './core/oauth/authenticate-access-token.js';
 import { oauthSecrets } from './adapters/crypto/oauth-secrets.js';
 import { createClientMetadataDocuments } from './adapters/oauth/client-metadata-documents.js';
@@ -195,10 +199,14 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readClientParty: createReadClientParty({ parties }),
     exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
   });
+  const listTools = createListTools({ parties, discovery: door, aliases: createShipAliases(options.gatewaySecret) });
+  const clientCalls = createPrismaClientCalls(prisma);
   registerMcpEndpoint(server, {
     resource,
     authenticateAccessToken: createAuthenticateAccessToken({ tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
-    listTools: createListTools({ parties, discovery: door, aliases: createShipAliases(options.gatewaySecret) }),
+    listTools,
+    callTool: createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock }),
+    readClientCall: createReadClientCall({ calls: clientCalls }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.

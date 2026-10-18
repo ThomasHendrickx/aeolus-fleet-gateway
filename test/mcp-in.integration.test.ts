@@ -65,7 +65,10 @@ describe('an outside MCP client lists the tools of the ships its party reaches',
     const { tools } = await mcp.listTools();
     await mcp.close();
 
-    expect(tools.map((tool) => [/^[a-z][a-z0-9]{7}__list_deals$/.test(tool.name), tool.description])).toEqual([[true, "Lists a contact's deals.\n\nOffered by: The CRM: contacts and deals."]]);
+    expect(tools.map((tool) => [/^[a-z][a-z0-9]{7}__list_deals$/.test(tool.name) || tool.name === 'aeolus_result', tool.description?.split('\n\n')[1] ?? tool.name])).toEqual([
+      [true, 'Offered by: The CRM: contacts and deals.'],
+      [true, 'aeolus_result'],
+    ]);
     expect(JSON.stringify(tools)).not.toContain('crm"');
   });
 
@@ -113,7 +116,9 @@ describe("an outside MCP client's tool call is a message its proxy ship sends", 
     await mcp.close();
 
     expect(handles[0]).toBe(handles[1]);
-    expect([await receiveOne(setting.fleet, crm), await receiveOne(setting.fleet, crm)].map((delivery) => delivery !== undefined)).toEqual([true, false]);
+    expect(await receiveOne(setting.fleet, crm)).toBeDefined();
+    const inbox = await fetch(`${setting.fleet.url}/api/v1/ship/inbox`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${crm}` }, body: '{}' });
+    expect(z.object({ waiting: z.number() }).parse(await inbox.json()).waiting).toBe(0);
   });
 
   it('answers a tool error, sending nothing, for a tool it does not list', async () => {

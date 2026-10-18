@@ -69,7 +69,7 @@ The gateway is an OAuth 2.1 authorization server for outside MCP clients, such a
 
 Codes and tokens are kept only as hashes, and so are client secrets.
 
-## MCP clients list tools
+## MCP clients list and call tools
 
 `<GATEWAY_PUBLIC_URL>/mcp` is the gateway's MCP endpoint (Streamable HTTP, stateless). A call without a token, or with one the gateway did not issue for it, gets 401 with `resource_metadata` naming where to sign in (RFC 9728).
 
@@ -77,6 +77,10 @@ Codes and tokens are kept only as hashes, and so are client secrets.
 - A tool is named `<alias>__<capability>`. The alias is 8 letters and digits derived from the ship under `GATEWAY_SECRET`: the client never sees a ship's name or id.
 - Its description is the capability's, then the ship's summary. A capability that takes plain text first gets one `text` argument. Every tool takes an optional `aeolus_idempotency_key`.
 - Left out: argo, ships with no statement by their crew, capabilities whose first input type is neither JSON nor plain text or whose input schema is not an object, and tool names over 128 characters.
+- No tool states an output schema: a call may answer a handle, and MCP clients check every answer against it.
+- `tools/call` sends the arguments, without `aeolus_idempotency_key`, as a message from the client's proxy ship to the tool's ship, under the capability's first input type. The client is answered only once the fleet answered the send: `{"handle": "...", "state": "submitted"}`. A fleet that refuses the send gets a tool error, and one that cannot be reached gives no reason why.
+- The same `aeolus_idempotency_key` again sends no second message. The send's key is derived from it under `GATEWAY_SECRET`, and the handle from the message, so the client never sees a `msg_` id.
+- `aeolus_result({ handle })` reads the client's own call.
 
 ## Develop
 

@@ -45,7 +45,6 @@ export interface ListedTool {
   title?: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  outputSchema?: Record<string, unknown>;
   target: ToolTarget;
 }
 
@@ -74,12 +73,6 @@ function inputSchemaOf(capability: Capability, isText: boolean): Record<string, 
   return { ...schema, properties: { ...properties, [IDEMPOTENCY_ARGUMENT]: IDEMPOTENCY_PROPERTY } };
 }
 
-/** What a capability answers, while it answers JSON MCP can check against an object schema. */
-function outputSchemaOf(capability: Capability): Record<string, unknown> | undefined {
-  const schema = capability.outputSchema;
-  return schema !== undefined && isJson(capability.outputModes?.[0] ?? DEFAULT_MODE) && isObjectSchema(schema) ? schema : undefined;
-}
-
 function toolOf({ alias, summary, shipId }: { alias: string; summary: string; shipId: ShipId }, capability: Capability): ListedTool | undefined {
   const contentType = capability.inputModes?.[0] ?? DEFAULT_MODE;
   const isText = essenceOf(contentType) === TEXT_MODE;
@@ -88,13 +81,12 @@ function toolOf({ alias, summary, shipId }: { alias: string; summary: string; sh
   if ((!isText && !isJson(contentType)) || inputSchema === undefined || name.length > TOOL_NAME_MAX_LENGTH) {
     return undefined;
   }
-  const outputSchema = outputSchemaOf(capability);
+  // No output schema: a call may answer a handle, and MCP clients check every answer against it.
   return {
     name,
     ...(capability.title === undefined ? {} : { title: capability.title }),
     description: [capability.description, `Offered by: ${summary}`].filter((part) => part !== undefined).join('\n\n'),
     inputSchema,
-    ...(outputSchema === undefined ? {} : { outputSchema }),
     target: { shipId, capability: capability.name, contentType, isText },
   };
 }

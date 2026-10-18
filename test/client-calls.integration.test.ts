@@ -38,7 +38,7 @@ describe("outside clients' calls in Postgres", () => {
     const calls = createPrismaClientCalls(prisma);
     await calls.save(aCall());
 
-    await expect(Promise.all([calls.findByHandle(FLEET, 'claude', 'handle-1'), calls.findByHandle(FLEET, 'cursor', 'handle-1'), calls.findByHandle(OTHER_FLEET, 'claude', 'handle-1')])).resolves.toEqual([aCall(), undefined, undefined]);
+    await expect(Promise.all([calls.findByHandle({ fleetId: FLEET, party: 'claude' }, 'handle-1'), calls.findByHandle({ fleetId: FLEET, party: 'cursor' }, 'handle-1'), calls.findByHandle({ fleetId: OTHER_FLEET, party: 'claude' }, 'handle-1')])).resolves.toEqual([aCall(), undefined, undefined]);
   });
 
   it('keeps one call per message: the same send again changes nothing', async () => {
@@ -47,7 +47,7 @@ describe("outside clients' calls in Postgres", () => {
     await calls.save(call);
     await calls.save({ ...call, sentAt: new Date('2026-10-19T13:00:00.000Z') });
 
-    await expect(calls.findByHandle(FLEET, 'claude', 'handle-2')).resolves.toEqual(call);
+    await expect(calls.findByHandle({ fleetId: FLEET, party: 'claude' }, 'handle-2')).resolves.toEqual(call);
   });
 
   it('forgets a fleet with its calls (decision 0021)', async () => {
@@ -56,6 +56,6 @@ describe("outside clients' calls in Postgres", () => {
 
     await createPrismaFleetForgetter(prisma).forget(OTHER_FLEET);
 
-    await expect(calls.findByHandle(OTHER_FLEET, 'claude', 'handle-o')).resolves.toBeUndefined();
+    await expect(calls.findByHandle({ fleetId: OTHER_FLEET, party: 'claude' }, 'handle-o')).resolves.toBeUndefined();
   });
 });

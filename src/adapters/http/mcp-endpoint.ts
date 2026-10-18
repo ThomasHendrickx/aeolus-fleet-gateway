@@ -9,7 +9,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import type { AccessTokenHolder, AuthenticateAccessToken } from '../../core/oauth/authenticate-access-token.js';
+import type { CallTool } from '../../core/mcp-in/call-tool.js';
 import type { ListTools } from '../../core/mcp-in/list-tools.js';
+import type { ReadClientCall } from '../../core/mcp-in/read-client-call.js';
 import { runningVersion } from './version.js';
 
 const HTTP_UNAUTHORIZED = 401;
@@ -19,7 +21,26 @@ export interface McpEndpointDeps {
   resource: string;
   authenticateAccessToken: AuthenticateAccessToken;
   listTools: ListTools;
+  callTool: CallTool;
+  readClientCall: ReadClientCall;
 }
+
+/** The gateway's own tool: the answer to a call that answered a handle. */
+const RESULT_TOOL = {
+  name: 'aeolus_result',
+  title: 'Read a call',
+  description: "A call's state and, once it is answered, its answer. Call it with the handle a tool answered, and again later while the call is not answered.",
+  inputSchema: { type: 'object' as const, properties: { handle: { type: 'string' } }, required: ['handle'] },
+};
+
+const argumentsSchema = z.record(z.string(), z.unknown()).default({});
+const resultArgumentsSchema = z.object({ handle: z.string() });
+
+/** A tool's answer as one text block of JSON. */
+const answered = (value: unknown, isError = false) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }], ...(isError ? { isError } : {}) });
+
+/** A tool error the client's model reads: what went wrong, never a fleet's reasons. */
+const toolError = (message: string) => ({ content: [{ type: 'text' as const, text: message }], isError: true });
 
 /** The request as the SDK's web-standard handler takes it. Fastify has read the JSON body already. */
 function webRequestOf(request: FastifyRequest): Request {
@@ -47,14 +68,30 @@ function serverFor(holder: AccessTokenHolder, deps: McpEndpointDeps): McpServer 
     }
     // Where each call goes stays with the gateway: the client sees aliases only.
     return {
-      tools: listed.value.map(({ name, title, description, inputSchema, outputSchema }) => ({
+      tools: listed.value.map(({ name, title, description, inputSchema }) => ({
         name,
         ...(title === undefined ? {} : { title }),
         description,
         inputSchema: objectSchema.parse(inputSchema),
-        ...(outputSchema === undefined ? {} : { outputSchema: objectSchema.parse(outputSchema) }),
-      })),
+      })).concat(RESULT_TOOL),
     };
+  });
+  mcp.server.setRequestHandler('tools/call', async (request) => {
+    const caller = { fleetId: holder.fleetId, party: holder.party };
+    if (request.params.name === RESULT_TOOL.name) {
+      const sent = resultArgumentsSchema.safeParse(request.params.arguments);
+      if (!sent.success) {
+        return toolError('aeolus_result takes the handle a tool answered');
+      }
+      const read = await deps.readClientCall(caller, sent.data.handle);
+      return read.isOk ? answered(read.value) : toolError(read.error.message);
+    }
+    const values = argumentsSchema.safeParse(request.params.arguments);
+    if (!values.success) {
+      return toolError('A tool takes its arguments as an object');
+    }
+    const called = await deps.callTool(caller, { name: request.params.name, arguments: values.data });
+    return called.isOk ? answered({ handle: called.value.handle, state: 'submitted' }) : toolError(called.error.message);
   });
   return mcp;
 }

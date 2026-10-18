@@ -93,11 +93,11 @@ describe("an outside MCP client's tool call is a message its proxy ship sends (i
   });
 
   it.each([
-    ['a tool it does not list', { name: 'a9cr2__drop_tables', arguments: {} }, 'NO_SUCH_TOOL'],
-    ['a text tool without its text', { name: 'a9cr2__ask', arguments: { text: 7 } }, 'INVALID_ARGUMENTS'],
-    ['an idempotency argument that is not a string', { name: 'a9cr2__ask', arguments: { text: 'hi', [IDEMPOTENCY_ARGUMENT]: 7 } }, 'INVALID_ARGUMENTS'],
-    ['an empty idempotency argument', { name: 'a9cr2__ask', arguments: { text: 'hi', [IDEMPOTENCY_ARGUMENT]: '' } }, 'INVALID_ARGUMENTS'],
-  ])('refuses %s, sending nothing', async (_what, call, kind) => {
+    { what: 'a tool it does not list', call: { name: 'a9cr2__drop_tables', arguments: {} }, kind: 'NO_SUCH_TOOL' },
+    { what: 'a text tool without its text', call: { name: 'a9cr2__ask', arguments: { text: 7 } }, kind: 'INVALID_ARGUMENTS' },
+    { what: 'an idempotency argument that is not a string', call: { name: 'a9cr2__ask', arguments: { text: 'hi', [IDEMPOTENCY_ARGUMENT]: 7 } }, kind: 'INVALID_ARGUMENTS' },
+    { what: 'an empty idempotency argument', call: { name: 'a9cr2__ask', arguments: { text: 'hi', [IDEMPOTENCY_ARGUMENT]: '' } }, kind: 'INVALID_ARGUMENTS' },
+  ])('refuses $what, sending nothing', async ({ call, kind }) => {
     discovery.state.ships = [aDiscoveredShip({ statement: { by: 'crew', summary: 's', capabilities: [{ name: 'ask', inputModes: ['text/plain'] }] } })];
 
     await expect(callTool(CALLER, call)).resolves.toMatchObject({ isOk: false, error: { kind } });

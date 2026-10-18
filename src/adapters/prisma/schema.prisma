@@ -157,3 +157,18 @@ model IssuedToken {
   @@index([codeHash])
   @@map("issued_tokens")
 }
+
+/// Outside MCP clients' calls: the message each proxy ship sent, and the handle its client reads it by.
+model ClientCall {
+  fleetId    String   @map("fleet_id")
+  messageId  String   @map("message_id")
+  party      String
+  handle     String
+  shipId     String   @map("ship_id")
+  capability String
+  sentAt     DateTime @map("sent_at")
+
+  @@id([fleetId, messageId])
+  @@unique([fleetId, handle])
+  @@map("client_calls")
+}

@@ -55,7 +55,7 @@ export const MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank9m01';
 export function fakeCallKeys(): CallKeys & { drawn: number } {
   const keys = {
     drawn: 0,
-    idempotencyKeyOf: (fleetId: FleetId, party: string, key: string) => `key(${fleetId}:${party}:${key})`,
+    idempotencyKeyOf: ({ fleetId, party, key }: { fleetId: FleetId; party: string; key: string }) => `key(${fleetId}:${party}:${key})`,
     newIdempotencyKey: () => {
       keys.drawn += 1;
       return `new-${String(keys.drawn)}`;
@@ -97,6 +97,6 @@ export function memoryClientCalls(): ClientCalls & { held: ClientCall[] } {
       }
       return Promise.resolve();
     },
-    findByHandle: (fleetId, party, handle) => Promise.resolve(held.find((call) => call.fleetId === fleetId && call.party === party && call.handle === handle)),
+    findByHandle: ({ fleetId, party }, handle) => Promise.resolve(held.find((call) => call.fleetId === fleetId && call.party === party && call.handle === handle)),
   };
 }

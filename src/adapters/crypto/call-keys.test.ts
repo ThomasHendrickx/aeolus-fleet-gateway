@@ -10,7 +10,7 @@ const MESSAGE = 'msg_01m3tbfspe96yf1rnr4ank9m01';
 describe("the keys of an outside client's call, derived under the gateway secret (NAT both ways)", () => {
   it("derives the send's idempotency key from the fleet, the party and the client's key: the same for the same, another for any other", () => {
     const keys = createCallKeys(SECRET);
-    const derived = [keys.idempotencyKeyOf(FLEET, 'claude', 'k-1'), keys.idempotencyKeyOf(FLEET, 'claude', 'k-1'), keys.idempotencyKeyOf(FLEET, 'cursor', 'k-1'), keys.idempotencyKeyOf(OTHER_FLEET, 'claude', 'k-1'), keys.idempotencyKeyOf(FLEET, 'claude', 'k-2')];
+    const derived = [keys.idempotencyKeyOf({ fleetId: FLEET, party: 'claude', key: 'k-1' }), keys.idempotencyKeyOf({ fleetId: FLEET, party: 'claude', key: 'k-1' }), keys.idempotencyKeyOf({ fleetId: FLEET, party: 'cursor', key: 'k-1' }), keys.idempotencyKeyOf({ fleetId: OTHER_FLEET, party: 'claude', key: 'k-1' }), keys.idempotencyKeyOf({ fleetId: FLEET, party: 'claude', key: 'k-2' })];
 
     expect(new Set(derived).size).toBe(4);
     expect(derived[0]).not.toContain('k-1');
@@ -19,7 +19,7 @@ describe("the keys of an outside client's call, derived under the gateway secret
   it('keeps the parts apart, so a party name with a colon makes no other key', () => {
     const keys = createCallKeys(SECRET);
 
-    expect(keys.idempotencyKeyOf(FLEET, 'a:b', 'c')).not.toBe(keys.idempotencyKeyOf(FLEET, 'a', 'b:c'));
+    expect(keys.idempotencyKeyOf({ fleetId: FLEET, party: 'a:b', key: 'c' })).not.toBe(keys.idempotencyKeyOf({ fleetId: FLEET, party: 'a', key: 'b:c' }));
   });
 
   it("answers a handle that tells nothing of the message id, the same for the same message, another under another secret", () => {

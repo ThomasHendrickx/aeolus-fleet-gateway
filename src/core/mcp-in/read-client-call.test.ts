@@ -21,10 +21,10 @@ describe('an outside MCP client reads its call by the handle it was answered (in
   });
 
   it.each([
-    ['a handle it was never answered', { fleetId: FLEET_ID, party: 'claude' }, 'handle-2'],
-    ["another party's call", { fleetId: FLEET_ID, party: 'cursor' }, HANDLE],
-    ["another fleet's call", { fleetId: OTHER_FLEET_ID, party: 'claude' }, HANDLE],
-  ])('knows no call by %s', async (_what, caller, handle) => {
+    { what: 'a handle it was never answered', caller: { fleetId: FLEET_ID, party: 'claude' }, handle: 'handle-2' },
+    { what: "another party's call", caller: { fleetId: FLEET_ID, party: 'cursor' }, handle: HANDLE },
+    { what: "another fleet's call", caller: { fleetId: OTHER_FLEET_ID, party: 'claude' }, handle: HANDLE },
+  ])('knows no call by $what', async ({ caller, handle }) => {
     await expect(readClientCall(caller, handle)).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_CALL' } });
   });
 });
