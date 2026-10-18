@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { FLEET_ID, OTHER_FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
+import { plainHasher } from '../../../test/support/memory-installation.js';
+import { OWNER_SHIP_ID, PROXY_SHIP_ID, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { createApproveClientParty } from '../parties/approve-party.js';
 import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { createApproveAuthorization } from './approve-authorization.js';
 import { createReadAuthorization } from './read-authorization.js';
@@ -14,6 +17,11 @@ let documents: ReturnType<typeof fakeClientMetadataDocuments>;
 let codes: ReturnType<typeof memoryAuthorizationCodes>;
 let readAuthorization: ReturnType<typeof createReadAuthorization>;
 let approveAuthorization: ReturnType<typeof createApproveAuthorization>;
+let fleet: ReturnType<typeof fakeProxyShipFleet>;
+let parties: ReturnType<typeof memoryPartyStore>;
+
+/** The party argo names for a client at its first approval. */
+const NEW_PARTY = { requestId: 'r-1', name: 'claude', ownerShipId: OWNER_SHIP_ID };
 
 beforeEach(async () => {
   clients = memoryOAuthClients();
@@ -23,8 +31,16 @@ beforeEach(async () => {
   });
   codes = memoryAuthorizationCodes();
   readAuthorization = createReadAuthorization({ clients, documents, resource: RESOURCE });
-  approveAuthorization = createApproveAuthorization({ readAuthorization, codes, secrets: fakeSecrets(), clock: { now: () => AT }, issuer: ISSUER });
+  fleet = fakeProxyShipFleet();
+  parties = memoryPartyStore();
+  const connections = memoryConnectionStore();
+  await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: AT });
+  approving(createApproveClientParty({ connections, parties, door: fleet.door, hasher: plainHasher, clock: { now: () => AT } }));
 });
+
+function approving(approveClientParty: ReturnType<typeof createApproveClientParty>) {
+  approveAuthorization = createApproveAuthorization({ readAuthorization, codes, secrets: fakeSecrets(), clock: { now: () => AT }, issuer: ISSUER, parties, approveClientParty });
+}
 
 /** An authorization request as a client sends it to /authorize. */
 function aRequest(overrides: Record<string, string | undefined> = {}): Record<string, string | undefined> {
@@ -85,7 +101,7 @@ describe('the gateway reads an authorization request (OAuth 2.1, MCP 2026-07-28)
 
 describe('argo approves an authorization request', () => {
   it('issues a code bound to the client, its redirect URI, its challenge and the resource, and sends the client back with it', async () => {
-    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true })).resolves.toEqual({
+    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true, newParty: NEW_PARTY })).resolves.toEqual({
       isOk: true,
       value: { redirectTo: `${CALLBACK}?code=secret-1&state=state-1&iss=${encodeURIComponent(ISSUER)}` },
     });
@@ -98,6 +114,7 @@ describe('argo approves an authorization request', () => {
         codeChallenge: 'S256(verifier-1)',
         resource: RESOURCE,
         scope: null,
+        party: 'claude',
         expiresAt: new Date('2026-10-19T09:01:00.000Z'),
         isUsed: false,
       },
@@ -113,7 +130,7 @@ describe('argo approves an authorization request', () => {
   });
 
   it("refuses a client pre-registered for another fleet than argo's", async () => {
-    await expect(approveAuthorization({ fleetId: OTHER_FLEET_ID, request: aRequest({ client_id: 'client-cursor', redirect_uri: 'https://cursor.example.com/callback' }), isApproved: true })).resolves.toMatchObject({
+    await expect(approveAuthorization({ fleetId: OTHER_FLEET_ID, request: aRequest({ client_id: 'client-cursor', redirect_uri: 'https://cursor.example.com/callback' }), isApproved: true, newParty: NEW_PARTY })).resolves.toMatchObject({
       isOk: false,
       error: { kind: 'invalidClient' },
     });
@@ -121,17 +138,68 @@ describe('argo approves an authorization request', () => {
   });
 
   it('reads the request again, so a changed request is refused as any is', async () => {
-    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest({ redirect_uri: 'https://evil.example.com/callback' }), isApproved: true })).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
+    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest({ redirect_uri: 'https://evil.example.com/callback' }), isApproved: true, newParty: NEW_PARTY })).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
   });
 
   it('keeps a redirect URI query, adding the code to it', async () => {
     documents = fakeClientMetadataDocuments({ [CIMD_CLIENT]: { client_id: CIMD_CLIENT, redirect_uris: [`${CALLBACK}?tenant=a`] } });
     readAuthorization = createReadAuthorization({ clients, documents, resource: RESOURCE });
-    approveAuthorization = createApproveAuthorization({ readAuthorization, codes, secrets: fakeSecrets(), clock: { now: () => AT }, issuer: ISSUER });
+    approving(createApproveClientParty({ connections: memoryConnectionStoreWith(), parties, door: fleet.door, hasher: plainHasher, clock: { now: () => AT } }));
 
-    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest({ redirect_uri: `${CALLBACK}?tenant=a`, state: undefined }), isApproved: true })).resolves.toEqual({
+    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest({ redirect_uri: `${CALLBACK}?tenant=a`, state: undefined }), isApproved: true, newParty: NEW_PARTY })).resolves.toEqual({
       isOk: true,
       value: { redirectTo: `${CALLBACK}?tenant=a&code=secret-1&iss=${encodeURIComponent(ISSUER)}` },
     });
+  });
+});
+
+/** A gateway connected to the fleet, for a test that builds its own approval. */
+function memoryConnectionStoreWith() {
+  const connections = memoryConnectionStore();
+  void connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: AT });
+  return connections;
+}
+
+describe('argo approves a client as a party: the proxy ship it calls the fleet as', () => {
+  it("names its party at the client's first approval: the gateway commissions and crews its proxy ship before the code is issued", async () => {
+    await approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true, newParty: NEW_PARTY });
+
+    expect({ commissioned: fleet.state.commissioned.map(({ name, type }) => [name, type]), party: (await parties.findByClient(FLEET_ID, CIMD_CLIENT))?.state }).toEqual({ commissioned: [['claude', 'mcp-client']], party: 'crewed' });
+  });
+
+  it('approves a client that has a party again with one click: no name, no second ship', async () => {
+    await approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true, newParty: NEW_PARTY });
+
+    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true })).resolves.toMatchObject({ isOk: true });
+    expect([...codes.held.values()].map((code) => code.party)).toEqual(['claude', 'claude']);
+    expect(fleet.state.commissioned).toHaveLength(1);
+  });
+
+  it('asks argo to name the party of a client that has none, issuing no code', async () => {
+    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true })).resolves.toMatchObject({ isOk: false, error: { kind: 'needsParty' } });
+    expect(codes.held.size).toBe(0);
+  });
+
+  it("says why when the party's proxy ship could not be crewed, issuing no code", async () => {
+    fleet.state.isAnswering = false;
+
+    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true, newParty: NEW_PARTY })).resolves.toMatchObject({
+      isOk: false,
+      error: { kind: 'partyRefused', message: expect.stringContaining('did not answer') as unknown },
+    });
+    expect(codes.held.size).toBe(0);
+  });
+
+  it('refuses a party whose proxy ship awaits crew, until argo hands its secret over', async () => {
+    fleet.state.isLosingNextAnswer = true;
+
+    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true, newParty: NEW_PARTY })).resolves.toMatchObject({ isOk: false, error: { kind: 'partyRefused' } });
+    await expect(parties.findByClient(FLEET_ID, CIMD_CLIENT)).resolves.toMatchObject({ state: 'awaitingCrew', proxyShipId: PROXY_SHIP_ID });
+  });
+
+  it('commissions nothing when argo denies', async () => {
+    await approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: false, newParty: NEW_PARTY });
+
+    expect(fleet.state.commissioned).toEqual([]);
   });
 });
