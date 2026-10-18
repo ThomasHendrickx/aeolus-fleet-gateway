@@ -33,7 +33,7 @@ The API is tRPC at `/trpc`: `connection.status` and `connection.connect` take ar
 
 ## Parties
 
-argo approves an outside MCP server as a party with `parties.approve` (argo's console session): its name, its Streamable HTTP URL, the credential the gateway calls it with (a static bearer, or OAuth client credentials with their issuer), the owner argo picks for it (a person's ship or argo) and how many calls it takes at once (1 to 64, 4 by default). The gateway, as its own ship, commissions the party's app proxy ship of type `mcp-server` with that owner, crews it, and keeps its crew token. argo labels the proxy ship in the console, as any ship, for the network rules to select it. `parties.list` shows each party without its credential or crew token. A proxy ship left awaiting crew (the commission's answer was lost, and its secret with it) takes a new secret from a new starting prompt with `parties.crew`.
+argo approves an outside MCP server as a party with `parties.approve` (argo's console session): its name, its Streamable HTTP URL, the credential the gateway calls it with (a static bearer, or OAuth client credentials with their issuer), the owner argo picks for it (a person's ship or argo) and how many calls it takes at once (1 to 10, the most core's pushReceive hands at once; 4 by default). The gateway, as its own ship, commissions the party's app proxy ship of type `mcp-server` with that owner, crews it, and keeps its crew token. argo labels the proxy ship in the console, as any ship, for the network rules to select it. `parties.list` shows each party without its credential or crew token. A proxy ship left awaiting crew (the commission's answer was lost, and its secret with it) takes a new secret from a new starting prompt with `parties.crew`.
 
 The gateway keeps outside credentials and crew tokens as they are in its own database, as squadrons keeps crew tokens: a key on the same server would protect only backups. Guard the database and its backups accordingly.
 
@@ -51,7 +51,7 @@ From its start, and as soon as a party is crewed, the gateway takes the calls of
 
 - A call the server never got (it was unreachable, or refused the credential) is handed again after a wait, and the fleet stops it at the fifth attempt.
 - A call sent with no answer (a broken stream, no answer within 5 minutes) is handed again only when argo marked its tool repeatable. Otherwise the gateway reports it not handled: it may have run, and a human who can check the outside system resends or dismisses it.
-- A party takes at most its concurrency limit of calls at once, and never more than 10, the most core's pushReceive takes.
+- A party takes at most its concurrency limit of calls at once.
 
 With core 0.27 the not handled report is refused (aeolus-fleet#955): the call is never made again, and its delivery stays handed until argo resends or dismisses it.
 

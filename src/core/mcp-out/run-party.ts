@@ -6,9 +6,6 @@ import type { HandCall, HandOutcome, ProxyShipCrew, PushedDelivery } from './han
 /** Outbound port: waits the given time, or less once the signal aborts. */
 export type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
 
-/** The most deliveries one pushReceive takes (core 0.27): its own in flight come first, so it bounds how many calls run at once too. */
-export const PUSH_RECEIVE_MAX = 10;
-
 /** The fleet's codes for a crew token it no longer takes: the gateway does not crew the proxy ship any more. */
 const CREW_REFUSED = new Set(['UNAUTHORIZED', 'LEASE_ENDED']);
 
@@ -29,7 +26,7 @@ export function createRunParty(deps: { crew: ProxyShipCrew; handCall: HandCall; 
     if (crewToken === null) {
       return { ended: 'crewRefused' };
     }
-    const max = Math.min(party.concurrencyLimit, PUSH_RECEIVE_MAX);
+    const max = party.concurrencyLimit;
     const inFlight = new Map<DeliveryId, Promise<void>>();
     const agains = new Map<DeliveryId, number>();
 
