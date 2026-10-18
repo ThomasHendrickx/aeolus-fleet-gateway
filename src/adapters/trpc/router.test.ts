@@ -78,7 +78,7 @@ describe("argo approves parties through the gateway's API", () => {
     ['an empty bearer token', { ...APPROVAL, credential: { kind: 'bearer', token: '' } }],
     ['client credentials without an issuer', { ...APPROVAL, credential: { kind: 'clientCredentials', clientId: 'gw', clientSecret: 's' } }],
     ['a concurrency limit of 0', { ...APPROVAL, concurrencyLimit: 0 }],
-    ['a concurrency limit of 65', { ...APPROVAL, concurrencyLimit: 65 }],
+    ['a concurrency limit of 11, over the 10 calls core hands a proxy ship at once', { ...APPROVAL, concurrencyLimit: 11 }],
     ['a name that is no ship handle', { ...APPROVAL, name: 'the CRM' }],
   ])('refuses %s', async (_what, approval) => {
     const { context, approvals } = aContext(ARGO_COOKIE);
@@ -87,12 +87,12 @@ describe("argo approves parties through the gateway's API", () => {
     expect(approvals).toEqual([]);
   });
 
-  it('takes a concurrency limit of 64', async () => {
+  it('takes a concurrency limit of 10', async () => {
     const { context, approvals } = aContext(ARGO_COOKIE);
 
-    await gatewayRouter.createCaller(context).parties.approve({ ...APPROVAL, concurrencyLimit: 64 });
+    await gatewayRouter.createCaller(context).parties.approve({ ...APPROVAL, concurrencyLimit: 10 });
 
-    expect(approvals[0]?.concurrencyLimit).toBe(64);
+    expect(approvals[0]?.concurrencyLimit).toBe(10);
   });
 });
 
