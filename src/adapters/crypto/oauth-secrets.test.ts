@@ -4,7 +4,7 @@ import { oauthSecrets } from './oauth-secrets.js';
 
 describe("the OAuth server's secrets", () => {
   it('computes the S256 challenge of RFC 7636 appendix B', () => {
-    expect(oauthSecrets.challengeOf('dBjftJeZ4CVP-mJ92K7PPq7_WJ6_N3Q7-JP9vE0rjU0')).toBe('E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM');
+    expect(oauthSecrets.challengeOf('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk')).toBe('E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM');
   });
 
   it('draws 256 bits, safe in a URL, and never the same twice', () => {

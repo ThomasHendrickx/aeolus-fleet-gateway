@@ -24,6 +24,7 @@ beforeEach(async () => {
       case '/slow.json':
         setTimeout(() => response.writeHead(200).end('{}'), 500);
         return;
+      case undefined:
       default:
         response.writeHead(404).end('{}');
     }
