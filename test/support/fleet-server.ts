@@ -19,6 +19,9 @@ const run = promisify(execFile);
 const START_TIMEOUT_MS = 60_000;
 const START_POLL_MS = 200;
 
+/** argo's console sign-in on every test fleet. */
+export const OPERATOR = { email: 'argo@example.com', password: 'correct horse battery staple' };
+
 export interface FleetServer {
   /** Where ships reach the fleet, such as `http://127.0.0.1:41234`. */
   url: string;
@@ -81,13 +84,28 @@ async function waitForVersion(url: string, exited: () => string | undefined): Pr
   throw new Error(`the fleet server at ${url} did not answer within ${String(START_TIMEOUT_MS)} ms`);
 }
 
-/** Migrates a new database and starts core on a free port, answering once it serves its version. */
+/** Creates the fleet and argo as an operator does once, answering the email and password on standard input. */
+async function initialiseFleet(bin: string, environment: Record<string, string>): Promise<void> {
+  const child = spawn(process.execPath, [bin, 'fleet:init', '--name', 'test fleet'], { env: { ...process.env, ...environment }, stdio: ['pipe', 'ignore', 'pipe'] });
+  let stderr = '';
+  child.stderr.on('data', (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
+  child.stdin.end(`${OPERATOR.email}\n${OPERATOR.password}\n${OPERATOR.password}\n`);
+  const code = await new Promise<number | null>((resolve) => child.once('close', resolve));
+  if (code !== 0) {
+    throw new Error(`aeolus-core fleet:init failed: ${stderr}`);
+  }
+}
+
+/** Migrates a new database, creates its fleet and argo, and starts core on a free port, answering once it serves its version. */
 export async function startFleetServer(adminUrl: string): Promise<FleetServer> {
   const databaseUrl = aNewDatabaseUrl(adminUrl, 'fleet');
   const bin = coreBin();
   await run(process.execPath, [bin, 'migrate'], { env: { ...process.env, DATABASE_URL: databaseUrl } });
   const port = await aFreePort();
   const url = `http://127.0.0.1:${String(port)}`;
+  await initialiseFleet(bin, { DATABASE_URL: databaseUrl, PUBLIC_URL: url });
   const child = spawn(process.execPath, [bin, 'start'], {
     env: { ...process.env, DATABASE_URL: databaseUrl, PUBLIC_URL: url, HOST: '127.0.0.1', PORT: String(port), LOG_LEVEL: 'warn' },
     stdio: ['ignore', 'ignore', 'pipe'],
