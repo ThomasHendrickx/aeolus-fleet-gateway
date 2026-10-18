@@ -29,8 +29,8 @@ export interface Reply {
 
 /** Outbound port: the fleet's calls a proxy ship's crew makes (decision 0040), each with its crew token. */
 export interface ProxyShipCrew {
-  /** Its deliveries, up to max: its own in flight first, then pending ones, each received. */
-  pushReceive(crewToken: string, max: number): Promise<Result<PushedDelivery[], FleetRefusal>>;
+  /** Its deliveries, up to max: its own in flight first, then pending ones, each received; it waits a while for one, or less once the signal aborts. */
+  pushReceive(crewToken: string, take: { max: number; signal: AbortSignal }): Promise<Result<PushedDelivery[], FleetRefusal>>;
   handed(crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>>;
   reply(crewToken: string, reply: Reply): Promise<Result<void, FleetRefusal>>;
   ack(crewToken: string, deliveryId: DeliveryId): Promise<Result<void, FleetRefusal>>;

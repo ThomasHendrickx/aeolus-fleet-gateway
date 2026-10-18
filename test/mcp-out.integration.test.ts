@@ -21,6 +21,9 @@ import { receiveOne, send } from './support/ship.js';
 
 const TOOL_CALL_TIMEOUT_MS = 1_000;
 
+/** A reply's payload, read back. */
+const parsed = (payload: string): unknown => JSON.parse(payload);
+
 let fleet: FleetServer;
 let crm: MockCrm;
 let cookie: string;
@@ -86,7 +89,7 @@ describe('a ship of the fleet calls an outside MCP server through its proxy ship
     const request = await callTool('list_deals', { contactId: 'c1' });
 
     const reply = await receiveOne(fleet, caller.crewToken);
-    expect(reply && { inReplyTo: reply.inReplyTo, contentType: reply.contentType, result: JSON.parse(reply.payload) as unknown }).toEqual({
+    expect(reply && { inReplyTo: reply.inReplyTo, contentType: reply.contentType, result: parsed(reply.payload) }).toEqual({
       inReplyTo: request,
       contentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals',
       result: {
@@ -103,7 +106,7 @@ describe('a ship of the fleet calls an outside MCP server through its proxy ship
     await callTool('sync_ledger', {});
 
     const reply = await receiveOne(fleet, caller.crewToken);
-    expect(reply && (JSON.parse(reply.payload) as { isError: boolean }).isError).toBe(true);
+    expect(reply && z.object({ isError: z.boolean() }).parse(parsed(reply.payload)).isError).toBe(true);
   });
 
   it('runs a call that may have run only once, though its answer was lost', async () => {

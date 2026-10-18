@@ -49,19 +49,19 @@ describe('the gateway hands a call to its outside MCP server (interop 5.2)', () 
 
     expect(servers.called).toEqual([{ connection: { url: CRM.url, credential: CRM.credential }, call: { name: 'list_deals', arguments: { contactId: 'c1' }, timeoutMs: 60_000 } }]);
     expect(crew.log).toEqual([
-      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1', handOverNumber: 1 }],
+      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 1 }],
       [
         'send',
         {
           to: CALLER_SHIP_ID,
-          inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank9ms1',
+          inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank9m01',
           contentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals',
           payload: JSON.stringify(DEALS),
-          idempotencyKey: 'mcp-result:msg_01m3tbfspe96yf1rnr4ank9ms1',
+          idempotencyKey: 'mcp-result:msg_01m3tbfspe96yf1rnr4ank9m01',
         },
       ],
-      ['ack', 'dlv_01m3tbfspe96yf1rnr4ank9dl1'],
-      ['handled', 'dlv_01m3tbfspe96yf1rnr4ank9dl1'],
+      ['ack', 'dlv_01m3tbfspe96yf1rnr4ank9d01'],
+      ['handled', 'dlv_01m3tbfspe96yf1rnr4ank9d01'],
     ]);
   });
 
@@ -104,8 +104,8 @@ describe('the gateway hands a call to its outside MCP server (interop 5.2)', () 
 
     await expect(handCall({ party: CRM, delivery: aPushedDelivery({ state: 'handed', handOverNumber: 1 }) })).resolves.toEqual({ kind: 'handled' });
     expect(crew.log.filter(([call]) => call === 'handed')).toEqual([
-      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1', handOverNumber: 1 }],
-      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1', handOverNumber: 2 }],
+      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 1 }],
+      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 2 }],
     ]);
   });
 
@@ -120,7 +120,7 @@ describe('the gateway hands a call to its outside MCP server (interop 5.2)', () 
     servers.state.outcome = { kind: 'unanswered', reason: 'timed out' };
 
     await expect(handCall({ party: CRM, delivery: aPushedDelivery() })).resolves.toEqual({ kind: 'notHandled' });
-    expect(crew.log.at(-1)).toEqual(['notHandled', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1', reason: MAY_HAVE_RUN }]);
+    expect(crew.log.at(-1)).toEqual(['notHandled', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', reason: MAY_HAVE_RUN }]);
     expect(crew.sent()).toEqual([]);
   });
 
@@ -133,7 +133,7 @@ describe('the gateway hands a call to its outside MCP server (interop 5.2)', () 
     await marks.mark(FLEET_ID, { party: 'crm', tool: 'list_deals', isRepeatable: true });
 
     await expect(handCall({ party: CRM, delivery: aPushedDelivery({ state: 'handed', handOverNumber: 1 }) })).resolves.toEqual({ kind: 'handled' });
-    expect(crew.log[0]).toEqual(['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1', handOverNumber: 2 }]);
+    expect(crew.log[0]).toEqual(['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 2 }]);
   });
 
   it('never calls again a call it judged may have run, though the fleet refused the report (core 0.27, aeolus-fleet#955)', async () => {
@@ -169,10 +169,10 @@ describe('a message that is no call the server can take', () => {
     expect(crew.sent()).toEqual([
       {
         to: CALLER_SHIP_ID,
-        inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank9ms1',
+        inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank9m01',
         contentType: 'text/plain',
         payload: "crm takes only tool calls: send a capability's input type, application/vnd.aeolus.mcp-tool+json; name=<tool>, with the tool arguments as a JSON object.",
-        idempotencyKey: 'mcp-result:msg_01m3tbfspe96yf1rnr4ank9ms1',
+        idempotencyKey: 'mcp-result:msg_01m3tbfspe96yf1rnr4ank9m01',
       },
     ]);
   });

@@ -61,7 +61,7 @@ export function createRunParty(deps: { crew: ProxyShipCrew; handCall: HandCall; 
         await Promise.race(inFlight.values());
         continue;
       }
-      const received = await deps.crew.pushReceive(crewToken, max);
+      const received = await deps.crew.pushReceive(crewToken, { max, signal });
       if (!received.isOk && CREW_REFUSED.has(received.error.code)) {
         await Promise.all(inFlight.values());
         return { ended: 'crewRefused' };

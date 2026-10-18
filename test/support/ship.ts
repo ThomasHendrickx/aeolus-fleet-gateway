@@ -20,7 +20,7 @@ async function call(fleet: FleetServer, request: { crewToken: string; path: stri
 
 /** Sends one message to a ship: its id. */
 export async function send(fleet: FleetServer, request: { crewToken: string; to: ShipId; contentType: string; payload: string }): Promise<MessageId> {
-  const body = { selector: { kind: 'ship', shipId: request.to }, contentType: request.contentType, payload: request.payload, idempotencyKey: crypto.randomUUID() };
+  const body = { selector: { kind: 'ship', shipId: request.to }, contentType: request.contentType, payload: request.payload, idempotencyKey: crypto.randomUUID(), model: 'claude-opus-5-5' };
   return sendOutputSchema.parse(await call(fleet, { crewToken: request.crewToken, path: '/ship/send', body })).messageId;
 }
 

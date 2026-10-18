@@ -89,23 +89,23 @@ describe("the gateway's calls in Postgres", () => {
     await prisma.$disconnect();
   });
 
-  const REPLY = { to: 'shp_01m3tbfspe96yf1rnr4ank9agt', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank9ms1', contentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals', payload: '{}', idempotencyKey: 'mcp-result:msg_01m3tbfspe96yf1rnr4ank9ms1' } as const;
+  const REPLY = { to: 'shp_01m3tbfspe96yf1rnr4ank9agt', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank9m01', contentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals', payload: '{}', idempotencyKey: 'mcp-result:msg_01m3tbfspe96yf1rnr4ank9m01' } as const;
 
   it('keeps each call by delivery, with its reply until it is sent', async () => {
     const calls = createPrismaCalls(prisma);
-    await calls.save({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1', fleetId: FLEET, party: 'crm', state: 'calling', reply: null });
-    await calls.save({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1', fleetId: FLEET, party: 'crm', state: 'answered', reply: REPLY });
+    await calls.save({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', fleetId: FLEET, party: 'crm', state: 'calling', reply: null });
+    await calls.save({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', fleetId: FLEET, party: 'crm', state: 'answered', reply: REPLY });
 
-    await expect(calls.find('dlv_01m3tbfspe96yf1rnr4ank9dl1')).resolves.toEqual({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1', fleetId: FLEET, party: 'crm', state: 'answered', reply: REPLY });
-    await expect(calls.find('dlv_01m3tbfspe96yf1rnr4ank9dl9')).resolves.toBeUndefined();
+    await expect(calls.find('dlv_01m3tbfspe96yf1rnr4ank9d01')).resolves.toEqual({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', fleetId: FLEET, party: 'crm', state: 'answered', reply: REPLY });
+    await expect(calls.find('dlv_01m3tbfspe96yf1rnr4ank9d09')).resolves.toBeUndefined();
   });
 
   it('forgets a fleet with its calls (decision 0021)', async () => {
     const calls = createPrismaCalls(prisma);
-    await calls.save({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl2', fleetId: OTHER_FLEET, party: 'crm', state: 'mayHaveRun', reply: null });
+    await calls.save({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d02', fleetId: OTHER_FLEET, party: 'crm', state: 'mayHaveRun', reply: null });
 
     await createPrismaFleetForgetter(prisma).forget(OTHER_FLEET);
 
-    await expect(calls.find('dlv_01m3tbfspe96yf1rnr4ank9dl2')).resolves.toBeUndefined();
+    await expect(calls.find('dlv_01m3tbfspe96yf1rnr4ank9d02')).resolves.toBeUndefined();
   });
 });

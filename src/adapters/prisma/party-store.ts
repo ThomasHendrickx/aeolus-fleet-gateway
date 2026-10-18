@@ -48,9 +48,10 @@ function partyOf(row: Row): Party {
   };
 }
 
-/** The parties, one row per fleet and name, each with its vault. */
-export function createPrismaPartyStore(db: Db): PartyStore {
+/** The parties, one row per fleet and name, each with its vault; and every crewed one, whose calls the gateway takes from its start. */
+export function createPrismaPartyStore(db: Db): PartyStore & { crewed(): Promise<Party[]> } {
   return {
+    crewed: async () => (await db.party.findMany({ where: { state: 'crewed' }, orderBy: [{ fleetId: 'asc' }, { name: 'asc' }] })).map(partyOf),
     find: async (fleetId, name) => {
       const row = await db.party.findUnique({ where: { fleetId_name: { fleetId, name } } });
       return row ? partyOf(row) : undefined;

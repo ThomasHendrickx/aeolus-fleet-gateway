@@ -91,3 +91,16 @@ model ToolMark {
   @@id([fleetId, party, tool])
   @@map("tool_marks")
 }
+
+/// The gateway's calls to outside MCP servers, by delivery: so a restart never calls again what may have run (interop 5.2).
+model Call {
+  deliveryId String @id @map("delivery_id")
+  fleetId    String @map("fleet_id")
+  party      String
+  state      String
+  /// The reply as JSON, kept from the server's answer until it is sent.
+  reply      Json?
+
+  @@index([fleetId])
+  @@map("calls")
+}

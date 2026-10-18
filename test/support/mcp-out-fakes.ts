@@ -77,8 +77,8 @@ export const CALLER_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9agt';
 /** A tool call to the CRM's list_deals, as the proxy ship's pushReceive answers it. */
 export function aPushedDelivery(overrides: Partial<PushedDelivery> = {}): PushedDelivery {
   return {
-    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9dl1',
-    messageId: 'msg_01m3tbfspe96yf1rnr4ank9ms1',
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01',
+    messageId: 'msg_01m3tbfspe96yf1rnr4ank9m01',
     senderShipId: CALLER_SHIP_ID,
     contentType: 'application/vnd.aeolus.mcp-tool+json; name=list_deals',
     payload: '{"contactId":"c1"}',
@@ -113,7 +113,7 @@ export function fakeProxyShipCrew() {
     crewTokens,
     received,
     sent: () => log.flatMap((call) => (call[0] === 'send' ? [call[1]] : [])),
-    pushReceive: (crewToken, max) => {
+    pushReceive: (crewToken, { max }) => {
       crewTokens.push(crewToken);
       received.push(max);
       return Promise.resolve(state.receiveRefusal === undefined ? ok(state.waiting.slice(0, max)) : err(state.receiveRefusal));
