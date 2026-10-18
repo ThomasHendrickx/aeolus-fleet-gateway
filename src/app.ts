@@ -17,6 +17,10 @@ import { createPrismaFleetForgetter } from './adapters/prisma/fleet-forgetter.js
 import { createPrismaFleetSwitches } from './adapters/prisma/fleet-switches.js';
 import { createPrismaInstallationRequests } from './adapters/prisma/installation-requests.js';
 import { createPrismaPartyStore } from './adapters/prisma/party-store.js';
+import { createPrismaToolMarks } from './adapters/prisma/tool-marks.js';
+import { createMcpServers } from './adapters/mcp/mcp-servers.js';
+import { createMarkTool } from './core/mcp-out/mark-tool.js';
+import { createStateParty } from './core/mcp-out/state-party.js';
 import { gatewayRouter, type GatewayRouter } from './adapters/trpc/router.js';
 import { createConnect } from './core/connection/connect.js';
 import { createReadConnection, type ReadConnection } from './core/connection/read-connection.js';
@@ -98,6 +102,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const approveParty = createApproveParty({ connections, parties, door, hasher: sha256RequestHasher, clock });
   const crewParty = createCrewParty({ parties, door });
   const listParties = createListParties({ parties });
+  const marks = createPrismaToolMarks(prisma);
+  const stateParty = createStateParty({ parties, servers: createMcpServers(), door, marks });
+  const markTool = createMarkTool({ parties, marks, stateParty });
 
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {
     prefix: '/trpc',
@@ -123,6 +130,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
         approveParty,
         crewParty,
         listParties,
+        stateParty,
+        markTool,
       }),
     },
   };

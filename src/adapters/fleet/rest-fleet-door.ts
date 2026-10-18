@@ -11,6 +11,7 @@ import { busyWaitMs, commissionShipOutputSchema, FLEET_BUSY_WAITS_MS, fleetListO
 import { z } from 'zod';
 
 import type { FleetDoor, FleetRefusal } from '../../core/connection/ports.js';
+import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
 
@@ -82,7 +83,7 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor {
+): FleetDoor & ProxyShipDoor & StatementDoor {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   return {
@@ -117,6 +118,11 @@ export function createRestFleetDoor(
     deregister: async (crewToken) => {
       const ended = await call({ path: '/ship/deregister', method: 'POST', crewToken, body: {}, answers: z.unknown() });
       return ended.isOk ? ok(undefined) : ended;
+    },
+    // The whole statement, as the proxy ship's crew; core 0.27 refuses the fields it does not know yet (aeolus-fleet#956).
+    setStatement: async (crewToken, statement) => {
+      const stated = await call({ path: '/ship/setStatement', method: 'POST', crewToken, body: statement, answers: z.object({ version: z.int() }) });
+      return stated.isOk ? ok(undefined) : stated;
     },
     // Core 0.27 answers no call the gateway's ship may make with whether a
     // networking plugin is registered, so a crewed ship of the networking

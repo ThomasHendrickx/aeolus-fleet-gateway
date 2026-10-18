@@ -14,7 +14,10 @@ export type DomainErrorKind =
   | 'PARTY_EXISTS'
   | 'COMMISSION_REFUSED'
   | 'NO_SUCH_PARTY'
-  | 'NOT_AWAITING_CREW';
+  | 'NOT_AWAITING_CREW'
+  | 'NOT_CREWED'
+  | 'SERVER_UNREACHABLE'
+  | 'STATEMENT_REFUSED';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {
