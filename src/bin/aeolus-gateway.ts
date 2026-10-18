@@ -20,6 +20,7 @@ async function start(): Promise<void> {
   const app = createGatewayApp({
     databaseUrl: config.databaseUrl,
     fleetUrl: config.fleetUrl,
+    publicUrl: config.publicUrl,
     logger: { level: config.logLevel },
     ...(config.installationToken === undefined ? {} : { installationToken: config.installationToken }),
   });

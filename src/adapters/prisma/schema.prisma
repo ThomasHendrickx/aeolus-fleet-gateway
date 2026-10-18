@@ -104,3 +104,51 @@ model Call {
   @@index([fleetId])
   @@map("calls")
 }
+
+/// MCP clients argo pre-registered; a confidential one's secret kept only as its hash.
+model OAuthClient {
+  clientId     String   @id @map("client_id")
+  fleetId      String   @map("fleet_id")
+  name         String
+  redirectUris String[] @map("redirect_uris")
+  secretHash   String?  @map("secret_hash")
+
+  @@index([fleetId])
+  @@map("oauth_clients")
+}
+
+/// The codes argo's approvals issued, kept only as hashes; each taken once.
+model AuthorizationCode {
+  codeHash      String    @id @map("code_hash")
+  fleetId       String    @map("fleet_id")
+  clientId      String    @map("client_id")
+  redirectUri   String    @map("redirect_uri")
+  codeChallenge String    @map("code_challenge")
+  resource      String
+  scope         String?
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt        DateTime? @map("used_at") @db.Timestamptz(3)
+
+  @@index([fleetId])
+  @@map("authorization_codes")
+}
+
+/// The access and refresh tokens the gateway issued, kept only as hashes, a pair per row.
+model IssuedToken {
+  accessHash       String   @id @map("access_hash")
+  refreshHash      String   @unique @map("refresh_hash")
+  familyId         String   @map("family_id")
+  codeHash         String   @map("code_hash")
+  fleetId          String   @map("fleet_id")
+  clientId         String   @map("client_id")
+  resource         String
+  scope            String?
+  accessExpiresAt  DateTime @map("access_expires_at") @db.Timestamptz(3)
+  refreshExpiresAt DateTime @map("refresh_expires_at") @db.Timestamptz(3)
+  state            String
+
+  @@index([fleetId])
+  @@index([familyId])
+  @@index([codeHash])
+  @@map("issued_tokens")
+}

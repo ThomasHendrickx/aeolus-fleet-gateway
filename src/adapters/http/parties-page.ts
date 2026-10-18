@@ -16,6 +16,7 @@ import { z } from 'zod';
 import type { inferRouterOutputs } from '@trpc/server';
 
 import { gatewayRouter, type Context, type GatewayRouter } from '../trpc/router.js';
+import { acceptForms, escaped, isSameOrigin, layout } from './html.js';
 
 /** A party as the API shows it. */
 type ShownParty = inferRouterOutputs<GatewayRouter>['parties']['list'][number];
@@ -30,29 +31,11 @@ const formSchema = z.record(z.string(), z.string());
 
 type Form = Record<string, string>;
 
-function escaped(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
-}
 
 function field(form: Form, name: string): string {
   return form[name] ?? '';
 }
 
-const STYLE = `
-:root { color-scheme: light dark; --ink: #1b1f24; --muted: #5b6470; --line: #d5dae0; --paper: #ffffff; --accent: #0b5cad; --warn: #a3261b; }
-@media (prefers-color-scheme: dark) { :root { --ink: #e6e9ed; --muted: #9aa3ad; --line: #39414a; --paper: #14181c; --accent: #6aa8ec; --warn: #f08a7e; } }
-body { margin: 0 auto; max-width: 960px; padding: 24px 16px; font: 15px/1.5 system-ui, sans-serif; color: var(--ink); background: var(--paper); }
-h1 { font-size: 22px; } h2 { font-size: 17px; margin-top: 32px; }
-table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
-form { display: grid; gap: 8px; margin: 8px 0; } form.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-label { display: grid; gap: 2px; color: var(--muted); } input, select, button { font: inherit; padding: 6px 8px; }
-button { color: var(--paper); background: var(--accent); border: 0; border-radius: 4px; cursor: pointer; }
-.error { color: var(--warn); border: 1px solid var(--warn); padding: 8px 12px; border-radius: 4px; } .muted { color: var(--muted); }
-`;
-
-function layout(body: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Gateway parties</title><style>${STYLE}</style></head><body>${body}</body></html>`;
-}
 
 function partyRow(party: ShownParty, canManage: boolean): string {
   const name = escaped(party.name);
@@ -109,7 +92,7 @@ async function renderPage(reply: FastifyReply, page: { context: Context; failure
       : `<table><thead><tr><th>Name</th><th>URL</th><th>Credential</th><th>State</th><th>Proxy ship</th><th></th></tr></thead><tbody>${parties.map((party) => partyRow(party, canManage)).join('')}</tbody></table>`,
     canManage ? APPROVE_FORM(randomUUID()) : '',
   ].join('');
-  return reply.code(failure?.status ?? 200).type('text/html; charset=utf-8').send(layout(body));
+  return reply.code(failure?.status ?? 200).type('text/html; charset=utf-8').send(layout('Gateway parties', body));
 }
 
 function signInPage(reply: FastifyReply, refusal: { fleetUrl: string; error: TRPCError }): FastifyReply {
@@ -117,21 +100,9 @@ function signInPage(reply: FastifyReply, refusal: { fleetUrl: string; error: TRP
   return reply
     .code(getHTTPStatusCodeFromError(error))
     .type('text/html; charset=utf-8')
-    .send(layout(`<h1>Parties</h1><p class="error">${escaped(messageOf(error))}</p><p><a href="${escaped(fleetUrl)}">Sign in to the console of your fleet</a>, then come back.</p>`));
+    .send(layout('Gateway parties', `<h1>Parties</h1><p class="error">${escaped(messageOf(error))}</p><p><a href="${escaped(fleetUrl)}">Sign in to the console of your fleet</a>, then come back.</p>`));
 }
 
-/** A form from this page: its Origin is the gateway's own, so no other site can send one with argo's cookie. */
-function isSameOrigin(request: FastifyRequest): boolean {
-  const origin = request.headers.origin;
-  if (origin === undefined) {
-    return false;
-  }
-  try {
-    return new URL(origin).host === request.headers.host;
-  } catch {
-    return false;
-  }
-}
 
 /** The calls each form makes, as argo, from its fields. */
 const ACTIONS: Record<string, (caller: ReturnType<typeof gatewayRouter.createCaller>, form: Form) => Promise<unknown>> = {
@@ -159,10 +130,7 @@ const ACTIONS: Record<string, (caller: ReturnType<typeof gatewayRouter.createCal
 };
 
 export function registerPartiesPage(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; fleetUrl: string }): void {
-  // eslint-disable-next-line @typescript-eslint/max-params -- Fastify's parser signature.
-  server.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_request, body, done) => {
-    done(null, Object.fromEntries(new URLSearchParams(String(body))));
-  });
+  acceptForms(server);
 
   const answer = async (exchange: { request: FastifyRequest; reply: FastifyReply }, act?: (caller: ReturnType<typeof gatewayRouter.createCaller>) => Promise<unknown>) => {
     const { request, reply } = exchange;
@@ -184,7 +152,7 @@ export function registerPartiesPage(server: FastifyInstance, deps: { contextFor:
       try {
         return await renderPage(reply, { context, failure });
       } catch {
-        return reply.code(failure.status).type('text/html; charset=utf-8').send(layout(`<h1>Parties</h1><p class="error">${escaped(failure.message)}</p>`));
+        return reply.code(failure.status).type('text/html; charset=utf-8').send(layout('Gateway parties', `<h1>Parties</h1><p class="error">${escaped(failure.message)}</p>`));
       }
     }
   };

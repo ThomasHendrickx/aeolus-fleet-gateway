@@ -15,6 +15,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 | `FLEET_URL` | required | The fleet's public URL (`http://` or `https://`) |
 | `HOST` | `127.0.0.1` | Interface to listen on |
 | `PORT` | `4200` | Port to listen on |
+| `GATEWAY_PUBLIC_URL` | `http://127.0.0.1:<PORT>` | Where outside MCP clients reach the gateway: the OAuth issuer, with the MCP endpoint at `/mcp` |
 | `INSTALLATION_TOKEN` | unset | The token a hosting service presents to the installation procedures (at least 32 characters, decision 0021). Unset: they are off and every fleet is served, as a self-hosted gateway needs; set: a fleet is served once switched on |
 | `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
@@ -54,6 +55,17 @@ From its start, and as soon as a party is crewed, the gateway takes the calls of
 - A party takes at most its concurrency limit of calls at once.
 
 With core 0.27 the not handled report is refused (aeolus-fleet#955): the call is never made again, and its delivery stays handed until argo resends or dismisses it.
+
+## MCP clients sign in
+
+The gateway is an OAuth 2.1 authorization server for outside MCP clients, such as Claude, ChatGPT or Cursor (MCP 2026-07-28):
+
+- `/.well-known/oauth-protected-resource` (RFC 9728) names the gateway as the authorization server of its MCP endpoint, `<GATEWAY_PUBLIC_URL>/mcp`; `/.well-known/oauth-authorization-server` (RFC 8414) states what it serves.
+- A client is pre-registered by argo with `oauth.registerClient` (its name, its redirect URIs, and whether it keeps a secret, answered once), or known by its client metadata document (CIMD): its client id is the https URL of that document. There is no dynamic registration.
+- At `/authorize` argo approves or denies each request, signed in to the console; a viewer session cannot. Only the authorization code flow with PKCE S256 is served, and the `resource` must be the gateway's MCP endpoint (RFC 8707).
+- `/token` takes a code once, within its minute, for an access token (one hour) and a refresh token (30 days). Refreshing rotates the pair; a code or a refresh token used twice revokes what it gave.
+
+Codes and tokens are kept only as hashes, and so are client secrets.
 
 ## Develop
 

@@ -9,6 +9,7 @@ const environmentSchema = z.object({
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(0).max(65_535).default(4200),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  GATEWAY_PUBLIC_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).optional(),
   INSTALLATION_TOKEN: z.string().min(INSTALLATION_TOKEN_MIN_LENGTH, { error: `must hold at least ${String(INSTALLATION_TOKEN_MIN_LENGTH)} characters` }).optional(),
 });
 
@@ -29,6 +30,11 @@ export interface Config {
    * self-hosted gateway needs; set, a fleet is served once switched on.
    */
   installationToken: string | undefined;
+  /**
+   * Where outside MCP clients reach the gateway: the OAuth issuer, with the
+   * MCP endpoint below it. This machine at the gateway's port unless set.
+   */
+  publicUrl: string;
 }
 
 export class ConfigError extends Error {
@@ -53,6 +59,7 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     port: variables.PORT,
     logLevel: variables.LOG_LEVEL,
     installationToken: variables.INSTALLATION_TOKEN,
+    publicUrl: (variables.GATEWAY_PUBLIC_URL ?? `http://127.0.0.1:${String(variables.PORT)}`).replace(/\/$/, ''),
   };
 }
 

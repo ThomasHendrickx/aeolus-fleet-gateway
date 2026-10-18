@@ -13,6 +13,7 @@ describe('the gateway configuration from the environment', () => {
       port: 4200,
       logLevel: 'info',
       installationToken: undefined,
+      publicUrl: 'http://127.0.0.1:4200',
     });
   });
 
@@ -24,7 +25,16 @@ describe('the gateway configuration from the environment', () => {
       port: 8080,
       logLevel: 'debug',
       installationToken: undefined,
+      publicUrl: 'http://127.0.0.1:8080',
     });
+  });
+
+  it('reads where outside MCP clients reach the gateway without its trailing slash: the OAuth issuer, and its MCP endpoint below it', () => {
+    expect(loadConfig({ DATABASE_URL, FLEET_URL: 'https://fleet.example', GATEWAY_PUBLIC_URL: 'https://gateway.example/' }).publicUrl).toBe('https://gateway.example');
+  });
+
+  it('refuses a public URL that is not http or https, naming the variable', () => {
+    expect(() => loadConfig({ DATABASE_URL, FLEET_URL: 'https://fleet.example', GATEWAY_PUBLIC_URL: 'ftp://gateway.example' })).toThrow(/^GATEWAY_PUBLIC_URL: /);
   });
 
   it('refuses a missing fleet URL, naming the variable', () => {
