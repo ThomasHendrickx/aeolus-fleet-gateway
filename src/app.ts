@@ -26,7 +26,8 @@ import { createRunParty } from './core/mcp-out/run-party.js';
 import { createPrismaCalls } from './adapters/prisma/calls.js';
 import { sleep } from './adapters/timers/sleep.js';
 import { createPartyWorkers } from './party-workers.js';
-import { gatewayRouter, type GatewayRouter } from './adapters/trpc/router.js';
+import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
+import { registerPartiesPage } from './adapters/http/parties-page.js';
 import { createConnect } from './core/connection/connect.js';
 import { createReadConnection, type ReadConnection } from './core/connection/read-connection.js';
 import { createDeleteFleet } from './core/installation/delete-fleet.js';
@@ -145,6 +146,25 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   };
   const listParties = createListParties({ parties });
 
+  // What every call of the API reads, from the request's console session and installation token.
+  const contextFor = (sent: { cookie: string | undefined; installationTokenSent: string | undefined }): Context => ({
+    ...sent,
+    authenticateOperator,
+    isServed,
+    heldConnection,
+    installation: { mode: installation, token: options.installationToken },
+    setFleetEnabled,
+    readFleet,
+    deleteFleet,
+    readConnection,
+    connect,
+    approveParty,
+    crewParty,
+    listParties,
+    stateParty,
+    markTool,
+  });
+
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {
     prefix: '/trpc',
     trpcOptions: {
@@ -154,27 +174,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           server.log.error({ err: error.cause ?? error, path }, 'procedure failed');
         }
       },
-      createContext: ({ req }) => ({
-        cookie: req.headers.cookie,
-        authenticateOperator,
-        isServed,
-        heldConnection,
-        installationTokenSent: typeof req.headers['x-aeolus-installation-token'] === 'string' ? req.headers['x-aeolus-installation-token'] : undefined,
-        installation: { mode: installation, token: options.installationToken },
-        setFleetEnabled,
-        readFleet,
-        deleteFleet,
-        readConnection,
-        connect,
-        approveParty,
-        crewParty,
-        listParties,
-        stateParty,
-        markTool,
-      }),
+      createContext: ({ req }) =>
+        contextFor({
+          cookie: req.headers.cookie,
+          installationTokenSent: typeof req.headers['x-aeolus-installation-token'] === 'string' ? req.headers['x-aeolus-installation-token'] : undefined,
+        }),
     },
   };
   void server.register(fastifyTRPCPlugin, trpc);
+  // The page calls the API as the caller, with the forwarded console session; it never takes the installation token.
+  registerPartiesPage(server, { contextFor: (cookie) => contextFor({ cookie, installationTokenSent: undefined }), fleetUrl: options.fleetUrl });
 
   server.addHook('onClose', async () => {
     await prisma.$disconnect();
