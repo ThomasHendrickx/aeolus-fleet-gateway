@@ -16,6 +16,7 @@ import { createPrismaConnectionStore } from './adapters/prisma/connection-store.
 import { createPrismaFleetForgetter } from './adapters/prisma/fleet-forgetter.js';
 import { createPrismaFleetSwitches } from './adapters/prisma/fleet-switches.js';
 import { createPrismaInstallationRequests } from './adapters/prisma/installation-requests.js';
+import { createPrismaPartyStore } from './adapters/prisma/party-store.js';
 import { gatewayRouter, type GatewayRouter } from './adapters/trpc/router.js';
 import { createConnect } from './core/connection/connect.js';
 import { createReadConnection, type ReadConnection } from './core/connection/read-connection.js';
@@ -25,6 +26,9 @@ import { createReadFleet } from './core/installation/read-fleet.js';
 import { createIsServed } from './core/installation/served.js';
 import { createSetFleetEnabled } from './core/installation/set-fleet-enabled.js';
 import { createAuthenticateOperator } from './core/operator/authenticate-operator.js';
+import { createApproveParty } from './core/parties/approve-party.js';
+import { createCrewParty } from './core/parties/crew-party.js';
+import { createListParties } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
 
 export const systemClock: Clock = { now: () => new Date() };
@@ -90,6 +94,10 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const deleteFleet = createDeleteFleet({ forgetter: createPrismaFleetForgetter(prisma), requests, hasher: sha256RequestHasher, clock });
   const connect = createConnect({ door, store: connections, clock });
   const authenticateOperator = createAuthenticateOperator({ sessions: createFleetConsoleSessions(options.fleetUrl) });
+  const parties = createPrismaPartyStore(prisma);
+  const approveParty = createApproveParty({ connections, parties, door, hasher: sha256RequestHasher, clock });
+  const crewParty = createCrewParty({ parties, door });
+  const listParties = createListParties({ parties });
 
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {
     prefix: '/trpc',
@@ -112,6 +120,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
         deleteFleet,
         readConnection,
         connect,
+        approveParty,
+        crewParty,
+        listParties,
       }),
     },
   };

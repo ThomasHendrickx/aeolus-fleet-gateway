@@ -5,7 +5,7 @@ import type { Party } from '../../src/core/parties/party.js';
 import type { PartyStore, ProxyShipDoor } from '../../src/core/parties/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
-export const OWNER_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9own';
+export const OWNER_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 export const PROXY_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9crm';
 
 /** The parties in memory, by fleet and name. */

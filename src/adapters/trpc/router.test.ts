@@ -1,13 +1,14 @@
 import type { FleetId } from '@aeolus-fleet/common';
 import { TRPCError } from '@trpc/server';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import { ok } from '../../core/shared/result.js';
 import { gatewayRouter, type Context } from './router.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
-const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9own';
+const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 const ARGO_COOKIE = 'aeolus_session=argo';
 const VIEWER_COOKIE = 'aeolus_session=viewer';
 
@@ -38,7 +39,12 @@ function aContext(cookie: string): { context: Context; approvals: Parameters<App
   return { context, approvals };
 }
 
-const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer', token: 'crm-token' }, ownerShipId: OWNER };
+const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
+
+type ApprovalInput = Parameters<ReturnType<typeof gatewayRouter.createCaller>['parties']['approve']>[0];
+
+/** An input as it arrives over HTTP: anything, for the router's own parsing to judge. */
+const asSent = (input: unknown): ApprovalInput => z.custom<ApprovalInput>(() => true).parse(input);
 
 describe("argo approves parties through the gateway's API", () => {
   it("approves for argo's fleet, with the default concurrency limit of 4", async () => {
@@ -70,7 +76,7 @@ describe("argo approves parties through the gateway's API", () => {
   ])('refuses %s', async (_what, approval) => {
     const { context, approvals } = aContext(ARGO_COOKIE);
 
-    await expect(gatewayRouter.createCaller(context).parties.approve(approval)).rejects.toBeInstanceOf(TRPCError);
+    await expect(gatewayRouter.createCaller(context).parties.approve(asSent(approval))).rejects.toBeInstanceOf(TRPCError);
     expect(approvals).toEqual([]);
   });
 

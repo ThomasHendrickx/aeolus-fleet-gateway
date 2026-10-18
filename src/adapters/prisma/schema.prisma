@@ -55,3 +55,29 @@ model InstallationRequest {
   @@index([fleetId])
   @@map("installation_requests")
 }
+
+/// The outside parties argo approved (interop I-5): one app proxy ship each,
+/// known by its ship's name in the fleet. The vault: the credential the
+/// gateway calls the party with, kept as squadrons keeps crew tokens, and the
+/// proxy ship's crew token.
+model Party {
+  fleetId          String   @map("fleet_id")
+  name             String
+  kind             String
+  url              String
+  /// The credential as JSON: a static bearer, or OAuth client credentials.
+  credential       Json
+  ownerShipId      String   @map("owner_ship_id")
+  concurrencyLimit Int      @map("concurrency_limit")
+  state            String
+  proxyShipId      String?  @map("proxy_ship_id")
+  /// Kept only from the proxy ship's commission until the gateway crews it.
+  secret           String?
+  crewToken        String?  @map("crew_token")
+  requestId        String   @map("request_id")
+  requestHash      String   @map("request_hash")
+  approvedAt       DateTime @map("approved_at") @db.Timestamptz(3)
+
+  @@id([fleetId, name])
+  @@map("parties")
+}

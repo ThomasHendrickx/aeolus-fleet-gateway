@@ -35,7 +35,7 @@ export interface InstallationRequests {
   record(request: InstallationRequest): Promise<void>;
 }
 
-/** Outbound port: forgets everything the gateway holds of a fleet, in one go: its connection, its switch and the requests that name it. */
+/** Outbound port: forgets everything the gateway holds of a fleet, in one go: its connection, its switch, its parties with their vault, and the requests that name it. */
 export interface FleetForgetter {
   forget(fleetId: FleetId): Promise<void>;
 }

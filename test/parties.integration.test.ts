@@ -9,7 +9,7 @@ import { migratedDatabase } from './support/database.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OTHER_FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8zz';
-const OWNER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9own';
+const OWNER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 const PROXY: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9crm';
 const AT = new Date('2026-10-18T13:00:00.000Z');
 
