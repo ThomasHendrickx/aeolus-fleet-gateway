@@ -37,6 +37,7 @@ function aContext(cookie: string): { context: Context; approvals: Parameters<App
     },
     crewParty: unused,
     listParties: () => Promise.resolve([]),
+    registerClient: (input) => Promise.resolve(input.redirectUris.length === 0 ? err({ kind: 'INVALID_REDIRECT_URIS' as const, message: 'A client registers 1 to 10 redirect URIs' }) : ok({ clientId: 'client-1', clientSecret: input.isConfidential ? 's' : null })),
     stateParty: ({ name }) => Promise.resolve(name === 'crm' ? ok({ capabilities: ['list_deals'] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `No party named ${name}` })),
     markTool: (input) => {
       marks.push(input);
@@ -132,5 +133,22 @@ describe("argo states a party's tools and marks them repeatable through the gate
 
     await expect(gatewayRouter.createCaller(context).parties.markTool(z.custom<MarkInput>(() => true).parse({ name: 'crm', tool, isRepeatable: true }))).rejects.toBeInstanceOf(TRPCError);
     expect(marks).toEqual([]);
+  });
+});
+
+describe('argo pre-registers MCP clients through the gateway\'s API', () => {
+  it("registers a client for argo's fleet, answering its secret once", async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).oauth.registerClient({ name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], isConfidential: true })).resolves.toEqual({
+      clientId: 'client-1',
+      clientSecret: 's',
+    });
+  });
+
+  it('refuses a viewer', async () => {
+    await expect(gatewayRouter.createCaller(aContext(VIEWER_COOKIE).context).oauth.registerClient({ name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], isConfidential: true })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('answers BAD_REQUEST to redirect URIs it refuses', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).oauth.registerClient({ name: 'Cursor', redirectUris: [], isConfidential: true })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
