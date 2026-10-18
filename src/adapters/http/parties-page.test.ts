@@ -89,12 +89,13 @@ afterEach(async () => {
   await server.close();
 });
 
-function post(path: string, form: Record<string, string>, request: { cookie?: string; origin?: string } = {}) {
+function post(path: string, form: Record<string, string> & { origin?: string }) {
+  const { origin, ...fields } = form;
   return server.inject({
     method: 'POST',
     url: path,
-    headers: { host: HOST, 'content-type': 'application/x-www-form-urlencoded', cookie: request.cookie ?? ARGO, origin: request.origin ?? ORIGIN },
-    payload: new URLSearchParams(form).toString(),
+    headers: { host: HOST, 'content-type': 'application/x-www-form-urlencoded', cookie: ARGO, origin: origin ?? ORIGIN },
+    payload: new URLSearchParams(fields).toString(),
   });
 }
 
@@ -158,7 +159,7 @@ describe("the gateway's page of parties, for argo signed in to the console", () 
   });
 
   it('refuses a form sent from another origin, changing nothing', async () => {
-    const answer = await post('/parties/approve', { requestId: 'r-4', name: 'erp', url: 'https://erp.example.com/mcp', credentialKind: 'bearer', token: 't', ownerShipId: OWNER, concurrencyLimit: '4' }, { origin: 'https://evil.example.com' });
+    const answer = await post('/parties/approve', { requestId: 'r-4', name: 'erp', url: 'https://erp.example.com/mcp', credentialKind: 'bearer', token: 't', ownerShipId: OWNER, concurrencyLimit: '4', origin: 'https://evil.example.com' });
 
     expect(answer.statusCode).toBe(403);
     expect(approvals).toEqual([]);
