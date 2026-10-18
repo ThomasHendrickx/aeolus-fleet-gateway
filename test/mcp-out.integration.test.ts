@@ -11,6 +11,7 @@ import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { mutate } from './support/gateway-api.js';
 import { receiveOne, send } from './support/ship.js';
+import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
 // MCP out end to end (interop 3.3, 5.2): a ship of the fleet calls the mock
 // CRM's tools by sending to its proxy ship, and the gateway replies with each
@@ -33,7 +34,7 @@ let proxy: { shipId: ShipId; secret: string };
 const apps: GatewayApp[] = [];
 
 async function started(): Promise<string> {
-  const app = createGatewayApp({ databaseUrl, fleetUrl: fleet.url, logger: false, toolCallTimeoutMs: TOOL_CALL_TIMEOUT_MS });
+  const app = createGatewayApp({ gatewaySecret: TEST_GATEWAY_SECRET, databaseUrl, fleetUrl: fleet.url, logger: false, toolCallTimeoutMs: TOOL_CALL_TIMEOUT_MS });
   apps.push(app);
   await app.restoreConnections();
   return app.server.listen({ host: '127.0.0.1', port: 0 });

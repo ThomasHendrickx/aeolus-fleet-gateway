@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { ConfigError, loadConfig, loadDatabaseUrl } from './config.js';
 
 const DATABASE_URL = 'postgresql://gateway:secret@db.example:5432/gateway';
+const GATEWAY_SECRET = 'a-gateway-secret-of-at-least-32-characters';
 
 describe('the gateway configuration from the environment', () => {
   it('reads the fleet URL without its trailing slash, and defaults the rest', () => {
-    expect(loadConfig({ DATABASE_URL, FLEET_URL: 'http://localhost:4000/' })).toEqual({
+    expect(loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'http://localhost:4000/' })).toEqual({
       databaseUrl: DATABASE_URL,
       fleetUrl: 'http://localhost:4000',
       host: '127.0.0.1',
@@ -14,11 +15,12 @@ describe('the gateway configuration from the environment', () => {
       logLevel: 'info',
       installationToken: undefined,
       publicUrl: 'http://127.0.0.1:4200',
+      gatewaySecret: GATEWAY_SECRET,
     });
   });
 
   it('reads the host, port and log level', () => {
-    expect(loadConfig({ DATABASE_URL, FLEET_URL: 'https://fleet.example', HOST: '0.0.0.0', PORT: '8080', LOG_LEVEL: 'debug' })).toEqual({
+    expect(loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', HOST: '0.0.0.0', PORT: '8080', LOG_LEVEL: 'debug' })).toEqual({
       databaseUrl: DATABASE_URL,
       fleetUrl: 'https://fleet.example',
       host: '0.0.0.0',
@@ -26,15 +28,21 @@ describe('the gateway configuration from the environment', () => {
       logLevel: 'debug',
       installationToken: undefined,
       publicUrl: 'http://127.0.0.1:8080',
+      gatewaySecret: GATEWAY_SECRET,
     });
   });
 
   it('reads where outside MCP clients reach the gateway without its trailing slash: the OAuth issuer, and its MCP endpoint below it', () => {
-    expect(loadConfig({ DATABASE_URL, FLEET_URL: 'https://fleet.example', GATEWAY_PUBLIC_URL: 'https://gateway.example/' }).publicUrl).toBe('https://gateway.example');
+    expect(loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', GATEWAY_PUBLIC_URL: 'https://gateway.example/' }).publicUrl).toBe('https://gateway.example');
+  });
+
+  it('refuses a missing gateway secret, and one of 31 characters: it keys aliases, handles and idempotency keys', () => {
+    expect(() => loadConfig({ DATABASE_URL, FLEET_URL: 'https://fleet.example' })).toThrow(/^GATEWAY_SECRET: /);
+    expect(() => loadConfig({ DATABASE_URL, FLEET_URL: 'https://fleet.example', GATEWAY_SECRET: 'x'.repeat(31) })).toThrow('GATEWAY_SECRET: must hold at least 32 characters');
   });
 
   it('refuses a public URL that is not http or https, naming the variable', () => {
-    expect(() => loadConfig({ DATABASE_URL, FLEET_URL: 'https://fleet.example', GATEWAY_PUBLIC_URL: 'ftp://gateway.example' })).toThrow(/^GATEWAY_PUBLIC_URL: /);
+    expect(() => loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', GATEWAY_PUBLIC_URL: 'ftp://gateway.example' })).toThrow(/^GATEWAY_PUBLIC_URL: /);
   });
 
   it('refuses a missing fleet URL, naming the variable', () => {
@@ -43,7 +51,7 @@ describe('the gateway configuration from the environment', () => {
   });
 
   it('reads an installation token of 32 characters, and refuses one of 31', () => {
-    const environment = { DATABASE_URL, FLEET_URL: 'https://fleet.example' };
+    const environment = { DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' };
     expect(loadConfig({ ...environment, INSTALLATION_TOKEN: 'x'.repeat(32) }).installationToken).toBe('x'.repeat(32));
     expect(() => loadConfig({ ...environment, INSTALLATION_TOKEN: 'x'.repeat(31) })).toThrow('INSTALLATION_TOKEN: must hold at least 32 characters');
   });
@@ -63,10 +71,10 @@ describe('the gateway configuration from the environment', () => {
   });
 
   it('refuses a fleet URL that is not http or https', () => {
-    expect(() => loadConfig({ DATABASE_URL, FLEET_URL: 'ftp://fleet.example' })).toThrow('FLEET_URL: must be an http:// or https:// URL');
+    expect(() => loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'ftp://fleet.example' })).toThrow('FLEET_URL: must be an http:// or https:// URL');
   });
 
   it('refuses a port above 65535', () => {
-    expect(() => loadConfig({ DATABASE_URL, FLEET_URL: 'https://fleet.example', PORT: '65536' })).toThrow(/^PORT: /);
+    expect(() => loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', PORT: '65536' })).toThrow(/^PORT: /);
   });
 });

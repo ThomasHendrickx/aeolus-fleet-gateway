@@ -4,6 +4,7 @@ import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
+import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
 // The gateway's page with a real console session: argo signs in to the
 // console, and the gateway's page knows argo by the forwarded cookie.
@@ -16,7 +17,7 @@ let cookie: string;
 beforeEach(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
   cookie = await signIn(fleet);
-  app = createGatewayApp({ databaseUrl: await migratedDatabase(inject('postgresUrl')), fleetUrl: fleet.url, logger: false });
+  app = createGatewayApp({ gatewaySecret: TEST_GATEWAY_SECRET, databaseUrl: await migratedDatabase(inject('postgresUrl')), fleetUrl: fleet.url, logger: false });
   address = await app.server.listen({ host: '127.0.0.1', port: 0 });
 });
 

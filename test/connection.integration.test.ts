@@ -7,6 +7,7 @@ import { commission, registerNetworkingPlugin, signIn } from './support/argo.js'
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
+import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
 // The gateway against a real core: it starts not connected, with no secret
 // anywhere; argo connects it as its ship, it keeps the crew token in its own
@@ -36,7 +37,7 @@ afterEach(async () => {
 
 /** A gateway process on the test's database, serving on a free port; with an installation token, a fleet is served once switched on. */
 async function started(installationToken?: string): Promise<string> {
-  const app = createGatewayApp({ databaseUrl, fleetUrl: fleet.url, logger: false, ...(installationToken === undefined ? {} : { installationToken }) });
+  const app = createGatewayApp({ gatewaySecret: TEST_GATEWAY_SECRET, databaseUrl, fleetUrl: fleet.url, logger: false, ...(installationToken === undefined ? {} : { installationToken }) });
   apps.push(app);
   await app.restoreConnections();
   return app.server.listen({ host: '127.0.0.1', port: 0 });
