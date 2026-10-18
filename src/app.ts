@@ -75,6 +75,8 @@ export interface GatewayAppOptions {
   publicUrl?: string;
   /** Keys ship aliases, result handles and idempotency keys: the same secret keeps every ship's alias across restarts. */
   gatewaySecret: string;
+  /** How long an outside MCP client's call waits for its answer before it is answered its handle: 10 seconds unless set. */
+  mcpWaitMaxMs?: number;
   /** How long the gateway waits for an outside tool's answer before the call counts as unanswered: 5 minutes unless set. */
   toolCallTimeoutMs?: number;
 }
@@ -93,6 +95,12 @@ const POLL_MS = 2_000;
 
 /** How long an outside client's call waits for its answer before it fails: the fleet's 10 minutes for a handed delivery, while statements state no deadline. */
 const CLIENT_CALL_DEADLINE_MS = 10 * 60_000;
+
+/** How long an outside MCP client's call waits for its answer unless told. */
+const MCP_WAIT_MAX_MS = 10_000;
+
+/** How often a waiting call is read for its answer. */
+const MCP_WAIT_POLL_MS = 200;
 
 /** How long a delivery answered again waits before it is handed with the next number, each longer than the last. */
 const AGAIN_WAITS_MS = [1_000, 10_000, 60_000, 300_000];
@@ -224,7 +232,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     resource,
     authenticateAccessToken: createAuthenticateAccessToken({ tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
     listTools,
-    callTool: createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, deadlineMs: CLIENT_CALL_DEADLINE_MS }),
+    callTool: createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, deadlineMs: CLIENT_CALL_DEADLINE_MS, sleep, waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS }),
     readClientCall: createReadClientCall({ calls: clientCalls, clock }),
   });
 

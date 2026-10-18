@@ -22,6 +22,7 @@ async function start(): Promise<void> {
     fleetUrl: config.fleetUrl,
     publicUrl: config.publicUrl,
     gatewaySecret: config.gatewaySecret,
+    mcpWaitMaxMs: config.mcpWaitMaxMs,
     logger: { level: config.logLevel },
     ...(config.installationToken === undefined ? {} : { installationToken: config.installationToken }),
   });
