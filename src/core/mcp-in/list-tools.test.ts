@@ -49,7 +49,7 @@ describe("an MCP client's tools are the capabilities of the ships its party reac
   it("lists each capability as a tool named by the ship's alias, never its name, with its MCP fields", async () => {
     await expect(toolsListed()).resolves.toEqual([
       {
-        name: 'aacr2__list_deals',
+        name: 'a9cr2__list_deals',
         title: 'List deals',
         description: "Lists a contact's deals.\n\nOffered by: The CRM: contacts and deals.",
         inputSchema: {
@@ -69,7 +69,7 @@ describe("an MCP client's tools are the capabilities of the ships its party reac
   it('takes a capability with no input schema as one with any arguments', async () => {
     discovery.state.ships = [aDiscoveredShip({ statement: { by: 'crew', summary: 's', capabilities: [{ name: 'ping' }] } })];
 
-    await expect(toolsListed()).resolves.toMatchObject([{ name: 'aacr2__ping', inputSchema: { type: 'object', properties: { [IDEMPOTENCY_ARGUMENT]: { type: 'string' } } }, target: { contentType: 'application/json', isText: false } }]);
+    await expect(toolsListed()).resolves.toMatchObject([{ name: 'a9cr2__ping', inputSchema: { type: 'object', properties: { [IDEMPOTENCY_ARGUMENT]: { type: 'string' } } }, target: { contentType: 'application/json', isText: false } }]);
   });
 
   it('gives a capability that takes plain text one text argument (orchestrator-1 on aeolus-fleet#877, Q14)', async () => {
@@ -99,10 +99,13 @@ describe("an MCP client's tools are the capabilities of the ships its party reac
     await expect(toolsListed().then((tools) => tools.map((tool) => tool.name.length))).resolves.toEqual([128]);
   });
 
-  it('leaves out an output schema a JSON result type does not carry', async () => {
-    discovery.state.ships = [aDiscoveredShip({ statement: { by: 'crew', summary: 's', capabilities: [{ name: 'say', outputSchema: { type: 'object' }, outputModes: ['text/plain'] }] } })];
+  it.each([
+    ['a result type that is not JSON', { name: 'say', outputSchema: { type: 'object' }, outputModes: ['text/plain'] }],
+    ['a schema that is not an object, which MCP takes no other', { name: 'count', outputSchema: { type: 'number' } }],
+  ])('leaves out the output schema of %s', async (_what, capability) => {
+    discovery.state.ships = [aDiscoveredShip({ statement: { by: 'crew', summary: 's', capabilities: [capability] } })];
 
-    await expect(toolsListed().then((tools) => tools[0]?.outputSchema)).resolves.toBeUndefined();
+    await expect(toolsListed().then((tools) => tools.map((tool) => tool.outputSchema))).resolves.toEqual([undefined]);
   });
 
   it('refuses a party that is not crewed, or not a client', async () => {

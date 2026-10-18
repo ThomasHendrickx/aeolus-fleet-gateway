@@ -16,6 +16,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 | `HOST` | `127.0.0.1` | Interface to listen on |
 | `PORT` | `4200` | Port to listen on |
 | `GATEWAY_PUBLIC_URL` | `http://127.0.0.1:<PORT>` | Where outside MCP clients reach the gateway: the OAuth issuer, with the MCP endpoint at `/mcp` |
+| `GATEWAY_SECRET` | required | At least 32 characters. Keys the ship aliases outside MCP clients see: the same secret keeps every alias across restarts, a new one renames every ship to them |
 | `INSTALLATION_TOKEN` | unset | The token a hosting service presents to the installation procedures (at least 32 characters, decision 0021). Unset: they are off and every fleet is served, as a self-hosted gateway needs; set: a fleet is served once switched on |
 | `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
@@ -67,6 +68,15 @@ The gateway is an OAuth 2.1 authorization server for outside MCP clients, such a
 - `/token` takes a code once, within its minute, for an access token (one hour) and a refresh token (30 days). Refreshing rotates the pair; a code or a refresh token used twice revokes what it gave.
 
 Codes and tokens are kept only as hashes, and so are client secrets.
+
+## MCP clients list tools
+
+`<GATEWAY_PUBLIC_URL>/mcp` is the gateway's MCP endpoint (Streamable HTTP, stateless). A call without a token, or with one the gateway did not issue for it, gets 401 with `resource_metadata` naming where to sign in (RFC 9728).
+
+- `tools/list` answers the capabilities of the ships the client's proxy ship may send to now, as the fleet's `discover` answers it: the gateway adds no reach of its own.
+- A tool is named `<alias>__<capability>`. The alias is 8 letters and digits derived from the ship under `GATEWAY_SECRET`: the client never sees a ship's name or id.
+- Its description is the capability's, then the ship's summary. A capability that takes plain text first gets one `text` argument. Every tool takes an optional `aeolus_idempotency_key`.
+- Left out: argo, ships with no statement by their crew, capabilities whose first input type is neither JSON nor plain text or whose input schema is not an object, and tool names over 128 characters.
 
 ## Develop
 
