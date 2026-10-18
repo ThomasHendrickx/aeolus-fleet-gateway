@@ -1,28 +1,28 @@
 #!/usr/bin/env node
 /**
- * `aeolus-gateway start`: checks that the fleet's core is new enough, then
- * serves until SIGINT or SIGTERM. Every setting comes from environment
- * variables (src/config.ts).
+ * `aeolus-gateway start`: checks that the fleet's core is new enough,
+ * migrates the gateway's database, then serves until SIGINT or SIGTERM.
+ * `aeolus-gateway migrate`: migrates the database alone. Every setting
+ * comes from environment variables (src/config.ts).
  */
-import Fastify from 'fastify';
-
 import { requireCoreVersion } from '../adapters/fleet/core-version.js';
-import { runningVersion } from '../adapters/http/version.js';
-import { ConfigError, loadConfig } from '../config.js';
+import { MigrationError, migrateDatabase } from '../adapters/prisma/migrate.js';
+import { createGatewayApp } from '../app.js';
+import { ConfigError, loadConfig, loadDatabaseUrl } from '../config.js';
 
-const USAGE = 'Usage: aeolus-gateway start';
+const USAGE = 'Usage: aeolus-gateway start | migrate';
 
 async function start(): Promise<void> {
   const config = loadConfig(process.env);
   await requireCoreVersion(config.fleetUrl);
-  const server = Fastify({ logger: { level: config.logLevel } });
-  server.get('/api/version', () => ({ gateway: runningVersion() }));
+  await migrateDatabase(config.databaseUrl);
+  const app = createGatewayApp({ databaseUrl: config.databaseUrl, logger: { level: config.logLevel } });
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(signal, () => {
-      void server.close().then(() => process.exit(0));
+      void app.close().then(() => process.exit(0));
     });
   }
-  await server.listen({ host: config.host, port: config.port });
+  await app.server.listen({ host: config.host, port: config.port });
 }
 
 try {
@@ -30,12 +30,15 @@ try {
     case 'start':
       await start();
       break;
+    case 'migrate':
+      await migrateDatabase(loadDatabaseUrl(process.env));
+      break;
     default:
       process.stderr.write(`${USAGE}\n`);
       process.exitCode = 2;
   }
 } catch (error) {
-  if (error instanceof ConfigError) {
+  if (error instanceof ConfigError || error instanceof MigrationError) {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;
   } else {

@@ -1,0 +1,18 @@
+// The gateway's tables, in its own database: core never reads them, and the
+// gateway never reads core's; it reaches the fleet only through core's public
+// API, as the ships it crews. Every table has fleet_id.
+//
+// Timestamps have no database default: the application's Clock port sets every
+// one of them, so tests control time.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "./generated"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+  runtime             = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+}

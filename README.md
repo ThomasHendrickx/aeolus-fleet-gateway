@@ -6,17 +6,23 @@
 
 ```sh
 npm install && npm run build
-FLEET_URL=https://fleet.example.com npm start
+DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 ```
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
+| `DATABASE_URL` | required | The gateway's own Postgres 16 or newer database, with a direct connection |
 | `FLEET_URL` | required | The fleet's public URL (`http://` or `https://`) |
 | `HOST` | `127.0.0.1` | Interface to listen on |
 | `PORT` | `4200` | Port to listen on |
 | `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
-At start the gateway reads core's version and exits 1 when core is older than it needs (core 0.27.0 or later), saying both versions.
+| Command | Does |
+| --- | --- |
+| `aeolus-gateway start` | Reads core's version and exits 1 when core is older than it needs (core 0.27.0 or later), saying both versions; migrates its database; serves |
+| `aeolus-gateway migrate` | Migrates its database, and nothing else. Needs `DATABASE_URL` alone |
+
+`GET /api/version` answers the version it runs, and `GET /api/health` answers `{ "status": "ok" }` while its database answers, else 503.
 
 ## Develop
 

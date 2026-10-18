@@ -20,12 +20,12 @@ describe('the gateway answers whoever operates the installation', () => {
   it('answers healthy while its database answers', async () => {
     app = createGatewayApp({ databaseUrl: await migratedDatabase(inject('postgresUrl')), logger: false });
     const response = await app.server.inject({ method: 'GET', url: '/api/health' });
-    expect({ status: response.statusCode, body: response.json() }).toEqual({ status: 200, body: { status: 'ok' } });
+    expect({ status: response.statusCode, body: response.json<unknown>() }).toEqual({ status: 200, body: { status: 'ok' } });
   });
 
   it('answers unavailable while its database does not answer', async () => {
     app = createGatewayApp({ databaseUrl: aNewDatabaseUrl(inject('postgresUrl'), 'never_created'), logger: false });
     const response = await app.server.inject({ method: 'GET', url: '/api/health' });
-    expect({ status: response.statusCode, body: response.json() }).toEqual({ status: 503, body: { status: 'unavailable' } });
+    expect({ status: response.statusCode, body: response.json<unknown>() }).toEqual({ status: 503, body: { status: 'unavailable' } });
   });
 });
