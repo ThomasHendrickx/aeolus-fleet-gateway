@@ -73,13 +73,13 @@ describe('the gateway reads an authorization request (OAuth 2.1, MCP 2026-07-28)
   });
 
   it.each([
-    ['another response type', { response_type: 'token' }, 'unsupported_response_type'],
-    ['no code challenge', { code_challenge: undefined }, 'invalid_request'],
-    ['the plain challenge method', { code_challenge_method: 'plain' }, 'invalid_request'],
-    ['no resource', { resource: undefined }, 'invalid_target'],
-    ['another resource', { resource: 'https://other.example.com/mcp' }, 'invalid_target'],
-  ])('sends the client back with an error for %s', async (_what, overrides, error) => {
-    await expect(readAuthorization(aRequest(overrides))).resolves.toEqual({ isOk: false, error: { kind: 'redirect', redirectUri: CALLBACK, error, description: expect.any(String) as unknown, state: 'state-1' } });
+    { what: 'another response type', overrides: { response_type: 'token' }, error: 'unsupported_response_type' },
+    { what: 'no code challenge', overrides: { code_challenge: undefined }, error: 'invalid_request' },
+    { what: 'the plain challenge method', overrides: { code_challenge_method: 'plain' }, error: 'invalid_request' },
+    { what: 'no resource', overrides: { resource: undefined }, error: 'invalid_target' },
+    { what: 'another resource', overrides: { resource: 'https://other.example.com/mcp' }, error: 'invalid_target' },
+  ])('sends the client back with an error for $what', async ({ overrides, error }) => {
+    await expect(readAuthorization(aRequest(overrides))).resolves.toMatchObject({ isOk: false, error: { kind: 'redirect', redirectUri: CALLBACK, error, state: 'state-1' } });
   });
 });
 

@@ -58,14 +58,14 @@ describe('a client takes its code for tokens (OAuth 2.1 with PKCE)', () => {
   });
 
   it.each([
-    ['an unknown code', { code: 'code-9' }, 'invalid_grant'],
-    ['the wrong verifier', { code_verifier: 'verifier-9' }, 'invalid_grant'],
-    ['another redirect URI', { redirect_uri: 'https://claude.example.com/other' }, 'invalid_grant'],
-    ["another client's code", { client_id: 'https://other.example.com/client.json' }, 'invalid_grant'],
-    ['another resource', { resource: 'https://other.example.com/mcp' }, 'invalid_target'],
-    ['no verifier', { code_verifier: undefined }, 'invalid_request'],
-    ['another grant type', { grant_type: 'password' }, 'unsupported_grant_type'],
-  ])('refuses %s', async (_what, overrides, error) => {
+    { what: 'an unknown code', overrides: { code: 'code-9' }, error: 'invalid_grant' },
+    { what: 'the wrong verifier', overrides: { code_verifier: 'verifier-9' }, error: 'invalid_grant' },
+    { what: 'another redirect URI', overrides: { redirect_uri: 'https://claude.example.com/other' }, error: 'invalid_grant' },
+    { what: "another client's code", overrides: { client_id: 'https://other.example.com/client.json' }, error: 'invalid_grant' },
+    { what: 'another resource', overrides: { resource: 'https://other.example.com/mcp' }, error: 'invalid_target' },
+    { what: 'no verifier', overrides: { code_verifier: undefined }, error: 'invalid_request' },
+    { what: 'another grant type', overrides: { grant_type: 'password' }, error: 'unsupported_grant_type' },
+  ])('refuses $what', async ({ overrides, error }) => {
     await expect(exchangeToken(aCodeGrant(overrides))).resolves.toMatchObject({ isOk: false, error: { error } });
     expect(tokens.held).toEqual([]);
   });
