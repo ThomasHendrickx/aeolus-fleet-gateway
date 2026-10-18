@@ -7,10 +7,21 @@
  */
 import { setTimeout as wait } from 'node:timers/promises';
 
-import { busyWaitMs, commissionShipOutputSchema, FLEET_BUSY_WAITS_MS, fleetListOutputSchema, idSchema, shipDetailOutputSchema } from '@aeolus-fleet/common';
+import {
+  busyWaitMs,
+  commissionShipOutputSchema,
+  FLEET_BUSY_WAITS_MS,
+  fleetListOutputSchema,
+  handedOutputSchema,
+  idSchema,
+  pushReceiveOutputSchema,
+  sendOutputSchema,
+  shipDetailOutputSchema,
+} from '@aeolus-fleet/common';
 import { z } from 'zod';
 
 import type { FleetDoor, FleetRefusal } from '../../core/connection/ports.js';
+import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
@@ -36,6 +47,8 @@ interface FleetCall<T> {
   crewToken?: string;
   body?: unknown;
   answers: z.ZodType<T>;
+  /** Ends a call that waits, such as pushReceive, once it aborts. */
+  signal?: AbortSignal;
 }
 
 /** Where the fleet answers, how long to wait before each next call while it is busy, the draw for each wait, and how a drawn wait is waited. */
@@ -72,6 +85,7 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
       method: request.method,
       headers,
       body: request.body === undefined ? undefined : JSON.stringify(request.body),
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
     });
     body = await response.json();
   } catch (error) {
@@ -83,9 +97,13 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & StatementDoor {
+): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
+  const done = async (crewToken: string, request: { path: string; body: unknown }) => {
+    const answered = await call({ ...request, method: 'POST', crewToken, answers: z.unknown() });
+    return answered.isOk ? ok(undefined) : answered;
+  };
   return {
     register: ({ shipId, secret }) =>
       call({ path: '/ship/register', method: 'POST', body: { shipId, secret, location: LOCATION, harness: HARNESS }, answers: z.object({ crewToken: z.string() }) }),
@@ -124,6 +142,40 @@ export function createRestFleetDoor(
       const stated = await call({ path: '/ship/setStatement', method: 'POST', crewToken, body: statement, answers: z.object({ version: z.int() }) });
       return stated.isOk ? ok(undefined) : stated;
     },
+    // A proxy ship's crew calls (decision 0040), as the gateway's computer side makes them.
+    pushReceive: async (crewToken, { max, signal }) => {
+      const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max }, answers: pushReceiveOutputSchema, signal });
+      return taken.isOk
+        ? ok(
+            taken.value.deliveries.map(({ deliveryId, messageId, senderShipId, contentType, payload, state, handOverNumber }) => ({
+              deliveryId,
+              messageId,
+              senderShipId,
+              contentType,
+              payload,
+              state,
+              handOverNumber,
+            })),
+          )
+        : taken;
+    },
+    handed: async (crewToken, handOver) => {
+      const answered = await call({ path: '/ship/handed', method: 'POST', crewToken, body: handOver, answers: handedOutputSchema });
+      return answered.isOk ? ok(answered.value.state) : answered;
+    },
+    reply: async (crewToken, { to, inReplyTo, contentType, payload, idempotencyKey }) => {
+      const sent = await call({
+        path: '/ship/send',
+        method: 'POST',
+        crewToken,
+        body: { selector: { kind: 'ship', shipId: to }, inReplyTo, contentType, payload, idempotencyKey },
+        answers: sendOutputSchema,
+      });
+      return sent.isOk ? ok(undefined) : sent;
+    },
+    ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
+    handled: (crewToken, deliveryId) => done(crewToken, { path: '/ship/handled', body: { deliveryId } }),
+    notHandled: (crewToken, report) => done(crewToken, { path: '/ship/notHandled', body: report }),
     // Core 0.27 answers no call the gateway's ship may make with whether a
     // networking plugin is registered, so a crewed ship of the networking
     // plugin's type stands in for it until core answers it itself.

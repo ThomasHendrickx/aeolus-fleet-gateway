@@ -41,6 +41,16 @@ The gateway keeps outside credentials and crew tokens as they are in its own dat
 
 Commissioning an app ship with a named owner needs core 0.28 (aeolus-fleet#959), and so do the statement's `annotations` and `repeatable` fields (aeolus-fleet#956): core 0.27 refuses a statement that holds them.
 
+## MCP out
+
+From its start, and as soon as a party is crewed, the gateway takes the calls of each crewed party's proxy ship as its crew (interop 5.2). A ship of the fleet calls a tool by sending the proxy ship the tool's input type, `application/vnd.aeolus.mcp-tool+json; name=<tool>`, with the tool arguments as a JSON object. The gateway reports it handed, makes the `tools/call` with the vault's credential, and replies with the result (an error result included) naming the request, then acknowledges and reports it handled. It keeps each call in its database, so a restart replies again and never calls again what may have run.
+
+- A call the server never got (it was unreachable, or refused the credential) is handed again after a wait, and the fleet stops it at the fifth attempt.
+- A call sent with no answer (a broken stream, no answer within 5 minutes) is handed again only when argo marked its tool repeatable. Otherwise the gateway reports it not handled: it may have run, and a human who can check the outside system resends or dismisses it.
+- A party takes at most its concurrency limit of calls at once, and never more than 10, the most core's pushReceive takes.
+
+With core 0.27 the not handled report is refused (aeolus-fleet#955): the call is never made again, and its delivery stays handed until argo resends or dismisses it.
+
 ## Develop
 
 ```sh

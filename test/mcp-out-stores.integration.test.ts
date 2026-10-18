@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, i
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgetter.js';
+import { createPrismaCalls } from '../src/adapters/prisma/calls.js';
 import { createPrismaToolMarks } from '../src/adapters/prisma/tool-marks.js';
 import { statementOf } from '../src/core/mcp-out/statement.js';
 import { commission, register, signIn } from './support/argo.js';
@@ -74,5 +75,37 @@ describe("argo's repeatable marks in Postgres", () => {
     await createPrismaFleetForgetter(prisma).forget(OTHER_FLEET);
 
     await expect(marks.repeatable(OTHER_FLEET, 'crm')).resolves.toEqual(new Set());
+  });
+});
+
+describe("the gateway's calls in Postgres", () => {
+  let prisma: PrismaClient;
+
+  beforeAll(async () => {
+    prisma = createPrismaClient(await migratedDatabase(inject('postgresUrl')));
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  const REPLY = { to: 'shp_01m3tbfspe96yf1rnr4ank9agt', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank9m01', contentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals', payload: '{}', idempotencyKey: 'mcp-result:msg_01m3tbfspe96yf1rnr4ank9m01' } as const;
+
+  it('keeps each call by delivery, with its reply until it is sent', async () => {
+    const calls = createPrismaCalls(prisma);
+    await calls.save({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', fleetId: FLEET, party: 'crm', state: 'calling', reply: null });
+    await calls.save({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', fleetId: FLEET, party: 'crm', state: 'answered', reply: REPLY });
+
+    await expect(calls.find('dlv_01m3tbfspe96yf1rnr4ank9d01')).resolves.toEqual({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', fleetId: FLEET, party: 'crm', state: 'answered', reply: REPLY });
+    await expect(calls.find('dlv_01m3tbfspe96yf1rnr4ank9d09')).resolves.toBeUndefined();
+  });
+
+  it('forgets a fleet with its calls (decision 0021)', async () => {
+    const calls = createPrismaCalls(prisma);
+    await calls.save({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d02', fleetId: OTHER_FLEET, party: 'crm', state: 'mayHaveRun', reply: null });
+
+    await createPrismaFleetForgetter(prisma).forget(OTHER_FLEET);
+
+    await expect(calls.find('dlv_01m3tbfspe96yf1rnr4ank9d02')).resolves.toBeUndefined();
   });
 });

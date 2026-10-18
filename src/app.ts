@@ -21,6 +21,11 @@ import { createPrismaToolMarks } from './adapters/prisma/tool-marks.js';
 import { createMcpServers } from './adapters/mcp/mcp-servers.js';
 import { createMarkTool } from './core/mcp-out/mark-tool.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
+import { createHandCall } from './core/mcp-out/hand-call.js';
+import { createRunParty } from './core/mcp-out/run-party.js';
+import { createPrismaCalls } from './adapters/prisma/calls.js';
+import { sleep } from './adapters/timers/sleep.js';
+import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type GatewayRouter } from './adapters/trpc/router.js';
 import { createConnect } from './core/connection/connect.js';
 import { createReadConnection, type ReadConnection } from './core/connection/read-connection.js';
@@ -30,8 +35,8 @@ import { createReadFleet } from './core/installation/read-fleet.js';
 import { createIsServed } from './core/installation/served.js';
 import { createSetFleetEnabled } from './core/installation/set-fleet-enabled.js';
 import { createAuthenticateOperator } from './core/operator/authenticate-operator.js';
-import { createApproveParty } from './core/parties/approve-party.js';
-import { createCrewParty } from './core/parties/crew-party.js';
+import { createApproveParty, type ApproveParty } from './core/parties/approve-party.js';
+import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
 import { createListParties } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
 
@@ -47,14 +52,30 @@ export interface GatewayAppOptions {
   logger?: FastifyServerOptions['logger'];
   /** The installation token (decision 0021): unset, the installation is open and every fleet is served. */
   installationToken?: string;
+  /** How long the gateway waits for an outside tool's answer before the call counts as unanswered: 5 minutes unless set. */
+  toolCallTimeoutMs?: number;
 }
+
+/** Within the fleet's 10 minutes a handed delivery may wait for its confirmation (decision 0040). */
+const TOOL_CALL_TIMEOUT_MS = 5 * 60_000;
+
+/** How often a proxy ship's worker looks again while the fleet hands it only what it holds, or does not answer. */
+const POLL_MS = 2_000;
+
+/** How long a delivery answered again waits before it is handed with the next number, each longer than the last. */
+const AGAIN_WAITS_MS = [1_000, 10_000, 60_000, 300_000];
 
 export interface GatewayApp {
   /** The HTTP server: `/api/health` and `/api/version` for whoever operates the installation, and `/trpc`. */
   server: FastifyInstance;
-  /** At start: reads every served fleet's kept connection, dropping a crew token its fleet no longer takes; answers each fleet still connected, as which ship. */
+  /**
+   * At start: reads every served fleet's kept connection, dropping a crew
+   * token its fleet no longer takes, and starts taking the calls of each
+   * crewed party of a served fleet; answers each fleet still connected, as
+   * which ship.
+   */
   restoreConnections: () => Promise<{ fleetId: FleetId; ship: string }[]>;
-  /** Stops the server and disconnects the database. */
+  /** Stops taking calls, once those in flight ended, then stops the server and disconnects the database. */
   close(): Promise<void>;
 }
 
@@ -99,12 +120,30 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const connect = createConnect({ door, store: connections, clock });
   const authenticateOperator = createAuthenticateOperator({ sessions: createFleetConsoleSessions(options.fleetUrl) });
   const parties = createPrismaPartyStore(prisma);
-  const approveParty = createApproveParty({ connections, parties, door, hasher: sha256RequestHasher, clock });
-  const crewParty = createCrewParty({ parties, door });
-  const listParties = createListParties({ parties });
   const marks = createPrismaToolMarks(prisma);
-  const stateParty = createStateParty({ parties, servers: createMcpServers(), door, marks });
+  const servers = createMcpServers();
+  const stateParty = createStateParty({ parties, servers, door, marks });
   const markTool = createMarkTool({ parties, marks, stateParty });
+  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
+  const workers = createPartyWorkers({ parties, stateParty, runParty: createRunParty({ crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }), log: server.log });
+  const approvePartyOnly = createApproveParty({ connections, parties, door, hasher: sha256RequestHasher, clock });
+  const crewPartyOnly = createCrewParty({ parties, door });
+  // A party crewed by approving it, or by a new secret, has its calls taken at once.
+  const approveParty: ApproveParty = async (input) => {
+    const approved = await approvePartyOnly(input);
+    if (approved.isOk) {
+      await workers.start({ fleetId: input.operatorFleetId, name: approved.value.name });
+    }
+    return approved;
+  };
+  const crewParty: CrewParty = async (input) => {
+    const crewed = await crewPartyOnly(input);
+    if (crewed.isOk) {
+      await workers.start({ fleetId: input.operatorFleetId, name: crewed.value.name });
+    }
+    return crewed;
+  };
+  const listParties = createListParties({ parties });
 
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {
     prefix: '/trpc',
@@ -152,8 +191,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           restored.push({ fleetId: crew.fleetId, ship: connection.ship?.name ?? crew.name });
         }
       }
+      for (const party of await parties.crewed()) {
+        if (await isServed(party.fleetId)) {
+          await workers.start(party);
+        }
+      }
       return restored;
     },
-    close: () => server.close(),
+    close: async () => {
+      await workers.stop();
+      await server.close();
+    },
   };
 }
