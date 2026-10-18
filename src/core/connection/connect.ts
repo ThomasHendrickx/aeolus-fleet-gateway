@@ -10,11 +10,11 @@ export type ConnectRefusal = DomainError<'ALREADY_CONNECTED' | 'SECRET_REFUSED' 
 export type Connect = (input: { operatorFleetId: FleetId; shipId: ShipId; secret: string }) => Promise<Result<ConnectionStatus, ConnectRefusal>>;
 
 /**
- * What the gateway's ship does (decisions 0044 to 0046): read the fleet,
+ * What the gateway's ship does (decisions 0044 to 0046): read the fleet, and
  * commission an app proxy ship for each party argo approves, naming the owner
- * argo picked, and label it.
+ * argo picked. argo labels proxy ships in the console.
  */
-const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'labels:assign'];
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf'];
 
 /**
  * Use case: argo connects the gateway, as the other plugins are connected.

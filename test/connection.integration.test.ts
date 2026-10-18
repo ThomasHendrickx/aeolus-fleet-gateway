@@ -13,7 +13,7 @@ import { connectGateway, mutate, query } from './support/gateway-api.js';
 // database and is connected again after a restart. It serves only a fleet with
 // a registered networking plugin (interop I-3).
 
-const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'labels:assign'];
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf'];
 const INSTALLATION_TOKEN = 'an-installation-token-of-at-least-32-characters';
 
 let fleet: FleetServer;
