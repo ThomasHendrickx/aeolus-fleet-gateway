@@ -44,7 +44,7 @@ export function aNewDatabaseUrl(adminUrl: string, prefix: string): string {
   return url.toString();
 }
 
-async function aFreePort(): Promise<number> {
+export async function aFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
     server.once('error', reject);
