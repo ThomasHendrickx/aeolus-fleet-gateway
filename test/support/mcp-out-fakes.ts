@@ -84,6 +84,7 @@ export function aPushedDelivery(overrides: Partial<PushedDelivery> = {}): Pushed
     payload: '{"contactId":"c1"}',
     state: 'received',
     handOverNumber: null,
+    inReplyTo: null,
     ...overrides,
   };
 }
@@ -98,8 +99,10 @@ export function fakeProxyShipCrew() {
     notHandledRefusal: FleetRefusal | undefined;
     isSendAnswering: boolean;
     receiveRefusal: FleetRefusal | undefined;
+    /** Whether each acknowledgement is lost: the fleet does not answer it, and hands its delivery again. */
+    isAckLost: boolean;
     waiting: PushedDelivery[];
-  } = { handedState: 'handed', handedRefusal: undefined, notHandledRefusal: undefined, isSendAnswering: true, receiveRefusal: undefined, waiting: [] };
+  } = { handedState: 'handed', handedRefusal: undefined, notHandledRefusal: undefined, isSendAnswering: true, receiveRefusal: undefined, isAckLost: false, waiting: [] };
   const received: number[] = [];
   const log: CrewCall[] = [];
   const crewTokens: string[] = [];
@@ -133,7 +136,12 @@ export function fakeProxyShipCrew() {
       return Promise.resolve(ok(undefined));
     },
     ack: (crewToken, deliveryId) => {
+      if (state.isAckLost) {
+        return Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
+      }
       done(crewToken, ['ack', deliveryId]);
+      // An acknowledged delivery is not handed again, as core's is not.
+      state.waiting = state.waiting.filter((waiting) => waiting.deliveryId !== deliveryId);
       return Promise.resolve(ok(undefined));
     },
     handled: (crewToken, deliveryId) => {

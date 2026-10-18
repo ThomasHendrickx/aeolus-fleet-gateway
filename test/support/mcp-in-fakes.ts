@@ -1,7 +1,9 @@
 import { idSchema, type FleetId, type MessageId, type ShipId } from '@aeolus-fleet/common';
 
-import type { CallKeys, CallSender, ClientCall, ClientCalls, DiscoveredShip, Discovery, ShipAliases } from '../../src/core/mcp-in/ports.js';
+import type { CallReply, ClientCall } from '../../src/core/mcp-in/client-call.js';
+import type { CallKeys, CallSender, ClientCalls, DiscoveredShip, Discovery, ShipAliases } from '../../src/core/mcp-in/ports.js';
 import { err, ok } from '../../src/core/shared/result.js';
+import { FLEET_ID } from './fleet-fakes.js';
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 
 export const CRM_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9cr2';
@@ -86,17 +88,62 @@ export function fakeCallSender() {
   return sender;
 }
 
-/** The calls of outside clients in memory, by fleet and message. */
-export function memoryClientCalls(): ClientCalls & { held: ClientCall[] } {
-  const held: ClientCall[] = [];
+/** A call an outside client made: sent, with no reply yet. */
+export function aClientCall(overrides: Partial<ClientCall> = {}): ClientCall {
   return {
-    held,
-    save: (call) => {
-      if (!held.some((earlier) => earlier.fleetId === call.fleetId && earlier.messageId === call.messageId)) {
-        held.push(call);
+    fleetId: FLEET_ID,
+    party: 'claude',
+    messageId: MESSAGE_ID,
+    handle: 'handle-1',
+    shipId: CRM_SHIP_ID,
+    capability: 'list_deals',
+    outputContentType: null,
+    sentAt: new Date('2026-10-19T12:00:00.000Z'),
+    deadlineAt: new Date('2026-10-19T12:10:00.000Z'),
+    replies: [],
+    ...overrides,
+  };
+}
+
+/** A reply to a call, as the gateway kept it. */
+export function aCallReply(overrides: Partial<CallReply> = {}): CallReply {
+  return {
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9r01',
+    messageId: 'msg_01m3tbfspe96yf1rnr4ank9r01',
+    contentType: 'text/plain',
+    payload: 'Two deals.',
+    receivedAt: new Date('2026-10-19T12:01:00.000Z'),
+    ...overrides,
+  };
+}
+
+/** The calls of outside clients in memory, by fleet and message, with their replies in the order kept. */
+export function memoryClientCalls(): ClientCalls & { held: ClientCall[]; isFailing: boolean } {
+  const store = {
+    held: new Array<ClientCall>(),
+    /** Whether keeping a reply fails, as a database that does not answer. */
+    isFailing: false,
+  };
+  const find = (fleetId: FleetId, messageId: MessageId) => store.held.find((call) => call.fleetId === fleetId && call.messageId === messageId);
+  return Object.assign(store, {
+    save: (call: Omit<ClientCall, 'replies'>) => {
+      if (!find(call.fleetId, call.messageId)) {
+        store.held.push({ ...call, replies: [] });
       }
       return Promise.resolve();
     },
-    findByHandle: ({ fleetId, party }, handle) => Promise.resolve(held.find((call) => call.fleetId === fleetId && call.party === party && call.handle === handle)),
-  };
+    addReply: ({ fleetId, messageId }: { fleetId: FleetId; messageId: MessageId }, reply: CallReply) => {
+      if (store.isFailing) {
+        return Promise.reject(new Error('The database did not answer'));
+      }
+      const call = find(fleetId, messageId);
+      if (call && !call.replies.some((kept) => kept.deliveryId === reply.deliveryId)) {
+        call.replies.push(reply);
+      }
+      return Promise.resolve();
+    },
+    findByMessage: (fleetId: FleetId, messageId: MessageId) => Promise.resolve(find(fleetId, messageId)),
+    findByHandle: ({ fleetId, party }: { fleetId: FleetId; party: string }, handle: string) =>
+      Promise.resolve(store.held.find((call) => call.fleetId === fleetId && call.party === party && call.handle === handle)),
+  });
 }

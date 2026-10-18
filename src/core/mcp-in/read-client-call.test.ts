@@ -1,27 +1,44 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { CRM_SHIP_ID, MESSAGE_ID, memoryClientCalls } from '../../../test/support/mcp-in-fakes.js';
+import { aCallReply, aClientCall, MESSAGE_ID, memoryClientCalls } from '../../../test/support/mcp-in-fakes.js';
+import type { Clock } from '../shared/clock.js';
 import { createReadClientCall } from './read-client-call.js';
 
 const HANDLE = 'handle-1';
+const CALLER = { fleetId: FLEET_ID, party: 'claude' };
 
 let calls: ReturnType<typeof memoryClientCalls>;
+let now: Date;
 let readClientCall: ReturnType<typeof createReadClientCall>;
 
 beforeEach(async () => {
   calls = memoryClientCalls();
-  await calls.save({ fleetId: FLEET_ID, party: 'claude', messageId: MESSAGE_ID, handle: HANDLE, shipId: CRM_SHIP_ID, capability: 'list_deals', sentAt: new Date('2026-10-19T12:00:00.000Z') });
-  readClientCall = createReadClientCall({ calls });
+  await calls.save(aClientCall({ handle: HANDLE, deadlineAt: new Date('2026-10-19T12:10:00.000Z') }));
+  now = new Date('2026-10-19T12:01:00.000Z');
+  const clock: Clock = { now: () => now };
+  readClientCall = createReadClientCall({ calls, clock });
 });
 
 describe('an outside MCP client reads its call by the handle it was answered (interop 3.4)', () => {
   it('reads a call sent and not yet answered as submitted', async () => {
-    await expect(readClientCall({ fleetId: FLEET_ID, party: 'claude' }, HANDLE)).resolves.toEqual({ isOk: true, value: { handle: HANDLE, state: 'submitted' } });
+    await expect(readClientCall(CALLER, HANDLE)).resolves.toEqual({ isOk: true, value: { handle: HANDLE, state: 'submitted' } });
+  });
+
+  it('reads a completed call with its answer', async () => {
+    await calls.addReply({ fleetId: FLEET_ID, messageId: MESSAGE_ID }, aCallReply({ contentType: 'text/plain', payload: 'Two deals.' }));
+
+    await expect(readClientCall(CALLER, HANDLE)).resolves.toEqual({ isOk: true, value: { handle: HANDLE, state: 'completed', answer: { contentType: 'text/plain', payload: 'Two deals.' } } });
+  });
+
+  it('reads a call past its deadline with no answer as failed', async () => {
+    now = new Date('2026-10-19T12:10:00.000Z');
+
+    await expect(readClientCall(CALLER, HANDLE)).resolves.toEqual({ isOk: true, value: { handle: HANDLE, state: 'failed' } });
   });
 
   it.each([
-    { what: 'a handle it was never answered', caller: { fleetId: FLEET_ID, party: 'claude' }, handle: 'handle-2' },
+    { what: 'a handle it was never answered', caller: CALLER, handle: 'handle-2' },
     { what: "another party's call", caller: { fleetId: FLEET_ID, party: 'cursor' }, handle: HANDLE },
     { what: "another fleet's call", caller: { fleetId: OTHER_FLEET_ID, party: 'claude' }, handle: HANDLE },
   ])('knows no call by $what', async ({ caller, handle }) => {

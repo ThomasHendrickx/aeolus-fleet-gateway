@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, signIn } from './support/argo.js';
 import { receiveOne } from './support/ship.js';
+import { setTimeout as wait } from 'node:timers/promises';
 import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
 import { aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
@@ -51,6 +52,20 @@ async function aConnectedClient(): Promise<Client> {
   const mcp = new Client({ name: 'test-client', version: '1' });
   await mcp.connect(new StreamableHTTPClientTransport(new URL(`${setting.address}/mcp`), { authProvider: client.provider }));
   return mcp;
+}
+
+/** How often, and how many times, a test reads a call while its reply travels. */
+const REPLY_POLL_MS = 500;
+const REPLY_ATTEMPTS = 60;
+
+/** The ship replies to a message, as its crew, in plain text. */
+async function replyTo(crewToken: string, reply: { to: string; inReplyTo: string; payload: string }): Promise<void> {
+  const response = await fetch(`${setting.fleet.url}/api/v1/ship/send`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${crewToken}` },
+    body: JSON.stringify({ selector: { kind: 'ship', shipId: reply.to }, inReplyTo: reply.inReplyTo, contentType: 'text/plain', payload: reply.payload, idempotencyKey: crypto.randomUUID() }),
+  });
+  expect(response.status).toBe(200);
 }
 
 const textOf = (result: Awaited<ReturnType<Client['callTool']>>) => z.string().parse(z.array(z.object({ text: z.string() })).parse(result.content)[0]?.text);
@@ -104,6 +119,24 @@ describe("an outside MCP client's tool call is a message its proxy ship sends", 
 
     expect(await receiveOne(setting.fleet, crm)).toMatchObject({ contentType: 'application/json', payload: '{"contactId":"c1"}' });
     expect(JSON.parse(textOf(read))).toEqual({ handle, state: 'submitted' });
+  });
+
+  it("answers aeolus_result with the ship's reply once it came: plain text from a ship that states no output type", async () => {
+    const crm = await aStatingShip();
+    const mcp = await aConnectedClient();
+    const [tool] = (await mcp.listTools()).tools.filter((each) => each.name.endsWith('__list_deals'));
+    const { handle } = z.object({ handle: z.string() }).parse(JSON.parse(textOf(await mcp.callTool({ name: z.string().parse(tool?.name), arguments: { contactId: 'c1' } }))));
+    const delivery = await receiveOne(setting.fleet, crm);
+    await replyTo(crm, { to: z.string().parse(delivery?.senderShipId), inReplyTo: z.string().parse(delivery?.messageId), payload: 'Two deals: Analytical engine, Difference engine.' });
+
+    let read = await mcp.callTool({ name: 'aeolus_result', arguments: { handle } });
+    for (let attempt = 0; attempt < REPLY_ATTEMPTS && read.content.length > 0 && textOf(read).includes('"state":"submitted"'); attempt += 1) {
+      await wait(REPLY_POLL_MS);
+      read = await mcp.callTool({ name: 'aeolus_result', arguments: { handle } });
+    }
+    await mcp.close();
+
+    expect({ text: textOf(read), isError: read.isError }).toEqual({ text: 'Two deals: Analytical engine, Difference engine.', isError: undefined });
   });
 
   it('sends the same call under the same idempotency argument once', async () => {
