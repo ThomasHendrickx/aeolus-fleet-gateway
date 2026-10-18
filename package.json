@@ -1,0 +1,51 @@
+{
+  "name": "@aeolus-fleet/gateway",
+  "version": "0.0.0",
+  "description": "Aeolus gateway: outside MCP servers and clients join a fleet as ships, through one gateway beside core.",
+  "keywords": [
+    "ai-agents",
+    "mcp",
+    "model-context-protocol",
+    "gateway"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ThomasHendrickx/aeolus-fleet-gateway.git"
+  },
+  "packageManager": "npm@11.19.1",
+  "engines": {
+    "node": ">=26"
+  },
+  "bin": {
+    "aeolus-gateway": "dist/bin/aeolus-gateway.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "typecheck": "tsc --project tsconfig.json",
+    "lint": "eslint --max-warnings 0 .",
+    "test": "vitest run",
+    "test:unit": "vitest run --project '*:unit'",
+    "test:integration": "vitest run --project '*:integration'",
+    "start": "node dist/bin/aeolus-gateway.js start"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@aeolus-fleet/core": "0.27.0",
+    "@eslint/js": "^10.0.1",
+    "@testcontainers/postgresql": "^12.2.0",
+    "@types/node": "^26.6.3",
+    "eslint": "^10.11.0",
+    "eslint-plugin-check-file": "^3.3.2",
+    "testcontainers": "^12.2.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  }
+}
