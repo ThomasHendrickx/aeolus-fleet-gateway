@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aDiscoveredShip, CRM_SHIP_ID, fakeAliases, fakeCallKeys, fakeCallSender, fakeDiscovery, MESSAGE_ID, memoryClientCalls } from '../../../test/support/mcp-in-fakes.js';
+import { aCallReply, aDiscoveredShip, CRM_SHIP_ID, fakeAliases, fakeCallKeys, fakeCallSender, fakeDiscovery, MESSAGE_ID, memoryClientCalls } from '../../../test/support/mcp-in-fakes.js';
 import { OWNER_SHIP_ID, PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import type { McpClientParty } from '../parties/party.js';
+import type { Sleep } from '../mcp-out/run-party.js';
 import type { Clock } from '../shared/clock.js';
 import { createCallTool } from './call-tool.js';
 import { createListTools, IDEMPOTENCY_ARGUMENT } from './list-tools.js';
@@ -25,8 +26,22 @@ const CLAUDE: McpClientParty = {
 
 const CALLER = { fleetId: FLEET_ID, party: 'claude' };
 const NOW = new Date('2026-10-19T12:00:00.000Z');
-const clock: Clock = { now: () => NOW };
 const DEADLINE_MS = 600_000;
+const WAIT_POLL_MS = 250;
+const RESULT_TYPE = 'application/vnd.aeolus.mcp-result+json; name=list_deals';
+
+let now: Date;
+const clock: Clock = { now: () => now };
+let sleeps: number[];
+/** What happens in the fleet while the call waits, before each sleep ends. */
+let whileWaiting: () => Promise<void>;
+
+/** Each sleep passes its time on the clock. */
+const sleep: Sleep = async (ms) => {
+  sleeps.push(ms);
+  now = new Date(now.getTime() + ms);
+  await whileWaiting();
+};
 
 let parties: ReturnType<typeof memoryPartyStore>;
 let discovery: ReturnType<typeof fakeDiscovery>;
@@ -35,6 +50,9 @@ let calls: ReturnType<typeof memoryClientCalls>;
 let keys: ReturnType<typeof fakeCallKeys>;
 let callTool: ReturnType<typeof createCallTool>;
 
+const callToolWaiting = (waitMs: number) =>
+  createCallTool({ parties, listTools: createListTools({ parties, discovery, aliases: fakeAliases }), sender, calls, keys, clock, deadlineMs: DEADLINE_MS, sleep, waitMs, waitPollMs: WAIT_POLL_MS });
+
 beforeEach(async () => {
   parties = memoryPartyStore();
   await parties.save(CLAUDE);
@@ -42,7 +60,10 @@ beforeEach(async () => {
   sender = fakeCallSender();
   calls = memoryClientCalls();
   keys = fakeCallKeys();
-  callTool = createCallTool({ parties, listTools: createListTools({ parties, discovery, aliases: fakeAliases }), sender, calls, keys, clock, deadlineMs: DEADLINE_MS });
+  now = NOW;
+  sleeps = [];
+  whileWaiting = () => Promise.resolve();
+  callTool = callToolWaiting(0);
 });
 
 describe("an outside MCP client's tool call is a message its proxy ship sends (interop 3.3)", () => {
@@ -63,7 +84,7 @@ describe("an outside MCP client's tool call is a message its proxy ship sends (i
   it("answers a handle once the fleet answered the send, and keeps the call under it, with the type its answer comes in and its deadline", async () => {
     const called = await callTool(CALLER, { name: 'a9cr2__list_deals', arguments: { contactId: 'c1' } });
 
-    expect(called).toEqual({ isOk: true, value: { handle: `handle(${FLEET_ID}:${MESSAGE_ID})` } });
+    expect(called).toEqual({ isOk: true, value: { handle: `handle(${FLEET_ID}:${MESSAGE_ID})`, state: 'submitted' } });
     expect(calls.held).toEqual([
       {
         fleetId: FLEET_ID,
@@ -147,5 +168,42 @@ describe("an outside MCP client's tool call is a message its proxy ship sends (i
     await parties.save({ ...CLAUDE, state: 'awaitingCrew', crewToken: null });
 
     await expect(callTool(CALLER, { name: 'a9cr2__list_deals', arguments: {} })).resolves.toMatchObject({ isOk: false, error: { kind: 'PARTY_NOT_CREWED' } });
+  });
+});
+
+describe('an outside MCP client waits a bounded time for the answer to its call (interop 3.3)', () => {
+  it('is answered the answer itself once it comes within the wait', async () => {
+    whileWaiting = () => calls.addReply({ fleetId: FLEET_ID, messageId: MESSAGE_ID }, aCallReply({ contentType: RESULT_TYPE, payload: '{"content":[]}', receivedAt: now }));
+
+    await expect(callToolWaiting(10_000)(CALLER, { name: 'a9cr2__list_deals', arguments: {} })).resolves.toEqual({
+      isOk: true,
+      value: { handle: `handle(${FLEET_ID}:${MESSAGE_ID})`, state: 'completed', answer: { contentType: RESULT_TYPE, payload: '{"content":[]}' } },
+    });
+    expect(sleeps).toEqual([WAIT_POLL_MS]);
+  });
+
+  it('is answered the handle once the wait passed without the answer, waiting no longer than the wait', async () => {
+    const called = await callToolWaiting(1000)(CALLER, { name: 'a9cr2__list_deals', arguments: {} });
+
+    expect(called).toMatchObject({ isOk: true, value: { state: 'submitted' } });
+    expect(sleeps).toEqual([250, 250, 250, 250]);
+  });
+
+  it('sleeps no further than the end of the wait', async () => {
+    await callToolWaiting(600)(CALLER, { name: 'a9cr2__list_deals', arguments: {} });
+
+    expect(sleeps).toEqual([250, 250, 100]);
+  });
+
+  it('is answered working when only a status came within the wait', async () => {
+    whileWaiting = () => calls.addReply({ fleetId: FLEET_ID, messageId: MESSAGE_ID }, aCallReply({ contentType: 'text/plain', payload: 'Looking.', receivedAt: now }));
+
+    await expect(callToolWaiting(500)(CALLER, { name: 'a9cr2__list_deals', arguments: {} })).resolves.toMatchObject({ isOk: true, value: { state: 'working' } });
+  });
+
+  it('waits not at all with no wait', async () => {
+    await callToolWaiting(0)(CALLER, { name: 'a9cr2__list_deals', arguments: {} });
+
+    expect(sleeps).toEqual([]);
   });
 });

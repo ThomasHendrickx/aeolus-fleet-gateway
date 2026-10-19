@@ -115,7 +115,7 @@ function serverFor(holder: AccessTokenHolder, deps: McpEndpointDeps): McpServer 
       return toolError('A tool takes its arguments as an object');
     }
     const called = await deps.callTool(caller, { name: request.params.name, arguments: values.data });
-    return called.isOk ? answered({ handle: called.value.handle, state: 'submitted' }) : toolError(called.error.message);
+    return called.isOk ? resultOf(called.value) : toolError(called.error.message);
   });
   return mcp;
 }

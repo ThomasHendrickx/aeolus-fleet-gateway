@@ -2,23 +2,28 @@
  * Use case: an outside MCP client calls a tool (interop 3.3). The call is a
  * message the party's proxy ship sends to the tool's ship, and the client is
  * answered a handle only once the fleet's send answered OK: the message is
- * stored before any answer, and the gateway never answers OK itself.
+ * stored before any answer, and the gateway never answers OK itself. It
+ * then waits a bounded time for the answer (interop 3.3): answered within
+ * it, the client gets the answer itself; else its handle and the state.
  */
-import type { FleetId } from '@aeolus-fleet/common';
+import type { FleetId, MessageId } from '@aeolus-fleet/common';
 
+import type { Sleep } from '../mcp-out/run-party.js';
 import type { PartyStore } from '../parties/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
+import { stateOf } from './client-call.js';
 import { IDEMPOTENCY_ARGUMENT, type ListedTool, type ListTools } from './list-tools.js';
 import type { CallKeys, CallSender, ClientCalls } from './ports.js';
+import type { ReadCall } from './read-client-call.js';
 
 export type CallToolRefusal = DomainError<'PARTY_NOT_CREWED' | 'FLEET_UNAVAILABLE' | 'NO_SUCH_TOOL' | 'INVALID_ARGUMENTS' | 'NOT_REACHABLE' | 'SEND_REFUSED'>;
 
 export type CallTool = (
   caller: { fleetId: FleetId; party: string },
   call: { name: string; arguments: Record<string, unknown> },
-) => Promise<Result<{ handle: string }, CallToolRefusal>>;
+) => Promise<Result<ReadCall, CallToolRefusal>>;
 
 interface CallToolDeps {
   parties: PartyStore;
@@ -29,6 +34,11 @@ interface CallToolDeps {
   clock: Clock;
   /** How long a call waits for its answer before it fails: the gateway default, while statements state none. */
   deadlineMs: number;
+  sleep: Sleep;
+  /** How long a call waits for its answer before it is answered its handle. */
+  waitMs: number;
+  /** How often it reads the call while it waits. */
+  waitPollMs: number;
 }
 
 /** The message's payload: the arguments as JSON, or a text tool's one text; none for arguments that do not fit the tool. */
@@ -48,6 +58,23 @@ function refusalOf(refused: { code: string; message: string }): ReturnType<typeo
       return refuse('FLEET_UNAVAILABLE', `The fleet did not answer, so the call may have been sent: call again with the same ${IDEMPOTENCY_ARGUMENT} to send it at most once`);
     default:
       return refuse('SEND_REFUSED', `The fleet refused the call: ${refused.message}`);
+  }
+}
+
+/** No signal ends a wait early: it is bounded by its own time. */
+const UNENDING = new AbortController().signal;
+
+/** The call as it stands once its answer came or the wait passed, read after each poll; it never sleeps past the wait's end. */
+async function answerWithin(deps: CallToolDeps, sent: { fleetId: FleetId; messageId: MessageId; handle: string; since: Date }): Promise<ReadCall> {
+  const waitEnd = sent.since.getTime() + deps.waitMs;
+  for (;;) {
+    const call = await deps.calls.findByMessage(sent.fleetId, sent.messageId);
+    const state = call ? stateOf(call, deps.clock.now()) : { state: 'submitted' as const };
+    const left = waitEnd - deps.clock.now().getTime();
+    if (state.state === 'completed' || state.state === 'failed' || left <= 0) {
+      return { handle: sent.handle, ...state };
+    }
+    await deps.sleep(Math.min(deps.waitPollMs, left), UNENDING);
   }
 }
 
@@ -92,6 +119,6 @@ export function createCallTool(deps: CallToolDeps): CallTool {
       sentAt,
       deadlineAt: new Date(sentAt.getTime() + deps.deadlineMs),
     });
-    return ok({ handle });
+    return ok(await answerWithin(deps, { fleetId: caller.fleetId, messageId, handle, since: sentAt }));
   };
 }

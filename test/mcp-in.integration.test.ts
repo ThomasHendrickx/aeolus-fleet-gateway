@@ -13,6 +13,9 @@ import { aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mc
 // MCP in (interop 3.3): an outside MCP client, signed in, sees the
 // capabilities of the ships its party reaches as tools, named by alias.
 
+/** How long a call waits for its answer in these tests: long enough for a ship's reply to travel, short for the calls nobody answers. */
+const MCP_WAIT_MS = 3000;
+
 let setting: Setting;
 let app: GatewayApp;
 
@@ -21,7 +24,7 @@ beforeEach(async () => {
   const port = await aFreePort();
   const address = `http://127.0.0.1:${String(port)}`;
   setting = { fleet, address, cookie: await signIn(fleet), databaseUrl: await migratedDatabase(inject('postgresUrl')) };
-  app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET });
+  app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET, mcpWaitMaxMs: MCP_WAIT_MS });
   await app.server.listen({ host: '127.0.0.1', port });
 });
 
@@ -137,6 +140,20 @@ describe("an outside MCP client's tool call is a message its proxy ship sends", 
     await mcp.close();
 
     expect({ text: textOf(read), isError: read.isError }).toEqual({ text: 'Two deals: Analytical engine, Difference engine.', isError: undefined });
+  });
+
+  it("answers the ship's reply itself when it comes within the wait", async () => {
+    const crm = await aStatingShip();
+    const mcp = await aConnectedClient();
+    const [tool] = (await mcp.listTools()).tools.filter((each) => each.name.endsWith('__list_deals'));
+
+    const calling = mcp.callTool({ name: z.string().parse(tool?.name), arguments: { contactId: 'c1' } });
+    const delivery = await receiveOne(setting.fleet, crm);
+    await replyTo(crm, { to: z.string().parse(delivery?.senderShipId), inReplyTo: z.string().parse(delivery?.messageId), payload: 'One deal: Analytical engine.' });
+    const called = await calling;
+    await mcp.close();
+
+    expect(textOf(called)).toBe('One deal: Analytical engine.');
   });
 
   it('sends the same call under the same idempotency argument once', async () => {

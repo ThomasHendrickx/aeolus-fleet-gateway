@@ -17,6 +17,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 | `PORT` | `4200` | Port to listen on |
 | `GATEWAY_PUBLIC_URL` | `http://127.0.0.1:<PORT>` | Where outside MCP clients reach the gateway: the OAuth issuer, with the MCP endpoint at `/mcp` |
 | `GATEWAY_SECRET` | required | At least 32 characters. Keys the ship aliases outside MCP clients see: the same secret keeps every alias across restarts, a new one renames every ship to them |
+| `MCP_WAIT_MAX_MS` | `10000` | How long an outside MCP client's tool call waits for its answer before it is answered its handle; `0` answers the handle at once |
 | `INSTALLATION_TOKEN` | unset | The token a hosting service presents to the installation procedures (at least 32 characters, decision 0021). Unset: they are off and every fleet is served, as a self-hosted gateway needs; set: a fleet is served once switched on |
 | `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
@@ -78,7 +79,7 @@ Codes and tokens are kept only as hashes, and so are client secrets.
 - Its description is the capability's, then the ship's summary. A capability that takes plain text first gets one `text` argument. Every tool takes an optional `aeolus_idempotency_key`.
 - Left out: argo, ships with no statement by their crew, capabilities whose first input type is neither JSON nor plain text or whose input schema is not an object, and tool names over 128 characters.
 - No tool states an output schema: a call may answer a handle, and MCP clients check every answer against it.
-- `tools/call` sends the arguments, without `aeolus_idempotency_key`, as a message from the client's proxy ship to the tool's ship, under the capability's first input type. The client is answered only once the fleet answered the send: `{"handle": "...", "state": "submitted"}`. A fleet that refuses the send gets a tool error, and one that cannot be reached gives no reason why.
+- `tools/call` sends the arguments, without `aeolus_idempotency_key`, as a message from the client's proxy ship to the tool's ship, under the capability's first input type. The client is answered only once the fleet answered the send. The call then waits up to `MCP_WAIT_MAX_MS` for its answer: answered within it, the client gets the answer itself; else `{"handle": "...", "state": "submitted"}` (or `working`). A fleet that refuses the send gets a tool error, and one that cannot be reached gives no reason why.
 - The same `aeolus_idempotency_key` again sends no second message. The send's key is derived from it under `GATEWAY_SECRET`, and the handle from the message, so the client never sees a `msg_` id.
 - `aeolus_result({ handle })` reads the client's own call: `submitted`, `working` once a reply of another type came, its answer once completed, or a tool error once it failed (interop 3.4).
 - The first reply of the capability's first output type completes it; plain text completes a call to a ship that states no output type. An outside tool's result, as MCP out replies one, is answered as that result.

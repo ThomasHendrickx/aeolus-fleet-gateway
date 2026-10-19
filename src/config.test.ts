@@ -16,6 +16,7 @@ describe('the gateway configuration from the environment', () => {
       installationToken: undefined,
       publicUrl: 'http://127.0.0.1:4200',
       gatewaySecret: GATEWAY_SECRET,
+      mcpWaitMaxMs: 10_000,
     });
   });
 
@@ -29,6 +30,7 @@ describe('the gateway configuration from the environment', () => {
       installationToken: undefined,
       publicUrl: 'http://127.0.0.1:8080',
       gatewaySecret: GATEWAY_SECRET,
+      mcpWaitMaxMs: 10_000,
     });
   });
 
@@ -39,6 +41,12 @@ describe('the gateway configuration from the environment', () => {
   it('refuses a missing gateway secret, and one of 31 characters: it keys aliases, handles and idempotency keys', () => {
     expect(() => loadConfig({ DATABASE_URL, FLEET_URL: 'https://fleet.example' })).toThrow(/^GATEWAY_SECRET: /);
     expect(() => loadConfig({ DATABASE_URL, FLEET_URL: 'https://fleet.example', GATEWAY_SECRET: 'x'.repeat(31) })).toThrow('GATEWAY_SECRET: must hold at least 32 characters');
+  });
+
+  it("reads how long an MCP client's call waits for its answer, and refuses a wait below 0", () => {
+    const environment = { DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' };
+    expect([loadConfig({ ...environment, MCP_WAIT_MAX_MS: '0' }).mcpWaitMaxMs, loadConfig({ ...environment, MCP_WAIT_MAX_MS: '30000' }).mcpWaitMaxMs]).toEqual([0, 30_000]);
+    expect(() => loadConfig({ ...environment, MCP_WAIT_MAX_MS: '-1' })).toThrow(/^MCP_WAIT_MAX_MS: /);
   });
 
   it('refuses a public URL that is not http or https, naming the variable', () => {

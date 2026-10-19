@@ -6,6 +6,9 @@ const INSTALLATION_TOKEN_MIN_LENGTH = 32;
 /** The shortest gateway secret: 32 characters, as long as the HMAC keys it makes. */
 const GATEWAY_SECRET_MIN_LENGTH = 32;
 
+/** How long an MCP client's call waits for its answer unless set (Q13). */
+const MCP_WAIT_MAX_MS_DEFAULT = 10_000;
+
 const environmentSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// or postgresql:// URL' }),
   FLEET_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }),
@@ -14,6 +17,7 @@ const environmentSchema = z.object({
   PORT: z.coerce.number().int().min(0).max(65_535).default(4200),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   GATEWAY_PUBLIC_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).optional(),
+  MCP_WAIT_MAX_MS: z.coerce.number().int().min(0).default(MCP_WAIT_MAX_MS_DEFAULT),
   INSTALLATION_TOKEN: z.string().min(INSTALLATION_TOKEN_MIN_LENGTH, { error: `must hold at least ${String(INSTALLATION_TOKEN_MIN_LENGTH)} characters` }).optional(),
 });
 
@@ -41,6 +45,8 @@ export interface Config {
   publicUrl: string;
   /** Keys what the gateway derives: ship aliases, result handles and idempotency keys. Changing it renames every ship to outside clients. */
   gatewaySecret: string;
+  /** How long an outside MCP client's call waits for its answer before it is answered its handle. */
+  mcpWaitMaxMs: number;
 }
 
 export class ConfigError extends Error {
@@ -67,6 +73,7 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     installationToken: variables.INSTALLATION_TOKEN,
     publicUrl: (variables.GATEWAY_PUBLIC_URL ?? `http://127.0.0.1:${String(variables.PORT)}`).replace(/\/$/, ''),
     gatewaySecret: variables.GATEWAY_SECRET,
+    mcpWaitMaxMs: variables.MCP_WAIT_MAX_MS,
   };
 }
 
