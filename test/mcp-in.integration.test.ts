@@ -1,8 +1,10 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { z } from 'zod';
 
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, signIn } from './support/argo.js';
+import { receiveOne } from './support/ship.js';
 import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
 import { aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
@@ -27,8 +29,8 @@ afterEach(async () => {
   await setting.fleet.stop();
 });
 
-/** A ship of the fleet that states one capability, as its crew. */
-async function aStatingShip(): Promise<void> {
+/** A ship of the fleet that states one capability, as its crew: its crew token. */
+async function aStatingShip(): Promise<string> {
   const ship = await commission(setting.fleet, { cookie: setting.cookie, ship: { name: 'crm', type: 'crm', kind: 'app' } });
   const crewToken = await register(setting.fleet, ship);
   const response = await fetch(`${setting.fleet.url}/api/v1/ship/setStatement`, {
@@ -40,7 +42,18 @@ async function aStatingShip(): Promise<void> {
     }),
   });
   expect(response.status).toBe(200);
+  return crewToken;
 }
+
+/** The SDK client of a signed-in MCP client, connected to the gateway's MCP endpoint. */
+async function aConnectedClient(): Promise<Client> {
+  const client = await aSignedInClient(setting);
+  const mcp = new Client({ name: 'test-client', version: '1' });
+  await mcp.connect(new StreamableHTTPClientTransport(new URL(`${setting.address}/mcp`), { authProvider: client.provider }));
+  return mcp;
+}
+
+const textOf = (result: Awaited<ReturnType<Client['callTool']>>) => z.string().parse(z.array(z.object({ text: z.string() })).parse(result.content)[0]?.text);
 
 describe('an outside MCP client lists the tools of the ships its party reaches', () => {
   it("lists a ship's capability as a tool named by alias, never by the ship's name", async () => {
@@ -52,7 +65,10 @@ describe('an outside MCP client lists the tools of the ships its party reaches',
     const { tools } = await mcp.listTools();
     await mcp.close();
 
-    expect(tools.map((tool) => [/^[a-z][a-z0-9]{7}__list_deals$/.test(tool.name), tool.description])).toEqual([[true, "Lists a contact's deals.\n\nOffered by: The CRM: contacts and deals."]]);
+    expect(tools.map((tool) => [/^[a-z][a-z0-9]{7}__list_deals$/.test(tool.name) || tool.name === 'aeolus_result', tool.description?.split('\n\n')[1] ?? tool.name])).toEqual([
+      [true, 'Offered by: The CRM: contacts and deals.'],
+      [true, 'aeolus_result'],
+    ]);
     expect(JSON.stringify(tools)).not.toContain('crm"');
   });
 
@@ -72,5 +88,45 @@ describe('an outside MCP client lists the tools of the ships its party reaches',
       status: 401,
       challenge: `Bearer error="invalid_token", resource_metadata="${setting.address}/.well-known/oauth-protected-resource/mcp"`,
     });
+  });
+});
+
+describe("an outside MCP client's tool call is a message its proxy ship sends", () => {
+  it("delivers the call's arguments to the ship, and answers a handle aeolus_result reads", async () => {
+    const crm = await aStatingShip();
+    const mcp = await aConnectedClient();
+    const [tool] = (await mcp.listTools()).tools.filter((each) => each.name.endsWith('__list_deals'));
+
+    const called = await mcp.callTool({ name: z.string().parse(tool?.name), arguments: { contactId: 'c1' } });
+    const { handle } = z.object({ handle: z.string() }).parse(JSON.parse(textOf(called)));
+    const read = await mcp.callTool({ name: 'aeolus_result', arguments: { handle } });
+    await mcp.close();
+
+    expect(await receiveOne(setting.fleet, crm)).toMatchObject({ contentType: 'application/json', payload: '{"contactId":"c1"}' });
+    expect(JSON.parse(textOf(read))).toEqual({ handle, state: 'submitted' });
+  });
+
+  it('sends the same call under the same idempotency argument once', async () => {
+    const crm = await aStatingShip();
+    const mcp = await aConnectedClient();
+    const [tool] = (await mcp.listTools()).tools.filter((each) => each.name.endsWith('__list_deals'));
+    const call = { name: z.string().parse(tool?.name), arguments: { contactId: 'c1', aeolus_idempotency_key: 'k-1' } };
+
+    const handles = [textOf(await mcp.callTool(call)), textOf(await mcp.callTool(call))];
+    await mcp.close();
+
+    expect(handles[0]).toBe(handles[1]);
+    expect(await receiveOne(setting.fleet, crm)).toBeDefined();
+    const inbox = await fetch(`${setting.fleet.url}/api/v1/ship/inbox`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${crm}` }, body: '{}' });
+    expect(z.object({ waiting: z.number() }).parse(await inbox.json()).waiting).toBe(0);
+  });
+
+  it('answers a tool error, sending nothing, for a tool it does not list', async () => {
+    const mcp = await aConnectedClient();
+
+    const called = await mcp.callTool({ name: 'aaaaaaaa__drop_tables', arguments: {} });
+    await mcp.close();
+
+    expect(called.isError).toBe(true);
   });
 });
