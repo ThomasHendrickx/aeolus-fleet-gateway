@@ -74,6 +74,7 @@ function contextFor(cookie: string | undefined): Context {
       return Promise.resolve(ok({ issuer: input.issuer, clientId: input.clientId, setAt: SET_AT }));
     },
     readIdentityProvider: () => Promise.resolve({ issuer: 'https://accounts.google.com', clientId: 'gateway.apps.googleusercontent.com', setAt: SET_AT }),
+    mcpEndpointOf: () => 'https://gateway.example.com/fleets/fleetaaa/mcp',
     stateParty: ({ name }) => {
       stated.push(name);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));
@@ -207,5 +208,11 @@ describe("the gateway's page of parties, for argo signed in to the console", () 
 
     expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 303, location: '/parties' });
     expect(providers).toEqual([{ fleetId: FLEET, issuer: 'https://accounts.google.com', clientId: 'gateway.apps.googleusercontent.com', clientSecret: 'google-secret' }]);
+  });
+
+  it("shows the fleet's MCP endpoint, which its MCP clients connect to", async () => {
+    const page = await server.inject({ url: '/parties', headers: { host: HOST, cookie: ARGO } });
+
+    expect(page.body).toContain('https://gateway.example.com/fleets/fleetaaa/mcp');
   });
 });

@@ -91,7 +91,7 @@ afterEach(async () => {
 async function aConnectedClient(tool: string): Promise<{ mcp: Client; name: string }> {
   const client = await aSignedInClient(setting);
   const mcp = new Client({ name: 'test-client', version: '1' });
-  await mcp.connect(new StreamableHTTPClientTransport(new URL(`${setting.address}/mcp`), { authProvider: client.provider }));
+  await mcp.connect(new StreamableHTTPClientTransport(new URL(client.endpoint), { authProvider: client.provider }));
   const { tools } = await mcp.listTools();
   return { mcp, name: z.string().parse(tools.find((each) => each.name.endsWith(`__${tool}`))?.name) };
 }

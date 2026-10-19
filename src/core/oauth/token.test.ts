@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { fakeSecrets, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
+import { fakeSecrets, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, OTHER_RESOURCE, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { createAuthenticateAccessToken } from './authenticate-access-token.js';
 import { createExchangeToken } from './exchange-token.js';
 
@@ -26,8 +26,8 @@ beforeEach(async () => {
   await codes.save({ codeHash: 'hash(code-1)', fleetId: FLEET_ID, clientId: CIMD_CLIENT, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-1)', resource: RESOURCE, scope: null, party: 'claude', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
   await codes.save({ codeHash: 'hash(code-2)', fleetId: FLEET_ID, clientId: 'client-cursor', redirectUri: 'https://cursor.example.com/callback', codeChallenge: 'S256(verifier-2)', resource: RESOURCE, scope: null, party: 'cursor', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
   tokens = memoryIssuedTokens();
-  exchangeToken = createExchangeToken({ clients, codes, tokens, secrets, clock, resource: RESOURCE });
-  authenticate = createAuthenticateAccessToken({ tokens, secrets, clock, resource: RESOURCE });
+  exchangeToken = createExchangeToken({ clients, codes, tokens, secrets, clock });
+  authenticate = createAuthenticateAccessToken({ tokens, secrets, clock });
 });
 
 /** A token request for the CIMD client's code, as it sends it to /token. */
@@ -63,6 +63,7 @@ describe('a client takes its code for tokens (OAuth 2.1 with PKCE)', () => {
     { what: 'another redirect URI', overrides: { redirect_uri: 'https://claude.example.com/other' }, error: 'invalid_grant' },
     { what: "another client's code", overrides: { client_id: 'https://other.example.com/client.json' }, error: 'invalid_grant' },
     { what: 'another resource', overrides: { resource: 'https://other.example.com/mcp' }, error: 'invalid_target' },
+    { what: "another fleet's MCP endpoint than the code's", overrides: { resource: OTHER_RESOURCE }, error: 'invalid_target' },
     { what: 'no verifier', overrides: { code_verifier: undefined }, error: 'invalid_request' },
     { what: 'another grant type', overrides: { grant_type: 'password' }, error: 'unsupported_grant_type' },
   ])('refuses $what', async ({ overrides, error }) => {
@@ -86,7 +87,7 @@ describe('a client takes its code for tokens (OAuth 2.1 with PKCE)', () => {
     await exchangeToken(aCodeGrant());
 
     await expect(exchangeToken(aCodeGrant())).resolves.toMatchObject({ isOk: false, error: { error: 'invalid_grant' } });
-    await expect(authenticate('secret-1')).resolves.toMatchObject({ isOk: false });
+    await expect(authenticate('secret-1', RESOURCE)).resolves.toMatchObject({ isOk: false });
   });
 });
 
@@ -95,7 +96,7 @@ describe('a client refreshes its tokens', () => {
     await exchangeToken(aCodeGrant());
     await exchangeToken({ grant_type: 'refresh_token', refresh_token: 'secret-2', client_id: CIMD_CLIENT });
 
-    await expect(authenticate('secret-3')).resolves.toMatchObject({ isOk: true, value: { party: 'claude' } });
+    await expect(authenticate('secret-3', RESOURCE)).resolves.toMatchObject({ isOk: true, value: { party: 'claude' } });
   });
 
   it('rotates them: a new pair, and the old refresh token no longer works', async () => {
@@ -112,7 +113,7 @@ describe('a client refreshes its tokens', () => {
     await exchangeToken({ grant_type: 'refresh_token', refresh_token: 'secret-2', client_id: CIMD_CLIENT });
 
     await expect(exchangeToken({ grant_type: 'refresh_token', refresh_token: 'secret-2', client_id: CIMD_CLIENT })).resolves.toMatchObject({ isOk: false, error: { error: 'invalid_grant' } });
-    await expect(authenticate('secret-3')).resolves.toMatchObject({ isOk: false });
+    await expect(authenticate('secret-3', RESOURCE)).resolves.toMatchObject({ isOk: false });
   });
 
   it("refuses another client's refresh token", async () => {
@@ -133,26 +134,32 @@ describe('the gateway knows the caller by its access token (RFC 8707: bound to t
   it("names the token's fleet, client and party: the proxy ship it calls the fleet as", async () => {
     await exchangeToken(aCodeGrant());
 
-    await expect(authenticate('secret-1')).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, clientId: CIMD_CLIENT, party: 'claude', scope: null } });
+    await expect(authenticate('secret-1', RESOURCE)).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, clientId: CIMD_CLIENT, party: 'claude', scope: null } });
+  });
+
+  it("refuses a token at another fleet's MCP endpoint than the one it was issued for", async () => {
+    await exchangeToken(aCodeGrant());
+
+    await expect(authenticate('secret-1', OTHER_RESOURCE)).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidToken' } });
   });
 
   it('refuses an unknown token', async () => {
-    await expect(authenticate('secret-9')).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidToken' } });
+    await expect(authenticate('secret-9', RESOURCE)).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidToken' } });
   });
 
   it('refuses an access token one hour after it was issued, and takes it just before', async () => {
     await exchangeToken(aCodeGrant());
     now = new Date('2026-10-19T09:59:59.999Z');
-    await expect(authenticate('secret-1')).resolves.toMatchObject({ isOk: true });
+    await expect(authenticate('secret-1', RESOURCE)).resolves.toMatchObject({ isOk: true });
 
     now = new Date('2026-10-19T10:00:00.000Z');
-    await expect(authenticate('secret-1')).resolves.toMatchObject({ isOk: false });
+    await expect(authenticate('secret-1', RESOURCE)).resolves.toMatchObject({ isOk: false });
   });
 
   it('refuses an access token whose refresh token was rotated: the new pair replaces it', async () => {
     await exchangeToken(aCodeGrant());
     await exchangeToken({ grant_type: 'refresh_token', refresh_token: 'secret-2', client_id: CIMD_CLIENT });
 
-    await expect(authenticate('secret-1')).resolves.toMatchObject({ isOk: false });
+    await expect(authenticate('secret-1', RESOURCE)).resolves.toMatchObject({ isOk: false });
   });
 });
