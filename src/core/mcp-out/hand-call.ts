@@ -1,7 +1,7 @@
 import { PAYLOAD_MAX_BYTES, payloadBytes, type DeliveryId, type FleetId, type MessageId, type ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
-import type { Party } from '../parties/party.js';
+import type { McpServerParty } from '../parties/party.js';
 import type { Result } from '../shared/result.js';
 import { toolCalledBy, toolInputType, toolResultType } from './content-types.js';
 import type { McpServers, ToolResult } from './ports.js';
@@ -69,7 +69,7 @@ export interface CallStore {
  */
 export type HandOutcome = { readonly kind: 'handled' } | { readonly kind: 'again' } | { readonly kind: 'notHandled' } | { readonly kind: 'undeliverable' };
 
-export type HandCall = (input: { party: Party; delivery: PushedDelivery }) => Promise<HandOutcome>;
+export type HandCall = (input: { party: McpServerParty; delivery: PushedDelivery }) => Promise<HandOutcome>;
 
 /** The reason a call that may have run is not handled, as Needs attention shows it. */
 export const MAY_HAVE_RUN = 'The call may have run; its answer was lost. Check the outside system, then resend or dismiss.';
@@ -106,7 +106,7 @@ function resultReply(delivery: PushedDelivery, call: { tool: string; result: Too
   };
 }
 
-function notACallReply(party: Party, delivery: PushedDelivery): Reply {
+function notACallReply(party: McpServerParty, delivery: PushedDelivery): Reply {
   return {
     to: delivery.senderShipId,
     inReplyTo: delivery.messageId,

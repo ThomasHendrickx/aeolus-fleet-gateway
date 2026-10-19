@@ -2,7 +2,7 @@ import type { FleetId } from '@aeolus-fleet/common';
 
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import { shownPartyOf, type ShownParty } from './approve-party.js';
+import { shownPartyOf, type ShownParty } from './shown-party.js';
 import type { Party } from './party.js';
 import type { PartyStore, ProxyShipDoor } from './ports.js';
 

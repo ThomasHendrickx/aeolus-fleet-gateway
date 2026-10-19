@@ -8,6 +8,8 @@ import type { Party } from './party.js';
 export interface PartyStore {
   find(fleetId: FleetId, name: string): Promise<Party | undefined>;
   list(fleetId: FleetId): Promise<Party[]>;
+  /** The party an MCP client is in the fleet, if argo approved it. */
+  findByClient(fleetId: FleetId, clientId: string): Promise<Party | undefined>;
   save(party: Party): Promise<void>;
   remove(fleetId: FleetId, name: string): Promise<void>;
 }

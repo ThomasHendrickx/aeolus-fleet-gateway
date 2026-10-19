@@ -11,21 +11,15 @@ import type { McpServerCredential } from '../vault/credential.js';
 export type PartyState = 'commissioning' | 'awaitingCrew' | 'crewed';
 
 /**
- * An outside MCP server argo approved for its fleet: one app proxy ship
- * (decision 0044), owned by the person inside who answers for it (0045),
- * crewed by the gateway. Known by its ship's name, unique in the fleet.
+ * What every party has: one app proxy ship (decision 0044), owned by the
+ * person inside who answers for it (0045), crewed by the gateway. Known by
+ * its ship's name, unique in the fleet.
  */
-export interface Party {
+interface PartyBase {
   readonly fleetId: FleetId;
   readonly name: string;
-  readonly kind: 'mcpServer';
-  /** The server's Streamable HTTP endpoint. */
-  readonly url: string;
-  readonly credential: McpServerCredential;
   /** The owner argo picked: a person's ship, or argo. */
   readonly ownerShipId: ShipId;
-  /** The most calls the gateway has in flight to the server at once. */
-  readonly concurrencyLimit: number;
   readonly state: PartyState;
   readonly proxyShipId: ShipId | null;
   /** The proxy ship's secret, kept only from its commission until the gateway crews it, so a crash between them loses nothing. */
@@ -36,3 +30,22 @@ export interface Party {
   readonly requestHash: string;
   readonly approvedAt: Date;
 }
+
+/** An outside MCP server argo approved for its fleet: fleet ships call its tools through its proxy ship (MCP out). */
+export interface McpServerParty extends PartyBase {
+  readonly kind: 'mcpServer';
+  /** The server's Streamable HTTP endpoint. */
+  readonly url: string;
+  readonly credential: McpServerCredential;
+  /** The most calls the gateway has in flight to the server at once. */
+  readonly concurrencyLimit: number;
+}
+
+/** An outside MCP client argo approved at /authorize: it calls fleet ships as its proxy ship (MCP in). */
+export interface McpClientParty extends PartyBase {
+  readonly kind: 'mcpClient';
+  /** Its OAuth client id: pre-registered, or its metadata document's URL. */
+  readonly clientId: string;
+}
+
+export type Party = McpServerParty | McpClientParty;

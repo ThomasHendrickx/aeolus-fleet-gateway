@@ -1,6 +1,6 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
-import { shownPartyOf, type ShownParty } from './approve-party.js';
+import { shownPartyOf, type ShownParty } from './shown-party.js';
 import type { PartyStore } from './ports.js';
 
 export type ListParties = (fleetId: FleetId) => Promise<ShownParty[]>;

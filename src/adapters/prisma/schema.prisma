@@ -64,11 +64,13 @@ model Party {
   fleetId          String   @map("fleet_id")
   name             String
   kind             String
-  url              String
-  /// The credential as JSON: a static bearer, or OAuth client credentials.
-  credential       Json
+  /// An MCP server's: its URL, its credential as JSON (a static bearer, or OAuth client credentials), and its calls at once.
+  url              String?
+  credential       Json?
+  concurrencyLimit Int?     @map("concurrency_limit")
+  /// An MCP client's: its OAuth client id.
+  clientId         String?  @map("client_id")
   ownerShipId      String   @map("owner_ship_id")
-  concurrencyLimit Int      @map("concurrency_limit")
   state            String
   proxyShipId      String?  @map("proxy_ship_id")
   /// Kept only from the proxy ship's commission until the gateway crews it.
@@ -79,6 +81,7 @@ model Party {
   approvedAt       DateTime @map("approved_at") @db.Timestamptz(3)
 
   @@id([fleetId, name])
+  @@unique([fleetId, clientId])
   @@map("parties")
 }
 
@@ -126,6 +129,7 @@ model AuthorizationCode {
   codeChallenge String    @map("code_challenge")
   resource      String
   scope         String?
+  party         String
   expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
   usedAt        DateTime? @map("used_at") @db.Timestamptz(3)
 
@@ -143,6 +147,7 @@ model IssuedToken {
   clientId         String   @map("client_id")
   resource         String
   scope            String?
+  party            String
   accessExpiresAt  DateTime @map("access_expires_at") @db.Timestamptz(3)
   refreshExpiresAt DateTime @map("refresh_expires_at") @db.Timestamptz(3)
   state            String

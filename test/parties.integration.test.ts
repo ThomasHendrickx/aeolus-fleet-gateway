@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgetter.js';
 import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
-import type { Party } from '../src/core/parties/party.js';
+import type { McpServerParty } from '../src/core/parties/party.js';
 import { migratedDatabase } from './support/database.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
@@ -23,7 +23,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-function aParty(overrides: Partial<Party> = {}): Party {
+function aParty(overrides: Partial<McpServerParty> = {}): McpServerParty {
   return {
     fleetId: FLEET,
     name: 'crm',
@@ -60,6 +60,15 @@ describe("the gateway's parties and their vault in Postgres", () => {
     await store.remove(FLEET, 'crm');
 
     await expect(store.list(FLEET).then((parties) => parties.map((party) => party.name))).resolves.toEqual(['erp']);
+  });
+
+  it('keeps an MCP client party, found by its client id', async () => {
+    const store = createPrismaPartyStore(prisma);
+    const { fleetId, ownerShipId, state, proxyShipId, secret, crewToken, requestId, requestHash, approvedAt } = aParty();
+    const party = { fleetId, name: 'claude', kind: 'mcpClient' as const, clientId: 'https://claude.example.com/client.json', ownerShipId, state, proxyShipId, secret, crewToken, requestId, requestHash, approvedAt };
+    await store.save(party);
+
+    await expect(Promise.all([store.findByClient(FLEET, 'https://claude.example.com/client.json'), store.findByClient(OTHER_FLEET, 'https://claude.example.com/client.json')])).resolves.toEqual([party, undefined]);
   });
 
   it('forgets a fleet with its parties and their credentials (decision 0021)', async () => {

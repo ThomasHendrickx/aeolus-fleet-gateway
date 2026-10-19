@@ -3,7 +3,8 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
-import type { ApproveParty, ShownParty } from '../../core/parties/approve-party.js';
+import type { ApproveParty } from '../../core/parties/approve-party.js';
+import type { ShownParty } from '../../core/parties/shown-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import { err, ok } from '../../core/shared/result.js';
 import type { Context } from '../trpc/router.js';

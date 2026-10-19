@@ -63,6 +63,7 @@ The gateway is an OAuth 2.1 authorization server for outside MCP clients, such a
 - `/.well-known/oauth-protected-resource` (RFC 9728) names the gateway as the authorization server of its MCP endpoint, `<GATEWAY_PUBLIC_URL>/mcp`; `/.well-known/oauth-authorization-server` (RFC 8414) states what it serves.
 - A client is pre-registered by argo with `oauth.registerClient` (its name, its redirect URIs, and whether it keeps a secret, answered once), or known by its client metadata document (CIMD): its client id is the https URL of that document. There is no dynamic registration.
 - At `/authorize` argo approves or denies each request, signed in to the console; a viewer session cannot. Only the authorization code flow with PKCE S256 is served, and the `resource` must be the gateway's MCP endpoint (RFC 8707).
+- Each client is a party with its own app proxy ship, of type `mcp-client`: at a client's first approval argo names the ship and its owner, and the gateway commissions and crews it before issuing the code. Later approvals take that party with one click. Every token names its party, so every fleet call the client makes is its proxy ship's, within its reach. `parties.list` shows client parties beside server parties.
 - `/token` takes a code once, within its minute, for an access token (one hour) and a refresh token (30 days). Refreshing rotates the pair; a code or a refresh token used twice revokes what it gave.
 
 Codes and tokens are kept only as hashes, and so are client secrets.

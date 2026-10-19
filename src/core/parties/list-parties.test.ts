@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { OWNER_SHIP_ID, PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
-import type { Party } from './party.js';
+import type { McpServerParty } from './party.js';
 import { createListParties } from './list-parties.js';
 
 const AT = new Date('2026-10-18T13:00:00.000Z');
 
-function aParty(overrides: Partial<Party>): Party {
+function aParty(overrides: Partial<McpServerParty>): McpServerParty {
   return {
     fleetId: FLEET_ID,
     name: 'crm',

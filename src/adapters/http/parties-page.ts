@@ -44,13 +44,15 @@ function partyRow(party: ShownParty, canManage: boolean): string {
         party.state === 'awaitingCrew'
           ? `<form class="inline" method="post" action="${PAGE}/crew"><input type="hidden" name="name" value="${name}"><input name="secret" placeholder="secret from a new starting prompt" required><button>Crew</button></form>`
           : '',
-        party.state === 'crewed'
+        party.kind === 'mcpServer' && party.state === 'crewed'
           ? `<form class="inline" method="post" action="${PAGE}/state"><input type="hidden" name="name" value="${name}"><button>State its tools</button></form>` +
             `<form class="inline" method="post" action="${PAGE}/mark"><input type="hidden" name="name" value="${name}"><input name="tool" placeholder="tool" required maxlength="128"><label><span><input type="checkbox" name="isRepeatable"> repeatable</span></label><button>Mark</button></form>`
           : '',
       ].join('')
     : '';
-  return `<tr><td>${name}</td><td>${escaped(party.url)}</td><td>${escaped(party.credentialKind)}</td><td>${escaped(party.state)}</td><td>${escaped(party.proxyShipId ?? '')}</td><td>${forms}</td></tr>`;
+  // A server shows where it is and how the gateway signs in; a client, its OAuth client id.
+  const outside = party.kind === 'mcpServer' ? `${escaped(party.url)}</td><td>${escaped(party.credentialKind)}` : `${escaped(party.clientId)}</td><td>MCP client`;
+  return `<tr><td>${name}</td><td>${outside}</td><td>${escaped(party.state)}</td><td>${escaped(party.proxyShipId ?? '')}</td><td>${forms}</td></tr>`;
 }
 
 const APPROVE_FORM = (requestId: string) => `<h2>Approve an MCP server</h2>

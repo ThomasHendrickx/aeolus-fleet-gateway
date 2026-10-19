@@ -31,7 +31,7 @@ export type StateParty = (input: { fleetId: FleetId; name: string }) => Promise<
 export function createStateParty(deps: { parties: PartyStore; servers: McpServers; door: StatementDoor; marks: ToolMarks }): StateParty {
   return async ({ fleetId, name }) => {
     const party = await deps.parties.find(fleetId, name);
-    if (!party) {
+    if (party?.kind !== 'mcpServer') {
       return refuse('NO_SUCH_PARTY', `No party named ${name}`);
     }
     if (party.state !== 'crewed' || party.crewToken === null) {

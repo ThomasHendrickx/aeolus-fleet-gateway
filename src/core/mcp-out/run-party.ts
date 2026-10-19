@@ -1,6 +1,6 @@
 import type { DeliveryId } from '@aeolus-fleet/common';
 
-import type { Party } from '../parties/party.js';
+import type { McpServerParty } from '../parties/party.js';
 import type { HandCall, HandOutcome, ProxyShipCrew, PushedDelivery } from './hand-call.js';
 
 /** Outbound port: waits the given time, or less once the signal aborts. */
@@ -9,7 +9,7 @@ export type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
 /** The fleet's codes for a crew token it no longer takes: the gateway does not crew the proxy ship any more. */
 const CREW_REFUSED = new Set(['UNAUTHORIZED', 'LEASE_ENDED']);
 
-export type RunParty = (input: { party: Party; signal: AbortSignal }) => Promise<{ ended: 'stopped' | 'crewRefused' }>;
+export type RunParty = (input: { party: McpServerParty; signal: AbortSignal }) => Promise<{ ended: 'stopped' | 'crewRefused' }>;
 
 /**
  * Use case: the gateway takes the calls of a party's proxy ship, as its

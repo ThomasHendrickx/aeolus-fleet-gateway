@@ -23,7 +23,7 @@ afterAll(async () => {
 });
 
 function aPair(overrides: Partial<TokenPair> = {}): TokenPair {
-  return { familyId: 'family-1', codeHash: 'code-1', fleetId: FLEET, clientId: 'client-1', resource: 'http://gateway.example.com/mcp', scope: null, accessHash: 'access-1', accessExpiresAt: AT, refreshHash: 'refresh-1', refreshExpiresAt: LATER, ...overrides };
+  return { familyId: 'family-1', codeHash: 'code-1', fleetId: FLEET, clientId: 'client-1', resource: 'http://gateway.example.com/mcp', scope: null, party: 'claude', accessHash: 'access-1', accessExpiresAt: AT, refreshHash: 'refresh-1', refreshExpiresAt: LATER, ...overrides };
 }
 
 describe("the gateway's OAuth records in Postgres", () => {
@@ -37,11 +37,12 @@ describe("the gateway's OAuth records in Postgres", () => {
 
   it('hands a code to one of two racing takes; the other reads it used', async () => {
     const codes = createPrismaAuthorizationCodes(prisma);
-    await codes.save({ codeHash: 'race', fleetId: FLEET, clientId: 'client-1', redirectUri: 'https://x.example/cb', codeChallenge: 'c', resource: 'r', scope: null, expiresAt: AT });
+    await codes.save({ codeHash: 'race', fleetId: FLEET, clientId: 'client-1', redirectUri: 'https://x.example/cb', codeChallenge: 'c', resource: 'r', scope: null, party: 'claude', expiresAt: AT });
 
     const takes = await Promise.all([codes.take('race'), codes.take('race')]);
 
     expect(takes.map((taken) => taken?.wasUsed).sort()).toEqual([false, true]);
+    expect(takes[0]?.code.party).toBe('claude');
     await expect(codes.take('none')).resolves.toBeUndefined();
   });
 
