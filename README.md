@@ -94,6 +94,8 @@ A fleet's MCP endpoint is served over Streamable HTTP, stateless. A call without
 
 argo sets the fleet's company identity provider with `identityProvider.set` (argo's console session): its issuer, and the gateway's client id and secret there, such as a Google OAuth client. The gateway keeps it only once the issuer's OpenID configuration (`<issuer>/.well-known/openid-configuration`) names that same issuer and serves its endpoints over https (or http on this machine). Setting it again replaces it. `identityProvider.get` shows the issuer and client id, never the secret, which is kept as the parties' credentials are.
 
+argo registers `<GATEWAY_PUBLIC_URL>/oidc/callback` as the redirect URI of the gateway's client at the provider; the page of parties shows it. A person's MCP client sends them to `/authorize` for their fleet's MCP endpoint. Who comes there without argo's console session is a person: where the fleet has an identity provider, the page offers to sign in with it. The gateway sends them to the provider (the code flow with PKCE, a state and a nonce, scope `openid email`) and keeps the sign-in for 10 minutes. Back at `/oidc/callback`, the sign-in is taken once by its state, the code is taken for an ID token, and the token is checked against the provider's keys, issuer, the gateway's client id, its expiry and the nonce. The person is the provider's issuer and subject, with the email only when the provider verified it. Until argo maps people to their ships, a signed-in person is told so and goes no further.
+
 ## Develop
 
 ```sh

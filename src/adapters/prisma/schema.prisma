@@ -201,3 +201,17 @@ model IdentityProvider {
 
   @@map("identity_providers")
 }
+
+/// People's sign-ins at their fleet's identity provider while under way, by their state's hash; each taken once, by deleting it.
+model SignIn {
+  stateHash String   @id @map("state_hash")
+  fleetId   String   @map("fleet_id")
+  /// The MCP client's authorization request, to go on with once the person is back.
+  request   Json
+  verifier  String
+  nonce     String
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@index([fleetId])
+  @@map("sign_ins")
+}

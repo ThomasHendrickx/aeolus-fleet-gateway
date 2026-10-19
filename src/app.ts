@@ -28,7 +28,7 @@ import { sleep } from './adapters/timers/sleep.js';
 import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerPartiesPage } from './adapters/http/parties-page.js';
-import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
+import { registerOAuthRoutes, SIGN_IN_CALLBACK_PATH } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
 import { createFleetEndpoints } from './adapters/crypto/fleet-endpoints.js';
 import { createShipAliases } from './adapters/crypto/ship-aliases.js';
@@ -47,6 +47,10 @@ import { createExchangeToken } from './core/oauth/exchange-token.js';
 import { createReadAuthorization } from './core/oauth/read-authorization.js';
 import { createRegisterClient } from './core/oauth/register-client.js';
 import { createReadIdentityProvider } from './core/federation/read-identity-provider.js';
+import { createCompleteSignIn } from './core/federation/complete-sign-in.js';
+import { createStartSignIn } from './core/federation/start-sign-in.js';
+import { createProviderSignIn } from './adapters/oidc/provider-sign-in.js';
+import { createPrismaSignIns } from './adapters/prisma/sign-ins.js';
 import { createSetIdentityProvider } from './core/federation/set-identity-provider.js';
 import { createProviderDiscovery } from './adapters/oidc/provider-discovery.js';
 import { createPrismaIdentityProviders } from './adapters/prisma/identity-providers.js';
@@ -216,8 +220,13 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const readAuthorization = createReadAuthorization({ clients: oauthClients, documents: createClientMetadataDocuments({ timeoutMs: CLIENT_METADATA_TIMEOUT_MS }), endpoints: fleetEndpoints });
   const registerClient = createRegisterClient({ clients: oauthClients, secrets: oauthSecrets });
   const identityProviders = createPrismaIdentityProviders(prisma);
-  const setIdentityProvider = createSetIdentityProvider({ providers: identityProviders, discovery: createProviderDiscovery({ timeoutMs: PROVIDER_DISCOVERY_TIMEOUT_MS }), clock });
+  const providerDiscovery = createProviderDiscovery({ timeoutMs: PROVIDER_DISCOVERY_TIMEOUT_MS });
+  const setIdentityProvider = createSetIdentityProvider({ providers: identityProviders, discovery: providerDiscovery, clock });
   const readIdentityProvider = createReadIdentityProvider({ providers: identityProviders });
+  // People sign in at their fleet's identity provider, which sends them back here.
+  const signInCallbackUrl = `${issuer}${SIGN_IN_CALLBACK_PATH}`;
+  const signIns = createPrismaSignIns(prisma);
+  const signInDeps = { providers: identityProviders, discovery: providerDiscovery, signIns, secrets: oauthSecrets, clock, callbackUrl: signInCallbackUrl };
   const issuedTokens = createPrismaIssuedTokens(prisma);
   registerOAuthRoutes(server, {
     issuer,
@@ -235,6 +244,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       approveClientParty,
     }),
     readClientParty: createReadClientParty({ parties }),
+    readIdentityProvider,
+    startSignIn: createStartSignIn({ readAuthorization, ...signInDeps }),
+    completeSignIn: createCompleteSignIn({ ...signInDeps, providerSignIn: createProviderSignIn({ timeoutMs: PROVIDER_DISCOVERY_TIMEOUT_MS }) }),
     exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock }),
   });
   const listTools = createListTools({ parties, discovery: door, aliases: createShipAliases(options.gatewaySecret) });
@@ -287,7 +299,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   };
   void server.register(fastifyTRPCPlugin, trpc);
   // The page calls the API as the caller, with the forwarded console session; it never takes the installation token.
-  registerPartiesPage(server, { contextFor: (cookie) => contextFor({ cookie, installationTokenSent: undefined }), fleetUrl: options.fleetUrl });
+  registerPartiesPage(server, { contextFor: (cookie) => contextFor({ cookie, installationTokenSent: undefined }), fleetUrl: options.fleetUrl, signInCallbackUrl });
 
   server.addHook('onClose', async () => {
     await prisma.$disconnect();

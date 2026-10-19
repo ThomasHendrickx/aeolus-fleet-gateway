@@ -78,10 +78,12 @@ const IDENTITY_PROVIDER_FORM = `<form method="post" action="${PAGE}/identity-pro
 <button>Set</button>
 </form>`;
 
-/** The fleet's identity provider, people's sign-in, never its secret; argo's form to set it. */
-function identityProviderPart(provider: { issuer: string; clientId: string } | null, canManage: boolean): string {
+/** The fleet's identity provider, people's sign-in, never its secret; argo's form to set it, with the redirect URI to register at the provider. */
+function identityProviderPart(part: { provider: { issuer: string; clientId: string } | null; canManage: boolean; signInCallbackUrl: string }): string {
+  const { provider, canManage, signInCallbackUrl } = part;
   const shown = provider ? `<p>${escaped(provider.issuer)}, client ${escaped(provider.clientId)}</p>` : '<p class="muted">None set: people cannot sign in yet.</p>';
-  return `<h2>Identity provider</h2>${shown}${canManage ? IDENTITY_PROVIDER_FORM : ''}`;
+  const redirectUri = `<p class="muted">Redirect URI to register for the gateway's client at the provider: <code>${escaped(signInCallbackUrl)}</code></p>`;
+  return `<h2>Identity provider</h2>${shown}${canManage ? redirectUri + IDENTITY_PROVIDER_FORM : ''}`;
 }
 
 /** Why the API refused, as the page says it: the form's fields that are not valid, or the API's message. */
@@ -92,7 +94,7 @@ function messageOf(error: TRPCError): string {
   return error.code === 'INTERNAL_SERVER_ERROR' ? 'Internal error' : error.message;
 }
 
-async function renderPage(reply: FastifyReply, page: { context: Context; failure?: { status: number; message: string } }): Promise<FastifyReply> {
+async function renderPage(reply: FastifyReply, page: { context: Context; signInCallbackUrl: string; failure?: { status: number; message: string } }): Promise<FastifyReply> {
   const { context, failure } = page;
   const caller = gatewayRouter.createCaller(context);
   const operator = await context.authenticateOperator(context.cookie);
@@ -109,7 +111,7 @@ async function renderPage(reply: FastifyReply, page: { context: Context; failure
       ? '<p class="muted">No party yet.</p>'
       : `<table><thead><tr><th>Name</th><th>URL</th><th>Credential</th><th>State</th><th>Proxy ship</th><th></th></tr></thead><tbody>${parties.map((party) => partyRow(party, canManage)).join('')}</tbody></table>`,
     canManage ? APPROVE_FORM(randomUUID()) : '',
-    identityProviderPart(provider, canManage),
+    identityProviderPart({ provider, canManage, signInCallbackUrl: page.signInCallbackUrl }),
   ].join('');
   return reply.code(failure?.status ?? 200).type('text/html; charset=utf-8').send(layout('Gateway parties', body));
 }
@@ -149,7 +151,7 @@ const ACTIONS: Record<string, (caller: ReturnType<typeof gatewayRouter.createCal
   mark: (caller, form) => caller.parties.markTool({ name: field(form, 'name'), tool: field(form, 'tool'), isRepeatable: form.isRepeatable === 'on' }),
 };
 
-export function registerPartiesPage(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; fleetUrl: string }): void {
+export function registerPartiesPage(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; fleetUrl: string; signInCallbackUrl: string }): void {
   acceptForms(server);
 
   const answer = async (exchange: { request: FastifyRequest; reply: FastifyReply }, act?: (caller: ReturnType<typeof gatewayRouter.createCaller>) => Promise<unknown>) => {
@@ -160,7 +162,7 @@ export function registerPartiesPage(server: FastifyInstance, deps: { contextFor:
         await act(gatewayRouter.createCaller(context));
         return await reply.code(HTTP_SEE_OTHER).header('location', PAGE).send();
       }
-      return await renderPage(reply, { context });
+      return await renderPage(reply, { context, signInCallbackUrl: deps.signInCallbackUrl });
     } catch (error) {
       if (!(error instanceof TRPCError)) {
         throw error;
@@ -170,7 +172,7 @@ export function registerPartiesPage(server: FastifyInstance, deps: { contextFor:
       }
       const failure = { status: error.code === 'INTERNAL_SERVER_ERROR' ? HTTP_INTERNAL_ERROR : getHTTPStatusCodeFromError(error), message: messageOf(error) };
       try {
-        return await renderPage(reply, { context, failure });
+        return await renderPage(reply, { context, signInCallbackUrl: deps.signInCallbackUrl, failure });
       } catch {
         return reply.code(failure.status).type('text/html; charset=utf-8').send(layout('Gateway parties', `<h1>Parties</h1><p class="error">${escaped(failure.message)}</p>`));
       }

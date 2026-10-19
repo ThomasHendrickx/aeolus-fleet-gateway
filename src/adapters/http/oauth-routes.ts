@@ -10,6 +10,9 @@ import { z } from 'zod';
 import { idSchema, type FleetId } from '@aeolus-fleet/common';
 
 import type { ApprovalRefusal, ApproveAuthorization } from '../../core/oauth/approve-authorization.js';
+import type { CompleteSignIn } from '../../core/federation/complete-sign-in.js';
+import type { ReadIdentityProvider } from '../../core/federation/read-identity-provider.js';
+import type { StartSignIn } from '../../core/federation/start-sign-in.js';
 import type { ExchangeToken } from '../../core/oauth/exchange-token.js';
 import type { FleetEndpoints } from '../../core/oauth/ports.js';
 import type { AuthorizationRefusal, AuthorizationRequest, ReadAuthorization } from '../../core/oauth/read-authorization.js';
@@ -26,6 +29,10 @@ const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
 const HTTP_CONFLICT = 409;
+const HTTP_BAD_GATEWAY = 502;
+
+/** Where the fleet's identity provider sends a person back: the redirect URI argo registers there. */
+export const SIGN_IN_CALLBACK_PATH = '/oidc/callback';
 
 /** The parameters of an authorization request the page carries from its query to its form. */
 const AUTHORIZATION_PARAMETERS = ['response_type', 'client_id', 'redirect_uri', 'code_challenge', 'code_challenge_method', 'resource', 'state', 'scope'] as const;
@@ -43,6 +50,9 @@ export interface OAuthRoutesDeps {
   approveAuthorization: ApproveAuthorization;
   exchangeToken: ExchangeToken;
   readClientParty: ReadClientParty;
+  readIdentityProvider: ReadIdentityProvider;
+  startSignIn: StartSignIn;
+  completeSignIn: CompleteSignIn;
 }
 
 function fieldsOf(value: unknown): Record<string, string> {
@@ -137,16 +147,37 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
     authorization_response_iss_parameter_supported: true,
   }));
 
+  /** The page that asks argo to sign in to the console first. */
+  const consoleSignIn = (reply: FastifyReply, message: string) =>
+    htmlPage(reply, {
+      status: HTTP_UNAUTHORIZED,
+      body: `<h1>Approve an MCP client</h1><p class="error">${escaped(message)}</p><p><a href="${escaped(deps.fleetUrl)}">Sign in to the console of your fleet</a>, then reload this page.</p>`,
+    });
+
+  /**
+   * Who comes with no console session is a person (Q25): where the fleet of
+   * the endpoint asked for has an identity provider, they are offered to sign
+   * in there; argo is still pointed to the console.
+   */
+  const signInOffer = async (reply: FastifyReply, offer: { parameters: Record<string, string | undefined>; message: string }) => {
+    const read = await deps.readAuthorization(offer.parameters);
+    const provider = read.isOk ? await deps.readIdentityProvider(read.value.fleetId) : null;
+    if (!read.isOk || provider === null) {
+      return consoleSignIn(reply, offer.message);
+    }
+    const sent = Object.entries(offer.parameters).filter((entry): entry is [string, string] => entry[1] !== undefined);
+    const link = `/authorize/sign-in?${new URLSearchParams(sent).toString()}`;
+    return htmlPage(reply, {
+      status: 200,
+      body: `<h1>Sign in</h1><p>${escaped(read.value.clientName)} asks to work as your ship.</p><p><a href="${escaped(link)}">Sign in with ${escaped(new URL(provider.issuer).host)}</a></p><p class="muted">argo approves MCP clients of apps: <a href="${escaped(deps.fleetUrl)}">sign in to the console of your fleet</a>, then reload this page.</p>`,
+    });
+  };
+
   /** argo's fleet, when the request comes from argo signed in to the console; else the page that says why not. */
   const argoOrRefusal = async (request: FastifyRequest, reply: FastifyReply) => {
     const operator = await deps.authenticateOperator(request.headers.cookie);
     if (!operator.isOk) {
-      return {
-        refused: htmlPage(reply, {
-          status: HTTP_UNAUTHORIZED,
-          body: `<h1>Approve an MCP client</h1><p class="error">${escaped(operator.error.message)}</p><p><a href="${escaped(deps.fleetUrl)}">Sign in to the console of your fleet</a>, then reload this page.</p>`,
-        }),
-      };
+      return { refused: consoleSignIn(reply, operator.error.message) };
     }
     if (!operator.value.scopes.includes('fleet:manage')) {
       return { refused: htmlPage(reply, { status: HTTP_FORBIDDEN, body: '<h1>Approve an MCP client</h1><p class="error">Only argo approves MCP clients: a viewer session only reads.</p>' }) };
@@ -155,17 +186,54 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
   };
 
   server.get('/authorize', async (request, reply) => {
+    const parameters = authorizationRequestOf(fieldsOf(request.query));
+    const operator = await deps.authenticateOperator(request.headers.cookie);
+    if (!operator.isOk) {
+      return signInOffer(reply, { parameters, message: operator.error.message });
+    }
     const argo = await argoOrRefusal(request, reply);
     if ('refused' in argo) {
       return argo.refused;
     }
-    const parameters = authorizationRequestOf(fieldsOf(request.query));
     const read = await deps.readAuthorization(parameters);
     if (!read.isOk) {
       return sendBack(reply, { refusal: read.error, issuer: deps.issuer });
     }
     const party = await deps.readClientParty({ fleetId: argo.fleetId, clientId: read.value.clientId });
     return htmlPage(reply, { status: 200, body: approvalForm({ request: parameters, authorization: read.value, party }) });
+  });
+
+  /** A person goes to the fleet's identity provider to sign in. */
+  server.get('/authorize/sign-in', async (request, reply) => {
+    const started = await deps.startSignIn(authorizationRequestOf(fieldsOf(request.query)));
+    if (started.isOk) {
+      return reply.code(HTTP_FOUND).header('location', started.value.redirectTo).send();
+    }
+    const refusal = started.error;
+    switch (refusal.kind) {
+      case 'invalidClient':
+      case 'redirect':
+        return sendBack(reply, { refusal, issuer: deps.issuer });
+      case 'noIdentityProvider':
+        return htmlPage(reply, { status: HTTP_CONFLICT, body: '<h1>Sign in</h1><p class="error">This fleet has no identity provider: people cannot sign in yet. Ask argo to set one.</p>' });
+      case 'providerUnusable':
+        return htmlPage(reply, { status: HTTP_BAD_GATEWAY, body: `<h1>Sign in</h1><p class="error">${escaped(refusal.message)}</p>` });
+    }
+  });
+
+  /** The person comes back from the identity provider. */
+  server.get(SIGN_IN_CALLBACK_PATH, async (request, reply) => {
+    const { state, code, error } = fieldsOf(request.query);
+    const completed = await deps.completeSignIn({ ...(state === undefined ? {} : { state }), ...(code === undefined ? {} : { code }), ...(error === undefined ? {} : { error }) });
+    if (!completed.isOk) {
+      return htmlPage(reply, { status: HTTP_BAD_REQUEST, body: `<h1>Sign in</h1><p class="error">${escaped(completed.error.message)}</p>` });
+    }
+    const { person } = completed.value;
+    // Until argo maps a person to their ship (the next slice), a signed-in person goes no further.
+    return htmlPage(reply, {
+      status: HTTP_FORBIDDEN,
+      body: `<h1>Sign in</h1><p>You signed in as ${escaped(person.email ?? person.subject)} at ${escaped(person.issuer)}.</p><p class="error">argo has not given you a ship of this fleet yet: ask argo, then connect your MCP client again.</p>`,
+    });
   });
 
   server.post('/authorize', async (request, reply) => {
