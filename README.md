@@ -46,7 +46,7 @@ Commissioning an app ship with a named owner needs core 0.28 (aeolus-fleet#959),
 
 ## The page of parties
 
-`/parties` is the gateway's own page for argo: the parties with their state, a form to approve an MCP server, and per party the forms to hand over a new secret, state its tools and mark a tool repeatable. The page knows argo by the console session cookie the browser sends, so the gateway must be served where that cookie reaches it (on localhost, any port). A viewer session sees the parties without the forms. Each form calls the API as the session's ship, and the page refuses a form sent from another origin.
+`/parties` is the gateway's own page for argo: the parties with their state, a form to approve an MCP server, per party the forms to hand over a new secret, state its tools and mark a tool repeatable, and the fleet's identity provider with a form to set it. The page knows argo by the console session cookie the browser sends, so the gateway must be served where that cookie reaches it (on localhost, any port). A viewer session sees the parties without the forms. Each form calls the API as the session's ship, and the page refuses a form sent from another origin.
 
 ## MCP out
 
