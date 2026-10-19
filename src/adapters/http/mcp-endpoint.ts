@@ -12,9 +12,12 @@ import type { AccessTokenHolder, AuthenticateAccessToken } from '../../core/oaut
 import type { CallTool } from '../../core/mcp-in/call-tool.js';
 import type { ListTools } from '../../core/mcp-in/list-tools.js';
 import type { ReadCall, ReadClientCall } from '../../core/mcp-in/read-client-call.js';
+import type { IsPerson } from '../../core/people/is-person.js';
+import type { ReadInbox } from '../../core/people/read-inbox.js';
 import { isToolResultType } from '../../core/mcp-out/content-types.js';
 import { FLEET_ENDPOINT_PATH } from '../crypto/fleet-endpoints.js';
 import { createdTaskOf, DEADLINE_PASSED, taskOf, TASKS_EXTENSION } from './mcp-task.js';
+import { personServerFor } from './person-tools.js';
 import { runningVersion } from './version.js';
 
 const HTTP_UNAUTHORIZED = 401;
@@ -26,6 +29,8 @@ export interface McpEndpointDeps {
   listTools: ListTools;
   callTool: CallTool;
   readClientCall: ReadClientCall;
+  isPerson: IsPerson;
+  readInbox: ReadInbox;
 }
 
 /** The gateway's own tool: the answer to a call that answered a handle. */
@@ -172,7 +177,9 @@ export function registerMcpEndpoint(server: FastifyInstance, deps: McpEndpointDe
     if (!holder.isOk) {
       return unauthorized(reply, { error: 'invalid_token', resource });
     }
-    const handler = createMcpHandler(() => serverFor(holder.value, deps));
+    // A person's ship is served the person's own tools; any other party, the fleet's.
+    const isPerson = await deps.isPerson(holder.value);
+    const handler = createMcpHandler(() => (isPerson ? personServerFor(holder.value, deps) : serverFor(holder.value, deps)));
     return handler.fetch(webRequestOf(request), { parsedBody: request.body });
   });
 }

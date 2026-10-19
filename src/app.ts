@@ -36,6 +36,8 @@ import { createListTools } from './core/mcp-in/list-tools.js';
 import { createCallTool } from './core/mcp-in/call-tool.js';
 import { createCollectReplies } from './core/mcp-in/collect-replies.js';
 import { createReadClientCall } from './core/mcp-in/read-client-call.js';
+import { createIsPerson } from './core/people/is-person.js';
+import { createReadInbox } from './core/people/read-inbox.js';
 import { createCallKeys } from './adapters/crypto/call-keys.js';
 import { createPrismaClientCalls } from './adapters/prisma/client-calls.js';
 import { createAuthenticateAccessToken } from './core/oauth/authenticate-access-token.js';
@@ -259,6 +261,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     listTools,
     callTool: createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, deadlineMs: CLIENT_CALL_DEADLINE_MS, sleep, waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS }),
     readClientCall: createReadClientCall({ calls: clientCalls, clock }),
+    isPerson: createIsPerson({ parties }),
+    readInbox: createReadInbox({ parties, door: door.person }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.
