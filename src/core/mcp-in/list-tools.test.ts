@@ -60,7 +60,13 @@ describe("an MCP client's tools are the capabilities of the ships its party reac
           },
           required: ['contactId'],
         },
-        target: { shipId: 'shp_01m3tbfspe96yf1rnr4ank9cr2', capability: 'list_deals', contentType: 'application/vnd.aeolus.mcp-tool+json; name=list_deals', isText: false },
+        target: {
+          shipId: 'shp_01m3tbfspe96yf1rnr4ank9cr2',
+          capability: 'list_deals',
+          contentType: 'application/vnd.aeolus.mcp-tool+json; name=list_deals',
+          isText: false,
+          outputContentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals',
+        },
       },
     ]);
   });

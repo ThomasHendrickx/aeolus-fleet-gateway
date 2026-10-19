@@ -4,14 +4,15 @@
  * the client its access token names. No token, or one the gateway did not
  * issue for this endpoint, gets 401 with where to sign in (RFC 9728).
  */
-import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
+import { createMcpHandler, isCallToolResult, McpServer } from '@modelcontextprotocol/server';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import type { AccessTokenHolder, AuthenticateAccessToken } from '../../core/oauth/authenticate-access-token.js';
 import type { CallTool } from '../../core/mcp-in/call-tool.js';
 import type { ListTools } from '../../core/mcp-in/list-tools.js';
-import type { ReadClientCall } from '../../core/mcp-in/read-client-call.js';
+import type { ReadCall, ReadClientCall } from '../../core/mcp-in/read-client-call.js';
+import { isToolResultType } from '../../core/mcp-out/content-types.js';
 import { runningVersion } from './version.js';
 
 const HTTP_UNAUTHORIZED = 401;
@@ -41,6 +42,29 @@ const answered = (value: unknown, isError = false) => ({ content: [{ type: 'text
 
 /** A tool error the client's model reads: what went wrong, never a fleet's reasons. */
 const toolError = (message: string) => ({ content: [{ type: 'text' as const, text: message }], isError: true });
+
+/** An answer that is an outside tool's result, as MCP out replies one, if it parses as one. */
+function toolResultOf(payload: string) {
+  try {
+    const parsed: unknown = JSON.parse(payload);
+    return isCallToolResult(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** What aeolus_result answers: the call's answer once completed, as the tool's own result where it is one; else its state. */
+function resultOf(read: ReadCall) {
+  switch (read.state) {
+    case 'completed':
+      return (isToolResultType(read.answer.contentType) ? toolResultOf(read.answer.payload) : undefined) ?? { content: [{ type: 'text' as const, text: read.answer.payload }] };
+    case 'failed':
+      return toolError('The call got no answer before its deadline. It may have run all the same.');
+    case 'submitted':
+    case 'working':
+      return answered({ handle: read.handle, state: read.state });
+  }
+}
 
 /** The request as the SDK's web-standard handler takes it. Fastify has read the JSON body already. */
 function webRequestOf(request: FastifyRequest): Request {
@@ -84,7 +108,7 @@ function serverFor(holder: AccessTokenHolder, deps: McpEndpointDeps): McpServer 
         return toolError('aeolus_result takes the handle a tool answered');
       }
       const read = await deps.readClientCall(caller, sent.data.handle);
-      return read.isOk ? answered(read.value) : toolError(read.error.message);
+      return read.isOk ? resultOf(read.value) : toolError(read.error.message);
     }
     const values = argumentsSchema.safeParse(request.params.arguments);
     if (!values.success) {

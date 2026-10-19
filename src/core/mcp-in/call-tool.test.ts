@@ -26,6 +26,7 @@ const CLAUDE: McpClientParty = {
 const CALLER = { fleetId: FLEET_ID, party: 'claude' };
 const NOW = new Date('2026-10-19T12:00:00.000Z');
 const clock: Clock = { now: () => NOW };
+const DEADLINE_MS = 600_000;
 
 let parties: ReturnType<typeof memoryPartyStore>;
 let discovery: ReturnType<typeof fakeDiscovery>;
@@ -41,7 +42,7 @@ beforeEach(async () => {
   sender = fakeCallSender();
   calls = memoryClientCalls();
   keys = fakeCallKeys();
-  callTool = createCallTool({ parties, listTools: createListTools({ parties, discovery, aliases: fakeAliases }), sender, calls, keys, clock });
+  callTool = createCallTool({ parties, listTools: createListTools({ parties, discovery, aliases: fakeAliases }), sender, calls, keys, clock, deadlineMs: DEADLINE_MS });
 });
 
 describe("an outside MCP client's tool call is a message its proxy ship sends (interop 3.3)", () => {
@@ -59,12 +60,23 @@ describe("an outside MCP client's tool call is a message its proxy ship sends (i
     ]);
   });
 
-  it('answers a handle once the fleet answered the send, and keeps the call under it', async () => {
+  it("answers a handle once the fleet answered the send, and keeps the call under it, with the type its answer comes in and its deadline", async () => {
     const called = await callTool(CALLER, { name: 'a9cr2__list_deals', arguments: { contactId: 'c1' } });
 
     expect(called).toEqual({ isOk: true, value: { handle: `handle(${FLEET_ID}:${MESSAGE_ID})` } });
     expect(calls.held).toEqual([
-      { fleetId: FLEET_ID, party: 'claude', messageId: MESSAGE_ID, handle: `handle(${FLEET_ID}:${MESSAGE_ID})`, shipId: CRM_SHIP_ID, capability: 'list_deals', sentAt: NOW },
+      {
+        fleetId: FLEET_ID,
+        party: 'claude',
+        messageId: MESSAGE_ID,
+        handle: `handle(${FLEET_ID}:${MESSAGE_ID})`,
+        shipId: CRM_SHIP_ID,
+        capability: 'list_deals',
+        outputContentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals',
+        sentAt: NOW,
+        deadlineAt: new Date('2026-10-19T12:10:00.000Z'),
+        replies: [],
+      },
     ]);
   });
 
@@ -82,6 +94,14 @@ describe("an outside MCP client's tool call is a message its proxy ship sends (i
     await callTool(CALLER, call);
 
     expect(sender.sent.map((message) => message.idempotencyKey)).toEqual(['new-1', 'new-2']);
+  });
+
+  it('keeps no answer type for a capability that states none', async () => {
+    discovery.state.ships = [aDiscoveredShip({ statement: { by: 'crew', summary: 's', capabilities: [{ name: 'ping' }] } })];
+
+    await callTool(CALLER, { name: 'a9cr2__ping', arguments: {} });
+
+    expect(calls.held.map((call) => call.outputContentType)).toEqual([null]);
   });
 
   it("sends a text tool's one argument as plain text", async () => {

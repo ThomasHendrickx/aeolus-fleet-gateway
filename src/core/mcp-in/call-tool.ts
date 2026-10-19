@@ -27,6 +27,8 @@ interface CallToolDeps {
   calls: ClientCalls;
   keys: CallKeys;
   clock: Clock;
+  /** How long a call waits for its answer before it fails: the gateway default, while statements state none. */
+  deadlineMs: number;
 }
 
 /** The message's payload: the arguments as JSON, or a text tool's one text; none for arguments that do not fit the tool. */
@@ -78,7 +80,18 @@ export function createCallTool(deps: CallToolDeps): CallTool {
     }
     const { messageId } = sent.value;
     const handle = deps.keys.handleOf(caller.fleetId, messageId);
-    await deps.calls.save({ fleetId: caller.fleetId, party: caller.party, messageId, handle, shipId: tool.target.shipId, capability: tool.target.capability, sentAt: deps.clock.now() });
+    const sentAt = deps.clock.now();
+    await deps.calls.save({
+      fleetId: caller.fleetId,
+      party: caller.party,
+      messageId,
+      handle,
+      shipId: tool.target.shipId,
+      capability: tool.target.capability,
+      outputContentType: tool.target.outputContentType,
+      sentAt,
+      deadlineAt: new Date(sentAt.getTime() + deps.deadlineMs),
+    });
     return ok({ handle });
   };
 }

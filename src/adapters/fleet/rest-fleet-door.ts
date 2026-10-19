@@ -149,7 +149,7 @@ export function createRestFleetDoor(
       const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max }, answers: pushReceiveOutputSchema, signal });
       return taken.isOk
         ? ok(
-            taken.value.deliveries.map(({ deliveryId, messageId, senderShipId, contentType, payload, state, handOverNumber }) => ({
+            taken.value.deliveries.map(({ deliveryId, messageId, senderShipId, contentType, payload, state, handOverNumber, inReplyTo }) => ({
               deliveryId,
               messageId,
               senderShipId,
@@ -157,6 +157,7 @@ export function createRestFleetDoor(
               payload,
               state,
               handOverNumber,
+              inReplyTo,
             })),
           )
         : taken;
