@@ -131,13 +131,22 @@ function serverFor(holder: AccessTokenHolder, deps: McpEndpointDeps): McpServer 
     const isUnanswered = called.value.state === 'submitted' || called.value.state === 'working';
     return isUnanswered && isTaskClient(ctx.mcpReq.envelope) ? createdTaskOf(called.value) : resultOf(called.value);
   });
-  mcp.server.setRequestHandler('tasks/get', { params: taskParamsSchema }, async ({ taskId }) => {
+  /** The party's own call by its task id; another party's or none is an error. */
+  const readTask = async (taskId: string) => {
     const read = await deps.readClientCall({ fleetId: holder.fleetId, party: holder.party }, taskId);
     if (!read.isOk) {
       throw new ProtocolError(ProtocolErrorCode.InvalidParams, `No task ${taskId} of this party`);
     }
-    return taskOf(read.value, resultOf);
-  });
+    return read.value;
+  };
+  mcp.server.setRequestHandler('tasks/get', { params: taskParamsSchema }, async ({ taskId }) => taskOf(await readTask(taskId), resultOf));
+  // Acknowledged and nothing changes: a sent call cannot be unsent, and no call asks for input yet.
+  for (const method of ['tasks/cancel', 'tasks/update']) {
+    mcp.server.setRequestHandler(method, { params: taskParamsSchema }, async ({ taskId }) => {
+      await readTask(taskId);
+      return {};
+    });
+  }
   return mcp;
 }
 
