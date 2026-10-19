@@ -66,6 +66,8 @@ function contextFor(cookie: string | undefined): Context {
     },
     listParties: () => Promise.resolve([CRM]),
     registerClient: unused,
+    setIdentityProvider: unused,
+    readIdentityProvider: unused,
     stateParty: ({ name }) => {
       stated.push(name);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));

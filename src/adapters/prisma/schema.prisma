@@ -190,3 +190,14 @@ model ClientCallReply {
   @@index([fleetId, callMessageId])
   @@map("client_call_replies")
 }
+
+/// Each fleet's company identity provider, which people sign in with (interop I-4); its client secret kept as the vault keeps credentials.
+model IdentityProvider {
+  fleetId      String   @id @map("fleet_id")
+  issuer       String
+  clientId     String   @map("client_id")
+  clientSecret String   @map("client_secret")
+  setAt        DateTime @map("set_at") @db.Timestamptz(3)
+
+  @@map("identity_providers")
+}
