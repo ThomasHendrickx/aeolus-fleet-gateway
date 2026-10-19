@@ -54,6 +54,7 @@
   "devDependencies": {
     "@aeolus-fleet/core": "0.27.0",
     "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/ext-tasks": "0.2.2",
     "@testcontainers/postgresql": "^12.2.0",
     "@types/node": "^26.6.3",
     "@types/pg": "^8.23.1",

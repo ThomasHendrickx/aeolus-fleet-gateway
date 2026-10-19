@@ -1,4 +1,5 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { isCreateTaskResultV2 } from '@modelcontextprotocol/ext-tasks/core/v2';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
@@ -178,5 +179,88 @@ describe("an outside MCP client's tool call is a message its proxy ship sends", 
     await mcp.close();
 
     expect(called.isError).toBe(true);
+  });
+});
+
+/** MCP's per-request envelope (2026-07-28) of a client that declares the Tasks extension. */
+const TASKS_CLIENT_META = {
+  'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+  'io.modelcontextprotocol/clientInfo': { name: 'test-client', version: '1' },
+  'io.modelcontextprotocol/clientCapabilities': { extensions: { 'io.modelcontextprotocol/tasks': {} } },
+};
+
+const rpcAnswer = z.object({ result: z.record(z.string(), z.unknown()).optional(), error: z.object({ code: z.number(), message: z.string() }).optional() });
+
+/** One request to the gateway's MCP endpoint over Streamable HTTP, as a client that declares the Tasks extension sends it: its result or error. */
+async function rpc(accessToken: string, request: { method: string; params: Record<string, unknown>; name?: string }) {
+  const response = await fetch(`${setting.address}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${accessToken}`,
+      'mcp-protocol-version': '2026-07-28',
+      'mcp-method': request.method,
+      ...(request.name === undefined ? {} : { 'mcp-name': request.name }),
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: request.method, params: { ...request.params, _meta: TASKS_CLIENT_META } }),
+  });
+  return rpcAnswer.parse(await response.json());
+}
+
+/** A signed-in client's access token, and the name it lists the CRM's tool under. */
+async function aTasksClient(): Promise<{ accessToken: string; tool: string }> {
+  const client = await aSignedInClient(setting);
+  const accessToken = z.string().parse(client.tokens()?.access_token);
+  const listed = await rpc(accessToken, { method: 'tools/list', params: {} });
+  const tools = z.object({ tools: z.array(z.object({ name: z.string() })) }).parse(listed.result).tools;
+  return { accessToken, tool: z.string().parse(tools.find((each) => each.name.endsWith('__list_deals'))?.name) };
+}
+
+const taskIdOf = (result: unknown) => z.object({ taskId: z.string() }).parse(result).taskId;
+
+describe('an outside MCP client that declares the Tasks extension follows a long call as a task', () => {
+  it('finds the extension stated at server/discover', async () => {
+    const client = await aSignedInClient(setting);
+
+    const discovered = await rpc(z.string().parse(client.tokens()?.access_token), { method: 'server/discover', params: {} });
+
+    expect(discovered.result).toMatchObject({ capabilities: { extensions: { 'io.modelcontextprotocol/tasks': {} } } });
+  });
+
+  it('is answered a task, durably created, for a call its ship does not answer within the wait', async () => {
+    await aStatingShip();
+    const { accessToken, tool } = await aTasksClient();
+
+    const created = await rpc(accessToken, { method: 'tools/call', params: { name: tool, arguments: { contactId: 'c1' } }, name: tool });
+    const taskId = taskIdOf(created.result);
+    const read = await rpc(accessToken, { method: 'tasks/get', params: { taskId }, name: taskId });
+
+    expect(isCreateTaskResultV2(created.result)).toBe(true);
+    expect(read.result).toMatchObject({ taskId, status: 'working' });
+  });
+
+  it("reads the task completed with the ship's reply as its result", async () => {
+    const crm = await aStatingShip();
+    const { accessToken, tool } = await aTasksClient();
+    const taskId = taskIdOf((await rpc(accessToken, { method: 'tools/call', params: { name: tool, arguments: { contactId: 'c1' } }, name: tool })).result);
+    const delivery = await receiveOne(setting.fleet, crm);
+    await replyTo(crm, { to: z.string().parse(delivery?.senderShipId), inReplyTo: z.string().parse(delivery?.messageId), payload: 'Two deals: Analytical engine, Difference engine.' });
+
+    let read = await rpc(accessToken, { method: 'tasks/get', params: { taskId }, name: taskId });
+    for (let attempt = 0; attempt < REPLY_ATTEMPTS && read.result?.status === 'working'; attempt += 1) {
+      await wait(REPLY_POLL_MS);
+      read = await rpc(accessToken, { method: 'tasks/get', params: { taskId }, name: taskId });
+    }
+
+    expect(read.result).toMatchObject({ taskId, status: 'completed', result: { content: [{ type: 'text', text: 'Two deals: Analytical engine, Difference engine.' }] } });
+  });
+
+  it('is answered an error for a task it never got', async () => {
+    const client = await aSignedInClient(setting);
+
+    const read = await rpc(z.string().parse(client.tokens()?.access_token), { method: 'tasks/get', params: { taskId: 'not-a-task' }, name: 'not-a-task' });
+
+    expect(read.error).toMatchObject({ code: -32602 });
   });
 });
