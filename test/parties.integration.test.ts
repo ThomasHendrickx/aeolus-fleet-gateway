@@ -4,13 +4,14 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgetter.js';
 import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
-import type { McpServerParty } from '../src/core/parties/party.js';
+import type { McpServerParty, PersonParty } from '../src/core/parties/party.js';
 import { migratedDatabase } from './support/database.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OTHER_FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8zz';
 const OWNER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 const PROXY: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9crm';
+const CHARLOTTE: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9chr';
 const AT = new Date('2026-10-18T13:00:00.000Z');
 
 let prisma: PrismaClient;
@@ -69,6 +70,33 @@ describe("the gateway's parties and their vault in Postgres", () => {
     await store.save(party);
 
     await expect(Promise.all([store.findByClient(FLEET, 'https://claude.example.com/client.json'), store.findByClient(OTHER_FLEET, 'https://claude.example.com/client.json')])).resolves.toEqual([party, undefined]);
+  });
+
+  it('keeps a person, found by their email, and bound to a sign-in later', async () => {
+    const store = createPrismaPartyStore(prisma);
+    const charlotte: PersonParty = {
+      fleetId: FLEET,
+      name: 'charlotte',
+      kind: 'person',
+      email: 'charlotte@example.com',
+      issuer: null,
+      subject: null,
+      ownerShipId: CHARLOTTE,
+      state: 'crewed',
+      proxyShipId: CHARLOTTE,
+      secret: null,
+      crewToken: 'aeolus_ct_v1_charlotte',
+      requestId: CHARLOTTE,
+      requestHash: '',
+      approvedAt: AT,
+    };
+    await store.save(charlotte);
+    await expect(store.findPersonByEmail(FLEET, 'charlotte@example.com')).resolves.toEqual(charlotte);
+
+    await store.save({ ...charlotte, issuer: 'https://accounts.google.com', subject: '1078' });
+
+    await expect(store.findPersonByEmail(FLEET, 'charlotte@example.com')).resolves.toMatchObject({ issuer: 'https://accounts.google.com', subject: '1078' });
+    await expect(store.findPersonByEmail(OTHER_FLEET, 'charlotte@example.com')).resolves.toBeUndefined();
   });
 
   it('forgets a fleet with its parties and their credentials (decision 0021)', async () => {

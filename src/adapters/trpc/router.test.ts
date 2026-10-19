@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { SetIdentityProvider } from '../../core/federation/set-identity-provider.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
+import type { MapPerson } from '../../core/parties/map-person.js';
 import { err, ok } from '../../core/shared/result.js';
 import { gatewayRouter, type Context } from './router.js';
 
@@ -16,7 +17,14 @@ const VIEWER_COOKIE = 'aeolus_session=viewer';
 const SET_AT = new Date('2026-10-19T12:00:00.000Z');
 
 /** A context with only what the parties procedures read; every approval it is asked for is recorded. */
-function aContext(cookie: string): { context: Context; approvals: Parameters<ApproveParty>[0][]; marks: Parameters<MarkTool>[0][]; providers: Parameters<SetIdentityProvider>[0][] } {
+function aContext(cookie: string): {
+  context: Context;
+  approvals: Parameters<ApproveParty>[0][];
+  marks: Parameters<MarkTool>[0][];
+  providers: Parameters<SetIdentityProvider>[0][];
+  people: Parameters<MapPerson>[0][];
+} {
+  const people: Parameters<MapPerson>[0][] = [];
   const approvals: Parameters<ApproveParty>[0][] = [];
   const providers: Parameters<SetIdentityProvider>[0][] = [];
   const marks: Parameters<MarkTool>[0][] = [];
@@ -52,8 +60,12 @@ function aContext(cookie: string): { context: Context; approvals: Parameters<App
     },
     readIdentityProvider: () => Promise.resolve({ issuer: 'https://accounts.google.com', clientId: 'gateway', setAt: SET_AT }),
     mcpEndpointOf: (fleetId) => `https://gateway.example.com/fleets/alias-of(${fleetId})/mcp`,
+    mapPerson: (input) => {
+      people.push(input);
+      return Promise.resolve(ok({ name: 'charlotte', kind: 'person' as const, email: input.email, isSignedIn: false, ownerShipId: input.shipId, state: 'crewed' as const, proxyShipId: input.shipId }));
+    },
   };
-  return { context, approvals, marks, providers };
+  return { context, approvals, marks, providers, people };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -203,5 +215,34 @@ describe("the fleet's MCP endpoint, which its MCP clients connect to", () => {
     { who: 'a viewer', cookie: VIEWER_COOKIE },
   ])("answers $who the endpoint of the session's fleet", async ({ cookie }) => {
     await expect(gatewayRouter.createCaller(aContext(cookie).context).mcp.endpoint()).resolves.toBe(`https://gateway.example.com/fleets/alias-of(${FLEET})/mcp`);
+  });
+});
+
+describe("argo maps a person to their ship through the gateway's API", () => {
+  const CHARLOTTE = { email: 'charlotte@example.com', shipId: 'shp_01m3tbfspe96yf1rnr4ank9chr' as const, secret: 'aeolus_sk_v1_charlotte' };
+
+  it("maps them in argo's fleet, answering the person without the secret", async () => {
+    const { context, people } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.map(CHARLOTTE)).resolves.toMatchObject({ kind: 'person', email: 'charlotte@example.com', isSignedIn: false });
+    expect(people).toEqual([{ operatorFleetId: FLEET, ...CHARLOTTE }]);
+  });
+
+  it('refuses a viewer', async () => {
+    const { context, people } = aContext(VIEWER_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.map(CHARLOTTE)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(people).toEqual([]);
+  });
+
+  it.each([
+    { what: 'something that is no email', input: { ...CHARLOTTE, email: 'charlotte' } },
+    { what: 'something that is no ship id', input: { ...CHARLOTTE, shipId: 'charlotte' } },
+    { what: 'an empty secret', input: { ...CHARLOTTE, secret: '' } },
+  ])('refuses $what', async ({ input }) => {
+    const { context, people } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.map(z.custom<typeof CHARLOTTE>(() => true).parse(input))).rejects.toBeInstanceOf(TRPCError);
+    expect(people).toEqual([]);
   });
 });

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { SetIdentityProvider } from '../../core/federation/set-identity-provider.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
+import type { MapPerson } from '../../core/parties/map-person.js';
 import type { ShownParty } from '../../core/parties/shown-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import { err, ok } from '../../core/shared/result.js';
@@ -29,12 +30,23 @@ const CRM: ShownParty = {
   proxyShipId: 'shp_01m3tbfspe96yf1rnr4ank9crm',
 };
 
+const CHARLOTTE: ShownParty = {
+  name: 'charlotte',
+  kind: 'person',
+  email: 'charlotte@example.com',
+  isSignedIn: false,
+  ownerShipId: 'shp_01m3tbfspe96yf1rnr4ank9chr',
+  state: 'crewed',
+  proxyShipId: 'shp_01m3tbfspe96yf1rnr4ank9chr',
+};
+
 let server: FastifyInstance;
 let approvals: Parameters<ApproveParty>[0][];
 let crews: Parameters<CrewParty>[0][];
 let marks: Parameters<MarkTool>[0][];
 let stated: string[];
 let providers: Parameters<SetIdentityProvider>[0][];
+let mapped: Parameters<MapPerson>[0][];
 const SET_AT = new Date('2026-10-19T12:00:00.000Z');
 
 function contextFor(cookie: string | undefined): Context {
@@ -67,7 +79,7 @@ function contextFor(cookie: string | undefined): Context {
       crews.push(input);
       return Promise.resolve(ok({ ...CRM, state: 'crewed' as const }));
     },
-    listParties: () => Promise.resolve([CRM]),
+    listParties: () => Promise.resolve([CRM, CHARLOTTE]),
     registerClient: unused,
     setIdentityProvider: (input) => {
       providers.push(input);
@@ -75,6 +87,10 @@ function contextFor(cookie: string | undefined): Context {
     },
     readIdentityProvider: () => Promise.resolve({ issuer: 'https://accounts.google.com', clientId: 'gateway.apps.googleusercontent.com', setAt: SET_AT }),
     mcpEndpointOf: () => 'https://gateway.example.com/fleets/fleetaaa/mcp',
+    mapPerson: (input) => {
+      mapped.push(input);
+      return Promise.resolve(ok({ name: 'charlotte', kind: 'person' as const, email: input.email, isSignedIn: false, ownerShipId: input.shipId, state: 'crewed' as const, proxyShipId: input.shipId }));
+    },
     stateParty: ({ name }) => {
       stated.push(name);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));
@@ -92,6 +108,7 @@ beforeEach(async () => {
   marks = [];
   stated = [];
   providers = [];
+  mapped = [];
   server = Fastify({ logger: false });
   registerPartiesPage(server, { contextFor, fleetUrl: 'https://fleet.example.com', signInCallbackUrl: 'https://gateway.example.com/oidc/callback' });
   await server.ready();
@@ -220,5 +237,19 @@ describe("the gateway's page of parties, for argo signed in to the console", () 
     const page = await server.inject({ url: '/parties', headers: { host: HOST, cookie: ARGO } });
 
     expect(page.body).toContain('https://gateway.example.com/oidc/callback');
+  });
+
+  it('maps a person, by their email, to their own ship', async () => {
+    const answer = await post('/parties/person', { email: 'charlotte@example.com', shipId: 'shp_01m3tbfspe96yf1rnr4ank9chr', secret: 'aeolus_sk_v1_charlotte' });
+
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 303, location: '/parties' });
+    expect(mapped).toEqual([{ operatorFleetId: FLEET, email: 'charlotte@example.com', shipId: 'shp_01m3tbfspe96yf1rnr4ank9chr', secret: 'aeolus_sk_v1_charlotte' }]);
+  });
+
+  it('shows a person by their email, and whether they signed in yet', async () => {
+    const page = await server.inject({ url: '/parties', headers: { host: HOST, cookie: ARGO } });
+
+    expect(page.body).toContain('charlotte@example.com');
+    expect(page.body).toContain('not signed in yet');
   });
 });

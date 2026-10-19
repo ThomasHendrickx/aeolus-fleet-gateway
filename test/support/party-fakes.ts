@@ -7,6 +7,8 @@ import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 export const OWNER_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 export const PROXY_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9crm';
+/** Charlotte's own ship, a person's, which argo commissioned in the console. */
+export const CHARLOTTE_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9chr';
 
 /** The parties in memory, by fleet and name. */
 export function memoryPartyStore(): PartyStore & { held: Map<string, Party> } {
@@ -17,6 +19,7 @@ export function memoryPartyStore(): PartyStore & { held: Map<string, Party> } {
     find: (fleetId, name) => Promise.resolve(held.get(key(fleetId, name))),
     list: (fleetId) => Promise.resolve([...held.values()].filter((party) => party.fleetId === fleetId)),
     findByClient: (fleetId, clientId) => Promise.resolve([...held.values()].find((party) => party.fleetId === fleetId && party.kind === 'mcpClient' && party.clientId === clientId)),
+    findPersonByEmail: (fleetId, email) => Promise.resolve([...held.values()].find((party) => party.fleetId === fleetId && party.kind === 'person' && party.email === email)),
     save: (party) => {
       held.set(key(party.fleetId, party.name), party);
       return Promise.resolve();
@@ -45,6 +48,8 @@ export function fakeProxyShipFleet() {
     crewed: new Set<ShipId>(),
     /** Dies after the next commission is stored, before its answer arrives. */
     isLosingNextAnswer: false,
+    /** The ship each crew token is, as whoami answers. */
+    ships: new Map<string, { shipId: ShipId; fleetId: FleetId; name: string; type: string }>(),
   };
   const unavailable = (): Promise<Result<never, FleetRefusal>> => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
   const door: ProxyShipDoor = {
@@ -76,7 +81,11 @@ export function fakeProxyShipFleet() {
         return Promise.resolve(err({ code: 'UNAUTHORIZED', message: 'Wrong ship id or secret' }));
       }
       state.crewed.add(shipId);
-      return Promise.resolve(ok({ crewToken: 'aeolus_ct_v1_proxy' }));
+      return Promise.resolve(ok({ crewToken: shipId === PROXY_SHIP_ID ? 'aeolus_ct_v1_proxy' : `aeolus_ct_v1_${shipId}` }));
+    },
+    whoami: (crewToken) => {
+      const ship = state.ships.get(crewToken);
+      return Promise.resolve(ship ? ok(ship) : err({ code: 'UNAUTHORIZED', message: 'No such crew token' }));
     },
   };
   return { state, door };
