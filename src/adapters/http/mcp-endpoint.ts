@@ -4,7 +4,7 @@
  * the client its access token names. No token, or one the gateway did not
  * issue for this endpoint, gets 401 with where to sign in (RFC 9728).
  */
-import { createMcpHandler, isCallToolResult, McpServer } from '@modelcontextprotocol/server';
+import { CLIENT_CAPABILITIES_META_KEY, createMcpHandler, isCallToolResult, McpServer, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
@@ -13,6 +13,7 @@ import type { CallTool } from '../../core/mcp-in/call-tool.js';
 import type { ListTools } from '../../core/mcp-in/list-tools.js';
 import type { ReadCall, ReadClientCall } from '../../core/mcp-in/read-client-call.js';
 import { isToolResultType } from '../../core/mcp-out/content-types.js';
+import { createdTaskOf, DEADLINE_PASSED, taskOf, TASKS_EXTENSION } from './mcp-task.js';
 import { runningVersion } from './version.js';
 
 const HTTP_UNAUTHORIZED = 401;
@@ -36,6 +37,15 @@ const RESULT_TOOL = {
 
 const argumentsSchema = z.record(z.string(), z.unknown()).default({});
 const resultArgumentsSchema = z.object({ handle: z.string() });
+const taskParamsSchema = z.looseObject({ taskId: z.string() });
+/** The capabilities a client declares on each request (2026-07-28), as far as the gateway reads them. */
+const envelopeSchema = z.object({ [CLIENT_CAPABILITIES_META_KEY]: z.object({ extensions: z.record(z.string(), z.unknown()).optional() }).optional() });
+
+/** Whether the client declared the Tasks extension on this request: only then may it be answered a task. */
+const isTaskClient = (envelope: unknown) => envelopeSchema.safeParse(envelope).data?.[CLIENT_CAPABILITIES_META_KEY]?.extensions?.[TASKS_EXTENSION] !== undefined;
+
+/** tools/call's params, as the gateway reads them: its result may be a task, which the SDK's own tools/call does not type. */
+const callParamsSchema = z.looseObject({ name: z.string(), arguments: z.unknown().optional() });
 
 /** A tool's answer as one text block of JSON. */
 const answered = (value: unknown, isError = false) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }], ...(isError ? { isError } : {}) });
@@ -59,7 +69,7 @@ function resultOf(read: ReadCall) {
     case 'completed':
       return (isToolResultType(read.answer.contentType) ? toolResultOf(read.answer.payload) : undefined) ?? { content: [{ type: 'text' as const, text: read.answer.payload }] };
     case 'failed':
-      return toolError('The call got no answer before its deadline. It may have run all the same.');
+      return toolError(DEADLINE_PASSED);
     case 'submitted':
     case 'working':
       return answered({ handle: read.handle, state: read.state });
@@ -84,7 +94,7 @@ const objectSchema = z.object({ type: z.literal('object') }).catchall(z.json());
 
 /** The MCP server one request of one client is served by. Its tools are known per request, from the fleet, so it lists them itself. */
 function serverFor(holder: AccessTokenHolder, deps: McpEndpointDeps): McpServer {
-  const mcp = new McpServer({ name: 'aeolus-gateway', version: runningVersion() }, { capabilities: { tools: {} } });
+  const mcp = new McpServer({ name: 'aeolus-gateway', version: runningVersion() }, { capabilities: { tools: {}, extensions: { [TASKS_EXTENSION]: {} } } });
   mcp.server.setRequestHandler('tools/list', async () => {
     const listed = await deps.listTools({ fleetId: holder.fleetId, party: holder.party });
     if (!listed.isOk) {
@@ -100,22 +110,33 @@ function serverFor(holder: AccessTokenHolder, deps: McpEndpointDeps): McpServer 
       })).concat(RESULT_TOOL),
     };
   });
-  mcp.server.setRequestHandler('tools/call', async (request) => {
+  mcp.server.setRequestHandler('tools/call', { params: callParamsSchema }, async (params, ctx) => {
     const caller = { fleetId: holder.fleetId, party: holder.party };
-    if (request.params.name === RESULT_TOOL.name) {
-      const sent = resultArgumentsSchema.safeParse(request.params.arguments);
+    if (params.name === RESULT_TOOL.name) {
+      const sent = resultArgumentsSchema.safeParse(params.arguments);
       if (!sent.success) {
         return toolError('aeolus_result takes the handle a tool answered');
       }
       const read = await deps.readClientCall(caller, sent.data.handle);
       return read.isOk ? resultOf(read.value) : toolError(read.error.message);
     }
-    const values = argumentsSchema.safeParse(request.params.arguments);
+    const values = argumentsSchema.safeParse(params.arguments);
     if (!values.success) {
       return toolError('A tool takes its arguments as an object');
     }
-    const called = await deps.callTool(caller, { name: request.params.name, arguments: values.data });
-    return called.isOk ? resultOf(called.value) : toolError(called.error.message);
+    const called = await deps.callTool(caller, { name: params.name, arguments: values.data });
+    if (!called.isOk) {
+      return toolError(called.error.message);
+    }
+    const isUnanswered = called.value.state === 'submitted' || called.value.state === 'working';
+    return isUnanswered && isTaskClient(ctx.mcpReq.envelope) ? createdTaskOf(called.value) : resultOf(called.value);
+  });
+  mcp.server.setRequestHandler('tasks/get', { params: taskParamsSchema }, async ({ taskId }) => {
+    const read = await deps.readClientCall({ fleetId: holder.fleetId, party: holder.party }, taskId);
+    if (!read.isOk) {
+      throw new ProtocolError(ProtocolErrorCode.InvalidParams, `No task ${taskId} of this party`);
+    }
+    return taskOf(read.value, resultOf);
   });
   return mcp;
 }

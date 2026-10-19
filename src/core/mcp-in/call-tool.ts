@@ -13,10 +13,9 @@ import type { PartyStore } from '../parties/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import { stateOf } from './client-call.js';
 import { IDEMPOTENCY_ARGUMENT, type ListedTool, type ListTools } from './list-tools.js';
 import type { CallKeys, CallSender, ClientCalls } from './ports.js';
-import type { ReadCall } from './read-client-call.js';
+import { readCallOf, type ReadCall } from './read-client-call.js';
 
 export type CallToolRefusal = DomainError<'PARTY_NOT_CREWED' | 'FLEET_UNAVAILABLE' | 'NO_SUCH_TOOL' | 'INVALID_ARGUMENTS' | 'NOT_REACHABLE' | 'SEND_REFUSED'>;
 
@@ -69,10 +68,10 @@ async function answerWithin(deps: CallToolDeps, sent: { fleetId: FleetId; messag
   const waitEnd = sent.since.getTime() + deps.waitMs;
   for (;;) {
     const call = await deps.calls.findByMessage(sent.fleetId, sent.messageId);
-    const state = call ? stateOf(call, deps.clock.now()) : { state: 'submitted' as const };
+    const read = call ? readCallOf(call, deps.clock.now()) : { handle: sent.handle, createdAt: sent.since, updatedAt: sent.since, state: 'submitted' as const };
     const left = waitEnd - deps.clock.now().getTime();
-    if (state.state === 'completed' || state.state === 'failed' || left <= 0) {
-      return { handle: sent.handle, ...state };
+    if (read.state === 'completed' || read.state === 'failed' || left <= 0) {
+      return read;
     }
     await deps.sleep(Math.min(deps.waitPollMs, left), UNENDING);
   }
