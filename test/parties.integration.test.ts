@@ -99,6 +99,36 @@ describe("the gateway's parties and their vault in Postgres", () => {
     await expect(store.findPersonByEmail(OTHER_FLEET, 'charlotte@example.com')).resolves.toBeUndefined();
   });
 
+  it('finds a bound person by their sign-in, and binds an unbound person to one sign-in only, even when two race', async () => {
+    const store = createPrismaPartyStore(prisma);
+    const charlotte: PersonParty = {
+      fleetId: FLEET,
+      name: 'charlotte-raced',
+      kind: 'person',
+      email: 'charlotte-raced@example.com',
+      issuer: null,
+      subject: null,
+      ownerShipId: CHARLOTTE,
+      state: 'crewed',
+      proxyShipId: CHARLOTTE,
+      secret: null,
+      crewToken: 'aeolus_ct_v1_charlotte',
+      requestId: CHARLOTTE,
+      requestHash: '',
+      approvedAt: AT,
+    };
+    await store.save(charlotte);
+
+    const subjects = ['1078', '2091'];
+    const binds = await Promise.all(subjects.map((subject) => store.bindPerson(FLEET, 'charlotte-raced', { issuer: 'https://accounts.google.com', subject })));
+
+    expect(binds.filter((isBound) => isBound)).toEqual([true]);
+    const won = { issuer: 'https://accounts.google.com', subject: subjects[binds.indexOf(true)] ?? '' };
+    await expect(store.findPersonBySignIn(FLEET, won)).resolves.toEqual({ ...charlotte, ...won });
+    await expect(store.findPersonBySignIn(OTHER_FLEET, won)).resolves.toBeUndefined();
+    await expect(store.bindPerson(FLEET, 'charlotte-raced', { issuer: 'https://accounts.google.com', subject: '3001' })).resolves.toBe(false);
+  });
+
   it('forgets a fleet with its parties and their credentials (decision 0021)', async () => {
     const store = createPrismaPartyStore(prisma);
     await store.save(aParty({ fleetId: OTHER_FLEET, name: 'ledger' }));

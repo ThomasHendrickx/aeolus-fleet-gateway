@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import type { FleetId } from '@aeolus-fleet/common';
+import { auth } from '@modelcontextprotocol/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
@@ -11,11 +12,11 @@ import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/cl
 import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgetter.js';
 import { createPrismaIdentityProviders } from '../src/adapters/prisma/identity-providers.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
-import { signIn } from './support/argo.js';
+import { commission, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { mutate, query } from './support/gateway-api.js';
-import { aConnectedGateway, CALLBACK, mcpEndpointOf, TEST_GATEWAY_SECRET } from './support/mcp-client.js';
+import { aClientProvider, aConnectedGateway, aRegisteredClient, CALLBACK, mcpEndpointOf, TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 import { CHARLOTTE, PROVIDER_CLIENT_ID, startOidcProvider, type OidcProvider } from './support/oidc-provider.js';
 
 // Federation for people (interop I-4): argo sets the fleet's company identity
@@ -241,5 +242,27 @@ describe('a person signs in from their MCP client, at the fleet\'s identity prov
 
     expect({ page: page.status, toProvider: toProvider.status, isAtProvider: locationOf(toProvider).startsWith(provider.issuerOf('company')), isBackAtGateway: locationOf(back).startsWith(`${address}/oidc/callback?`) }).toEqual({ page: 200, toProvider: 302, isAtProvider: true, isBackAtGateway: true });
     expect({ status: signedIn.status, isNamed: (await signedIn.text()).includes(CHARLOTTE.email) }).toEqual({ status: 403, isNamed: true });
+  });
+
+  it('is sent back to their MCP client as their own ship, which argo mapped them to by their email, and the client takes its token', async () => {
+    const setting = { fleet, address, cookie, databaseUrl };
+    await aConnectedGateway(setting);
+    await mutate(address, { procedure: 'identityProvider.set', cookie, body: { issuer: provider.issuerOf('company'), clientId: PROVIDER_CLIENT_ID, clientSecret: 'provider-secret' } });
+    const ship = await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } });
+    const mapped = await mutate(address, { procedure: 'people.map', cookie, body: { email: CHARLOTTE.email, shipId: ship.shipId, secret: ship.secret } });
+    expect(mapped.status).toBe(200);
+    const client = aClientProvider(await aRegisteredClient(setting, false));
+    const serverUrl = await mcpEndpointOf(setting);
+    await auth(client.provider, { serverUrl });
+
+    const page = await fetch(z.instanceof(URL).parse(client.sentTo()));
+    const signInLink = z.string().parse(/href="(\/authorize\/sign-in\?[^"]+)"/.exec(await page.text())?.[1]).replaceAll('&amp;', '&');
+    const toProvider = await fetch(`${address}${signInLink}`, { redirect: 'manual' });
+    const back = await fetch(locationOf(toProvider), { redirect: 'manual' });
+    const signedIn = await fetch(locationOf(back), { redirect: 'manual' });
+    const sentBack = new URL(locationOf(signedIn));
+    await auth(client.provider, { serverUrl, authorizationCode: z.string().parse(sentBack.searchParams.get('code')), iss: z.string().parse(sentBack.searchParams.get('iss')) });
+
+    expect({ status: signedIn.status, to: `${sentBack.origin}${sentBack.pathname}`, hasToken: client.tokens()?.access_token !== undefined }).toEqual({ status: 302, to: CALLBACK, hasToken: true });
   });
 });

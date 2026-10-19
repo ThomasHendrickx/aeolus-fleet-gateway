@@ -13,8 +13,9 @@ import { createApproveClientParty } from '../../core/parties/approve-party.js';
 import { createReadClientParty } from '../../core/parties/read-client-party.js';
 import { SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { plainHasher } from '../../../test/support/memory-installation.js';
-import { OWNER_SHIP_ID, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { CHARLOTTE_SHIP_ID, OWNER_SHIP_ID, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { aProviderMetadata, fakeProviderDiscovery, fakeProviderSignIn, GOOGLE_ISSUER, memoryIdentityProviders, memorySignIns } from '../../../test/support/federation-fakes.js';
+import { createAuthorizePerson } from '../../core/federation/authorize-person.js';
 import { createCompleteSignIn } from '../../core/federation/complete-sign-in.js';
 import { createReadIdentityProvider } from '../../core/federation/read-identity-provider.js';
 import { createStartSignIn } from '../../core/federation/start-sign-in.js';
@@ -62,6 +63,7 @@ beforeEach(async () => {
     readIdentityProvider: createReadIdentityProvider({ providers }),
     startSignIn: createStartSignIn({ readAuthorization, providers, discovery, signIns, secrets, clock, callbackUrl }),
     completeSignIn: createCompleteSignIn({ signIns, providers, discovery, providerSignIn, secrets, clock, callbackUrl }),
+    authorizePerson: createAuthorizePerson({ readAuthorization, parties, codes, secrets, clock, issuer: ISSUER }),
     issuer: ISSUER,
     endpoints: fakeFleetEndpoints(),
     fleetUrl: 'https://fleet.example.com',
@@ -273,12 +275,26 @@ describe('a person signs in at /authorize with the fleet\'s identity provider (Q
     expect(answer.body).toContain('no identity provider');
   });
 
-  it("shows who the provider vouched for, and that argo has not given them this fleet's ship yet", async () => {
+  /** The person comes back from Google, signed in as Charlotte. */
+  async function backFromGoogle() {
     await withGoogle();
     const started = await server.inject({ url: `/authorize/sign-in?${new URLSearchParams(REQUEST).toString()}`, headers: { host: HOST } });
     const state = new URL(z.string().parse(started.headers.location)).searchParams.get('state');
+    return server.inject({ url: `/oidc/callback?${new URLSearchParams({ state: z.string().parse(state), code: 'google-code' }).toString()}`, headers: { host: HOST } });
+  }
 
-    const back = await server.inject({ url: `/oidc/callback?${new URLSearchParams({ state: z.string().parse(state), code: 'google-code' }).toString()}`, headers: { host: HOST } });
+  it('sends a person argo mapped back to their MCP client, with a code and the issuer', async () => {
+    await parties.save({ fleetId: FLEET, name: 'charlotte', kind: 'person', email: 'charlotte@example.com', issuer: null, subject: null, ownerShipId: CHARLOTTE_SHIP_ID, state: 'crewed', proxyShipId: CHARLOTTE_SHIP_ID, secret: null, crewToken: 'aeolus_ct_v1_charlotte', requestId: CHARLOTTE_SHIP_ID, requestHash: '', approvedAt: new Date('2026-10-19T09:00:00.000Z') });
+
+    const back = await backFromGoogle();
+
+    expect(back.statusCode).toBe(302);
+    const sentBack = new URL(z.string().parse(back.headers.location));
+    expect({ to: `${sentBack.origin}${sentBack.pathname}`, isCoded: sentBack.searchParams.has('code'), state: sentBack.searchParams.get('state'), iss: sentBack.searchParams.get('iss') }).toEqual({ to: CALLBACK, isCoded: true, state: 'state-1', iss: ISSUER });
+  });
+
+  it("shows who the provider vouched for, and that argo has not given them this fleet's ship yet", async () => {
+    const back = await backFromGoogle();
 
     expect(back.statusCode).toBe(403);
     expect(back.body).toContain('charlotte@example.com');
