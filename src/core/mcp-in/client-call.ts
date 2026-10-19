@@ -52,18 +52,29 @@ function isAnswer(call: ClientCall, reply: CallReply): boolean {
   return call.outputContentType === null ? essenceOf(reply.contentType) === PLAIN_TEXT : normalized(reply.contentType) === normalized(call.outputContentType);
 }
 
+/** The call's state with since when it holds, by the one rule below. */
+function standing(call: ClientCall, now: Date): { state: CallState; since: Date } {
+  const answer = call.replies.find((reply) => isAnswer(call, reply));
+  if (answer) {
+    return { state: { state: 'completed', answer: { contentType: answer.contentType, payload: answer.payload } }, since: answer.receivedAt };
+  }
+  if (now.getTime() >= call.deadlineAt.getTime()) {
+    return { state: { state: 'failed' }, since: call.deadlineAt };
+  }
+  const [first] = call.replies;
+  return first ? { state: { state: 'working' }, since: first.receivedAt } : { state: { state: 'submitted' }, since: call.sentAt };
+}
+
 /**
  * Completed by the first reply of the stated output type, kept before the
  * deadline; failed at the deadline without one, and a later reply changes
  * nothing; working once any other reply came; submitted before that.
  */
 export function stateOf(call: ClientCall, now: Date): CallState {
-  const answer = call.replies.find((reply) => isAnswer(call, reply));
-  if (answer) {
-    return { state: 'completed', answer: { contentType: answer.contentType, payload: answer.payload } };
-  }
-  if (now.getTime() >= call.deadlineAt.getTime()) {
-    return { state: 'failed' };
-  }
-  return call.replies.length > 0 ? { state: 'working' } : { state: 'submitted' };
+  return standing(call, now).state;
+}
+
+/** Since when the call is in its state: its sending, its first reply, its answer, or its deadline. */
+export function stateSince(call: ClientCall, now: Date): Date {
+  return standing(call, now).since;
 }

@@ -3,11 +3,16 @@ import type { FleetId } from '@aeolus-fleet/common';
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import { stateOf, type CallState } from './client-call.js';
+import { stateOf, stateSince, type CallState, type ClientCall } from './client-call.js';
 import type { ClientCalls } from './ports.js';
 
-/** A call as its client reads it (interop 3.4): its handle and its state, with its answer once completed. */
-export type ReadCall = { handle: string } & CallState;
+/** A call as its client reads it (interop 3.4): its handle, when it was sent, its state and since when, with its answer once completed. */
+export type ReadCall = { handle: string; createdAt: Date; updatedAt: Date } & CallState;
+
+/** The call as its client reads it now. */
+export function readCallOf(call: ClientCall, now: Date): ReadCall {
+  return { handle: call.handle, createdAt: call.sentAt, updatedAt: stateSince(call, now), ...stateOf(call, now) };
+}
 
 export type ReadClientCall = (caller: { fleetId: FleetId; party: string }, handle: string) => Promise<Result<ReadCall, DomainError<'NO_SUCH_CALL'>>>;
 
@@ -15,6 +20,6 @@ export type ReadClientCall = (caller: { fleetId: FleetId; party: string }, handl
 export function createReadClientCall(deps: { calls: ClientCalls; clock: Clock }): ReadClientCall {
   return async ({ fleetId, party }, handle) => {
     const call = await deps.calls.findByHandle({ fleetId, party }, handle);
-    return call ? ok({ handle: call.handle, ...stateOf(call, deps.clock.now()) }) : refuse('NO_SUCH_CALL', 'This party made no call with that handle');
+    return call ? ok(readCallOf(call, deps.clock.now())) : refuse('NO_SUCH_CALL', 'This party made no call with that handle');
   };
 }

@@ -20,21 +20,24 @@ beforeEach(async () => {
   readClientCall = createReadClientCall({ calls, clock });
 });
 
+/** When aClientCall was sent. */
+const SENT_AT = new Date('2026-10-19T12:00:00.000Z');
+
 describe('an outside MCP client reads its call by the handle it was answered (interop 3.4)', () => {
-  it('reads a call sent and not yet answered as submitted', async () => {
-    await expect(readClientCall(CALLER, HANDLE)).resolves.toEqual({ isOk: true, value: { handle: HANDLE, state: 'submitted' } });
+  it('reads a call sent and not yet answered as submitted, since it was sent', async () => {
+    await expect(readClientCall(CALLER, HANDLE)).resolves.toEqual({ isOk: true, value: { handle: HANDLE, createdAt: SENT_AT, updatedAt: SENT_AT, state: 'submitted' } });
   });
 
-  it('reads a completed call with its answer', async () => {
+  it('reads a completed call with its answer, since it came', async () => {
     await calls.addReply({ fleetId: FLEET_ID, messageId: MESSAGE_ID }, aCallReply({ contentType: 'text/plain', payload: 'Two deals.' }));
 
-    await expect(readClientCall(CALLER, HANDLE)).resolves.toEqual({ isOk: true, value: { handle: HANDLE, state: 'completed', answer: { contentType: 'text/plain', payload: 'Two deals.' } } });
+    await expect(readClientCall(CALLER, HANDLE)).resolves.toEqual({ isOk: true, value: { handle: HANDLE, createdAt: SENT_AT, updatedAt: new Date('2026-10-19T12:01:00.000Z'), state: 'completed', answer: { contentType: 'text/plain', payload: 'Two deals.' } } });
   });
 
-  it('reads a call past its deadline with no answer as failed', async () => {
+  it('reads a call past its deadline with no answer as failed, since its deadline', async () => {
     now = new Date('2026-10-19T12:10:00.000Z');
 
-    await expect(readClientCall(CALLER, HANDLE)).resolves.toEqual({ isOk: true, value: { handle: HANDLE, state: 'failed' } });
+    await expect(readClientCall(CALLER, HANDLE)).resolves.toEqual({ isOk: true, value: { handle: HANDLE, createdAt: SENT_AT, updatedAt: new Date('2026-10-19T12:10:00.000Z'), state: 'failed' } });
   });
 
   it.each([

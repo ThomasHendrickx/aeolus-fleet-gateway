@@ -84,7 +84,7 @@ describe("an outside MCP client's tool call is a message its proxy ship sends (i
   it("answers a handle once the fleet answered the send, and keeps the call under it, with the type its answer comes in and its deadline", async () => {
     const called = await callTool(CALLER, { name: 'a9cr2__list_deals', arguments: { contactId: 'c1' } });
 
-    expect(called).toEqual({ isOk: true, value: { handle: `handle(${FLEET_ID}:${MESSAGE_ID})`, state: 'submitted' } });
+    expect(called).toEqual({ isOk: true, value: { handle: `handle(${FLEET_ID}:${MESSAGE_ID})`, createdAt: NOW, updatedAt: NOW, state: 'submitted' } });
     expect(calls.held).toEqual([
       {
         fleetId: FLEET_ID,
@@ -177,7 +177,13 @@ describe('an outside MCP client waits a bounded time for the answer to its call 
 
     await expect(callToolWaiting(10_000)(CALLER, { name: 'a9cr2__list_deals', arguments: {} })).resolves.toEqual({
       isOk: true,
-      value: { handle: `handle(${FLEET_ID}:${MESSAGE_ID})`, state: 'completed', answer: { contentType: RESULT_TYPE, payload: '{"content":[]}' } },
+      value: {
+        handle: `handle(${FLEET_ID}:${MESSAGE_ID})`,
+        createdAt: NOW,
+        updatedAt: new Date('2026-10-19T12:00:00.250Z'),
+        state: 'completed',
+        answer: { contentType: RESULT_TYPE, payload: '{"content":[]}' },
+      },
     });
     expect(sleeps).toEqual([WAIT_POLL_MS]);
   });
