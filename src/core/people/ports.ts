@@ -30,6 +30,10 @@ export interface PersonShipDoor {
   pushReceive(crewToken: string, take: { max: number }): Promise<Result<PersonDelivery[], FleetRefusal>>;
   /** Acknowledges a delivery the person opened: their own act confirms it (interop 5.1). */
   ack(crewToken: string, deliveryId: DeliveryId): Promise<Result<void, FleetRefusal>>;
+  /** Sends the person's answer to the sender, in reply to its message, once under its key. */
+  reply(crewToken: string, reply: { to: ShipId; inReplyTo: MessageId; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<void, FleetRefusal>>;
+  /** Reports the person dealt with the delivery. */
+  handled(crewToken: string, deliveryId: DeliveryId): Promise<Result<void, FleetRefusal>>;
 }
 
 /**
@@ -53,4 +57,6 @@ export interface OpenedDeliveries {
   /** Keeps it, or keeps it as last opened when it was opened before. */
   save(opened: OpenedDelivery): Promise<void>;
   find(fleetId: FleetId, opened: { party: string; deliveryId: string }): Promise<OpenedDelivery | undefined>;
+  /** Forgets it once the person dealt with it. */
+  remove(fleetId: FleetId, opened: { party: string; deliveryId: string }): Promise<void>;
 }

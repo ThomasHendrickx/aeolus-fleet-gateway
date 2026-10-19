@@ -25,5 +25,8 @@ export function createPrismaOpenedDeliveries(db: Db): OpenedDeliveries {
           }
         : undefined;
     },
+    remove: async (fleetId, { party, deliveryId }) => {
+      await db.openedDelivery.deleteMany({ where: { fleetId, party, deliveryId } });
+    },
   };
 }

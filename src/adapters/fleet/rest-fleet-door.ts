@@ -197,6 +197,9 @@ export function createRestFleetDoor(
           : taken;
       },
       ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
+      reply: (crewToken, { to, inReplyTo, contentType, payload, idempotencyKey }) =>
+        done(crewToken, { path: '/ship/send', body: { selector: { kind: 'ship', shipId: to }, inReplyTo, contentType, payload, idempotencyKey } }),
+      handled: (crewToken, deliveryId) => done(crewToken, { path: '/ship/handled', body: { deliveryId } }),
     },
     handed: async (crewToken, handOver) => {
       const answered = await call({ path: '/ship/handed', method: 'POST', crewToken, body: handOver, answers: handedOutputSchema });

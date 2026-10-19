@@ -13,6 +13,8 @@ import type { CallTool } from '../../core/mcp-in/call-tool.js';
 import type { ListTools } from '../../core/mcp-in/list-tools.js';
 import type { ReadCall, ReadClientCall } from '../../core/mcp-in/read-client-call.js';
 import type { IsPerson } from '../../core/people/is-person.js';
+import type { AnswerDelivery } from '../../core/people/answer-delivery.js';
+import type { DoneDelivery } from '../../core/people/done-delivery.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import { isToolResultType } from '../../core/mcp-out/content-types.js';
@@ -33,6 +35,8 @@ export interface McpEndpointDeps {
   isPerson: IsPerson;
   readInbox: ReadInbox;
   openDelivery: OpenDelivery;
+  answerDelivery: AnswerDelivery;
+  doneDelivery: DoneDelivery;
 }
 
 /** The gateway's own tool: the answer to a call that answered a handle. */

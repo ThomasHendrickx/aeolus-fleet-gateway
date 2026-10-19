@@ -37,6 +37,8 @@ import { createCallTool } from './core/mcp-in/call-tool.js';
 import { createCollectReplies } from './core/mcp-in/collect-replies.js';
 import { createReadClientCall } from './core/mcp-in/read-client-call.js';
 import { createIsPerson } from './core/people/is-person.js';
+import { createAnswerDelivery } from './core/people/answer-delivery.js';
+import { createDoneDelivery } from './core/people/done-delivery.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadInbox } from './core/people/read-inbox.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
@@ -257,6 +259,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock }),
   });
   const listTools = createListTools({ parties, discovery: door, aliases: createShipAliases(options.gatewaySecret) });
+  const openedDeliveries = createPrismaOpenedDeliveries(prisma);
   registerMcpEndpoint(server, {
     issuer,
     authenticateAccessToken: createAuthenticateAccessToken({ tokens: issuedTokens, secrets: oauthSecrets, clock }),
@@ -265,7 +268,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readClientCall: createReadClientCall({ calls: clientCalls, clock }),
     isPerson: createIsPerson({ parties }),
     readInbox: createReadInbox({ parties, door: door.person }),
-    openDelivery: createOpenDelivery({ parties, door: door.person, opened: createPrismaOpenedDeliveries(prisma), clock }),
+    openDelivery: createOpenDelivery({ parties, door: door.person, opened: openedDeliveries, clock }),
+    answerDelivery: createAnswerDelivery({ parties, door: door.person, opened: openedDeliveries }),
+    doneDelivery: createDoneDelivery({ parties, door: door.person, opened: openedDeliveries }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.
