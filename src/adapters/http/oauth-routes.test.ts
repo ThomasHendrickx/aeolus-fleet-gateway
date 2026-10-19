@@ -14,6 +14,10 @@ import { createReadClientParty } from '../../core/parties/read-client-party.js';
 import { SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { plainHasher } from '../../../test/support/memory-installation.js';
 import { OWNER_SHIP_ID, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { aProviderMetadata, fakeProviderDiscovery, fakeProviderSignIn, GOOGLE_ISSUER, memoryIdentityProviders, memorySignIns } from '../../../test/support/federation-fakes.js';
+import { createCompleteSignIn } from '../../core/federation/complete-sign-in.js';
+import { createReadIdentityProvider } from '../../core/federation/read-identity-provider.js';
+import { createStartSignIn } from '../../core/federation/start-sign-in.js';
 import { registerOAuthRoutes } from './oauth-routes.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
@@ -35,6 +39,7 @@ const authenticateOperator: AuthenticateOperator = (cookie) => {
 
 let server: FastifyInstance;
 let parties: ReturnType<typeof memoryPartyStore>;
+let providers: ReturnType<typeof memoryIdentityProviders>;
 
 beforeEach(async () => {
   const clients = memoryOAuthClients();
@@ -47,8 +52,16 @@ beforeEach(async () => {
   const connections = memoryConnectionStore();
   await connections.save({ fleetId: FLEET, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-19T09:00:00.000Z') });
   const approveClientParty = createApproveClientParty({ connections, parties, door: fakeProxyShipFleet().door, hasher: plainHasher, clock });
+  providers = memoryIdentityProviders();
+  const discovery = fakeProviderDiscovery({ [GOOGLE_ISSUER]: aProviderMetadata(GOOGLE_ISSUER) });
+  const signIns = memorySignIns();
+  const providerSignIn = fakeProviderSignIn({ 'google-code': { issuer: GOOGLE_ISSUER, subject: '1078', email: 'charlotte@example.com' } });
+  const callbackUrl = `${ISSUER}/oidc/callback`;
   server = Fastify({ logger: false });
   registerOAuthRoutes(server, {
+    readIdentityProvider: createReadIdentityProvider({ providers }),
+    startSignIn: createStartSignIn({ readAuthorization, providers, discovery, signIns, secrets, clock, callbackUrl }),
+    completeSignIn: createCompleteSignIn({ signIns, providers, discovery, providerSignIn, secrets, clock, callbackUrl }),
     issuer: ISSUER,
     endpoints: fakeFleetEndpoints(),
     fleetUrl: 'https://fleet.example.com',
@@ -224,5 +237,57 @@ describe('a client takes its code for tokens at /token', () => {
     const answer = await token({ grant_type: 'authorization_code', code: 'unknown', redirect_uri: CALLBACK, code_verifier: 'verifier-1', client_id: CLIENT, client_secret: 'cursor-secret' });
 
     expect({ status: answer.statusCode, body: answer.json<unknown>() }).toMatchObject({ status: 400, body: { error: 'invalid_grant' } });
+  });
+});
+
+describe('a person signs in at /authorize with the fleet\'s identity provider (Q25: no console session)', () => {
+  /** argo set Google as the fleet's identity provider. */
+  async function withGoogle(): Promise<void> {
+    await providers.save({ fleetId: FLEET, issuer: GOOGLE_ISSUER, clientId: 'gateway.apps.googleusercontent.com', clientSecret: 'google-secret', setAt: new Date('2026-10-19T09:00:00.000Z') });
+  }
+
+  it("offers a caller with no session to sign in with the fleet's identity provider, and argo the console", async () => {
+    await withGoogle();
+
+    const page = await authorizePage(undefined);
+
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain(`href="/authorize/sign-in?${new URLSearchParams(REQUEST).toString().replaceAll('&', '&amp;')}"`);
+    expect(page.body).toContain('accounts.google.com');
+    expect(page.body).toContain('href="https://fleet.example.com"');
+  });
+
+  it('sends the person to the identity provider', async () => {
+    await withGoogle();
+
+    const answer = await server.inject({ url: `/authorize/sign-in?${new URLSearchParams(REQUEST).toString()}`, headers: { host: HOST } });
+
+    expect(answer.statusCode).toBe(302);
+    expect(answer.headers.location).toMatch(/^https:\/\/accounts\.google\.com\/o\/oauth2\/v2\/auth\?response_type=code&client_id=gateway\.apps\.googleusercontent\.com&/);
+  });
+
+  it('says on the page that people cannot sign in where the fleet has no identity provider', async () => {
+    const answer = await server.inject({ url: `/authorize/sign-in?${new URLSearchParams(REQUEST).toString()}`, headers: { host: HOST } });
+
+    expect(answer.statusCode).toBe(409);
+    expect(answer.body).toContain('no identity provider');
+  });
+
+  it("shows who the provider vouched for, and that argo has not given them this fleet's ship yet", async () => {
+    await withGoogle();
+    const started = await server.inject({ url: `/authorize/sign-in?${new URLSearchParams(REQUEST).toString()}`, headers: { host: HOST } });
+    const state = new URL(z.string().parse(started.headers.location)).searchParams.get('state');
+
+    const back = await server.inject({ url: `/oidc/callback?${new URLSearchParams({ state: z.string().parse(state), code: 'google-code' }).toString()}`, headers: { host: HOST } });
+
+    expect(back.statusCode).toBe(403);
+    expect(back.body).toContain('charlotte@example.com');
+  });
+
+  it('refuses a sign-in it did not start, saying why', async () => {
+    const back = await server.inject({ url: '/oidc/callback?state=forged&code=google-code', headers: { host: HOST } });
+
+    expect(back.statusCode).toBe(400);
+    expect(back.body).toContain('class="error"');
   });
 });

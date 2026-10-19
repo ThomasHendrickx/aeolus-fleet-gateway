@@ -3,7 +3,7 @@
  * pre-registers it, its party is crewed, argo approves it at /authorize with
  * a real console session, and it signs in.
  */
-import { idSchema } from '@aeolus-fleet/common';
+import { idSchema, type FleetId } from '@aeolus-fleet/common';
 import { auth, type OAuthClientProvider, type StoredOAuthTokens } from '@modelcontextprotocol/client';
 import { expect } from 'vitest';
 import { z } from 'zod';
@@ -87,16 +87,29 @@ export async function approved(setting: Setting, sentTo: URL): Promise<{ code: s
  * ship in the console, the party is kept awaiting crew as the gateway's
  * commission leaves it, and argo hands its secret over with parties.crew.
  */
-export async function aCrewedClientParty(setting: Setting, clientId: string): Promise<{ proxyShipId: string }> {
+/**
+ * The gateway connected to the test's fleet, as connection.connect leaves it:
+ * its ship's crew token, without the networking plugin connect checks for.
+ * The fleet's MCP endpoint is served from then on. Its fleet.
+ */
+export async function aConnectedGateway(setting: Setting): Promise<FleetId> {
   const { fleet, cookie } = setting;
-  const proxy = await commission(fleet, { cookie, ship: { name: 'test-client', type: 'mcp-client', kind: 'app' } });
-  const owner = await commission(fleet, { cookie, ship: { name: 'owner', type: 'agent' } });
-  const whoami = await fetch(`${fleet.url}/api/v1/ship/whoami`, { headers: { authorization: `Bearer ${await register(fleet, owner)}` } });
+  const gateway = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway' } });
+  const crewToken = await register(fleet, gateway);
+  const whoami = await fetch(`${fleet.url}/api/v1/ship/whoami`, { headers: { authorization: `Bearer ${crewToken}` } });
   const { fleetId } = z.object({ fleetId: idSchema('fleet') }).parse(await whoami.json());
   const prisma = createPrismaClient(setting.databaseUrl);
-  // The gateway connected to the fleet, as connection.connect leaves it: its ship's crew token, without the networking plugin connect checks for.
-  const gateway = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway' } });
-  await createPrismaConnectionStore(prisma).save({ fleetId, shipId: gateway.shipId, name: 'gateway', crewToken: await register(fleet, gateway), crewedAt: new Date() });
+  await createPrismaConnectionStore(prisma).save({ fleetId, shipId: gateway.shipId, name: 'gateway', crewToken, crewedAt: new Date() });
+  await prisma.$disconnect();
+  return fleetId;
+}
+
+export async function aCrewedClientParty(setting: Setting, clientId: string): Promise<{ proxyShipId: string }> {
+  const { fleet, cookie } = setting;
+  const fleetId = await aConnectedGateway(setting);
+  const proxy = await commission(fleet, { cookie, ship: { name: 'test-client', type: 'mcp-client', kind: 'app' } });
+  const owner = await commission(fleet, { cookie, ship: { name: 'owner', type: 'agent' } });
+  const prisma = createPrismaClient(setting.databaseUrl);
   await createPrismaPartyStore(prisma).save({
     fleetId,
     name: 'test-client',

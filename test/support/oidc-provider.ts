@@ -5,6 +5,24 @@ import { OIDC_PROVIDER_IMAGE } from './container-images.js';
 /** The provider's port in its container. */
 const PORT = 8080;
 
+/** The gateway's client at the test provider, as argo registers it there. */
+export const PROVIDER_CLIENT_ID = 'gateway';
+
+/** The person the provider at `company` signs in, whoever asks: as a company's provider vouches for its employee. */
+export const CHARLOTTE = { subject: 'charlotte-sub', email: 'charlotte@example.com' };
+
+/** Signs in without a login page (the provider's non-interactive mode), so a test follows the redirects alone. */
+const CONFIGURATION = JSON.stringify({
+  interactiveLogin: false,
+  tokenCallbacks: [
+    {
+      issuerId: 'company',
+      tokenExpiry: 3600,
+      requestMappings: [{ requestParam: 'client_id', match: '*', claims: { sub: CHARLOTTE.subject, email: CHARLOTTE.email, email_verified: true, aud: [PROVIDER_CLIENT_ID] } }],
+    },
+  ],
+});
+
 /**
  * A company identity provider for the tests: navikt's mock OAuth2 server, a
  * real OpenID provider that serves any issuer id under its root and signs in
@@ -14,7 +32,7 @@ const PORT = 8080;
 class OidcProviderContainer extends GenericContainer {
   constructor() {
     super(OIDC_PROVIDER_IMAGE);
-    this.withExposedPorts(PORT).withWaitStrategy(Wait.forHttp('/default/.well-known/openid-configuration', PORT));
+    this.withExposedPorts(PORT).withEnvironment({ JSON_CONFIG: CONFIGURATION }).withWaitStrategy(Wait.forHttp('/default/.well-known/openid-configuration', PORT));
     this.hostConfig.PidsLimit = 4096;
   }
 }

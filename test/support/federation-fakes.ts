@@ -1,7 +1,8 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
 import type { IdentityProvider, ProviderMetadata } from '../../src/core/federation/identity-provider.js';
-import type { IdentityProviders, ProviderDiscovery } from '../../src/core/federation/ports.js';
+import type { IdentityProviders, ProviderDiscovery, ProviderSignIn, SignIns } from '../../src/core/federation/ports.js';
+import type { SignedInPerson, SignIn } from '../../src/core/federation/sign-in.js';
 import { err, ok } from '../../src/core/shared/result.js';
 
 /** The company's identity provider in the tests, as Google states itself. */
@@ -40,6 +41,36 @@ export function memoryIdentityProviders(): IdentityProviders & { held: Map<Fleet
     save: (provider) => {
       held.set(provider.fleetId, provider);
       return Promise.resolve();
+    },
+  };
+}
+
+/** The sign-ins under way in memory, by their state's hash; each taken once. */
+export function memorySignIns(): SignIns & { held: Map<string, SignIn> } {
+  const held = new Map<string, SignIn>();
+  return {
+    held,
+    save: (signIn) => {
+      held.set(signIn.stateHash, signIn);
+      return Promise.resolve();
+    },
+    take: (stateHash) => {
+      const signIn = held.get(stateHash);
+      held.delete(stateHash);
+      return Promise.resolve(signIn);
+    },
+  };
+}
+
+/** An identity provider's answers to the gateway's sign-ins: the person each code signs in, checked against the sign-in's verifier and nonce. */
+export function fakeProviderSignIn(people: Readonly<Record<string, SignedInPerson>>): ProviderSignIn & { completed: Parameters<ProviderSignIn['complete']>[0][] } {
+  const completed: Parameters<ProviderSignIn['complete']>[0][] = [];
+  return {
+    completed,
+    complete: (input) => {
+      completed.push(input);
+      const person = people[input.code];
+      return Promise.resolve(person ? ok(person) : err({ reason: 'the token endpoint answered invalid_grant' }));
     },
   };
 }

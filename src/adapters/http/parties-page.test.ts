@@ -93,7 +93,7 @@ beforeEach(async () => {
   stated = [];
   providers = [];
   server = Fastify({ logger: false });
-  registerPartiesPage(server, { contextFor, fleetUrl: 'https://fleet.example.com' });
+  registerPartiesPage(server, { contextFor, fleetUrl: 'https://fleet.example.com', signInCallbackUrl: 'https://gateway.example.com/oidc/callback' });
   await server.ready();
 });
 
@@ -214,5 +214,11 @@ describe("the gateway's page of parties, for argo signed in to the console", () 
     const page = await server.inject({ url: '/parties', headers: { host: HOST, cookie: ARGO } });
 
     expect(page.body).toContain('https://gateway.example.com/fleets/fleetaaa/mcp');
+  });
+
+  it('shows the redirect URI argo registers at the identity provider for the gateway', async () => {
+    const page = await server.inject({ url: '/parties', headers: { host: HOST, cookie: ARGO } });
+
+    expect(page.body).toContain('https://gateway.example.com/oidc/callback');
   });
 });
