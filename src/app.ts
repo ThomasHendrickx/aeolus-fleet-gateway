@@ -29,6 +29,10 @@ import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerPartiesPage } from './adapters/http/parties-page.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
+import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
+import { createShipAliases } from './adapters/crypto/ship-aliases.js';
+import { createListTools } from './core/mcp-in/list-tools.js';
+import { createAuthenticateAccessToken } from './core/oauth/authenticate-access-token.js';
 import { oauthSecrets } from './adapters/crypto/oauth-secrets.js';
 import { createClientMetadataDocuments } from './adapters/oauth/client-metadata-documents.js';
 import { createPrismaAuthorizationCodes, createPrismaIssuedTokens, createPrismaOAuthClients } from './adapters/prisma/oauth-stores.js';
@@ -64,6 +68,8 @@ export interface GatewayAppOptions {
   installationToken?: string;
   /** Where outside MCP clients reach the gateway: the OAuth issuer, with the MCP endpoint at /mcp. */
   publicUrl?: string;
+  /** Keys ship aliases, result handles and idempotency keys: the same secret keeps every ship's alias across restarts. */
+  gatewaySecret: string;
   /** How long the gateway waits for an outside tool's answer before the call counts as unanswered: 5 minutes unless set. */
   toolCallTimeoutMs?: number;
 }
@@ -170,6 +176,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const authorizationCodes = createPrismaAuthorizationCodes(prisma);
   const readAuthorization = createReadAuthorization({ clients: oauthClients, documents: createClientMetadataDocuments({ timeoutMs: CLIENT_METADATA_TIMEOUT_MS }), resource });
   const registerClient = createRegisterClient({ clients: oauthClients, secrets: oauthSecrets });
+  const issuedTokens = createPrismaIssuedTokens(prisma);
   registerOAuthRoutes(server, {
     issuer,
     resource,
@@ -186,7 +193,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       approveClientParty: createApproveClientParty({ connections, parties, door, hasher: sha256RequestHasher, clock }),
     }),
     readClientParty: createReadClientParty({ parties }),
-    exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: createPrismaIssuedTokens(prisma), secrets: oauthSecrets, clock, resource }),
+    exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
+  });
+  registerMcpEndpoint(server, {
+    resource,
+    authenticateAccessToken: createAuthenticateAccessToken({ tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
+    listTools: createListTools({ parties, discovery: door, aliases: createShipAliases(options.gatewaySecret) }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.

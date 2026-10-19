@@ -10,6 +10,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import {
   busyWaitMs,
   commissionShipOutputSchema,
+  discoverOutputSchema,
   FLEET_BUSY_WAITS_MS,
   fleetListOutputSchema,
   handedOutputSchema,
@@ -21,6 +22,7 @@ import {
 import { z } from 'zod';
 
 import type { FleetDoor, FleetRefusal } from '../../core/connection/ports.js';
+import type { Discovery } from '../../core/mcp-in/ports.js';
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
@@ -97,7 +99,7 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew {
+): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   const done = async (crewToken: string, request: { path: string; body: unknown }) => {
@@ -179,6 +181,10 @@ export function createRestFleetDoor(
     // Core 0.27 answers no call the gateway's ship may make with whether a
     // networking plugin is registered, so a crewed ship of the networking
     // plugin's type stands in for it until core answers it itself.
+    discover: async (crewToken) => {
+      const found = await call({ path: '/ship/discover', method: 'GET', crewToken, answers: discoverOutputSchema });
+      return found.isOk ? ok(found.value.ships.map(({ id, kind, statement }) => ({ shipId: id, kind, statement }))) : found;
+    },
     hasNetworkingPlugin: async (crewToken) => {
       const listed = await call({ path: '/fleet/list', method: 'POST', crewToken, body: {}, answers: fleetListOutputSchema });
       return listed.isOk ? ok(listed.value.some((ship) => ship.type === NETWORKING_PLUGIN_TYPE && ship.status === 'crewed')) : listed;

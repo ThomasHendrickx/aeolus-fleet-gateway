@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { aFreePort, aNewDatabaseUrl, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { runGateway } from './support/gateway-bin.js';
+import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
 let fleet: FleetServer;
 const started: ChildProcess[] = [];
@@ -23,7 +24,7 @@ describe('aeolus-gateway start and migrate', () => {
   it('start migrates its database, then answers healthy', async () => {
     const port = await aFreePort();
     const child = spawn('npx', ['tsx', 'src/bin/aeolus-gateway.ts', 'start'], {
-      env: { ...process.env, DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'), FLEET_URL: fleet.url, PORT: String(port), LOG_LEVEL: 'silent' },
+      env: { ...process.env, DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'), FLEET_URL: fleet.url, PORT: String(port), LOG_LEVEL: 'silent', GATEWAY_SECRET: TEST_GATEWAY_SECRET },
       stdio: 'ignore',
     });
     started.push(child);

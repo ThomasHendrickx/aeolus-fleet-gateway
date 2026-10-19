@@ -3,9 +3,13 @@ import { z } from 'zod';
 /** The shortest installation token the gateway takes, as the server does (decision 0020). */
 const INSTALLATION_TOKEN_MIN_LENGTH = 32;
 
+/** The shortest gateway secret: 32 characters, as long as the HMAC keys it makes. */
+const GATEWAY_SECRET_MIN_LENGTH = 32;
+
 const environmentSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// or postgresql:// URL' }),
   FLEET_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }),
+  GATEWAY_SECRET: z.string().min(GATEWAY_SECRET_MIN_LENGTH, { error: `must hold at least ${String(GATEWAY_SECRET_MIN_LENGTH)} characters` }),
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(0).max(65_535).default(4200),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -35,6 +39,8 @@ export interface Config {
    * MCP endpoint below it. This machine at the gateway's port unless set.
    */
   publicUrl: string;
+  /** Keys what the gateway derives: ship aliases, result handles and idempotency keys. Changing it renames every ship to outside clients. */
+  gatewaySecret: string;
 }
 
 export class ConfigError extends Error {
@@ -60,6 +66,7 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     logLevel: variables.LOG_LEVEL,
     installationToken: variables.INSTALLATION_TOKEN,
     publicUrl: (variables.GATEWAY_PUBLIC_URL ?? `http://127.0.0.1:${String(variables.PORT)}`).replace(/\/$/, ''),
+    gatewaySecret: variables.GATEWAY_SECRET,
   };
 }
 

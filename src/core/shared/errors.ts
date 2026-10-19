@@ -19,7 +19,8 @@ export type DomainErrorKind =
   | 'SERVER_UNREACHABLE'
   | 'STATEMENT_REFUSED'
   | 'INVALID_REDIRECT_URIS'
-  | 'CLIENT_HAS_PARTY';
+  | 'CLIENT_HAS_PARTY'
+  | 'PARTY_NOT_CREWED';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {
