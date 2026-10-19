@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
+import { fakeClientMetadataDocuments, fakeFleetEndpoints, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { createApproveAuthorization } from '../../core/oauth/approve-authorization.js';
 import { createExchangeToken } from '../../core/oauth/exchange-token.js';
 import { createReadAuthorization } from '../../core/oauth/read-authorization.js';
@@ -42,7 +42,7 @@ beforeEach(async () => {
   const codes = memoryAuthorizationCodes();
   const secrets = fakeSecrets();
   const clock = { now: () => new Date('2026-10-19T09:00:00.000Z') };
-  const readAuthorization = createReadAuthorization({ clients, documents: fakeClientMetadataDocuments(), resource: RESOURCE });
+  const readAuthorization = createReadAuthorization({ clients, documents: fakeClientMetadataDocuments(), endpoints: fakeFleetEndpoints() });
   parties = memoryPartyStore();
   const connections = memoryConnectionStore();
   await connections.save({ fleetId: FLEET, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-19T09:00:00.000Z') });
@@ -50,13 +50,13 @@ beforeEach(async () => {
   server = Fastify({ logger: false });
   registerOAuthRoutes(server, {
     issuer: ISSUER,
-    resource: RESOURCE,
+    endpoints: fakeFleetEndpoints(),
     fleetUrl: 'https://fleet.example.com',
     authenticateOperator,
     readAuthorization,
     approveAuthorization: createApproveAuthorization({ readAuthorization, codes, secrets, clock, issuer: ISSUER, parties, approveClientParty }),
     readClientParty: createReadClientParty({ parties }),
-    exchangeToken: createExchangeToken({ clients, codes, tokens: memoryIssuedTokens(), secrets, clock, resource: RESOURCE }),
+    exchangeToken: createExchangeToken({ clients, codes, tokens: memoryIssuedTokens(), secrets, clock }),
   });
   await server.ready();
 });
@@ -91,10 +91,16 @@ function token(form: Record<string, string>, headers: Record<string, string> = {
 const tokenAnswer = z.object({ access_token: z.string(), token_type: z.literal('Bearer'), expires_in: z.number(), refresh_token: z.string() });
 
 describe("the gateway's OAuth metadata", () => {
-  it.each(['/.well-known/oauth-protected-resource/mcp', '/.well-known/oauth-protected-resource'])('names its authorization server for the MCP endpoint at %s (RFC 9728)', async (path) => {
-    const answer = await server.inject({ url: path });
+  it("names its authorization server for a fleet's MCP endpoint (RFC 9728)", async () => {
+    const answer = await server.inject({ url: '/.well-known/oauth-protected-resource/fleets/fleetaaa/mcp' });
 
     expect(answer.json()).toEqual({ resource: RESOURCE, authorization_servers: [ISSUER], bearer_methods_supported: ['header'] });
+  });
+
+  it.each(['/.well-known/oauth-protected-resource/fleets/fleetzzz/mcp', '/.well-known/oauth-protected-resource/mcp', '/.well-known/oauth-protected-resource'])('knows no protected resource at %s: no fleet has that MCP endpoint', async (path) => {
+    const answer = await server.inject({ url: path });
+
+    expect(answer.statusCode).toBe(404);
   });
 
   it('states what the authorization server serves (RFC 8414)', async () => {

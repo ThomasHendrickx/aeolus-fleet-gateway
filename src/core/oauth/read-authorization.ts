@@ -2,7 +2,7 @@ import type { FleetId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
 import { err, ok, type Result } from '../shared/result.js';
-import type { ClientMetadataDocuments, OAuthClients, OAuthErrorCode } from './ports.js';
+import type { ClientMetadataDocuments, FleetEndpoints, OAuthClients, OAuthErrorCode } from './ports.js';
 import { isLoopback, isRedirectUri } from './redirect-uri.js';
 
 /** An authorization request the gateway read and found valid, for argo to approve or deny. */
@@ -11,6 +11,8 @@ export interface AuthorizationRequest {
   readonly clientName: string;
   /** The fleet a pre-registered client belongs to; null for a client known by its metadata document. */
   readonly clientFleetId: FleetId | null;
+  /** The fleet whose MCP endpoint the request asks a token for. */
+  readonly fleetId: FleetId;
   readonly redirectUri: string;
   readonly codeChallenge: string;
   readonly resource: string;
@@ -58,10 +60,11 @@ interface KnownClient {
  * Use case: the gateway reads an authorization request from an MCP client
  * (OAuth 2.1 with PKCE, MCP 2026-07-28). The client is pre-registered, or
  * known by its metadata document (CIMD), fetched from its client id. Only
- * the S256 challenge is taken, and the resource must be the gateway's MCP
- * endpoint (RFC 8707), so a token is bound to it.
+ * the S256 challenge is taken, and the resource must be a fleet's MCP
+ * endpoint (RFC 8707), so a token is bound to it; a pre-registered client
+ * asks only for its own fleet's.
  */
-export function createReadAuthorization(deps: { clients: OAuthClients; documents: ClientMetadataDocuments; resource: string }): ReadAuthorization {
+export function createReadAuthorization(deps: { clients: OAuthClients; documents: ClientMetadataDocuments; endpoints: FleetEndpoints }): ReadAuthorization {
   const knownClient = async (clientId: string): Promise<Result<KnownClient, string>> => {
     const url = metadataDocumentUrl(clientId);
     if (url === undefined) {
@@ -101,9 +104,14 @@ export function createReadAuthorization(deps: { clients: OAuthClients; documents
     if (codeChallenge === undefined || codeChallenge === '' || request.code_challenge_method !== 'S256') {
       return sendBack('invalid_request', 'A PKCE code challenge with the S256 method is required');
     }
-    if (request.resource !== deps.resource) {
-      return sendBack('invalid_target', `The resource must be ${deps.resource}`);
+    const resource = request.resource;
+    const fleetId = resource === undefined ? undefined : await deps.endpoints.fleetOf(resource);
+    if (resource === undefined || fleetId === undefined) {
+      return sendBack('invalid_target', "The resource must be a fleet's MCP endpoint at this gateway");
     }
-    return ok({ clientId, clientName: client.value.name, clientFleetId: client.value.fleetId, redirectUri, codeChallenge, resource: deps.resource, scope: request.scope ?? null, state });
+    if (client.value.fleetId !== null && client.value.fleetId !== fleetId) {
+      return err({ kind: 'invalidClient', message: `${client.value.name} is registered for another fleet` });
+    }
+    return ok({ clientId, clientName: client.value.name, clientFleetId: client.value.fleetId, fleetId, redirectUri, codeChallenge, resource, scope: request.scope ?? null, state });
   };
 }

@@ -4,7 +4,7 @@ import { FLEET_ID, OTHER_FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../
 import { plainHasher } from '../../../test/support/memory-installation.js';
 import { OWNER_SHIP_ID, PROXY_SHIP_ID, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { createApproveClientParty } from '../parties/approve-party.js';
-import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
+import { fakeClientMetadataDocuments, fakeFleetEndpoints, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryOAuthClients, OTHER_RESOURCE, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { createApproveAuthorization } from './approve-authorization.js';
 import { createReadAuthorization } from './read-authorization.js';
 
@@ -30,7 +30,7 @@ beforeEach(async () => {
     [CIMD_CLIENT]: { client_id: CIMD_CLIENT, client_name: 'Claude', redirect_uris: [CALLBACK], token_endpoint_auth_method: 'none' },
   });
   codes = memoryAuthorizationCodes();
-  readAuthorization = createReadAuthorization({ clients, documents, resource: RESOURCE });
+  readAuthorization = createReadAuthorization({ clients, documents, endpoints: fakeFleetEndpoints() });
   fleet = fakeProxyShipFleet();
   parties = memoryPartyStore();
   const connections = memoryConnectionStore();
@@ -58,10 +58,10 @@ function aRequest(overrides: Record<string, string | undefined> = {}): Record<st
 }
 
 describe('the gateway reads an authorization request (OAuth 2.1, MCP 2026-07-28)', () => {
-  it('reads a client from its metadata document (CIMD), for argo to approve', async () => {
+  it("reads a client from its metadata document (CIMD), for argo to approve, and the fleet whose MCP endpoint it asks for", async () => {
     await expect(readAuthorization(aRequest())).resolves.toEqual({
       isOk: true,
-      value: { clientId: CIMD_CLIENT, clientName: 'Claude', clientFleetId: null, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-1)', resource: RESOURCE, scope: null, state: 'state-1' },
+      value: { clientId: CIMD_CLIENT, clientName: 'Claude', clientFleetId: null, fleetId: FLEET_ID, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-1)', resource: RESOURCE, scope: null, state: 'state-1' },
     });
   });
 
@@ -83,7 +83,7 @@ describe('the gateway reads an authorization request (OAuth 2.1, MCP 2026-07-28)
 
   it('refuses a metadata document naming another client id', async () => {
     documents = fakeClientMetadataDocuments({ [CIMD_CLIENT]: { client_id: 'https://other.example.com/client.json', redirect_uris: [CALLBACK] } });
-    readAuthorization = createReadAuthorization({ clients, documents, resource: RESOURCE });
+    readAuthorization = createReadAuthorization({ clients, documents, endpoints: fakeFleetEndpoints() });
 
     await expect(readAuthorization(aRequest())).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
   });
@@ -93,7 +93,8 @@ describe('the gateway reads an authorization request (OAuth 2.1, MCP 2026-07-28)
     { what: 'no code challenge', overrides: { code_challenge: undefined }, error: 'invalid_request' },
     { what: 'the plain challenge method', overrides: { code_challenge_method: 'plain' }, error: 'invalid_request' },
     { what: 'no resource', overrides: { resource: undefined }, error: 'invalid_target' },
-    { what: 'another resource', overrides: { resource: 'https://other.example.com/mcp' }, error: 'invalid_target' },
+    { what: 'a resource that is no MCP endpoint of a fleet', overrides: { resource: 'https://other.example.com/mcp' }, error: 'invalid_target' },
+    { what: 'the single MCP endpoint of before', overrides: { resource: `${ISSUER}/mcp` }, error: 'invalid_target' },
   ])('sends the client back with an error for $what', async ({ overrides, error }) => {
     await expect(readAuthorization(aRequest(overrides))).resolves.toMatchObject({ isOk: false, error: { kind: 'redirect', redirectUri: CALLBACK, error, state: 'state-1' } });
   });
@@ -137,13 +138,22 @@ describe('argo approves an authorization request', () => {
     expect(codes.held.size).toBe(0);
   });
 
+  it("refuses a request for another fleet's MCP endpoint than argo's, issuing no code", async () => {
+    await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest({ resource: OTHER_RESOURCE }), isApproved: true, newParty: NEW_PARTY })).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
+    expect(codes.held.size).toBe(0);
+  });
+
+  it("refuses a pre-registered client at another fleet's MCP endpoint than its own", async () => {
+    await expect(readAuthorization(aRequest({ client_id: 'client-cursor', redirect_uri: 'https://cursor.example.com/callback', resource: OTHER_RESOURCE }))).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
+  });
+
   it('reads the request again, so a changed request is refused as any is', async () => {
     await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest({ redirect_uri: 'https://evil.example.com/callback' }), isApproved: true, newParty: NEW_PARTY })).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
   });
 
   it('keeps a redirect URI query, adding the code to it', async () => {
     documents = fakeClientMetadataDocuments({ [CIMD_CLIENT]: { client_id: CIMD_CLIENT, redirect_uris: [`${CALLBACK}?tenant=a`] } });
-    readAuthorization = createReadAuthorization({ clients, documents, resource: RESOURCE });
+    readAuthorization = createReadAuthorization({ clients, documents, endpoints: fakeFleetEndpoints() });
     approving(createApproveClientParty({ connections: memoryConnectionStoreWith(), parties, door: fleet.door, hasher: plainHasher, clock: { now: () => AT } }));
 
     await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest({ redirect_uri: `${CALLBACK}?tenant=a`, state: undefined }), isApproved: true, newParty: NEW_PARTY })).resolves.toEqual({

@@ -15,7 +15,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 | `FLEET_URL` | required | The fleet's public URL (`http://` or `https://`) |
 | `HOST` | `127.0.0.1` | Interface to listen on |
 | `PORT` | `4200` | Port to listen on |
-| `GATEWAY_PUBLIC_URL` | `http://127.0.0.1:<PORT>` | Where outside MCP clients reach the gateway: the OAuth issuer, with the MCP endpoint at `/mcp` |
+| `GATEWAY_PUBLIC_URL` | `http://127.0.0.1:<PORT>` | Where outside MCP clients reach the gateway: the OAuth issuer, with each fleet's MCP endpoint at `/fleets/<alias>/mcp` |
 | `GATEWAY_SECRET` | required | At least 32 characters. Keys the ship aliases outside MCP clients see: the same secret keeps every alias across restarts, a new one renames every ship to them |
 | `MCP_WAIT_MAX_MS` | `10000` | How long an outside MCP client's tool call waits for its answer before it is answered its handle; `0` answers the handle at once |
 | `INSTALLATION_TOKEN` | unset | The token a hosting service presents to the installation procedures (at least 32 characters, decision 0021). Unset: they are off and every fleet is served, as a self-hosted gateway needs; set: a fleet is served once switched on |
@@ -62,9 +62,10 @@ With core 0.27 the not handled report is refused (aeolus-fleet#955): the call is
 
 The gateway is an OAuth 2.1 authorization server for outside MCP clients, such as Claude, ChatGPT or Cursor (MCP 2026-07-28):
 
-- `/.well-known/oauth-protected-resource` (RFC 9728) names the gateway as the authorization server of its MCP endpoint, `<GATEWAY_PUBLIC_URL>/mcp`; `/.well-known/oauth-authorization-server` (RFC 8414) states what it serves.
+- Each fleet has its own MCP endpoint, `<GATEWAY_PUBLIC_URL>/fleets/<alias>/mcp`, the one URL its MCP clients connect to (interop 1). The alias is 8 letters and digits derived from the fleet under `GATEWAY_SECRET`, so the URL names no fleet id. A fleet has one while the gateway is connected to it; `mcp.endpoint` (argo's or a viewer's console session) and the page of parties show it.
+- `/.well-known/oauth-protected-resource/fleets/<alias>/mcp` (RFC 9728) names the gateway as the authorization server of that endpoint; `/.well-known/oauth-authorization-server` (RFC 8414) states what it serves.
 - A client is pre-registered by argo with `oauth.registerClient` (its name, its redirect URIs, and whether it keeps a secret, answered once), or known by its client metadata document (CIMD): its client id is the https URL of that document. There is no dynamic registration.
-- At `/authorize` argo approves or denies each request, signed in to the console; a viewer session cannot. Only the authorization code flow with PKCE S256 is served, and the `resource` must be the gateway's MCP endpoint (RFC 8707).
+- At `/authorize` argo approves or denies each request, signed in to the console; a viewer session cannot. Only the authorization code flow with PKCE S256 is served, and the `resource` must be a fleet's MCP endpoint (RFC 8707): argo approves only for argo's own fleet, and a pre-registered client asks only for its own fleet's. A token is taken only at the endpoint it was issued for.
 - Each client is a party with its own app proxy ship, of type `mcp-client`: at a client's first approval argo names the ship and its owner, and the gateway commissions and crews it before issuing the code. Later approvals take that party with one click. Every token names its party, so every fleet call the client makes is its proxy ship's, within its reach. `parties.list` shows client parties beside server parties.
 - `/token` takes a code once, within its minute, for an access token (one hour) and a refresh token (30 days). Refreshing rotates the pair; a code or a refresh token used twice revokes what it gave.
 
@@ -74,7 +75,7 @@ Serve the gateway at its own origin, such as `https://gateway.example.com`, with
 
 ## MCP clients list and call tools
 
-`<GATEWAY_PUBLIC_URL>/mcp` is the gateway's MCP endpoint (Streamable HTTP, stateless). A call without a token, or with one the gateway did not issue for it, gets 401 with `resource_metadata` naming where to sign in (RFC 9728).
+A fleet's MCP endpoint is served over Streamable HTTP, stateless. A call without a token, or with one the gateway did not issue for that fleet's endpoint, gets 401 with `resource_metadata` naming where to sign in (RFC 9728).
 
 - `tools/list` answers the capabilities of the ships the client's proxy ship may send to now, as the fleet's `discover` answers it: the gateway adds no reach of its own.
 - A tool is named `<alias>__<capability>`. The alias is 8 letters and digits derived from the ship under `GATEWAY_SECRET`: the client never sees a ship's name or id.
