@@ -26,6 +26,8 @@ import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListParties } from '../../core/parties/list-parties.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { StateParty } from '../../core/mcp-out/state-party.js';
+import type { ReadIdentityProvider } from '../../core/federation/read-identity-provider.js';
+import type { SetIdentityProvider } from '../../core/federation/set-identity-provider.js';
 import type { RegisterClient } from '../../core/oauth/register-client.js';
 
 export interface Context {
@@ -49,6 +51,8 @@ export interface Context {
   stateParty: StateParty;
   markTool: MarkTool;
   registerClient: RegisterClient;
+  setIdentityProvider: SetIdentityProvider;
+  readIdentityProvider: ReadIdentityProvider;
 }
 
 /** What a caller reads of a failure: nothing of it, so no crew token, secret or query ever leaves; the log holds it whole. */
@@ -115,6 +119,12 @@ const servedProcedure = operatorProcedure.use(async ({ ctx, next }) => {
   await refuseUnlessServed(ctx);
   return next();
 });
+
+/** The longest client id or secret argo sets for an identity provider: far over any provider's, and bounded. */
+const PROVIDER_CLIENT_FIELD_MAX_LENGTH = 2048;
+
+/** An identity provider as the API answers it: never its secret. */
+const shownIdentityProviderSchema = z.object({ issuer: z.string(), clientId: z.string(), setAt: z.date().transform((date) => date.toISOString()) });
 
 /** The refusals of connecting, as the API states them. */
 const CONNECT_CODES = {
@@ -286,6 +296,26 @@ export const gatewayRouter = t.router({
         }
         return stated.value;
       }),
+  }),
+  identityProvider: t.router({
+    /**
+     * argo sets the fleet's company identity provider, which people sign in
+     * with (interop I-4): its issuer, and the gateway's client id and secret
+     * there. Kept once its OpenID configuration names that issuer; the secret
+     * is never answered.
+     */
+    set: managing(servedProcedure)
+      .input(z.strictObject({ issuer: z.string(), clientId: z.string().min(1).max(PROVIDER_CLIENT_FIELD_MAX_LENGTH), clientSecret: z.string().min(1).max(PROVIDER_CLIENT_FIELD_MAX_LENGTH) }))
+      .output(shownIdentityProviderSchema)
+      .mutation(async ({ ctx, input }) => {
+        const set = await ctx.setIdentityProvider({ fleetId: ctx.fleetId, ...input });
+        if (!set.isOk) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: set.error.message });
+        }
+        return set.value;
+      }),
+    /** The fleet's identity provider without its secret, or none. */
+    get: servedProcedure.output(shownIdentityProviderSchema.nullable()).query(({ ctx }) => ctx.readIdentityProvider(ctx.fleetId)),
   }),
   oauth: t.router({
     /**
