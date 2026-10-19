@@ -51,13 +51,13 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
 /** The deliveries people opened, in memory, by fleet, party and delivery. */
 export function memoryOpenedDeliveries(): OpenedDeliveries & { held: Map<string, OpenedDelivery> } {
   const held = new Map<string, OpenedDelivery>();
-  const key = (fleetId: FleetId, party: string, deliveryId: string) => `${fleetId}/${party}/${deliveryId}`;
+  const key = (fleetId: FleetId, { party, deliveryId }: { party: string; deliveryId: string }) => `${fleetId}/${party}/${deliveryId}`;
   return {
     held,
     save: (opened) => {
-      held.set(key(opened.fleetId, opened.party, opened.deliveryId), opened);
+      held.set(key(opened.fleetId, opened), opened);
       return Promise.resolve();
     },
-    find: (fleetId, { party, deliveryId }) => Promise.resolve(held.get(key(fleetId, party, deliveryId))),
+    find: (fleetId, opened) => Promise.resolve(held.get(key(fleetId, opened))),
   };
 }

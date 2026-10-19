@@ -221,3 +221,18 @@ model SignIn {
   @@index([fleetId])
   @@map("sign_ins")
 }
+
+/// The deliveries people opened, until they deal with them (Q28 (a)): what an answer needs once the delivery is acknowledged, never its payload.
+model OpenedDelivery {
+  fleetId      String   @map("fleet_id")
+  party        String
+  deliveryId   String   @map("delivery_id")
+  messageId    String   @map("message_id")
+  senderShipId String   @map("sender_ship_id")
+  from         String
+  title        String
+  openedAt     DateTime @map("opened_at") @db.Timestamptz(3)
+
+  @@id([fleetId, party, deliveryId])
+  @@map("opened_deliveries")
+}

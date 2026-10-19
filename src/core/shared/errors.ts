@@ -29,6 +29,7 @@ export type DomainErrorKind =
   | 'INVALID_ISSUER'
   | 'PROVIDER_UNUSABLE'
   | 'NOT_A_PERSON'
+  | 'NO_SUCH_DELIVERY'
   | 'PERSON_EXISTS';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */

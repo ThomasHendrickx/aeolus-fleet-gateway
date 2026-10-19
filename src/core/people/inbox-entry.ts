@@ -14,7 +14,7 @@ export interface InboxEntry {
 }
 
 /** A question's own title; any other message's first line, cut to the longest title. */
-function titleOf(delivery: PersonDelivery): string {
+export function titleOf(delivery: PersonDelivery): string {
   const title = delivery.questionTitle ?? delivery.payload.split('\n', 1)[0] ?? '';
   return title.length > TITLE_MAX_LENGTH ? `${title.slice(0, TITLE_MAX_LENGTH - 1)}…` : title;
 }
