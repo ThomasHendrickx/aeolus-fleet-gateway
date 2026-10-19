@@ -49,6 +49,7 @@ import { createRegisterClient } from './core/oauth/register-client.js';
 import { createReadIdentityProvider } from './core/federation/read-identity-provider.js';
 import { createCompleteSignIn } from './core/federation/complete-sign-in.js';
 import { createStartSignIn } from './core/federation/start-sign-in.js';
+import { createMapPerson } from './core/parties/map-person.js';
 import { createProviderSignIn } from './adapters/oidc/provider-sign-in.js';
 import { createPrismaSignIns } from './adapters/prisma/sign-ins.js';
 import { createSetIdentityProvider } from './core/federation/set-identity-provider.js';
@@ -279,6 +280,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     setIdentityProvider,
     readIdentityProvider,
     mcpEndpointOf: (fleetId) => fleetEndpoints.endpointOf(fleetId),
+    mapPerson: createMapPerson({ parties, door, clock }),
   });
 
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {

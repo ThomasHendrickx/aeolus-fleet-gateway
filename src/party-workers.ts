@@ -25,7 +25,8 @@ export function createPartyWorkers(deps: { parties: PartyStore; stateParty: Stat
 
   const work = async ({ fleetId, name }: { fleetId: FleetId; name: string }): Promise<void> => {
     const party = await deps.parties.find(fleetId, name);
-    if (party?.state !== 'crewed') {
+    // A person's ship takes no worker: its deliveries are the person's own, read from their chat.
+    if (party?.state !== 'crewed' || party.kind === 'person') {
       return;
     }
     if (party.kind === 'mcpClient') {

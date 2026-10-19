@@ -50,9 +50,19 @@ function partyRow(party: ShownParty, canManage: boolean): string {
           : '',
       ].join('')
     : '';
-  // A server shows where it is and how the gateway signs in; a client, its OAuth client id.
-  const outside = party.kind === 'mcpServer' ? `${escaped(party.url)}</td><td>${escaped(party.credentialKind)}` : `${escaped(party.clientId)}</td><td>MCP client`;
-  return `<tr><td>${name}</td><td>${outside}</td><td>${escaped(party.state)}</td><td>${escaped(party.proxyShipId ?? '')}</td><td>${forms}</td></tr>`;
+  return `<tr><td>${name}</td><td>${outsideOf(party)}</td><td>${escaped(party.state)}</td><td>${escaped(party.proxyShipId ?? '')}</td><td>${forms}</td></tr>`;
+}
+
+/** A server shows where it is and how the gateway signs in; a client, its OAuth client id; a person, their email and whether they signed in. */
+function outsideOf(party: ShownParty): string {
+  switch (party.kind) {
+    case 'mcpServer':
+      return `${escaped(party.url)}</td><td>${escaped(party.credentialKind)}`;
+    case 'mcpClient':
+      return `${escaped(party.clientId)}</td><td>MCP client`;
+    case 'person':
+      return `${escaped(party.email)}</td><td>person, ${party.isSignedIn ? 'signed in' : 'not signed in yet'}`;
+  }
 }
 
 const APPROVE_FORM = (requestId: string) => `<h2>Approve an MCP server</h2>
@@ -86,6 +96,14 @@ function identityProviderPart(part: { provider: { issuer: string; clientId: stri
   return `<h2>Identity provider</h2>${shown}${canManage ? redirectUri + IDENTITY_PROVIDER_FORM : ''}`;
 }
 
+const PERSON_FORM = `<h2>Map a person to their ship</h2>
+<form method="post" action="${PAGE}/person">
+<label>Email, as the identity provider verifies it<input name="email" type="email" required></label>
+<label>Their ship's id (a person's ship, commissioned in the console)<input name="shipId" required></label>
+<label>Secret, from a new starting prompt<input name="secret" type="password" required></label>
+<button>Map</button>
+</form>`;
+
 /** Why the API refused, as the page says it: the form's fields that are not valid, or the API's message. */
 function messageOf(error: TRPCError): string {
   if (error.cause instanceof z.ZodError) {
@@ -111,6 +129,7 @@ async function renderPage(reply: FastifyReply, page: { context: Context; signInC
       ? '<p class="muted">No party yet.</p>'
       : `<table><thead><tr><th>Name</th><th>URL</th><th>Credential</th><th>State</th><th>Proxy ship</th><th></th></tr></thead><tbody>${parties.map((party) => partyRow(party, canManage)).join('')}</tbody></table>`,
     canManage ? APPROVE_FORM(randomUUID()) : '',
+    canManage ? PERSON_FORM : '',
     identityProviderPart({ provider, canManage, signInCallbackUrl: page.signInCallbackUrl }),
   ].join('');
   return reply.code(failure?.status ?? 200).type('text/html; charset=utf-8').send(layout('Gateway parties', body));
@@ -147,6 +166,13 @@ const ACTIONS: Record<string, (caller: ReturnType<typeof gatewayRouter.createCal
   },
   crew: (caller, form) => caller.parties.crew({ name: field(form, 'name'), secret: field(form, 'secret') }),
   state: (caller, form) => caller.parties.state({ name: field(form, 'name') }),
+  person: (caller, form) => {
+    const shipId = idSchema('ship').safeParse(field(form, 'shipId'));
+    if (!shipId.success) {
+      return Promise.reject(new TRPCError({ code: 'BAD_REQUEST', message: "The ship id is not a ship id (shp_...)" }));
+    }
+    return caller.people.map({ email: field(form, 'email'), shipId: shipId.data, secret: field(form, 'secret') });
+  },
   'identity-provider': (caller, form) => caller.identityProvider.set({ issuer: field(form, 'issuer'), clientId: field(form, 'clientId'), clientSecret: field(form, 'clientSecret') }),
   mark: (caller, form) => caller.parties.markTool({ name: field(form, 'name'), tool: field(form, 'tool'), isRepeatable: form.isRepeatable === 'on' }),
 };

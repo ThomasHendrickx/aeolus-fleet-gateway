@@ -22,6 +22,7 @@ import type { IsServed } from '../../core/installation/served.js';
 import type { SetFleetEnabled } from '../../core/installation/set-fleet-enabled.js';
 import type { AuthenticateOperator } from '../../core/operator/authenticate-operator.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
+import type { MapPerson } from '../../core/parties/map-person.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListParties } from '../../core/parties/list-parties.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
@@ -53,6 +54,7 @@ export interface Context {
   registerClient: RegisterClient;
   setIdentityProvider: SetIdentityProvider;
   readIdentityProvider: ReadIdentityProvider;
+  mapPerson: MapPerson;
   /** The fleet's MCP endpoint, where its MCP clients connect. */
   mcpEndpointOf: (fleetId: FleetId) => string;
 }
@@ -128,6 +130,14 @@ const PROVIDER_CLIENT_FIELD_MAX_LENGTH = 2048;
 /** An identity provider as the API answers it: never its secret. */
 const shownIdentityProviderSchema = z.object({ issuer: z.string(), clientId: z.string(), setAt: z.date().transform((date) => date.toISOString()) });
 
+/** The refusals of mapping a person, as the API states them. */
+const MAP_PERSON_CODES = {
+  PERSON_EXISTS: 'CONFLICT',
+  PARTY_EXISTS: 'CONFLICT',
+  SECRET_REFUSED: 'BAD_REQUEST',
+  OTHER_FLEET: 'BAD_REQUEST',
+} as const satisfies Record<string, TRPCError['code']>;
+
 /** The refusals of connecting, as the API states them. */
 const CONNECT_CODES = {
   ALREADY_CONNECTED: 'CONFLICT',
@@ -200,6 +210,7 @@ const shownPartyBase = { name: z.string(), ownerShipId: z.string(), state: z.enu
 const shownPartySchema = z.discriminatedUnion('kind', [
   z.object({ ...shownPartyBase, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
   z.object({ ...shownPartyBase, kind: z.literal('mcpClient'), clientId: z.string() }),
+  z.object({ ...shownPartyBase, kind: z.literal('person'), email: z.string(), isSignedIn: z.boolean() }),
 ]);
 
 /** The connection as the console reads it: whether the gateway serves the fleet, and its connection. */
@@ -297,6 +308,23 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: STATE_CODES[stated.error.kind], message: stated.error.message });
         }
         return stated.value;
+      }),
+  }),
+  people: t.router({
+    /**
+     * argo maps a person, by their email, to their own ship (Q17, Q26): the
+     * ship argo commissioned in the console, with its secret from a new
+     * starting prompt. The gateway crews it; the secret is never kept.
+     */
+    map: managing(servedProcedure)
+      .input(z.strictObject({ email: z.email(), shipId: idSchema('ship'), secret: z.string().min(1) }))
+      .output(shownPartySchema)
+      .mutation(async ({ ctx, input }) => {
+        const mapped = await ctx.mapPerson({ operatorFleetId: ctx.fleetId, ...input });
+        if (!mapped.isOk) {
+          throw new TRPCError({ code: MAP_PERSON_CODES[mapped.error.kind], message: mapped.error.message });
+        }
+        return mapped.value;
       }),
   }),
   mcp: t.router({

@@ -21,6 +21,9 @@ interface Row {
   credential: unknown;
   concurrencyLimit: number | null;
   clientId: string | null;
+  email: string | null;
+  issuer: string | null;
+  subject: string | null;
   ownerShipId: string;
   state: string;
   proxyShipId: string | null;
@@ -31,7 +34,7 @@ interface Row {
   approvedAt: Date;
 }
 
-const kindSchema = z.enum(['mcpServer', 'mcpClient']);
+const kindSchema = z.enum(['mcpServer', 'mcpClient', 'person']);
 
 function partyOf(row: Row): Party {
   const base = {
@@ -52,6 +55,8 @@ function partyOf(row: Row): Party {
       return { ...base, kind, url: z.string().parse(row.url), credential: credentialSchema.parse(row.credential), concurrencyLimit: z.int().parse(row.concurrencyLimit) };
     case 'mcpClient':
       return { ...base, kind, clientId: z.string().parse(row.clientId) };
+    case 'person':
+      return { ...base, kind, email: z.string().parse(row.email), issuer: row.issuer, subject: row.subject };
   }
 }
 
@@ -59,9 +64,11 @@ function partyOf(row: Row): Party {
 function outsideColumnsOf(party: Party) {
   switch (party.kind) {
     case 'mcpServer':
-      return { url: party.url, credential: { ...party.credential }, concurrencyLimit: party.concurrencyLimit, clientId: null };
+      return { url: party.url, credential: { ...party.credential }, concurrencyLimit: party.concurrencyLimit, clientId: null, email: null, issuer: null, subject: null };
     case 'mcpClient':
-      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: party.clientId };
+      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: party.clientId, email: null, issuer: null, subject: null };
+    case 'person':
+      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: null, email: party.email, issuer: party.issuer, subject: party.subject };
   }
 }
 
@@ -76,6 +83,11 @@ export function createPrismaPartyStore(db: Db): PartyStore & { crewed(): Promise
     findByClient: async (fleetId, clientId) => {
       const row = await db.party.findUnique({ where: { fleetId_clientId: { fleetId, clientId } } });
       return row ? partyOf(row) : undefined;
+    },
+    findPersonByEmail: async (fleetId, email) => {
+      const row = await db.party.findUnique({ where: { fleetId_email: { fleetId, email } } });
+      const party = row ? partyOf(row) : undefined;
+      return party?.kind === 'person' ? party : undefined;
     },
     list: async (fleetId) => (await db.party.findMany({ where: { fleetId }, orderBy: { name: 'asc' } })).map(partyOf),
     save: async (party) => {

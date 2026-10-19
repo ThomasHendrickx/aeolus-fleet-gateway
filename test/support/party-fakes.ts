@@ -1,7 +1,7 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
-import type { Party } from '../../src/core/parties/party.js';
+import type { Party, PersonParty } from '../../src/core/parties/party.js';
 import type { PartyStore, ProxyShipDoor } from '../../src/core/parties/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
@@ -19,7 +19,7 @@ export function memoryPartyStore(): PartyStore & { held: Map<string, Party> } {
     find: (fleetId, name) => Promise.resolve(held.get(key(fleetId, name))),
     list: (fleetId) => Promise.resolve([...held.values()].filter((party) => party.fleetId === fleetId)),
     findByClient: (fleetId, clientId) => Promise.resolve([...held.values()].find((party) => party.fleetId === fleetId && party.kind === 'mcpClient' && party.clientId === clientId)),
-    findPersonByEmail: (fleetId, email) => Promise.resolve([...held.values()].find((party) => party.fleetId === fleetId && party.kind === 'person' && party.email === email)),
+    findPersonByEmail: (fleetId, email) => Promise.resolve([...held.values()].find((party): party is PersonParty => party.fleetId === fleetId && party.kind === 'person' && party.email === email)),
     save: (party) => {
       held.set(key(party.fleetId, party.name), party);
       return Promise.resolve();

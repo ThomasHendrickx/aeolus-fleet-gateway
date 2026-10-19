@@ -2,7 +2,7 @@ import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
-import type { Party } from './party.js';
+import type { Party, PersonParty } from './party.js';
 
 /** Outbound port: the parties argo approved, one per proxy ship name in a fleet. */
 export interface PartyStore {
@@ -10,6 +10,8 @@ export interface PartyStore {
   list(fleetId: FleetId): Promise<Party[]>;
   /** The party an MCP client is in the fleet, if argo approved it. */
   findByClient(fleetId: FleetId, clientId: string): Promise<Party | undefined>;
+  /** The person argo mapped by this email, in lower case. */
+  findPersonByEmail(fleetId: FleetId, email: string): Promise<PersonParty | undefined>;
   save(party: Party): Promise<void>;
   remove(fleetId: FleetId, name: string): Promise<void>;
 }
@@ -27,4 +29,6 @@ export interface ProxyShipDoor {
     ship: { name: string; type: string; owner: ShipId; idempotencyKey: string },
   ): Promise<Result<{ shipId: ShipId; secret: string | null }, FleetRefusal>>;
   register(claim: { shipId: ShipId; secret: string }): Promise<Result<{ crewToken: string }, FleetRefusal>>;
+  /** The ship a crew token crews. */
+  whoami(crewToken: string): Promise<Result<{ shipId: ShipId; fleetId: FleetId; name: string; type: string }, FleetRefusal>>;
 }

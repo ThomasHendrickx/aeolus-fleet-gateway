@@ -48,4 +48,19 @@ export interface McpClientParty extends PartyBase {
   readonly clientId: string;
 }
 
-export type Party = McpServerParty | McpClientParty;
+/**
+ * A person who signs in through the gateway (interop 3.2: kind person): argo
+ * maps them by their email to their own ship, which argo commissioned, and
+ * the gateway crews it for them, so their chat holds no crew token (0.8).
+ * Their first sign-in with that verified email binds the provider's issuer
+ * and subject (Q26); later sign-ins match the subject only.
+ */
+export interface PersonParty extends PartyBase {
+  readonly kind: 'person';
+  /** Lower case, as a sign-in's verified email is matched to it. */
+  readonly email: string;
+  readonly issuer: string | null;
+  readonly subject: string | null;
+}
+
+export type Party = McpServerParty | McpClientParty | PersonParty;
