@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
-import type { FleetId } from '@aeolus-fleet/common';
-import { auth } from '@modelcontextprotocol/client';
+import { QUESTION_CONTENT_TYPE, type FleetId } from '@aeolus-fleet/common';
+import { auth, Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
@@ -12,8 +12,9 @@ import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/cl
 import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgetter.js';
 import { createPrismaIdentityProviders } from '../src/adapters/prisma/identity-providers.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
-import { commission, signIn } from './support/argo.js';
+import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
+import { send } from './support/ship.js';
 import { aFreePort, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { mutate, query } from './support/gateway-api.js';
 import { aClientProvider, aConnectedGateway, aRegisteredClient, CALLBACK, mcpEndpointOf, TEST_GATEWAY_SECRET } from './support/mcp-client.js';
@@ -244,7 +245,12 @@ describe('a person signs in from their MCP client, at the fleet\'s identity prov
     expect({ status: signedIn.status, isNamed: (await signedIn.text()).includes(CHARLOTTE.email) }).toEqual({ status: 403, isNamed: true });
   });
 
-  it('is sent back to their MCP client as their own ship, which argo mapped them to by their email, and the client takes its token', async () => {
+  /**
+   * Charlotte, mapped by argo to her own ship by her email, signs in from
+   * her MCP SDK client at the local OpenID provider: her ship, the client,
+   * and how she came back from the sign-in.
+   */
+  async function aSignedInPerson() {
     const setting = { fleet, address, cookie, databaseUrl };
     await aConnectedGateway(setting);
     await mutate(address, { procedure: 'identityProvider.set', cookie, body: { issuer: provider.issuerOf('company'), clientId: PROVIDER_CLIENT_ID, clientSecret: 'provider-secret' } });
@@ -254,7 +260,6 @@ describe('a person signs in from their MCP client, at the fleet\'s identity prov
     const client = aClientProvider(await aRegisteredClient(setting, false));
     const serverUrl = await mcpEndpointOf(setting);
     await auth(client.provider, { serverUrl });
-
     const page = await fetch(z.instanceof(URL).parse(client.sentTo()));
     const signInLink = z.string().parse(/href="(\/authorize\/sign-in\?[^"]+)"/.exec(await page.text())?.[1]).replaceAll('&amp;', '&');
     const toProvider = await fetch(`${address}${signInLink}`, { redirect: 'manual' });
@@ -262,7 +267,33 @@ describe('a person signs in from their MCP client, at the fleet\'s identity prov
     const signedIn = await fetch(locationOf(back), { redirect: 'manual' });
     const sentBack = new URL(locationOf(signedIn));
     await auth(client.provider, { serverUrl, authorizationCode: z.string().parse(sentBack.searchParams.get('code')), iss: z.string().parse(sentBack.searchParams.get('iss')) });
+    return { shipId: ship.shipId, client, serverUrl, signedIn, sentBack };
+  }
+
+  it('is sent back to their MCP client as their own ship, which argo mapped them to by their email, and the client takes its token', async () => {
+    const { client, signedIn, sentBack } = await aSignedInPerson();
 
     expect({ status: signedIn.status, to: `${sentBack.origin}${sentBack.pathname}`, hasToken: client.tokens()?.access_token !== undefined }).toEqual({ status: 302, to: CALLBACK, hasToken: true });
+  });
+
+  it("reads their own ship's inbox from their MCP client, by titles only, through the gateway that crews it", async () => {
+    const person = await aSignedInPerson();
+    const tracker = await commission(fleet, { cookie, ship: { name: 'tracker', type: 'tracker' } });
+    const question = JSON.stringify({ id: crypto.randomUUID(), title: 'Go for release 1.4?', context: 'All checks are green.', options: [{ key: 1, label: 'Go', detail: 'Ship it today' }], pick: { option: 1, why: 'Green' } });
+    await send(fleet, { crewToken: await register(fleet, tracker), to: person.shipId, contentType: QUESTION_CONTENT_TYPE, payload: question });
+    const mcp = new Client({ name: 'charlotte-claude', version: '1' });
+    await mcp.connect(new StreamableHTTPClientTransport(new URL(person.serverUrl), { authProvider: person.client.provider }));
+
+    const { tools } = await mcp.listTools();
+    const inbox = await mcp.callTool({ name: 'aeolus_inbox', arguments: {} });
+    await mcp.close();
+
+    expect(tools.map(({ name }) => name)).toEqual(['aeolus_inbox']);
+    const read = z.object({ waiting: z.number(), deliveries: z.array(z.object({ from: z.string(), title: z.string() }).loose()) }).parse(JSON.parse(z.string().parse(z.array(z.object({ text: z.string() })).parse(inbox.content)[0]?.text)));
+    expect({ waiting: read.waiting, deliveries: read.deliveries.map(({ from, title }) => ({ from, title })), hasPayload: JSON.stringify(inbox).includes('All checks are green') }).toEqual({
+      waiting: 1,
+      deliveries: [{ from: 'tracker', title: 'Go for release 1.4?' }],
+      hasPayload: false,
+    });
   });
 });
