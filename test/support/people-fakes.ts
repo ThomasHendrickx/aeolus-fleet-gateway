@@ -1,5 +1,7 @@
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
-import type { PersonDelivery, PersonShipDoor } from '../../src/core/people/ports.js';
+import type { FleetId } from '@aeolus-fleet/common';
+
+import type { OpenedDeliveries, OpenedDelivery, PersonDelivery, PersonShipDoor } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 /** A delivery to a person's ship, as the fleet's push receive hands it: a question from the issue tracker by default. */
@@ -7,6 +9,7 @@ export function aPersonDelivery(overrides: Partial<PersonDelivery> = {}): Person
   return {
     deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
     messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+    senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
     senderName: 'tracker',
     contentType: 'application/vnd.aeolus.question+json',
     payload: '{"id":"9b2f","title":"Go for release 1.4?","context":"All checks are green.","options":[{"key":1,"label":"Go"}]}',
@@ -35,6 +38,26 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
       calls.push(`pushReceive(${String(max)})`);
       return crewed(crewToken, () => ship.deliveries.slice(0, max));
     },
+    ack: (crewToken, deliveryId) => {
+      calls.push(`ack(${deliveryId})`);
+      return crewed(crewToken, () => {
+        ship.deliveries = ship.deliveries.filter((delivery) => delivery.deliveryId !== deliveryId);
+      });
+    },
   };
   return { door, calls };
+}
+
+/** The deliveries people opened, in memory, by fleet, party and delivery. */
+export function memoryOpenedDeliveries(): OpenedDeliveries & { held: Map<string, OpenedDelivery> } {
+  const held = new Map<string, OpenedDelivery>();
+  const key = (fleetId: FleetId, party: string, deliveryId: string) => `${fleetId}/${party}/${deliveryId}`;
+  return {
+    held,
+    save: (opened) => {
+      held.set(key(opened.fleetId, opened.party, opened.deliveryId), opened);
+      return Promise.resolve();
+    },
+    find: (fleetId, { party, deliveryId }) => Promise.resolve(held.get(key(fleetId, party, deliveryId))),
+  };
 }
