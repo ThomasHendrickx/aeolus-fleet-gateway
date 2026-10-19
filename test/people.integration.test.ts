@@ -62,6 +62,18 @@ describe('the deliveries people opened, in Postgres', () => {
     await expect(opened.find(FLEET, { party: 'charlotte', deliveryId })).resolves.toMatchObject({ openedAt: new Date('2026-10-19T09:05:00.000Z') });
   });
 
+  it('forgets a delivery once the person dealt with it, and only that one', async () => {
+    const opened = createPrismaOpenedDeliveries(prisma);
+    await opened.save(anOpenedDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003' }));
+    await opened.save(anOpenedDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0004' }));
+
+    await opened.remove(FLEET, { party: 'charlotte', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003' });
+
+    await expect(
+      Promise.all([opened.find(FLEET, { party: 'charlotte', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003' }), opened.find(FLEET, { party: 'charlotte', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0004' })]),
+    ).resolves.toEqual([undefined, anOpenedDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0004' })]);
+  });
+
   it('forgets a fleet with the deliveries its people opened (decision 0021)', async () => {
     const opened = createPrismaOpenedDeliveries(prisma);
     await opened.save(anOpenedDelivery({ fleetId: OTHER_FLEET }));

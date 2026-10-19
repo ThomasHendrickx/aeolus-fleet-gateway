@@ -27,6 +27,10 @@ export function aPersonDelivery(overrides: Partial<PersonDelivery> = {}): Person
  */
 export function fakePersonShipDoor(ship: { crewToken: string; deliveries: PersonDelivery[] }) {
   const calls: string[] = [];
+  /** The replies the fleet took, as sent. */
+  const replies: Parameters<PersonShipDoor['reply']>[1][] = [];
+  /** The fleet's answers to come for reply and handled, before it takes them. */
+  const refusals: { reply: FleetRefusal[]; handled: FleetRefusal[] } = { reply: [], handled: [] };
   const refusal: FleetRefusal = { code: 'UNAUTHORIZED', message: 'The crew token is not valid' };
   const crewed = <T>(crewToken: string, value: () => T): Promise<Result<T, FleetRefusal>> => Promise.resolve(crewToken === ship.crewToken ? ok(value()) : err(refusal));
   const door: PersonShipDoor = {
@@ -44,8 +48,23 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
         ship.deliveries = ship.deliveries.filter((delivery) => delivery.deliveryId !== deliveryId);
       });
     },
+    reply: (crewToken, reply) => {
+      calls.push(`reply(${reply.inReplyTo})`);
+      const refused = refusals.reply.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
+      return crewed(crewToken, () => {
+        replies.push(reply);
+      });
+    },
+    handled: (crewToken, deliveryId) => {
+      calls.push(`handled(${deliveryId})`);
+      const refused = refusals.handled.shift();
+      return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => undefined);
+    },
   };
-  return { door, calls };
+  return { door, calls, replies, refusals };
 }
 
 /** The deliveries people opened, in memory, by fleet, party and delivery. */
@@ -59,5 +78,9 @@ export function memoryOpenedDeliveries(): OpenedDeliveries & { held: Map<string,
       return Promise.resolve();
     },
     find: (fleetId, opened) => Promise.resolve(held.get(key(fleetId, opened))),
+    remove: (fleetId, opened) => {
+      held.delete(key(fleetId, opened));
+      return Promise.resolve();
+    },
   };
 }

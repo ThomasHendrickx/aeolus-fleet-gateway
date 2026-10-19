@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { QUESTION_CONTENT_TYPE, type FleetId } from '@aeolus-fleet/common';
+import { ANSWER_CONTENT_TYPE, QUESTION_CONTENT_TYPE, type FleetId } from '@aeolus-fleet/common';
 import { auth, Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
@@ -14,7 +14,7 @@ import { createPrismaIdentityProviders } from '../src/adapters/prisma/identity-p
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
-import { send } from './support/ship.js';
+import { receiveOne, send } from './support/ship.js';
 import { aFreePort, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { mutate, query } from './support/gateway-api.js';
 import { aClientProvider, aConnectedGateway, aRegisteredClient, CALLBACK, mcpEndpointOf, TEST_GATEWAY_SECRET } from './support/mcp-client.js';
@@ -288,7 +288,7 @@ describe('a person signs in from their MCP client, at the fleet\'s identity prov
     const inbox = await mcp.callTool({ name: 'aeolus_inbox', arguments: {} });
     await mcp.close();
 
-    expect(tools.map(({ name }) => name)).toEqual(['aeolus_inbox', 'aeolus_open']);
+    expect(tools.map(({ name }) => name)).toEqual(['aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done']);
     const read = z.object({ waiting: z.number(), deliveries: z.array(z.object({ from: z.string(), title: z.string() }).loose()) }).parse(JSON.parse(z.string().parse(z.array(z.object({ text: z.string() })).parse(inbox.content)[0]?.text)));
     expect({ waiting: read.waiting, deliveries: read.deliveries.map(({ from, title }) => ({ from, title })), hasPayload: JSON.stringify(inbox).includes('All checks are green') }).toEqual({
       waiting: 1,
@@ -313,5 +313,42 @@ describe('a person signs in from their MCP client, at the fleet\'s identity prov
 
     expect(z.object({ from: z.string(), title: z.string(), payload: z.string() }).loose().parse(JSON.parse(textOf(opened)))).toMatchObject({ from: 'tracker', title: 'Go for release 1.4?', payload: question });
     expect(JSON.parse(textOf(after))).toEqual({ waiting: 0, deliveries: [] });
+  });
+
+  /** Charlotte, signed in, with the tracker's question opened in her MCP client: the tracker's crew token, the question's message id, and her client. */
+  async function aPersonWithAnOpenedQuestion() {
+    const person = await aSignedInPerson();
+    const tracker = await commission(fleet, { cookie, ship: { name: 'tracker', type: 'tracker' } });
+    const trackerToken = await register(fleet, tracker);
+    const question = JSON.stringify({ id: '0b6d2a43-5d1e-4f4a-9c2e-6f1d2a3b4c5d', title: 'Go for release 1.4?', context: 'All checks are green.', options: [{ key: 1, label: 'Go', detail: 'Ship it today' }], pick: { option: 1, why: 'Green' } });
+    const messageId = await send(fleet, { crewToken: trackerToken, to: person.shipId, contentType: QUESTION_CONTENT_TYPE, payload: question });
+    const mcp = new Client({ name: 'charlotte-claude', version: '1' });
+    await mcp.connect(new StreamableHTTPClientTransport(new URL(person.serverUrl), { authProvider: person.client.provider }));
+    const textOf = (result: Awaited<ReturnType<Client['callTool']>>) => z.string().parse(z.array(z.object({ text: z.string() })).parse(result.content)[0]?.text);
+    const [waiting] = z.object({ deliveries: z.array(z.object({ deliveryId: z.string() })) }).parse(JSON.parse(textOf(await mcp.callTool({ name: 'aeolus_inbox', arguments: {} })))).deliveries;
+    const deliveryId = z.string().parse(waiting?.deliveryId);
+    await mcp.callTool({ name: 'aeolus_open', arguments: { deliveryId } });
+    return { trackerToken, messageId, deliveryId, mcp, textOf };
+  }
+
+  it("answers a question from their MCP client: the asker gets the answer, in reply to its question", async () => {
+    const { trackerToken, messageId, deliveryId, mcp } = await aPersonWithAnOpenedQuestion();
+    const answer = JSON.stringify({ questionId: '0b6d2a43-5d1e-4f4a-9c2e-6f1d2a3b4c5d', option: 1, note: 'Go' });
+
+    const answered = await mcp.callTool({ name: 'aeolus_answer', arguments: { deliveryId, contentType: ANSWER_CONTENT_TYPE, payload: answer } });
+    await mcp.close();
+
+    expect(answered.isError).not.toBe(true);
+    expect(await receiveOne(fleet, trackerToken)).toMatchObject({ inReplyTo: messageId, senderName: 'charlotte', contentType: ANSWER_CONTENT_TYPE, payload: answer });
+  });
+
+  it('is done with a delivery from their MCP client, with no answer, and is done once', async () => {
+    const { deliveryId, mcp, textOf } = await aPersonWithAnOpenedQuestion();
+
+    const done = await mcp.callTool({ name: 'aeolus_done', arguments: { deliveryId } });
+    const again = await mcp.callTool({ name: 'aeolus_done', arguments: { deliveryId } });
+    await mcp.close();
+
+    expect({ done: z.object({ deliveryId: z.string(), isHandled: z.boolean() }).parse(JSON.parse(textOf(done))), isRefusedAgain: again.isError }).toEqual({ done: { deliveryId, isHandled: true }, isRefusedAgain: true });
   });
 });
