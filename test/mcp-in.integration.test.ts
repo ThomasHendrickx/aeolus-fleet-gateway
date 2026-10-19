@@ -256,6 +256,30 @@ describe('an outside MCP client that declares the Tasks extension follows a long
     expect(read.result).toMatchObject({ taskId, status: 'completed', result: { content: [{ type: 'text', text: 'Two deals: Analytical engine, Difference engine.' }] } });
   });
 
+  it.each([
+    { what: 'tasks/cancel', method: 'tasks/cancel', params: {} },
+    { what: 'tasks/update', method: 'tasks/update', params: { inputResponses: {} } },
+  ])('is acknowledged its $what, and the task goes on: a sent call cannot be unsent', async ({ method, params }) => {
+    await aStatingShip();
+    const { accessToken, tool } = await aTasksClient();
+    const taskId = taskIdOf((await rpc(accessToken, { method: 'tools/call', params: { name: tool, arguments: { contactId: 'c1' } }, name: tool })).result);
+
+    const acknowledged = await rpc(accessToken, { method, params: { taskId, ...params }, name: taskId });
+    const read = await rpc(accessToken, { method: 'tasks/get', params: { taskId }, name: taskId });
+
+    expect(acknowledged.error).toBeUndefined();
+    expect(acknowledged.result).toMatchObject({ resultType: 'complete' });
+    expect(read.result).toMatchObject({ taskId, status: 'working' });
+  });
+
+  it.each(['tasks/cancel', 'tasks/update'])('is answered an error for %s of a task it never got', async (method) => {
+    const client = await aSignedInClient(setting);
+
+    const answered = await rpc(z.string().parse(client.tokens()?.access_token), { method, params: { taskId: 'not-a-task', inputResponses: {} }, name: 'not-a-task' });
+
+    expect(answered.error).toMatchObject({ code: -32602 });
+  });
+
   it('is answered an error for a task it never got', async () => {
     const client = await aSignedInClient(setting);
 
