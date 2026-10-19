@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
+import type { SetIdentityProvider } from '../../core/federation/set-identity-provider.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import { err, ok } from '../../core/shared/result.js';
 import { gatewayRouter, type Context } from './router.js';
@@ -12,10 +13,12 @@ const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 const ARGO_COOKIE = 'aeolus_session=argo';
 const VIEWER_COOKIE = 'aeolus_session=viewer';
+const SET_AT = new Date('2026-10-19T12:00:00.000Z');
 
 /** A context with only what the parties procedures read; every approval it is asked for is recorded. */
-function aContext(cookie: string): { context: Context; approvals: Parameters<ApproveParty>[0][]; marks: Parameters<MarkTool>[0][] } {
+function aContext(cookie: string): { context: Context; approvals: Parameters<ApproveParty>[0][]; marks: Parameters<MarkTool>[0][]; providers: Parameters<SetIdentityProvider>[0][] } {
   const approvals: Parameters<ApproveParty>[0][] = [];
+  const providers: Parameters<SetIdentityProvider>[0][] = [];
   const marks: Parameters<MarkTool>[0][] = [];
   const unused = () => Promise.reject(new Error('not used by the parties procedures'));
   const context: Context = {
@@ -43,8 +46,13 @@ function aContext(cookie: string): { context: Context; approvals: Parameters<App
       marks.push(input);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));
     },
+    setIdentityProvider: (input) => {
+      providers.push(input);
+      return Promise.resolve(input.issuer.startsWith('https://') ? ok({ issuer: input.issuer, clientId: input.clientId, setAt: SET_AT }) : err({ kind: 'INVALID_ISSUER' as const, message: 'An issuer is an https URL' }));
+    },
+    readIdentityProvider: () => Promise.resolve({ issuer: 'https://accounts.google.com', clientId: 'gateway', setAt: SET_AT }),
   };
-  return { context, approvals, marks };
+  return { context, approvals, marks, providers };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -150,5 +158,40 @@ describe('argo pre-registers MCP clients through the gateway\'s API', () => {
 
   it('answers BAD_REQUEST to redirect URIs it refuses', async () => {
     await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).oauth.registerClient({ name: 'Cursor', redirectUris: [], isConfidential: true })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+});
+
+describe("argo sets the fleet's company identity provider through the gateway's API", () => {
+  const GOOGLE = { issuer: 'https://accounts.google.com', clientId: 'gateway', clientSecret: 'google-secret' };
+
+  it("sets it for argo's fleet, answering it without its secret", async () => {
+    const { context, providers } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).identityProvider.set(GOOGLE)).resolves.toEqual({ issuer: 'https://accounts.google.com', clientId: 'gateway', setAt: SET_AT.toISOString() });
+    expect(providers).toEqual([{ fleetId: FLEET, ...GOOGLE }]);
+  });
+
+  it('answers BAD_REQUEST with the reason for one it refuses', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).identityProvider.set({ ...GOOGLE, issuer: 'http://accounts.google.com' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: 'An issuer is an https URL' });
+  });
+
+  it('refuses a viewer, who only reads it', async () => {
+    const { context, providers } = aContext(VIEWER_COOKIE);
+    const caller = gatewayRouter.createCaller(context);
+
+    await expect(caller.identityProvider.set(GOOGLE)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.identityProvider.get()).resolves.toEqual({ issuer: 'https://accounts.google.com', clientId: 'gateway', setAt: SET_AT.toISOString() });
+    expect(providers).toEqual([]);
+  });
+
+  it.each([
+    { what: 'an empty client id', input: { ...GOOGLE, clientId: '' } },
+    { what: 'an empty client secret', input: { ...GOOGLE, clientSecret: '' } },
+    { what: 'a field it does not know', input: { ...GOOGLE, tenant: 'x' } },
+  ])('refuses $what', async ({ input }) => {
+    const { context, providers } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).identityProvider.set(z.custom<typeof GOOGLE>(() => true).parse(input))).rejects.toBeInstanceOf(TRPCError);
+    expect(providers).toEqual([]);
   });
 });
