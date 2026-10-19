@@ -30,6 +30,7 @@ import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc
 import { registerPartiesPage } from './adapters/http/parties-page.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
+import { createFleetEndpoints } from './adapters/crypto/fleet-endpoints.js';
 import { createShipAliases } from './adapters/crypto/ship-aliases.js';
 import { createListTools } from './core/mcp-in/list-tools.js';
 import { createCallTool } from './core/mcp-in/call-tool.js';
@@ -207,12 +208,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   };
   const listParties = createListParties({ parties });
 
-  // The OAuth server for outside MCP clients: the issuer is the public URL, and every token is bound to its MCP endpoint (RFC 8707).
+  // The OAuth server for outside MCP clients: the issuer is the public URL, and every token is bound to its fleet's MCP endpoint (RFC 8707).
   const issuer = options.publicUrl ?? DEFAULT_PUBLIC_URL;
-  const resource = `${issuer}/mcp`;
+  const fleetEndpoints = createFleetEndpoints({ secret: options.gatewaySecret, issuer, connections });
   const oauthClients = createPrismaOAuthClients(prisma);
   const authorizationCodes = createPrismaAuthorizationCodes(prisma);
-  const readAuthorization = createReadAuthorization({ clients: oauthClients, documents: createClientMetadataDocuments({ timeoutMs: CLIENT_METADATA_TIMEOUT_MS }), resource });
+  const readAuthorization = createReadAuthorization({ clients: oauthClients, documents: createClientMetadataDocuments({ timeoutMs: CLIENT_METADATA_TIMEOUT_MS }), endpoints: fleetEndpoints });
   const registerClient = createRegisterClient({ clients: oauthClients, secrets: oauthSecrets });
   const identityProviders = createPrismaIdentityProviders(prisma);
   const setIdentityProvider = createSetIdentityProvider({ providers: identityProviders, discovery: createProviderDiscovery({ timeoutMs: PROVIDER_DISCOVERY_TIMEOUT_MS }), clock });
@@ -220,7 +221,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const issuedTokens = createPrismaIssuedTokens(prisma);
   registerOAuthRoutes(server, {
     issuer,
-    resource,
+    endpoints: fleetEndpoints,
     fleetUrl: options.fleetUrl,
     authenticateOperator,
     readAuthorization,
@@ -234,12 +235,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       approveClientParty,
     }),
     readClientParty: createReadClientParty({ parties }),
-    exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
+    exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock }),
   });
   const listTools = createListTools({ parties, discovery: door, aliases: createShipAliases(options.gatewaySecret) });
   registerMcpEndpoint(server, {
-    resource,
-    authenticateAccessToken: createAuthenticateAccessToken({ tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
+    issuer,
+    authenticateAccessToken: createAuthenticateAccessToken({ tokens: issuedTokens, secrets: oauthSecrets, clock }),
     listTools,
     callTool: createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, deadlineMs: CLIENT_CALL_DEADLINE_MS, sleep, waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS }),
     readClientCall: createReadClientCall({ calls: clientCalls, clock }),
@@ -265,6 +266,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     registerClient,
     setIdentityProvider,
     readIdentityProvider,
+    mcpEndpointOf: (fleetId) => fleetEndpoints.endpointOf(fleetId),
   });
 
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {

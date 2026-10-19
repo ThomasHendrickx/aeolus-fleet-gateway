@@ -11,10 +11,12 @@ import { idSchema, type FleetId } from '@aeolus-fleet/common';
 
 import type { ApprovalRefusal, ApproveAuthorization } from '../../core/oauth/approve-authorization.js';
 import type { ExchangeToken } from '../../core/oauth/exchange-token.js';
+import type { FleetEndpoints } from '../../core/oauth/ports.js';
 import type { AuthorizationRefusal, AuthorizationRequest, ReadAuthorization } from '../../core/oauth/read-authorization.js';
 import type { AuthenticateOperator } from '../../core/operator/authenticate-operator.js';
 import type { ReadClientParty } from '../../core/parties/read-client-party.js';
 import type { ShownParty } from '../../core/parties/shown-party.js';
+import { FLEET_ENDPOINT_PATH } from '../crypto/fleet-endpoints.js';
 import { acceptForms, escaped, isSameOrigin, layout } from './html.js';
 import { randomUUID } from 'node:crypto';
 
@@ -22,6 +24,7 @@ const HTTP_FOUND = 302;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
+const HTTP_NOT_FOUND = 404;
 const HTTP_CONFLICT = 409;
 
 /** The parameters of an authorization request the page carries from its query to its form. */
@@ -33,7 +36,7 @@ const fieldsSchema = z.record(z.string(), z.unknown()).transform((fields) =>
 
 export interface OAuthRoutesDeps {
   issuer: string;
-  resource: string;
+  endpoints: FleetEndpoints;
   fleetUrl: string;
   authenticateOperator: AuthenticateOperator;
   readAuthorization: ReadAuthorization;
@@ -113,9 +116,15 @@ function basicCredentials(header: string | undefined): Record<string, string> {
 export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDeps): void {
   acceptForms(server);
 
-  const protectedResource = { resource: deps.resource, authorization_servers: [deps.issuer], bearer_methods_supported: ['header'] };
-  server.get('/.well-known/oauth-protected-resource', () => protectedResource);
-  server.get(`/.well-known/oauth-protected-resource${new URL(deps.resource).pathname}`, () => protectedResource);
+  // Each fleet's MCP endpoint names this server (RFC 9728), at the well-known path before the endpoint's own.
+  const endpointPath = `${new URL(deps.issuer).pathname.replace(/\/$/, '')}${FLEET_ENDPOINT_PATH}`;
+  server.get<{ Params: { alias: string } }>(`/.well-known/oauth-protected-resource${endpointPath}`, async (request, reply) => {
+    const resource = `${deps.issuer}${FLEET_ENDPOINT_PATH.replace(':alias', request.params.alias)}`;
+    if ((await deps.endpoints.fleetOf(resource)) === undefined) {
+      return reply.code(HTTP_NOT_FOUND).send({ error: 'No fleet has this MCP endpoint' });
+    }
+    return { resource, authorization_servers: [deps.issuer], bearer_methods_supported: ['header'] };
+  });
   server.get('/.well-known/oauth-authorization-server', () => ({
     issuer: deps.issuer,
     authorization_endpoint: `${deps.issuer}/authorize`,

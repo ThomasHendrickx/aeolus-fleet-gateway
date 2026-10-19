@@ -53,6 +53,8 @@ export interface Context {
   registerClient: RegisterClient;
   setIdentityProvider: SetIdentityProvider;
   readIdentityProvider: ReadIdentityProvider;
+  /** The fleet's MCP endpoint, where its MCP clients connect. */
+  mcpEndpointOf: (fleetId: FleetId) => string;
 }
 
 /** What a caller reads of a failure: nothing of it, so no crew token, secret or query ever leaves; the log holds it whole. */
@@ -296,6 +298,10 @@ export const gatewayRouter = t.router({
         }
         return stated.value;
       }),
+  }),
+  mcp: t.router({
+    /** The fleet's MCP endpoint, the one URL its MCP clients connect to (interop 1). */
+    endpoint: operatorProcedure.output(z.string()).query(({ ctx }) => ctx.mcpEndpointOf(ctx.fleetId)),
   }),
   identityProvider: t.router({
     /**
