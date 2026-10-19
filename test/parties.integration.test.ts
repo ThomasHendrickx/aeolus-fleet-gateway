@@ -119,14 +119,14 @@ describe("the gateway's parties and their vault in Postgres", () => {
     };
     await store.save(charlotte);
 
-    const subjects = ['1078', '2091'];
-    const binds = await Promise.all(subjects.map((subject) => store.bindPerson(FLEET, 'charlotte-raced', { issuer: 'https://accounts.google.com', subject })));
+    const subjects = ['5001', '5002'];
+    const binds = await Promise.all(subjects.map((subject) => store.bindPerson(FLEET, { name: 'charlotte-raced', issuer: 'https://accounts.google.com', subject })));
 
     expect(binds.filter((isBound) => isBound)).toEqual([true]);
     const won = { issuer: 'https://accounts.google.com', subject: subjects[binds.indexOf(true)] ?? '' };
     await expect(store.findPersonBySignIn(FLEET, won)).resolves.toEqual({ ...charlotte, ...won });
     await expect(store.findPersonBySignIn(OTHER_FLEET, won)).resolves.toBeUndefined();
-    await expect(store.bindPerson(FLEET, 'charlotte-raced', { issuer: 'https://accounts.google.com', subject: '3001' })).resolves.toBe(false);
+    await expect(store.bindPerson(FLEET, { name: 'charlotte-raced', issuer: 'https://accounts.google.com', subject: '5003' })).resolves.toBe(false);
   });
 
   it('forgets a fleet with its parties and their credentials (decision 0021)', async () => {

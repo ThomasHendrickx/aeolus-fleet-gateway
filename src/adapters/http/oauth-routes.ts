@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { idSchema, type FleetId } from '@aeolus-fleet/common';
 
 import type { ApprovalRefusal, ApproveAuthorization } from '../../core/oauth/approve-authorization.js';
+import type { AuthorizePerson } from '../../core/federation/authorize-person.js';
 import type { CompleteSignIn } from '../../core/federation/complete-sign-in.js';
 import type { ReadIdentityProvider } from '../../core/federation/read-identity-provider.js';
 import type { StartSignIn } from '../../core/federation/start-sign-in.js';
@@ -53,6 +54,7 @@ export interface OAuthRoutesDeps {
   readIdentityProvider: ReadIdentityProvider;
   startSignIn: StartSignIn;
   completeSignIn: CompleteSignIn;
+  authorizePerson: AuthorizePerson;
 }
 
 function fieldsOf(value: unknown): Record<string, string> {
@@ -229,7 +231,14 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
       return htmlPage(reply, { status: HTTP_BAD_REQUEST, body: `<h1>Sign in</h1><p class="error">${escaped(completed.error.message)}</p>` });
     }
     const { person } = completed.value;
-    // Until argo maps a person to their ship (the next slice), a signed-in person goes no further.
+    const authorized = await deps.authorizePerson(completed.value);
+    if (authorized.isOk) {
+      return reply.code(HTTP_FOUND).header('location', authorized.value.redirectTo).send();
+    }
+    const refusal = authorized.error;
+    if (refusal.kind !== 'notMapped') {
+      return sendBack(reply, { refusal, issuer: deps.issuer });
+    }
     return htmlPage(reply, {
       status: HTTP_FORBIDDEN,
       body: `<h1>Sign in</h1><p>You signed in as ${escaped(person.email ?? person.subject)} at ${escaped(person.issuer)}.</p><p class="error">argo has not given you a ship of this fleet yet: ask argo, then connect your MCP client again.</p>`,

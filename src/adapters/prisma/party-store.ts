@@ -89,6 +89,16 @@ export function createPrismaPartyStore(db: Db): PartyStore & { crewed(): Promise
       const party = row ? partyOf(row) : undefined;
       return party?.kind === 'person' ? party : undefined;
     },
+    findPersonBySignIn: async (fleetId, { issuer, subject }) => {
+      const row = await db.party.findUnique({ where: { fleetId_issuer_subject: { fleetId, issuer, subject } } });
+      const party = row ? partyOf(row) : undefined;
+      return party?.kind === 'person' ? party : undefined;
+    },
+    bindPerson: async (fleetId, { name, issuer, subject }) => {
+      // Only a person not bound yet: the row lock makes the second of two racing binds update nothing.
+      const bound = await db.party.updateMany({ where: { fleetId, name, kind: 'person', subject: null }, data: { issuer, subject } });
+      return bound.count === 1;
+    },
     list: async (fleetId) => (await db.party.findMany({ where: { fleetId }, orderBy: { name: 'asc' } })).map(partyOf),
     save: async (party) => {
       const columns = {

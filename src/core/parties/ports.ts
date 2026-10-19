@@ -12,6 +12,10 @@ export interface PartyStore {
   findByClient(fleetId: FleetId, clientId: string): Promise<Party | undefined>;
   /** The person argo mapped by this email, in lower case. */
   findPersonByEmail(fleetId: FleetId, email: string): Promise<PersonParty | undefined>;
+  /** The person bound to this sign-in: the identity provider's issuer and subject. */
+  findPersonBySignIn(fleetId: FleetId, signIn: { issuer: string; subject: string }): Promise<PersonParty | undefined>;
+  /** Binds a person not bound yet to a sign-in, at most once even under a race: whether this call did. */
+  bindPerson(fleetId: FleetId, binding: { name: string; issuer: string; subject: string }): Promise<boolean>;
   save(party: Party): Promise<void>;
   remove(fleetId: FleetId, name: string): Promise<void>;
 }

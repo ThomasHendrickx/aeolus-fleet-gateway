@@ -47,6 +47,7 @@ import { createExchangeToken } from './core/oauth/exchange-token.js';
 import { createReadAuthorization } from './core/oauth/read-authorization.js';
 import { createRegisterClient } from './core/oauth/register-client.js';
 import { createReadIdentityProvider } from './core/federation/read-identity-provider.js';
+import { createAuthorizePerson } from './core/federation/authorize-person.js';
 import { createCompleteSignIn } from './core/federation/complete-sign-in.js';
 import { createStartSignIn } from './core/federation/start-sign-in.js';
 import { createMapPerson } from './core/parties/map-person.js';
@@ -248,6 +249,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readIdentityProvider,
     startSignIn: createStartSignIn({ readAuthorization, ...signInDeps }),
     completeSignIn: createCompleteSignIn({ ...signInDeps, providerSignIn: createProviderSignIn({ timeoutMs: PROVIDER_DISCOVERY_TIMEOUT_MS }) }),
+    authorizePerson: createAuthorizePerson({ readAuthorization, parties, codes: authorizationCodes, secrets: oauthSecrets, clock, issuer }),
     exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock }),
   });
   const listTools = createListTools({ parties, discovery: door, aliases: createShipAliases(options.gatewaySecret) });
