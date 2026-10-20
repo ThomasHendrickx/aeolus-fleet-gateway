@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, OTHER_FLEET_ID } from '../test/support/fleet-fakes.js';
-import { OWNER_SHIP_ID, PROXY_SHIP_ID, memoryPartyStore } from '../test/support/party-fakes.js';
+import { PROXY_SHIP_ID, memoryPartyStore } from '../test/support/party-fakes.js';
 import type { McpServerParty } from './core/parties/party.js';
 import { ok } from './core/shared/result.js';
 import { createPartyWorkers } from './party-workers.js';
@@ -19,7 +19,6 @@ function aCrewedServer(fleetId: FleetId, name: string): McpServerParty {
     url: `https://${name}.example.com/mcp`,
     credential: { kind: 'bearer', token: 't' },
     concurrencyLimit: 4,
-    ownerShipId: OWNER_SHIP_ID,
     state: 'crewed',
     proxyShipId: PROXY_SHIP_ID,
     secret: null,

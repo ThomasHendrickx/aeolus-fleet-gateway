@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { aClientCall, MESSAGE_ID, memoryClientCalls } from '../../../test/support/mcp-in-fakes.js';
 import { aPushedDelivery, fakeProxyShipCrew } from '../../../test/support/mcp-out-fakes.js';
-import { OWNER_SHIP_ID, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
+import { PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
 import type { Sleep } from '../mcp-out/run-party.js';
 import type { McpClientParty } from '../parties/party.js';
 import type { Clock } from '../shared/clock.js';
@@ -14,7 +14,6 @@ const CLAUDE: McpClientParty = {
   name: 'claude',
   kind: 'mcpClient',
   clientId: 'https://claude.example.com/client.json',
-  ownerShipId: OWNER_SHIP_ID,
   state: 'crewed',
   proxyShipId: PROXY_SHIP_ID,
   secret: null,

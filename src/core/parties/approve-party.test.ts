@@ -52,7 +52,7 @@ describe('argo approves an outside MCP server as a party (interop I-5)', () => {
   it('answers the party without its credential or crew token', async () => {
     const approved = await approve(anApproval());
 
-    expect(approved.isOk && Object.keys(approved.value).sort()).toEqual(['concurrencyLimit', 'credentialKind', 'kind', 'name', 'ownerShipId', 'proxyShipId', 'state', 'url']);
+    expect(approved.isOk && Object.keys(approved.value).sort()).toEqual(['concurrencyLimit', 'credentialKind', 'kind', 'name', 'proxyShipId', 'state', 'url']);
   });
 
   it('answers a repeated approval with the party, commissioning nothing again', async () => {

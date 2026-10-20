@@ -57,7 +57,6 @@ beforeEach(async () => {
     url: crm.url,
     credential: { kind: 'bearer', token: MOCK_CRM_BEARER },
     // The owner is only kept by the gateway; core 0.28 checks it at the commission.
-    ownerShipId: caller.shipId,
     concurrencyLimit: 4,
     state: 'awaitingCrew',
     proxyShipId: proxy.shipId,
@@ -148,5 +147,19 @@ describe('a ship holding fleet:manage retires an outside MCP server party (decis
     const listed = await query(address, { procedure: 'parties.list', cookie });
     expect(z.object({ result: z.object({ data: z.array(z.unknown()) }) }).parse(await listed.json()).result.data).toEqual([]);
     await expect(callTool('list_deals', { contactId: 'c1' })).rejects.toThrow();
+  });
+});
+
+describe("an outside party's owner and scopes are the fleet's (decision 0056)", () => {
+  it("lists the party with its proxy ship's owner and scopes, read from the fleet as the gateway's ship", async () => {
+    const address = await started();
+    await crewed(address);
+    const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'] } });
+    expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
+
+    const listed = await query(address, { procedure: 'parties.list', cookie });
+
+    const [party] = z.object({ result: z.object({ data: z.array(z.object({ name: z.string(), ownerShipId: z.string().nullable(), scopes: z.array(z.string()).nullable() })) }) }).parse(await listed.json()).result.data;
+    expect({ name: party?.name, isOwned: (party?.ownerShipId ?? '').startsWith('shp_'), canMessage: ['messages:send', 'messages:receive'].every((scope) => party?.scopes?.includes(scope)) }).toEqual({ name: 'crm', isOwned: true, canMessage: true });
   });
 });

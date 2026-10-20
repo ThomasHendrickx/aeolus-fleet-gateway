@@ -47,7 +47,6 @@ async function aCrewedCrmParty(): Promise<void> {
     kind: 'mcpServer',
     url: crm.url,
     credential: { kind: 'bearer', token: MOCK_CRM_BEARER },
-    ownerShipId: owner.shipId,
     concurrencyLimit: 4,
     state: 'awaitingCrew',
     proxyShipId: proxy.shipId,
