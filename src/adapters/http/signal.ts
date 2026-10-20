@@ -197,15 +197,15 @@ function topBar(current: Tab | undefined, isSignedIn: boolean): string {
   return `<header class="top"><a class="mark" href="/overview">${MARK}Aeolus</a><nav class="tabs">${tabs}</nav>${signOut}</header>`;
 }
 
-/** Where a signed-out caller signs in: the gateway's own sign-in through pagasae, or, on a gateway that signs no one in, the console. */
-export type SignInWay = { kind: 'pages' } | { kind: 'console'; fleetUrl: string };
+/** Where a signed-out caller signs in: the gateway's own sign-in through pagasae, or nowhere, on a gateway that signs no one in. */
+export type SignInWay = 'pages' | 'none';
 
 /** What a signed-out caller is shown: why, and the one way to sign in, coming back to the page they asked for. */
 export function signInPrompt(shown: { message: string; way: SignInWay; returnTo: string }): string {
-  const link =
-    shown.way.kind === 'pages'
-      ? `<a class="button" href="/sign-in?${new URLSearchParams({ return_to: shown.returnTo }).toString().replaceAll('&', '&amp;')}">${icon('signIn', 14)}Sign in</a>`
-      : `<a class="button" href="${escaped(shown.way.fleetUrl)}">${icon('signIn', 14)}Sign in to the console of your fleet</a>`;
+  if (shown.way === 'none') {
+    return `<section class="card"><h2>This gateway signs no one in</h2><p class="muted">Its pages are for people signed in through pagasae, which its operator has not set.</p></section>`;
+  }
+  const link = `<a class="button" href="/sign-in?${new URLSearchParams({ return_to: shown.returnTo }).toString().replaceAll('&', '&amp;')}">${icon('signIn', 14)}Sign in</a>`;
   return `<section class="card"><h2>${escaped(shown.message)}</h2><div class="actions">${link}</div></section>`;
 }
 
