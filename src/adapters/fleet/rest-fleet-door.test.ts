@@ -33,9 +33,13 @@ afterEach(async () => {
 
 const CALL = { crewToken: 'aeolus_ct_v1_gateway', accountToken: 'account-token-1', shipId: PERSON_SHIP } as const;
 
+function parsed(body: string): unknown {
+  return JSON.parse(body);
+}
+
 /** The parts of a received call that say who made it and what. */
 function sent() {
-  return received.map(({ url, headers, body }) => ({ url, authorization: headers.authorization, accountToken: headers['aeolus-account-token'], body: JSON.parse(body) as unknown }));
+  return received.map(({ url, headers, body }) => ({ url, authorization: headers.authorization, accountToken: headers['aeolus-account-token'], body: parsed(body) }));
 }
 
 describe("the fleet's calls the gateway makes for a signed-in account (decision 0057)", () => {

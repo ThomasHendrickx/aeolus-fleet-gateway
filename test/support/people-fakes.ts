@@ -11,7 +11,8 @@ import { err, ok, type Result } from '../../src/core/shared/result.js';
  * registers with the prompt's secret. Every call is recorded.
  */
 export function fakePersonShipFleet(options: { personShipId: ShipId; isCrewedElsewhere?: boolean }) {
-  const state = { isCrewed: options.isCrewedElsewhere === true, issued: 0, calls: [] as string[] };
+  const calls: string[] = [];
+  const state = { isCrewed: options.isCrewedElsewhere === true, issued: 0, calls };
   const isOwn = (call: { crewToken: string; accountToken: string; shipId: ShipId }) => call.crewToken === 'aeolus_ct_v1_gateway' && call.accountToken === 'account-token-1' && call.shipId === options.personShipId;
   const forbidden: FleetRefusal = { code: 'FORBIDDEN', message: 'is not your person ship' };
   const door: AccountDoor & { register(claim: { shipId: ShipId; secret: string }): Promise<Result<{ crewToken: string }, FleetRefusal>> } = {

@@ -18,6 +18,7 @@ import {
   pushReceiveOutputSchema,
   sendOutputSchema,
   shipDetailOutputSchema,
+  startingPromptOutputSchema,
 } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
@@ -26,6 +27,7 @@ import type { CallSender, Discovery } from '../../core/mcp-in/ports.js';
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
+import type { AccountDoor } from '../../core/people/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
 
 const refusalSchema = z.object({ code: z.string(), message: z.string() });
@@ -39,6 +41,9 @@ const LOCATION = { kind: 'SERVER' } as const;
 /** The harness the gateway states when it registers a ship: it is software, not a model. */
 const HARNESS = 'aeolus-gateway';
 
+/** The header an account's token travels in; common's ACCOUNT_TOKEN_HEADER replaces it once published (aeolus-fleet#991). */
+const ACCOUNT_TOKEN_HEADER = 'aeolus-account-token';
+
 /** The ship type the networking plugin's ship has (decision 0035). */
 const NETWORKING_PLUGIN_TYPE = 'networking-plugin';
 
@@ -47,6 +52,8 @@ interface FleetCall<T> {
   path: string;
   method: 'GET' | 'POST';
   crewToken?: string;
+  /** The account a call is made for, beside the gateway's crew token (decision 0057). */
+  accountToken?: string;
   body?: unknown;
   answers: z.ZodType<T>;
   /** Ends a call that waits, such as pushReceive, once it aborts. */
@@ -77,6 +84,9 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
   if (request.crewToken !== undefined) {
     headers.authorization = `Bearer ${request.crewToken}`;
   }
+  if (request.accountToken !== undefined) {
+    headers[ACCOUNT_TOKEN_HEADER] = request.accountToken;
+  }
   if (request.body !== undefined) {
     headers['content-type'] = 'application/json';
   }
@@ -99,7 +109,7 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender {
+): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & AccountDoor {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   const done = async (crewToken: string, request: { path: string; body: unknown }) => {
@@ -107,6 +117,14 @@ export function createRestFleetDoor(
     return answered.isOk ? ok(undefined) : answered;
   };
   return {
+    startingPrompt: async ({ crewToken, accountToken, shipId }) => {
+      const issued = await call({ path: '/fleet/getStartingPrompt', method: 'POST', crewToken, accountToken, body: { shipId }, answers: startingPromptOutputSchema });
+      return issued.isOk ? ok({ secret: issued.value.secret }) : issued;
+    },
+    release: async ({ crewToken, accountToken, shipId }) => {
+      const released = await call({ path: '/fleet/release', method: 'POST', crewToken, accountToken, body: { shipId }, answers: z.unknown() });
+      return released.isOk ? ok(undefined) : released;
+    },
     register: ({ shipId, secret }) =>
       call({ path: '/ship/register', method: 'POST', body: { shipId, secret, location: LOCATION, harness: HARNESS }, answers: z.object({ crewToken: z.string() }) }),
     whoami: (crewToken) =>
