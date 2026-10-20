@@ -27,6 +27,7 @@ import { createPrismaCalls } from './adapters/prisma/calls.js';
 import { sleep } from './adapters/timers/sleep.js';
 import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
+import { registerOutsidePartiesPage } from './adapters/http/outside-parties-page.js';
 import { registerPartiesPage } from './adapters/http/parties-page.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
@@ -367,7 +368,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   };
   void server.register(fastifyTRPCPlugin, trpc);
   // The page calls the API as the caller, with the forwarded console session; it never takes the installation token.
-  registerPartiesPage(server, { contextFor: (cookie) => contextFor({ cookie, crewToken: undefined, installationTokenSent: undefined }), fleetUrl: options.fleetUrl });
+  const pageContextFor = (cookie: string | undefined) => contextFor({ cookie, crewToken: undefined, installationTokenSent: undefined });
+  registerPartiesPage(server, { contextFor: pageContextFor, fleetUrl: options.fleetUrl });
+  registerOutsidePartiesPage(server, { contextFor: pageContextFor, fleetUrl: options.fleetUrl });
 
   server.addHook('onClose', async () => {
     await prisma.$disconnect();

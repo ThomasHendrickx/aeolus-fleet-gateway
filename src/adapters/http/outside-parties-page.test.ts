@@ -51,15 +51,15 @@ function contextFor(cookie: string | undefined): Context {
     listToDecide: unused,
     decideRequest: unused,
     readOutsideParties: () => Promise.resolve({ isOn }),
-    setOutsideParties: ({ actor, isOn: wanted, isOpenNetworkConfirmed }) => {
+    setOutsideParties: ({ actor, isOn: isWanted, isOpenNetworkConfirmed }) => {
       if (!actor.scopes.includes('fleet:network')) {
         return Promise.resolve(err({ kind: 'NOT_A_NETWORKER' as const, message: 'Switching outside parties needs fleet:network' }));
       }
-      switches.push({ isOn: wanted, isOpenNetworkConfirmed });
-      if (wanted && !isOpenNetworkConfirmed && isNetworkOpen) {
+      switches.push({ isOn: isWanted, isOpenNetworkConfirmed });
+      if (isWanted && !isOpenNetworkConfirmed && isNetworkOpen) {
         return Promise.resolve(err({ kind: 'OPEN_NETWORK' as const, message: OPEN_NETWORK_WARNING }));
       }
-      isOn = wanted;
+      isOn = isWanted;
       return Promise.resolve(ok({ isOn }));
     },
   };
