@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
+import type { ShownParty } from '../../core/parties/shown-party.js';
 import { err, ok } from '../../core/shared/result.js';
 import type { Context } from '../trpc/router.js';
 import { registerOutsidePartiesPage } from './outside-parties-page.js';
@@ -17,6 +18,20 @@ const OPEN_NETWORK_WARNING = 'This fleet applies no network rules, so every outs
 let server: FastifyInstance;
 let isOn: boolean;
 let isNetworkOpen: boolean;
+const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
+const LINEAR: ShownParty = {
+  name: 'linear',
+  kind: 'mcpServer',
+  url: 'https://mcp.linear.app/mcp',
+  credentialKind: 'bearer',
+  ownerShipId: OWNER,
+  concurrencyLimit: 4,
+  state: 'crewed',
+  proxyShipId: 'shp_01m3tbfspe96yf1rnr4ank9lin',
+};
+const ORDERBOT: ShownParty = { name: 'orderbot<x>', kind: 'mcpClient', clientId: 'https://orderbot.example.com/client.json', ownerShipId: OWNER, state: 'awaitingCrew', proxyShipId: null };
+
+let parties: ShownParty[];
 let switches: Omit<Parameters<SetOutsideParties>[0], 'actor' | 'as'>[];
 
 function contextFor(cookie: string | undefined): Context {
@@ -45,7 +60,7 @@ function contextFor(cookie: string | undefined): Context {
     connect: unused,
     approveParty: unused,
     crewParty: unused,
-    listParties: unused,
+    listParties: () => Promise.resolve(parties),
     stateParty: unused,
     markTool: unused,
     registerClient: unused,
@@ -69,6 +84,7 @@ function contextFor(cookie: string | undefined): Context {
 beforeEach(async () => {
   isOn = false;
   isNetworkOpen = false;
+  parties = [LINEAR, ORDERBOT];
   switches = [];
   server = Fastify({ logger: false });
   registerOutsidePartiesPage(server, { contextFor, fleetUrl: 'https://fleet.example.com' });
@@ -182,5 +198,46 @@ describe("the outside parties page: the fleet's switch", () => {
 
     expect(shown.statusCode).toBe(401);
     expect(shown.body).toContain('href="https://fleet.example.com"');
+  });
+});
+
+describe('the outside parties page: every outside party of the fleet', () => {
+  it('leads with how many outside parties the fleet has, per kind and per protocol', async () => {
+    const shown = await page(VIEWER);
+
+    expect(shown.body).toContain('aria-label="2 outside parties"');
+    expect(shown.body).toContain('1 server');
+    expect(shown.body).toContain('1 client');
+    expect(shown.body).toContain('MCP 2');
+  });
+
+  it('shows each party as a card: its mark, name, protocol, kind, proxy ship status and owner, escaped', async () => {
+    const shown = await page(VIEWER);
+
+    expect(shown.body).toContain('class="party-card"');
+    expect(shown.body).toContain('linear');
+    expect(shown.body).toContain('orderbot&lt;x&gt;');
+    expect(shown.body).toContain('class="tag protocol">MCP<');
+    expect(shown.body).toContain('MCP server');
+    expect(shown.body).toContain('MCP client');
+    expect(shown.body).toContain('Crewed');
+    expect(shown.body).toContain('Awaiting crew');
+    expect(shown.body).toContain(OWNER);
+  });
+
+  it('shows the servers only, or the clients only', async () => {
+    const servers = await server.inject({ url: '/outside-parties?kind=server', headers: { host: HOST, cookie: VIEWER } });
+    const clients = await server.inject({ url: '/outside-parties?kind=client', headers: { host: HOST, cookie: VIEWER } });
+
+    expect({ servers: servers.body.includes('linear') && !servers.body.includes('orderbot'), clients: clients.body.includes('orderbot') && !clients.body.includes('mcp.linear.app') }).toEqual({ servers: true, clients: true });
+  });
+
+  it('says when the fleet has no outside party yet', async () => {
+    parties = [];
+
+    const shown = await page(VIEWER);
+
+    expect(shown.body).toContain('aria-label="0 outside parties"');
+    expect(shown.body).toContain('No outside party yet');
   });
 });
