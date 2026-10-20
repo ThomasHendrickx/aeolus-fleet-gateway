@@ -9,6 +9,8 @@ import { setTimeout as wait } from 'node:timers/promises';
 
 import {
   ACCOUNT_TOKEN_HEADER,
+  ON_BEHALF_OF_HEADER,
+  shipOutputSchema,
   busyWaitMs,
   commissionShipOutputSchema,
   discoverOutputSchema,
@@ -22,6 +24,7 @@ import {
   sendOutputSchema,
   shipDetailOutputSchema,
   startingPromptOutputSchema,
+  type ShipId,
 } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
@@ -52,6 +55,8 @@ interface FleetCall<T> {
   crewToken?: string;
   /** The account a call is made for, beside the gateway's crew token (decision 0057). */
   accountToken?: string;
+  /** The ship a read is made on behalf of (fleet:on-behalf): it answers within that ship's read reach (decision 0034). */
+  onBehalfOf?: ShipId;
   body?: unknown;
   answers: z.ZodType<T>;
   /** Ends a call that waits, such as pushReceive, once it aborts. */
@@ -84,6 +89,9 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
   }
   if (request.accountToken !== undefined) {
     headers[ACCOUNT_TOKEN_HEADER] = request.accountToken;
+  }
+  if (request.onBehalfOf !== undefined) {
+    headers[ON_BEHALF_OF_HEADER] = request.onBehalfOf;
   }
   if (request.body !== undefined) {
     headers['content-type'] = 'application/json';
@@ -149,10 +157,13 @@ export function createRestFleetDoor(
       const read = await call({ path: '/fleet/ship', method: 'POST', crewToken, body: { shipId }, answers: shipDetailOutputSchema });
       return read.isOk ? ok(read.value.owner?.id ?? null) : read;
     },
-    getShip: async (crewToken, ship) => {
-      const read = await call({ path: '/fleet/ship', method: 'POST', crewToken, body: ship, answers: shipDetailOutputSchema });
+    getShip: async (crewToken, { shipId, onBehalfOf }) => {
+      const read = await call({ path: '/fleet/ship', method: 'POST', crewToken, onBehalfOf, body: { shipId }, answers: shipOutputSchema });
       if (!read.isOk) {
         return read;
+      }
+      if ('isInReadReach' in read.value) {
+        return err({ code: 'FORBIDDEN', message: `${read.value.name} is outside the read reach` });
       }
       const { status, scopes } = read.value;
       return ok({ status, scopes });
