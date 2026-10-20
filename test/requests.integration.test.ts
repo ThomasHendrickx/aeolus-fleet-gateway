@@ -100,9 +100,19 @@ describe('an approver decides a pending request through the gateway', () => {
     await expect(toDecide()).resolves.toEqual([]);
   });
 
-  // Core 0.27 commissions no app ship for the gateway (aeolus-fleet#959), so the fleet refuses
-  // the proxy ship here: the unhappy path of an approval, end to end. The approval itself is
-  // proven against the fleet's stand-in in decide-request.test.ts until core 0.28.0.
+  it("approves it as an agent ship holding gateway:approve: the gateway commissions and crews the client's proxy ship, owned by the owner picked (aeolus-fleet#959)", async () => {
+    const decided = await mutate(address, {
+      procedure: 'requests.decide',
+      crewToken: approver,
+      body: { requestId: REQUEST_ID, decision: { kind: 'approve', party: { name: 'orderbot', ownerShipId: owner, scopes: ['messages:send', 'messages:receive'] } } },
+    });
+
+    expect(decided.status, await decided.clone().text()).toBe(200);
+    const read = await query(address, { procedure: 'parties.get', crewToken: approver, input: { name: 'orderbot' } });
+    expect(z.object({ result: z.object({ data: z.object({ state: z.string(), ownerShipId: z.string().nullable() }) }) }).parse(await read.json()).result.data).toEqual({ state: 'crewed', ownerShipId: owner });
+    await expect(toDecide()).resolves.toEqual([]);
+  });
+
   it('keeps it pending, undecided, when the fleet refuses the proxy ship', async () => {
     const decided = await mutate(address, {
       procedure: 'requests.decide',
