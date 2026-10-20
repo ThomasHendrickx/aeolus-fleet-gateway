@@ -8,7 +8,7 @@ export const FLEET_ID: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 export const OTHER_FLEET_ID: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8zz';
 
 /** The scopes argo gives the gateway's ship when it connects the gateway. */
-export const GATEWAY_SCOPES = ['messages:send', 'messages:receive', 'fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+export const GATEWAY_SCOPES = ['messages:send', 'messages:receive', 'fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
 
 /**
  * A fleet that knows the gateway's ship: its secret claims it once, its crew

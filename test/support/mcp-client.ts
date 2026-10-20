@@ -24,7 +24,7 @@ export const TEST_GATEWAY_SECRET = 'a-test-gateway-secret-of-at-least-32-charact
 export const CALLBACK = 'http://127.0.0.1:33418/callback';
 
 /** The scopes argo commissions the gateway's ship with. */
-const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
 
 /** The request a person opened for the test client, which argo approves. */
 const APPROVAL_REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0009';

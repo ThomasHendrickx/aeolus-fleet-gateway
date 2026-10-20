@@ -1,4 +1,4 @@
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import type { FleetId, ShipId, VerifiedFact } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { Party } from '../../src/core/parties/party.js';
@@ -42,12 +42,16 @@ export function fakeProxyShipFleet() {
     validOwners: new Set<ShipId>([OWNER_SHIP_ID]),
     commissioned: new Array<{ name: string; type: string; owner: ShipId; idempotencyKey: string; scopes: readonly string[] }>(),
     /** The scopes the gateway's ship holds, so a commission gives no other (decision 0053). */
-    gatewayScopes: new Set(['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare']),
+    gatewayScopes: new Set(['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify']),
     keys: new Map<string, ShipId>(),
     secrets: new Map<ShipId, string>(),
     crewed: new Set<ShipId>(),
     /** Dies after the next commission is stored, before its answer arrives. */
     isLosingNextAnswer: false,
+    /** The facts each writer, by its crew token, set about each ship (decision 0059). */
+    verified: new Map<ShipId, { crewToken: string; facts: readonly VerifiedFact[] }>(),
+    /** Whether setVerifiedFacts is refused, as for a ship outside the gateway's manage reach. */
+    isVerifyRefused: false,
   };
   const unavailable = (): Promise<Result<never, FleetRefusal>> => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
   const door: ProxyShipDoor = {
@@ -84,6 +88,13 @@ export function fakeProxyShipFleet() {
       }
       state.crewed.add(shipId);
       return Promise.resolve(ok({ crewToken: 'aeolus_ct_v1_proxy' }));
+    },
+    setVerifiedFacts: (crewToken, { shipId, facts }) => {
+      if (state.isVerifyRefused) {
+        return Promise.resolve(err({ code: 'FORBIDDEN', message: 'The ship is outside your manage reach' }));
+      }
+      state.verified.set(shipId, { crewToken, facts });
+      return Promise.resolve(ok(undefined));
     },
   };
   return { state, door };

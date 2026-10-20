@@ -14,7 +14,7 @@ import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 // database and is connected again after a restart, whatever network the
 // fleet has (interop I-3, Thomas 20 Oct).
 
-const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
 const INSTALLATION_TOKEN = 'an-installation-token-of-at-least-32-characters';
 
 let fleet: FleetServer;
