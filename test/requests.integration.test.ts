@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaPendingRequests } from '../src/adapters/prisma/pending-requests.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
-import { commission, register, signIn } from './support/argo.js';
+import { applyEmptyOwnRules, commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
@@ -85,6 +85,12 @@ async function toDecide(): Promise<string[]> {
 }
 
 describe('an approver decides a pending request through the gateway', () => {
+  it("lists To decide for an approver outside the gateway's own read reach, in a fleet that applies its own network rules: an actor reads itself", async () => {
+    await applyEmptyOwnRules(fleet, argoCookie);
+
+    await expect(toDecide()).resolves.toEqual([REQUEST_ID]);
+  });
+
   it('denies it as an agent ship holding gateway:approve, and it leaves To decide', async () => {
     await expect(toDecide()).resolves.toEqual([REQUEST_ID]);
 

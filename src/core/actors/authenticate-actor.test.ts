@@ -30,6 +30,8 @@ let connections: ReturnType<typeof memoryConnectionStore>;
 let agentFleet: typeof FLEET_ID;
 /** Who read the agent's scopes, by crew token. */
 let readers: string[];
+/** Whether the agent is outside the gateway's own read reach, as in a fleet that applies its own network rules. */
+let isOutsideGatewayReach: boolean;
 let grants: ReturnType<typeof memoryAccountGrants>;
 let sessions: ReturnType<typeof fakePageSessions>;
 /** The page session cookie of Charlotte's grant. */
@@ -38,9 +40,14 @@ let charlotte: string;
 const door: Pick<FleetDoor, 'whoami' | 'getShip'> = {
   whoami: (crewToken) =>
     Promise.resolve(crewToken === AGENT_CREW ? ok({ shipId: AGENT, fleetId: agentFleet, name: 'approver', type: 'agent' }) : err({ code: 'UNAUTHORIZED', message: 'Unknown crew token' })),
-  getShip: (crewToken, { shipId }) => {
+  getShip: (crewToken, { shipId, onBehalfOf }) => {
     readers.push(crewToken);
-    return Promise.resolve(shipId === AGENT ? ok({ status: 'crewed' as const, scopes: ['messages:send', 'gateway:approve'] }) : err({ code: 'NOT_FOUND', message: 'No such ship' }));
+    if (shipId !== AGENT) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'No such ship' }));
+    }
+    // A read on behalf of a ship answers with that ship's read reach, which holds the ship itself (decision 0034).
+    const isInReach = !isOutsideGatewayReach || onBehalfOf === AGENT;
+    return Promise.resolve(isInReach ? ok({ status: 'crewed' as const, scopes: ['messages:send', 'gateway:approve'] }) : err({ code: 'FORBIDDEN', message: 'The ship is outside your read reach' }));
   },
 };
 
@@ -49,6 +56,7 @@ beforeEach(async () => {
   await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: GATEWAY_CREW, crewedAt: new Date('2026-10-20T09:00:00.000Z') });
   agentFleet = FLEET_ID;
   readers = [];
+  isOutsideGatewayReach = false;
   grants = memoryAccountGrants();
   sessions = fakePageSessions();
   await grants.save({ grantId: 'grant-1', fleetId: FLEET_ID, accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, scopes: ['fleet:read', 'gateway:approve'], refreshToken: 'pagasae-refresh-1', accountToken: 'account-token-1', accountTokenExpiresAt: new Date('2026-10-20T10:00:00.000Z') });
@@ -68,6 +76,12 @@ describe('who calls the gateway', () => {
   it("is a ship by its own crew token, in its fleet, with the scopes the fleet holds for it, read as the gateway's ship", async () => {
     await expect(authenticate({ crewToken: AGENT_CREW })).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, kind: 'ship', shipId: AGENT, scopes: ['messages:send', 'gateway:approve'] } });
     expect(readers).toEqual([GATEWAY_CREW]);
+  });
+
+  it("is a ship outside the gateway's own read reach, its scopes read on its own behalf: an actor reads itself", async () => {
+    isOutsideGatewayReach = true;
+
+    await expect(authenticate({ crewToken: AGENT_CREW })).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, kind: 'ship', shipId: AGENT, scopes: ['messages:send', 'gateway:approve'] } });
   });
 
   it('takes the crew token over a cookie sent with it', async () => {
