@@ -3,6 +3,10 @@ import { Client, StreamableHTTPClientTransport, auth } from '@modelcontextprotoc
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
+import WebSocket from 'ws';
+
+import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
+import { createPrismaPendingRequests } from '../src/adapters/prisma/pending-requests.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, registerNetworkingPlugin, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
@@ -28,6 +32,17 @@ let setting: Setting;
 let app: GatewayApp;
 let pagasae: FakePagasae;
 let fleetId: FleetId;
+let prisma: PrismaClient;
+
+async function until(isDone: () => boolean): Promise<void> {
+  const deadline = Date.now() + 5000;
+  while (!isDone()) {
+    if (Date.now() > deadline) {
+      throw new Error('not in time');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
 
 beforeEach(async () => {
   const fleet = await startFleetServer(inject('postgresUrl'));
@@ -37,6 +52,7 @@ beforeEach(async () => {
   setting = { fleet, address, cookie: await signIn(fleet), databaseUrl: await migratedDatabase(inject('postgresUrl')), pagasae };
   app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET, pagasae: { url: pagasae.url, ...PAGASAE_CLIENT }, installationToken: INSTALLATION_TOKEN });
   await app.server.listen({ host: '127.0.0.1', port });
+  prisma = createPrismaClient(setting.databaseUrl);
   const gatewayShip = await commission(fleet, { cookie: setting.cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: GATEWAY_SCOPES } });
   const probeCrew = await register(fleet, await commission(fleet, { cookie: setting.cookie, ship: { name: 'probe', type: 'agent' } }));
   const whoami = await fetch(`${fleet.url}/api/v1/ship/whoami`, { headers: { authorization: `Bearer ${probeCrew}` } });
@@ -47,6 +63,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  await prisma.$disconnect();
   await app.close();
   await pagasae.stop();
   await setting.fleet.stop();
@@ -158,6 +175,34 @@ describe("a person signs in to the gateway's pages through pagasae", () => {
 
     // pagasae names no person ship for Charlotte here, so only To decide waits on her.
     expect({ status: overview.status, waits: page.includes('0 to decide') && !page.includes('for you'), signOut: page.includes('action="/sign-out"') }).toEqual({ status: 200, waits: true, signOut: true });
+  });
+
+  it("is sent the overview again over the live channel when a request opens in the person's fleet", async () => {
+    pagasae.answer({ ...charlotteIn(pagasae, fleetId), scope: 'fleet:read gateway:approve' });
+    const browser = aBrowser();
+    await browser.follow(`${setting.address}/sign-in`, `${setting.address}/overview`);
+    const received: string[] = [];
+    const socket = new WebSocket(`${setting.address.replace('http', 'ws')}/live?page=overview`, { headers: { cookie: browser.cookieFor(setting.address), origin: setting.address } });
+    socket.on('message', (data: Buffer) => received.push(data.toString()));
+    await until(() => received.length === 1);
+
+    const asked = new Date();
+    await createPrismaPendingRequests(prisma).open({
+      fleetId,
+      requestId: 'req_01m5c7hmbt9f1vrkwb37az0001',
+      subject: { kind: 'client', clientId: 'https://orderbot.example.com/client.json', clientName: 'Orderbot' },
+      requesters: [{ accountId: 'acc-pieter', personShipId: null }],
+      askedAt: asked,
+      expiresAt: new Date(asked.getTime() + 7 * 86_400_000),
+      state: 'pending',
+      decidedBy: null,
+      decidedAt: null,
+      now: asked,
+    });
+
+    await until(() => received.length === 2);
+    socket.terminate();
+    expect(received[1]).toContain('Orderbot');
   });
 
   it('signs out: the page session ends, so the next call is signed out', async () => {
