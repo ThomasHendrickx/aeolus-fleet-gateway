@@ -39,7 +39,9 @@ export function fakeProxyShipFleet() {
     /** Whether a register is answered; the fleet may answer the commission and then go quiet. */
     isRegisterAnswering: true,
     validOwners: new Set<ShipId>([OWNER_SHIP_ID]),
-    commissioned: new Array<{ name: string; type: string; owner: ShipId; idempotencyKey: string }>(),
+    commissioned: new Array<{ name: string; type: string; owner: ShipId; idempotencyKey: string; scopes: readonly string[] }>(),
+    /** The scopes the gateway's ship holds, so a commission gives no other (decision 0053). */
+    gatewayScopes: new Set(['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare']),
     keys: new Map<string, ShipId>(),
     secrets: new Map<ShipId, string>(),
     crewed: new Set<ShipId>(),
@@ -54,6 +56,10 @@ export function fakeProxyShipFleet() {
       }
       if (!state.validOwners.has(ship.owner)) {
         return Promise.resolve(err({ code: 'BAD_REQUEST', message: 'The owner is an active person ship or argo (decision 0045)' }));
+      }
+      const notHeld = ship.scopes.find((scope) => !state.gatewayScopes.has(scope));
+      if (notHeld !== undefined) {
+        return Promise.resolve(err({ code: 'FORBIDDEN', message: `A commission gives only scopes the commissioner holds: not ${notHeld}` }));
       }
       const earlier = state.keys.get(ship.idempotencyKey);
       if (earlier !== undefined) {
