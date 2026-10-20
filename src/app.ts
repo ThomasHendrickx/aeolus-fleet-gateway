@@ -45,10 +45,6 @@ import { createApproveAuthorization } from './core/oauth/approve-authorization.j
 import { createExchangeToken } from './core/oauth/exchange-token.js';
 import { createReadAuthorization } from './core/oauth/read-authorization.js';
 import { createRegisterClient } from './core/oauth/register-client.js';
-import { createReadIdentityProvider } from './core/federation/read-identity-provider.js';
-import { createSetIdentityProvider } from './core/federation/set-identity-provider.js';
-import { createProviderDiscovery } from './adapters/oidc/provider-discovery.js';
-import { createPrismaIdentityProviders } from './adapters/prisma/identity-providers.js';
 import { createConnect } from './core/connection/connect.js';
 import { createReadConnection, type ReadConnection } from './core/connection/read-connection.js';
 import { createDeleteFleet } from './core/installation/delete-fleet.js';
@@ -93,8 +89,6 @@ const DEFAULT_PUBLIC_URL = 'http://127.0.0.1:4200';
 
 /** How long a client's metadata document may take to answer. */
 const CLIENT_METADATA_TIMEOUT_MS = 5_000;
-/** How long the gateway waits for an identity provider's OpenID configuration while argo sets it. */
-const PROVIDER_DISCOVERY_TIMEOUT_MS = 5_000;
 
 /** How often a proxy ship's worker looks again while the fleet hands it only what it holds, or does not answer. */
 const POLL_MS = 2_000;
@@ -214,9 +208,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const authorizationCodes = createPrismaAuthorizationCodes(prisma);
   const readAuthorization = createReadAuthorization({ clients: oauthClients, documents: createClientMetadataDocuments({ timeoutMs: CLIENT_METADATA_TIMEOUT_MS }), resource });
   const registerClient = createRegisterClient({ clients: oauthClients, secrets: oauthSecrets });
-  const identityProviders = createPrismaIdentityProviders(prisma);
-  const setIdentityProvider = createSetIdentityProvider({ providers: identityProviders, discovery: createProviderDiscovery({ timeoutMs: PROVIDER_DISCOVERY_TIMEOUT_MS }), clock });
-  const readIdentityProvider = createReadIdentityProvider({ providers: identityProviders });
   const issuedTokens = createPrismaIssuedTokens(prisma);
   registerOAuthRoutes(server, {
     issuer,
@@ -263,8 +254,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     stateParty,
     markTool,
     registerClient,
-    setIdentityProvider,
-    readIdentityProvider,
   });
 
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {

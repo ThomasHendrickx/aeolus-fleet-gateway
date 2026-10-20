@@ -46,7 +46,7 @@ Commissioning an app ship with a named owner needs core 0.28 (aeolus-fleet#959),
 
 ## The page of parties
 
-`/parties` is the gateway's own page for argo: the parties with their state, a form to approve an MCP server, per party the forms to hand over a new secret, state its tools and mark a tool repeatable, and the fleet's identity provider with a form to set it. The page knows argo by the console session cookie the browser sends, so the gateway must be served where that cookie reaches it (on localhost, any port). A viewer session sees the parties without the forms. Each form calls the API as the session's ship, and the page refuses a form sent from another origin.
+`/parties` is the gateway's own page for argo: the parties with their state, a form to approve an MCP server, and per party the forms to hand over a new secret, state its tools and mark a tool repeatable. The page knows argo by the console session cookie the browser sends, so the gateway must be served where that cookie reaches it (on localhost, any port). A viewer session sees the parties without the forms. Each form calls the API as the session's ship, and the page refuses a form sent from another origin.
 
 ## MCP out
 
@@ -88,10 +88,6 @@ Serve the gateway at its own origin, such as `https://gateway.example.com`, with
 - The first reply of the capability's first output type completes it; plain text completes a call to a ship that states no output type. An outside tool's result, as MCP out replies one, is answered as that result.
 - A call fails 10 minutes after it was sent without its answer: the gateway's default while statements state no deadline. A reply after that is kept and changes nothing.
 - Each client party's worker takes the replies of its proxy ship, keeps each on its call, then acknowledges and handles its delivery. With core 0.27 a message to the proxy ship that replies to no call stays unacknowledged, for a later slice's inbox. Ten of them would take every pushReceive answer and keep replies out, until core 0.28's `receiveReply` (aeolus-fleet#953) takes replies by message.
-
-## People sign in with the company's identity provider
-
-argo sets the fleet's company identity provider with `identityProvider.set` (argo's console session): its issuer, and the gateway's client id and secret there, such as a Google OAuth client. The gateway keeps it only once the issuer's OpenID configuration (`<issuer>/.well-known/openid-configuration`) names that same issuer and serves its endpoints over https (or http on this machine). Setting it again replaces it. `identityProvider.get` shows the issuer and client id, never the secret, which is kept as the parties' credentials are.
 
 ## Develop
 

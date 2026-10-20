@@ -2,7 +2,6 @@ import type { FleetId } from '@aeolus-fleet/common';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { SetIdentityProvider } from '../../core/federation/set-identity-provider.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { ShownParty } from '../../core/parties/shown-party.js';
@@ -34,8 +33,6 @@ let approvals: Parameters<ApproveParty>[0][];
 let crews: Parameters<CrewParty>[0][];
 let marks: Parameters<MarkTool>[0][];
 let stated: string[];
-let providers: Parameters<SetIdentityProvider>[0][];
-const SET_AT = new Date('2026-10-19T12:00:00.000Z');
 
 function contextFor(cookie: string | undefined): Context {
   const unused = () => Promise.reject(new Error('not used by the page'));
@@ -69,11 +66,6 @@ function contextFor(cookie: string | undefined): Context {
     },
     listParties: () => Promise.resolve([CRM]),
     registerClient: unused,
-    setIdentityProvider: (input) => {
-      providers.push(input);
-      return Promise.resolve(ok({ issuer: input.issuer, clientId: input.clientId, setAt: SET_AT }));
-    },
-    readIdentityProvider: () => Promise.resolve({ issuer: 'https://accounts.google.com', clientId: 'gateway.apps.googleusercontent.com', setAt: SET_AT }),
     stateParty: ({ name }) => {
       stated.push(name);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));
@@ -90,7 +82,6 @@ beforeEach(async () => {
   crews = [];
   marks = [];
   stated = [];
-  providers = [];
   server = Fastify({ logger: false });
   registerPartiesPage(server, { contextFor, fleetUrl: 'https://fleet.example.com' });
   await server.ready();
@@ -193,19 +184,5 @@ describe("the gateway's page of parties, for argo signed in to the console", () 
     await post('/parties/mark', { name: 'crm', tool: 'create_deal' });
 
     expect(marks.map(({ isRepeatable }) => isRepeatable)).toEqual([true, false]);
-  });
-
-  it("shows the fleet's identity provider without its secret", async () => {
-    const page = await server.inject({ url: '/parties', headers: { host: HOST, cookie: ARGO } });
-
-    expect(page.body).toContain('https://accounts.google.com');
-    expect(page.body).toContain('gateway.apps.googleusercontent.com');
-  });
-
-  it('sets the identity provider people sign in with', async () => {
-    const answer = await post('/parties/identity-provider', { issuer: 'https://accounts.google.com', clientId: 'gateway.apps.googleusercontent.com', clientSecret: 'google-secret' });
-
-    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 303, location: '/parties' });
-    expect(providers).toEqual([{ fleetId: FLEET, issuer: 'https://accounts.google.com', clientId: 'gateway.apps.googleusercontent.com', clientSecret: 'google-secret' }]);
   });
 });

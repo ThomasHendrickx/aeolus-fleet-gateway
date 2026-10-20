@@ -25,9 +25,7 @@ export type DomainErrorKind =
   | 'INVALID_ARGUMENTS'
   | 'NOT_REACHABLE'
   | 'SEND_REFUSED'
-  | 'NO_SUCH_CALL'
-  | 'INVALID_ISSUER'
-  | 'PROVIDER_UNUSABLE';
+  | 'NO_SUCH_CALL';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {
