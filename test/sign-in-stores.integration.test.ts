@@ -59,6 +59,18 @@ describe("signed-in accounts' grants in Postgres (decision 0054)", () => {
     await expect(grants.find(FLEET, 'grant-3')).resolves.toBeUndefined();
   });
 
+  it("finds every grant of an account in its fleet only (decision 0055)", async () => {
+    const grants = createPrismaAccountGrants(prisma);
+    await grants.save(aGrant({ grantId: 'grant-b1', accountId: 'acc-burak' }));
+    await grants.save(aGrant({ grantId: 'grant-b2', accountId: 'acc-burak' }));
+    await grants.save(aGrant({ grantId: 'grant-b3', accountId: 'acc-burak', fleetId: OTHER_FLEET }));
+    await grants.save(aGrant({ grantId: 'grant-c1', accountId: 'acc-charlie' }));
+
+    const found = await grants.ofAccount(FLEET, 'acc-burak');
+
+    expect(found.map(({ grantId }) => grantId).sort()).toEqual(['grant-b1', 'grant-b2']);
+  });
+
   it('forgets a fleet with its grants (decision 0021)', async () => {
     await createPrismaAccountGrants(prisma).save(aGrant({ grantId: 'grant-o', fleetId: OTHER_FLEET }));
 

@@ -59,6 +59,7 @@ function contextFor(cookie: string | undefined): Context {
     setFleetEnabled: unused,
     readFleet: unused,
     deleteFleet: unused,
+    endSignIns: unused,
     readConnection: unused,
     connect: unused,
     approveParty: unused,

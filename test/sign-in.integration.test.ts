@@ -21,6 +21,8 @@ import { outsidePartiesOn } from './support/outside-parties.js';
 // gateway are real.
 
 const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+/** The hosting service's token (decision 0021), which pagasae presents when it tells the gateway an account was disabled. */
+const INSTALLATION_TOKEN = 'an-installation-token-of-at-least-32-characters';
 
 let setting: Setting;
 let app: GatewayApp;
@@ -33,13 +35,14 @@ beforeEach(async () => {
   const address = `http://127.0.0.1:${String(port)}`;
   pagasae = await startFakePagasae();
   setting = { fleet, address, cookie: await signIn(fleet), databaseUrl: await migratedDatabase(inject('postgresUrl')), pagasae };
-  app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET, pagasae: { url: pagasae.url, ...PAGASAE_CLIENT } });
+  app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET, pagasae: { url: pagasae.url, ...PAGASAE_CLIENT }, installationToken: INSTALLATION_TOKEN });
   await app.server.listen({ host: '127.0.0.1', port });
   const gatewayShip = await commission(fleet, { cookie: setting.cookie, ship: { name: 'gateway', type: 'gateway', scopes: GATEWAY_SCOPES } });
   const probeCrew = await register(fleet, await commission(fleet, { cookie: setting.cookie, ship: { name: 'probe', type: 'agent' } }));
   const whoami = await fetch(`${fleet.url}/api/v1/ship/whoami`, { headers: { authorization: `Bearer ${probeCrew}` } });
   fleetId = z.object({ fleetId: idSchema('fleet') }).parse(await whoami.json()).fleetId;
   await registerNetworkingPlugin(fleet, setting.cookie);
+  expect((await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'switch-on', fleetId, enabled: true } })).status).toBe(200);
   expect((await connectGateway(address, { cookie: setting.cookie, ...gatewayShip })).status).toBe(200);
 });
 
@@ -48,6 +51,30 @@ afterEach(async () => {
   await pagasae.stop();
   await setting.fleet.stop();
 });
+
+/** Charlotte signs in from a new MCP client, which takes the gateway's tokens. */
+async function charlotteSignedIn(): Promise<ReturnType<typeof aClientProvider>> {
+  pagasae.answer(charlotteIn(pagasae, fleetId));
+  const client = aClientProvider(await aRegisteredClient(setting, false));
+  const serverUrl = `${setting.address}/mcp`;
+  await auth(client.provider, { serverUrl });
+  const back = new URL(z.string().parse((await aBrowser().follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'account'), CALLBACK)).headers.get('location')));
+  const iss = back.searchParams.get('iss');
+  await expect(auth(client.provider, { serverUrl, authorizationCode: z.string().parse(back.searchParams.get('code')), ...(iss === null ? {} : { iss }) })).resolves.toBe('AUTHORIZED');
+  return client;
+}
+
+/** What /mcp answers an initialize from the client with its access token. */
+async function initializeStatus(client: ReturnType<typeof aClientProvider>): Promise<number> {
+  const tokens = await client.provider.tokens();
+  const response = await fetch(`${setting.address}/mcp`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${z.string().parse(tokens?.access_token)}`, 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'charlotte', version: '1' } } }),
+  });
+  await response.body?.cancel();
+  return response.status;
+}
 
 describe('a person signs in from their MCP client through pagasae', () => {
   it("gets tokens with no approval, and their MCP session lists their person ship's tools", async () => {
@@ -146,5 +173,25 @@ describe('a person asks for an outside MCP server from their chat (decision 0056
       isAsked: true,
       toDecide: [{ subject: { kind: 'server', url: 'https://mcp.linear.app/mcp' }, requesters: [{ accountId: 'acc-charlotte', personShipId: null }] }],
     });
+  });
+});
+
+describe("pagasae tells the gateway an account was disabled (decision 0055, flow F8)", () => {
+  it("refuses the leaver's MCP clients at their next call, with the installation token", async () => {
+    const first = await charlotteSignedIn();
+    const second = await charlotteSignedIn();
+    expect([await initializeStatus(first), await initializeStatus(second)]).toEqual([200, 200]);
+
+    const told = await mutate(setting.address, { procedure: 'installation.accountDisabled', installationToken: INSTALLATION_TOKEN, body: { fleetId, accountId: 'acc-charlotte' } });
+
+    expect({ told: told.status, clients: [await initializeStatus(first), await initializeStatus(second)] }).toEqual({ told: 200, clients: [401, 401] });
+  });
+
+  it('is refused without the installation token, and the sign-in goes on', async () => {
+    const client = await charlotteSignedIn();
+
+    const told = await mutate(setting.address, { procedure: 'installation.accountDisabled', body: { fleetId, accountId: 'acc-charlotte' } });
+
+    expect({ told: told.status, client: await initializeStatus(client) }).toEqual({ told: 401, client: 200 });
   });
 });

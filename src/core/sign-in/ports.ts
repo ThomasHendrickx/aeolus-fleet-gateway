@@ -71,6 +71,8 @@ export interface AccountGrant {
 export interface AccountGrants {
   save(grant: AccountGrant): Promise<void>;
   find(fleetId: FleetId, grantId: string): Promise<AccountGrant | undefined>;
+  /** Every grant of the account in the fleet: one per client it signed in from. */
+  ofAccount(fleetId: FleetId, accountId: string): Promise<readonly AccountGrant[]>;
   /** Keeps pagasae's new tokens for the grant, and the person ship they name. */
   renew(grant: { fleetId: FleetId; grantId: string }, tokens: Partial<Pick<AccountGrant, 'refreshToken' | 'accountToken' | 'accountTokenExpiresAt' | 'personShipId'>>): Promise<void>;
   end(fleetId: FleetId, grantId: string): Promise<void>;

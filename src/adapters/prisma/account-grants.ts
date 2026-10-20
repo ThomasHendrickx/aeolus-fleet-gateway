@@ -17,6 +17,10 @@ export function createPrismaAccountGrants(db: Db): AccountGrants {
       const row = await db.accountGrant.findFirst({ where: { fleetId, grantId } });
       return row ? grantOf(row) : undefined;
     },
+    ofAccount: async (fleetId, accountId) => {
+      const rows = await db.accountGrant.findMany({ where: { fleetId, accountId } });
+      return rows.map(grantOf);
+    },
     renew: async ({ fleetId, grantId }, tokens) => {
       await db.accountGrant.updateMany({ where: { fleetId, grantId }, data: { ...tokens } });
     },
