@@ -14,7 +14,7 @@ import { migratedDatabase } from './support/database.js';
 import { PAGASAE_CLIENT, startFakePagasae } from './support/fake-pagasae.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
 import { mutate } from './support/gateway-api.js';
-import { aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
+import { aConnectedGateway, aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
 import { outsidePartiesOn } from './support/outside-parties.js';
 
 // The journey of slice 2 end to end: an outside MCP client, signed in with
@@ -83,6 +83,7 @@ beforeEach(async () => {
   setting = { fleet, address, cookie: await signIn(fleet), databaseUrl, pagasae: await startFakePagasae() };
   app = createGatewayApp({ databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET, pagasae: { url: setting.pagasae.url, ...PAGASAE_CLIENT } });
   await app.server.listen({ host: '127.0.0.1', port });
+  await aConnectedGateway(setting);
 });
 
 afterEach(async () => {

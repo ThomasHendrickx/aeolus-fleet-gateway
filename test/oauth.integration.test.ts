@@ -7,7 +7,7 @@ import { signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { PAGASAE_CLIENT, startFakePagasae } from './support/fake-pagasae.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
-import { aClientProvider, aCrewedClientParty, aRegisteredClient, answered, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
+import { aConnectedGateway, aClientProvider, aCrewedClientParty, aRegisteredClient, answered, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
 
 // An MCP client signs in to the gateway with the MCP TypeScript SDK, as
 // Claude or Cursor would: argo pre-registers it, a person of the fleet asks
@@ -24,6 +24,7 @@ beforeEach(async () => {
   setting = { fleet, address, cookie: await signIn(fleet), databaseUrl: await migratedDatabase(inject('postgresUrl')), pagasae: await startFakePagasae() };
   app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET, pagasae: { url: setting.pagasae.url, ...PAGASAE_CLIENT } });
   await app.server.listen({ host: '127.0.0.1', port });
+  await aConnectedGateway(setting);
 });
 
 afterEach(async () => {

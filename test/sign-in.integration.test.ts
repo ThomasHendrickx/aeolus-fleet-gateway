@@ -113,7 +113,7 @@ describe('a person asks for access for their MCP client (decision 0056)', () => 
     const answer = await browser.visit(waiting);
 
     expect({
-      waited: { status: landed.status, isWaitingPage: new URL(waiting).pathname.startsWith('/authorize/waiting/'), says: (await landed.text()).includes('Waiting for approval') },
+      waited: { status: landed.status, isWaitingPage: new URL(waiting).pathname === '/authorize/waiting', says: (await landed.text()).includes('Waiting for approval') },
       toDecide: toDecide.map(({ subject }) => subject.clientName),
       denied: denied.status,
       back: new URL(z.string().parse(answer.headers.get('location'))).searchParams.get('error'),

@@ -113,7 +113,7 @@ async function askedForAccess() {
 
 /** The browser opens the waiting page, holding the cookie given. */
 function waitingPage(waiting: string, cookie: string | null = 'aeolus_waiting=secret-2') {
-  return server.inject({ url: `/authorize/waiting/${waiting}`, headers: { host: HOST, ...(cookie === null ? {} : { cookie }) } });
+  return server.inject({ url: `/authorize/waiting?waiting=${waiting}`, headers: { host: HOST, ...(cookie === null ? {} : { cookie }) } });
 }
 
 /** The client's party, crewed. */
@@ -253,7 +253,7 @@ describe('a person who asked for access for the client (decision 0056)', () => {
 
     expect({ status: answer.statusCode, location: answer.headers.location, cookies: answer.headers['set-cookie'] }).toEqual({
       status: 302,
-      location: '/authorize/waiting/waiting-1',
+      location: '/authorize/waiting?waiting=waiting-1',
       cookies: ['aeolus_sign_in=; Path=/pagasae/callback; Max-Age=0; HttpOnly; SameSite=Lax', 'aeolus_waiting=secret-2; Path=/authorize/waiting; Max-Age=604800; HttpOnly; SameSite=Lax'],
     });
   });

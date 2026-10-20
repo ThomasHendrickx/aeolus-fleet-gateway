@@ -116,7 +116,7 @@ describe('an account asks for access for an outside MCP client', () => {
     await parties.save(aClientParty('crewed'));
 
     await expect(asked()).resolves.toEqual({ isOk: true, value: { kind: 'answered', redirectTo: `${CALLBACK}?code=secret-1&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
-    expect({ holder: codes.held.get('hash(secret-1)')?.party, requests: requests.held }).toEqual({ holder: 'orderbot', requests: [] });
+    expect({ code: codes.held.get('hash(secret-1)'), requests: requests.held }).toMatchObject({ code: { kind: 'party', party: 'orderbot' }, requests: [] });
   });
 
   it("keeps the query of the client's redirect URI, adding the code to it", async () => {

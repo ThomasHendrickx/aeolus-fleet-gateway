@@ -47,6 +47,10 @@ export interface PendingRequests {
    */
   open(request: PendingRequest & { now: Date }): Promise<PendingRequest>;
   find(fleetId: FleetId, requestId: string): Promise<PendingRequest | undefined>;
+  /** The latest request for the client or server the account asked for, in any state, and whether the account was told its end. */
+  latestAskedBy(fleetId: FleetId, asked: { subject: RequestSubject; accountId: string }): Promise<{ request: PendingRequest; isTold: boolean } | undefined>;
+  /** Marks that the account was told the request ended, so its next try asks anew. */
+  markTold(fleetId: FleetId, told: { requestId: string; accountId: string }): Promise<void>;
   /** The open requests not expired by now, the oldest first. */
   listOpen(fleetId: FleetId, now: Date): Promise<PendingRequest[]>;
   /** Takes a pending request, not expired by now, for approving; false when it is not. */
@@ -60,4 +64,25 @@ export interface PendingRequests {
 /** Outbound port: new request ids, prefixed `req_` and time-ordered. */
 export interface RequestIds {
   newRequestId(): string;
+}
+
+/** A browser waiting for a request for an outside MCP client: the request, the account that asked, and the client's request to answer once it is decided. */
+export interface Waiting {
+  readonly fleetId: FleetId;
+  readonly requestId: string;
+  readonly accountId: string;
+  /** The secret the browser that asked holds, so no other browser takes the client's code. */
+  readonly browserSecret: string;
+  readonly request: Readonly<Record<string, string | undefined>>;
+}
+
+/**
+ * Outbound port: seals a waiting into the waiting page's address, so the
+ * gateway stores nothing more than the request, and the browser's secret
+ * stays secret on the way.
+ */
+export interface WaitingSeals {
+  seal(waiting: Waiting): string;
+  /** The waiting a sealed address holds; none for one the gateway did not seal. */
+  open(sealed: string): Waiting | undefined;
 }

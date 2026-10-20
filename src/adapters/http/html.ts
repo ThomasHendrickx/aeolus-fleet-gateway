@@ -22,7 +22,12 @@ button { color: var(--paper); background: var(--accent); border: 0; border-radiu
 
 /** A whole page of the gateway's: its title, its body, and the shared style. */
 export function layout(title: string, body: string): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escaped(title)}</title><style>${STYLE}</style></head><body>${body}</body></html>`;
+  return documentOf({ title, head: '', body });
+}
+
+/** A page of the gateway with more in its head, such as a refresh. */
+export function documentOf(page: { title: string; head: string; body: string }): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${page.head}<title>${escaped(page.title)}</title><style>${STYLE}</style></head><body>${page.body}</body></html>`;
 }
 
 /** A form from the gateway's own pages: its Origin is the gateway's, so no other site can send one with argo's cookie. */

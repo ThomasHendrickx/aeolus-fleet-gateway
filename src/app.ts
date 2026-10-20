@@ -41,9 +41,13 @@ import { createAuthenticateAccessToken } from './core/oauth/authenticate-access-
 import { oauthSecrets } from './adapters/crypto/oauth-secrets.js';
 import { createClientMetadataDocuments } from './adapters/oauth/client-metadata-documents.js';
 import { createPrismaAuthorizationCodes, createPrismaIssuedTokens, createPrismaOAuthClients } from './adapters/prisma/oauth-stores.js';
-import { createApproveAuthorization } from './core/oauth/approve-authorization.js';
 import { createExchangeToken } from './core/oauth/exchange-token.js';
 import { createSignInSeals } from './adapters/crypto/sign-in-seals.js';
+import { createWaitingSeals } from './adapters/crypto/waiting-seals.js';
+import { createRequestIds } from './adapters/crypto/request-ids.js';
+import { createAskForClient } from './core/requests/ask-for-client.js';
+import { createOpenRequest } from './core/requests/open-request.js';
+import { createReadWaiting } from './core/requests/read-waiting.js';
 import { createPagasae } from './adapters/pagasae/pagasae-client.js';
 import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
@@ -70,7 +74,6 @@ import { createIsServed } from './core/installation/served.js';
 import { createSetFleetEnabled } from './core/installation/set-fleet-enabled.js';
 import { createAuthenticateOperator } from './core/operator/authenticate-operator.js';
 import { createApproveClientParty, createApproveParty, type ApproveClientParty, type ApproveParty } from './core/parties/approve-party.js';
-import { createReadClientParty } from './core/parties/read-client-party.js';
 import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
 import { createListParties } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
@@ -258,9 +261,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const registerClient = createRegisterClient({ clients: oauthClients, secrets: oauthSecrets });
   const issuedTokens = createPrismaIssuedTokens(prisma);
   const seals = createSignInSeals(options.gatewaySecret);
-  // People sign in through pagasae where it is set (decision 0054); else argo alone approves clients.
+  // People sign in through pagasae where it is set (decision 0054); else no client connects, as only an account asks for one (A a).
   const pagasae = options.pagasae === undefined ? undefined : createPagasae({ ...options.pagasae, redirectUri: `${issuer}/pagasae/callback`, timeoutMs: PAGASAE_TIMEOUT_MS });
   const grants = createPrismaAccountGrants(prisma);
+  const pendingRequests = createPrismaPendingRequests(prisma);
+  const waitings = createWaitingSeals(options.gatewaySecret);
+  const issuing = { codes: authorizationCodes, secrets: oauthSecrets, clock, issuer };
   const signIn =
     pagasae === undefined
       ? undefined
@@ -276,25 +282,22 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             clock,
             issuer,
             servesFleet: async (fleetId) => (await connections.find(fleetId)) !== undefined && (await isServed(fleetId)),
+            askForClient: createAskForClient({
+              parties,
+              requests: pendingRequests,
+              openRequest: createOpenRequest({ requests: pendingRequests, ids: createRequestIds(), clock }),
+              servesOutsideParties,
+              waitings,
+              ...issuing,
+            }),
           }),
+          readWaiting: createReadWaiting({ waitings, readAuthorization, requests: pendingRequests, parties, ...issuing }),
         };
   registerOAuthRoutes(server, {
     ...(signIn === undefined ? {} : { signIn }),
     issuer,
     resource,
-    fleetUrl: options.fleetUrl,
-    authenticateOperator,
     readAuthorization,
-    approveAuthorization: createApproveAuthorization({
-      readAuthorization,
-      codes: authorizationCodes,
-      secrets: oauthSecrets,
-      clock,
-      issuer,
-      parties,
-      approveClientParty,
-    }),
-    readClientParty: createReadClientParty({ parties }),
     exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
   });
   // A signed-in person's messaging, as the crew of their person ship (decision 0057).
@@ -324,7 +327,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
 
   // What every call of the API reads, from the request's console session and installation token.
   const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections });
-  const pendingRequests = createPrismaPendingRequests(prisma);
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; installationTokenSent: string | undefined }): Context => ({
     ...sent,
     authenticateActor,

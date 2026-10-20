@@ -266,6 +266,8 @@ model PendingRequest {
   state      String
   decidedBy  Json?     @map("decided_by")
   decidedAt  DateTime? @map("decided_at") @db.Timestamptz(3)
+  /// The requesters told the request ended, by account id, as JSON, so their next try asks anew.
+  toldAccountIds Json  @default("[]") @map("told_account_ids")
 
   @@id([fleetId, requestId])
   @@index([fleetId, askedAt], map: "pending_requests_fleet_asked")

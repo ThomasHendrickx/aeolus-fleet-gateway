@@ -15,13 +15,16 @@ import { commission, register } from './argo.js';
 import { aBrowser, pickedAt } from './browser.js';
 import { charlotteIn, type FakePagasae } from './fake-pagasae.js';
 import type { FleetServer } from './fleet-server.js';
-import { mutate } from './gateway-api.js';
+import { connectGateway, mutate } from './gateway-api.js';
 import { outsidePartiesOn } from './outside-parties.js';
 
 /** The gateway secret every test gateway runs with. */
 export const TEST_GATEWAY_SECRET = 'a-test-gateway-secret-of-at-least-32-characters';
 
 export const CALLBACK = 'http://127.0.0.1:33418/callback';
+
+/** The scopes argo commissions the gateway's ship with. */
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
 
 /** Where a test's fleet, gateway and argo are. */
 export interface Setting {
@@ -63,6 +66,12 @@ export function aClientProvider(client: { clientId: string; clientSecret: string
     codeVerifier: () => verifier,
   };
   return { provider, sentTo: () => sentTo, tokens: () => saved };
+}
+
+/** argo connects the gateway to the fleet, as a person signs in only to a fleet the gateway serves. */
+export async function aConnectedGateway(setting: Setting): Promise<void> {
+  const gatewayShip = await commission(setting.fleet, { cookie: setting.cookie, ship: { name: 'gateway', type: 'gateway', scopes: GATEWAY_SCOPES } });
+  expect((await connectGateway(setting.address, { cookie: setting.cookie, ...gatewayShip })).status).toBe(200);
 }
 
 /** The fleet argo's console session is signed in to. */
