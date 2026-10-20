@@ -29,6 +29,7 @@ const LINEAR: ListedParty = {
 let server: FastifyInstance;
 let parties: ListedParty[];
 let retired: string[];
+let isServerDown: boolean;
 let changes: Record<string, unknown>[];
 
 function contextFor(cookie: string | undefined): Context {
@@ -89,6 +90,12 @@ function contextFor(cookie: string | undefined): Context {
       return Promise.resolve(ok(undefined));
     },
     checkServer: unused,
+    readPartyTools: ({ name }) =>
+      Promise.resolve(
+        isServerDown
+          ? err({ kind: 'SERVER_UNREACHABLE' as const, message: `The MCP server of ${name} could not be listed: connect ECONNREFUSED` })
+          : ok({ tools: [{ name: 'list_issues', description: 'List issues <by team>' }, { name: 'get_issue' }] }),
+      ),
     stateParty: unused,
     markTool: unused,
     registerClient: unused,
@@ -103,6 +110,7 @@ function contextFor(cookie: string | undefined): Context {
 beforeEach(async () => {
   parties = [LINEAR];
   retired = [];
+  isServerDown = false;
   changes = [];
   server = Fastify({ logger: false });
   registerOutsidePartyPage(server, { contextFor, signIn: 'pages' });
@@ -166,6 +174,36 @@ describe('an outside party, on its own page', () => {
   it('offers Retire only to an actor holding fleet:manage', async () => {
     expect((await open('/outside-parties/linear', MANAGER)).body).toContain('href="/outside-parties/linear/retire"');
     expect((await open('/outside-parties/linear', READER)).body).not.toContain('/outside-parties/linear/retire');
+  });
+});
+
+describe("an outside MCP server's tools, on its page", () => {
+  it('lists each tool the server answers now, by name and short description, escaped, with how many', async () => {
+    const shown = await open('/outside-parties/linear', READER);
+
+    expect(shown.body).toContain('Tools');
+    expect(shown.body).toContain('<span class="count">2</span>');
+    expect(shown.body).toContain('list_issues');
+    expect(shown.body).toContain('List issues &lt;by team&gt;');
+    expect(shown.body).toContain('get_issue');
+  });
+
+  it('says why the server could not be listed, and shows the party all the same', async () => {
+    isServerDown = true;
+
+    const shown = await open('/outside-parties/linear', READER);
+
+    expect(shown.statusCode).toBe(200);
+    expect(shown.body).toContain('The MCP server of linear could not be listed: connect ECONNREFUSED');
+    expect(shown.body).toContain('shp_01m3tbfspe96yf1rnr4ank9lin');
+  });
+
+  it('shows no tools for an MCP client', async () => {
+    parties = [{ name: 'orderbot', kind: 'mcpClient', clientId: 'https://orderbot.example.com/client.json', state: 'crewed', proxyShipId: null, ownerShipId: OWNER, scopes: null }];
+
+    const shown = await open('/outside-parties/orderbot', READER);
+
+    expect(shown.body).not.toContain('class="tool-rows"');
   });
 });
 

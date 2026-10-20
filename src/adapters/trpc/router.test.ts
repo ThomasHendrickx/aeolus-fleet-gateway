@@ -112,6 +112,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     registerClient: (input) => Promise.resolve(input.redirectUris.length === 0 ? err({ kind: 'INVALID_REDIRECT_URIS' as const, message: 'A client registers 1 to 10 redirect URIs' }) : ok({ clientId: 'client-1', clientSecret: input.isConfidential ? 's' : null })),
     checkServer: ({ url }) =>
       Promise.resolve(url === 'https://down.example.com/mcp' ? err({ kind: 'SERVER_UNREACHABLE' as const, message: 'The MCP server could not be listed: connect ECONNREFUSED' }) : ok({ tools: [{ name: 'list_issues', description: 'List issues' }] })),
+    readPartyTools: ({ name }) => Promise.resolve(name === 'linear' ? ok({ tools: [{ name: 'list_issues', description: 'List issues' }] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `There is no outside MCP server ${name}` })),
     stateParty: ({ name }) => Promise.resolve(name === 'crm' ? ok({ capabilities: ['list_deals'] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `No party named ${name}` })),
     markTool: (input) => {
       marks.push(input);
@@ -219,6 +220,16 @@ describe("an actor holding fleet:manage checks an outside MCP server through the
 
   it('refuses an actor without fleet:manage', async () => {
     await expect(gatewayRouter.createCaller(aContext(VIEWER_COOKIE).context).parties.check(CHECK)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("an actor reads an outside MCP server's tools through the gateway's API", () => {
+  it('answers the tools the server lists now', async () => {
+    await expect(gatewayRouter.createCaller(aContext(VIEWER_COOKIE).context).parties.tools({ name: 'linear' })).resolves.toEqual({ tools: [{ name: 'list_issues', description: 'List issues' }] });
+  });
+
+  it('answers NOT_FOUND for a server it does not know', async () => {
+    await expect(gatewayRouter.createCaller(aContext(VIEWER_COOKIE).context).parties.tools({ name: 'notion' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
 
