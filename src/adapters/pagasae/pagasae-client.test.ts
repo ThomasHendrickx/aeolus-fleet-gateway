@@ -15,6 +15,12 @@ function anAccountToken(claims: Record<string, unknown>): string {
   return `${part({ alg: 'EdDSA', typ: 'at+jwt', kid: 'k1' })}.${part(claims)}.c2lnbmF0dXJl`;
 }
 
+/**
+ * Every claim core checks on an account token (aeolus-fleet common's
+ * accountTokenClaimsSchema, decision 0058), as pagasae signs them. The
+ * gateway reads its own few of them until that schema is published
+ * (aeolus-fleet#991).
+ */
 const CHARLOTTE = { iss: 'https://pagasae.example.com', aud: FLEET, sub: 'acc-charlotte', org: 'org-acme', scope: 'fleet:read', group: ['sales'], person_ship: PERSON_SHIP, iat: 1_792_400_000, exp: 1_792_400_600 };
 
 let server: Server;
@@ -88,6 +94,17 @@ describe('redeeming the code pagasae sent the person back with', () => {
         personShipId: PERSON_SHIP,
       },
     });
+  });
+
+  it.each([
+    ['an audience that is no fleet id', { aud: 'acme' }],
+    ['a person ship that is no ship id', { person_ship: 'person-charlotte' }],
+    ['no subject', { sub: '' }],
+    ['no end', { exp: undefined }],
+  ])('answers that the account token could not be read for %s, as core would refuse it', async (_what, claims) => {
+    answer = { status: 200, body: { access_token: anAccountToken({ ...CHARLOTTE, ...claims }), token_type: 'Bearer', expires_in: 600, refresh_token: 'r' } };
+
+    await expect(pagasae().redeemCode({ code: 'pagasae-code-1', verifier: 'verifier-1' })).resolves.toMatchObject({ isOk: false });
   });
 
   it('answers no person ship for an account with none', async () => {

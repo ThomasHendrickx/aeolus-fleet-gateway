@@ -17,7 +17,7 @@ const MILLISECONDS_PER_SECOND = 1000;
 const tokenAnswerSchema = z.object({ access_token: z.string(), refresh_token: z.string() });
 const errorAnswerSchema = z.object({ error: z.string() });
 
-/** What the gateway reads of an account token: its fleet (the audience), its account, its person ship there, and its end. */
+/** What the gateway reads of an account token: its fleet (the audience), its account, its person ship there, and its end; common's accountTokenClaimsSchema replaces it once published (aeolus-fleet#991). */
 const accountTokenSchema = z.object({ aud: idSchema('fleet'), sub: z.string().min(1), person_ship: idSchema('ship').optional(), exp: z.number() });
 
 function claimsOf(accountToken: string): unknown {
