@@ -79,8 +79,8 @@ function decided(state: 'approved' | 'denied') {
 }
 
 describe('the browser waits for an outside MCP client to be approved', () => {
-  it('waits while the request is pending', async () => {
-    await expect(readWaiting()({ waiting: 'waiting-1', browserSecret: 'browser-1' })).resolves.toEqual({ isOk: true, value: { kind: 'waiting', clientName: 'Orderbot' } });
+  it('waits while the request is pending, until it expires', async () => {
+    await expect(readWaiting()({ waiting: 'waiting-1', browserSecret: 'browser-1' })).resolves.toEqual({ isOk: true, value: { kind: 'waiting', clientName: 'Orderbot', expiresAt: PENDING.expiresAt } });
   });
 
   it("sends the client back with a code for its party once approved and crewed, bound to the client's request", async () => {
@@ -98,7 +98,7 @@ describe('the browser waits for an outside MCP client to be approved', () => {
     decided('approved');
     await parties.save({ ...PARTY, state: 'awaitingCrew', crewToken: null });
 
-    await expect(readWaiting()({ waiting: 'waiting-1', browserSecret: 'browser-1' })).resolves.toEqual({ isOk: true, value: { kind: 'waiting', clientName: 'Orderbot' } });
+    await expect(readWaiting()({ waiting: 'waiting-1', browserSecret: 'browser-1' })).resolves.toEqual({ isOk: true, value: { kind: 'waiting', clientName: 'Orderbot', expiresAt: PENDING.expiresAt } });
   });
 
   it('sends the client back with access_denied once denied, the account told', async () => {
@@ -114,7 +114,7 @@ describe('the browser waits for an outside MCP client to be approved', () => {
     now = new Date('2026-10-27T09:00:00.000Z');
 
     await expect(readWaiting()({ waiting: 'waiting-1', browserSecret: 'browser-1' })).resolves.toEqual({ isOk: true, value: { kind: 'answered', redirectTo: DENIED } });
-    expect(before).toEqual({ isOk: true, value: { kind: 'waiting', clientName: 'Orderbot' } });
+    expect(before).toEqual({ isOk: true, value: { kind: 'waiting', clientName: 'Orderbot', expiresAt: PENDING.expiresAt } });
   });
 
   it('refuses a waiting it did not seal, or one whose request is forgotten', async () => {

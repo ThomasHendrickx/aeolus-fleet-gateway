@@ -271,6 +271,42 @@ describe('a person who signed in as themselves is sent back from pagasae', () =>
   });
 });
 
+describe("the sign-in pages in design B, Signal, in the console's look", () => {
+  it('shows the client and the fleet side by side, and each pick as a tile', async () => {
+    const page = await authorizePage();
+
+    expect({
+      handshake: page.body.includes('class="handshake"'),
+      tiles: page.body.split('class="tile"').length - 1,
+      tokens: page.body.includes('--tone-attention-fg:oklch(0.5 0.19 27)'),
+    }).toEqual({ handshake: true, tiles: 2, tokens: true });
+  });
+
+  it('leads the waiting page with a ring of the time left, waiting for approval', async () => {
+    await askedForAccess();
+
+    const page = await waitingPage('waiting-1');
+
+    expect({
+      ring: page.body.includes('class="ring"') && page.body.includes('7 d 0 h'),
+      badge: page.body.includes('class="badge tone-waiting"') && page.body.includes('Waiting for approval'),
+    }).toEqual({ ring: true, badge: true });
+  });
+
+  it('leads an error page with one ring in its tone, its title and its reason', async () => {
+    served = [];
+    await signIn('account');
+
+    const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
+
+    expect({
+      ring: answer.body.includes('class="ring"') && answer.body.includes('stroke="var(--tone-attention-fg)"'),
+      title: answer.body.includes('<h1>No fleet for you</h1>'),
+      reason: answer.body.includes('This gateway does not serve the fleet you signed in to.'),
+    }).toEqual({ ring: true, title: true, reason: true });
+  });
+});
+
 describe('a person who asked for access for the client (decision 0056)', () => {
   it("waits on the gateway's page, the browser's secret moved to a cookie only that page reads, for the request's 7 days", async () => {
     const answer = await askedForAccess();
