@@ -32,6 +32,8 @@ let owner: ShipId;
 /** Charlotte's person ship's crew token. */
 let charlotte: string;
 let fleetId: FleetId;
+let gatewayShipId: ShipId;
+let argoCookie: string;
 
 beforeEach(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
@@ -42,7 +44,9 @@ beforeEach(async () => {
   app = createGatewayApp({ databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET });
   await app.server.listen({ host: '127.0.0.1', port });
   await registerNetworkingPlugin(fleet, cookie);
+  argoCookie = cookie;
   const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: GATEWAY_SCOPES } });
+  gatewayShipId = gatewayShip.shipId;
   expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
   approver = await register(fleet, await commission(fleet, { cookie, ship: { name: 'approver', type: 'agent', scopes: ['fleet:read', 'gateway:approve'] } }));
   const charlotteShip = await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } });
@@ -132,6 +136,40 @@ describe("a person hears the outcome of their request for an outside MCP server 
       from: 'gateway',
       contentType: 'text/plain',
       payload: 'Your request for https://mcp.linear.app/mcp was denied.',
+    });
+  });
+});
+
+describe("the gateway asks its owner about a request, and withdraws the question once it is decided (decision 0056)", () => {
+  /** Charlotte's next delivery, waiting up to 5 seconds for it. */
+  async function nextDelivery() {
+    let delivery = await receiveOne(fleet, charlotte);
+    for (let attempt = 0; attempt < 50 && delivery === undefined; attempt += 1) {
+      await wait(100);
+      delivery = await receiveOne(fleet, charlotte);
+    }
+    return delivery;
+  }
+
+  it("sends the owner of the gateway's ship the question, then its withdrawal", async () => {
+    const owned = await fetch(`${fleet.url}/trpc/fleet.setOwner`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: fleet.url, cookie: argoCookie },
+      body: JSON.stringify({ shipId: gatewayShipId, ownerShipId: owner }),
+    });
+    expect(owned.status, await owned.clone().text()).toBe(200);
+
+    await app.restoreConnections();
+    const question = await nextDelivery();
+    await mutate(address, { procedure: 'requests.decide', crewToken: approver, body: { requestId: REQUEST_ID, decision: { kind: 'deny' } } });
+    const withdrawal = await nextDelivery();
+
+    const asked = z.object({ id: z.string(), title: z.string() }).parse(JSON.parse(z.string().parse(question?.payload)));
+    const questionId = asked.id;
+    expect({ question: [question?.senderName, question?.contentType], title: asked.title, withdrawal: [withdrawal?.contentType, withdrawal?.payload] }).toEqual({
+      question: ['gateway', 'application/vnd.aeolus.question+json'],
+      title: 'Orderbot asks for access to the fleet',
+      withdrawal: ['application/vnd.aeolus.question-withdrawal+json', JSON.stringify({ questionId })],
     });
   });
 });

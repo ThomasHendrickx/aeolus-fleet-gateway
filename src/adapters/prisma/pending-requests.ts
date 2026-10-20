@@ -30,7 +30,8 @@ function subjectKeyOf(subject: RequestSubject): string {
   return subject.kind === 'client' ? `client:${subject.clientId}` : `server:${subject.url}`;
 }
 
-function requestOf(raw: unknown): PendingRequest {
+/** A pending request from a row, whether read by Prisma or by raw SQL. */
+export function requestOf(raw: unknown): PendingRequest {
   const row = rowSchema.parse(raw);
   const subject: RequestSubject =
     row.kind === 'client' ? { kind: 'client', clientId: z.string().parse(row.clientId), clientName: z.string().parse(row.clientName) } : { kind: 'server', url: z.string().parse(row.url) };

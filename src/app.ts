@@ -3,6 +3,8 @@
  * API is the console's server's and its page's, with the console's session
  * cookie, and the hosting service's, with the installation token.
  */
+import { randomUUID } from 'node:crypto';
+
 import type { FleetId } from '@aeolus-fleet/common';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
@@ -51,10 +53,12 @@ import { createAskForClient } from './core/requests/ask-for-client.js';
 import { createAskForServer } from './core/requests/ask-for-server.js';
 import { createExpireRequests } from './core/requests/expire-requests.js';
 import { createTellOutcomes } from './core/requests/tell-outcomes.js';
+import { createAskOwners } from './core/requests/ask-owners.js';
+import { createPrismaOwnerQuestions } from './adapters/prisma/owner-questions.js';
 import type { DecideRequest } from './core/requests/decide-request.js';
 import { createPrismaOutcomeNotices } from './adapters/prisma/outcome-notices.js';
 import { createOutcomeWorker } from './outcome-worker.js';
-import { createOpenRequest } from './core/requests/open-request.js';
+import { createOpenRequest, type OpenRequest } from './core/requests/open-request.js';
 import { createReadWaiting } from './core/requests/read-waiting.js';
 import { createPagasae } from './adapters/pagasae/pagasae-client.js';
 import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
@@ -279,7 +283,13 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const pendingRequests = createPrismaPendingRequests(prisma);
   const waitings = createWaitingSeals(options.gatewaySecret);
   const issuing = { codes: authorizationCodes, secrets: oauthSecrets, clock, issuer };
-  const openRequest = createOpenRequest({ requests: pendingRequests, ids: createRequestIds(), clock });
+  const openRequestOnly = createOpenRequest({ requests: pendingRequests, ids: createRequestIds(), clock });
+  // A request opened has the gateway's owner asked at once, not at the next round.
+  const openRequest: OpenRequest = async (asked) => {
+    const opened = await openRequestOnly(asked);
+    outcomes.tellNow();
+    return opened;
+  };
   const signIn =
     pagasae === undefined
       ? undefined
@@ -344,6 +354,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const outcomes = createOutcomeWorker({
     expireRequests: createExpireRequests({ requests: pendingRequests, clock }),
     tellOutcomes: createTellOutcomes({ notices: createPrismaOutcomeNotices(prisma), requests: pendingRequests, connections, sender: door }),
+    askOwners: createAskOwners({ questions: createPrismaOwnerQuestions(prisma), connections, owners: door, sender: door, newQuestionId: randomUUID, clock, overviewUrl: `${issuer}/overview` }),
     sleep,
     intervalMs: OUTCOME_ROUND_MS,
     log: server.log,

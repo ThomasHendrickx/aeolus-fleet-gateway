@@ -5,6 +5,9 @@
  */
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
+import type { FleetRefusal } from '../connection/ports.js';
+import type { Result } from '../shared/result.js';
+
 /** What a request is for: an outside MCP client, by its OAuth client id and name, or an outside MCP server, by its address. */
 export type RequestSubject = { readonly kind: 'client'; readonly clientId: string; readonly clientName: string } | { readonly kind: 'server'; readonly url: string };
 
@@ -116,4 +119,34 @@ export interface OutcomeNotices {
   listUnended(limit: number): Promise<OutcomeNotice[]>;
   /** Ends an outcome: told, or refused by the fleet. */
   end(notice: Pick<OutcomeNotice, 'fleetId' | 'requestId' | 'accountId'>): Promise<void>;
+}
+
+/** The gateway's question to its owner about one request (decision 0056): asked once, withdrawn once the request ended. */
+export interface OwnerQuestion {
+  readonly fleetId: FleetId;
+  readonly requestId: string;
+  /** The question's own uuid (decision 0038), the same each time it is sent. */
+  readonly questionId: string;
+  /** The ship asked; null before it is asked, or when the fleet refused the question. */
+  readonly askedShipId: ShipId | null;
+  readonly askedAt: Date | null;
+  readonly withdrawnAt: Date | null;
+}
+
+/** Outbound port: the gateway's questions to its owner, beside the requests they are about. */
+export interface OwnerQuestions {
+  /** The open requests, not expired by now, in every fleet, whose question is not asked yet, with its id once kept. */
+  listToAsk(now: Date, limit: number): Promise<{ request: PendingRequest; questionId: string | null }[]>;
+  /** Keeps the request's question with this id, unless it has one: the id it keeps. */
+  keep(fleetId: FleetId, question: { requestId: string; questionId: string }): Promise<string>;
+  /** Marks the question asked of a ship, or, with none, given up after the fleet refused it. */
+  markAsked(fleetId: FleetId, asked: { requestId: string; askedShipId: ShipId | null; at: Date }): Promise<void>;
+  /** The questions asked of a ship and not withdrawn whose request ended by now, in every fleet. */
+  listToWithdraw(now: Date, limit: number): Promise<OwnerQuestion[]>;
+  markWithdrawn(fleetId: FleetId, withdrawn: { requestId: string; at: Date }): Promise<void>;
+}
+
+/** Outbound port: who owns a ship (decision 0045), as the fleet answers it. */
+export interface Owners {
+  ownerOf(crewToken: string, shipId: ShipId): Promise<Result<ShipId | null, FleetRefusal>>;
 }

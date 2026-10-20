@@ -1,6 +1,10 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
-import type { OutcomeNotice, OutcomeNotices, PendingRequest, PendingRequests, Waiting, WaitingSeals } from '../../src/core/requests/ports.js';
+import type { ShipId } from '@aeolus-fleet/common';
+
+import type { OutcomeNotice, OutcomeNotices, OwnerQuestion, OwnerQuestions, PendingRequest, PendingRequests, Waiting, WaitingSeals } from '../../src/core/requests/ports.js';
+import { stateAt } from '../../src/core/requests/request-state.js';
+import { err, ok } from '../../src/core/shared/result.js';
 
 /** Pending requests in memory, as the store keeps them: one open request per client or server in a fleet. */
 export function memoryPendingRequests(): PendingRequests & { held: PendingRequest[]; told: Set<string>; notices: (OutcomeNotice & { isEnded: boolean })[]; outcomeNotices: OutcomeNotices } {
@@ -112,5 +116,71 @@ export function fakeWaitingSeals(): WaitingSeals & { held: Map<string, Waiting> 
       return sealed;
     },
     open: (sealed) => held.get(sealed),
+  };
+}
+
+/** The questions to the gateway's owner in memory, beside the requests they are about. */
+export function memoryOwnerQuestions(requests: { held: PendingRequest[] }): OwnerQuestions & { held: OwnerQuestion[] } {
+  const held: OwnerQuestion[] = [];
+  const questionOf = (request: PendingRequest) => held.find((question) => question.fleetId === request.fleetId && question.requestId === request.requestId);
+  const isOpenAt = (request: PendingRequest, now: Date) => {
+    const state = stateAt(request, now);
+    return state === 'pending' || state === 'approving';
+  };
+  const replace = ({ fleetId, requestId }: { fleetId: string; requestId: string }, change: Partial<OwnerQuestion>) => {
+    const index = held.findIndex((question) => question.fleetId === fleetId && question.requestId === requestId);
+    const question = held[index];
+    if (question !== undefined) {
+      held.splice(index, 1, { ...question, ...change });
+    }
+  };
+  return {
+    held,
+    listToAsk: (now, limit) =>
+      Promise.resolve(
+        requests.held
+          .filter((request) => isOpenAt(request, now) && (questionOf(request)?.askedAt ?? null) === null)
+          .slice(0, limit)
+          .map((request) => ({ request, questionId: questionOf(request)?.questionId ?? null })),
+      ),
+    keep: (fleetId, { requestId, questionId }) => {
+      const kept = held.find((question) => question.fleetId === fleetId && question.requestId === requestId);
+      if (kept !== undefined) {
+        return Promise.resolve(kept.questionId);
+      }
+      held.push({ fleetId, requestId, questionId, askedShipId: null, askedAt: null, withdrawnAt: null });
+      return Promise.resolve(questionId);
+    },
+    markAsked: (fleetId, { requestId, askedShipId, at }) => {
+      replace({ fleetId, requestId }, { askedShipId, askedAt: at });
+      return Promise.resolve();
+    },
+    listToWithdraw: (now, limit) =>
+      Promise.resolve(
+        held
+          .filter((question) => {
+            const request = requests.held.find((each) => each.fleetId === question.fleetId && each.requestId === question.requestId);
+            return question.askedShipId !== null && question.withdrawnAt === null && (request === undefined || !isOpenAt(request, now));
+          })
+          .slice(0, limit),
+      ),
+    markWithdrawn: (fleetId, { requestId, at }) => {
+      replace({ fleetId, requestId }, { withdrawnAt: at });
+      return Promise.resolve();
+    },
+  };
+}
+
+/** Who owns each ship, as the fleet answers it; a ship not listed is unknown. */
+export function fakeOwners(owners: Record<string, ShipId | null>, answer: { isAnswering: boolean } = { isAnswering: true }) {
+  return {
+    ownerOf: (_crewToken: string, shipId: ShipId) =>
+      Promise.resolve(
+        !answer.isAnswering
+          ? err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })
+          : shipId in owners
+            ? ok(owners[shipId] ?? null)
+            : err({ code: 'NOT_FOUND', message: `No ship ${shipId}` }),
+      ),
   };
 }
