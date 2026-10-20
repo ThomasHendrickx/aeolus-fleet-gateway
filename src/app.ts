@@ -48,6 +48,14 @@ import { createPagasae } from './adapters/pagasae/pagasae-client.js';
 import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
+import { createAccountTokenOf } from './core/sign-in/account-token.js';
+import { createAnswerDelivery } from './core/people/answer-delivery.js';
+import { createCrewPersonShip } from './core/people/crew-person-ship.js';
+import { createDoneDelivery } from './core/people/done-delivery.js';
+import { createOpenDelivery } from './core/people/open-delivery.js';
+import { createReadInbox } from './core/people/read-inbox.js';
+import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
+import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createReadAuthorization } from './core/oauth/read-authorization.js';
 import { createRegisterClient } from './core/oauth/register-client.js';
 import { createConnect } from './core/connection/connect.js';
@@ -63,6 +71,7 @@ import { createReadClientParty } from './core/parties/read-client-party.js';
 import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
 import { createListParties } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
+import type { Pagasae } from './core/sign-in/ports.js';
 
 export const systemClock: Clock = { now: () => new Date() };
 
@@ -222,6 +231,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const seals = createSignInSeals(options.gatewaySecret);
   // People sign in through pagasae where it is set (decision 0054); else argo alone approves clients.
   const pagasae = options.pagasae === undefined ? undefined : createPagasae({ ...options.pagasae, redirectUri: `${issuer}/pagasae/callback`, timeoutMs: PAGASAE_TIMEOUT_MS });
+  const grants = createPrismaAccountGrants(prisma);
   const signIn =
     pagasae === undefined
       ? undefined
@@ -231,7 +241,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             readAuthorization,
             seals,
             pagasae,
-            grants: createPrismaAccountGrants(prisma),
+            grants,
             codes: authorizationCodes,
             secrets: oauthSecrets,
             clock,
@@ -258,6 +268,20 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readClientParty: createReadClientParty({ parties }),
     exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
   });
+  // A signed-in person's messaging, as the crew of their person ship (decision 0057).
+  const personToolsOf = (signedIn: { pagasae: Pagasae }) => {
+    const crews = createPrismaPersonCrews(prisma);
+    const opened = createPrismaOpenedDeliveries(prisma);
+    const accountTokenOf = createAccountTokenOf({ grants, tokens: issuedTokens, pagasae: signedIn.pagasae, clock });
+    const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
+    return {
+      readInbox: createReadInbox(asCrew),
+      openDelivery: createOpenDelivery({ ...asCrew, opened, clock }),
+      answerDelivery: createAnswerDelivery({ ...asCrew, opened }),
+      doneDelivery: createDoneDelivery({ ...asCrew, opened }),
+    };
+  };
+  const person = pagasae === undefined ? undefined : personToolsOf({ pagasae });
   const listTools = createListTools({ parties, discovery: door, aliases: createShipAliases(options.gatewaySecret) });
   registerMcpEndpoint(server, {
     resource,
@@ -265,6 +289,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     listTools,
     callTool: createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, deadlineMs: CLIENT_CALL_DEADLINE_MS, sleep, waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS }),
     readClientCall: createReadClientCall({ calls: clientCalls, clock }),
+    ...(person === undefined ? {} : { person }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.

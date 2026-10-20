@@ -66,7 +66,7 @@ async function browserFrom(sentTo: URL): Promise<Response> {
 }
 
 describe('a person signs in from their MCP client through pagasae', () => {
-  it('gets tokens with no approval, and their MCP session lists no tools yet', async () => {
+  it("gets tokens with no approval, and their MCP session lists their person ship's tools", async () => {
     pagasae.answer(charlotteIn(fleetId));
     const client = aClientProvider(await aRegisteredClient(setting, false));
     const serverUrl = `${setting.address}/mcp`;
@@ -78,7 +78,14 @@ describe('a person signs in from their MCP client through pagasae', () => {
     const mcp = new Client({ name: 'charlotte', version: '1' });
     await mcp.connect(new StreamableHTTPClientTransport(new URL(serverUrl), { authProvider: client.provider }));
 
-    await expect(mcp.listTools()).resolves.toMatchObject({ tools: [] });
+    const listed = await mcp.listTools();
+    const read = await mcp.callTool({ name: 'aeolus_inbox', arguments: {} });
+
+    expect({ tools: listed.tools.map(({ name }) => name), read }).toEqual({
+      tools: ['aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done'],
+      // pagasae names no person ship for Charlotte here, so the gateway asks the fleet nothing.
+      read: { content: [{ type: 'text', text: 'You have no person ship in this fleet: your rights there do not let you message' }], isError: true },
+    });
     await mcp.close();
   });
 

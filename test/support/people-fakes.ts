@@ -1,8 +1,12 @@
-import type { ShipId } from '@aeolus-fleet/common';
+import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
-import type { AccountDoor, PersonCrew, PersonCrews } from '../../src/core/people/ports.js';
+import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
+import type { AccountDoor, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonShipDoor } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
+
+import { FLEET_ID } from './fleet-fakes.js';
+import { PERSON_SHIP_ID } from './sign-in-fakes.js';
 
 /**
  * The fleet as a person ship sees it in a test (core 0.28, aeolus-fleet
@@ -57,6 +61,124 @@ export function memoryPersonCrews(): PersonCrews & { held: PersonCrew[] } {
     find: (fleetId, shipId) => Promise.resolve(held.find((crew) => crew.fleetId === fleetId && crew.shipId === shipId)),
     save: (crew) => {
       held.push(crew);
+      return Promise.resolve();
+    },
+    drop: (fleetId, shipId) => {
+      const index = held.findIndex((crew) => crew.fleetId === fleetId && crew.shipId === shipId);
+      if (index >= 0) {
+        held.splice(index, 1);
+      }
+      return Promise.resolve();
+    },
+  };
+}
+
+/** Charlotte's sign-in in the fleet, whose account has a person ship: grant-1. */
+export const CHARLOTTE_GRANT = { fleetId: FLEET_ID, grantId: 'grant-1' };
+
+/**
+ * The gateway's crew of Charlotte's person ship as part 4 gives it, over the
+ * crews held: the one held, else a new crew, numbered from 1 (the first is
+ * aeolus_ct_v1_charlotte). Any other grant's account has no person ship.
+ */
+export function fakeCrewPersonShip(crews: PersonCrews): CrewPersonShip & { crewed: number } {
+  const crew = Object.assign(
+    async (grant: { fleetId: FleetId; grantId: string }) => {
+      if (grant.fleetId !== CHARLOTTE_GRANT.fleetId || grant.grantId !== CHARLOTTE_GRANT.grantId) {
+        return err({ kind: 'noPersonShip' as const });
+      }
+      const held = await crews.find(grant.fleetId, PERSON_SHIP_ID);
+      if (held !== undefined) {
+        return ok({ shipId: PERSON_SHIP_ID, crewToken: held.crewToken });
+      }
+      crew.crewed += 1;
+      const crewToken = crew.crewed === 1 ? 'aeolus_ct_v1_charlotte' : `aeolus_ct_v1_charlotte_${String(crew.crewed)}`;
+      await crews.save({ fleetId: grant.fleetId, shipId: PERSON_SHIP_ID, crewToken, crewedAt: new Date('2026-10-19T09:00:00.000Z') });
+      return ok({ shipId: PERSON_SHIP_ID, crewToken });
+    },
+    { crewed: 0 },
+  );
+  return crew;
+}
+
+/** A delivery to a person's ship, as the fleet's push receive hands it: a question from the issue tracker by default. */
+export function aPersonDelivery(overrides: Partial<PersonDelivery> = {}): PersonDelivery {
+  return {
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+    messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+    senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+    senderName: 'tracker',
+    contentType: 'application/vnd.aeolus.question+json',
+    payload: '{"id":"9b2f","title":"Go for release 1.4?","context":"All checks are green.","options":[{"key":1,"label":"Go"}]}',
+    questionTitle: 'Go for release 1.4?',
+    sentAt: new Date('2026-10-19T08:00:00.000Z'),
+    inReplyTo: null,
+    ...overrides,
+  };
+}
+
+/**
+ * A person's ship in the fleet, as its crew's calls see it: the deliveries
+ * waiting for it, each push receive handing the oldest again, up to max; the
+ * crew token it takes, and the calls the gateway made.
+ */
+export function fakePersonShipDoor(ship: { crewToken: string; deliveries: PersonDelivery[] }) {
+  const calls: string[] = [];
+  /** The replies the fleet took, as sent. */
+  const replies: Parameters<PersonShipDoor['reply']>[1][] = [];
+  /** The fleet's answers to come for reply and handled, before it takes them. */
+  const refusals: { reply: FleetRefusal[]; handled: FleetRefusal[] } = { reply: [], handled: [] };
+  const refusal: FleetRefusal = { code: 'UNAUTHORIZED', message: 'The crew token is not valid' };
+  const crewed = <T>(crewToken: string, value: () => T): Promise<Result<T, FleetRefusal>> => Promise.resolve(crewToken === ship.crewToken ? ok(value()) : err(refusal));
+  const door: PersonShipDoor = {
+    inbox: (crewToken) => {
+      calls.push('inbox');
+      return crewed(crewToken, () => ({ waiting: ship.deliveries.length }));
+    },
+    pushReceive: (crewToken, { max }) => {
+      calls.push(`pushReceive(${String(max)})`);
+      return crewed(crewToken, () => ship.deliveries.slice(0, max));
+    },
+    ack: (crewToken, deliveryId) => {
+      calls.push(`ack(${deliveryId})`);
+      return crewed(crewToken, () => {
+        ship.deliveries = ship.deliveries.filter((delivery) => delivery.deliveryId !== deliveryId);
+        return undefined;
+      });
+    },
+    reply: (crewToken, reply) => {
+      calls.push(`reply(${reply.inReplyTo})`);
+      const refused = refusals.reply.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
+      return crewed(crewToken, () => {
+        replies.push(reply);
+        return undefined;
+      });
+    },
+    handled: (crewToken, deliveryId) => {
+      calls.push(`handled(${deliveryId})`);
+      const refused = refusals.handled.shift();
+      return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => undefined);
+    },
+  };
+  return { door, calls, replies, refusals };
+}
+
+/** The deliveries people opened, in memory, by fleet, person ship and delivery. */
+export function memoryOpenedDeliveries(): OpenedDeliveries & { held: Map<string, OpenedDelivery> } {
+  const held = new Map<string, OpenedDelivery>();
+  const key = (fleetId: FleetId, { shipId, deliveryId }: { shipId: string; deliveryId: string }) => `${fleetId}/${shipId}/${deliveryId}`;
+  return {
+    held,
+    save: (opened) => {
+      held.set(key(opened.fleetId, opened), opened);
+      return Promise.resolve();
+    },
+    find: (fleetId, opened) => Promise.resolve(held.get(key(fleetId, opened))),
+    remove: (fleetId, opened) => {
+      held.delete(key(fleetId, opened));
       return Promise.resolve();
     },
   };
