@@ -152,7 +152,7 @@ describe('pagasae sends the person back', () => {
     now = STARTED_AT;
     const again = await started();
     now = new Date('2026-10-19T09:09:59.999Z');
-    await expect(completeSignIn(fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-6', tokens: CHARLOTTE_TOKENS }))({ ...again, state: 'secret-5' })).resolves.toMatchObject({ isOk: true });
+    await expect(completeSignIn(fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-4', tokens: CHARLOTTE_TOKENS }))({ ...again, state: 'secret-3' })).resolves.toMatchObject({ isOk: true });
   });
 
   it.each([
