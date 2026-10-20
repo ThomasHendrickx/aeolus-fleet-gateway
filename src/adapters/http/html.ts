@@ -2,7 +2,9 @@
  * What the gateway's server-rendered pages share: escaping, the page
  * layout and its style, forms, and the check that a form came from them.
  */
+import type { TRPCError } from '@trpc/server';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 
 export function escaped(text: string): string {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -51,4 +53,12 @@ export function acceptForms(server: FastifyInstance): void {
       done(null, Object.fromEntries(new URLSearchParams(String(body))));
     });
   }
+}
+
+/** Why the API refused, as a page says it: the form's fields that are not valid, or the API's message. */
+export function refusalMessage(error: TRPCError): string {
+  if (error.cause instanceof z.ZodError) {
+    return `The form is not valid: ${error.cause.issues.map((issue) => `${issue.path.join('.') || 'form'}: ${issue.message}`).join('; ')}`;
+  }
+  return error.code === 'INTERNAL_SERVER_ERROR' ? 'Internal error' : error.message;
 }

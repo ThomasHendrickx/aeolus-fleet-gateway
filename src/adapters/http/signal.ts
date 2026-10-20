@@ -60,6 +60,26 @@ button.primary:hover { background: var(--primary-hover); }
 button.destructive { color: var(--destructive-foreground); background: var(--destructive); border-color: var(--destructive); }
 button:focus-visible, .button:focus-visible, .tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .alert { border-width: 1px; border-style: solid; }
+.party-mark { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--secondary); border: 1px solid var(--border); font: 600 13px/1 var(--font-mono); }
+.handshake { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.handshake figure { margin: 0; display: grid; justify-items: center; gap: 4px; font-size: 12px; }
+.fleet-mark { display: inline-flex; }
+.split { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { main.wide { max-width: 1040px; } .split { grid-template-columns: minmax(0, 1fr) 280px; } }
+.queue { display: grid; gap: 8px; align-content: start; }
+.queue h2 { margin: 0; font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
+.item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); text-decoration: none; }
+.item[aria-current="true"] { border-color: var(--primary); }
+.item .text { display: grid; min-width: 0; flex: 1; } .item .text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted-foreground); }
+.mono { font-family: var(--font-mono); font-size: 12px; }
+.field { display: grid; gap: 4px; } .field > span { font-size: 13px; font-weight: 500; }
+input[type="text"], input[type="password"], input[type="number"], input[type="url"], select { height: 36px; padding: 0 10px; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--background); color: var(--foreground); font: inherit; }
+.scope { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.scope .label { flex: 1; }
+.scopes { display: grid; gap: 6px; }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
+legend { font-size: 13px; font-weight: 500; padding: 0; margin-bottom: 4px; }
 @media (max-width: 640px) { .actions > * { flex: 1; } button, .button { height: 44px; width: 100%; } }
 `;
 
@@ -67,7 +87,7 @@ button:focus-visible, .button:focus-visible, .tab:focus-visible { outline: 2px s
 export type Tone = 'waiting' | 'active' | 'ok' | 'attention' | 'ended';
 
 /** An icon the pages draw, from the console's icon set (Lucide), as inline SVG paths. */
-export type Icon = 'plug' | 'power' | 'powerOff' | 'alert' | 'signIn';
+export type Icon = 'plug' | 'power' | 'powerOff' | 'alert' | 'signIn' | 'house' | 'hourglass' | 'check' | 'x' | 'ban' | 'lock' | 'server' | 'laptop' | 'arrowLeftRight' | 'users';
 
 const ICON_PATHS: Record<Icon, string> = {
   plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
@@ -75,6 +95,16 @@ const ICON_PATHS: Record<Icon, string> = {
   powerOff: '<path d="M18.36 6.64A9 9 0 0 1 20.77 15"/><path d="M6.16 6.16a9 9 0 1 0 12.68 12.68"/><path d="M12 2v4"/><path d="m2 2 20 20"/>',
   alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   signIn: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>',
+  house: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  hourglass: '<path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  server: '<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/>',
+  laptop: '<path d="M18 5a2 2 0 0 1 2 2v8.526a2 2 0 0 0 .212.897l1.068 2.127a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45l1.068-2.127A2 2 0 0 0 4 15.526V7a2 2 0 0 1 2-2z"/><path d="M20.054 15.987H3.946"/>',
+  arrowLeftRight: '<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
 };
 
 export function icon(name: Icon, size = 16): string {
@@ -88,6 +118,8 @@ export function statusBadge(status: { tone: Tone; icon: Icon; label: string }): 
 
 /** The app mark from aeolus-fleet brand/aeolus-mark.svg: the Ship glyph on a tile in --primary, its stroke in --primary-foreground. */
 const MARK = `<svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--primary)"/><g fill="none" stroke="var(--primary-foreground)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" transform="translate(6 6) scale(0.8333)"><path d="M12 2v2"/><path d="M12 9.189V13"/><path d="M19 12V6a2 2 0 00-2-2H7a2 2 0 00-2 2v6"/><path d="M19.38 19A11.6 11.6 0 0021 13l-8.188-3.639a2 2 0 00-1.624 0L3 13.001a11.6 11.6 0 002.81 7.76"/><path d="M2 20c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1s1.2 1 2.5 1c2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></g></svg>`;
+
+const MARK_LARGE = MARK.replace('width="24" height="24"', 'width="40" height="40"');
 
 const RING_SIZE = 96;
 const RING_STROKE = 6;
@@ -104,10 +136,21 @@ export function ring(shown: { tone: Tone; center: { icon: Icon } | { count: numb
   return `<svg class="ring" width="${RING_SIZE}" height="${RING_SIZE}" viewBox="0 0 ${RING_SIZE} ${RING_SIZE}" role="img" aria-label="${escaped(shown.label)}"><circle cx="${middle}" cy="${middle}" r="${radius}" fill="none" stroke="var(--tone-${shown.tone}-fg)" stroke-width="${RING_STROKE}"${dash}/>${center}</svg>`;
 }
 
+/** An outside party's mark: the first two letters of its name on a tile, as the console's Avatar draws a ship. */
+export function partyMark(name: string): string {
+  return `<span class="party-mark" aria-hidden="true">${escaped(name.replaceAll(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase())}</span>`;
+}
+
+/** Who meets whom: the outside party's mark and the fleet's, side by side. */
+export function handshake(party: { name: string }): string {
+  return `<div class="handshake"><figure>${partyMark(party.name)}<figcaption>${escaped(party.name)}</figcaption></figure><span class="muted">${icon('arrowLeftRight', 16)}</span><figure><span class="fleet-mark">${MARK_LARGE}</span><figcaption>Fleet</figcaption></figure></div>`;
+}
+
 /** A tab of the pages' top bar. */
-export type Tab = 'outsideParties';
+export type Tab = 'overview' | 'outsideParties';
 
 const TABS: Record<Tab, { label: string; icon: Icon; href: string }> = {
+  overview: { label: 'Overview', icon: 'house', href: '/overview' },
   outsideParties: { label: 'Outside parties', icon: 'plug', href: '/outside-parties' },
 };
 
@@ -115,10 +158,10 @@ function topBar(current: Tab | undefined): string {
   const tabs = Object.entries(TABS)
     .map(([tab, shown]) => `<a class="tab" href="${shown.href}"${tab === current ? ' aria-current="page"' : ''}>${icon(shown.icon, 14)}${escaped(shown.label)}</a>`)
     .join('');
-  return `<header class="top"><a class="mark" href="/outside-parties">${MARK}Aeolus</a><nav class="tabs">${tabs}</nav></header>`;
+  return `<header class="top"><a class="mark" href="/overview">${MARK}Aeolus</a><nav class="tabs">${tabs}</nav></header>`;
 }
 
 /** A whole Signal page: the top bar with its tabs, then the page's own body. */
-export function signalPage(page: { title: string; tab?: Tab; body: string }): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escaped(page.title)}</title><style>${STYLE}</style></head><body>${topBar(page.tab)}<main>${page.body}</main></body></html>`;
+export function signalPage(page: { title: string; tab?: Tab; body: string; isWide?: boolean }): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escaped(page.title)}</title><style>${STYLE}</style></head><body>${topBar(page.tab)}<main${page.isWide === true ? ' class="wide"' : ''}>${page.body}</main></body></html>`;
 }

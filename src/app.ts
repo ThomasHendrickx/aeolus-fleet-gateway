@@ -28,6 +28,7 @@ import { sleep } from './adapters/timers/sleep.js';
 import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerOutsidePartiesPage } from './adapters/http/outside-parties-page.js';
+import { registerOverviewPage } from './adapters/http/overview-page.js';
 import { registerPartiesPage } from './adapters/http/parties-page.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
@@ -373,6 +374,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const pageContextFor = (cookie: string | undefined) => contextFor({ cookie, crewToken: undefined, installationTokenSent: undefined });
   registerPartiesPage(server, { contextFor: pageContextFor, fleetUrl: options.fleetUrl });
   registerOutsidePartiesPage(server, { contextFor: pageContextFor, fleetUrl: options.fleetUrl });
+  registerOverviewPage(server, { contextFor: pageContextFor, fleetUrl: options.fleetUrl, clock });
 
   server.addHook('onClose', async () => {
     await prisma.$disconnect();
