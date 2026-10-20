@@ -103,6 +103,7 @@ import { createRetireParty } from './core/parties/retire-party.js';
 import { createProxyShipsAsActor } from './adapters/fleet/proxy-ships-as-actor.js';
 import { createCredentialOf } from './core/actors/credential-of.js';
 import { createDecideRequest } from './core/requests/decide-request.js';
+import { createListMine } from './core/requests/list-mine.js';
 import { createListToDecide } from './core/requests/list-to-decide.js';
 import { createPrismaPendingRequests } from './adapters/prisma/pending-requests.js';
 
@@ -414,6 +415,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     setOutsideParties,
     registerClient,
     listToDecide: createListToDecide({ requests: pendingRequests, clock }),
+    listMine: createListMine({ requests: pendingRequests, clock }),
     decideRequest,
     ...(person === undefined ? {} : { person }),
   });

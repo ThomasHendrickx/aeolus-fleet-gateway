@@ -56,6 +56,8 @@ export interface PendingRequests {
   markTold(fleetId: FleetId, told: { requestId: string; accountId: string }): Promise<void>;
   /** The open requests not expired by now, the oldest first. */
   listOpen(fleetId: FleetId, now: Date): Promise<PendingRequest[]>;
+  /** The requests an account asked in the fleet, in any state, the newest first. */
+  listMine(fleetId: FleetId, accountId: string): Promise<PendingRequest[]>;
   /** Takes a pending request, not expired by now, for approving; false when it is not. */
   claim(fleetId: FleetId, claim: { requestId: string; now: Date }): Promise<boolean>;
   /** Gives an approving request back as pending, when its proxy ship was refused. */

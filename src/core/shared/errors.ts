@@ -41,7 +41,8 @@ export type DomainErrorKind =
   | 'OUTSIDE_PARTIES_OFF'
   | 'INVALID_SERVER_URL'
   | 'NOT_A_MANAGER'
-  | 'RETIRE_REFUSED';
+  | 'RETIRE_REFUSED'
+  | 'NOT_AN_ACCOUNT';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {

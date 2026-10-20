@@ -69,6 +69,7 @@ function contextFor(cookie: string | undefined): Context {
     markTool: unused,
     registerClient: unused,
     listToDecide: unused,
+    listMine: unused,
     decideRequest: unused,
     readOutsideParties: () => Promise.resolve({ isOn }),
     setOutsideParties: ({ actor, isOn: isWanted, isOpenNetworkConfirmed }) => {

@@ -32,6 +32,7 @@ import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { StateParty } from '../../core/mcp-out/state-party.js';
 import type { RegisterClient } from '../../core/oauth/register-client.js';
 import type { DecideRequest, DecideRefusal } from '../../core/requests/decide-request.js';
+import type { ListMine } from '../../core/requests/list-mine.js';
 import type { ListToDecide } from '../../core/requests/list-to-decide.js';
 import type { EndSignIns } from '../../core/sign-in/end-sign-ins.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
@@ -68,6 +69,7 @@ export interface Context {
   markTool: MarkTool;
   registerClient: RegisterClient;
   listToDecide: ListToDecide;
+  listMine: ListMine;
   decideRequest: DecideRequest;
   /** A person's own person ship's deliveries; unset where no pagasae signs anyone in. */
   person?: { readInbox: ReadInbox; openDelivery: OpenDelivery; answerDelivery: AnswerDelivery; doneDelivery: DoneDelivery };
@@ -443,6 +445,14 @@ export const gatewayRouter = t.router({
     done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, ...input }))),
   }),
   requests: t.router({
+    /** The requests the account asked, in any state, the newest first (decision 0056: Your requests). */
+    mine: actorProcedure.output(z.array(pendingRequestSchema)).query(async ({ ctx }) => {
+      const listed = await ctx.listMine(ctx.actor);
+      if (!listed.isOk) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: listed.error.message });
+      }
+      return listed.value.map(shownRequestOf);
+    }),
     /** Every open request of the fleet, for an actor holding gateway:approve (decision 0056). */
     toDecide: servedProcedure.output(z.array(pendingRequestSchema)).query(async ({ ctx }) => {
       const listed = await ctx.listToDecide(ctx.actor);

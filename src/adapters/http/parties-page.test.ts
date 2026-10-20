@@ -51,6 +51,7 @@ function contextFor(cookie: string | undefined): Context {
     },
     isServed: () => Promise.resolve(true),
     listToDecide: unused,
+    listMine: unused,
     decideRequest: unused,
     heldConnection: unused,
     installationTokenSent: undefined,
