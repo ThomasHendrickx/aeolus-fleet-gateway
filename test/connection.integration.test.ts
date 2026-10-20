@@ -96,6 +96,21 @@ describe('argo connects the gateway', () => {
     expect(namespaces.find(({ namespace }) => namespace === 'gateway')).toEqual({ namespace: 'gateway', declaredBy: { name: 'gateway' }, scopes: [{ scope: 'gateway:approve' }] });
   });
 
+  it("serves a ship by its own crew token, with the scopes the fleet holds for it (decision 0057)", async () => {
+    await registerNetworkingPlugin(fleet, cookie);
+    const address = await started();
+    await connectGateway(address, { cookie, ...gatewayShip });
+    const reader = await register(fleet, await commission(fleet, { cookie, ship: { name: 'reader', type: 'agent', scopes: ['fleet:read'] } }));
+
+    const [read, changed, forged] = await Promise.all([
+      query(address, { procedure: 'parties.list', crewToken: reader }),
+      mutate(address, { procedure: 'parties.crew', crewToken: reader, body: { name: 'crm' } }),
+      query(address, { procedure: 'parties.list', crewToken: 'aeolus_ct_v1_forged' }),
+    ]);
+
+    expect([read.status, changed.status, forged.status]).toEqual([200, 403, 401]);
+  });
+
   it('is refused in a fleet with no networking plugin, and stays not connected (interop I-3)', async () => {
     const address = await started();
 
