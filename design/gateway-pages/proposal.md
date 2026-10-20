@@ -45,6 +45,7 @@ Screens 11 to 14 on phone, 10 to 12 on desktop. Every outside party the fleet ha
 
 - **The list:** a ring with how many there are, counts per kind (server, client) and per protocol, then one card each: the party's mark and name, its protocol as a tag (`MCP`), its kind, its proxy ship's status (Crewed), its owner, how many scopes it holds, how many tools a server offers, and its last use as a signal icon, fresh to old, as LastSeen draws it.
 - **One party:** the handshake (party and fleet), rings for its tools and the ships that use it, then its facts: proxy ship (an app ship), owner, scopes, last use. Change sits beside owner and scopes.
+- **Tools:** an MCP server's page lists its tools, each with its name in mono and its short description, as the server answered when it was added. Turning a tool off and on is later: it would sit as a Switch at the end of each tool row, and no control is drawn now.
 - **Change owner or scopes:** a bottom sheet on phone, a panel beside the party on desktop: the owner is a person ship, the scopes are the same rows as when it was approved, `messages:send` and `messages:receive` locked on. Changing the owner is `fleet:owner` (0053); granting is what the actor holds (0046).
 - **Retire:** one normal confirm that lists what happens: its proxy ship is retired, the ships that used it lose its tools, and adding it again is a new request. The button names it: Retire Linear. Retire is the blueprint's word for ending a ship for good; the docs have no other word for ending an outside party.
 
@@ -54,7 +55,7 @@ A2A is not built yet (0048, interop I-6), so no A2A flow is drawn. Nothing on th
 
 - An outside party is a party and its protocol: the protocol is a tag on every card, request and detail (`MCP` today, `A2A` beside it later), and the list counts per protocol.
 - An A2A agent is an outside party like an MCP client or server: it gets a proxy ship, an owner and scopes, and is approved through the same pending request, waiting page and errors.
-- What differs per protocol stays in one fact on the detail: an MCP server's tools count, an A2A agent's skills from its agent card.
+- What differs per protocol stays in one list on the detail: an MCP server's tools, an A2A agent's skills from its agent card, each with its name and short description.
 - Adding by address works the same: the gateway reads what the address offers (an MCP server's tools, an A2A agent card) before it counts as added.
 
 ## Answers from Thomas (20 Oct)
@@ -65,7 +66,6 @@ A2A is not built yet (0048, interop I-6), so no A2A flow is drawn. Nothing on th
 ## Decided
 
 - **Scopes an approver grants:** any scope the approver holds itself, never more (0053, the commission check). The scope rows offer only those; `fleet:read` in the screens is one such scope.
+- **Who changes or retires an outside party:** the usual scopes, within reach: `fleet:owner` changes its owner, `scopes:grant` its scopes, `fleet:manage` retires it. The page shows each control only to an actor holding its scope.
 
-## Questions
-
-1. Who may change an outside party's owner or scopes, or retire it, on the gateway's page: holders of the approving scope, or `fleet:owner`, `scopes:grant` and `fleet:manage` within reach as for any ship? Still with Thomas.
+Every answer here is also recorded in decisions 0056 and 0034 on aeolus-fleet (ThomasHendrickx/aeolus-fleet#993).
