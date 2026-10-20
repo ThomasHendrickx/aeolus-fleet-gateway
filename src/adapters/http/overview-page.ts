@@ -21,6 +21,7 @@ import { gatewayRouter, type Context, type GatewayRouter } from '../trpc/router.
 import { acceptForms, escaped, isSameOrigin, refusalMessage } from './html.js';
 import { registerDeliveryPages, waitingItem } from './delivery-page.js';
 import type { LivePage } from './live.js';
+import { EVERY_APP_SHIP_SCOPES, SCOPE_FIELD_PREFIX, scopeRow } from './scope-rows.js';
 import { handshake, icon, partyMark, ring, signalPage, signInPrompt, statusBadge, type Icon, type SignInWay, type Tone } from './signal.js';
 
 /** What waits on a person's own ship, as the API shows it. */
@@ -41,18 +42,6 @@ const TITLE = 'Overview';
 const DAY_MS = 86_400_000;
 const CONCURRENCY_LIMIT_DEFAULT = 4;
 
-/** The scopes every app ship gets (0046): shown locked on, and always sent. */
-const EVERY_APP_SHIP_SCOPES: readonly string[] = ['messages:send', 'messages:receive'];
-
-/** A scope's plain label, as the scope rows show it beside the scope itself. */
-const SCOPE_LABELS: Record<string, string> = {
-  'messages:send': 'Send',
-  'messages:receive': 'Receive',
-  'fleet:read': 'Read the fleet',
-};
-
-/** A form field that ticks a scope: `scope:<scope>`, one field per scope, as a form posts each name once. */
-const SCOPE_FIELD_PREFIX = 'scope:';
 
 const formSchema = z.record(z.string(), z.string());
 type Form = Record<string, string>;
@@ -174,14 +163,6 @@ async function overviewOf(context: Context, now: Date): Promise<string> {
   return overviewSection({ toDecide, inbox, mine, now });
 }
 
-function scopeRow(scope: string, isLocked: boolean): string {
-  const label = escaped(SCOPE_LABELS[scope] ?? scope);
-  const box = isLocked
-    ? `<input type="checkbox" checked disabled aria-label="${label}">`
-    : `<input type="checkbox" name="${SCOPE_FIELD_PREFIX}${escaped(scope)}" aria-label="${label}">`;
-  return `<label class="scope">${box}<span class="label">${label}</span><span class="mono">${escaped(scope)}</span>${isLocked ? `<span class="muted">${icon('lock', 12)}</span>` : ''}</label>`;
-}
-
 const SERVER_FIELDS = `<fieldset><legend>The server's credential</legend>
 <label class="field"><span>Credential</span><select name="credentialKind"><option value="bearer">Bearer token</option><option value="clientCredentials">OAuth client credentials</option></select></label>
 <label class="field"><span>Bearer token</span><input type="password" name="token"></label>
@@ -204,7 +185,7 @@ function decisionCard(request: ShownRequest, scopes: readonly string[]): string 
   const name = subjectName(request);
   const action = `${PAGE}/requests/${encodeURIComponent(request.requestId)}/decide`;
   const held = scopes.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope));
-  const rows = [...EVERY_APP_SHIP_SCOPES.map((scope) => scopeRow(scope, true)), ...held.map((scope) => scopeRow(scope, false))].join('');
+  const rows = [...EVERY_APP_SHIP_SCOPES.map((scope) => scopeRow({ scope, isLocked: true })), ...held.map((scope) => scopeRow({ scope }))].join('');
   return `<section class="card"><h2>Approve ${escaped(name)}</h2>
 <form method="post" action="${action}" style="display:grid;gap:12px"><input type="hidden" name="decision" value="approve">
 <label class="field"><span>Proxy ship's name</span><input type="text" name="name" value="${escaped(suggestedName(name))}" required></label>

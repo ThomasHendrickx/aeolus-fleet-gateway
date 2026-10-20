@@ -112,6 +112,7 @@ form > button.item { width: 100%; height: auto; justify-content: flex-start; tex
 .fact-rows > div:first-child { border-top: 0; }
 .fact-rows dt { display: inline-flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 13px; }
 .fact-rows dd { margin: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.fact-rows dd a { margin-left: 8px; color: var(--primary); font-size: 13px; font-weight: 500; text-decoration: none; }
 .consequences { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .consequences li { display: flex; align-items: center; gap: 8px; }
 .counts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0 0; }

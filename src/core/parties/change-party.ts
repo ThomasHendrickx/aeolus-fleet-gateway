@@ -14,6 +14,12 @@ import { refuse, type DomainError } from '../shared/errors.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { PartyStore, ProxyShipsAsActor } from './ports.js';
 
+/** The scope that changes an outside party's owner (0053). */
+export const OWNING_SCOPE = 'fleet:owner';
+
+/** The scope that grants and revokes an outside party's scopes (0046). */
+export const GRANTING_SCOPE = 'scopes:grant';
+
 export type ChangePartyRefusal = DomainError<'SCOPE_NOT_HELD' | 'NO_SUCH_PARTY' | 'PARTY_NOT_COMMISSIONED' | 'CHANGE_REFUSED' | 'FLEET_UNAVAILABLE' | 'NOT_AN_ACTOR'>;
 
 interface ChangeDeps {
@@ -57,7 +63,7 @@ function refusalOf(refusal: FleetRefusal): ChangePartyRefusal {
 /** Use case: an actor holding fleet:owner sets the owner of an outside party's proxy ship, as itself. */
 export function createChangePartyOwner(deps: ChangeDeps): ChangePartyOwner {
   return async ({ ownerShipId, ...call }) => {
-    const target = await proxyShipFor(deps, { ...call, scope: 'fleet:owner' });
+    const target = await proxyShipFor(deps, { ...call, scope: OWNING_SCOPE });
     if (!target.isOk) {
       return target;
     }
@@ -69,7 +75,7 @@ export function createChangePartyOwner(deps: ChangeDeps): ChangePartyOwner {
 /** Use case: an actor holding scopes:grant grants and revokes scopes on an outside party's proxy ship, as itself: every scope it holds now. */
 export function createChangePartyScopes(deps: ChangeDeps): ChangePartyScopes {
   return async ({ grant, revoke, ...call }) => {
-    const target = await proxyShipFor(deps, { ...call, scope: 'scopes:grant' });
+    const target = await proxyShipFor(deps, { ...call, scope: GRANTING_SCOPE });
     if (!target.isOk) {
       return target;
     }
