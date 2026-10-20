@@ -102,6 +102,7 @@ export function createApproveAuthorization(deps: {
       codeChallenge: authorization.codeChallenge,
       resource: authorization.resource,
       scope: authorization.scope,
+      kind: 'party',
       party: party.value,
       expiresAt: new Date(deps.clock.now().getTime() + CODE_LIFETIME_MS),
     });

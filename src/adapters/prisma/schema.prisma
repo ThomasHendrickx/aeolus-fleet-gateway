@@ -129,7 +129,9 @@ model AuthorizationCode {
   codeChallenge String    @map("code_challenge")
   resource      String
   scope         String?
-  party         String
+  /// The party it stands for, or else the account grant (decision 0054): exactly one of the two.
+  party         String?
+  grantId       String?   @map("grant_id")
   expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
   usedAt        DateTime? @map("used_at") @db.Timestamptz(3)
 
@@ -147,7 +149,9 @@ model IssuedToken {
   clientId         String   @map("client_id")
   resource         String
   scope            String?
-  party            String
+  /// The party it stands for, or else the account grant (decision 0054): exactly one of the two.
+  party            String?
+  grantId          String?  @map("grant_id")
   accessExpiresAt  DateTime @map("access_expires_at") @db.Timestamptz(3)
   refreshExpiresAt DateTime @map("refresh_expires_at") @db.Timestamptz(3)
   state            String
