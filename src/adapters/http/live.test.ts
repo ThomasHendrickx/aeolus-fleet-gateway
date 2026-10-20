@@ -1,7 +1,7 @@
 import type { FleetId } from '@aeolus-fleet/common';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { WebSocket } from 'ws';
+import type { WebSocket } from '@fastify/websocket';
 
 import { err, ok } from '../../core/shared/result.js';
 import type { Context } from '../trpc/router.js';
@@ -74,12 +74,20 @@ afterEach(async () => {
 async function open(query: string, headers: Record<string, string> = { cookie: SIGNED_IN, origin: ORIGIN }) {
   const received: unknown[] = [];
   const closed: { code?: number } = {};
-  const socket = await server.injectWS(`/live?${query}`, { headers: { host: HOST, ...headers } });
+  // Heard from before the socket opens, as the first sections may come at once.
+  const socket = await server.injectWS(
+    `/live?${query}`,
+    { headers: { host: HOST, ...headers } },
+    {
+      onInit: (opening) => {
+        opening.on('message', (data: Buffer) => received.push(JSON.parse(data.toString())));
+        opening.on('close', (code: number) => {
+          closed.code = code;
+        });
+      },
+    },
+  );
   sockets.push(socket);
-  socket.on('message', (data: Buffer) => received.push(JSON.parse(data.toString())));
-  socket.on('close', (code: number) => {
-    closed.code = code;
-  });
   return { socket, received, closed };
 }
 
@@ -157,7 +165,7 @@ describe("the pages' live channel", () => {
   it('stops reading a page once its socket closed', async () => {
     const live = await open('page=overview');
     await until(() => live.received.length === 1);
-    live.socket.close();
+    live.socket.terminate();
     await until(() => hub.listeners() === 0);
 
     hub.publish({ fleetId: FLEET, topic: 'requests' });
