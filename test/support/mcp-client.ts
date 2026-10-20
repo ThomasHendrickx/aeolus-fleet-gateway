@@ -13,6 +13,7 @@ import { createPrismaPartyStore } from '../../src/adapters/prisma/party-store.js
 import { commission, register } from './argo.js';
 import type { FleetServer } from './fleet-server.js';
 import { mutate } from './gateway-api.js';
+import { outsidePartiesOn } from './outside-parties.js';
 
 /** The gateway secret every test gateway runs with. */
 export const TEST_GATEWAY_SECRET = 'a-test-gateway-secret-of-at-least-32-characters';
@@ -103,6 +104,7 @@ export async function aCrewedClientParty(setting: Setting, clientId: string): Pr
     approvedAt: new Date(),
   });
   await prisma.$disconnect();
+  await outsidePartiesOn(setting.databaseUrl, fleetId);
   const crewed = await mutate(setting.address, { procedure: 'parties.crew', cookie, body: { name: 'test-client', secret: proxy.secret } });
   expect(crewed.status).toBe(200);
   return { proxyShipId: proxy.shipId };

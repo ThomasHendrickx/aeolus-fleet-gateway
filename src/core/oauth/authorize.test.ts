@@ -8,6 +8,9 @@ import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCo
 import { createApproveAuthorization } from './approve-authorization.js';
 import { createReadAuthorization } from './read-authorization.js';
 
+/** Outside parties are on for every fleet here. */
+const isServing = () => Promise.resolve(true);
+
 const AT = new Date('2026-10-19T09:00:00.000Z');
 const CIMD_CLIENT = 'https://claude.example.com/oauth/client.json';
 const CALLBACK = 'https://claude.example.com/callback';
@@ -35,7 +38,7 @@ beforeEach(async () => {
   parties = memoryPartyStore();
   const connections = memoryConnectionStore();
   await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: AT });
-  approving(createApproveClientParty({ connections, parties, door: fleet.door, hasher: plainHasher, clock: { now: () => AT } }));
+  approving(createApproveClientParty({ connections, parties, door: fleet.door, hasher: plainHasher, servesOutsideParties: isServing, clock: { now: () => AT } }));
 });
 
 function approving(approveClientParty: ReturnType<typeof createApproveClientParty>) {
@@ -145,7 +148,7 @@ describe('argo approves an authorization request', () => {
   it('keeps a redirect URI query, adding the code to it', async () => {
     documents = fakeClientMetadataDocuments({ [CIMD_CLIENT]: { client_id: CIMD_CLIENT, redirect_uris: [`${CALLBACK}?tenant=a`] } });
     readAuthorization = createReadAuthorization({ clients, documents, resource: RESOURCE });
-    approving(createApproveClientParty({ connections: memoryConnectionStoreWith(), parties, door: fleet.door, hasher: plainHasher, clock: { now: () => AT } }));
+    approving(createApproveClientParty({ connections: memoryConnectionStoreWith(), parties, door: fleet.door, hasher: plainHasher, servesOutsideParties: isServing, clock: { now: () => AT } }));
 
     await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest({ redirect_uri: `${CALLBACK}?tenant=a`, state: undefined }), isApproved: true, newParty: NEW_PARTY })).resolves.toEqual({
       isOk: true,

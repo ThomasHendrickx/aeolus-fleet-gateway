@@ -12,6 +12,7 @@ import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { mutate } from './support/gateway-api.js';
 import { receiveOne, send } from './support/ship.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
+import { outsidePartiesOn } from './support/outside-parties.js';
 
 // MCP out end to end (interop 3.3, 5.2): a ship of the fleet calls the mock
 // CRM's tools by sending to its proxy ship, and the gateway replies with each
@@ -67,6 +68,7 @@ beforeEach(async () => {
     approvedAt: new Date(),
   });
   await prisma.$disconnect();
+  await outsidePartiesOn(databaseUrl, fleetId);
 });
 
 afterEach(async () => {

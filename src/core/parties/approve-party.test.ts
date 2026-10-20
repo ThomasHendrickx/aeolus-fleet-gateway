@@ -6,6 +6,9 @@ import { OWNER_SHIP_ID, PROXY_SHIP_ID, fakeProxyShipFleet, memoryPartyStore } fr
 import type { McpServerCredential } from '../vault/credential.js';
 import { createApproveParty } from './approve-party.js';
 
+/** Outside parties are on for every fleet here. */
+const isServing = () => Promise.resolve(true);
+
 const AT = new Date('2026-10-18T13:00:00.000Z');
 const CRM_URL = 'https://crm.example.com/mcp';
 const BEARER: McpServerCredential = { kind: 'bearer', token: 'crm-token' };
@@ -20,7 +23,7 @@ beforeEach(async () => {
   parties = memoryPartyStore();
   connections = memoryConnectionStore();
   await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: AT });
-  approve = createApproveParty({ connections, parties, door: fleet.door, hasher: plainHasher, clock: { now: () => AT } });
+  approve = createApproveParty({ connections, parties, door: fleet.door, hasher: plainHasher, servesOutsideParties: isServing, clock: { now: () => AT } });
 });
 
 function anApproval(overrides: Partial<Parameters<typeof approve>[0]> = {}): Parameters<typeof approve>[0] {
@@ -28,6 +31,13 @@ function anApproval(overrides: Partial<Parameters<typeof approve>[0]> = {}): Par
 }
 
 describe('argo approves an outside MCP server as a party (interop I-5)', () => {
+  it("is refused while the fleet's outside parties are off, commissioning nothing (interop I-3)", async () => {
+    const off = createApproveParty({ connections, parties, door: fleet.door, hasher: plainHasher, servesOutsideParties: () => Promise.resolve(false), clock: { now: () => AT } });
+
+    await expect(off(anApproval())).resolves.toMatchObject({ isOk: false, error: { kind: 'OUTSIDE_PARTIES_OFF' } });
+    expect({ commissioned: fleet.state.commissioned, parties: parties.held.size }).toEqual({ commissioned: [], parties: 0 });
+  });
+
   it('commissions its app proxy ship with the owner argo picked, under the approval as its key', async () => {
     await approve(anApproval());
 

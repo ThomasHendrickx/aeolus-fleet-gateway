@@ -44,6 +44,8 @@ let fleet: ReturnType<typeof fakeProxyShipFleet>;
 let parties: ReturnType<typeof memoryPartyStore>;
 let requests: ReturnType<typeof memoryPendingRequests>;
 let now: Date;
+/** Whether the fleet's outside parties are on (interop I-3). */
+let isOn: boolean;
 
 beforeEach(() => {
   fleet = fakeProxyShipFleet();
@@ -51,12 +53,13 @@ beforeEach(() => {
   requests = memoryPendingRequests();
   requests.held.push(aRequest(), SERVER_REQUEST);
   now = new Date('2026-10-21T09:00:00.000Z');
+  isOn = true;
 });
 
 async function decideRequest() {
   const connections = memoryConnectionStore();
   await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: ASKED_AT });
-  const approval = { connections, parties, door: fleet.door, hasher: plainHasher, clock: { now: () => now } };
+  const approval = { connections, parties, door: fleet.door, hasher: plainHasher, servesOutsideParties: () => Promise.resolve(isOn), clock: { now: () => now } };
   return createDecideRequest({ requests, approveParty: createApproveParty(approval), approveClientParty: createApproveClientParty(approval), clock: { now: () => now } });
 }
 
@@ -101,6 +104,13 @@ describe('an approver approves a person\'s request for an outside MCP server', (
 });
 
 describe('deciding a pending request', () => {
+  it("refuses an approval while the fleet's outside parties are off, keeping the request pending", async () => {
+    isOn = false;
+
+    await expect(decide({ actor: APPROVER_ACTOR, requestId: CLIENT_ID, decision: APPROVE })).resolves.toMatchObject({ isOk: false, error: { kind: 'OUTSIDE_PARTIES_OFF' } });
+    expect({ commissioned: fleet.state.commissioned, request: (await requests.find(FLEET_ID, CLIENT_ID))?.state }).toEqual({ commissioned: [], request: 'pending' });
+  });
+
   it('denies it, commissioning nothing', async () => {
     await expect(decide({ actor: APPROVER_ACTOR, requestId: CLIENT_ID, decision: { kind: 'deny' } })).resolves.toEqual({ isOk: true, value: { state: 'denied', party: null } });
     expect({ commissioned: fleet.state.commissioned, request: (await requests.find(FLEET_ID, CLIENT_ID))?.state }).toEqual({ commissioned: [], request: 'denied' });
