@@ -89,7 +89,7 @@ describe("the changes to a fleet's pending requests, heard by the pages", () => 
     await until(() => heard.length > 0);
     heard = [];
 
-    await requests.decide(FLEET, { requestId: request.requestId, from: ['pending'], decision: { outcome: 'denied', decidedBy: { kind: 'operator' }, decidedAt: NOW } });
+    await requests.decide(FLEET, { requestId: request.requestId, from: ['pending'], decision: { outcome: 'denied', decidedBy: { kind: 'operator' }, decidedAt: NOW }, notices: [] });
 
     await until(() => heard.length > 0);
     expect(heard).toEqual([{ fleetId: FLEET, topic: 'requests' }]);
@@ -98,7 +98,9 @@ describe("the changes to a fleet's pending requests, heard by the pages", () => 
   it('never hears a change rolled back', async () => {
     await expect(
       prisma.$transaction(async (transaction) => {
-        await createPrismaPendingRequests(transaction).open({ ...aRequest(), now: NOW });
+        await transaction.$executeRaw`
+          INSERT INTO "pending_requests" ("fleet_id", "request_id", "kind", "subject_key", "url", "requesters", "asked_at", "expires_at", "state")
+          VALUES (${FLEET}, 'req_rolled_back', 'server', 'server:https://rolled-back.example.com/mcp', 'https://rolled-back.example.com/mcp', '[]'::jsonb, ${NOW}, ${NOW}, 'pending')`;
         throw new Error('rolled back');
       }),
     ).rejects.toThrow('rolled back');
