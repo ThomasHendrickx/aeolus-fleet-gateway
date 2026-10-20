@@ -131,7 +131,6 @@ const CONNECT_CODES = {
   SECRET_REFUSED: 'BAD_REQUEST',
   OTHER_FLEET: 'BAD_REQUEST',
   MISSING_SCOPES: 'BAD_REQUEST',
-  NO_NETWORKING_PLUGIN: 'PRECONDITION_FAILED',
   SCOPE_REFUSED: 'CONFLICT',
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
 } as const satisfies Record<string, TRPCError['code']>;
@@ -139,8 +138,6 @@ const CONNECT_CODES = {
 /** The refusals of switching a fleet, as the API states them: a fleet that does not answer is tried again with the same request id. */
 const SET_ENABLED_CODES = {
   REQUEST_ID_USED: 'CONFLICT',
-  NO_NETWORKING_PLUGIN: 'PRECONDITION_FAILED',
-  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
 } as const satisfies Record<string, TRPCError['code']>;
 
 /** The refusals of approving a party, as the API states them: a fleet that does not answer is tried again with the same request id. */

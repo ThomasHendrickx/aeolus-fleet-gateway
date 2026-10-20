@@ -6,7 +6,6 @@ export type DomainErrorKind =
   | 'SECRET_REFUSED'
   | 'OTHER_FLEET'
   | 'MISSING_SCOPES'
-  | 'NO_NETWORKING_PLUGIN'
   | 'SCOPE_REFUSED'
   | 'NOT_THE_OPERATOR'
   | 'NOT_AN_ACTOR'

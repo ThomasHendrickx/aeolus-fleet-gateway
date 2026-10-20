@@ -17,7 +17,7 @@ beforeEach(() => {
   switches = memoryFleetSwitches();
   requests = memoryInstallationRequests();
   connections = memoryConnectionStore();
-  setEnabled = createSetFleetEnabled({ switches, requests, hasher: plainHasher, clock: { now: () => AT }, connections, door: fleet.door });
+  setEnabled = createSetFleetEnabled({ switches, requests, hasher: plainHasher, clock: { now: () => AT } });
 });
 
 async function connected(): Promise<void> {
