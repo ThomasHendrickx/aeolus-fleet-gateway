@@ -11,6 +11,7 @@ import { overviewLivePages, registerOverviewPage } from './overview-page.js';
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const APPROVER = 'aeolus_session=argo';
 const VIEWER = 'aeolus_session=viewer';
+const PERSON = 'aeolus_gateway_session=charlotte';
 const HOST = 'gateway.example.com';
 const ORIGIN = `http://${HOST}`;
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
@@ -49,6 +50,9 @@ function contextFor(cookie: string | undefined): Context {
       }
       if (sent === VIEWER) {
         return Promise.resolve(ok({ fleetId: FLEET, kind: 'viewer' as const, scopes: ['fleet:read'] }));
+      }
+      if (sent === PERSON) {
+        return Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: OWNER, grantId: 'grant-1', scopes: ['fleet:read'] }));
       }
       return Promise.resolve(err({ kind: 'NOT_AN_ACTOR' as const, message: 'Sign in to the console of your fleet' }));
     },
@@ -89,7 +93,7 @@ beforeEach(async () => {
   decisions = [];
   refusal = undefined;
   server = Fastify({ logger: false });
-  registerOverviewPage(server, { contextFor, fleetUrl: 'https://fleet.example.com', clock: { now: () => NOW } });
+  registerOverviewPage(server, { contextFor, signIn: { kind: 'pages' }, clock: { now: () => NOW } });
   await server.ready();
 });
 
@@ -215,11 +219,23 @@ describe('the Overview page: To decide', () => {
     expect(decisions).toEqual([]);
   });
 
-  it('asks a caller with no session to sign in to the console', async () => {
-    const page = await get('/overview');
+  it('asks a caller with no session to sign in, coming back to the page they asked for', async () => {
+    const page = await get('/overview/requests/req_orderbot');
 
     expect(page.statusCode).toBe(401);
-    expect(page.body).toContain('href="https://fleet.example.com"');
+    expect(page.body).toContain('href="/sign-in?return_to=%2Foverview%2Frequests%2Freq_orderbot"');
+  });
+
+  it('offers a person signed in to the pages to sign out', async () => {
+    const page = await get('/overview', PERSON);
+
+    expect(page.body).toContain('<form method="post" action="/sign-out"');
+  });
+
+  it('offers no sign-out to a console session, which signs out in the console', async () => {
+    const page = await get('/overview', APPROVER);
+
+    expect(page.body).not.toContain('action="/sign-out"');
   });
 });
 
