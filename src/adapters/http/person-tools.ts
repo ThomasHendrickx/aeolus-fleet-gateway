@@ -1,7 +1,8 @@
 /**
  * The tools a signed-in person's MCP client is served (Q20, decision 0057):
  * their person ship's calls, which the gateway makes as the ship's crew, so
- * the chat holds no crew token.
+ * the chat holds no crew token; and asking for an outside MCP server as
+ * their account (decision 0056).
  */
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -11,6 +12,7 @@ import type { DoneDelivery } from '../../core/people/done-delivery.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
+import type { AskForServer } from '../../core/requests/ask-for-server.js';
 import { runningVersion } from './version.js';
 
 export interface PersonToolsDeps {
@@ -18,6 +20,7 @@ export interface PersonToolsDeps {
   openDelivery: OpenDelivery;
   answerDelivery: AnswerDelivery;
   doneDelivery: DoneDelivery;
+  askForServer: AskForServer;
 }
 
 const INBOX_TOOL = {
@@ -56,9 +59,18 @@ const DONE_TOOL = {
   inputSchema: { type: 'object' as const, properties: { deliveryId: { type: 'string' } }, required: ['deliveryId'] },
 };
 
-const PERSON_TOOLS = [INBOX_TOOL, OPEN_TOOL, ANSWER_TOOL, DONE_TOOL];
+const ASK_FOR_SERVER_TOOL = {
+  name: 'aeolus_ask_for_server',
+  title: 'Ask for an outside MCP server',
+  description:
+    'Asks an approver of your fleet to add an outside MCP server, by its https address, so its tools reach the fleet. The approver gives its credential. A request waits 7 days for a decision; another person asking for the same server joins it.',
+  inputSchema: { type: 'object' as const, properties: { url: { type: 'string' } }, required: ['url'] },
+};
+
+const PERSON_TOOLS = [INBOX_TOOL, OPEN_TOOL, ANSWER_TOOL, DONE_TOOL, ASK_FOR_SERVER_TOOL];
 
 const deliveryArgumentsSchema = z.object({ deliveryId: z.string() });
+const askForServerArgumentsSchema = z.object({ url: z.string() });
 const answerArgumentsSchema = z.object({ deliveryId: z.string(), contentType: z.string(), payload: z.string() });
 
 /** A tool's answer as one text block of JSON. */
@@ -94,6 +106,14 @@ export function personServerFor(caller: PersonCaller, deps: PersonToolsDeps): Mc
         }
         const dealt = await deps.answerDelivery({ caller, ...sent.data });
         return dealt.isOk ? answered(dealt.value) : toolError(dealt.error.message);
+      }
+      case ASK_FOR_SERVER_TOOL.name: {
+        const sent = askForServerArgumentsSchema.safeParse(params.arguments);
+        if (!sent.success) {
+          return toolError(`${ASK_FOR_SERVER_TOOL.name} takes the server's url`);
+        }
+        const asked = await deps.askForServer({ caller, url: sent.data.url });
+        return asked.isOk ? answered({ ...asked.value, expiresAt: asked.value.expiresAt.toISOString() }) : toolError(asked.error.message);
       }
       default:
         return toolError(`No tool ${params.name}: your person ship has ${PERSON_TOOLS.map(({ name }) => name).join(', ')}`);
