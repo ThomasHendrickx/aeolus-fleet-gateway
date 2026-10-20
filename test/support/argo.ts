@@ -45,16 +45,20 @@ export async function register(fleet: FleetServer, ship: { shipId: ShipId; secre
   return z.object({ crewToken: z.string() }).parse(await response.json()).crewToken;
 }
 
-/** Commissions, crews and registers the fleet's networking plugin (decision 0035), as the networking plugin does when argo connects it. */
-export async function registerNetworkingPlugin(fleet: FleetServer, cookie: string): Promise<void> {
-  const ship = await commission(fleet, { cookie, ship: { name: 'networking-plugin', type: 'networking-plugin', scopes: ['fleet:read', 'fleet:network'] } });
-  const crewToken = await register(fleet, ship);
-  const response = await fetch(`${fleet.url}/api/v1/fleet/registerNetworkPlugin`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${crewToken}` },
-    body: JSON.stringify({ whileUnavailable: 'keep-latest', notRespondingAfterSeconds: 300 }),
-  });
-  if (!response.ok) {
-    throw new Error(`registerNetworkPlugin failed: ${await response.text()}`);
-  }
+/** Applies the fleet's own network rules, an empty list, as an actor holding fleet:network does: the open rule goes off, so only the built-in and declared rules reach (decisions 0034, 0035). */
+export async function applyEmptyOwnRules(fleet: FleetServer, cookie: string): Promise<void> {
+  const crewToken = await register(fleet, await commission(fleet, { cookie, ship: { name: 'network-admin', type: 'agent', scopes: ['fleet:read', 'fleet:network'] } }));
+  const call = async (procedure: string, body: unknown): Promise<unknown> => {
+    const response = await fetch(`${fleet.url}/api/v1/fleet/${procedure}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${crewToken}` },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`${procedure} failed: ${await response.text()}`);
+    }
+    return response.json();
+  };
+  const { savedAgainstVersion } = z.object({ savedAgainstVersion: z.number() }).parse(await call('saveNetworkRulesDraft', { rules: [] }));
+  await call('applyNetworkRules', { version: savedAgainstVersion });
 }

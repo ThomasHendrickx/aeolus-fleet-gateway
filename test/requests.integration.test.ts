@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaPendingRequests } from '../src/adapters/prisma/pending-requests.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
-import { commission, register, registerNetworkingPlugin, signIn } from './support/argo.js';
+import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
@@ -22,6 +22,8 @@ import { receiveOne } from './support/ship.js';
 const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
 const REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0001';
 const SERVER_REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0002';
+/** A ship the fleet does not hold: the fleet refuses a proxy ship it would own. */
+const UNKNOWN_SHIP_ID = 'shp_01m5c7hmbt9f1vrkwb37az0003';
 
 let fleet: FleetServer;
 let app: GatewayApp;
@@ -43,7 +45,6 @@ beforeEach(async () => {
   address = `http://127.0.0.1:${String(port)}`;
   app = createGatewayApp({ databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET });
   await app.server.listen({ host: '127.0.0.1', port });
-  await registerNetworkingPlugin(fleet, cookie);
   argoCookie = cookie;
   const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: GATEWAY_SCOPES } });
   gatewayShipId = gatewayShip.shipId;
@@ -100,7 +101,7 @@ describe('an approver decides a pending request through the gateway', () => {
     const decided = await mutate(address, {
       procedure: 'requests.decide',
       crewToken: approver,
-      body: { requestId: REQUEST_ID, decision: { kind: 'approve', party: { name: 'orderbot', ownerShipId: owner, scopes: ['messages:send', 'messages:receive'] } } },
+      body: { requestId: REQUEST_ID, decision: { kind: 'approve', party: { name: 'orderbot', ownerShipId: UNKNOWN_SHIP_ID, scopes: ['messages:send', 'messages:receive'] } } },
     });
 
     expect(decided.status).toBe(400);

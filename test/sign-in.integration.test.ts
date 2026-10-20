@@ -8,7 +8,7 @@ import WebSocket from 'ws';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaPendingRequests } from '../src/adapters/prisma/pending-requests.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
-import { commission, register, registerNetworkingPlugin, signIn } from './support/argo.js';
+import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { aBrowser, pickedAt } from './support/browser.js';
 import { charlotteIn, startFakePagasae, PAGASAE_CLIENT, type FakePagasae } from './support/fake-pagasae.js';
@@ -57,7 +57,6 @@ beforeEach(async () => {
   const probeCrew = await register(fleet, await commission(fleet, { cookie: setting.cookie, ship: { name: 'probe', type: 'agent' } }));
   const whoami = await fetch(`${fleet.url}/api/v1/ship/whoami`, { headers: { authorization: `Bearer ${probeCrew}` } });
   fleetId = z.object({ fleetId: idSchema('fleet') }).parse(await whoami.json()).fleetId;
-  await registerNetworkingPlugin(fleet, setting.cookie);
   expect((await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'switch-on', fleetId, enabled: true } })).status).toBe(200);
   expect((await connectGateway(address, { cookie: setting.cookie, ...gatewayShip })).status).toBe(200);
 });
