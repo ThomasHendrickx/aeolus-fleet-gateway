@@ -33,11 +33,11 @@ interface Listener {
 
 /** Hands each change to the sockets of its fleet, on this gateway. */
 export interface ChangeHub {
-  publish(change: Change): void;
+  publish: (change: Change) => void;
   /** Every socket reads its page again: changes may have been missed. */
-  resync(): void;
-  subscribe(listener: Listener): () => void;
-  listeners(): number;
+  resync: () => void;
+  subscribe: (listener: Listener) => () => void;
+  listeners: () => number;
 }
 
 export function createChangeHub(): ChangeHub {
@@ -90,28 +90,31 @@ function reader(send: { socket: WebSocket; read: () => Promise<Record<string, st
   };
 }
 
-export async function registerLive(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; hub: ChangeHub; pages: Record<string, LivePage> }): Promise<void> {
-  await server.register(websocket);
-  server.get('/live', { websocket: true }, async (socket, request) => {
-    if (!isSameOrigin(request)) {
-      socket.close(CLOSE_OTHER_ORIGIN, 'Opened only from the gateway pages');
-      return;
-    }
-    const params = new URLSearchParams(request.url.slice(request.url.indexOf('?') + 1));
-    const page = deps.pages[params.get('page') ?? ''];
-    if (page === undefined) {
-      socket.close(CLOSE_NOT_LIVE, 'No such live page');
-      return;
-    }
-    const context = deps.contextFor(request.headers.cookie);
-    const actor = await context.authenticateActor({ cookie: context.cookie, crewToken: context.crewToken });
-    if (!actor.isOk) {
-      socket.close(CLOSE_NO_SESSION, 'Sign in again');
-      return;
-    }
-    const read = reader({ socket, read: () => page.render(context, params) });
-    const unsubscribe = deps.hub.subscribe({ fleetId: actor.value.fleetId, read });
-    socket.on('close', unsubscribe);
-    read();
+export function registerLive(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; hub: ChangeHub; pages: Record<string, LivePage> }): void {
+  void server.register(websocket);
+  // Registered once the websocket plugin is loaded, which a websocket route needs.
+  void server.after(() => {
+    server.get('/live', { websocket: true }, async (socket, request) => {
+      if (!isSameOrigin(request)) {
+        socket.close(CLOSE_OTHER_ORIGIN, 'Opened only from the gateway pages');
+        return;
+      }
+      const params = new URLSearchParams(request.url.slice(request.url.indexOf('?') + 1));
+      const page = deps.pages[params.get('page') ?? ''];
+      if (page === undefined) {
+        socket.close(CLOSE_NOT_LIVE, 'No such live page');
+        return;
+      }
+      const context = deps.contextFor(request.headers.cookie);
+      const actor = await context.authenticateActor({ cookie: context.cookie, crewToken: context.crewToken });
+      if (!actor.isOk) {
+        socket.close(CLOSE_NO_SESSION, 'Sign in again');
+        return;
+      }
+      const read = reader({ socket, read: () => page.render(context, params) });
+      const unsubscribe = deps.hub.subscribe({ fleetId: actor.value.fleetId, read });
+      socket.on('close', unsubscribe);
+      read();
+    });
   });
 }

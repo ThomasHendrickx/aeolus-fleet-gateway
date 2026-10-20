@@ -53,7 +53,7 @@ beforeEach(async () => {
   sockets = [];
   hub = createChangeHub();
   server = Fastify({ logger: false });
-  await registerLive(server, {
+  registerLive(server, {
     contextFor,
     hub,
     pages: {

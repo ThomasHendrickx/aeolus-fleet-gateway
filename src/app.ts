@@ -30,7 +30,9 @@ import { sleep } from './adapters/timers/sleep.js';
 import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerOutsidePartiesPage } from './adapters/http/outside-parties-page.js';
-import { registerOverviewPage } from './adapters/http/overview-page.js';
+import { createChangeHub, registerLive } from './adapters/http/live.js';
+import { overviewLivePages, registerOverviewPage } from './adapters/http/overview-page.js';
+import { listenToChanges } from './adapters/prisma/changes.js';
 import { registerPartiesPage } from './adapters/http/parties-page.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
@@ -416,7 +418,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   registerOutsidePartiesPage(server, { contextFor: pageContextFor, fleetUrl: options.fleetUrl });
   registerOverviewPage(server, { contextFor: pageContextFor, fleetUrl: options.fleetUrl, clock });
 
+  // The live pages hear each committed change to the fleet's requests, from whichever gateway made it.
+  const hub = createChangeHub();
+  registerLive(server, { contextFor: pageContextFor, hub, pages: overviewLivePages({ clock }) });
+  let changes: { close(): Promise<void> } | undefined;
+  server.addHook('onReady', async () => {
+    changes = await listenToChanges(options.databaseUrl, { onChange: hub.publish, onResync: hub.resync });
+  });
+
   server.addHook('onClose', async () => {
+    await changes?.close();
     await prisma.$disconnect();
   });
 

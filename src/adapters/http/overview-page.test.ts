@@ -230,7 +230,7 @@ describe('the Overview page, live', () => {
     const page = await get('/overview', APPROVER);
 
     expect(page.body).toContain('data-live="overview"');
-    expect(page.body).toContain("'page=overview'");
+    expect(page.body).toContain('data-live-query="page=overview"');
     expect(page.body).toContain(`data-expires-at="${ORDERBOT.expiresAt.toISOString()}"`);
   });
 
@@ -239,7 +239,7 @@ describe('the Overview page, live', () => {
 
     expect(page.body).toContain('data-live="queue"');
     expect(page.body).toContain('data-live="request"');
-    expect(page.body).toContain("'page=request&requestId=req_orderbot'");
+    expect(page.body).toContain('data-live-query="page=request&amp;requestId=req_orderbot"');
   });
 
   it('reads To decide again as its caller', async () => {
