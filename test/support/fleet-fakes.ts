@@ -8,7 +8,7 @@ export const FLEET_ID: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 export const OTHER_FLEET_ID: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8zz';
 
 /** The scopes argo gives the gateway's ship when it connects the gateway. */
-export const GATEWAY_SCOPES = ['messages:send', 'messages:receive', 'fleet:read', 'fleet:commission', 'fleet:on-behalf'];
+export const GATEWAY_SCOPES = ['messages:send', 'messages:receive', 'fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
 
 /**
  * A fleet that knows the gateway's ship: its secret claims it once, its crew
@@ -16,6 +16,7 @@ export const GATEWAY_SCOPES = ['messages:send', 'messages:receive', 'fleet:read'
  * It has a registered networking plugin or none, as the fleet answers it.
  */
 export function fakeGatewayFleet() {
+  const noRefusal = (): FleetRefusal | undefined => undefined;
   const state = {
     secret: 'aeolus_sk_v1_good',
     fleetId: FLEET_ID,
@@ -26,6 +27,10 @@ export function fakeGatewayFleet() {
     liveTokens: new Set<string>(),
     registers: 0,
     deregistered: new Array<string>(),
+    /** The namespaces the gateway's ship declared, as the fleet took them. */
+    declared: new Array<{ namespace: string; scopes: { scope: string; description: string }[] }>(),
+    /** The fleet's refusal of a declaration, as when another ship holds the namespace. */
+    declareRefusal: noRefusal(),
   };
   const unavailable = () => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
   const released = () => Promise.resolve(err({ code: 'LEASE_ENDED', message: 'This ship was released; this session no longer crews it.' }));
@@ -62,6 +67,16 @@ export function fakeGatewayFleet() {
       state.deregistered.push(crewToken);
       state.liveTokens.delete(crewToken);
       state.isCrewed = false;
+      return Promise.resolve(ok(undefined));
+    },
+    declareScopes: (crewToken, declaration) => {
+      if (!state.liveTokens.has(crewToken)) {
+        return released();
+      }
+      if (state.declareRefusal !== undefined) {
+        return Promise.resolve(err(state.declareRefusal));
+      }
+      state.declared.push(declaration);
       return Promise.resolve(ok(undefined));
     },
     hasNetworkingPlugin: (crewToken) => {

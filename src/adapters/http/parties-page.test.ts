@@ -38,14 +38,15 @@ function contextFor(cookie: string | undefined): Context {
   const unused = () => Promise.reject(new Error('not used by the page'));
   return {
     cookie,
-    authenticateOperator: (sent) => {
+    crewToken: undefined,
+    authenticateActor: ({ cookie: sent }) => {
       if (sent === ARGO) {
         return Promise.resolve(ok({ fleetId: FLEET, kind: 'operator' as const, scopes: ['fleet:read', 'fleet:manage'] }));
       }
       if (sent === VIEWER) {
         return Promise.resolve(ok({ fleetId: FLEET, kind: 'viewer' as const, scopes: ['fleet:read'] }));
       }
-      return Promise.resolve(err({ kind: 'NOT_THE_OPERATOR' as const, message: 'Sign in to the console of your fleet' }));
+      return Promise.resolve(err({ kind: 'NOT_AN_ACTOR' as const, message: 'Sign in to the console of your fleet' }));
     },
     isServed: () => Promise.resolve(true),
     heldConnection: unused,

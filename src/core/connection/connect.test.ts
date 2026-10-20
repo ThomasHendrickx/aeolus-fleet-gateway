@@ -54,16 +54,34 @@ describe('connecting the gateway', () => {
     expect([store.held.size, fleet.state.deregistered]).toEqual([0, ['aeolus_ct_v1_1']]);
   });
 
-  it('connects a ship holding fleet:read, fleet:commission and fleet:on-behalf, and no labels scope', async () => {
-    fleet.state.scopes = ['messages:send', 'messages:receive', 'fleet:read', 'fleet:commission', 'fleet:on-behalf'];
+  it('connects a ship holding fleet:read, fleet:commission, fleet:on-behalf and scopes:declare, and no labels scope', async () => {
+    fleet.state.scopes = ['messages:send', 'messages:receive', 'fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
 
     await expect(connect({ secret: 'aeolus_sk_v1_good' })).resolves.toMatchObject({ isOk: true, value: { state: 'connected' } });
   });
 
-  it.each(['fleet:read', 'fleet:commission', 'fleet:on-behalf'])('is refused for a ship without %s, and lets the ship go again', async (missing) => {
+  it.each(['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'])('is refused for a ship without %s, and lets the ship go again', async (missing) => {
     fleet.state.scopes = GATEWAY_SCOPES.filter((scope) => scope !== missing);
 
     await expect(connect({ secret: 'aeolus_sk_v1_good' })).resolves.toMatchObject({ isOk: false, error: { kind: 'MISSING_SCOPES' } });
+    expect([store.held.size, fleet.state.deregistered]).toEqual([0, ['aeolus_ct_v1_1']]);
+  });
+
+  it("declares the gateway's approving scope, gateway:approve, so any actor the fleet grants it approves outside parties (decision 0056)", async () => {
+    await connect({ secret: 'aeolus_sk_v1_good' });
+
+    expect(fleet.state.declared).toEqual([
+      { namespace: 'gateway', scopes: [{ scope: 'gateway:approve', description: 'Approve outside parties: outside MCP clients and servers, each acting in the fleet as its proxy ship' }] },
+    ]);
+  });
+
+  it('is refused when the fleet does not take the gateway\'s scope, as when another ship holds its namespace, and lets the ship go again', async () => {
+    fleet.state.declareRefusal = { code: 'CONFLICT', message: 'The namespace gateway is taken by another ship' };
+
+    await expect(connect({ secret: 'aeolus_sk_v1_good' })).resolves.toMatchObject({
+      isOk: false,
+      error: { kind: 'SCOPE_REFUSED', message: "The fleet did not take the gateway's scope gateway:approve: The namespace gateway is taken by another ship" },
+    });
     expect([store.held.size, fleet.state.deregistered]).toEqual([0, ['aeolus_ct_v1_1']]);
   });
 

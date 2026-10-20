@@ -5,23 +5,30 @@ import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { ConnectionStatus, ConnectionStore, FleetDoor } from './ports.js';
 
-export type ConnectRefusal = DomainError<'ALREADY_CONNECTED' | 'SECRET_REFUSED' | 'OTHER_FLEET' | 'MISSING_SCOPES' | 'NO_NETWORKING_PLUGIN' | 'FLEET_UNAVAILABLE'>;
+export type ConnectRefusal = DomainError<'ALREADY_CONNECTED' | 'SECRET_REFUSED' | 'OTHER_FLEET' | 'MISSING_SCOPES' | 'NO_NETWORKING_PLUGIN' | 'SCOPE_REFUSED' | 'FLEET_UNAVAILABLE'>;
 
 export type Connect = (input: { operatorFleetId: FleetId; shipId: ShipId; secret: string }) => Promise<Result<ConnectionStatus, ConnectRefusal>>;
 
 /**
- * What the gateway's ship does (decisions 0044 to 0046): read the fleet, and
- * commission an app proxy ship for each party argo approves, naming the owner
- * argo picked. argo labels proxy ships in the console.
+ * What the gateway's ship does (decisions 0044 to 0046): read the fleet,
+ * commission an app proxy ship for each approved outside party, naming its
+ * owner, and declare the gateway's own scope.
  */
-const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf'];
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+
+/** The gateway's own scopes, under its namespace: approving is a scope any actor may hold (decision 0056). */
+const GATEWAY_NAMESPACE = {
+  namespace: 'gateway',
+  scopes: [{ scope: 'gateway:approve', description: 'Approve outside parties: outside MCP clients and servers, each acting in the fleet as its proxy ship' }],
+};
 
 /**
  * Use case: argo connects the gateway, as the other plugins are connected.
  * The console's server hands it its ship's secret, server to server; the
  * gateway registers with it as a server and keeps only the crew token. The
  * ship must be of argo's fleet and hold the gateway's scopes, and the fleet
- * must have a registered networking plugin (interop I-3), or the gateway lets
+ * must have a registered networking plugin (interop I-3), and the fleet must
+ * take the gateway's declared scope, or the gateway lets
  * the ship go again and keeps nothing. Each fleet has its own connection:
  * connect works only while the gateway is not connected to argo's fleet,
  * whatever other fleets it serves. The secret is never kept or logged.
@@ -58,6 +65,10 @@ export function createConnect(deps: { door: FleetDoor; store: ConnectionStore; c
     }
     if (!plugin.value) {
       return letGo('NO_NETWORKING_PLUGIN', 'Connect the networking plugin first: the gateway serves only a fleet with a registered networking plugin');
+    }
+    const declared = await deps.door.declareScopes(crewToken, GATEWAY_NAMESPACE);
+    if (!declared.isOk) {
+      return letGo('SCOPE_REFUSED', `The fleet did not take the gateway's scope gateway:approve: ${declared.error.message}`);
     }
 
     await deps.store.save({ fleetId: who.value.fleetId, shipId, name: who.value.name, crewToken, crewedAt: deps.clock.now() });

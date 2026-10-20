@@ -82,9 +82,9 @@ function messageOf(error: TRPCError): string {
 async function renderPage(reply: FastifyReply, page: { context: Context; failure?: { status: number; message: string } }): Promise<FastifyReply> {
   const { context, failure } = page;
   const caller = gatewayRouter.createCaller(context);
-  const operator = await context.authenticateOperator(context.cookie);
+  const actor = await context.authenticateActor({ cookie: context.cookie });
   const parties = await caller.parties.list();
-  const canManage = operator.isOk && operator.value.scopes.includes('fleet:manage');
+  const canManage = actor.isOk && actor.value.scopes.includes('fleet:manage');
   const body = [
     '<h1>Parties</h1>',
     '<p class="muted">Outside MCP servers argo approved for this fleet, each behind its proxy ship.</p>',

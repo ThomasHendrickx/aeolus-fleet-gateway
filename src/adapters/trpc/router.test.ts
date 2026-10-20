@@ -1,4 +1,4 @@
-import type { FleetId } from '@aeolus-fleet/common';
+import type { FleetId, ShipId } from '@aeolus-fleet/common';
 import { TRPCError } from '@trpc/server';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -12,16 +12,25 @@ const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 const ARGO_COOKIE = 'aeolus_session=argo';
 const VIEWER_COOKIE = 'aeolus_session=viewer';
+const MANAGER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9mgr';
+/** A ship's own crew tokens: one holding fleet:manage, one only reading. */
+const MANAGER_CREW = 'aeolus_ct_v1_manager';
+const READER_CREW = 'aeolus_ct_v1_reader';
 
 /** A context with only what the parties procedures read; every approval it is asked for is recorded. */
-function aContext(cookie: string): { context: Context; approvals: Parameters<ApproveParty>[0][]; marks: Parameters<MarkTool>[0][] } {
+function aContext(cookie: string | undefined, crewToken?: string): { context: Context; approvals: Parameters<ApproveParty>[0][]; marks: Parameters<MarkTool>[0][] } {
   const approvals: Parameters<ApproveParty>[0][] = [];
   const marks: Parameters<MarkTool>[0][] = [];
   const unused = () => Promise.reject(new Error('not used by the parties procedures'));
   const context: Context = {
     cookie,
-    authenticateOperator: (sent) =>
-      Promise.resolve(ok(sent === ARGO_COOKIE ? { fleetId: FLEET, kind: 'operator' as const, scopes: ['fleet:read', 'fleet:manage'] } : { fleetId: FLEET, kind: 'viewer' as const, scopes: ['fleet:read'] })),
+    crewToken,
+    authenticateActor: (sent) => {
+      if (sent.crewToken !== undefined) {
+        return Promise.resolve(ok({ fleetId: FLEET, kind: 'ship' as const, shipId: MANAGER, scopes: sent.crewToken === MANAGER_CREW ? ['fleet:read', 'fleet:manage'] : ['fleet:read'] }));
+      }
+      return Promise.resolve(ok(sent.cookie === ARGO_COOKIE ? { fleetId: FLEET, kind: 'operator' as const, scopes: ['fleet:read', 'fleet:manage'] } : { fleetId: FLEET, kind: 'viewer' as const, scopes: ['fleet:read'] }));
+    },
     isServed: () => Promise.resolve(true),
     heldConnection: unused,
     installationTokenSent: undefined,
@@ -67,6 +76,22 @@ describe("argo approves parties through the gateway's API", () => {
     const { context, approvals } = aContext(VIEWER_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).parties.approve(APPROVAL)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(approvals).toEqual([]);
+  });
+
+  it('approves for a ship holding fleet:manage, by its own crew token (decision 0057)', async () => {
+    const { context, approvals } = aContext(undefined, MANAGER_CREW);
+
+    await gatewayRouter.createCaller(context).parties.approve(APPROVAL);
+
+    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4 }]);
+  });
+
+  it('refuses a ship that only reads, and lets it read the parties', async () => {
+    const { context, approvals } = aContext(undefined, READER_CREW);
+
+    await expect(gatewayRouter.createCaller(context).parties.approve(APPROVAL)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(gatewayRouter.createCaller(context).parties.list()).resolves.toEqual([]);
     expect(approvals).toEqual([]);
   });
 
