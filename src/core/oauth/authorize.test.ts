@@ -114,6 +114,7 @@ describe('argo approves an authorization request', () => {
         codeChallenge: 'S256(verifier-1)',
         resource: RESOURCE,
         scope: null,
+        kind: 'party',
         party: 'claude',
         expiresAt: new Date('2026-10-19T09:01:00.000Z'),
         isUsed: false,

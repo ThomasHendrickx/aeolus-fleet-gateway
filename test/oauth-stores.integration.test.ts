@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgetter.js';
 import { createPrismaAuthorizationCodes, createPrismaIssuedTokens, createPrismaOAuthClients } from '../src/adapters/prisma/oauth-stores.js';
-import type { TokenPair } from '../src/core/oauth/ports.js';
+import type { TokenHolder, TokenPair } from '../src/core/oauth/ports.js';
 import { migratedDatabase } from './support/database.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
@@ -22,8 +22,8 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-function aPair(overrides: Partial<TokenPair> = {}): TokenPair {
-  return { familyId: 'family-1', codeHash: 'code-1', fleetId: FLEET, clientId: 'client-1', resource: 'http://gateway.example.com/mcp', scope: null, party: 'claude', accessHash: 'access-1', accessExpiresAt: AT, refreshHash: 'refresh-1', refreshExpiresAt: LATER, ...overrides };
+function aPair(overrides: Partial<Pick<TokenPair, 'familyId' | 'codeHash' | 'fleetId' | 'accessHash' | 'refreshHash'>> = {}, holder: TokenHolder = { kind: 'party', party: 'claude' }): TokenPair {
+  return { familyId: 'family-1', codeHash: 'code-1', fleetId: FLEET, clientId: 'client-1', resource: 'http://gateway.example.com/mcp', scope: null, ...holder, accessHash: 'access-1', accessExpiresAt: AT, refreshHash: 'refresh-1', refreshExpiresAt: LATER, ...overrides };
 }
 
 describe("the gateway's OAuth records in Postgres", () => {
@@ -37,12 +37,12 @@ describe("the gateway's OAuth records in Postgres", () => {
 
   it('hands a code to one of two racing takes; the other reads it used', async () => {
     const codes = createPrismaAuthorizationCodes(prisma);
-    await codes.save({ codeHash: 'race', fleetId: FLEET, clientId: 'client-1', redirectUri: 'https://x.example/cb', codeChallenge: 'c', resource: 'r', scope: null, party: 'claude', expiresAt: AT });
+    await codes.save({ codeHash: 'race', fleetId: FLEET, clientId: 'client-1', redirectUri: 'https://x.example/cb', codeChallenge: 'c', resource: 'r', scope: null, kind: 'party', party: 'claude', expiresAt: AT });
 
     const takes = await Promise.all([codes.take('race'), codes.take('race')]);
 
     expect(takes.map((taken) => taken?.wasUsed).sort()).toEqual([false, true]);
-    expect(takes[0]?.code.party).toBe('claude');
+    expect(takes[0]?.code).toMatchObject({ kind: 'party', party: 'claude' });
     await expect(codes.take('none')).resolves.toBeUndefined();
   });
 
@@ -63,6 +63,16 @@ describe("the gateway's OAuth records in Postgres", () => {
     await tokens.save(aPair({ familyId: 'family-3', accessHash: 'access-3', refreshHash: 'refresh-3' }));
 
     await expect(tokens.findByAccess('access-3')).resolves.toEqual({ ...aPair({ familyId: 'family-3', accessHash: 'access-3', refreshHash: 'refresh-3' }), state: 'active' });
+  });
+
+  it("keeps a code and a pair for a signed-in account's grant (decision 0054)", async () => {
+    const codes = createPrismaAuthorizationCodes(prisma);
+    const tokens = createPrismaIssuedTokens(prisma);
+    await codes.save({ codeHash: 'account-code', fleetId: FLEET, clientId: 'client-1', redirectUri: 'https://x.example/cb', codeChallenge: 'c', resource: 'r', scope: null, kind: 'account', grantId: 'grant-1', expiresAt: AT });
+    await tokens.save(aPair({ familyId: 'family-a', accessHash: 'access-a', refreshHash: 'refresh-a' }, { kind: 'account', grantId: 'grant-1' }));
+
+    await expect(codes.take('account-code')).resolves.toMatchObject({ code: { kind: 'account', grantId: 'grant-1' } });
+    await expect(tokens.findByAccess('access-a')).resolves.toEqual({ ...aPair({ familyId: 'family-a', accessHash: 'access-a', refreshHash: 'refresh-a' }, { kind: 'account', grantId: 'grant-1' }), state: 'active' });
   });
 
   it("forgets a fleet with its clients, codes and tokens (decision 0021)", async () => {

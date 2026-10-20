@@ -23,8 +23,9 @@ beforeEach(async () => {
   clients = memoryOAuthClients();
   await clients.save({ clientId: 'client-cursor', fleetId: FLEET_ID, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: 'hash(cursor-secret)' });
   codes = memoryAuthorizationCodes();
-  await codes.save({ codeHash: 'hash(code-1)', fleetId: FLEET_ID, clientId: CIMD_CLIENT, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-1)', resource: RESOURCE, scope: null, party: 'claude', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
-  await codes.save({ codeHash: 'hash(code-2)', fleetId: FLEET_ID, clientId: 'client-cursor', redirectUri: 'https://cursor.example.com/callback', codeChallenge: 'S256(verifier-2)', resource: RESOURCE, scope: null, party: 'cursor', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
+  await codes.save({ codeHash: 'hash(code-1)', fleetId: FLEET_ID, clientId: CIMD_CLIENT, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-1)', resource: RESOURCE, scope: null, kind: 'party', party: 'claude', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
+  await codes.save({ codeHash: 'hash(code-2)', fleetId: FLEET_ID, clientId: 'client-cursor', redirectUri: 'https://cursor.example.com/callback', codeChallenge: 'S256(verifier-2)', resource: RESOURCE, scope: null, kind: 'party', party: 'cursor', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
+  await codes.save({ codeHash: 'hash(code-3)', fleetId: FLEET_ID, clientId: CIMD_CLIENT, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-3)', resource: RESOURCE, scope: null, kind: 'account', grantId: 'grant-1', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
   tokens = memoryIssuedTokens();
   exchangeToken = createExchangeToken({ clients, codes, tokens, secrets, clock, resource: RESOURCE });
   authenticate = createAuthenticateAccessToken({ tokens, secrets, clock, resource: RESOURCE });
@@ -95,7 +96,7 @@ describe('a client refreshes its tokens', () => {
     await exchangeToken(aCodeGrant());
     await exchangeToken({ grant_type: 'refresh_token', refresh_token: 'secret-2', client_id: CIMD_CLIENT });
 
-    await expect(authenticate('secret-3')).resolves.toMatchObject({ isOk: true, value: { party: 'claude' } });
+    await expect(authenticate('secret-3')).resolves.toMatchObject({ isOk: true, value: { kind: 'party', party: 'claude' } });
   });
 
   it('rotates them: a new pair, and the old refresh token no longer works', async () => {
@@ -133,7 +134,20 @@ describe('the gateway knows the caller by its access token (RFC 8707: bound to t
   it("names the token's fleet, client and party: the proxy ship it calls the fleet as", async () => {
     await exchangeToken(aCodeGrant());
 
-    await expect(authenticate('secret-1')).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, clientId: CIMD_CLIENT, party: 'claude', scope: null } });
+    await expect(authenticate('secret-1')).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, clientId: CIMD_CLIENT, kind: 'party', party: 'claude', scope: null } });
+  });
+
+  it("names the account grant of a person who signed in through pagasae, whose code holds it (decision 0054)", async () => {
+    await exchangeToken(aCodeGrant({ code: 'code-3', code_verifier: 'verifier-3' }));
+
+    await expect(authenticate('secret-1')).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, clientId: CIMD_CLIENT, kind: 'account', grantId: 'grant-1', scope: null } });
+  });
+
+  it('keeps the account grant across a refresh', async () => {
+    await exchangeToken(aCodeGrant({ code: 'code-3', code_verifier: 'verifier-3' }));
+    await exchangeToken({ grant_type: 'refresh_token', refresh_token: 'secret-2', client_id: CIMD_CLIENT });
+
+    await expect(authenticate('secret-3')).resolves.toMatchObject({ isOk: true, value: { kind: 'account', grantId: 'grant-1' } });
   });
 
   it('refuses an unknown token', async () => {
