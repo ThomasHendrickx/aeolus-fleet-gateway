@@ -12,7 +12,7 @@ import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 // server to server (decision 0043). Here no pagasae is set, so the pages
 // sign no one in.
 
-const PAGES = ['/overview', '/overview/requests/req_1', '/outside-parties', '/parties'];
+const PAGES = ['/overview', '/overview/requests/req_1', '/outside-parties', '/outside-parties/linear', '/outside-parties/linear/retire', '/parties'];
 
 let fleet: FleetServer;
 let app: GatewayApp;
@@ -40,6 +40,12 @@ describe("the gateway's pages, for accounts only", () => {
 
   it("refuses argo's console session a form, changing nothing", async () => {
     const answer = await fetch(`${address}/outside-parties/switch`, { method: 'POST', headers: { cookie, origin: address, 'content-type': 'application/x-www-form-urlencoded' }, body: 'isOn=true' });
+
+    expect(answer.status).toBe(401);
+  });
+
+  it("refuses argo's console session retiring an outside party", async () => {
+    const answer = await fetch(`${address}/outside-parties/linear/retire`, { method: 'POST', headers: { cookie, origin: address, 'content-type': 'application/x-www-form-urlencoded' }, body: '' });
 
     expect(answer.status).toBe(401);
   });
