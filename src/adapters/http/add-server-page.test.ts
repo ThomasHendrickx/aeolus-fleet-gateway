@@ -92,7 +92,8 @@ function open(cookie?: string) {
   return server.inject({ url: '/outside-parties/add', headers: { host: HOST, ...(cookie === undefined ? {} : { cookie }) } });
 }
 
-function post(path: string, form: Record<string, string>, sent: { cookie?: string; origin?: string } = {}) {
+function post(sent: { path: string; form: Record<string, string>; cookie?: string; origin?: string }) {
+  const { path, form } = sent;
   return server.inject({
     method: 'POST',
     url: path,
@@ -125,7 +126,7 @@ describe('adding an outside MCP server: the address', () => {
 
 describe('adding an outside MCP server: the check', () => {
   it('shows how many tools the server answered with, and each by name, escaped, before it is added', async () => {
-    const shown = await post('/outside-parties/add/check', ADDRESS);
+    const shown = await post({ path: '/outside-parties/add/check', form: ADDRESS });
 
     expect(shown.statusCode).toBe(200);
     expect(checks).toEqual([{ fleetId: FLEET, url: URL_SENT, credential: { kind: 'bearer', token: 'linear-token' } }]);
@@ -137,7 +138,7 @@ describe('adding an outside MCP server: the check', () => {
   });
 
   it("goes on to the owner, the proxy ship's name offered from the address", async () => {
-    const shown = await post('/outside-parties/add/check', ADDRESS);
+    const shown = await post({ path: '/outside-parties/add/check', form: ADDRESS });
 
     expect(shown.body).toContain('action="/outside-parties/add"');
     expect(shown.body).toContain('name="name" value="linear"');
@@ -146,7 +147,7 @@ describe('adding an outside MCP server: the check', () => {
   });
 
   it('says why the server could not be checked, keeping the address', async () => {
-    const shown = await post('/outside-parties/add/check', { ...ADDRESS, url: 'https://down.example.com/mcp' });
+    const shown = await post({ path: '/outside-parties/add/check', form: { ...ADDRESS, url: 'https://down.example.com/mcp' } });
 
     expect(shown.statusCode).toBe(502);
     expect(shown.body).toContain('The MCP server could not be listed: connect ECONNREFUSED');
@@ -154,7 +155,7 @@ describe('adding an outside MCP server: the check', () => {
   });
 
   it('says why the API refused an actor without fleet:manage', async () => {
-    const shown = await post('/outside-parties/add/check', ADDRESS, { cookie: READER });
+    const shown = await post({ path: '/outside-parties/add/check', form: ADDRESS, cookie: READER });
 
     expect(shown.statusCode).toBe(403);
     expect(checks).toEqual([]);
@@ -165,7 +166,7 @@ describe('adding an outside MCP server: the owner', () => {
   const OWNED = { ...ADDRESS, requestId: '0f7f8d2a-5c1e-4b8e-9d3a-2a6b1c9e7f10', name: 'linear', ownerShipId: OWNER, concurrencyLimit: '4' };
 
   it('approves it with the owner picked, and shows the party', async () => {
-    const sent = await post('/outside-parties/add', OWNED);
+    const sent = await post({ path: '/outside-parties/add', form: OWNED });
 
     expect(sent.statusCode).toBe(303);
     expect(sent.headers.location).toBe('/outside-parties/linear');
@@ -173,7 +174,7 @@ describe('adding an outside MCP server: the owner', () => {
   });
 
   it('says an owner that is not a ship id is not one, approving nothing', async () => {
-    const sent = await post('/outside-parties/add', { ...OWNED, ownerShipId: 'charlotte' });
+    const sent = await post({ path: '/outside-parties/add', form: { ...OWNED, ownerShipId: 'charlotte' } });
 
     expect(sent.statusCode).toBe(400);
     expect(sent.body).toContain('not a ship id');
@@ -181,7 +182,7 @@ describe('adding an outside MCP server: the owner', () => {
   });
 
   it('says why the API refused, keeping what was typed', async () => {
-    const sent = await post('/outside-parties/add', { ...OWNED, name: 'taken' });
+    const sent = await post({ path: '/outside-parties/add', form: { ...OWNED, name: 'taken' } });
 
     expect(sent.statusCode).toBe(409);
     expect(sent.body).toContain('A party named taken was approved already');
@@ -189,7 +190,7 @@ describe('adding an outside MCP server: the owner', () => {
   });
 
   it('refuses a form sent from another origin', async () => {
-    const sent = await post('/outside-parties/add', OWNED, { origin: 'https://evil.example.com' });
+    const sent = await post({ path: '/outside-parties/add', form: OWNED, origin: 'https://evil.example.com' });
 
     expect(sent.statusCode).toBe(403);
     expect(approvals).toEqual([]);
