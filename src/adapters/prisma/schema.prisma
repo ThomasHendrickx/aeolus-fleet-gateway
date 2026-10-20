@@ -273,3 +273,23 @@ model PendingRequest {
   @@index([fleetId, askedAt], map: "pending_requests_fleet_asked")
   @@map("pending_requests")
 }
+
+/// The outcomes of requests for outside MCP servers still to tell, one per
+/// requester with a person ship, written with the decision or the expiry and
+/// ended once the fleet stored the message or refused it (decision 0056).
+model RequestOutcomeNotice {
+  fleetId      String    @map("fleet_id")
+  requestId    String    @map("request_id")
+  accountId    String    @map("account_id")
+  personShipId String    @map("person_ship_id")
+  url          String
+  /// approved, denied or expired.
+  outcome      String
+  partyName    String?   @map("party_name")
+  createdAt    DateTime  @map("created_at") @db.Timestamptz(3)
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  @@id([fleetId, requestId, accountId])
+  @@index([endedAt, createdAt], map: "request_outcome_notices_unended")
+  @@map("request_outcome_notices")
+}

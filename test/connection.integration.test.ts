@@ -26,7 +26,7 @@ const apps: GatewayApp[] = [];
 beforeEach(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
   cookie = await signIn(fleet);
-  gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', scopes: GATEWAY_SCOPES } });
+  gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: GATEWAY_SCOPES } });
   databaseUrl = await migratedDatabase(inject('postgresUrl'));
 });
 

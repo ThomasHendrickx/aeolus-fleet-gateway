@@ -7,6 +7,7 @@ import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { McpServerCredential } from '../vault/credential.js';
+import { noticesOf } from './outcome-notice.js';
 import type { DecidedBy, PendingRequest, PendingRequests } from './ports.js';
 
 /** The scope the gateway declares for approving outside parties (decision 0056). */
@@ -42,7 +43,8 @@ function decidedByOf(actor: Actor): DecidedBy {
  * the proxy ship is commissioned the request is approving, under its id as
  * the commission's key, so an approval tried again after the fleet did not
  * answer commissions one ship; a refused commission gives the request back
- * as pending, undecided.
+ * as pending, undecided. The decision is written with its outcomes to tell,
+ * so no requester's message is lost.
  */
 export function createDecideRequest(deps: { requests: PendingRequests; approveParty: ApproveParty; approveClientParty: ApproveClientParty; clock: Clock }): DecideRequest {
   const approve = (request: PendingRequest, approval: Approval) => {
@@ -74,7 +76,7 @@ export function createDecideRequest(deps: { requests: PendingRequests; approvePa
     }
     const decided = { outcome: decision.kind === 'deny' ? ('denied' as const) : ('approved' as const), decidedBy: decidedByOf(actor), decidedAt: now };
     if (decision.kind === 'deny') {
-      const isDenied = await deps.requests.decide(actor.fleetId, { requestId, from: ['pending'], decision: decided });
+      const isDenied = await deps.requests.decide(actor.fleetId, { requestId, from: ['pending'], decision: decided, notices: noticesOf(request, { outcome: 'denied', partyName: null }) });
       return isDenied ? ok({ state: 'denied', party: null }) : refuse('ALREADY_DECIDED', 'This request is decided already');
     }
     const notHeld = decision.party.scopes.find((scope) => !EVERY_APP_SHIP_SCOPES.has(scope) && !actor.scopes.includes(scope));
@@ -94,7 +96,7 @@ export function createDecideRequest(deps: { requests: PendingRequests; approvePa
       }
       return party;
     }
-    await deps.requests.decide(actor.fleetId, { requestId, from: ['approving'], decision: decided });
+    await deps.requests.decide(actor.fleetId, { requestId, from: ['approving'], decision: decided, notices: noticesOf(request, { outcome: 'approved', partyName: party.value.name }) });
     return ok({ state: 'approved', party: party.value });
   };
 }

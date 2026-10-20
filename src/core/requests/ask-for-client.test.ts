@@ -80,7 +80,7 @@ function asked(requester: typeof CHARLOTTE | typeof PIETER = CHARLOTTE) {
 
 /** The request of the client, decided as an approver would. */
 async function decided(outcome: 'approved' | 'denied') {
-  await requests.decide(FLEET_ID, { requestId: 'req_1', from: ['pending'], decision: { outcome, decidedBy: { kind: 'operator' }, decidedAt: now } });
+  await requests.decide(FLEET_ID, { requestId: 'req_1', from: ['pending'], decision: { outcome, decidedBy: { kind: 'operator' }, decidedAt: now }, notices: [] });
 }
 
 describe('an account asks for access for an outside MCP client', () => {

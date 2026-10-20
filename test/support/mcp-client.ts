@@ -70,7 +70,7 @@ export function aClientProvider(client: { clientId: string; clientSecret: string
 
 /** argo connects the gateway to the fleet, as a person signs in only to a fleet the gateway serves. */
 export async function aConnectedGateway(setting: Setting): Promise<void> {
-  const gatewayShip = await commission(setting.fleet, { cookie: setting.cookie, ship: { name: 'gateway', type: 'gateway', scopes: GATEWAY_SCOPES } });
+  const gatewayShip = await commission(setting.fleet, { cookie: setting.cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: GATEWAY_SCOPES } });
   expect((await connectGateway(setting.address, { cookie: setting.cookie, ...gatewayShip })).status).toBe(200);
 }
 
