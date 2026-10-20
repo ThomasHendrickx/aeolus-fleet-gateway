@@ -35,11 +35,30 @@ Every flow is a row of steps, like a parcel tracker: Sign in, Fleet, Connected f
 - For: one picture explains every flow, including the unhappy paths: you see where you are and where it stopped, with no sentence. The same tracker serves sign-in, waiting, deciding, adding and the errors, so people learn it once. Lanes give the approver the whole state of the fleet's requests at a glance.
 - Against: the tracker and the tone edge are new parts (small ones, built from StatusBadge tones). Lanes on phone show one lane at a time, so the counts in the chips carry the overview.
 
-## Pick
+## Decision
 
-C. Thomas asked for pages understood by looking, and C is the only one where the unhappy paths are understood by looking too: refused, expired and access_denied are the waiting page with the step that failed, so nobody has to read why. It stays calm enough for approvals, where B's rings feel loud, and it keeps the overview that B gives up. From A it keeps the console's parts for everything inside the tracker and the lanes (StatusBadge, Avatar, Sheet, TopBar, TabBar), so the new parts stay two: the tracker and the tone-edged card.
+Thomas picked B, Signal (20 Oct), and asked for the pages that manage connections and for how A2A fits. B's sheets now hold both.
+
+## Managing outside parties (B)
+
+Screens 11 to 14 on phone, 10 to 12 on desktop. Every outside party the fleet has, MCP servers added and MCP clients approved, in one place: the Outside parties tab.
+
+- **The list:** a ring with how many there are, counts per kind (server, client) and per protocol, then one card each: the party's mark and name, its protocol as a tag (`MCP`), its kind, its proxy ship's status (Crewed), its owner, how many scopes it holds, how many tools a server offers, and its last use as a signal icon, fresh to old, as LastSeen draws it.
+- **One party:** the handshake (party and fleet), rings for its tools and the ships that use it, then its facts: proxy ship (an app ship), owner, scopes, last use. Change sits beside owner and scopes.
+- **Change owner or scopes:** a bottom sheet on phone, a panel beside the party on desktop: the owner is a person ship, the scopes are the same rows as when it was approved, `messages:send` and `messages:receive` locked on. Changing the owner is `fleet:owner` (0053); granting is what the actor holds (0046).
+- **Retire:** one normal confirm that lists what happens: its proxy ship is retired, the ships that used it lose its tools, and adding it again is a new request. The button names it: Retire Linear. Retire is the blueprint's word for ending a ship for good; the docs have no other word for ending an outside party.
+
+## How A2A slots in
+
+A2A is not built yet (0048, interop I-6), so no A2A flow is drawn. Nothing on these pages is MCP's alone:
+
+- An outside party is a party and its protocol: the protocol is a tag on every card, request and detail (`MCP` today, `A2A` beside it later), and the list counts per protocol.
+- An A2A agent is an outside party like an MCP client or server: it gets a proxy ship, an owner and scopes, and is approved through the same pending request, waiting page and errors.
+- What differs per protocol stays in one fact on the detail: an MCP server's tools count, an A2A agent's skills from its agent card.
+- Adding by address works the same: the gateway reads what the address offers (an MCP server's tools, an A2A agent card) before it counts as added.
 
 ## Questions
 
-1. The approving scope has no name in the docs yet; the screens never show it, and show the Requests tab only to holders of it. Is that right, or should a person without it see their own requests under Requests too (C puts them in the own page's third lane)?
-2. Which scopes may an approver grant to a proxy ship beyond `messages:send` and `messages:receive`? The screens offer `fleet:read` as an example; F9 says only scopes the gateway's ship holds.
+1. The approving scope has no name in the docs yet; the screens never show it, and show the Requests tab only to holders of it.
+2. Which scopes may an approver grant to a proxy ship beyond `messages:send` and `messages:receive`? The screens offer `fleet:read` as an example.
+3. Who may change an outside party's owner or scopes, or retire it, on the gateway's page: holders of the approving scope, or `fleet:owner`, `scopes:grant` and `fleet:manage` as for any ship? The screens show the controls to an approver.
