@@ -10,12 +10,13 @@ import type { AccountGrants, Pagasae, SignInSeals } from './ports.js';
 /**
  * Why a sign-in gave the client no code, beside the request's own refusals:
  * - unknownSignIn: the gateway sealed no sign-in into this state, or its 10 minutes passed;
+ * - otherBrowser: the browser that came back does not hold the sign-in's secret, as when another site makes it finish its own;
  * - pagasaeRefused: pagasae did not redeem its code, for the reason given;
  * - fleetNotServed: the account's fleet is one this gateway does not serve.
  */
-export type SignInRefusal = AuthorizationRefusal | { readonly kind: 'unknownSignIn' } | { readonly kind: 'pagasaeRefused'; readonly message: string } | { readonly kind: 'fleetNotServed' };
+export type SignInRefusal = AuthorizationRefusal | { readonly kind: 'unknownSignIn' } | { readonly kind: 'otherBrowser' } | { readonly kind: 'pagasaeRefused'; readonly message: string } | { readonly kind: 'fleetNotServed' };
 
-export type CompleteSignIn = (back: { state?: string | undefined; code?: string | undefined; error?: string | undefined }) => Promise<Result<{ redirectTo: string }, SignInRefusal>>;
+export type CompleteSignIn = (back: { state?: string | undefined; code?: string | undefined; error?: string | undefined; browserSecret?: string | undefined }) => Promise<Result<{ redirectTo: string }, SignInRefusal>>;
 
 /**
  * Use case: pagasae sends the person back. Their sign-in is opened from its
@@ -36,10 +37,13 @@ export function createCompleteSignIn(deps: {
   /** Whether the gateway serves the fleet: connected to it, and switched on where an installation switches fleets (decision 0021). */
   servesFleet: (fleetId: FleetId) => Promise<boolean>;
 }): CompleteSignIn {
-  return async ({ state, code, error }) => {
+  return async ({ state, code, error, browserSecret }) => {
     const signIn = state === undefined ? undefined : deps.seals.open(state);
     if (signIn === undefined || signIn.expiresAt.getTime() <= deps.clock.now().getTime()) {
       return err({ kind: 'unknownSignIn' });
+    }
+    if (browserSecret !== signIn.browserSecret) {
+      return err({ kind: 'otherBrowser' });
     }
     const read = await deps.readAuthorization(signIn.request);
     if (!read.isOk) {

@@ -10,6 +10,8 @@ import type { Result } from '../shared/result.js';
 /** A person's sign-in at pagasae under way: the client's authorization request, with the gateway's PKCE verifier. */
 export interface PendingSignIn {
   readonly verifier: string;
+  /** The secret the browser that started the sign-in holds, so no other browser finishes it (login CSRF). */
+  readonly browserSecret: string;
   readonly request: Readonly<Record<string, string | undefined>>;
   readonly expiresAt: Date;
 }
