@@ -397,3 +397,25 @@ describe('the Overview page: what waits on a person', () => {
     expect(opened.statusCode).toBe(403);
   });
 });
+
+describe('the Overview page: Your requests', () => {
+  it('lists the requests a person asked, the newest first, each with its state', async () => {
+    mine = [
+      aRequest({ requestId: 'req_linear', subject: { kind: 'server', url: 'https://mcp.linear.app/mcp' } }),
+      aRequest({ requestId: 'req_orderbot', subject: { kind: 'client', clientId: 'https://orderbot.example.com/client', clientName: 'Orderbot' }, state: 'denied', decidedBy: { kind: 'operator' }, decidedAt: NOW }),
+    ];
+
+    const page = await get('/overview', PERSON);
+
+    expect(page.body).toContain('Your requests · 2');
+    expect(page.body.indexOf('mcp.linear.app')).toBeLessThan(page.body.indexOf('Orderbot'));
+    expect(page.body).toContain('6 d left');
+    expect(page.body).toMatch(/class="badge tone-ended"[^>]*>(<svg[^]*?<\/svg>)?Denied/);
+  });
+
+  it('shows no Your requests to an actor who asks none', async () => {
+    const page = await get('/overview', APPROVER);
+
+    expect(page.body).not.toContain('Your requests');
+  });
+});
