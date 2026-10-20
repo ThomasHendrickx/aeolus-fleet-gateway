@@ -143,6 +143,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
       calls.push(`ack(${deliveryId})`);
       return crewed(crewToken, () => {
         ship.deliveries = ship.deliveries.filter((delivery) => delivery.deliveryId !== deliveryId);
+        return undefined;
       });
     },
     reply: (crewToken, reply) => {
@@ -153,6 +154,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
       }
       return crewed(crewToken, () => {
         replies.push(reply);
+        return undefined;
       });
     },
     handled: (crewToken, deliveryId) => {

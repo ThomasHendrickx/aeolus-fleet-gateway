@@ -15,7 +15,10 @@ import {
   fleetListOutputSchema,
   handedOutputSchema,
   idSchema,
+  inboxOutputSchema,
   pushReceiveOutputSchema,
+  QUESTION_CONTENT_TYPE,
+  questionSchema,
   sendOutputSchema,
   shipDetailOutputSchema,
   startingPromptOutputSchema,
@@ -27,7 +30,7 @@ import type { CallSender, Discovery } from '../../core/mcp-in/ports.js';
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
-import type { AccountDoor } from '../../core/people/ports.js';
+import type { AccountDoor, PersonShipDoor } from '../../core/people/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
 
 const refusalSchema = z.object({ code: z.string(), message: z.string() });
@@ -106,10 +109,19 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
   return response.ok ? ok(request.answers.parse(body)) : err(refusalSchema.parse(body));
 }
 
+/** A question's payload, if it parses as one. */
+function questionOf(payload: string) {
+  try {
+    return questionSchema.safeParse(JSON.parse(payload)).data;
+  } catch {
+    return undefined;
+  }
+}
+
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & AccountDoor {
+): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & AccountDoor & { person: PersonShipDoor } {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   const done = async (crewToken: string, request: { path: string; body: unknown }) => {
@@ -179,6 +191,32 @@ export function createRestFleetDoor(
             })),
           )
         : taken;
+    },
+    // A person ship's crew calls, as the gateway makes them for the person (decision 0057).
+    person: {
+      inbox: (crewToken) => call({ path: '/ship/inbox', method: 'POST', crewToken, body: { waitSeconds: 0 }, answers: inboxOutputSchema }),
+      pushReceive: async (crewToken, { max }) => {
+        const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max }, answers: pushReceiveOutputSchema });
+        return taken.isOk
+          ? ok(
+              taken.value.deliveries.map(({ deliveryId, messageId, senderShipId, senderName, contentType, payload, sentAt, inReplyTo }) => ({
+                deliveryId,
+                messageId,
+                senderShipId,
+                senderName,
+                contentType,
+                payload,
+                questionTitle: contentType === QUESTION_CONTENT_TYPE ? (questionOf(payload)?.title ?? null) : null,
+                sentAt: new Date(sentAt),
+                inReplyTo,
+              })),
+            )
+          : taken;
+      },
+      ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
+      reply: (crewToken, { to, inReplyTo, contentType, payload, idempotencyKey }) =>
+        done(crewToken, { path: '/ship/send', body: { selector: { kind: 'ship', shipId: to }, inReplyTo, contentType, payload, idempotencyKey } }),
+      handled: (crewToken, deliveryId) => done(crewToken, { path: '/ship/handled', body: { deliveryId } }),
     },
     handed: async (crewToken, handOver) => {
       const answered = await call({ path: '/ship/handed', method: 'POST', crewToken, body: handOver, answers: handedOutputSchema });

@@ -14,5 +14,8 @@ export function createPrismaPersonCrews(db: Db): PersonCrews {
       const { fleetId, shipId, crewToken, crewedAt } = crew;
       await db.personCrew.upsert({ where: { fleetId_shipId: { fleetId, shipId } }, create: { fleetId, shipId, crewToken, crewedAt }, update: { crewToken, crewedAt } });
     },
+    drop: async (fleetId, shipId) => {
+      await db.personCrew.deleteMany({ where: { fleetId, shipId } });
+    },
   };
 }

@@ -65,17 +65,31 @@ describe("the fleet's calls the gateway makes for a signed-in account (decision 
 });
 
 describe("the calls the gateway makes as the crew of a person's ship (Q20)", () => {
-  const QUESTION = { id: '9b2f', title: 'Go for release 1.4?', context: 'All checks are green.', options: [{ key: 1, label: 'Go' }] };
+  const QUESTION = { id: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e', title: 'Go for release 1.4?', context: 'All checks are green.', options: [{ key: 1, label: 'Go' }], pick: { option: 1, why: 'Every check is green' } };
 
   it('asks how many deliveries wait, without waiting', async () => {
-    answer = { status: 200, body: { waiting: 2 } };
+    answer = { status: 200, body: { waiting: 2, forced: 0 } };
 
     await expect(createRestFleetDoor(base).person.inbox('aeolus_ct_v1_charlotte')).resolves.toMatchObject({ isOk: true, value: { waiting: 2 } });
     expect(sent()).toEqual([{ url: '/api/v1/ship/inbox', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { waitSeconds: 0 } }]);
   });
 
   it("takes the waiting deliveries, reading a question's title from its payload", async () => {
-    const delivery = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', messageId: 'msg_01m3tbfspe96yf1rnr4ank0001', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', senderName: 'tracker', sentAt: '2026-10-19T08:00:00.000Z', inReplyTo: null };
+    const delivery = {
+      deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+      messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+      senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderName: 'tracker',
+      senderType: 'tracker',
+      recipient: { kind: 'ship', shipId: 'shp_01m3tbfspe96yf1rnr4ank0per' },
+      model: null,
+      sentAt: '2026-10-19T08:00:00.000Z',
+      inReplyTo: null,
+      attempts: 0,
+      isForced: false,
+      state: 'received',
+      handOverNumber: null,
+    };
     answer = {
       status: 200,
       body: {

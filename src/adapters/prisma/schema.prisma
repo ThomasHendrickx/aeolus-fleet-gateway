@@ -220,3 +220,18 @@ model PersonCrew {
   @@id([fleetId, shipId])
   @@map("person_crews")
 }
+
+/// A delivery a person opened, kept until they deal with it, so their answer finds its message and sender (Q28 (a)).
+model OpenedDelivery {
+  fleetId      String   @map("fleet_id")
+  shipId       String   @map("ship_id")
+  deliveryId   String   @map("delivery_id")
+  messageId    String   @map("message_id")
+  senderShipId String   @map("sender_ship_id")
+  from         String
+  title        String
+  openedAt     DateTime @map("opened_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId, deliveryId])
+  @@map("opened_deliveries")
+}

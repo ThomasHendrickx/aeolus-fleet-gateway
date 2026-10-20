@@ -3,7 +3,7 @@
  * messaging (decisions 0054, 0057): the fleet's calls it makes as their
  * account, and the one crew every client of the person shares.
  */
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import type { DeliveryId, FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
@@ -34,4 +34,60 @@ export interface PersonCrew {
 export interface PersonCrews {
   find(fleetId: FleetId, shipId: ShipId): Promise<PersonCrew | undefined>;
   save(crew: PersonCrew): Promise<void>;
+  /** Forgets a crew that no longer works, as when its lease ended, so the ship is crewed again. */
+  drop(fleetId: FleetId, shipId: ShipId): Promise<void>;
+}
+
+/** A delivery to the person ship, as the fleet's push receive hands it. */
+export interface PersonDelivery {
+  readonly deliveryId: DeliveryId;
+  readonly messageId: MessageId;
+  readonly senderShipId: ShipId;
+  readonly senderName: string;
+  readonly contentType: string;
+  readonly payload: string;
+  /** The title of a question (the question content type), read at the edge; none for any other message. */
+  readonly questionTitle: string | null;
+  readonly sentAt: Date;
+  readonly inReplyTo: MessageId | null;
+}
+
+/** Outbound port: the fleet's calls the gateway makes as the crew of a person ship. */
+export interface PersonShipDoor {
+  /** How many deliveries wait for the ship, without waiting. */
+  inbox(crewToken: string): Promise<Result<{ waiting: number }, FleetRefusal>>;
+  /** The ship's deliveries, up to max, its own held ones again first. */
+  pushReceive(crewToken: string, take: { max: number }): Promise<Result<PersonDelivery[], FleetRefusal>>;
+  /** Acknowledges a delivery the person opened: their own act confirms it (interop 5.1). */
+  ack(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
+  /** Sends the person's answer to the sender, in reply to its message, once under its key. */
+  reply(crewToken: string, reply: { to: ShipId; inReplyTo: MessageId; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<undefined, FleetRefusal>>;
+  /** Reports the person dealt with the delivery. */
+  handled(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
+}
+
+/**
+ * A delivery a person opened, as the gateway keeps it until they deal with
+ * it (Q28 (a)): what their answer needs once the delivery is acknowledged,
+ * its message and sender, and its title, never its payload. It is the person
+ * ship's, so every client of the person finds it.
+ */
+export interface OpenedDelivery {
+  readonly fleetId: FleetId;
+  readonly shipId: ShipId;
+  readonly deliveryId: DeliveryId;
+  readonly messageId: MessageId;
+  readonly senderShipId: ShipId;
+  readonly from: string;
+  readonly title: string;
+  readonly openedAt: Date;
+}
+
+/** Outbound port: the deliveries people opened, by fleet, person ship and delivery. */
+export interface OpenedDeliveries {
+  /** Keeps it, or keeps it as last opened when it was opened before. */
+  save(opened: OpenedDelivery): Promise<void>;
+  find(fleetId: FleetId, opened: { shipId: ShipId; deliveryId: string }): Promise<OpenedDelivery | undefined>;
+  /** Forgets it once the person dealt with it. */
+  remove(fleetId: FleetId, opened: { shipId: ShipId; deliveryId: string }): Promise<void>;
 }
