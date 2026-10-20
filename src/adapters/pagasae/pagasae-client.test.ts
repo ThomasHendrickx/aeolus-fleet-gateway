@@ -102,6 +102,10 @@ describe('redeeming the code pagasae sent the person back with', () => {
     ['a person ship that is no ship id', { person_ship: 'person-charlotte' }],
     ['no subject', { sub: '' }],
     ['no end', { exp: undefined }],
+    ['no scope claim', { scope: undefined }],
+    ['a core scope that does not exist', { scope: 'fleet:read fleet:everything' }],
+    ['no organisation', { org: '' }],
+    ['no issue time', { iat: undefined }],
   ])('answers that the account token could not be read for %s, as core would refuse it', async (_what, claims) => {
     answer = { status: 200, body: { access_token: anAccountToken({ ...CHARLOTTE, ...claims }), token_type: 'Bearer', expires_in: 600, refresh_token: 'r' } };
 
@@ -115,9 +119,8 @@ describe('redeeming the code pagasae sent the person back with', () => {
     await expect(pagasae().redeemCode({ code: 'pagasae-code-1', verifier: 'verifier-1' })).resolves.toMatchObject({ isOk: true, value: { personShipId: null } });
   });
 
-  it('answers no scopes for a token that carries none', async () => {
-    const withoutScope = Object.fromEntries(Object.entries(CHARLOTTE).filter(([claim]) => claim !== 'scope'));
-    answer = { status: 200, body: { ...(typeof answer.body === 'object' ? answer.body : {}), access_token: anAccountToken(withoutScope) } };
+  it('answers no scopes for a token whose scope claim is empty', async () => {
+    answer = { status: 200, body: { ...(typeof answer.body === 'object' ? answer.body : {}), access_token: anAccountToken({ ...CHARLOTTE, scope: '' }) } };
 
     await expect(pagasae().redeemCode({ code: 'pagasae-code-1', verifier: 'verifier-1' })).resolves.toMatchObject({ isOk: true, value: { scopes: [] } });
   });
