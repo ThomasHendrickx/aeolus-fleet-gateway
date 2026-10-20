@@ -33,7 +33,8 @@ export interface Reply {
 export interface ProxyShipCrew {
   /** Its deliveries, up to max: its own in flight first, then pending ones, each received; it waits a while for one, or less once the signal aborts. */
   pushReceive(crewToken: string, take: { max: number; signal: AbortSignal }): Promise<Result<PushedDelivery[], FleetRefusal>>;
-  handed(crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>>;
+  /** Hands the delivery over with its number, naming the channel it went through (interop 5.1). */
+  handed(crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: string }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>>;
   reply(crewToken: string, reply: Reply): Promise<Result<void, FleetRefusal>>;
   ack(crewToken: string, deliveryId: DeliveryId): Promise<Result<void, FleetRefusal>>;
   handled(crewToken: string, deliveryId: DeliveryId): Promise<Result<void, FleetRefusal>>;
@@ -72,6 +73,9 @@ export interface CallStore {
 export type HandOutcome = { readonly kind: 'handled' } | { readonly kind: 'again' } | { readonly kind: 'notHandled' } | { readonly kind: 'undeliverable' };
 
 export type HandCall = (input: { party: McpServerParty; delivery: PushedDelivery }) => Promise<HandOutcome>;
+
+/** The channel the gateway hands a proxy ship's delivery through: its outside MCP server (interop 5.1). */
+const MCP_CHANNEL = 'mcp';
 
 /** The reason a call that may have run is not handled, as Needs attention shows it. */
 export const MAY_HAVE_RUN = 'The call may have run; its answer was lost. Check the outside system, then resend or dismiss.';
@@ -146,7 +150,7 @@ export function createHandCall(deps: { crew: ProxyShipCrew; servers: McpServers;
     };
     const mayHaveRun = async (): Promise<HandOutcome> => {
       await deps.calls.save({ ...kept, state: 'mayHaveRun', reply: null });
-      // Core 0.27 refuses this for a delivery never handed once more (aeolus-fleet#955); the call stays judged, and is reported again each time it comes.
+      // A refused report leaves the call judged: it is reported again each time it comes, and never called again.
       await deps.crew.notHandled(crewToken, { deliveryId: delivery.deliveryId, reason: MAY_HAVE_RUN });
       return { kind: 'notHandled' };
     };
@@ -172,7 +176,7 @@ export function createHandCall(deps: { crew: ProxyShipCrew; servers: McpServers;
       return mayHaveRun();
     }
 
-    const handed = await deps.crew.handed(crewToken, { deliveryId: delivery.deliveryId, handOverNumber: (delivery.handOverNumber ?? 0) + 1 });
+    const handed = await deps.crew.handed(crewToken, { deliveryId: delivery.deliveryId, handOverNumber: (delivery.handOverNumber ?? 0) + 1, channel: MCP_CHANNEL });
     if (!handed.isOk) {
       return AGAIN;
     }

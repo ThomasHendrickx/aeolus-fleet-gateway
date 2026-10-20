@@ -55,7 +55,7 @@ From its start, and as soon as a party is crewed, the gateway takes the calls of
 - A call sent with no answer (a broken stream, no answer within 5 minutes) is handed again only when argo marked its tool repeatable. Otherwise the gateway reports it not handled: it may have run, and a human who can check the outside system resends or dismisses it.
 - A party takes at most its concurrency limit of calls at once.
 
-With core 0.27 the not handled report is refused (aeolus-fleet#955): the call is never made again, and its delivery stays handed until argo resends or dismisses it.
+Each hand-over names its channel, `mcp` (interop 5.1). A call reported not handled shows in the console's Needs attention with why, for argo to resend or dismiss; it is never called again.
 
 ## MCP clients sign in
 
