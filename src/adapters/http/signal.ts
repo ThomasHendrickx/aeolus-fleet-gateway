@@ -89,6 +89,8 @@ main.centred > .mark, main.centred > .ring, main.centred > .badge { width: auto;
 .tile:hover { border-color: var(--primary); }
 .going-on { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); }
 .going-on::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--tone-ok-fg); }
+.tab { white-space: nowrap; }
+@media (max-width: 480px) { .top .label { display: none; } .top { gap: 8px; } }
 .sign-out { margin-left: auto; } .sign-out button { height: 32px; border: 0; background: transparent; color: var(--muted-foreground); }
 .live-status { position: fixed; right: 16px; bottom: 16px; margin: 0; }
 .party-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
@@ -183,10 +185,10 @@ const TABS: Record<Tab, { label: string; icon: Icon; href: string }> = {
 
 function topBar(current: Tab | undefined, isSignedIn: boolean): string {
   const tabs = Object.entries(TABS)
-    .map(([tab, shown]) => `<a class="tab" href="${shown.href}"${tab === current ? ' aria-current="page"' : ''}>${icon(shown.icon, 14)}${escaped(shown.label)}</a>`)
+    .map(([tab, shown]) => `<a class="tab" href="${shown.href}" aria-label="${escaped(shown.label)}"${tab === current ? ' aria-current="page"' : ''}>${icon(shown.icon, 14)}<span class="label">${escaped(shown.label)}</span></a>`)
     .join('');
   // A person signed in to the pages signs out here; a console session signs out in the console.
-  const signOut = isSignedIn ? `<form method="post" action="/sign-out" class="sign-out"><button>${icon('signOut', 14)}Sign out</button></form>` : '';
+  const signOut = isSignedIn ? `<form method="post" action="/sign-out" class="sign-out"><button aria-label="Sign out">${icon('signOut', 14)}<span class="label">Sign out</span></button></form>` : '';
   return `<header class="top"><a class="mark" href="/overview">${MARK}Aeolus</a><nav class="tabs">${tabs}</nav>${signOut}</header>`;
 }
 
