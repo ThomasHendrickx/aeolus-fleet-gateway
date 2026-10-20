@@ -14,7 +14,7 @@ import { createReadClientParty } from '../../core/parties/read-client-party.js';
 import { SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { plainHasher } from '../../../test/support/memory-installation.js';
 import { OWNER_SHIP_ID, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
-import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, memoryPendingSignIns, PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
+import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
 import type { Pagasae } from '../../core/sign-in/ports.js';
 import { createCompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
 import { createStartSignIn } from '../../core/sign-in/start-sign-in.js';
@@ -40,7 +40,7 @@ const authenticateOperator: AuthenticateOperator = (cookie) => {
 let server: FastifyInstance;
 let parties: ReturnType<typeof memoryPartyStore>;
 let served: FleetId[];
-/** pagasae redeems pagasae-code-1 for the verifier a person's start draws first, secret-2, unless a test sets it. */
+/** pagasae redeems pagasae-code-1 for the verifier a person's start draws first, secret-1, unless a test sets it. */
 let pagasae: Pagasae;
 
 beforeEach(async () => {
@@ -55,8 +55,8 @@ beforeEach(async () => {
   await connections.save({ fleetId: FLEET, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-19T09:00:00.000Z') });
   const approveClientParty = createApproveClientParty({ connections, parties, door: fakeProxyShipFleet().door, hasher: plainHasher, clock });
   served = [FLEET];
-  pagasae = fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-2', tokens: CHARLOTTE_TOKENS });
-  const signIns = memoryPendingSignIns();
+  pagasae = fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-1', tokens: CHARLOTTE_TOKENS });
+  const seals = fakeSignInSeals();
   server = Fastify({ logger: false });
   registerOAuthRoutes(server, {
     issuer: ISSUER,
@@ -67,9 +67,9 @@ beforeEach(async () => {
     approveAuthorization: createApproveAuthorization({ readAuthorization, codes, secrets, clock, issuer: ISSUER, parties, approveClientParty }),
     readClientParty: createReadClientParty({ parties }),
     exchangeToken: createExchangeToken({ clients, codes, tokens: memoryIssuedTokens(), secrets, clock, resource: RESOURCE }),
-    startSignIn: createStartSignIn({ readAuthorization, signIns, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }),
+    startSignIn: createStartSignIn({ readAuthorization, seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }),
     completeSignIn: (back) =>
-      createCompleteSignIn({ readAuthorization, signIns, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)) })(back),
+      createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)) })(back),
   });
   await server.ready();
 });
@@ -206,15 +206,15 @@ describe('a person, with no console session, signs in through pagasae (Q25, deci
   it('is sent to pagasae from /authorize', async () => {
     const answer = await authorizePage(undefined);
 
-    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: `${PAGASAE_URL}/oauth/authorize?state=secret-1&code_challenge=S256(secret-2)` });
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)` });
   });
 
   it("is sent back from pagasae to the client with the gateway's code", async () => {
     await authorizePage(undefined);
 
-    const answer = await callback({ state: 'secret-1', code: 'pagasae-code-1' });
+    const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
 
-    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: `${CALLBACK}?code=secret-4&state=state-1&iss=${encodeURIComponent(ISSUER)}` });
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: `${CALLBACK}?code=secret-3&state=state-1&iss=${encodeURIComponent(ISSUER)}` });
   });
 
   it('is told a sign-in it did not start, or started too long ago, is unknown, and sent nowhere', async () => {
@@ -228,7 +228,7 @@ describe('a person, with no console session, signs in through pagasae (Q25, deci
     served = [];
     await authorizePage(undefined);
 
-    const answer = await callback({ state: 'secret-1', code: 'pagasae-code-1' });
+    const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
 
     expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 403, location: undefined });
   });
@@ -237,7 +237,7 @@ describe('a person, with no console session, signs in through pagasae (Q25, deci
     pagasae = fakePagasae({ refusal: 'invalid_grant' });
     await authorizePage(undefined);
 
-    const answer = await callback({ state: 'secret-1', code: 'pagasae-code-1' });
+    const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
 
     expect(answer.statusCode).toBe(502);
     expect(answer.body).toContain('invalid_grant');

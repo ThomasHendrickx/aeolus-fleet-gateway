@@ -7,18 +7,22 @@ import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import type { Result } from '../shared/result.js';
 
-/** A person's sign-in at pagasae under way: the client's authorization request, kept by its state's hash with the gateway's PKCE verifier. */
+/** A person's sign-in at pagasae under way: the client's authorization request, with the gateway's PKCE verifier. */
 export interface PendingSignIn {
-  readonly stateHash: string;
   readonly verifier: string;
   readonly request: Readonly<Record<string, string | undefined>>;
   readonly expiresAt: Date;
 }
 
-export interface PendingSignIns {
-  save(signIn: PendingSignIn): Promise<void>;
-  /** Takes the sign-in away, at most once even under a race; none for an unknown state. */
-  take(stateHash: string): Promise<PendingSignIn | undefined>;
+/**
+ * Outbound port: seals a sign-in under way into the state pagasae carries
+ * back, so the gateway stores nothing before it knows the fleet, and the
+ * verifier stays secret on the way.
+ */
+export interface SignInSeals {
+  seal(signIn: PendingSignIn): string;
+  /** The sign-in a state seals; none for a state the gateway did not seal. */
+  open(state: string): PendingSignIn | undefined;
 }
 
 /** What pagasae answers for a redeemed code: the account token, what it names, and the refresh token behind it. */

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
-import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, memoryPendingSignIns, PAGASAE_URL, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
+import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createReadAuthorization } from '../oauth/read-authorization.js';
 import type { Pagasae } from './ports.js';
 import { createCompleteSignIn } from './complete-sign-in.js';
@@ -21,7 +21,7 @@ const CALLBACK = 'https://claude.example.com/callback';
 let now: Date;
 let secrets: ReturnType<typeof fakeSecrets>;
 let clients: ReturnType<typeof memoryOAuthClients>;
-let signIns: ReturnType<typeof memoryPendingSignIns>;
+let seals: ReturnType<typeof fakeSignInSeals>;
 let grants: ReturnType<typeof memoryAccountGrants>;
 let codes: ReturnType<typeof memoryAuthorizationCodes>;
 let served: FleetId[];
@@ -31,7 +31,7 @@ beforeEach(async () => {
   secrets = fakeSecrets();
   clients = memoryOAuthClients();
   await clients.save({ clientId: 'client-cursor', fleetId: OTHER_FLEET_ID, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: null });
-  signIns = memoryPendingSignIns();
+  seals = fakeSignInSeals();
   grants = memoryAccountGrants();
   codes = memoryAuthorizationCodes();
   served = [FLEET_ID];
@@ -46,14 +46,14 @@ function readAuthorization() {
 }
 
 function startSignIn() {
-  return createStartSignIn({ readAuthorization: readAuthorization(), signIns, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock: { now: () => now } });
+  return createStartSignIn({ readAuthorization: readAuthorization(), seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock: { now: () => now } });
 }
 
-/** pagasae redeems its code pagasae-code-1 for the verifier the start drew, secret-2. */
-function completeSignIn(pagasae: Pagasae = fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-2', tokens: CHARLOTTE_TOKENS })) {
+/** pagasae redeems its code pagasae-code-1 for the verifier the start drew, secret-1. */
+function completeSignIn(pagasae: Pagasae = fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-1', tokens: CHARLOTTE_TOKENS })) {
   return createCompleteSignIn({
     readAuthorization: readAuthorization(),
-    signIns,
+    seals,
     pagasae,
     grants,
     codes,
@@ -72,24 +72,24 @@ function aRequest(overrides: Record<string, string | undefined> = {}): Record<st
 /** The person started at /authorize; pagasae sends them back with this. */
 async function started(request = aRequest()) {
   await startSignIn()(request);
-  return { state: 'secret-1', code: 'pagasae-code-1' };
+  return { state: 'sealed-1', code: 'pagasae-code-1' };
 }
 
 describe('a person starts signing in at /authorize', () => {
-  it("is sent to pagasae with the gateway's own PKCE challenge and a new state, naming no fleet, so pagasae picks it", async () => {
-    await expect(startSignIn()(aRequest())).resolves.toEqual({ isOk: true, value: { redirectTo: `${PAGASAE_URL}/oauth/authorize?state=secret-1&code_challenge=S256(secret-2)` } });
+  it("is sent to pagasae with the gateway's own PKCE challenge and the sign-in sealed in the state, naming no fleet, so pagasae picks it", async () => {
+    await expect(startSignIn()(aRequest())).resolves.toEqual({ isOk: true, value: { redirectTo: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)` } });
   });
 
-  it("keeps the client's request by the state's hash for 10 minutes, with the verifier", async () => {
+  it("seals the client's request for 10 minutes with the verifier, storing nothing", async () => {
     await startSignIn()(aRequest());
 
-    expect([...signIns.held.values()]).toEqual([{ stateHash: 'hash(secret-1)', verifier: 'secret-2', request: aRequest(), expiresAt: new Date('2026-10-19T09:10:00.000Z') }]);
+    expect([...seals.held.values()]).toEqual([{ verifier: 'secret-1', request: aRequest(), expiresAt: new Date('2026-10-19T09:10:00.000Z') }]);
   });
 
   it('is refused as /authorize refuses a request, keeping nothing', async () => {
     await expect(startSignIn()(aRequest({ redirect_uri: 'https://evil.example.com/callback' }))).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
     await expect(startSignIn()(aRequest({ code_challenge_method: 'plain' }))).resolves.toMatchObject({ isOk: false, error: { kind: 'redirect', error: 'invalid_request' } });
-    expect(signIns.held.size).toBe(0);
+    expect(seals.held.size).toBe(0);
   });
 });
 
@@ -97,7 +97,7 @@ describe('pagasae sends the person back', () => {
   it("sends the client back with the gateway's code for the account's grant, with its state and the issuer", async () => {
     const back = await started();
 
-    await expect(completeSignIn()(back)).resolves.toEqual({ isOk: true, value: { redirectTo: `${CALLBACK}?code=secret-4&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
+    await expect(completeSignIn()(back)).resolves.toEqual({ isOk: true, value: { redirectTo: `${CALLBACK}?code=secret-3&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
   });
 
   it("keeps the account's grant: its fleet, account and person ship, pagasae's refresh token and the account token", async () => {
@@ -105,7 +105,7 @@ describe('pagasae sends the person back', () => {
 
     expect(grants.held).toEqual([
       {
-        grantId: 'secret-3',
+        grantId: 'secret-2',
         fleetId: FLEET_ID,
         accountId: 'acc-charlotte',
         personShipId: PERSON_SHIP_ID,
@@ -121,7 +121,7 @@ describe('pagasae sends the person back', () => {
 
     expect([...codes.held.values()]).toEqual([
       {
-        codeHash: 'hash(secret-4)',
+        codeHash: 'hash(secret-3)',
         fleetId: FLEET_ID,
         clientId: CIMD_CLIENT,
         redirectUri: CALLBACK,
@@ -129,19 +129,11 @@ describe('pagasae sends the person back', () => {
         resource: RESOURCE,
         scope: null,
         kind: 'account',
-        grantId: 'secret-3',
+        grantId: 'secret-2',
         expiresAt: new Date('2026-10-19T09:01:00.000Z'),
         isUsed: false,
       },
     ]);
-  });
-
-  it('takes a sign-in once: the same state again is refused', async () => {
-    const back = await started();
-    await completeSignIn()(back);
-
-    await expect(completeSignIn()(back)).resolves.toEqual({ isOk: false, error: { kind: 'unknownSignIn' } });
-    expect(codes.held.size).toBe(1);
   });
 
   it('refuses a sign-in 10 minutes after it started, and takes one just before', async () => {
@@ -149,10 +141,8 @@ describe('pagasae sends the person back', () => {
     now = new Date('2026-10-19T09:10:00.000Z');
     await expect(completeSignIn()(back)).resolves.toEqual({ isOk: false, error: { kind: 'unknownSignIn' } });
 
-    now = STARTED_AT;
-    const again = await started();
     now = new Date('2026-10-19T09:09:59.999Z');
-    await expect(completeSignIn(fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-4', tokens: CHARLOTTE_TOKENS }))({ ...again, state: 'secret-3' })).resolves.toMatchObject({ isOk: true });
+    await expect(completeSignIn()(back)).resolves.toMatchObject({ isOk: true });
   });
 
   it.each([

@@ -1,6 +1,6 @@
 import type { ShipId } from '@aeolus-fleet/common';
 
-import type { AccountGrant, AccountGrants, Pagasae, PagasaeTokens, PendingSignIn, PendingSignIns } from '../../src/core/sign-in/ports.js';
+import type { AccountGrant, AccountGrants, Pagasae, PagasaeTokens, PendingSignIn, SignInSeals } from '../../src/core/sign-in/ports.js';
 import { err, ok } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -18,19 +18,17 @@ export const CHARLOTTE_TOKENS: PagasaeTokens = {
   personShipId: PERSON_SHIP_ID,
 };
 
-export function memoryPendingSignIns(): PendingSignIns & { held: Map<string, PendingSignIn> } {
+/** Seals as a test reads them: numbered in the order they are made, opened from the same seals only. */
+export function fakeSignInSeals(): SignInSeals & { held: Map<string, PendingSignIn> } {
   const held = new Map<string, PendingSignIn>();
   return {
     held,
-    save: (signIn) => {
-      held.set(signIn.stateHash, signIn);
-      return Promise.resolve();
+    seal: (signIn) => {
+      const state = `sealed-${String(held.size + 1)}`;
+      held.set(state, signIn);
+      return state;
     },
-    take: (stateHash) => {
-      const signIn = held.get(stateHash);
-      held.delete(stateHash);
-      return Promise.resolve(signIn);
-    },
+    open: (state) => held.get(state),
   };
 }
 

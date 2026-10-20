@@ -5,11 +5,11 @@ import type { AuthorizationCodes, OAuthSecrets } from '../oauth/ports.js';
 import type { AuthorizationRefusal, ReadAuthorization } from '../oauth/read-authorization.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { AccountGrants, Pagasae, PendingSignIns } from './ports.js';
+import type { AccountGrants, Pagasae, SignInSeals } from './ports.js';
 
 /**
  * Why a sign-in gave the client no code, beside the request's own refusals:
- * - unknownSignIn: no sign-in under way has this state, it was taken, or its 10 minutes passed;
+ * - unknownSignIn: the gateway sealed no sign-in into this state, or its 10 minutes passed;
  * - pagasaeRefused: pagasae did not redeem its code, for the reason given;
  * - fleetNotServed: the account's fleet is one this gateway does not serve.
  */
@@ -18,15 +18,15 @@ export type SignInRefusal = AuthorizationRefusal | { readonly kind: 'unknownSign
 export type CompleteSignIn = (back: { state?: string | undefined; code?: string | undefined; error?: string | undefined }) => Promise<Result<{ redirectTo: string }, SignInRefusal>>;
 
 /**
- * Use case: pagasae sends the person back. Their sign-in is taken once by
- * its state, the client's request read again, and pagasae's code redeemed
- * with the gateway's verifier. The account's grant is kept, and the client
+ * Use case: pagasae sends the person back. Their sign-in is opened from its
+ * state, the client's request read again, and pagasae's code redeemed with
+ * the gateway's verifier; pagasae takes a code once. The account's grant is kept, and the client
  * is sent back with the gateway's own code for it: the client acts in the
  * fleet as the account, with no approval (orchestrator-1, slice 7 Q1).
  */
 export function createCompleteSignIn(deps: {
   readAuthorization: ReadAuthorization;
-  signIns: PendingSignIns;
+  seals: SignInSeals;
   pagasae: Pagasae;
   grants: AccountGrants;
   codes: AuthorizationCodes;
@@ -37,7 +37,7 @@ export function createCompleteSignIn(deps: {
   servesFleet: (fleetId: FleetId) => Promise<boolean>;
 }): CompleteSignIn {
   return async ({ state, code, error }) => {
-    const signIn = state === undefined ? undefined : await deps.signIns.take(deps.secrets.hashOf(state));
+    const signIn = state === undefined ? undefined : deps.seals.open(state);
     if (signIn === undefined || signIn.expiresAt.getTime() <= deps.clock.now().getTime()) {
       return err({ kind: 'unknownSignIn' });
     }
