@@ -90,10 +90,19 @@ function reader(send: { socket: WebSocket; read: () => Promise<Record<string, st
   };
 }
 
+const servingWebsockets = new WeakSet<FastifyInstance>();
+
+/** Serves websockets on the server, once whichever route asks first; its routes register once it is loaded. */
+export function acceptWebsockets(server: FastifyInstance, routes: () => void): void {
+  if (!servingWebsockets.has(server)) {
+    servingWebsockets.add(server);
+    void server.register(websocket);
+  }
+  void server.after(routes);
+}
+
 export function registerLive(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; hub: ChangeHub; pages: Record<string, LivePage> }): void {
-  void server.register(websocket);
-  // Registered once the websocket plugin is loaded, which a websocket route needs.
-  void server.after(() => {
+  acceptWebsockets(server, () => {
     server.get('/live', { websocket: true }, async (socket, request) => {
       if (!isSameOrigin(request)) {
         socket.close(CLOSE_OTHER_ORIGIN, 'Opened only from the gateway pages');
