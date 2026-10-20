@@ -16,7 +16,7 @@ export const MCP_SERVER_SHIP_TYPE = 'mcp-server';
 /** The type of every outside MCP client's proxy ship. */
 export const MCP_CLIENT_SHIP_TYPE = 'mcp-client';
 
-export type ApprovePartyRefusal = DomainError<'NOT_CONNECTED' | 'PARTY_EXISTS' | 'COMMISSION_REFUSED' | 'FLEET_UNAVAILABLE'>;
+export type ApprovePartyRefusal = DomainError<'OUTSIDE_PARTIES_OFF' | 'NOT_CONNECTED' | 'PARTY_EXISTS' | 'COMMISSION_REFUSED' | 'FLEET_UNAVAILABLE'>;
 
 export type ApproveParty = (input: {
   operatorFleetId: FleetId;
@@ -39,7 +39,15 @@ export type ApproveClientParty = (input: {
   scopes: readonly string[];
 }) => Promise<Result<ShownParty, ApprovePartyRefusal | DomainError<'CLIENT_HAS_PARTY'>>>;
 
-interface ApprovalDeps { connections: ConnectionStore; parties: PartyStore; door: ProxyShipDoor; hasher: RequestHasher; clock: Clock }
+interface ApprovalDeps {
+  connections: ConnectionStore;
+  parties: PartyStore;
+  door: ProxyShipDoor;
+  hasher: RequestHasher;
+  /** Whether the fleet's outside parties are on (interop I-3). */
+  servesOutsideParties: (fleetId: FleetId) => Promise<boolean>;
+  clock: Clock;
+}
 
 /** What one approval asks for: the party it keeps, as it is before its proxy ship is commissioned, under its request's hash. */
 interface Approval<P extends Party> {
@@ -61,7 +69,8 @@ interface Approval<P extends Party> {
  * a fleet that did not answer left it, and commissions no second ship. A
  * commission the fleet stored but whose answer was lost leaves the ship
  * awaiting crew: its secret was shown once. A refused commission keeps
- * nothing, so argo may approve again.
+ * nothing, so argo may approve again. While the fleet's outside parties are
+ * off, nothing is approved (interop I-3).
  */
 async function approved<P extends Party>(deps: ApprovalDeps, approval: Approval<P>): Promise<Result<ShownParty, ApprovePartyRefusal>> {
   const crewed = async (party: P & { proxyShipId: ShipId; secret: string }): Promise<Result<ShownParty, ApprovePartyRefusal>> => {
@@ -75,6 +84,9 @@ async function approved<P extends Party>(deps: ApprovalDeps, approval: Approval<
   };
 
   const { fleetId } = approval;
+  if (!(await deps.servesOutsideParties(fleetId))) {
+    return refuse('OUTSIDE_PARTIES_OFF', "This fleet's outside parties are off: turn them on first");
+  }
   const gateway = await deps.connections.find(fleetId);
   if (!gateway) {
     return refuse('NOT_CONNECTED', 'The gateway is not connected to this fleet: connect it in the console');

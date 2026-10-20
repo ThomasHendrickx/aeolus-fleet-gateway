@@ -35,7 +35,10 @@ export type DomainErrorKind =
   | 'NO_SUCH_CALL'
   | 'NOT_A_PERSON'
   | 'SIGNED_OUT'
-  | 'NO_SUCH_DELIVERY';
+  | 'NO_SUCH_DELIVERY'
+  | 'NOT_A_NETWORKER'
+  | 'OPEN_NETWORK'
+  | 'OUTSIDE_PARTIES_OFF';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {

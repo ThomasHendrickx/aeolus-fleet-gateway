@@ -73,6 +73,8 @@ function contextFor(cookie: string | undefined): Context {
       stated.push(name);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));
     },
+    readOutsideParties: unused,
+    setOutsideParties: unused,
     markTool: (input) => {
       marks.push(input);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));

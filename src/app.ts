@@ -58,6 +58,9 @@ import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliverie
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createReadAuthorization } from './core/oauth/read-authorization.js';
 import { createRegisterClient } from './core/oauth/register-client.js';
+import { createFleetNetwork } from './adapters/fleet/fleet-network.js';
+import { createPrismaOutsidePartySwitches } from './adapters/prisma/outside-party-switches.js';
+import { createReadOutsideParties, createSetOutsideParties, type SetOutsideParties } from './core/outside-parties/set-outside-parties.js';
 import { createConnect } from './core/connection/connect.js';
 import { createReadConnection, type ReadConnection } from './core/connection/read-connection.js';
 import { createDeleteFleet } from './core/installation/delete-fleet.js';
@@ -192,14 +195,17 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const markTool = createMarkTool({ parties, marks, stateParty });
   const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
   const clientCalls = createPrismaClientCalls(prisma);
+  const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
+  const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
   const workers = createPartyWorkers({
     parties,
     stateParty,
     runParty: createRunParty({ crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
     collectReplies: createCollectReplies({ crew: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
+    servesOutsideParties,
     log: server.log,
   });
-  const approvePartyOnly = createApproveParty({ connections, parties, door, hasher: sha256RequestHasher, clock });
+  const approvePartyOnly = createApproveParty({ connections, parties, door, hasher: sha256RequestHasher, servesOutsideParties, clock });
   const crewPartyOnly = createCrewParty({ parties, door });
   // A party crewed by approving it, or by a new secret, has its calls taken at once.
   const approveParty: ApproveParty = async (input) => {
@@ -216,7 +222,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     }
     return crewed;
   };
-  const approveClientPartyOnly = createApproveClientParty({ connections, parties, door, hasher: sha256RequestHasher, clock });
+  const approveClientPartyOnly = createApproveClientParty({ connections, parties, door, hasher: sha256RequestHasher, servesOutsideParties, clock });
   // A client party crewed at its first approval has the replies to its calls taken at once.
   const approveClientParty: ApproveClientParty = async (input) => {
     const approved = await approveClientPartyOnly(input);
@@ -226,6 +232,22 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     return approved;
   };
   const listParties = createListParties({ parties });
+  const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock });
+  // Off stops the fleet's workers; on starts its crewed parties' workers again.
+  const setOutsideParties: SetOutsideParties = async (input) => {
+    const set = await setOutsidePartiesOnly(input);
+    if (set.isOk && !set.value.isOn) {
+      await workers.stopFleet(input.actor.fleetId);
+    }
+    if (set.isOk && set.value.isOn) {
+      for (const party of await parties.crewed()) {
+        if (party.fleetId === input.actor.fleetId) {
+          await workers.start(party);
+        }
+      }
+    }
+    return set;
+  };
 
   // The OAuth server for outside MCP clients: the issuer is the public URL, and every token is bound to its MCP endpoint (RFC 8707).
   const issuer = options.publicUrl ?? DEFAULT_PUBLIC_URL;
@@ -296,6 +318,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     listTools,
     callTool: createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, deadlineMs: CLIENT_CALL_DEADLINE_MS, sleep, waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS }),
     readClientCall: createReadClientCall({ calls: clientCalls, clock }),
+    servesOutsideParties,
     ...(person === undefined ? {} : { person }),
   });
 
@@ -318,6 +341,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     listParties,
     stateParty,
     markTool,
+    readOutsideParties: createReadOutsideParties({ switches: outsidePartySwitches }),
+    setOutsideParties,
     registerClient,
     listToDecide: createListToDecide({ requests: pendingRequests, clock }),
     decideRequest: createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock }),

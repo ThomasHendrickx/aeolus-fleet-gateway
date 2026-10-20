@@ -10,6 +10,7 @@ import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
+import { outsidePartiesOn } from './support/outside-parties.js';
 
 // An agent ship holding gateway:approve decides a pending request through
 // the gateway's API (decision 0056): the gateway, as its own ship,
@@ -54,6 +55,7 @@ beforeEach(async () => {
     decidedAt: null,
     now: asked,
   });
+  await outsidePartiesOn(databaseUrl, fleetId);
 });
 
 afterEach(async () => {

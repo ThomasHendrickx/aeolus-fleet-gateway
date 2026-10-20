@@ -41,6 +41,16 @@ model FleetSwitch {
   @@map("fleet_switches")
 }
 
+/// Whether a fleet's outside parties are on (interop I-3); a fleet without a
+/// row has them off.
+model OutsidePartySwitch {
+  fleetId   String   @id @map("fleet_id")
+  isOn      Boolean  @map("is_on")
+  changedAt DateTime @map("changed_at") @db.Timestamptz(3)
+
+  @@map("outside_party_switches")
+}
+
 /// The installation's requests, by the caller's request id, so a replay answers
 /// what the first call answered. A switch names its fleet and goes with it; a
 /// delete keeps only the request's hash, so nothing of the deleted fleet stays.
