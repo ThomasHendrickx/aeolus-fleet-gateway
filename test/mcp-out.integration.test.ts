@@ -9,7 +9,7 @@ import { MOCK_CRM_BEARER, startMockCrm, type MockCrm } from './fixtures/mock-crm
 import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
-import { mutate } from './support/gateway-api.js';
+import { mutate, query } from './support/gateway-api.js';
 import { receiveOne, send } from './support/ship.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 import { outsidePartiesOn } from './support/outside-parties.js';
@@ -130,5 +130,19 @@ describe('a ship of the fleet calls an outside MCP server through its proxy ship
     const request = await callTool('list_contacts', {});
 
     await expect(receiveOne(fleet, caller.crewToken).then((reply) => reply?.inReplyTo)).resolves.toBe(request);
+  });
+});
+
+describe('argo retires an outside MCP server party (decision 0056)', () => {
+  it('retires its proxy ship in the fleet and forgets the party, so a call to it is refused', async () => {
+    const address = await started();
+    await crewed(address);
+
+    const retired = await mutate(address, { procedure: 'parties.retire', cookie, body: { name: 'crm' } });
+
+    expect(retired.status).toBe(200);
+    const listed = await query(address, { procedure: 'parties.list', cookie });
+    expect(z.object({ result: z.object({ data: z.array(z.unknown()) }) }).parse(await listed.json()).result.data).toEqual([]);
+    await expect(callTool('list_deals', { contactId: 'c1' })).rejects.toThrow();
   });
 });
