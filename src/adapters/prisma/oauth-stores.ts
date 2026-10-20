@@ -103,5 +103,8 @@ export function createPrismaIssuedTokens(db: Db): IssuedTokens {
     revokeGrant: async (fleetId, grantId) => {
       await db.issuedToken.updateMany({ where: { fleetId, grantId }, data: { state: 'revoked' } });
     },
+    revokeParty: async (fleetId, party) => {
+      await db.issuedToken.updateMany({ where: { fleetId, party }, data: { state: 'revoked' } });
+    },
   };
 }

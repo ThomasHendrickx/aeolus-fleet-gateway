@@ -2,7 +2,8 @@ import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { Party } from '../../src/core/parties/party.js';
-import type { PartyStore, ProxyShipDoor } from '../../src/core/parties/ports.js';
+import type { ActorCredential } from '../../src/core/actors/credential-of.js';
+import type { PartyStore, ProxyShipDoor, ProxyShipsAsActor } from '../../src/core/parties/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 export const OWNER_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
@@ -86,4 +87,16 @@ export function fakeProxyShipFleet() {
     },
   };
   return { state, door };
+}
+
+/** The fleet's calls on proxy ships as the actor, as a test sees them: each retire with its credential, answered as given. */
+export function fakeProxyShipsAsActor(answer: Result<undefined, FleetRefusal> = ok(undefined)): ProxyShipsAsActor & { retired: { as: ActorCredential; shipId: ShipId }[] } {
+  const retired: { as: ActorCredential; shipId: ShipId }[] = [];
+  return {
+    retired,
+    retire: (as, { shipId }) => {
+      retired.push({ as, shipId });
+      return Promise.resolve(answer);
+    },
+  };
 }

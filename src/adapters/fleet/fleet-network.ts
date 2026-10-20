@@ -11,24 +11,10 @@ import type { FleetRefusal } from '../../core/connection/ports.js';
 import type { ActorCredential } from '../../core/actors/credential-of.js';
 import type { FleetNetwork } from '../../core/outside-parties/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
-
-/** The header an account's token travels in; common's ACCOUNT_TOKEN_HEADER replaces it once published (aeolus-fleet#991). */
-const ACCOUNT_TOKEN_HEADER = 'aeolus-account-token';
+import { refusalOf, restHeaders } from './actor-door.js';
 
 const networkRulesSchema = z.object({ applied: z.object({ rules: z.array(z.unknown()).nullable() }) });
 const trpcAnswerSchema = z.object({ result: z.object({ data: networkRulesSchema }) }).transform(({ result }) => result.data);
-const refusalSchema = z.object({ code: z.string(), message: z.string() });
-const trpcRefusalSchema = z.object({ error: z.object({ message: z.string(), data: z.object({ code: z.string() }) }) });
-
-/** The fleet's refusal as its code and message, whichever door answered it. */
-function refusalOf(status: number, body: unknown): FleetRefusal {
-  const rest = refusalSchema.safeParse(body);
-  if (rest.success) {
-    return rest.data;
-  }
-  const trpc = trpcRefusalSchema.safeParse(body);
-  return trpc.success ? { code: trpc.data.error.data.code, message: trpc.data.error.message } : { code: 'UNAVAILABLE', message: `The fleet answered ${String(status)}` };
-}
 
 export function createFleetNetwork(fleetUrl: string): FleetNetwork {
   return {
@@ -36,7 +22,7 @@ export function createFleetNetwork(fleetUrl: string): FleetNetwork {
       const request =
         as.crewToken === undefined
           ? { url: `${fleetUrl}/trpc/fleet.networkRules`, headers: { cookie: as.cookie ?? '' } }
-          : { url: `${fleetUrl}/api/v1/fleet/networkRules`, headers: { authorization: `Bearer ${as.crewToken}`, ...(as.accountToken === undefined ? {} : { [ACCOUNT_TOKEN_HEADER]: as.accountToken }) } };
+          : { url: `${fleetUrl}/api/v1/fleet/networkRules`, headers: restHeaders(as) };
       let response: Response;
       try {
         response = await fetch(request.url, { headers: request.headers });
