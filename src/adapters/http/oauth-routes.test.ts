@@ -77,6 +77,7 @@ async function startServer(isSigningPeopleIn: boolean) {
             readWaiting: createReadWaiting({ waitings, readAuthorization, requests, parties, codes, secrets, clock, issuer: ISSUER }),
             watchWaiting: createWatchWaiting({ waitings, requests, parties, clock }),
             hub,
+            clock,
           },
         }
       : {}),

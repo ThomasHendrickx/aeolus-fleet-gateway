@@ -17,10 +17,12 @@ import type { ClientAnswer } from '../../core/requests/ask-for-client.js';
 import { REQUEST_LIFETIME_MS } from '../../core/requests/open-request.js';
 import type { ReadWaiting } from '../../core/requests/read-waiting.js';
 import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
+import type { Clock } from '../../core/shared/clock.js';
 import type { CompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
 import { SIGN_IN_LIFETIME_MS, type StartSignIn } from '../../core/sign-in/start-sign-in.js';
-import { acceptForms, documentOf, escaped, isSameOrigin } from './html.js';
+import { acceptForms, escaped, isSameOrigin } from './html.js';
 import { acceptWebsockets, type ChangeHub } from './live.js';
+import { handshake, icon, ring, signInPage, statusBadge, type Icon, type Tone } from './signal.js';
 
 const HTTP_FOUND = 302;
 const HTTP_BAD_REQUEST = 400;
@@ -52,7 +54,7 @@ export interface OAuthRoutesDeps {
   readAuthorization: ReadAuthorization;
   exchangeToken: ExchangeToken;
   /** Signing people in through pagasae (decision 0054) and their clients' waits, followed live; unset where no pagasae is set. */
-  signIn?: { start: StartSignIn; complete: CompleteSignIn; readWaiting: ReadWaiting; watchWaiting: WatchWaiting; hub: ChangeHub };
+  signIn?: { start: StartSignIn; complete: CompleteSignIn; readWaiting: ReadWaiting; watchWaiting: WatchWaiting; hub: ChangeHub; clock: Clock };
 }
 
 function fieldsOf(value: unknown): Record<string, string> {
@@ -65,13 +67,28 @@ function authorizationRequestOf(fields: Record<string, string>): Record<string, 
 }
 
 /** A page of the gateway, never cached. */
-function htmlPage(reply: FastifyReply, page: { status: number; title: string; body: string; head?: string }): FastifyReply {
-  return reply.code(page.status).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(documentOf({ title: page.title, head: page.head ?? '', body: page.body }));
+function htmlPage(reply: FastifyReply, page: { status: number; title: string; body: string }): FastifyReply {
+  return reply.code(page.status).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(signInPage({ title: page.title, body: page.body }));
 }
 
+/** How an error page leads (design B): one ring in its tone around one icon, dashed for what ended, and one title. */
+const ERROR_LOOKS = {
+  invalidClient: { tone: 'attention', icon: 'alert', heading: 'This client cannot connect' },
+  noPick: { tone: 'attention', icon: 'alert', heading: 'Pick how to connect' },
+  signInEnded: { tone: 'ended', icon: 'timerOff', heading: 'Sign-in ended', isDashed: true },
+  otherBrowser: { tone: 'attention', icon: 'shieldX', heading: 'Not this browser' },
+  noFleet: { tone: 'attention', icon: 'shieldX', heading: 'No fleet for you' },
+  outsidePartiesOff: { tone: 'ended', icon: 'powerOff', heading: 'Outside parties are off' },
+  signInFailed: { tone: 'attention', icon: 'alert', heading: 'Sign-in did not go through' },
+  requestEnded: { tone: 'ended', icon: 'timerOff', heading: 'Request ended', isDashed: true },
+  noSignIn: { tone: 'ended', icon: 'ban', heading: 'No sign-in here' },
+} as const satisfies Record<string, { tone: Tone; icon: Icon; heading: string; isDashed?: boolean }>;
+
 /** A page that tells a person why their client got nothing, sending them nowhere. */
-function errorPage(reply: FastifyReply, page: { status: number; title: string; message: string }): FastifyReply {
-  return htmlPage(reply, { status: page.status, title: page.title, body: `<h1>${escaped(page.title)}</h1><p class="error">${escaped(page.message)}</p>` });
+function errorPage(reply: FastifyReply, page: { status: number; title: string; look: keyof typeof ERROR_LOOKS; message: string }): FastifyReply {
+  const look: { tone: Tone; icon: Icon; heading: string; isDashed?: boolean } = ERROR_LOOKS[page.look];
+  const lead = ring({ tone: look.tone, center: { icon: look.icon }, label: look.heading, size: 144, ...(look.isDashed === undefined ? {} : { isDashed: look.isDashed }) });
+  return htmlPage(reply, { status: page.status, title: page.title, body: `${lead}<h1>${escaped(look.heading)}</h1><p class="muted">${escaped(page.message)}</p>` });
 }
 
 /** A browser cookie the gateway keeps a secret in for one path, or clears. Lax, so it comes back on a redirect from pagasae. */
@@ -103,7 +120,7 @@ function cookieValue(cookie: BrowserCookie, header: string | undefined): string 
 function sendBack(reply: FastifyReply, answer: { refusal: AuthorizationRefusal; issuer: string }): FastifyReply {
   const { refusal, issuer } = answer;
   if (refusal.kind === 'invalidClient') {
-    return errorPage(reply, { status: HTTP_BAD_REQUEST, title: 'Connect an MCP client', message: refusal.message });
+    return errorPage(reply, { status: HTTP_BAD_REQUEST, title: 'Connect an MCP client', look: 'invalidClient', message: refusal.message });
   }
   const url = new URL(refusal.redirectUri);
   url.searchParams.append('error', refusal.error);
@@ -120,13 +137,14 @@ function pickPage(request: Record<string, string | undefined>, authorization: Au
   const hidden = Object.entries(request)
     .flatMap(([name, value]) => (value === undefined ? [] : [`<input type="hidden" name="${escaped(name)}" value="${escaped(value)}">`]))
     .join('');
-  return `<h1>Connect an MCP client</h1>
+  return `${handshake({ name: authorization.clientName, fleet: 'Aeolus' })}
+<h1>Connect an MCP client</h1>
 <p><strong>${escaped(authorization.clientName)}</strong> asks to call your fleet's ships through the gateway.</p>
-<p class="muted">Client ${escaped(authorization.clientId)}, sent back to ${escaped(authorization.redirectUri)}.</p>
-<form method="get" action="/authorize/sign-in">${hidden}
-<p><button name="holder" value="account">Sign in as yourself</button> <span class="muted">The client acts as you.</span></p>
-<p><button name="holder" value="party">Ask for access for this client</button> <span class="muted">An approver of your fleet decides; the client then acts as its own party.</span></p>
-</form>`;
+<form method="get" action="/authorize/sign-in">${hidden}<div class="tiles">
+<button class="tile" name="holder" value="account">${icon('signIn', 20)}<strong>Sign in as yourself</strong><span class="muted">The client acts as you.</span></button>
+<button class="tile" name="holder" value="party">${icon('hourglass', 20)}<strong>Ask for access for this client</strong><span class="muted">An approver of your fleet decides; the client then acts as its own party.</span></button>
+</div></form>
+<p class="muted">Client ${escaped(authorization.clientId)}, sent back to ${escaped(authorization.redirectUri)}.</p>`;
 }
 
 /**
@@ -136,8 +154,15 @@ function pickPage(request: Record<string, string | undefined>, authorization: Au
  * with backoff. It never reloads on a timer.
  */
 const WAITING_SCRIPT = `(function () {
-  var wait = 500, expiry;
+  var wait = 500, expiry, HOUR = 3600000;
   function goOn() { location.replace(location.href); }
+  function countDown() {
+    var holder = document.querySelector('[data-expires-at]'), text = document.querySelector('[data-time-left]');
+    if (!holder || !text) return;
+    var hours = Math.max(0, Math.floor((Date.parse(holder.getAttribute('data-expires-at')) - Date.now()) / HOUR));
+    text.textContent = Math.floor(hours / 24) + ' d ' + (hours % 24) + ' h';
+  }
+  setInterval(countDown, 60000);
   function open() {
     var socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '${WAITING_COOKIE.path}/live' + location.search);
     socket.onopen = function () { wait = 500; };
@@ -155,10 +180,24 @@ const WAITING_SCRIPT = `(function () {
   open();
 })();`;
 
-/** The waiting page: the client waits for approval, and the page goes on by itself once it is decided. */
-function waitingPage(clientName: string): string {
-  return `<h1>Waiting for approval</h1>
-<p><strong>${escaped(clientName)}</strong> waits for an approver of your fleet. This page goes on by itself once it is decided; you may close it and connect again later.</p>
+const MS_PER_HOUR = 3_600_000;
+const HOURS_PER_DAY = 24;
+
+/** The time left of a request, in days and hours, as the waiting page's ring shows it. */
+function timeLeft(expiresAt: Date, now: Date): string {
+  const hours = Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / MS_PER_HOUR));
+  return `${String(Math.floor(hours / HOURS_PER_DAY))} d ${String(hours % HOURS_PER_DAY)} h`;
+}
+
+/** The waiting page: the client waits for approval, the ring counting its time left, and the page goes on by itself once it is decided. */
+function waitingPage(waiting: { clientName: string; expiresAt: Date; now: Date }): string {
+  const left = timeLeft(waiting.expiresAt, waiting.now);
+  return `${handshake({ name: waiting.clientName, fleet: 'Aeolus' })}
+<div data-expires-at="${waiting.expiresAt.toISOString()}">${ring({ tone: 'waiting', center: { text: left, icon: 'hourglass' }, label: `${left} left`, size: 176 })}</div>
+${statusBadge({ tone: 'waiting', icon: 'hourglass', label: 'Waiting for approval' })}
+<p><strong>${escaped(waiting.clientName)}</strong> waits for an approver of your fleet.</p>
+<p><span class="going-on">Goes on by itself</span></p>
+<p class="muted">Closed this page? Connect again later.</p>
 <script>${WAITING_SCRIPT}</script>`;
 }
 
@@ -185,7 +224,7 @@ function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn:
     const fields = fieldsOf(request.query);
     const holder = holderSchema.safeParse(fields.holder);
     if (!holder.success) {
-      return errorPage(reply, { status: HTTP_BAD_REQUEST, title: 'Connect an MCP client', message: 'Pick on the page whether to sign in as yourself or to ask for access for the client.' });
+      return errorPage(reply, { status: HTTP_BAD_REQUEST, title: 'Connect an MCP client', look: 'noPick', message: 'Pick on the page whether to sign in as yourself or to ask for access for the client.' });
     }
     const started = await signIn.start({ request: authorizationRequestOf(fields), holder: holder.data });
     if (!started.isOk) {
@@ -220,15 +259,15 @@ function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn:
       case 'redirect':
         return sendBack(reply, { refusal, issuer });
       case 'unknownSignIn':
-        return errorPage(reply, { status: HTTP_BAD_REQUEST, title, message: 'This sign-in is unknown, or took over 10 minutes. Start again from your MCP client.' });
+        return errorPage(reply, { status: HTTP_BAD_REQUEST, title, look: 'signInEnded', message: 'This sign-in is unknown, or took over 10 minutes. Start again from your MCP client.' });
       case 'otherBrowser':
-        return errorPage(reply, { status: HTTP_BAD_REQUEST, title, message: 'This sign-in was started in another browser, so it is not yours to finish. Start again from your MCP client.' });
+        return errorPage(reply, { status: HTTP_BAD_REQUEST, title, look: 'otherBrowser', message: 'This sign-in was started in another browser, so it is not yours to finish. Start again from your MCP client.' });
       case 'fleetNotServed':
-        return errorPage(reply, { status: HTTP_FORBIDDEN, title, message: 'This gateway does not serve the fleet you signed in to.' });
+        return errorPage(reply, { status: HTTP_FORBIDDEN, title, look: 'noFleet', message: 'This gateway does not serve the fleet you signed in to.' });
       case 'outsidePartiesOff':
-        return errorPage(reply, { status: HTTP_FORBIDDEN, title, message: "Your fleet's outside parties are off, so no MCP client can ask for access. Sign in as yourself instead, or ask whoever runs your fleet." });
+        return errorPage(reply, { status: HTTP_FORBIDDEN, title, look: 'outsidePartiesOff', message: "Your fleet's outside parties are off, so no MCP client can ask for access. Sign in as yourself instead, or ask whoever runs your fleet." });
       case 'pagasaeRefused':
-        return errorPage(reply, { status: HTTP_BAD_GATEWAY, title, message: `The sign-in did not go through: ${refusal.message}. Start again from your MCP client.` });
+        return errorPage(reply, { status: HTTP_BAD_GATEWAY, title, look: 'signInFailed', message: `The sign-in did not go through: ${refusal.message}. Start again from your MCP client.` });
     }
   });
 
@@ -239,7 +278,7 @@ function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn:
     const title = 'Waiting for approval';
     if (read.isOk) {
       if (read.value.kind === 'waiting') {
-        return htmlPage(reply, { status: 200, title, body: waitingPage(read.value.clientName) });
+        return htmlPage(reply, { status: 200, title, body: waitingPage({ ...read.value, now: signIn.clock.now() }) });
       }
       const cleared = cookieHeader(WAITING_COOKIE, { value: '', maxAgeSeconds: 0, isSecure });
       return reply.code(HTTP_FOUND).header('location', read.value.redirectTo).header('set-cookie', cleared).send();
@@ -250,9 +289,9 @@ function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn:
       case 'redirect':
         return sendBack(reply, { refusal, issuer });
       case 'unknownWaiting':
-        return errorPage(reply, { status: HTTP_NOT_FOUND, title, message: 'This request is unknown, or ended long ago. Start again from your MCP client.' });
+        return errorPage(reply, { status: HTTP_NOT_FOUND, title, look: 'requestEnded', message: 'This request is unknown, or ended long ago. Start again from your MCP client.' });
       case 'otherBrowser':
-        return errorPage(reply, { status: HTTP_BAD_REQUEST, title, message: 'This request was made in another browser, so it is not yours to follow. Start again from your MCP client.' });
+        return errorPage(reply, { status: HTTP_BAD_REQUEST, title, look: 'otherBrowser', message: 'This request was made in another browser, so it is not yours to follow. Start again from your MCP client.' });
     }
   });
 
@@ -307,7 +346,7 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
 
   server.get('/authorize', async (request, reply) => {
     if (deps.signIn === undefined) {
-      return errorPage(reply, { status: HTTP_FORBIDDEN, title: 'Connect an MCP client', message: 'This gateway signs no one in, so no MCP client can connect to it: its operator sets pagasae first.' });
+      return errorPage(reply, { status: HTTP_FORBIDDEN, title: 'Connect an MCP client', look: 'noSignIn', message: 'This gateway signs no one in, so no MCP client can connect to it: its operator sets pagasae first.' });
     }
     const parameters = authorizationRequestOf(fieldsOf(request.query));
     const read = await deps.readAuthorization(parameters);

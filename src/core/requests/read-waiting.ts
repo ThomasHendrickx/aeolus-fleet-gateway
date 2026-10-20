@@ -7,8 +7,8 @@ import { err, ok, type Result } from '../shared/result.js';
 import type { PendingRequests, WaitingSeals } from './ports.js';
 import { isRefused } from './request-state.js';
 
-/** What the waiting page shows: the client still waits, or where it is sent back now. */
-export type WaitingAnswer = { readonly kind: 'waiting'; readonly clientName: string } | { readonly kind: 'answered'; readonly redirectTo: string };
+/** What the waiting page shows: the client still waits, until its request expires, or where it is sent back now. */
+export type WaitingAnswer = { readonly kind: 'waiting'; readonly clientName: string; readonly expiresAt: Date } | { readonly kind: 'answered'; readonly redirectTo: string };
 
 /**
  * Why a waiting gives the client nothing, beside its request's own refusals:
@@ -60,7 +60,7 @@ export function createReadWaiting(deps: {
     }
     const party = request.state === 'approved' ? await deps.parties.findByClient(fleetId, authorization.clientId) : undefined;
     if (party?.state !== 'crewed') {
-      return ok({ kind: 'waiting', clientName: authorization.clientName });
+      return ok({ kind: 'waiting', clientName: authorization.clientName, expiresAt: request.expiresAt });
     }
     return ok({ kind: 'answered', redirectTo: await issueCode(deps, { fleetId, authorization, holder: { kind: 'party', party: party.name } }) });
   };

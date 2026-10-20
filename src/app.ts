@@ -322,6 +322,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           readWaiting: createReadWaiting({ waitings, readAuthorization, requests: pendingRequests, parties, ...issuing }),
           watchWaiting: createWatchWaiting({ waitings, requests: pendingRequests, parties, clock }),
           hub,
+          clock,
         };
   registerOAuthRoutes(server, {
     ...(signIn === undefined ? {} : { signIn }),
