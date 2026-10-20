@@ -25,7 +25,6 @@ const CLAUDE: McpClientParty = {
 
 const CALLER = { fleetId: FLEET_ID, party: 'claude' };
 const NOW = new Date('2026-10-19T12:00:00.000Z');
-const DEADLINE_MS = 600_000;
 const WAIT_POLL_MS = 250;
 const RESULT_TYPE = 'application/vnd.aeolus.mcp-result+json; name=list_deals';
 
@@ -49,8 +48,16 @@ let calls: ReturnType<typeof memoryClientCalls>;
 let keys: ReturnType<typeof fakeCallKeys>;
 let callTool: ReturnType<typeof createCallTool>;
 
-const callToolWaiting = (waitMs: number) =>
-  createCallTool({ parties, listTools: createListTools({ parties, discovery, aliases: fakeAliases }), sender, calls, keys, clock, deadlineMs: DEADLINE_MS, sleep, waitMs, waitPollMs: WAIT_POLL_MS });
+/** The call tool of a gateway that waits at most waitMaxMs, whatever a capability states. */
+const callToolWaiting = (waitMaxMs: number) =>
+  createCallTool({ parties, listTools: createListTools({ parties, discovery, aliases: fakeAliases }), sender, calls, keys, clock, sleep, waitMaxMs, waitPollMs: WAIT_POLL_MS });
+
+/** The CRM's ship, its list_deals stating the wait and deadline given, or none. */
+function aCrmStating(timing: { waitMs?: number; deadlineMs?: number }) {
+  return aDiscoveredShip({
+    statement: { by: 'crew', summary: 's', capabilities: [{ name: 'list_deals', outputModes: [RESULT_TYPE], ...timing }] },
+  });
+}
 
 beforeEach(async () => {
   parties = memoryPartyStore();
@@ -204,6 +211,31 @@ describe('an outside MCP client waits a bounded time for the answer to its call 
     whileWaiting = () => calls.addReply({ fleetId: FLEET_ID, messageId: MESSAGE_ID }, aCallReply({ contentType: 'text/plain', payload: 'Looking.', receivedAt: now }));
 
     await expect(callToolWaiting(500)(CALLER, { name: 'a9cr2__list_deals', arguments: {} })).resolves.toMatchObject({ isOk: true, value: { state: 'working' } });
+  });
+
+  it("waits the capability's own wait when it is below the gateway's most", async () => {
+    discovery.state.ships = [aCrmStating({ waitMs: 600 })];
+
+    await callToolWaiting(10_000)(CALLER, { name: 'a9cr2__list_deals', arguments: {} });
+
+    expect(sleeps.reduce((total, ms) => total + ms, 0)).toBe(600);
+  });
+
+  it('is answered at once, waiting not at all, for a capability that states no wait', async () => {
+    discovery.state.ships = [aCrmStating({})];
+
+    await expect(callToolWaiting(10_000)(CALLER, { name: 'a9cr2__list_deals', arguments: {} })).resolves.toMatchObject({ isOk: true, value: { state: 'submitted' } });
+    expect(sleeps).toEqual([]);
+  });
+
+  it("keeps the call with the deadline its capability states, and none for a capability that states none (interop 3.4)", async () => {
+    discovery.state.ships = [aCrmStating({ deadlineMs: 30_000 })];
+    await callTool(CALLER, { name: 'a9cr2__list_deals', arguments: { [IDEMPOTENCY_ARGUMENT]: 'k-1' } });
+    discovery.state.ships = [aCrmStating({})];
+
+    await callTool(CALLER, { name: 'a9cr2__list_deals', arguments: { [IDEMPOTENCY_ARGUMENT]: 'k-2' } });
+
+    expect(calls.held.map(({ deadlineAt }) => deadlineAt)).toEqual([new Date('2026-10-19T12:00:30.000Z'), null]);
   });
 
   it('waits not at all with no wait', async () => {

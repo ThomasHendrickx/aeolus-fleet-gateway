@@ -50,6 +50,13 @@ describe("which reply completes an outside client's call, and when it fails (int
     expect([stateOf(call, BEFORE_DEADLINE), stateOf(call, DEADLINE)]).toEqual([{ state: 'submitted' }, { state: 'failed' }]);
   });
 
+  it('never fails by time when its capability states no deadline, and is completed by a reply however late', () => {
+    const late = new Date('2027-10-19T12:00:00.000Z');
+    const call = aClientCall({ outputContentType: null, deadlineAt: null });
+
+    expect([stateOf(call, late), stateOf({ ...call, replies: [aCallReply({ contentType: 'text/plain', receivedAt: late })] }, late)]).toEqual([{ state: 'submitted' }, expect.objectContaining({ state: 'completed' })]);
+  });
+
   it('stays failed when its completing reply comes after the deadline', () => {
     const call = aClientCall({ outputContentType: null, deadlineAt: DEADLINE, replies: [aCallReply({ contentType: 'text/plain', receivedAt: DEADLINE })] });
 

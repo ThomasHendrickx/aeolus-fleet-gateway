@@ -65,6 +65,8 @@ describe("an MCP client's tools are the capabilities of the ships its party reac
           contentType: 'application/vnd.aeolus.mcp-tool+json; name=list_deals',
           isText: false,
           outputContentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals',
+          waitMs: 10_000,
+          deadlineMs: 600_000,
         },
       },
     ]);
@@ -73,7 +75,7 @@ describe("an MCP client's tools are the capabilities of the ships its party reac
   it('takes a capability with no input schema as one with any arguments', async () => {
     discovery.state.ships = [aDiscoveredShip({ statement: { by: 'crew', summary: 's', capabilities: [{ name: 'ping' }] } })];
 
-    await expect(toolsListed()).resolves.toMatchObject([{ name: 'a9cr2__ping', inputSchema: { type: 'object', properties: { [IDEMPOTENCY_ARGUMENT]: { type: 'string' } } }, target: { contentType: 'application/json', isText: false } }]);
+    await expect(toolsListed()).resolves.toMatchObject([{ name: 'a9cr2__ping', inputSchema: { type: 'object', properties: { [IDEMPOTENCY_ARGUMENT]: { type: 'string' } } }, target: { contentType: 'application/json', isText: false, waitMs: 0, deadlineMs: null } }]);
   });
 
   it('gives a capability that takes plain text one text argument (orchestrator-1 on aeolus-fleet#877, Q14)', async () => {
