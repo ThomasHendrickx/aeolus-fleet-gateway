@@ -11,9 +11,10 @@ import { statementOf } from '../src/core/mcp-out/statement.js';
 import { MOCK_CRM_BEARER, startMockCrm, type MockCrm } from './fixtures/mock-crm/mock-crm.js';
 import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
+import { PAGASAE_CLIENT, startFakePagasae } from './support/fake-pagasae.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
 import { mutate } from './support/gateway-api.js';
-import { aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
+import { aConnectedGateway, aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
 import { outsidePartiesOn } from './support/outside-parties.js';
 
 // The journey of slice 2 end to end: an outside MCP client, signed in with
@@ -79,13 +80,15 @@ beforeEach(async () => {
   crm = mockCrm;
   const port = await aFreePort();
   const address = `http://127.0.0.1:${String(port)}`;
-  setting = { fleet, address, cookie: await signIn(fleet), databaseUrl };
-  app = createGatewayApp({ databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET });
+  setting = { fleet, address, cookie: await signIn(fleet), databaseUrl, pagasae: await startFakePagasae() };
+  app = createGatewayApp({ databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET, pagasae: { url: setting.pagasae.url, ...PAGASAE_CLIENT } });
   await app.server.listen({ host: '127.0.0.1', port });
+  await aConnectedGateway(setting);
 });
 
 afterEach(async () => {
   await app.close();
+  await setting.pagasae.stop();
   await Promise.all([crm.close(), setting.fleet.stop()]);
 });
 

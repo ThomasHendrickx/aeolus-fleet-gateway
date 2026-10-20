@@ -82,3 +82,9 @@ export async function startFakePagasae(): Promise<FakePagasae> {
     },
   };
 }
+
+/** Charlotte's account token claims in a fleet, as pagasae signs them. */
+export function charlotteIn(pagasae: FakePagasae, fleet: string): Record<string, unknown> {
+  const now = Math.floor(Date.now() / 1000);
+  return { iss: pagasae.url, aud: fleet, sub: 'acc-charlotte', org: 'org-acme', scope: 'fleet:read', group: ['sales'], iat: now, exp: now + 600 };
+}

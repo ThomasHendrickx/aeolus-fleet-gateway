@@ -119,6 +119,43 @@ describe('pending requests in Postgres', () => {
     await expect(requests.find(FLEET, released.requestId)).resolves.toMatchObject({ state: 'pending' });
   });
 
+  it('finds the latest request an account asked for a client, in its fleet only, and whether the account was told its end', async () => {
+    const requests = createPrismaPendingRequests(prisma);
+    const first = aRequest();
+    const subject = first.subject;
+    await requests.open({ ...first, now: ASKED_AT });
+    await requests.decide(FLEET, { requestId: first.requestId, from: ['pending'], decision: { outcome: 'denied', decidedBy: { kind: 'operator' }, decidedAt: AFTER } });
+    const second = { ...aRequest(), subject, askedAt: AFTER };
+    await requests.open({ ...second, now: AFTER });
+    await requests.decide(FLEET, { requestId: second.requestId, from: ['pending'], decision: { outcome: 'denied', decidedBy: { kind: 'operator' }, decidedAt: AFTER } });
+
+    await requests.markTold(FLEET, { requestId: second.requestId, accountId: 'acc-charlotte' });
+
+    await expect(
+      Promise.all([
+        requests.latestAskedBy(FLEET, { subject, accountId: 'acc-charlotte' }),
+        requests.latestAskedBy(FLEET, { subject, accountId: 'acc-pieter' }),
+        requests.latestAskedBy(OTHER_FLEET, { subject, accountId: 'acc-charlotte' }),
+      ]),
+    ).resolves.toEqual([{ request: { ...second, state: 'denied', decidedBy: { kind: 'operator' }, decidedAt: AFTER }, isTold: true }, undefined, undefined]);
+  });
+
+  it('tells one requester only, so another is still to be told', async () => {
+    const requests = createPrismaPendingRequests(prisma);
+    const request = aRequest();
+    await requests.open({ ...request, now: ASKED_AT });
+    await requests.open({ ...request, requestId: `${request.requestId.slice(0, -4)}9999`, requesters: [{ accountId: 'acc-pieter', personShipId: null }], now: ASKED_AT });
+
+    await requests.markTold(FLEET, { requestId: request.requestId, accountId: 'acc-pieter' });
+    await requests.markTold(FLEET, { requestId: request.requestId, accountId: 'acc-pieter' });
+
+    await expect(
+      Promise.all([requests.latestAskedBy(FLEET, { subject: request.subject, accountId: 'acc-charlotte' }), requests.latestAskedBy(FLEET, { subject: request.subject, accountId: 'acc-pieter' })]).then((found) =>
+        found.map((each) => each?.isTold),
+      ),
+    ).resolves.toEqual([false, true]);
+  });
+
   it('forgets a fleet with its requests (decision 0021)', async () => {
     const requests = createPrismaPendingRequests(prisma);
     const request = aRequest({ fleetId: OTHER_FLEET });

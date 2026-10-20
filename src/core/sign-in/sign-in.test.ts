@@ -5,6 +5,8 @@ import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createReadAuthorization } from '../oauth/read-authorization.js';
+import type { AskForClient } from '../requests/ask-for-client.js';
+import { err, ok } from '../shared/result.js';
 import type { Pagasae } from './ports.js';
 import { createCompleteSignIn } from './complete-sign-in.js';
 import { createStartSignIn } from './start-sign-in.js';
@@ -12,7 +14,8 @@ import { createStartSignIn } from './start-sign-in.js';
 // A person signs in to the gateway through pagasae (decision 0054): the
 // gateway keeps the client's request, sends the person to pagasae, which
 // answers the account and picks the fleet, and sends the client back with
-// the gateway's own code for that account's grant.
+// the gateway's own code for that account's grant. Or they ask for access
+// for the client, as an outside party (decision 0056, Q1 a).
 
 const STARTED_AT = new Date('2026-10-19T09:00:00.000Z');
 const CIMD_CLIENT = 'https://claude.example.com/oauth/client.json';
@@ -25,6 +28,8 @@ let seals: ReturnType<typeof fakeSignInSeals>;
 let grants: ReturnType<typeof memoryAccountGrants>;
 let codes: ReturnType<typeof memoryAuthorizationCodes>;
 let served: FleetId[];
+/** Every ask for a client the sign-in made. */
+let asks: Parameters<AskForClient>[0][];
 
 beforeEach(async () => {
   now = STARTED_AT;
@@ -35,6 +40,7 @@ beforeEach(async () => {
   grants = memoryAccountGrants();
   codes = memoryAuthorizationCodes();
   served = [FLEET_ID];
+  asks = [];
 });
 
 function readAuthorization() {
@@ -49,8 +55,16 @@ function startSignIn() {
   return createStartSignIn({ readAuthorization: readAuthorization(), seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock: { now: () => now } });
 }
 
+/** Asks for a client as the gateway would, waiting on waiting-1; refused while outside parties are off. */
+function askingForClient(isOn = true): AskForClient {
+  return (asked) => {
+    asks.push(asked);
+    return Promise.resolve(isOn ? ok({ kind: 'waiting' as const, waiting: 'waiting-1' }) : err({ kind: 'OUTSIDE_PARTIES_OFF' as const, message: "This fleet's outside parties are off" }));
+  };
+}
+
 /** pagasae redeems its code pagasae-code-1 for the verifier the start drew, secret-1. */
-function completeSignIn(pagasae: Pagasae = fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-1', tokens: CHARLOTTE_TOKENS })) {
+function completeSignIn(pagasae: Pagasae = fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-1', tokens: CHARLOTTE_TOKENS }), askForClient = askingForClient()) {
   return createCompleteSignIn({
     readAuthorization: readAuthorization(),
     seals,
@@ -61,6 +75,7 @@ function completeSignIn(pagasae: Pagasae = fakePagasae({ code: 'pagasae-code-1',
     clock: { now: () => now },
     issuer: ISSUER,
     servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)),
+    askForClient,
   });
 }
 
@@ -70,29 +85,29 @@ function aRequest(overrides: Record<string, string | undefined> = {}): Record<st
 }
 
 /** The person started at /authorize; pagasae sends them back with this, to the browser holding the secret the start drew after the verifier. */
-async function started(request = aRequest()) {
-  await startSignIn()(request);
+async function started(request = aRequest(), holder: 'account' | 'party' = 'account') {
+  await startSignIn()({ request, holder });
   return { state: 'sealed-1', code: 'pagasae-code-1', browserSecret: 'secret-2' };
 }
 
 describe('a person starts signing in at /authorize', () => {
   it("is sent to pagasae with the gateway's own PKCE challenge and the sign-in sealed in the state, naming no fleet, so pagasae picks it", async () => {
-    await expect(startSignIn()(aRequest())).resolves.toMatchObject({ isOk: true, value: { redirectTo: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)` } });
+    await expect(startSignIn()({ request: aRequest(), holder: 'account' })).resolves.toMatchObject({ isOk: true, value: { redirectTo: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)` } });
   });
 
   it('answers a new secret for the browser to hold, so only that browser finishes the sign-in', async () => {
-    await expect(startSignIn()(aRequest())).resolves.toMatchObject({ isOk: true, value: { browserSecret: 'secret-2' } });
+    await expect(startSignIn()({ request: aRequest(), holder: 'account' })).resolves.toMatchObject({ isOk: true, value: { browserSecret: 'secret-2' } });
   });
 
-  it("seals the client's request for 10 minutes with the verifier and the browser's secret, storing nothing", async () => {
-    await startSignIn()(aRequest());
+  it("seals the client's request for 10 minutes with the verifier, the browser's secret and what the person picked the client to act as, storing nothing", async () => {
+    await startSignIn()({ request: aRequest(), holder: 'party' });
 
-    expect([...seals.held.values()]).toEqual([{ verifier: 'secret-1', browserSecret: 'secret-2', request: aRequest(), expiresAt: new Date('2026-10-19T09:10:00.000Z') }]);
+    expect([...seals.held.values()]).toEqual([{ verifier: 'secret-1', browserSecret: 'secret-2', request: aRequest(), holder: 'party', expiresAt: new Date('2026-10-19T09:10:00.000Z') }]);
   });
 
   it('is refused as /authorize refuses a request, keeping nothing', async () => {
-    await expect(startSignIn()(aRequest({ redirect_uri: 'https://evil.example.com/callback' }))).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
-    await expect(startSignIn()(aRequest({ code_challenge_method: 'plain' }))).resolves.toMatchObject({ isOk: false, error: { kind: 'redirect', error: 'invalid_request' } });
+    await expect(startSignIn()({ request: aRequest({ redirect_uri: 'https://evil.example.com/callback' }), holder: 'account' })).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
+    await expect(startSignIn()({ request: aRequest({ code_challenge_method: 'plain' }), holder: 'account' })).resolves.toMatchObject({ isOk: false, error: { kind: 'redirect', error: 'invalid_request' } });
     expect(seals.held.size).toBe(0);
   });
 });
@@ -101,7 +116,7 @@ describe('pagasae sends the person back', () => {
   it("sends the client back with the gateway's code for the account's grant, with its state and the issuer", async () => {
     const back = await started();
 
-    await expect(completeSignIn()(back)).resolves.toEqual({ isOk: true, value: { redirectTo: `${CALLBACK}?code=secret-4&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
+    await expect(completeSignIn()(back)).resolves.toEqual({ isOk: true, value: { kind: 'answered', redirectTo: `${CALLBACK}?code=secret-4&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
   });
 
   it("keeps the account's grant: its fleet, account and person ship, pagasae's refresh token and the account token", async () => {
@@ -174,7 +189,7 @@ describe('pagasae sends the person back', () => {
   it("sends the client back with access_denied when pagasae answers an error, keeping no grant", async () => {
     const { state, browserSecret } = await started();
 
-    await expect(completeSignIn()({ state, browserSecret, error: 'access_denied' })).resolves.toEqual({ isOk: true, value: { redirectTo: `${CALLBACK}?error=access_denied&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
+    await expect(completeSignIn()({ state, browserSecret, error: 'access_denied' })).resolves.toEqual({ isOk: true, value: { kind: 'answered', redirectTo: `${CALLBACK}?error=access_denied&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
     expect(grants.held).toEqual([]);
   });
 
@@ -198,5 +213,32 @@ describe('pagasae sends the person back', () => {
 
     await expect(completeSignIn()(back)).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
     expect(codes.held.size).toBe(0);
+  });
+});
+
+describe('pagasae sends back a person who asks for access for the client', () => {
+  it('asks for the client as their account, with the client\'s request and the browser\'s secret, keeping no grant', async () => {
+    const back = await started(aRequest(), 'party');
+
+    await expect(completeSignIn()(back)).resolves.toEqual({ isOk: true, value: { kind: 'waiting', waiting: 'waiting-1' } });
+    expect({ asks, grants: grants.held, codes: codes.held.size }).toEqual({
+      asks: [
+        {
+          fleetId: FLEET_ID,
+          requester: { accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID },
+          authorization: { clientId: CIMD_CLIENT, clientName: 'Claude', clientFleetId: null, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-1)', resource: RESOURCE, scope: null, state: 'state-1' },
+          request: aRequest(),
+          browserSecret: 'secret-2',
+        },
+      ],
+      grants: [],
+      codes: 0,
+    });
+  });
+
+  it("says when the fleet's outside parties are off (interop I-3)", async () => {
+    const back = await started(aRequest(), 'party');
+
+    await expect(completeSignIn(undefined, askingForClient(false))(back)).resolves.toEqual({ isOk: false, error: { kind: 'outsidePartiesOff' } });
   });
 });

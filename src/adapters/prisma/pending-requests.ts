@@ -6,6 +6,7 @@ import type { Db } from './client.js';
 
 const requestersSchema = z.array(z.object({ accountId: z.string(), personShipId: idSchema('ship').nullable() }));
 const decidedBySchema = z.union([z.object({ kind: z.literal('ship'), shipId: idSchema('ship') }), z.object({ kind: z.enum(['operator', 'viewer']) })]).nullable();
+const toldAccountIdsSchema = z.array(z.string());
 const stateSchema = z.enum(['pending', 'approving', 'approved', 'denied', 'expired']);
 
 /** A row as the table holds it, whether read by Prisma or by the raw insert. */
@@ -72,6 +73,18 @@ export function createPrismaPendingRequests(db: Db): PendingRequests {
         RETURNING "fleet_id" AS "fleetId", "request_id" AS "requestId", "kind", "client_id" AS "clientId", "client_name" AS "clientName", "url", "requesters",
           "asked_at" AS "askedAt", "expires_at" AS "expiresAt", "state", "decided_by" AS "decidedBy", "decided_at" AS "decidedAt"`;
       return requestOf(rows[0]);
+    },
+    latestAskedBy: async (fleetId, { subject, accountId }) => {
+      const row = await db.pendingRequest.findFirst({
+        where: { fleetId, subjectKey: subjectKeyOf(subject), requesters: { array_contains: [{ accountId }] } },
+        orderBy: { askedAt: 'desc' },
+      });
+      return row === null ? undefined : { request: requestOf(row), isTold: toldAccountIdsSchema.parse(row.toldAccountIds).includes(accountId) };
+    },
+    markTold: async (fleetId, { requestId, accountId }) => {
+      await db.$executeRaw`
+        UPDATE "pending_requests" SET "told_account_ids" = "told_account_ids" || jsonb_build_array(${accountId}::text)
+        WHERE "fleet_id" = ${fleetId} AND "request_id" = ${requestId} AND NOT "told_account_ids" @> jsonb_build_array(${accountId}::text)`;
     },
     find: async (fleetId: FleetId, requestId) => {
       const row = await db.pendingRequest.findUnique({ where: { fleetId_requestId: { fleetId, requestId } } });

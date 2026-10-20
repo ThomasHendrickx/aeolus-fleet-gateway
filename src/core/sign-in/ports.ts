@@ -13,8 +13,13 @@ export interface PendingSignIn {
   /** The secret the browser that started the sign-in holds, so no other browser finishes it (login CSRF). */
   readonly browserSecret: string;
   readonly request: Readonly<Record<string, string | undefined>>;
+  /** What the person picked the client to act as: their account, or a party they ask access for (Q1 a). */
+  readonly holder: SignInHolder;
   readonly expiresAt: Date;
 }
+
+/** What a client acts as once its person signed in: the account itself, or an outside party (decision 0056). */
+export type SignInHolder = 'account' | 'party';
 
 /**
  * Outbound port: seals a sign-in under way into the state pagasae carries

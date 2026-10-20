@@ -7,6 +7,7 @@ const SIGN_IN = {
   verifier: 'the-gateway-verifier-kept-secret-on-the-way',
   browserSecret: 'the-secret-the-browser-holds-in-a-cookie',
   request: { client_id: 'https://claude.example.com/oauth/client.json', redirect_uri: 'https://claude.example.com/callback', state: 'state-1', scope: undefined },
+  holder: 'party' as const,
   expiresAt: new Date('2026-10-19T09:10:00.000Z'),
 };
 

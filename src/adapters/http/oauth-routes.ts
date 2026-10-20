@@ -1,33 +1,35 @@
 /**
  * The gateway's OAuth 2.1 authorization server over HTTP, for outside MCP
  * clients (MCP 2026-07-28 authorization): the metadata of RFC 9728 and RFC
- * 8414, /authorize, where argo approves each client signed in to the
- * console and a person is sent to pagasae to sign in, /pagasae/callback,
- * where pagasae sends them back, and /token. Each route parses the request and calls one use case.
+ * 8414; /authorize, where a person picks what the client acts as (Q1 a) and
+ * is sent to pagasae to sign in; /pagasae/callback, where pagasae sends them
+ * back; the waiting page, where a client asked for waits for an approver
+ * (decision 0056); and /token. Each route parses the request and calls one
+ * use case. Only a signed-in account asks for a client, so a gateway where
+ * no pagasae is set answers no client (Thomas's question A).
  */
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 
-import { idSchema, type FleetId } from '@aeolus-fleet/common';
-
-import type { ApprovalRefusal, ApproveAuthorization } from '../../core/oauth/approve-authorization.js';
 import type { ExchangeToken } from '../../core/oauth/exchange-token.js';
 import type { AuthorizationRefusal, AuthorizationRequest, ReadAuthorization } from '../../core/oauth/read-authorization.js';
-import type { AuthenticateOperator } from '../../core/operator/authenticate-operator.js';
-import type { ReadClientParty } from '../../core/parties/read-client-party.js';
-import type { ShownParty } from '../../core/parties/shown-party.js';
+import type { ClientAnswer } from '../../core/requests/ask-for-client.js';
+import { REQUEST_LIFETIME_MS } from '../../core/requests/open-request.js';
+import type { ReadWaiting } from '../../core/requests/read-waiting.js';
 import type { CompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
 import { SIGN_IN_LIFETIME_MS, type StartSignIn } from '../../core/sign-in/start-sign-in.js';
-import { acceptForms, escaped, isSameOrigin, layout } from './html.js';
-import { randomUUID } from 'node:crypto';
+import { acceptForms, documentOf, escaped } from './html.js';
 
 const HTTP_FOUND = 302;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
-const HTTP_CONFLICT = 409;
+const HTTP_NOT_FOUND = 404;
 const HTTP_BAD_GATEWAY = 502;
 const MS_PER_SECOND = 1000;
+
+/** How often the waiting page looks again. */
+const WAITING_RELOAD_SECONDS = 5;
 
 /** Whether the gateway is served over HTTPS, so its cookies go over HTTPS only. */
 const isHttps = (issuer: string) => new URL(issuer).protocol === 'https:';
@@ -39,17 +41,16 @@ const fieldsSchema = z.record(z.string(), z.unknown()).transform((fields) =>
   Object.fromEntries(Object.entries(fields).flatMap(([name, value]) => (typeof value === 'string' ? [[name, value]] : []))),
 );
 
+/** What the person may pick the client to act as. */
+const holderSchema = z.enum(['account', 'party']);
+
 export interface OAuthRoutesDeps {
   issuer: string;
   resource: string;
-  fleetUrl: string;
-  authenticateOperator: AuthenticateOperator;
   readAuthorization: ReadAuthorization;
-  approveAuthorization: ApproveAuthorization;
   exchangeToken: ExchangeToken;
-  readClientParty: ReadClientParty;
-  /** Signing people in through pagasae (decision 0054); unset where no pagasae is set, so only argo approves. */
-  signIn?: { start: StartSignIn; complete: CompleteSignIn };
+  /** Signing people in through pagasae (decision 0054) and their clients' waits; unset where no pagasae is set. */
+  signIn?: { start: StartSignIn; complete: CompleteSignIn; readWaiting: ReadWaiting };
 }
 
 function fieldsOf(value: unknown): Record<string, string> {
@@ -61,38 +62,46 @@ function authorizationRequestOf(fields: Record<string, string>): Record<string, 
   return Object.fromEntries(AUTHORIZATION_PARAMETERS.map((name) => [name, fields[name]]));
 }
 
-function htmlPage(reply: FastifyReply, page: { status: number; body: string }): FastifyReply {
-  return reply.code(page.status).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(layout('Approve an MCP client', page.body));
+/** A page of the gateway, never cached. */
+function htmlPage(reply: FastifyReply, page: { status: number; title: string; body: string; head?: string }): FastifyReply {
+  return reply.code(page.status).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(documentOf({ title: page.title, head: page.head ?? '', body: page.body }));
+}
+
+/** A page that tells a person why their client got nothing, sending them nowhere. */
+function errorPage(reply: FastifyReply, page: { status: number; title: string; message: string }): FastifyReply {
+  return htmlPage(reply, { status: page.status, title: page.title, body: `<h1>${escaped(page.title)}</h1><p class="error">${escaped(page.message)}</p>` });
+}
+
+/** A browser cookie the gateway keeps a secret in for one path, or clears. Lax, so it comes back on a redirect from pagasae. */
+interface BrowserCookie {
+  name: string;
+  path: string;
 }
 
 /** The cookie the browser that started a sign-in holds its secret in, sent back to the callback only. */
-const SIGN_IN_COOKIE = 'aeolus_sign_in';
-const SIGN_IN_COOKIE_PATH = '/pagasae/callback';
+const SIGN_IN_COOKIE: BrowserCookie = { name: 'aeolus_sign_in', path: '/pagasae/callback' };
 
-/** The sign-in cookie: the browser's secret for the sign-in's lifetime, or cleared. Lax, so it comes back on pagasae's redirect. */
-function signInCookie(cookie: { value: string; maxAgeSeconds: number; isSecure: boolean }): string {
-  return `${SIGN_IN_COOKIE}=${cookie.value}; Path=${SIGN_IN_COOKIE_PATH}; Max-Age=${String(cookie.maxAgeSeconds)}; HttpOnly;${cookie.isSecure ? ' Secure;' : ''} SameSite=Lax`;
+/** The cookie the browser that asked for a client holds the same secret in, sent back to the waiting page only. */
+const WAITING_COOKIE: BrowserCookie = { name: 'aeolus_waiting', path: '/authorize/waiting' };
+
+function cookieHeader(cookie: BrowserCookie, set: { value: string; maxAgeSeconds: number; isSecure: boolean }): string {
+  return `${cookie.name}=${set.value}; Path=${cookie.path}; Max-Age=${String(set.maxAgeSeconds)}; HttpOnly;${set.isSecure ? ' Secure;' : ''} SameSite=Lax`;
 }
 
-/** The browser's sign-in secret from a Cookie header, if it sent one. */
-function browserSecretOf(cookieHeader: string | undefined): string | undefined {
-  const prefix = `${SIGN_IN_COOKIE}=`;
-  return cookieHeader
+/** The cookie's value from a Cookie header, if the browser sent it. */
+function cookieValue(cookie: BrowserCookie, header: string | undefined): string | undefined {
+  const prefix = `${cookie.name}=`;
+  return header
     ?.split(';')
     .map((part) => part.trim())
     .find((part) => part.startsWith(prefix))
     ?.slice(prefix.length);
 }
 
-/** A page that tells a person why their sign-in gave their client nothing, sending them nowhere. */
-function signInPage(reply: FastifyReply, page: { status: number; message: string }): FastifyReply {
-  return reply.code(page.status).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(layout('Sign in', `<h1>Sign in</h1><p class="error">${escaped(page.message)}</p>`));
-}
-
 function sendBack(reply: FastifyReply, answer: { refusal: AuthorizationRefusal; issuer: string }): FastifyReply {
   const { refusal, issuer } = answer;
   if (refusal.kind === 'invalidClient') {
-    return htmlPage(reply, { status: HTTP_BAD_REQUEST, body: `<h1>Approve an MCP client</h1><p class="error">${escaped(refusal.message)}</p>` });
+    return errorPage(reply, { status: HTTP_BAD_REQUEST, title: 'Connect an MCP client', message: refusal.message });
   }
   const url = new URL(refusal.redirectUri);
   url.searchParams.append('error', refusal.error);
@@ -104,30 +113,24 @@ function sendBack(reply: FastifyReply, answer: { refusal: AuthorizationRefusal; 
   return reply.code(HTTP_FOUND).header('location', url.toString()).send();
 }
 
-/** What the page shows and asks: the client, and its party, or the fields to name one at its first approval. */
-interface ApprovalPage {
-  request: Record<string, string | undefined>;
-  authorization: AuthorizationRequest;
-  party: ShownParty | undefined;
-  error?: string;
-}
-
-function approvalForm({ request, authorization, party, error }: ApprovalPage): string {
+/** The page at /authorize: the client, and the two picks (Q1 a), each starting a sign-in through pagasae. */
+function pickPage(request: Record<string, string | undefined>, authorization: AuthorizationRequest): string {
   const hidden = Object.entries(request)
     .flatMap(([name, value]) => (value === undefined ? [] : [`<input type="hidden" name="${escaped(name)}" value="${escaped(value)}">`]))
     .join('');
-  const asParty =
-    party === undefined
-      ? `<p>It is no party of your fleet yet. Name its proxy ship, the ship it calls the fleet as, and the owner who answers for it.</p>
-<input type="hidden" name="partyRequestId" value="${randomUUID()}">
-<label>Name, the proxy ship's<input name="partyName" required></label>
-<label>Owner's ship id (a person's ship, or argo)<input name="ownerShipId" required></label>`
-      : `<p>It calls the fleet as the party <strong>${escaped(party.name)}</strong>.</p>`;
-  return `<h1>Approve an MCP client</h1>
-${error === undefined ? '' : `<p class="error">${escaped(error)}</p>`}
+  return `<h1>Connect an MCP client</h1>
 <p><strong>${escaped(authorization.clientName)}</strong> asks to call your fleet's ships through the gateway.</p>
 <p class="muted">Client ${escaped(authorization.clientId)}, sent back to ${escaped(authorization.redirectUri)}.</p>
-<form method="post" action="/authorize">${hidden}${asParty}<div class="inline"><button name="decision" value="approve">Approve</button> <button name="decision" value="deny" formnovalidate>Deny</button></div></form>`;
+<form method="get" action="/authorize/sign-in">${hidden}
+<p><button name="holder" value="account">Sign in as yourself</button> <span class="muted">The client acts as you.</span></p>
+<p><button name="holder" value="party">Ask for access for this client</button> <span class="muted">An approver of your fleet decides; the client then acts as its own party.</span></p>
+</form>`;
+}
+
+/** The waiting page: the client waits for approval, and the page looks again by itself. */
+function waitingPage(clientName: string): string {
+  return `<h1>Waiting for approval</h1>
+<p><strong>${escaped(clientName)}</strong> waits for an approver of your fleet. This page goes on by itself once it is decided; you may close it and connect again later.</p>`;
 }
 
 /** Client credentials in an HTTP Basic header (RFC 6749, 2.3.1): each part form-urlencoded. */
@@ -144,28 +147,83 @@ function basicCredentials(header: string | undefined): Record<string, string> {
   return { client_id: decode(decoded.slice(0, separator)), client_secret: decode(decoded.slice(separator + 1)) };
 }
 
-/** Where pagasae sends a person back (decision 0054): their client gets its code, or the person a page saying why not. */
-function registerSignInCallback(server: FastifyInstance, deps: { issuer: string; complete: CompleteSignIn }): void {
-  server.get(SIGN_IN_COOKIE_PATH, async (request, reply) => {
-    const { state, code, error } = fieldsOf(request.query);
-    const completed = await deps.complete({ state, code, error, browserSecret: browserSecretOf(request.headers.cookie) });
-    reply.header('set-cookie', signInCookie({ value: '', maxAgeSeconds: 0, isSecure: isHttps(deps.issuer) }));
-    if (completed.isOk) {
-      return reply.code(HTTP_FOUND).header('location', completed.value.redirectTo).send();
+/** Signing people in through pagasae, and the waiting page (decisions 0054, 0056). */
+function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn: NonNullable<OAuthRoutesDeps['signIn']> }): void {
+  const { issuer, signIn } = deps;
+  const isSecure = isHttps(issuer);
+
+  server.get('/authorize/sign-in', async (request, reply) => {
+    const fields = fieldsOf(request.query);
+    const holder = holderSchema.safeParse(fields.holder);
+    if (!holder.success) {
+      return errorPage(reply, { status: HTTP_BAD_REQUEST, title: 'Connect an MCP client', message: 'Pick on the page whether to sign in as yourself or to ask for access for the client.' });
     }
+    const started = await signIn.start({ request: authorizationRequestOf(fields), holder: holder.data });
+    if (!started.isOk) {
+      return sendBack(reply, { refusal: started.error, issuer });
+    }
+    const cookie = cookieHeader(SIGN_IN_COOKIE, { value: started.value.browserSecret, maxAgeSeconds: SIGN_IN_LIFETIME_MS / MS_PER_SECOND, isSecure });
+    return reply.code(HTTP_FOUND).header('location', started.value.redirectTo).header('set-cookie', cookie).send();
+  });
+
+  /** Where the browser goes next: back to the client, or, holding the secret in its waiting cookie, to the waiting page. */
+  const goOn = (reply: FastifyReply, { answer, browserSecret }: { answer: ClientAnswer; browserSecret: string | undefined }): FastifyReply => {
+    const cleared = cookieHeader(SIGN_IN_COOKIE, { value: '', maxAgeSeconds: 0, isSecure });
+    if (answer.kind === 'answered') {
+      return reply.code(HTTP_FOUND).header('location', answer.redirectTo).header('set-cookie', cleared).send();
+    }
+    const waiting = cookieHeader(WAITING_COOKIE, { value: browserSecret ?? '', maxAgeSeconds: REQUEST_LIFETIME_MS / MS_PER_SECOND, isSecure });
+    return reply.code(HTTP_FOUND).header('location', `${WAITING_COOKIE.path}?${new URLSearchParams({ waiting: answer.waiting }).toString()}`).header('set-cookie', [cleared, waiting]).send();
+  };
+
+  server.get(SIGN_IN_COOKIE.path, async (request, reply) => {
+    const { state, code, error } = fieldsOf(request.query);
+    const browserSecret = cookieValue(SIGN_IN_COOKIE, request.headers.cookie);
+    const completed = await signIn.complete({ state, code, error, browserSecret });
+    if (completed.isOk) {
+      return goOn(reply, { answer: completed.value, browserSecret });
+    }
+    void reply.header('set-cookie', cookieHeader(SIGN_IN_COOKIE, { value: '', maxAgeSeconds: 0, isSecure }));
     const refusal = completed.error;
+    const title = 'Sign in';
     switch (refusal.kind) {
       case 'invalidClient':
       case 'redirect':
-        return sendBack(reply, { refusal, issuer: deps.issuer });
+        return sendBack(reply, { refusal, issuer });
       case 'unknownSignIn':
-        return signInPage(reply, { status: HTTP_BAD_REQUEST, message: 'This sign-in is unknown, or took over 10 minutes. Start again from your MCP client.' });
+        return errorPage(reply, { status: HTTP_BAD_REQUEST, title, message: 'This sign-in is unknown, or took over 10 minutes. Start again from your MCP client.' });
       case 'otherBrowser':
-        return signInPage(reply, { status: HTTP_BAD_REQUEST, message: 'This sign-in was started in another browser, so it is not yours to finish. Start again from your MCP client.' });
+        return errorPage(reply, { status: HTTP_BAD_REQUEST, title, message: 'This sign-in was started in another browser, so it is not yours to finish. Start again from your MCP client.' });
       case 'fleetNotServed':
-        return signInPage(reply, { status: HTTP_FORBIDDEN, message: 'This gateway does not serve the fleet you signed in to.' });
+        return errorPage(reply, { status: HTTP_FORBIDDEN, title, message: 'This gateway does not serve the fleet you signed in to.' });
+      case 'outsidePartiesOff':
+        return errorPage(reply, { status: HTTP_FORBIDDEN, title, message: "Your fleet's outside parties are off, so no MCP client can ask for access. Sign in as yourself instead, or ask whoever runs your fleet." });
       case 'pagasaeRefused':
-        return signInPage(reply, { status: HTTP_BAD_GATEWAY, message: `The sign-in did not go through: ${refusal.message}. Start again from your MCP client.` });
+        return errorPage(reply, { status: HTTP_BAD_GATEWAY, title, message: `The sign-in did not go through: ${refusal.message}. Start again from your MCP client.` });
+    }
+  });
+
+  // The sealed waiting goes in the query, as it is longer than a path parameter may be.
+  server.get(WAITING_COOKIE.path, async (request, reply) => {
+    const { waiting = '' } = fieldsOf(request.query);
+    const read = await signIn.readWaiting({ waiting, browserSecret: cookieValue(WAITING_COOKIE, request.headers.cookie) });
+    const title = 'Waiting for approval';
+    if (read.isOk) {
+      if (read.value.kind === 'waiting') {
+        return htmlPage(reply, { status: 200, title, body: waitingPage(read.value.clientName), head: `<meta http-equiv="refresh" content="${String(WAITING_RELOAD_SECONDS)}">` });
+      }
+      const cleared = cookieHeader(WAITING_COOKIE, { value: '', maxAgeSeconds: 0, isSecure });
+      return reply.code(HTTP_FOUND).header('location', read.value.redirectTo).header('set-cookie', cleared).send();
+    }
+    const refusal = read.error;
+    switch (refusal.kind) {
+      case 'invalidClient':
+      case 'redirect':
+        return sendBack(reply, { refusal, issuer });
+      case 'unknownWaiting':
+        return errorPage(reply, { status: HTTP_NOT_FOUND, title, message: 'This request is unknown, or ended long ago. Start again from your MCP client.' });
+      case 'otherBrowser':
+        return errorPage(reply, { status: HTTP_BAD_REQUEST, title, message: 'This request was made in another browser, so it is not yours to follow. Start again from your MCP client.' });
     }
   });
 }
@@ -188,84 +246,21 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
     authorization_response_iss_parameter_supported: true,
   }));
 
-  /** argo's fleet, when the request comes from argo signed in to the console; else the page that says why not. */
-  const argoOrRefusal = async (request: FastifyRequest, reply: FastifyReply) => {
-    const operator = await deps.authenticateOperator(request.headers.cookie);
-    if (!operator.isOk) {
-      return {
-        refused: htmlPage(reply, {
-          status: HTTP_UNAUTHORIZED,
-          body: `<h1>Approve an MCP client</h1><p class="error">${escaped(operator.error.message)}</p><p><a href="${escaped(deps.fleetUrl)}">Sign in to the console of your fleet</a>, then reload this page.</p>`,
-        }),
-      };
-    }
-    if (!operator.value.scopes.includes('fleet:manage')) {
-      return { refused: htmlPage(reply, { status: HTTP_FORBIDDEN, body: '<h1>Approve an MCP client</h1><p class="error">Only argo approves MCP clients: a viewer session only reads.</p>' }) };
-    }
-    return { fleetId: operator.value.fleetId };
-  };
-
   server.get('/authorize', async (request, reply) => {
+    if (deps.signIn === undefined) {
+      return errorPage(reply, { status: HTTP_FORBIDDEN, title: 'Connect an MCP client', message: 'This gateway signs no one in, so no MCP client can connect to it: its operator sets pagasae first.' });
+    }
     const parameters = authorizationRequestOf(fieldsOf(request.query));
-    // Who comes without argo's console session is a person, who signs in through pagasae (Q25, decision 0054).
-    const { signIn } = deps;
-    if (signIn !== undefined && !(await deps.authenticateOperator(request.headers.cookie)).isOk) {
-      const started = await signIn.start(parameters);
-      if (!started.isOk) {
-        return sendBack(reply, { refusal: started.error, issuer: deps.issuer });
-      }
-      const cookie = signInCookie({ value: started.value.browserSecret, maxAgeSeconds: SIGN_IN_LIFETIME_MS / MS_PER_SECOND, isSecure: isHttps(deps.issuer) });
-      return reply.code(HTTP_FOUND).header('location', started.value.redirectTo).header('set-cookie', cookie).send();
-    }
-    const argo = await argoOrRefusal(request, reply);
-    if ('refused' in argo) {
-      return argo.refused;
-    }
     const read = await deps.readAuthorization(parameters);
     if (!read.isOk) {
       return sendBack(reply, { refusal: read.error, issuer: deps.issuer });
     }
-    const party = await deps.readClientParty({ fleetId: argo.fleetId, clientId: read.value.clientId });
-    return htmlPage(reply, { status: 200, body: approvalForm({ request: parameters, authorization: read.value, party }) });
+    return htmlPage(reply, { status: 200, title: 'Connect an MCP client', body: pickPage(parameters, read.value) });
   });
 
   if (deps.signIn !== undefined) {
-    registerSignInCallback(server, { issuer: deps.issuer, complete: deps.signIn.complete });
+    registerSignIn(server, { issuer: deps.issuer, signIn: deps.signIn });
   }
-
-  server.post('/authorize', async (request, reply) => {
-    if (!isSameOrigin(request)) {
-      return reply.code(HTTP_FORBIDDEN).type('text/plain; charset=utf-8').send('An approval is sent only from the gateway\'s page.');
-    }
-    const argo = await argoOrRefusal(request, reply);
-    if ('refused' in argo) {
-      return argo.refused;
-    }
-    const fields = fieldsOf(request.body);
-    const parameters = authorizationRequestOf(fields);
-    const owner = idSchema('ship').safeParse(fields.ownerShipId);
-    const newParty = fields.partyName === undefined || fields.partyRequestId === undefined || !owner.success ? undefined : { requestId: fields.partyRequestId, name: fields.partyName, ownerShipId: owner.data };
-    const decided = await deps.approveAuthorization({ fleetId: argo.fleetId, request: parameters, isApproved: fields.decision === 'approve', ...(newParty === undefined ? {} : { newParty }) });
-    if (!decided.isOk) {
-      return refusedApproval(reply, { refusal: decided.error, request: parameters, fleetId: argo.fleetId });
-    }
-    return reply.code(HTTP_FOUND).header('location', decided.value.redirectTo).send();
-  });
-
-  /** A refused approval: back to the client, or the page again with what argo must fix. */
-  const refusedApproval = async (reply: FastifyReply, refused: { refusal: ApprovalRefusal; request: Record<string, string | undefined>; fleetId: FleetId }): Promise<FastifyReply> => {
-    const { refusal } = refused;
-    if (refusal.kind === 'invalidClient' || refusal.kind === 'redirect') {
-      return sendBack(reply, { refusal, issuer: deps.issuer });
-    }
-    const read = await deps.readAuthorization(refused.request);
-    if (!read.isOk) {
-      return sendBack(reply, { refusal: read.error, issuer: deps.issuer });
-    }
-    const party = await deps.readClientParty({ fleetId: refused.fleetId, clientId: read.value.clientId });
-    const error = refusal.kind === 'needsParty' ? "Name the client's party and its owner (a ship id, shp_...)" : refusal.message;
-    return htmlPage(reply, { status: refusal.kind === 'needsParty' ? HTTP_BAD_REQUEST : HTTP_CONFLICT, body: approvalForm({ request: refused.request, authorization: read.value, party, error }) });
-  };
 
   server.post('/token', async (request, reply) => {
     const exchanged = await deps.exchangeToken({ ...fieldsOf(request.body), ...basicCredentials(request.headers.authorization) });

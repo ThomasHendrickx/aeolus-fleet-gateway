@@ -4,45 +4,30 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
-import { createApproveAuthorization } from '../../core/oauth/approve-authorization.js';
+import { OWNER_SHIP_ID, PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { fakeWaitingSeals, memoryPendingRequests } from '../../../test/support/request-fakes.js';
+import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
 import { createExchangeToken } from '../../core/oauth/exchange-token.js';
 import { createReadAuthorization } from '../../core/oauth/read-authorization.js';
-import type { AuthenticateOperator } from '../../core/operator/authenticate-operator.js';
-import { err, ok } from '../../core/shared/result.js';
-import { createApproveClientParty } from '../../core/parties/approve-party.js';
-import { createReadClientParty } from '../../core/parties/read-client-party.js';
-import { SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
-import { plainHasher } from '../../../test/support/memory-installation.js';
-import { OWNER_SHIP_ID, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
-import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
+import { createAskForClient } from '../../core/requests/ask-for-client.js';
+import { createOpenRequest } from '../../core/requests/open-request.js';
+import { createReadWaiting } from '../../core/requests/read-waiting.js';
 import type { Pagasae } from '../../core/sign-in/ports.js';
 import { createCompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
 import { createStartSignIn } from '../../core/sign-in/start-sign-in.js';
 import { registerOAuthRoutes } from './oauth-routes.js';
 
-/** Outside parties are on for every fleet here. */
-const isServing = () => Promise.resolve(true);
-
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
-const ARGO = 'aeolus_session=argo';
-const VIEWER = 'aeolus_session=viewer';
 const HOST = 'gateway.example.com';
 const CLIENT = 'client-cursor';
 const CALLBACK = 'https://cursor.example.com/callback';
 
-const authenticateOperator: AuthenticateOperator = (cookie) => {
-  if (cookie === ARGO) {
-    return Promise.resolve(ok({ fleetId: FLEET, kind: 'operator' as const, scopes: ['fleet:read', 'fleet:manage'] }));
-  }
-  if (cookie === VIEWER) {
-    return Promise.resolve(ok({ fleetId: FLEET, kind: 'viewer' as const, scopes: ['fleet:read'] }));
-  }
-  return Promise.resolve(err({ kind: 'NOT_THE_OPERATOR' as const, message: 'Sign in to the console of your fleet' }));
-};
-
 let server: FastifyInstance;
 let parties: ReturnType<typeof memoryPartyStore>;
+let requests: ReturnType<typeof memoryPendingRequests>;
 let served: FleetId[];
+/** Whether the fleet's outside parties are on (interop I-3). */
+let isOn: boolean;
 /** pagasae redeems pagasae-code-1 for the verifier a person's start draws first, secret-1, unless a test sets it. */
 let pagasae: Pagasae;
 
@@ -55,28 +40,37 @@ async function startServer(isSigningPeopleIn: boolean) {
   const clock = { now: () => new Date('2026-10-19T09:00:00.000Z') };
   const readAuthorization = createReadAuthorization({ clients, documents: fakeClientMetadataDocuments(), resource: RESOURCE });
   parties = memoryPartyStore();
-  const connections = memoryConnectionStore();
-  await connections.save({ fleetId: FLEET, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-19T09:00:00.000Z') });
-  const approveClientParty = createApproveClientParty({ connections, parties, door: fakeProxyShipFleet().door, hasher: plainHasher, servesOutsideParties: isServing, clock });
+  requests = memoryPendingRequests();
   served = [FLEET];
+  isOn = true;
   pagasae = fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-1', tokens: CHARLOTTE_TOKENS });
   const seals = fakeSignInSeals();
+  const waitings = fakeWaitingSeals();
+  let ids = 0;
+  const askForClient = createAskForClient({
+    parties,
+    requests,
+    openRequest: createOpenRequest({ requests, ids: { newRequestId: () => `req_${String((ids += 1))}` }, clock }),
+    servesOutsideParties: () => Promise.resolve(isOn),
+    waitings,
+    codes,
+    secrets,
+    clock,
+    issuer: ISSUER,
+  });
   server = Fastify({ logger: false });
   registerOAuthRoutes(server, {
     issuer: ISSUER,
     resource: RESOURCE,
-    fleetUrl: 'https://fleet.example.com',
-    authenticateOperator,
     readAuthorization,
-    approveAuthorization: createApproveAuthorization({ readAuthorization, codes, secrets, clock, issuer: ISSUER, parties, approveClientParty }),
-    readClientParty: createReadClientParty({ parties }),
     exchangeToken: createExchangeToken({ clients, codes, tokens: memoryIssuedTokens(), secrets, clock, resource: RESOURCE }),
     ...(isSigningPeopleIn
       ? {
           signIn: {
             start: createStartSignIn({ readAuthorization, seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }),
             complete: (back) =>
-              createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)) })(back),
+              createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)), askForClient })(back),
+            readWaiting: createReadWaiting({ waitings, readAuthorization, requests, parties, codes, secrets, clock, issuer: ISSUER }),
           },
         }
       : {}),
@@ -92,23 +86,44 @@ afterEach(async () => {
   await server.close();
 });
 
-/** The party argo names for the client at its first approval. */
-const NEW_PARTY = { partyRequestId: 'r-1', partyName: 'cursor', ownerShipId: OWNER_SHIP_ID };
-
 const REQUEST = { response_type: 'code', client_id: CLIENT, redirect_uri: CALLBACK, code_challenge: 'S256(verifier-1)', code_challenge_method: 'S256', resource: RESOURCE, state: 'state-1' };
 
-function authorizePage(cookie: string | undefined, request: Record<string, string> = REQUEST) {
-  return server.inject({ url: `/authorize?${new URLSearchParams(request).toString()}`, headers: { host: HOST, ...(cookie === undefined ? {} : { cookie }) } });
+/** The browser that started the sign-in holds the secret drawn after the verifier. */
+const STARTED_BROWSER = 'aeolus_sign_in=secret-2';
+
+function authorizePage(request: Record<string, string> = REQUEST) {
+  return server.inject({ url: `/authorize?${new URLSearchParams(request).toString()}`, headers: { host: HOST } });
 }
 
-function decide(form: Record<string, string> & { cookie?: string; origin?: string }) {
-  const { cookie, origin, ...fields } = form;
-  return server.inject({
-    method: 'POST',
-    url: '/authorize',
-    headers: { host: HOST, 'content-type': 'application/x-www-form-urlencoded', cookie: cookie ?? ARGO, origin: origin ?? `http://${HOST}` },
-    payload: new URLSearchParams(fields).toString(),
-  });
+/** The person picks what the client acts as on the page, and starts signing in. */
+function signIn(holder: string, request: Record<string, string> = REQUEST) {
+  return server.inject({ url: `/authorize/sign-in?${new URLSearchParams({ ...request, holder }).toString()}`, headers: { host: HOST } });
+}
+
+/** pagasae sends the browser back, holding the cookie given, or none. */
+function callback(query: Record<string, string>, cookie: string | null = STARTED_BROWSER) {
+  return server.inject({ url: `/pagasae/callback?${new URLSearchParams(query).toString()}`, headers: { host: HOST, ...(cookie === null ? {} : { cookie }) } });
+}
+
+/** A person asks for access for the client, and comes back from pagasae. */
+async function askedForAccess() {
+  await signIn('party');
+  return callback({ state: 'sealed-1', code: 'pagasae-code-1' });
+}
+
+/** The browser opens the waiting page, holding the cookie given. */
+function waitingPage(waiting: string, cookie: string | null = 'aeolus_waiting=secret-2') {
+  return server.inject({ url: `/authorize/waiting?waiting=${waiting}`, headers: { host: HOST, ...(cookie === null ? {} : { cookie }) } });
+}
+
+/** The client's party, crewed. */
+async function aCrewedParty() {
+  await parties.save({ fleetId: FLEET, name: 'cursor', kind: 'mcpClient', clientId: CLIENT, ownerShipId: OWNER_SHIP_ID, state: 'crewed', proxyShipId: PROXY_SHIP_ID, secret: null, crewToken: 'aeolus_ct_v1_cursor', requestId: 'req_1', requestHash: 'h', approvedAt: new Date('2026-10-19T09:00:00.000Z') });
+}
+
+/** The client's request decided as an approver would. */
+async function decided(outcome: 'approved' | 'denied') {
+  await requests.decide(FLEET, { requestId: 'req_1', from: ['pending'], decision: { outcome, decidedBy: { kind: 'operator' }, decidedAt: new Date('2026-10-19T09:00:00.000Z') } });
 }
 
 function token(form: Record<string, string>, headers: Record<string, string> = {}) {
@@ -141,100 +156,51 @@ describe("the gateway's OAuth metadata", () => {
   });
 });
 
-describe('argo approves an MCP client at /authorize, signed in to the console', () => {
-  it('shows argo the client, escaped, with the forms to approve or deny it', async () => {
-    const page = await authorizePage(ARGO);
 
-    expect(page.statusCode).toBe(200);
-    expect(page.body).toContain('Cursor &lt;IDE&gt;');
-    expect(page.body).toContain('name="decision" value="approve"');
-    expect(page.body).not.toContain('<IDE>');
-  });
+describe('a person comes to /authorize from an MCP client (Q1 a, decision 0054)', () => {
+  it('is shown the client, escaped, with the two choices: sign in as yourself, or ask for access for this client', async () => {
+    const page = await authorizePage();
 
-
-  it('refuses a viewer, who may not approve', async () => {
-    const page = await authorizePage(VIEWER);
-
-    expect(page.statusCode).toBe(403);
+    expect({ status: page.statusCode, cache: page.headers['cache-control'] }).toEqual({ status: 200, cache: 'no-store' });
+    expect({
+      isEscaped: page.body.includes('Cursor &lt;IDE&gt;') && !page.body.includes('<IDE>'),
+      asAccount: page.body.includes('name="holder" value="account"') && page.body.includes('Sign in as yourself'),
+      asParty: page.body.includes('name="holder" value="party"') && page.body.includes('Ask for access for this client'),
+    }).toEqual({ isEscaped: true, asAccount: true, asParty: true });
   });
 
   it('says on the page that the client is unknown, sending nobody anywhere', async () => {
-    const page = await authorizePage(ARGO, { ...REQUEST, client_id: 'client-unknown' });
+    const page = await authorizePage({ ...REQUEST, client_id: 'client-unknown' });
 
-    expect(page.statusCode).toBe(400);
-    expect(page.headers.location).toBeUndefined();
+    expect({ status: page.statusCode, location: page.headers.location }).toEqual({ status: 400, location: undefined });
   });
 
   it('sends a known client back with the error for a request it got wrong', async () => {
-    const page = await authorizePage(ARGO, { ...REQUEST, code_challenge_method: 'plain' });
+    const page = await authorizePage({ ...REQUEST, code_challenge_method: 'plain' });
 
-    expect(page.statusCode).toBe(302);
-    expect(new URL(String(page.headers.location)).searchParams.get('error')).toBe('invalid_request');
+    expect({ status: page.statusCode, error: new URL(String(page.headers.location)).searchParams.get('error') }).toEqual({ status: 302, error: 'invalid_request' });
   });
 
-  it('sends the client back with a code once argo approves', async () => {
-    const answer = await decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve' });
+  it('is sent to pagasae once they pick, with the browser\'s secret in a cookie only the callback reads, for 10 minutes', async () => {
+    const answer = await signIn('account');
 
-    expect(answer.statusCode).toBe(302);
-    expect(String(answer.headers.location)).toBe(`${CALLBACK}?code=secret-1&state=state-1&iss=${encodeURIComponent(ISSUER)}`);
+    expect({ status: answer.statusCode, location: answer.headers.location, cookie: answer.headers['set-cookie'] }).toEqual({
+      status: 302,
+      location: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)`,
+      cookie: 'aeolus_sign_in=secret-2; Path=/pagasae/callback; Max-Age=600; HttpOnly; SameSite=Lax',
+    });
   });
 
-  it("asks argo to name the party of a client that is none yet", async () => {
-    const page = await authorizePage(ARGO);
+  it('is told a pick the page does not offer, sent nowhere', async () => {
+    const answer = await signIn('argo');
 
-    expect(page.body).toContain('name="partyName"');
-  });
-
-  it('names the party of a client that is one, asking nothing more', async () => {
-    await decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve' });
-
-    const page = await authorizePage(ARGO);
-
-    expect({ isParty: page.body.includes('the party <strong>cursor</strong>'), isAsking: page.body.includes('name="partyName"') }).toEqual({ isParty: true, isAsking: false });
-  });
-
-  it('shows the page again, asking for the party, when argo approves a client that is none without naming it', async () => {
-    const answer = await decide({ ...REQUEST, decision: 'approve' });
-
-    expect({ status: answer.statusCode, isAsking: answer.body.includes('name="partyName"') }).toEqual({ status: 400, isAsking: true });
-  });
-
-  it('sends the client back with access_denied once argo denies', async () => {
-    const answer = await decide({ ...REQUEST, decision: 'deny' });
-
-    expect(new URL(String(answer.headers.location)).searchParams.get('error')).toBe('access_denied');
-  });
-
-  it('refuses a decision sent from another origin, or by a viewer', async () => {
-    const answers = await Promise.all([decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve', origin: 'https://evil.example.com' }), decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve', cookie: VIEWER })]);
-
-    expect(answers.map((answer) => answer.statusCode)).toEqual([403, 403]);
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 400, location: undefined });
   });
 });
 
-describe('a person, with no console session, signs in through pagasae (Q25, decision 0054)', () => {
-  /** The browser that started the sign-in holds the secret drawn after the verifier. */
-  const STARTED_BROWSER = 'aeolus_sign_in=secret-2';
-
-  /** pagasae sends the browser back, holding the cookie given, or none. */
-  function callback(query: Record<string, string>, cookie: string | null = STARTED_BROWSER) {
-    return server.inject({ url: `/pagasae/callback?${new URLSearchParams(query).toString()}`, headers: { host: HOST, ...(cookie === null ? {} : { cookie }) } });
-  }
-
-  it('is sent to pagasae from /authorize', async () => {
-    const answer = await authorizePage(undefined);
-
-    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)` });
-  });
-
-  it("is given the browser's secret in a cookie only the callback reads, for the sign-in's 10 minutes, over plain HTTP here as the issuer is", async () => {
-    const answer = await authorizePage(undefined);
-
-    expect(answer.headers['set-cookie']).toBe('aeolus_sign_in=secret-2; Path=/pagasae/callback; Max-Age=600; HttpOnly; SameSite=Lax');
-  });
-
-  it("is sent back from pagasae to the client with the gateway's code, and the browser's secret is cleared", async () => {
-    await authorizePage(undefined);
+describe('a person who signed in as themselves is sent back from pagasae', () => {
+  it("to the client with the gateway's code, and the browser's secret is cleared", async () => {
+    await signIn('account');
 
     const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' }, `console=other; ${STARTED_BROWSER}`);
 
@@ -246,7 +212,7 @@ describe('a person, with no console session, signs in through pagasae (Q25, deci
   });
 
   it('is told a sign-in started in another browser is not theirs, and sent nowhere (login CSRF)', async () => {
-    await authorizePage(undefined);
+    await signIn('account');
 
     const answers = await Promise.all([callback({ state: 'sealed-1', code: 'pagasae-code-1' }, null), callback({ state: 'sealed-1', code: 'pagasae-code-1' }, 'aeolus_sign_in=secret-9')]);
 
@@ -259,13 +225,12 @@ describe('a person, with no console session, signs in through pagasae (Q25, deci
   it('is told a sign-in it did not start, or started too long ago, is unknown, and sent nowhere', async () => {
     const answer = await callback({ state: 'forged', code: 'pagasae-code-1' });
 
-    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 400, location: undefined });
-    expect(answer.body).toContain('Start again from your MCP client');
+    expect({ status: answer.statusCode, location: answer.headers.location, says: answer.body.includes('Start again from your MCP client') }).toEqual({ status: 400, location: undefined, says: true });
   });
 
   it('is told this gateway does not serve the fleet they signed in to', async () => {
     served = [];
-    await authorizePage(undefined);
+    await signIn('account');
 
     const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
 
@@ -274,12 +239,87 @@ describe('a person, with no console session, signs in through pagasae (Q25, deci
 
   it('is told when pagasae did not take its code', async () => {
     pagasae = fakePagasae({ refusal: 'invalid_grant' });
-    await authorizePage(undefined);
+    await signIn('account');
 
     const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
 
-    expect(answer.statusCode).toBe(502);
-    expect(answer.body).toContain('invalid_grant');
+    expect({ status: answer.statusCode, says: answer.body.includes('invalid_grant') }).toEqual({ status: 502, says: true });
+  });
+});
+
+describe('a person who asked for access for the client (decision 0056)', () => {
+  it("waits on the gateway's page, the browser's secret moved to a cookie only that page reads, for the request's 7 days", async () => {
+    const answer = await askedForAccess();
+
+    expect({ status: answer.statusCode, location: answer.headers.location, cookies: answer.headers['set-cookie'] }).toEqual({
+      status: 302,
+      location: '/authorize/waiting?waiting=waiting-1',
+      cookies: ['aeolus_sign_in=; Path=/pagasae/callback; Max-Age=0; HttpOnly; SameSite=Lax', 'aeolus_waiting=secret-2; Path=/authorize/waiting; Max-Age=604800; HttpOnly; SameSite=Lax'],
+    });
+  });
+
+  it('is shown that the client waits for approval, on a page that reloads itself and is never cached', async () => {
+    await askedForAccess();
+
+    const page = await waitingPage('waiting-1');
+
+    expect({ status: page.statusCode, cache: page.headers['cache-control'], reloads: page.body.includes('http-equiv="refresh"'), says: page.body.includes('Waiting for approval') && page.body.includes('Cursor &lt;IDE&gt;') }).toEqual({
+      status: 200,
+      cache: 'no-store',
+      reloads: true,
+      says: true,
+    });
+  });
+
+  it("goes on to the client with its party's code once approved, and the cookie is cleared", async () => {
+    await askedForAccess();
+    await decided('approved');
+    await aCrewedParty();
+
+    const answer = await waitingPage('waiting-1');
+
+    expect({ status: answer.statusCode, location: answer.headers.location, cookie: answer.headers['set-cookie'] }).toEqual({
+      status: 302,
+      location: `${CALLBACK}?code=secret-3&state=state-1&iss=${encodeURIComponent(ISSUER)}`,
+      cookie: 'aeolus_waiting=; Path=/authorize/waiting; Max-Age=0; HttpOnly; SameSite=Lax',
+    });
+  });
+
+  it('goes on to the client with access_denied once denied', async () => {
+    await askedForAccess();
+    await decided('denied');
+
+    const answer = await waitingPage('waiting-1');
+
+    expect(new URL(String(answer.headers.location)).searchParams.get('error')).toBe('access_denied');
+  });
+
+  it("is sent straight back to the client with its party's code when it has one", async () => {
+    await aCrewedParty();
+
+    const answer = await askedForAccess();
+
+    expect(answer.headers.location).toBe(`${CALLBACK}?code=secret-3&state=state-1&iss=${encodeURIComponent(ISSUER)}`);
+  });
+
+  it("is told when the fleet's outside parties are off, sent nowhere (interop I-3)", async () => {
+    isOn = false;
+
+    const answer = await askedForAccess();
+
+    expect({ status: answer.statusCode, location: answer.headers.location, says: answer.body.includes('outside parties are off') }).toEqual({ status: 403, location: undefined, says: true });
+  });
+
+  it('is told a wait started in another browser is not theirs, or one the gateway does not know is unknown', async () => {
+    await askedForAccess();
+
+    const answers = await Promise.all([waitingPage('waiting-1', null), waitingPage('waiting-1', 'aeolus_waiting=secret-9'), waitingPage('waiting-9')]);
+
+    expect(answers.map((answer) => ({ status: answer.statusCode, location: answer.headers.location }))).toEqual([
+      { status: 400, location: undefined },
+      { status: 400, location: undefined },
+      { status: 404, location: undefined },
+    ]);
   });
 });
 
@@ -289,33 +329,34 @@ describe('a gateway where no pagasae is set', () => {
     await startServer(false);
   });
 
-  it('asks a caller with no session to sign in to the console', async () => {
-    const page = await authorizePage(undefined);
+  it('says at /authorize that it signs no one in, so no client asks (A a)', async () => {
+    const page = await authorizePage();
 
-    expect(page.statusCode).toBe(401);
-    expect(page.body).toContain('href="https://fleet.example.com"');
+    expect({ status: page.statusCode, says: page.body.includes('signs no one in') }).toEqual({ status: 403, says: true });
   });
 
-  it('knows no callback from pagasae', async () => {
-    const answer = await server.inject({ url: '/pagasae/callback?state=sealed-1&code=pagasae-code-1', headers: { host: HOST } });
+  it('knows no sign-in, callback from pagasae or waiting page', async () => {
+    const answers = await Promise.all([signIn('account'), server.inject({ url: '/pagasae/callback?state=sealed-1&code=pagasae-code-1', headers: { host: HOST } }), waitingPage('waiting-1')]);
 
-    expect(answer.statusCode).toBe(404);
+    expect(answers.map((answer) => answer.statusCode)).toEqual([404, 404, 404]);
   });
 });
 
 describe('a client takes its code for tokens at /token', () => {
   it('answers the tokens as JSON, never cached, the client authenticated with HTTP Basic', async () => {
-    await decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve' });
+    await aCrewedParty();
+    await askedForAccess();
 
-    const answer = await token({ grant_type: 'authorization_code', code: 'secret-1', redirect_uri: CALLBACK, code_verifier: 'verifier-1', resource: RESOURCE }, { authorization: `Basic ${Buffer.from(`${CLIENT}:cursor-secret`).toString('base64')}` });
+    const answer = await token({ grant_type: 'authorization_code', code: 'secret-3', redirect_uri: CALLBACK, code_verifier: 'verifier-1', resource: RESOURCE }, { authorization: `Basic ${Buffer.from(`${CLIENT}:cursor-secret`).toString('base64')}` });
 
     expect({ status: answer.statusCode, cache: answer.headers['cache-control'], body: tokenAnswer.safeParse(answer.json()).success }).toEqual({ status: 200, cache: 'no-store', body: true });
   });
 
   it('takes the client secret in the form too', async () => {
-    await decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve' });
+    await aCrewedParty();
+    await askedForAccess();
 
-    const answer = await token({ grant_type: 'authorization_code', code: 'secret-1', redirect_uri: CALLBACK, code_verifier: 'verifier-1', client_id: CLIENT, client_secret: 'cursor-secret' });
+    const answer = await token({ grant_type: 'authorization_code', code: 'secret-3', redirect_uri: CALLBACK, code_verifier: 'verifier-1', client_id: CLIENT, client_secret: 'cursor-secret' });
 
     expect(answer.statusCode).toBe(200);
   });

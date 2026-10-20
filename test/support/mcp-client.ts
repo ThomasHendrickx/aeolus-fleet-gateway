@@ -1,9 +1,10 @@
 /**
  * An outside MCP client in a test, as the MCP TypeScript SDK runs one: argo
- * pre-registers it, its party is crewed, argo approves it at /authorize with
- * a real console session, and it signs in.
+ * pre-registers it, its party is crewed, a person of the fleet asks for
+ * access for it at /authorize, signed in through a fake pagasae, and the
+ * client signs in as its party.
  */
-import { idSchema } from '@aeolus-fleet/common';
+import { idSchema, type FleetId } from '@aeolus-fleet/common';
 import { auth, type OAuthClientProvider, type StoredOAuthTokens } from '@modelcontextprotocol/client';
 import { expect } from 'vitest';
 import { z } from 'zod';
@@ -11,8 +12,10 @@ import { z } from 'zod';
 import { createPrismaClient } from '../../src/adapters/prisma/client.js';
 import { createPrismaPartyStore } from '../../src/adapters/prisma/party-store.js';
 import { commission, register } from './argo.js';
+import { aBrowser, pickedAt } from './browser.js';
+import { charlotteIn, type FakePagasae } from './fake-pagasae.js';
 import type { FleetServer } from './fleet-server.js';
-import { mutate } from './gateway-api.js';
+import { connectGateway, mutate } from './gateway-api.js';
 import { outsidePartiesOn } from './outside-parties.js';
 
 /** The gateway secret every test gateway runs with. */
@@ -20,12 +23,17 @@ export const TEST_GATEWAY_SECRET = 'a-test-gateway-secret-of-at-least-32-charact
 
 export const CALLBACK = 'http://127.0.0.1:33418/callback';
 
+/** The scopes argo commissions the gateway's ship with. */
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+
 /** Where a test's fleet, gateway and argo are. */
 export interface Setting {
   fleet: FleetServer;
   address: string;
   cookie: string;
   databaseUrl: string;
+  /** The pagasae the gateway signs people in through. */
+  pagasae: FakePagasae;
 }
 
 const registered = z.object({ result: z.object({ data: z.object({ clientId: z.string(), clientSecret: z.string().nullable() }) }) });
@@ -60,16 +68,22 @@ export function aClientProvider(client: { clientId: string; clientSecret: string
   return { provider, sentTo: () => sentTo, tokens: () => saved };
 }
 
-/** argo approves the request the client was sent to authorize: the code the client gets back. */
-export async function approved(setting: Setting, sentTo: URL): Promise<{ code: string; iss: string | null }> {
-  const page = await fetch(sentTo, { headers: { cookie: setting.cookie } });
-  expect(page.status).toBe(200);
-  const answer = await fetch(`${setting.address}/authorize`, {
-    method: 'POST',
-    redirect: 'manual',
-    headers: { cookie: setting.cookie, origin: setting.address, 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ ...Object.fromEntries(sentTo.searchParams), decision: 'approve' }).toString(),
-  });
+/** argo connects the gateway to the fleet, as a person signs in only to a fleet the gateway serves. */
+export async function aConnectedGateway(setting: Setting): Promise<void> {
+  const gatewayShip = await commission(setting.fleet, { cookie: setting.cookie, ship: { name: 'gateway', type: 'gateway', scopes: GATEWAY_SCOPES } });
+  expect((await connectGateway(setting.address, { cookie: setting.cookie, ...gatewayShip })).status).toBe(200);
+}
+
+/** The fleet argo's console session is signed in to. */
+export async function fleetIdOf(setting: Setting): Promise<FleetId> {
+  const session = await fetch(`${setting.fleet.url}/trpc/console.session`, { headers: { cookie: setting.cookie } });
+  return z.object({ result: z.object({ data: z.object({ fleetId: idSchema('fleet') }) }) }).parse(await session.json()).result.data.fleetId;
+}
+
+/** Charlotte asks for access for the client she was sent to authorize, whose party answers at once: the code the client gets back. */
+export async function answered(setting: Setting, sentTo: URL): Promise<{ code: string; iss: string | null }> {
+  setting.pagasae.answer(charlotteIn(setting.pagasae, await fleetIdOf(setting)));
+  const answer = await aBrowser().follow(pickedAt(sentTo, 'party'), CALLBACK);
   const back = new URL(z.string().parse(answer.headers.get('location')));
   return { code: z.string().parse(back.searchParams.get('code')), iss: back.searchParams.get('iss') };
 }
@@ -117,7 +131,7 @@ export async function aSignedInClient(setting: Setting, isConfidential = true) {
   const client = aClientProvider(information);
   const serverUrl = `${setting.address}/mcp`;
   await auth(client.provider, { serverUrl });
-  const { code, iss } = await approved(setting, z.instanceof(URL).parse(client.sentTo()));
+  const { code, iss } = await answered(setting, z.instanceof(URL).parse(client.sentTo()));
   await auth(client.provider, { serverUrl, authorizationCode: code, ...(iss === null ? {} : { iss }) });
   return client;
 }

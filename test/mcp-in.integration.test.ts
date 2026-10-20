@@ -8,8 +8,9 @@ import { commission, register, signIn } from './support/argo.js';
 import { receiveOne } from './support/ship.js';
 import { setTimeout as wait } from 'node:timers/promises';
 import { migratedDatabase } from './support/database.js';
+import { PAGASAE_CLIENT, startFakePagasae } from './support/fake-pagasae.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
-import { aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
+import { aConnectedGateway, aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
 import { mutate } from './support/gateway-api.js';
 
 // MCP in (interop 3.3): an outside MCP client, signed in, sees the
@@ -25,13 +26,15 @@ beforeEach(async () => {
   const fleet = await startFleetServer(inject('postgresUrl'));
   const port = await aFreePort();
   const address = `http://127.0.0.1:${String(port)}`;
-  setting = { fleet, address, cookie: await signIn(fleet), databaseUrl: await migratedDatabase(inject('postgresUrl')) };
-  app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET, mcpWaitMaxMs: MCP_WAIT_MS });
+  setting = { fleet, address, cookie: await signIn(fleet), databaseUrl: await migratedDatabase(inject('postgresUrl')), pagasae: await startFakePagasae() };
+  app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET, pagasae: { url: setting.pagasae.url, ...PAGASAE_CLIENT }, mcpWaitMaxMs: MCP_WAIT_MS });
   await app.server.listen({ host: '127.0.0.1', port });
+  await aConnectedGateway(setting);
 });
 
 afterEach(async () => {
   await app.close();
+  await setting.pagasae.stop();
   await setting.fleet.stop();
 });
 
