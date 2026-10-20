@@ -1,4 +1,4 @@
-import { idSchema, type ShipId } from '@aeolus-fleet/common';
+import { discoverOutputSchema, idSchema, type ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
@@ -171,5 +171,24 @@ describe("a ship holding scopes:grant changes an outside party's scopes (decisio
     const read = await query(address, { procedure: 'parties.get', cookie, input: { name: 'crm' } });
     const { scopes } = z.object({ result: z.object({ data: z.object({ scopes: z.array(z.string()).nullable() }) }) }).parse(await read.json()).result.data;
     expect(scopes?.includes('fleet:read')).toBe(true);
+  });
+});
+
+describe("the CRM's proxy ship states its tools as the server lists them (aeolus-fleet#956)", () => {
+  it("shows in discovery each tool with the server's annotations, and argo's repeatable mark", async () => {
+    const address = await started();
+    await approved(address);
+
+    const marked = await mutate(address, { procedure: 'parties.markTool', cookie, body: { name: 'crm', tool: 'list_deals', isRepeatable: true } });
+
+    expect(marked.status, await marked.clone().text()).toBe(200);
+    const found = await fetch(`${fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${caller.crewToken}` } });
+    const statement = discoverOutputSchema.parse(await found.json()).ships.find(({ id }) => id === proxyShipId)?.statement;
+    const capabilities = statement?.by === 'crew' ? statement.capabilities : [];
+    const shown = capabilities.filter(({ name }) => ['list_deals', 'create_contact'].includes(name)).map(({ name, annotations, repeatable }) => ({ name, annotations, repeatable }));
+    expect(shown.sort((left, right) => left.name.localeCompare(right.name))).toEqual([
+      { name: 'create_contact', annotations: { readOnlyHint: false, idempotentHint: false }, repeatable: undefined },
+      { name: 'list_deals', annotations: { readOnlyHint: true, idempotentHint: true }, repeatable: true },
+    ]);
   });
 });

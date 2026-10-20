@@ -1,20 +1,15 @@
-import { idSchema } from '@aeolus-fleet/common';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
-import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
-import { createPrismaClient } from '../src/adapters/prisma/client.js';
-import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
-import { statementOf } from '../src/core/mcp-out/statement.js';
 import { MOCK_CRM_BEARER, startMockCrm, type MockCrm } from './fixtures/mock-crm/mock-crm.js';
-import { commission, register, signIn } from './support/argo.js';
+import { commission, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { PAGASAE_CLIENT, startFakePagasae } from './support/fake-pagasae.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
 import { mutate } from './support/gateway-api.js';
-import { aConnectedGateway, aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
+import { aConnectedGateway, aSignedInClient, fleetIdOf, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
 import { outsidePartiesOn } from './support/outside-parties.js';
 
 // The journey of slice 2 end to end: an outside MCP client, signed in with
@@ -22,56 +17,24 @@ import { outsidePartiesOn } from './support/outside-parties.js';
 // message from its proxy ship, through the fleet, to the CRM's proxy ship,
 // whose worker calls the mock CRM (MCP out); the result comes back as a
 // reply, and the client is answered it (MCP in).
-//
-// Core 0.27 stand-ins: argo commissions the CRM's proxy ship in the console
-// and hands its secret over with parties.crew (aeolus-fleet#959), and the
-// test states it without the tools' annotations, which 0.27 refuses
-// (aeolus-fleet#956).
 
 let setting: Setting;
 let app: GatewayApp;
 let crm: MockCrm;
 
-/** The CRM party, crewed by the gateway and stated as it would state it on core 0.28, without annotations. */
+/** argo approves the CRM through the gateway, which crews its proxy ship, and has the gateway state its tools. */
 async function aCrewedCrmParty(): Promise<void> {
-  const { fleet, cookie } = setting;
-  const proxy = await commission(fleet, { cookie, ship: { name: 'crm', type: 'mcp-server', kind: 'app' } });
-  const owner = await commission(fleet, { cookie, ship: { name: 'crm-owner', type: 'agent' } });
-  const whoami = await fetch(`${fleet.url}/api/v1/ship/whoami`, { headers: { authorization: `Bearer ${await register(fleet, owner)}` } });
-  const { fleetId } = z.object({ fleetId: idSchema('fleet') }).parse(await whoami.json());
-  const prisma = createPrismaClient(setting.databaseUrl);
-  const parties = createPrismaPartyStore(prisma);
-  await parties.save({
-    fleetId,
-    name: 'crm',
-    kind: 'mcpServer',
-    url: crm.url,
-    credential: { kind: 'bearer', token: MOCK_CRM_BEARER },
-    concurrencyLimit: 4,
-    state: 'awaitingCrew',
-    proxyShipId: proxy.shipId,
-    secret: null,
-    crewToken: null,
-    requestId: 'approve-crm',
-    requestHash: 'h',
-    approvedAt: new Date(),
+  const { fleet, cookie, address } = setting;
+  const owner = await commission(fleet, { cookie, ship: { name: 'crm-owner', type: 'person', kind: 'person' } });
+  await outsidePartiesOn(setting.databaseUrl, await fleetIdOf(setting));
+  const approved = await mutate(address, {
+    procedure: 'parties.approve',
+    cookie,
+    body: { requestId: 'approve-crm', name: 'crm', url: crm.url, credential: { kind: 'bearer', token: MOCK_CRM_BEARER }, ownerShipId: owner.shipId, concurrencyLimit: 4 },
   });
-  await outsidePartiesOn(setting.databaseUrl, fleetId);
-  const crewed = await mutate(setting.address, { procedure: 'parties.crew', cookie, body: { name: 'crm', secret: proxy.secret } });
-  expect(crewed.status).toBe(200);
-  const crewToken = z.string().parse((await parties.find(fleetId, 'crm'))?.crewToken);
-  await prisma.$disconnect();
-  await statedWithoutAnnotations(crewToken);
-}
-
-/** The CRM's proxy ship states the mock CRM's tools, as the gateway does, without their annotations. */
-async function statedWithoutAnnotations(crewToken: string): Promise<void> {
-  const outside = new Client({ name: 'test', version: '1' });
-  await outside.connect(new StreamableHTTPClientTransport(new URL(crm.url), { requestInit: { headers: { authorization: `Bearer ${MOCK_CRM_BEARER}` } } }));
-  const { tools } = await outside.listTools();
-  await outside.close();
-  const statement = statementOf({ partyName: 'crm', tools: tools.map(({ name, title, description, inputSchema }) => ({ name, ...(title === undefined ? {} : { title }), ...(description === undefined ? {} : { description }), inputSchema })), repeatable: new Set() });
-  await expect(createRestFleetDoor(setting.fleet.url).setStatement(crewToken, statement)).resolves.toEqual({ isOk: true, value: undefined });
+  expect(approved.status, await approved.clone().text()).toBe(200);
+  const stated = await mutate(address, { procedure: 'parties.state', cookie, body: { name: 'crm' } });
+  expect(stated.status, await stated.clone().text()).toBe(200);
 }
 
 beforeEach(async () => {

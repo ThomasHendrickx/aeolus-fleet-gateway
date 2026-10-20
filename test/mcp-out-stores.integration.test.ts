@@ -29,8 +29,7 @@ describe("a proxy ship's statement, stated through the fleet's REST API", () => 
     const cookie = await signIn(fleet);
     const proxy = await register(fleet, await commission(fleet, { cookie, ship: { name: 'crm', type: 'mcp-server', kind: 'app' } }));
     const caller = await register(fleet, await commission(fleet, { cookie, ship: { name: 'agent', type: 'agent', scopes: ['messages:send'] } }));
-    // Without the fields core 0.27 does not know yet (annotations, repeatable: aeolus-fleet#956).
-    const statement = statementOf({ partyName: 'crm', tools: [{ name: 'list_deals', title: 'List deals', inputSchema: { type: 'object' } }], repeatable: new Set() });
+    const statement = statementOf({ partyName: 'crm', tools: [{ name: 'list_deals', title: 'List deals', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } }], repeatable: new Set(['list_deals']) });
 
     await expect(createRestFleetDoor(fleet.url).setStatement(proxy, statement)).resolves.toEqual({ isOk: true, value: undefined });
 

@@ -5,9 +5,8 @@ import { createPrismaOutsidePartySwitches } from '../../src/adapters/prisma/outs
 
 /**
  * Turns the fleet's outside parties on in the gateway's database, as an actor
- * holding fleet:network does once the fleet applies network rules. Core 0.27
- * answers no fleet.networkRules (aeolus-fleet #997), so the switch is set
- * here rather than through the API.
+ * holding fleet:network does with outsideParties.set once the fleet applies
+ * network rules; set here, so a test needs no such actor.
  */
 export async function outsidePartiesOn(databaseUrl: string, fleetId: FleetId): Promise<void> {
   const prisma = createPrismaClient(databaseUrl);
