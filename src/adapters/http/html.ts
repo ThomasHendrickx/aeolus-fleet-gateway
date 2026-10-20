@@ -27,8 +27,8 @@ export function layout(title: string, body: string): string {
   return documentOf({ title, head: '', body });
 }
 
-/** A page of the gateway with more in its head, such as a refresh. */
-export function documentOf(page: { title: string; head: string; body: string }): string {
+/** A page of the gateway: its title, its head and its body, with the shared style. */
+function documentOf(page: { title: string; head: string; body: string }): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${page.head}<title>${escaped(page.title)}</title><style>${STYLE}</style></head><body>${page.body}</body></html>`;
 }
 

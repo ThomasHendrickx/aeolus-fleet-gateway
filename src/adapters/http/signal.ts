@@ -80,6 +80,15 @@ input[type="text"], input[type="password"], input[type="number"], input[type="ur
 .scopes { display: grid; gap: 6px; }
 fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
 legend { font-size: 13px; font-weight: 500; padding: 0; margin-bottom: 4px; }
+main.centred { max-width: 440px; min-height: 100vh; align-content: center; justify-items: center; text-align: center; }
+main.centred > * { width: 100%; } main.centred p, main.centred h1 { margin: 0; } main.centred { gap: 16px; }
+main.centred > .mark, main.centred > .ring, main.centred > .badge { width: auto; }
+.tiles { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 480px) { .tiles { grid-template-columns: 1fr; } }
+.tile { display: grid; gap: 4px; justify-items: center; align-content: center; height: auto; min-height: 112px; padding: 16px; border-radius: var(--radius-lg); text-align: center; }
+.tile:hover { border-color: var(--primary); }
+.going-on { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); }
+.going-on::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--tone-ok-fg); }
 .live-status { position: fixed; right: 16px; bottom: 16px; margin: 0; }
 @media (max-width: 640px) { .actions > * { flex: 1; } button, .button { height: 44px; width: 100%; } }
 `;
@@ -88,7 +97,7 @@ legend { font-size: 13px; font-weight: 500; padding: 0; margin-bottom: 4px; }
 export type Tone = 'waiting' | 'active' | 'ok' | 'attention' | 'ended';
 
 /** An icon the pages draw, from the console's icon set (Lucide), as inline SVG paths. */
-export type Icon = 'plug' | 'power' | 'powerOff' | 'alert' | 'signIn' | 'house' | 'hourglass' | 'check' | 'x' | 'ban' | 'lock' | 'server' | 'laptop' | 'arrowLeftRight' | 'users';
+export type Icon = 'plug' | 'power' | 'powerOff' | 'alert' | 'signIn' | 'house' | 'hourglass' | 'check' | 'x' | 'ban' | 'lock' | 'server' | 'laptop' | 'arrowLeftRight' | 'users' | 'shieldX' | 'timerOff';
 
 const ICON_PATHS: Record<Icon, string> = {
   plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
@@ -105,6 +114,8 @@ const ICON_PATHS: Record<Icon, string> = {
   server: '<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/>',
   laptop: '<path d="M18 5a2 2 0 0 1 2 2v8.526a2 2 0 0 0 .212.897l1.068 2.127a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45l1.068-2.127A2 2 0 0 0 4 15.526V7a2 2 0 0 1 2-2z"/><path d="M20.054 15.987H3.946"/>',
   arrowLeftRight: '<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>',
+  shieldX: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m14.5 9.5-5 5"/><path d="m9.5 9.5 5 5"/>',
+  timerOff: '<path d="M10 2h4"/><path d="M4.6 11a8 8 0 0 0 1.7 8.7 8 8 0 0 0 8.7 1.7"/><path d="M7.4 7.4a8 8 0 0 1 10.3 1 8 8 0 0 1 .9 10.2"/><path d="m2 2 20 20"/><path d="M12 12v-2"/>',
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
 };
 
@@ -126,15 +137,22 @@ const RING_SIZE = 96;
 const RING_STROKE = 6;
 
 /** The large shape that leads a page: a full ring in a tone, dashed for a state that ended, around an icon or a number. */
-export function ring(shown: { tone: Tone; center: { icon: Icon } | { count: number }; label: string; isDashed?: boolean }): string {
-  const radius = (RING_SIZE - RING_STROKE) / 2;
-  const middle = RING_SIZE / 2;
+export function ring(shown: { tone: Tone; center: { icon: Icon } | { count: number } | { text: string; icon: Icon }; label: string; isDashed?: boolean; size?: number }): string {
+  const size = shown.size ?? RING_SIZE;
+  const radius = (size - RING_STROKE) / 2;
+  const middle = size / 2;
   const dash = shown.isDashed === true ? ' stroke-dasharray="4 6"' : '';
-  const center =
-    'icon' in shown.center
-      ? `<foreignObject x="${middle - 14}" y="${middle - 14}" width="28" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="color:var(--tone-${shown.tone}-fg)">${icon(shown.center.icon, 28)}</div></foreignObject>`
-      : `<text x="${middle}" y="${middle}" text-anchor="middle" dominant-baseline="central" font-size="28" font-weight="600" fill="currentColor">${shown.center.count}</text>`;
-  return `<svg class="ring" width="${RING_SIZE}" height="${RING_SIZE}" viewBox="0 0 ${RING_SIZE} ${RING_SIZE}" role="img" aria-label="${escaped(shown.label)}"><circle cx="${middle}" cy="${middle}" r="${radius}" fill="none" stroke="var(--tone-${shown.tone}-fg)" stroke-width="${RING_STROKE}"${dash}/>${center}</svg>`;
+  const iconSize = Math.round(size * 0.3);
+  let center: string;
+  if ('count' in shown.center) {
+    center = `<text x="${middle}" y="${middle}" text-anchor="middle" dominant-baseline="central" font-size="28" font-weight="600" fill="currentColor">${shown.center.count}</text>`;
+  } else if ('text' in shown.center) {
+    // An icon above a short text, such as the time left; the page may update the text.
+    center = `<foreignObject x="${middle - 14}" y="${middle - 34}" width="28" height="28"><div xmlns="http://www.w3.org/1999/xhtml" style="color:var(--tone-${shown.tone}-fg)">${icon(shown.center.icon, 24)}</div></foreignObject><text x="${middle}" y="${middle + 10}" text-anchor="middle" dominant-baseline="central" font-size="22" font-weight="600" fill="currentColor" data-time-left>${escaped(shown.center.text)}</text><text x="${middle}" y="${middle + 34}" text-anchor="middle" font-size="12" fill="var(--muted-foreground)">left</text>`;
+  } else {
+    center = `<foreignObject x="${middle - iconSize / 2}" y="${middle - iconSize / 2}" width="${iconSize}" height="${iconSize}"><div xmlns="http://www.w3.org/1999/xhtml" style="color:var(--tone-${shown.tone}-fg)">${icon(shown.center.icon, iconSize)}</div></foreignObject>`;
+  }
+  return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${escaped(shown.label)}"><circle cx="${middle}" cy="${middle}" r="${radius}" fill="none" stroke="var(--tone-${shown.tone}-fg)" stroke-width="${RING_STROKE}"${dash}/>${center}</svg>`;
 }
 
 /** An outside party's mark: the first two letters of its name on a tile, as the console's Avatar draws a ship. */
@@ -143,8 +161,8 @@ export function partyMark(name: string): string {
 }
 
 /** Who meets whom: the outside party's mark and the fleet's, side by side. */
-export function handshake(party: { name: string }): string {
-  return `<div class="handshake"><figure>${partyMark(party.name)}<figcaption>${escaped(party.name)}</figcaption></figure><span class="muted">${icon('arrowLeftRight', 16)}</span><figure><span class="fleet-mark">${MARK_LARGE}</span><figcaption>Fleet</figcaption></figure></div>`;
+export function handshake(party: { name: string; fleet?: string }): string {
+  return `<div class="handshake"><figure>${partyMark(party.name)}<figcaption>${escaped(party.name)}</figcaption></figure><span class="muted">${icon('arrowLeftRight', 16)}</span><figure><span class="fleet-mark">${MARK_LARGE}</span><figcaption>${escaped(party.fleet ?? 'Fleet')}</figcaption></figure></div>`;
 }
 
 /** A tab of the pages' top bar. */
@@ -200,6 +218,15 @@ const LIVE_SCRIPT = `(function (query) {
   open();
   setInterval(countDown, 60000);
 })(document.currentScript.getAttribute('data-live-query'));`;
+
+/**
+ * A page a person meets on their way in, from an outside MCP client: the
+ * mark and its name above one centred column, no tabs. Its own script, if
+ * any, comes with its body.
+ */
+export function signInPage(page: { title: string; body: string }): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escaped(page.title)}</title><style>${STYLE}</style></head><body><main class="centred"><div class="mark">${MARK}Aeolus</div>${page.body}</main></body></html>`;
+}
 
 /** A whole Signal page: the top bar with its tabs, then the page's own body; a live page names itself to the live channel. */
 export function signalPage(page: { title: string; tab?: Tab; body: string; isWide?: boolean; live?: string }): string {
