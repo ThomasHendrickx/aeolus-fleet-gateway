@@ -45,6 +45,7 @@ function contextFor(cookie: string | undefined): Context {
     setOutsideParties: unused,
     listToDecide: unused,
     decideRequest: unused,
+    endSignIns: unused,
   };
 }
 
