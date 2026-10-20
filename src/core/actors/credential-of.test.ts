@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { memoryIssuedTokens } from '../../../test/support/oauth-fakes.js';
-import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
+import { fakePagasae, memoryAccountGrants, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createAccountTokenOf } from '../sign-in/account-token.js';
 import type { Actor } from './authenticate-actor.js';
 import { createCredentialOf } from './credential-of.js';

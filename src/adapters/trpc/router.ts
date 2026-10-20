@@ -232,6 +232,7 @@ const OUTSIDE_PARTIES_CODES = {
   NOT_A_NETWORKER: 'FORBIDDEN',
   OPEN_NETWORK: 'PRECONDITION_FAILED',
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+  NOT_AN_ACTOR: 'UNAUTHORIZED',
 } as const satisfies Record<string, TRPCError['code']>;
 
 /** A pending request as the API answers it: its times as ISO text. */

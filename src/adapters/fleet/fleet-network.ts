@@ -1,14 +1,19 @@
 /**
  * Reads whether the fleet applies network rules with `fleet.networkRules`
  * (aeolus-fleet #997), as the actor who asked (decision 0057): a ship with its
- * crew token over REST, argo with the console session over tRPC. The answer's
+ * crew token over REST, an account with its account token presented by the
+ * gateway's ship over REST, argo with the console session over tRPC. The answer's
  * schema stands in for common's until core 0.28 publishes it (aeolus-fleet#991).
  */
 import { z } from 'zod';
 
 import type { FleetRefusal } from '../../core/connection/ports.js';
-import type { ActorCredential, FleetNetwork } from '../../core/outside-parties/ports.js';
+import type { ActorCredential } from '../../core/actors/credential-of.js';
+import type { FleetNetwork } from '../../core/outside-parties/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
+
+/** The header an account's token travels in; common's ACCOUNT_TOKEN_HEADER replaces it once published (aeolus-fleet#991). */
+const ACCOUNT_TOKEN_HEADER = 'aeolus-account-token';
 
 const networkRulesSchema = z.object({ applied: z.object({ rules: z.array(z.unknown()).nullable() }) });
 const trpcAnswerSchema = z.object({ result: z.object({ data: networkRulesSchema }) }).transform(({ result }) => result.data);
@@ -31,7 +36,7 @@ export function createFleetNetwork(fleetUrl: string): FleetNetwork {
       const request =
         as.crewToken === undefined
           ? { url: `${fleetUrl}/trpc/fleet.networkRules`, headers: { cookie: as.cookie ?? '' } }
-          : { url: `${fleetUrl}/api/v1/fleet/networkRules`, headers: { authorization: `Bearer ${as.crewToken}` } };
+          : { url: `${fleetUrl}/api/v1/fleet/networkRules`, headers: { authorization: `Bearer ${as.crewToken}`, ...(as.accountToken === undefined ? {} : { [ACCOUNT_TOKEN_HEADER]: as.accountToken }) } };
       let response: Response;
       try {
         response = await fetch(request.url, { headers: request.headers });

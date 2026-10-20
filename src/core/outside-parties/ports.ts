@@ -1,5 +1,6 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
+import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
 
@@ -7,12 +8,6 @@ import type { Result } from '../shared/result.js';
 export interface OutsidePartySwitches {
   isOn(fleetId: FleetId): Promise<boolean>;
   set(fleetId: FleetId, switched: { isOn: boolean; at: Date }): Promise<void>;
-}
-
-/** The credential an actor called the gateway with, passed on so the fleet answers as that actor. */
-export interface ActorCredential {
-  cookie?: string;
-  crewToken?: string;
 }
 
 /** Outbound port: the fleet's network, as the actor reads it. */

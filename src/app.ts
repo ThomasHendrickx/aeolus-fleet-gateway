@@ -98,6 +98,7 @@ import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
 import { createListParties } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
 import { createAuthenticateActor } from './core/actors/authenticate-actor.js';
+import { createCredentialOf } from './core/actors/credential-of.js';
 import { createDecideRequest } from './core/requests/decide-request.js';
 import { createListToDecide } from './core/requests/list-to-decide.js';
 import { createPrismaPendingRequests } from './adapters/prisma/pending-requests.js';
@@ -257,7 +258,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     return approved;
   };
   const listParties = createListParties({ parties });
-  const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock });
+  // An account's credential needs its account token, set up with the sign-in below.
+  const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // Off stops the fleet's workers; on starts its crewed parties' workers again.
   const setOutsideParties: SetOutsideParties = async (input) => {
     const set = await setOutsidePartiesOnly(input);
@@ -365,6 +367,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
 
   // What every call of the API reads, from the request's console session and installation token.
+  const credentialOf = createCredentialOf({ connections, accountTokenOf });
   const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections, sessions: pageSessions, accountTokenOf });
   const outcomes = createOutcomeWorker({
     expireRequests: createExpireRequests({ requests: pendingRequests, clock }),

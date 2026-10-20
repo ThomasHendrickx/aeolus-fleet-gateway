@@ -1,8 +1,9 @@
 import type { Actor } from '../actors/authenticate-actor.js';
+import type { ActorCredential, CredentialOf } from '../actors/credential-of.js';
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import type { ActorCredential, FleetNetwork, OutsidePartySwitches } from './ports.js';
+import type { FleetNetwork, OutsidePartySwitches } from './ports.js';
 
 /** The scope that switches a fleet's outside parties, as it changes the fleet's network. */
 export const SWITCHING_SCOPE = 'fleet:network';
@@ -14,7 +15,7 @@ export type SetOutsideParties = (input: {
   as: ActorCredential;
   isOn: boolean;
   isOpenNetworkConfirmed: boolean;
-}) => Promise<Result<{ isOn: boolean }, DomainError<'NOT_A_NETWORKER' | 'OPEN_NETWORK' | 'FLEET_UNAVAILABLE'>>>;
+}) => Promise<Result<{ isOn: boolean }, DomainError<'NOT_A_NETWORKER' | 'OPEN_NETWORK' | 'FLEET_UNAVAILABLE' | 'NOT_AN_ACTOR'>>>;
 
 /** Use case: whether the actor's fleet's outside parties are on. */
 export function createReadOutsideParties(deps: { switches: OutsidePartySwitches }): ReadOutsideParties {
@@ -26,15 +27,19 @@ export function createReadOutsideParties(deps: { switches: OutsidePartySwitches 
  * on or off (interop I-3). The gateway sets no policy but warns: turning
  * them on while the fleet applies no network rules needs the warning
  * confirmed. The rules are read as the actor, so the fleet answers what that
- * actor may see. Turning off reads nothing.
+ * actor may see, an account by its account token. Turning off reads nothing.
  */
-export function createSetOutsideParties(deps: { switches: OutsidePartySwitches; network: FleetNetwork; clock: Clock }): SetOutsideParties {
+export function createSetOutsideParties(deps: { switches: OutsidePartySwitches; network: FleetNetwork; clock: Clock; credentialOf: CredentialOf }): SetOutsideParties {
   return async ({ actor, as, isOn, isOpenNetworkConfirmed }) => {
     if (!actor.scopes.includes(SWITCHING_SCOPE)) {
       return refuse('NOT_A_NETWORKER', `Switching outside parties needs ${SWITCHING_SCOPE}`);
     }
     if (isOn && !isOpenNetworkConfirmed) {
-      const isOpen = await deps.network.isOpen(as);
+      const credential = await deps.credentialOf(actor, as);
+      if (!credential.isOk) {
+        return credential;
+      }
+      const isOpen = await deps.network.isOpen(credential.value);
       if (!isOpen.isOk) {
         return refuse('FLEET_UNAVAILABLE', `The fleet did not say its network rules: ${isOpen.error.message}`);
       }
