@@ -16,6 +16,7 @@ import type { ListTools } from '../../core/mcp-in/list-tools.js';
 import type { ReadCall, ReadClientCall } from '../../core/mcp-in/read-client-call.js';
 import { isToolResultType } from '../../core/mcp-out/content-types.js';
 import { createdTaskOf, DEADLINE_PASSED, taskOf, TASKS_EXTENSION } from './mcp-task.js';
+import { personServerFor, type PersonToolsDeps } from './person-tools.js';
 import { runningVersion } from './version.js';
 
 const HTTP_UNAUTHORIZED = 401;
@@ -27,6 +28,8 @@ export interface McpEndpointDeps {
   listTools: ListTools;
   callTool: CallTool;
   readClientCall: ReadClientCall;
+  /** A signed-in person's tools, where people sign in (decision 0054). */
+  person?: PersonToolsDeps;
 }
 
 /** The gateway's own tool: the answer to a call that answered a handle. */
@@ -93,13 +96,6 @@ function webRequestOf(request: FastifyRequest): Request {
 
 /** A JSON Schema of an object, as MCP's tool takes one. */
 const objectSchema = z.object({ type: z.literal('object') }).catchall(z.json());
-
-/** The MCP server a signed-in person's client is served by: no tools yet; a person's own tools come with their person ship (aeolus-fleet#877, slice 7). */
-function accountServer(): McpServer {
-  const mcp = new McpServer({ name: 'aeolus-gateway', version: runningVersion() }, { capabilities: { tools: {} } });
-  mcp.server.setRequestHandler('tools/list', () => ({ tools: [] }));
-  return mcp;
-}
 
 /** The MCP server one request of one client is served by. Its tools are known per request, from the fleet, so it lists them itself. */
 function serverFor(holder: { fleetId: FleetId; party: string }, deps: McpEndpointDeps): McpServer {
@@ -177,7 +173,17 @@ export function registerMcpEndpoint(server: FastifyInstance, deps: McpEndpointDe
       return unauthorized(reply, 'invalid_token');
     }
     const held = holder.value;
-    const handler = createMcpHandler(() => (held.kind === 'party' ? serverFor({ fleetId: held.fleetId, party: held.party }, deps) : accountServer()));
+    const { person } = deps;
+    let serve: () => McpServer;
+    if (held.kind === 'party') {
+      serve = () => serverFor({ fleetId: held.fleetId, party: held.party }, deps);
+    } else if (person === undefined) {
+      // An account's token is issued only where people sign in, so it finds their tools.
+      return unauthorized(reply, 'invalid_token');
+    } else {
+      serve = () => personServerFor({ fleetId: held.fleetId, grantId: held.grantId }, person);
+    }
+    const handler = createMcpHandler(serve);
     return handler.fetch(webRequestOf(request), { parsedBody: request.body });
   });
 }
