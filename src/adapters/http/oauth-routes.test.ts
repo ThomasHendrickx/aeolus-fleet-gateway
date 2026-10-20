@@ -43,7 +43,8 @@ let served: FleetId[];
 /** pagasae redeems pagasae-code-1 for the verifier a person's start draws first, secret-1, unless a test sets it. */
 let pagasae: Pagasae;
 
-beforeEach(async () => {
+/** The routes over in-memory ports; signing people in through pagasae only where it is set. */
+async function startServer(isSigningPeopleIn: boolean) {
   const clients = memoryOAuthClients();
   await clients.save({ clientId: CLIENT, fleetId: FLEET, name: 'Cursor <IDE>', redirectUris: [CALLBACK], secretHash: 'hash(cursor-secret)' });
   const codes = memoryAuthorizationCodes();
@@ -67,11 +68,21 @@ beforeEach(async () => {
     approveAuthorization: createApproveAuthorization({ readAuthorization, codes, secrets, clock, issuer: ISSUER, parties, approveClientParty }),
     readClientParty: createReadClientParty({ parties }),
     exchangeToken: createExchangeToken({ clients, codes, tokens: memoryIssuedTokens(), secrets, clock, resource: RESOURCE }),
-    startSignIn: createStartSignIn({ readAuthorization, seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }),
-    completeSignIn: (back) =>
-      createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)) })(back),
+    ...(isSigningPeopleIn
+      ? {
+          signIn: {
+            start: createStartSignIn({ readAuthorization, seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }),
+            complete: (back) =>
+              createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)) })(back),
+          },
+        }
+      : {}),
   });
   await server.ready();
+}
+
+beforeEach(async () => {
+  await startServer(true);
 });
 
 afterEach(async () => {
@@ -241,6 +252,26 @@ describe('a person, with no console session, signs in through pagasae (Q25, deci
 
     expect(answer.statusCode).toBe(502);
     expect(answer.body).toContain('invalid_grant');
+  });
+});
+
+describe('a gateway where no pagasae is set', () => {
+  beforeEach(async () => {
+    await server.close();
+    await startServer(false);
+  });
+
+  it('asks a caller with no session to sign in to the console', async () => {
+    const page = await authorizePage(undefined);
+
+    expect(page.statusCode).toBe(401);
+    expect(page.body).toContain('href="https://fleet.example.com"');
+  });
+
+  it('knows no callback from pagasae', async () => {
+    const answer = await server.inject({ url: '/pagasae/callback?state=sealed-1&code=pagasae-code-1', headers: { host: HOST } });
+
+    expect(answer.statusCode).toBe(404);
   });
 });
 
