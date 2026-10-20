@@ -1,4 +1,4 @@
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import type { FleetId, ShipId, VerifiedFact } from '@aeolus-fleet/common';
 
 import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
@@ -29,6 +29,8 @@ export interface ProxyShipDoor {
     ship: { name: string; type: string; owner: ShipId; idempotencyKey: string; scopes: readonly string[] },
   ): Promise<Result<{ shipId: ShipId; secret: string | null }, FleetRefusal>>;
   register(claim: { shipId: ShipId; secret: string }): Promise<Result<{ crewToken: string }, FleetRefusal>>;
+  /** Sets the gateway's facts about the proxy ship whole (fleet.setVerifiedFacts, fleet:verify, decision 0059). */
+  setVerifiedFacts(crewToken: string, written: { shipId: ShipId; facts: readonly VerifiedFact[] }): Promise<Result<undefined, FleetRefusal>>;
 }
 
 /** Outbound port: the fleet's calls on a party's proxy ship made as the actor (decision 0057), so the fleet checks its scopes and reach. */

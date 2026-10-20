@@ -10,11 +10,12 @@ export type ConnectRefusal = DomainError<'ALREADY_CONNECTED' | 'SECRET_REFUSED' 
 export type Connect = (input: { operatorFleetId: FleetId; shipId: ShipId; secret: string }) => Promise<Result<ConnectionStatus, ConnectRefusal>>;
 
 /**
- * What the gateway's ship does (decisions 0044 to 0046): read the fleet,
- * commission an app proxy ship for each approved outside party, naming its
- * owner, and declare the gateway's own scope.
+ * What the gateway's ship does (decisions 0044 to 0046, 0059): read the
+ * fleet, commission an app proxy ship for each approved outside party, naming
+ * its owner, declare the gateway's own scope, and write what it checked about
+ * each proxy ship.
  */
-const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
 
 /** The gateway's own scopes, under its namespace: approving is a scope any actor may hold (decision 0056). */
 const GATEWAY_NAMESPACE = {

@@ -1,4 +1,4 @@
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import type { FleetId, ShipId, VerifiedFact } from '@aeolus-fleet/common';
 
 import type { McpServerCredential } from '../vault/credential.js';
 
@@ -48,3 +48,27 @@ export interface McpClientParty extends PartyBase {
 }
 
 export type Party = McpServerParty | McpClientParty;
+
+/** The host of an https address, or none: only an address reached over TLS shows who answers it. */
+function tlsHostOf(address: string): string | undefined {
+  try {
+    const url = new URL(address);
+    return url.protocol === 'https:' ? url.hostname : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * What the gateway checked about the party behind a proxy ship (decision
+ * 0059): the host it reached an MCP server at over TLS, and the domain of the
+ * metadata document it read an MCP client's id from over TLS. A client argo
+ * registered has no document, and an address without TLS proves no host.
+ */
+export function verifiedFactsOf(party: Party): VerifiedFact[] {
+  const host = tlsHostOf(party.kind === 'mcpServer' ? party.url : party.clientId);
+  if (host === undefined) {
+    return [];
+  }
+  return [party.kind === 'mcpServer' ? { checked: 'tlsHost', value: host } : { checked: 'clientIdDocumentDomain', value: host }];
+}
