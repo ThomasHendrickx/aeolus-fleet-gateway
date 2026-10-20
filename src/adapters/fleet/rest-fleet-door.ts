@@ -164,7 +164,7 @@ export function createRestFleetDoor(
       const { status, scopes } = read.value;
       return ok({ status, scopes });
     },
-    // An app ship owned by the owner argo picked: core 0.28's commission (aeolus-fleet#959).
+    // An app ship owned by the owner argo picked (decision 0045).
     commissionAppShip: async (crewToken, { name, type, owner, idempotencyKey, scopes }) => {
       const commissioned = await call({
         path: '/fleet/commission',
@@ -179,7 +179,7 @@ export function createRestFleetDoor(
       const ended = await call({ path: '/ship/deregister', method: 'POST', crewToken, body: {}, answers: z.unknown() });
       return ended.isOk ? ok(undefined) : ended;
     },
-    // The whole statement, as the proxy ship's crew; core 0.27 refuses the fields it does not know yet (aeolus-fleet#956).
+    // The whole statement, as the proxy ship's crew.
     setStatement: async (crewToken, statement) => {
       const stated = await call({ path: '/ship/setStatement', method: 'POST', crewToken, body: statement, answers: z.object({ version: z.int() }) });
       return stated.isOk ? ok(undefined) : stated;
