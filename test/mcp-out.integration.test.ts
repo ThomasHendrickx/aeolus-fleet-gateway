@@ -1,8 +1,9 @@
-import { discoverOutputSchema, idSchema, type ShipId } from '@aeolus-fleet/common';
+import { discoverOutputSchema, idSchema, needsAttentionOutputSchema, type ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
+import { MAY_HAVE_RUN } from '../src/core/mcp-out/hand-call.js';
 import { MOCK_CRM_BEARER, startMockCrm, type MockCrm } from './fixtures/mock-crm/mock-crm.js';
 import { applyEmptyOwnRules, commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
@@ -18,6 +19,8 @@ import { outsidePartiesOn } from './support/outside-parties.js';
 // sending to its proxy ship, and the gateway replies with each result.
 
 const TOOL_CALL_TIMEOUT_MS = 1_000;
+/** How many times a test reads Needs attention, a tool call timeout apart, before it counts it empty. */
+const NEEDS_ATTENTION_TRIES = 10;
 const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
 
 /** A reply's payload, read back. */
@@ -70,6 +73,19 @@ async function approved(address: string): Promise<void> {
   proxyShipId = party.result.data.proxyShipId;
 }
 
+/** Needs attention as argo reads it, once it lists a delivery: the gateway reports a call it judged may have run after its timeout. */
+async function needsAttention() {
+  for (let tries = 0; tries < NEEDS_ATTENTION_TRIES; tries += 1) {
+    const response = await fetch(`${fleet.url}/trpc/fleet.needsAttention`, { headers: { cookie } });
+    const listed = needsAttentionOutputSchema.parse(z.object({ result: z.object({ data: z.unknown() }) }).parse(await response.json()).result.data);
+    if (listed.length > 0) {
+      return listed;
+    }
+    await new Promise((resolve) => setTimeout(resolve, TOOL_CALL_TIMEOUT_MS));
+  }
+  return [];
+}
+
 function callTool(tool: string, args: Record<string, unknown>) {
   return send(fleet, { crewToken: caller.crewToken, to: proxyShipId, contentType: `application/vnd.aeolus.mcp-tool+json; name=${tool}`, payload: JSON.stringify(args) });
 }
@@ -109,6 +125,18 @@ describe('a ship of the fleet calls an outside MCP server through its proxy ship
     await new Promise((resolve) => setTimeout(resolve, TOOL_CALL_TIMEOUT_MS * 4));
 
     expect(crm.calls.get('forecast_revenue')).toBe(1);
+  });
+
+  it('shows the call that may have run in Needs attention, saying why, for argo to dismiss (aeolus-fleet#955)', async () => {
+    crm.isSlowToolHeld = true;
+    await approved(await started());
+    await callTool('forecast_revenue', {});
+
+    const listed = await needsAttention();
+
+    expect(listed.map(({ state, reason, ship }) => ({ state, reason, shipId: ship.id }))).toEqual([{ state: 'notHandled', reason: MAY_HAVE_RUN, shipId: proxyShipId }]);
+    const dismissed = await fetch(`${fleet.url}/trpc/fleet.dismiss`, { method: 'POST', headers: { 'content-type': 'application/json', origin: fleet.url, cookie }, body: JSON.stringify({ deliveryId: listed[0]?.deliveryId }) });
+    expect(dismissed.status, await dismissed.clone().text()).toBe(200);
   });
 
   it('takes the calls again after a restart, with the kept crew token', async () => {
