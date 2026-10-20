@@ -5,6 +5,8 @@ import { z } from 'zod';
 
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
+import type { DecideRequest } from '../../core/requests/decide-request.js';
+import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
 import { gatewayRouter, type Context } from './router.js';
 
@@ -16,10 +18,26 @@ const MANAGER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9mgr';
 /** A ship's own crew tokens: one holding fleet:manage, one only reading. */
 const MANAGER_CREW = 'aeolus_ct_v1_manager';
 const READER_CREW = 'aeolus_ct_v1_reader';
+/** A ship's own crew token holding gateway:approve. */
+const APPROVER_CREW = 'aeolus_ct_v1_approver';
+const REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0001';
+const DECIDED = 'req_01m5c7hmbt9f1vrkwb37az0002';
+const ORDERBOT_REQUEST: PendingRequest = {
+  fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8sv',
+  requestId: REQUEST_ID,
+  subject: { kind: 'client', clientId: 'https://orderbot.example.com/client.json', clientName: 'Orderbot' },
+  requesters: [{ accountId: 'acc-charlotte', personShipId: 'shp_01m3tbfspe96yf1rnr4ank9wnr' }],
+  askedAt: new Date('2026-10-20T09:00:00.000Z'),
+  expiresAt: new Date('2026-10-27T09:00:00.000Z'),
+  state: 'pending',
+  decidedBy: null,
+  decidedAt: null,
+};
 
 /** A context with only what the parties procedures read; every approval it is asked for is recorded. */
-function aContext(cookie: string | undefined, crewToken?: string): { context: Context; approvals: Parameters<ApproveParty>[0][]; marks: Parameters<MarkTool>[0][] } {
+function aContext(cookie: string | undefined, crewToken?: string): { context: Context; approvals: Parameters<ApproveParty>[0][]; marks: Parameters<MarkTool>[0][]; decisions: Parameters<DecideRequest>[0][] } {
   const approvals: Parameters<ApproveParty>[0][] = [];
+  const decisions: Parameters<DecideRequest>[0][] = [];
   const marks: Parameters<MarkTool>[0][] = [];
   const unused = () => Promise.reject(new Error('not used by the parties procedures'));
   const context: Context = {
@@ -27,7 +45,8 @@ function aContext(cookie: string | undefined, crewToken?: string): { context: Co
     crewToken,
     authenticateActor: (sent) => {
       if (sent.crewToken !== undefined) {
-        return Promise.resolve(ok({ fleetId: FLEET, kind: 'ship' as const, shipId: MANAGER, scopes: sent.crewToken === MANAGER_CREW ? ['fleet:read', 'fleet:manage'] : ['fleet:read'] }));
+        const scopes = { [MANAGER_CREW]: ['fleet:read', 'fleet:manage'], [APPROVER_CREW]: ['fleet:read', 'gateway:approve'] }[sent.crewToken] ?? ['fleet:read'];
+        return Promise.resolve(ok({ fleetId: FLEET, kind: 'ship' as const, shipId: MANAGER, scopes }));
       }
       return Promise.resolve(ok(sent.cookie === ARGO_COOKIE ? { fleetId: FLEET, kind: 'operator' as const, scopes: ['fleet:read', 'fleet:manage'] } : { fleetId: FLEET, kind: 'viewer' as const, scopes: ['fleet:read'] }));
     },
@@ -52,8 +71,17 @@ function aContext(cookie: string | undefined, crewToken?: string): { context: Co
       marks.push(input);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));
     },
+    listToDecide: (actor) =>
+      Promise.resolve(actor.scopes.includes('gateway:approve') ? ok([ORDERBOT_REQUEST]) : err({ kind: 'NOT_AN_APPROVER' as const, message: 'Deciding requests needs gateway:approve' })),
+    decideRequest: (input) => {
+      decisions.push(input);
+      if (input.requestId === DECIDED) {
+        return Promise.resolve(err({ kind: 'ALREADY_DECIDED' as const, message: 'This request was denied already' }));
+      }
+      return Promise.resolve(ok({ state: 'denied' as const, party: null }));
+    },
   };
-  return { context, approvals, marks };
+  return { context, approvals, marks, decisions };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -69,7 +97,7 @@ describe("argo approves parties through the gateway's API", () => {
 
     await gatewayRouter.createCaller(context).parties.approve(APPROVAL);
 
-    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4 }]);
+    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [] }]);
   });
 
   it('refuses a viewer, who only reads', async () => {
@@ -84,7 +112,7 @@ describe("argo approves parties through the gateway's API", () => {
 
     await gatewayRouter.createCaller(context).parties.approve(APPROVAL);
 
-    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4 }]);
+    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [] }]);
   });
 
   it('refuses a ship that only reads, and lets it read the parties', async () => {
@@ -175,5 +203,43 @@ describe('argo pre-registers MCP clients through the gateway\'s API', () => {
 
   it('answers BAD_REQUEST to redirect URIs it refuses', async () => {
     await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).oauth.registerClient({ name: 'Cursor', redirectUris: [], isConfidential: true })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+});
+
+type DecideInput = Parameters<ReturnType<typeof gatewayRouter.createCaller>['requests']['decide']>[0];
+
+describe("an approver decides pending requests through the gateway's API (decision 0056)", () => {
+  it('lists the requests to decide, their times as ISO text', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context).requests.toDecide()).resolves.toEqual([
+      { ...ORDERBOT_REQUEST, askedAt: '2026-10-20T09:00:00.000Z', expiresAt: '2026-10-27T09:00:00.000Z', decidedAt: null },
+    ]);
+  });
+
+  it('answers FORBIDDEN to an actor without gateway:approve', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined, READER_CREW).context).requests.toDecide()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('decides as the actor, with the owner and scopes given', async () => {
+    const { context, decisions } = aContext(undefined, APPROVER_CREW);
+    const decision = { kind: 'approve' as const, party: { name: 'orderbot', ownerShipId: OWNER, scopes: ['fleet:read'] } };
+
+    await gatewayRouter.createCaller(context).requests.decide({ requestId: REQUEST_ID, decision });
+
+    expect(decisions).toEqual([{ actor: { fleetId: FLEET, kind: 'ship', shipId: MANAGER, scopes: ['fleet:read', 'gateway:approve'] }, requestId: REQUEST_ID, decision }]);
+  });
+
+  it('answers CONFLICT to a request decided already', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context).requests.decide({ requestId: DECIDED, decision: { kind: 'deny' } })).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it.each([
+    ['a decision it does not know', { requestId: REQUEST_ID, decision: { kind: 'hold' } }],
+    ['an owner that is no ship id', { requestId: REQUEST_ID, decision: { kind: 'approve', party: { name: 'orderbot', ownerShipId: 'charlotte', scopes: [] } } }],
+    ['a name that is no ship handle', { requestId: REQUEST_ID, decision: { kind: 'approve', party: { name: 'Order Bot', ownerShipId: OWNER, scopes: [] } } }],
+  ])('refuses %s, deciding nothing', async (_what, input) => {
+    const { context, decisions } = aContext(undefined, APPROVER_CREW);
+
+    await expect(gatewayRouter.createCaller(context).requests.decide(z.custom<DecideInput>(() => true).parse(input))).rejects.toBeInstanceOf(TRPCError);
+    expect(decisions).toEqual([]);
   });
 });

@@ -29,6 +29,9 @@ import type { ListParties } from '../../core/parties/list-parties.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { StateParty } from '../../core/mcp-out/state-party.js';
 import type { RegisterClient } from '../../core/oauth/register-client.js';
+import type { DecideRequest, DecideRefusal } from '../../core/requests/decide-request.js';
+import type { ListToDecide } from '../../core/requests/list-to-decide.js';
+import type { PendingRequest } from '../../core/requests/ports.js';
 
 export interface Context {
   /** The Cookie header the console's server or the gateway's page forwarded. */
@@ -53,6 +56,8 @@ export interface Context {
   stateParty: StateParty;
   markTool: MarkTool;
   registerClient: RegisterClient;
+  listToDecide: ListToDecide;
+  decideRequest: DecideRequest;
 }
 
 /** What a caller reads of a failure: nothing of it, so no crew token, secret or query ever leaves; the log holds it whole. */
@@ -68,7 +73,7 @@ const actorProcedure = t.procedure.use(async ({ ctx, next }) => {
   if (!actor.isOk) {
     throw new TRPCError({ code: 'UNAUTHORIZED', message: actor.error.message });
   }
-  return next({ ctx: { fleetId: actor.value.fleetId, scopes: actor.value.scopes } });
+  return next({ ctx: { actor: actor.value, fleetId: actor.value.fleetId, scopes: actor.value.scopes } });
 });
 
 /**
@@ -203,6 +208,48 @@ const connectionStatusOutputSchema = z.object({
   lastShipId: z.string().nullable(),
 });
 
+/** The refusals of deciding a request, as the API states them. */
+const DECIDE_CODES = {
+  NOT_AN_APPROVER: 'FORBIDDEN',
+  SCOPE_NOT_HELD: 'FORBIDDEN',
+  NO_SUCH_REQUEST: 'NOT_FOUND',
+  ALREADY_DECIDED: 'CONFLICT',
+  EXPIRED: 'CONFLICT',
+  CLIENT_HAS_PARTY: 'CONFLICT',
+  PARTY_EXISTS: 'CONFLICT',
+  SERVER_DETAILS_MISSING: 'BAD_REQUEST',
+  COMMISSION_REFUSED: 'BAD_REQUEST',
+  NOT_CONNECTED: 'PRECONDITION_FAILED',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+} as const satisfies Record<DecideRefusal['kind'], TRPCError['code']>;
+
+/** A pending request as the API answers it: its times as ISO text. */
+const pendingRequestSchema = z.object({
+  fleetId: z.string(),
+  requestId: z.string(),
+  subject: z.discriminatedUnion('kind', [z.object({ kind: z.literal('client'), clientId: z.string(), clientName: z.string() }), z.object({ kind: z.literal('server'), url: z.string() })]),
+  requesters: z.array(z.object({ accountId: z.string(), personShipId: z.string().nullable() })),
+  askedAt: z.string(),
+  expiresAt: z.string(),
+  state: z.enum(['pending', 'approving', 'approved', 'denied', 'expired']),
+  decidedBy: z.union([z.object({ kind: z.literal('ship'), shipId: z.string() }), z.object({ kind: z.enum(['operator', 'viewer']) })]).nullable(),
+  decidedAt: z.string().nullable(),
+});
+
+function shownRequestOf(request: PendingRequest): z.infer<typeof pendingRequestSchema> {
+  return { ...request, requesters: [...request.requesters], askedAt: request.askedAt.toISOString(), expiresAt: request.expiresAt.toISOString(), decidedAt: request.decidedAt?.toISOString() ?? null };
+}
+
+/** A decision as the API takes it: deny, or approve naming the proxy ship, its owner and its scopes, and for a server its credential. */
+const decisionSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('deny') }),
+  z.strictObject({
+    kind: z.literal('approve'),
+    party: z.strictObject({ name: shipHandleSchema, ownerShipId: idSchema('ship'), scopes: z.array(z.string()) }),
+    server: z.strictObject({ credential: credentialInputSchema, concurrencyLimit: z.int().min(CONCURRENCY_LIMIT_MIN).max(CONCURRENCY_LIMIT_MAX) }).optional(),
+  }),
+]);
+
 export const gatewayRouter = t.router({
   connection: t.router({
     /** Whether the gateway is connected to the operator's fleet, as which ship, and the ship it was last connected as. */
@@ -252,7 +299,7 @@ export const gatewayRouter = t.router({
       )
       .output(shownPartySchema)
       .mutation(async ({ ctx, input }) => {
-        const approved = await ctx.approveParty({ operatorFleetId: ctx.fleetId, ...input });
+        const approved = await ctx.approveParty({ operatorFleetId: ctx.fleetId, ...input, scopes: [] });
         if (!approved.isOk) {
           throw new TRPCError({ code: APPROVE_CODES[approved.error.kind], message: approved.error.message });
         }
@@ -290,6 +337,27 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: STATE_CODES[stated.error.kind], message: stated.error.message });
         }
         return stated.value;
+      }),
+  }),
+  requests: t.router({
+    /** Every open request of the fleet, for an actor holding gateway:approve (decision 0056). */
+    toDecide: servedProcedure.output(z.array(pendingRequestSchema)).query(async ({ ctx }) => {
+      const listed = await ctx.listToDecide(ctx.actor);
+      if (!listed.isOk) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: listed.error.message });
+      }
+      return listed.value.map(shownRequestOf);
+    }),
+    /** Decides a pending request as the actor: the first decision counts. */
+    decide: servedProcedure
+      .input(z.strictObject({ requestId: z.string().min(1), decision: decisionSchema }))
+      .output(z.object({ state: z.enum(['approved', 'denied']), party: shownPartySchema.nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        const decided = await ctx.decideRequest({ actor: ctx.actor, ...input });
+        if (!decided.isOk) {
+          throw new TRPCError({ code: DECIDE_CODES[decided.error.kind], message: decided.error.message });
+        }
+        return decided.value;
       }),
   }),
   oauth: t.router({

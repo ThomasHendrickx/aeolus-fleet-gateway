@@ -19,12 +19,13 @@ export interface ProxyShipDoor {
   /**
    * Commissions an app ship as the gateway's ship (fleet:commission and
    * fleet:on-behalf, decision 0044), owned by the owner argo picked (0045),
+   * with the scopes granted, only ones the gateway's ship holds (0053),
    * under the gateway's idempotency key: its id, and on the first commission
    * its secret. A repeat under the same key answers the same ship without one.
    */
   commissionAppShip(
     crewToken: string,
-    ship: { name: string; type: string; owner: ShipId; idempotencyKey: string },
+    ship: { name: string; type: string; owner: ShipId; idempotencyKey: string; scopes: readonly string[] },
   ): Promise<Result<{ shipId: ShipId; secret: string | null }, FleetRefusal>>;
   register(claim: { shipId: ShipId; secret: string }): Promise<Result<{ crewToken: string }, FleetRefusal>>;
 }

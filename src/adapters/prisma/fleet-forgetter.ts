@@ -6,7 +6,7 @@ export function createPrismaFleetForgetter(db: PrismaClient): FleetForgetter {
   return {
     forget: async (fleetId) => {
       const where = { where: { fleetId } };
-      await db.$transaction([db.connection.deleteMany(where), db.fleetSwitch.deleteMany(where), db.party.deleteMany(where), db.toolMark.deleteMany(where), db.call.deleteMany(where), db.clientCall.deleteMany(where), db.clientCallReply.deleteMany(where), db.oAuthClient.deleteMany(where), db.authorizationCode.deleteMany(where), db.issuedToken.deleteMany(where), db.accountGrant.deleteMany(where), db.personCrew.deleteMany(where), db.openedDelivery.deleteMany(where), db.installationRequest.deleteMany(where)]);
+      await db.$transaction([db.connection.deleteMany(where), db.fleetSwitch.deleteMany(where), db.party.deleteMany(where), db.toolMark.deleteMany(where), db.call.deleteMany(where), db.clientCall.deleteMany(where), db.clientCallReply.deleteMany(where), db.oAuthClient.deleteMany(where), db.authorizationCode.deleteMany(where), db.issuedToken.deleteMany(where), db.accountGrant.deleteMany(where), db.personCrew.deleteMany(where), db.openedDelivery.deleteMany(where), db.pendingRequest.deleteMany(where), db.installationRequest.deleteMany(where)]);
     },
   };
 }

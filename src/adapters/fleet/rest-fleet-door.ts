@@ -155,12 +155,12 @@ export function createRestFleetDoor(
       return ok({ status, scopes });
     },
     // An app ship owned by the owner argo picked: core 0.28's commission (aeolus-fleet#959).
-    commissionAppShip: async (crewToken, { name, type, owner, idempotencyKey }) => {
+    commissionAppShip: async (crewToken, { name, type, owner, idempotencyKey, scopes }) => {
       const commissioned = await call({
         path: '/fleet/commission',
         method: 'POST',
         crewToken,
-        body: { name, type, kind: 'app', owner, idempotencyKey },
+        body: { name, type, kind: 'app', owner, idempotencyKey, scopes },
         answers: commissionShipOutputSchema,
       });
       return commissioned.isOk ? ok({ shipId: commissioned.value.shipId, secret: commissioned.value.secret }) : commissioned;

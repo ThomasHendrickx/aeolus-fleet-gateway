@@ -22,14 +22,14 @@ beforeEach(async () => {
 });
 
 function anApproval(overrides: Partial<Parameters<typeof approve>[0]> = {}): Parameters<typeof approve>[0] {
-  return { operatorFleetId: FLEET_ID, requestId: 'r-1', name: 'claude', clientId: CLAUDE, ownerShipId: OWNER_SHIP_ID, ...overrides };
+  return { operatorFleetId: FLEET_ID, requestId: 'r-1', name: 'claude', clientId: CLAUDE, ownerShipId: OWNER_SHIP_ID, scopes: [], ...overrides };
 }
 
 describe('argo approves an outside MCP client as a party, at its first authorization (interop I-5)', () => {
   it('commissions its app proxy ship of type mcp-client with the owner argo picked, under the approval as its key', async () => {
     await approve(anApproval());
 
-    expect(fleet.state.commissioned).toEqual([{ name: 'claude', type: 'mcp-client', owner: OWNER_SHIP_ID, idempotencyKey: 'r-1' }]);
+    expect(fleet.state.commissioned).toEqual([{ name: 'claude', type: 'mcp-client', owner: OWNER_SHIP_ID, idempotencyKey: 'r-1', scopes: [] }]);
   });
 
   it('crews the proxy ship and keeps its crew token with the client id', async () => {
