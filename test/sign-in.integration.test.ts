@@ -17,7 +17,7 @@ import { aClientProvider, aRegisteredClient, CALLBACK, TEST_GATEWAY_SECRET, type
 // gateway's code for tokens. Here pagasae is a fake; the fleet and the
 // gateway are real.
 
-const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf'];
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
 
 let setting: Setting;
 let app: GatewayApp;

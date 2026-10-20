@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
-import { commission, registerNetworkingPlugin, signIn } from './support/argo.js';
+import { commission, register, registerNetworkingPlugin, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
@@ -14,7 +14,7 @@ import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 // database and is connected again after a restart. It serves only a fleet with
 // a registered networking plugin (interop I-3).
 
-const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf'];
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
 const INSTALLATION_TOKEN = 'an-installation-token-of-at-least-32-characters';
 
 let fleet: FleetServer;
@@ -82,6 +82,18 @@ describe('argo connects the gateway', () => {
 
     expect(response.status, await response.clone().text()).toBe(200);
     await expect(status(address)).resolves.toEqual({ enabled: true, state: 'connected', ship: { shipId: gatewayShip.shipId, name: 'gateway' }, lastShipId: gatewayShip.shipId });
+  });
+
+  it("declares its approving scope in the fleet, gateway:approve, declared by the gateway's ship (decision 0056)", async () => {
+    await registerNetworkingPlugin(fleet, cookie);
+    const address = await started();
+    await connectGateway(address, { cookie, ...gatewayShip });
+    const reader = await register(fleet, await commission(fleet, { cookie, ship: { name: 'reader', type: 'agent', scopes: ['fleet:read'] } }));
+
+    const answer = await fetch(`${fleet.url}/api/v1/fleet/scopes`, { headers: { authorization: `Bearer ${reader}` } });
+
+    const namespaces = z.array(z.object({ namespace: z.string(), declaredBy: z.object({ name: z.string() }).nullable(), scopes: z.array(z.object({ scope: z.string() })) })).parse(await answer.json());
+    expect(namespaces.find(({ namespace }) => namespace === 'gateway')).toEqual({ namespace: 'gateway', declaredBy: { name: 'gateway' }, scopes: [{ scope: 'gateway:approve' }] });
   });
 
   it('is refused in a fleet with no networking plugin, and stays not connected (interop I-3)', async () => {
