@@ -132,3 +132,33 @@ describe('redeeming the code pagasae sent the person back with', () => {
     await expect(unreachable.redeemCode({ code: 'pagasae-code-1', verifier: 'verifier-1' })).resolves.toMatchObject({ isOk: false });
   });
 });
+
+describe("refreshing a person's account token at pagasae", () => {
+  it("posts the refresh token and the gateway's secret to pagasae's token endpoint", async () => {
+    await pagasae().refresh('pagasae-refresh-1');
+
+    expect(received.map(({ url, form }) => ({ url, form: Object.fromEntries(form) }))).toEqual([
+      { url: '/oauth/token', form: { grant_type: 'refresh_token', refresh_token: 'pagasae-refresh-1', client_id: 'gateway', client_secret: SECRET } },
+    ]);
+  });
+
+  it('answers the new account token and refresh token, and what the token names', async () => {
+    await expect(pagasae().refresh('pagasae-refresh-1')).resolves.toMatchObject({ isOk: true, value: { accountToken: anAccountToken(CHARLOTTE), refreshToken: 'pagasae-refresh-1', fleetId: FLEET, personShipId: PERSON_SHIP } });
+  });
+
+  it("answers refused for pagasae's invalid_grant: the grant ended", async () => {
+    answer = { status: 400, body: { error: 'invalid_grant' } };
+
+    await expect(pagasae().refresh('pagasae-refresh-1')).resolves.toEqual({ isOk: false, error: { kind: 'refused', reason: 'invalid_grant' } });
+  });
+
+  it('answers unavailable when pagasae does not answer, or answers 5xx', async () => {
+    answer = { status: 503, body: {} };
+    const unreachable = createPagasae({ url: 'http://127.0.0.1:1', clientId: 'gateway', clientSecret: SECRET, redirectUri: REDIRECT_URI, timeoutMs: 1000 });
+
+    await expect(Promise.all([pagasae().refresh('pagasae-refresh-1'), unreachable.refresh('pagasae-refresh-1')])).resolves.toMatchObject([
+      { isOk: false, error: { kind: 'unavailable' } },
+      { isOk: false, error: { kind: 'unavailable' } },
+    ]);
+  });
+});
