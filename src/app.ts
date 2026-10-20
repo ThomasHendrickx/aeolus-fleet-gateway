@@ -71,6 +71,7 @@ import { createReadClientParty } from './core/parties/read-client-party.js';
 import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
 import { createListParties } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
+import { createAuthenticateActor } from './core/actors/authenticate-actor.js';
 import type { Pagasae } from './core/sign-in/ports.js';
 
 export const systemClock: Clock = { now: () => new Date() };
@@ -108,6 +109,9 @@ const CLIENT_METADATA_TIMEOUT_MS = 5_000;
 
 /** How long pagasae's token endpoint may take to answer. */
 const PAGASAE_TIMEOUT_MS = 10_000;
+
+/** How a ship sends its own crew token to the gateway's API: as a bearer token (decision 0057). */
+const BEARER = 'Bearer ';
 
 /** How often a proxy ship's worker looks again while the fleet hands it only what it holds, or does not answer. */
 const POLL_MS = 2_000;
@@ -293,9 +297,10 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
 
   // What every call of the API reads, from the request's console session and installation token.
-  const contextFor = (sent: { cookie: string | undefined; installationTokenSent: string | undefined }): Context => ({
+  const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections });
+  const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; installationTokenSent: string | undefined }): Context => ({
     ...sent,
-    authenticateOperator,
+    authenticateActor,
     isServed,
     heldConnection,
     installation: { mode: installation, token: options.installationToken },
@@ -324,13 +329,14 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       createContext: ({ req }) =>
         contextFor({
           cookie: req.headers.cookie,
+          crewToken: req.headers.authorization?.startsWith(BEARER) === true ? req.headers.authorization.slice(BEARER.length) : undefined,
           installationTokenSent: typeof req.headers['x-aeolus-installation-token'] === 'string' ? req.headers['x-aeolus-installation-token'] : undefined,
         }),
     },
   };
   void server.register(fastifyTRPCPlugin, trpc);
   // The page calls the API as the caller, with the forwarded console session; it never takes the installation token.
-  registerPartiesPage(server, { contextFor: (cookie) => contextFor({ cookie, installationTokenSent: undefined }), fleetUrl: options.fleetUrl });
+  registerPartiesPage(server, { contextFor: (cookie) => contextFor({ cookie, crewToken: undefined, installationTokenSent: undefined }), fleetUrl: options.fleetUrl });
 
   server.addHook('onClose', async () => {
     await prisma.$disconnect();

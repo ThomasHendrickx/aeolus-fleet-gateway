@@ -9,6 +9,7 @@ export type DomainErrorKind =
   | 'NO_NETWORKING_PLUGIN'
   | 'SCOPE_REFUSED'
   | 'NOT_THE_OPERATOR'
+  | 'NOT_AN_ACTOR'
   | 'REQUEST_ID_USED'
   | 'FLEET_UNAVAILABLE'
   | 'NOT_CONNECTED'

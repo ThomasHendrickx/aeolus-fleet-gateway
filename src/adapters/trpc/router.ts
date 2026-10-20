@@ -1,9 +1,11 @@
 /**
  * The gateway's API: one tRPC router, which the console's server and the
  * gateway's page call with the console's session cookie, as the other
- * plugins' (decision 0043). Every procedure but the installation's is the
- * operator's: the cookie must be a signed-in console session of a fleet at
- * the fleet's URL, and the procedure works on that fleet. A fleet the gateway
+ * plugins' (decision 0043), and any ship with its own crew token (decision
+ * 0057). Every procedure but the installation's is an actor's: argo or a
+ * viewer by a console session of a fleet at the fleet's URL, or a ship of a
+ * fleet the gateway is connected to, and the procedure works on that fleet.
+ * What it may call is the scopes the fleet holds for it. A fleet the gateway
  * does not serve (switched off) gets only `connection.status`. The
  * installation procedures take the installation token instead (decision 0021).
  */
@@ -20,7 +22,7 @@ import type { InstallationMode } from '../../core/installation/ports.js';
 import type { ReadFleet } from '../../core/installation/read-fleet.js';
 import type { IsServed } from '../../core/installation/served.js';
 import type { SetFleetEnabled } from '../../core/installation/set-fleet-enabled.js';
-import type { AuthenticateOperator } from '../../core/operator/authenticate-operator.js';
+import type { AuthenticateActor } from '../../core/actors/authenticate-actor.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListParties } from '../../core/parties/list-parties.js';
@@ -31,7 +33,9 @@ import type { RegisterClient } from '../../core/oauth/register-client.js';
 export interface Context {
   /** The Cookie header the console's server or the gateway's page forwarded. */
   cookie: string | undefined;
-  authenticateOperator: AuthenticateOperator;
+  /** The crew token a ship sent as its bearer token, if any. */
+  crewToken: string | undefined;
+  authenticateActor: AuthenticateActor;
   isServed: IsServed;
   /** The fleet's connection as the gateway holds it, without asking the fleet: what a fleet that is off reads. */
   heldConnection: ReadConnection;
@@ -59,23 +63,23 @@ const t = initTRPC.context<Context>().create({
   errorFormatter: ({ shape, error }) => (error.code === 'INTERNAL_SERVER_ERROR' ? { ...shape, message: INTERNAL_ERROR_MESSAGE } : shape),
 });
 
-const operatorProcedure = t.procedure.use(async ({ ctx, next }) => {
-  const operator = await ctx.authenticateOperator(ctx.cookie);
-  if (!operator.isOk) {
-    throw new TRPCError({ code: 'UNAUTHORIZED', message: operator.error.message });
+const actorProcedure = t.procedure.use(async ({ ctx, next }) => {
+  const actor = await ctx.authenticateActor({ cookie: ctx.cookie, crewToken: ctx.crewToken });
+  if (!actor.isOk) {
+    throw new TRPCError({ code: 'UNAUTHORIZED', message: actor.error.message });
   }
-  return next({ ctx: { fleetId: operator.value.fleetId, scopes: operator.value.scopes } });
+  return next({ ctx: { fleetId: actor.value.fleetId, scopes: actor.value.scopes } });
 });
 
 /**
- * What changes the fleet needs the session's ship to hold fleet:manage: argo
- * does, a viewer session (fleet:read only, decision 0022) does not, so it is
- * served reads only. Checked before the input is read.
+ * What changes the fleet needs the actor to hold fleet:manage: argo does, a
+ * viewer session (fleet:read only, decision 0022) does not, so it is served
+ * reads only; a ship as its scopes say. Checked before the input is read.
  */
-function managing(procedure: typeof operatorProcedure) {
+function managing(procedure: typeof actorProcedure) {
   return procedure.use(({ ctx, next }) => {
     if (!ctx.scopes.includes('fleet:manage')) {
-      throw new TRPCError({ code: 'FORBIDDEN', message: 'Needs fleet:manage: a viewer session only reads' });
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Needs fleet:manage' });
     }
     return next();
   });
@@ -111,7 +115,7 @@ async function refuseUnlessServed(ctx: { fleetId: FleetId; isServed: IsServed })
 }
 
 /** The operator's procedures that need the gateway to serve their fleet. */
-const servedProcedure = operatorProcedure.use(async ({ ctx, next }) => {
+const servedProcedure = actorProcedure.use(async ({ ctx, next }) => {
   await refuseUnlessServed(ctx);
   return next();
 });
@@ -202,7 +206,7 @@ const connectionStatusOutputSchema = z.object({
 export const gatewayRouter = t.router({
   connection: t.router({
     /** Whether the gateway is connected to the operator's fleet, as which ship, and the ship it was last connected as. */
-    status: operatorProcedure.output(connectionStatusOutputSchema).query(async ({ ctx }) => {
+    status: actorProcedure.output(connectionStatusOutputSchema).query(async ({ ctx }) => {
       // A fleet that is off is read from what the gateway holds: it asks its fleet nothing then.
       const isServed = await ctx.isServed(ctx.fleetId);
       const connection = isServed ? await ctx.readConnection(ctx.fleetId) : await ctx.heldConnection(ctx.fleetId);
@@ -293,7 +297,7 @@ export const gatewayRouter = t.router({
      * argo pre-registers an MCP client for its fleet: its name and redirect
      * URIs, and whether it keeps a secret. The secret is answered this once.
      */
-    registerClient: managing(operatorProcedure)
+    registerClient: managing(actorProcedure)
       .input(z.strictObject({ name: z.string().min(1).max(CLIENT_NAME_MAX_LENGTH), redirectUris: z.array(z.string()), isConfidential: z.boolean() }))
       .output(z.object({ clientId: z.string(), clientSecret: z.string().nullable() }))
       .mutation(async ({ ctx, input }) => {
