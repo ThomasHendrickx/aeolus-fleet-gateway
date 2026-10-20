@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
-import { commission, register, registerNetworkingPlugin, signIn } from './support/argo.js';
+import { commission, register, applyEmptyOwnRules, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
@@ -74,8 +74,8 @@ describe('a gateway that was never connected', () => {
 });
 
 describe('argo connects the gateway', () => {
-  it('in a fleet with a networking plugin: the gateway registers its ship and is connected as it', async () => {
-    await registerNetworkingPlugin(fleet, cookie);
+  it('in a fleet with its own rules applied: the gateway registers its ship and is connected as it', async () => {
+    await applyEmptyOwnRules(fleet, cookie);
     const address = await started();
 
     const response = await connectGateway(address, { cookie, ...gatewayShip });
@@ -85,7 +85,6 @@ describe('argo connects the gateway', () => {
   });
 
   it("declares its approving scope in the fleet, gateway:approve, declared by the gateway's ship (decision 0056)", async () => {
-    await registerNetworkingPlugin(fleet, cookie);
     const address = await started();
     await connectGateway(address, { cookie, ...gatewayShip });
     const reader = await register(fleet, await commission(fleet, { cookie, ship: { name: 'reader', type: 'agent', scopes: ['fleet:read'] } }));
@@ -97,7 +96,6 @@ describe('argo connects the gateway', () => {
   });
 
   it("serves a ship by its own crew token, with the scopes the fleet holds for it (decision 0057)", async () => {
-    await registerNetworkingPlugin(fleet, cookie);
     const address = await started();
     await connectGateway(address, { cookie, ...gatewayShip });
     const reader = await register(fleet, await commission(fleet, { cookie, ship: { name: 'reader', type: 'agent', scopes: ['fleet:read'] } }));
@@ -111,7 +109,7 @@ describe('argo connects the gateway', () => {
     expect([read.status, changed.status, forged.status]).toEqual([200, 403, 401]);
   });
 
-  it('connects in a fleet with no networking plugin: the fleet decides its network (interop I-3, Thomas 20 Oct)', async () => {
+  it('connects in a fleet with no rules of its own applied: the fleet decides its network (interop I-3, Thomas 20 Oct)', async () => {
     const address = await started();
 
     const response = await connectGateway(address, { cookie, ...gatewayShip });
@@ -121,7 +119,6 @@ describe('argo connects the gateway', () => {
   });
 
   it('is refused for a ship without the gateway scopes', async () => {
-    await registerNetworkingPlugin(fleet, cookie);
     const reader = await commission(fleet, { cookie, ship: { name: 'reader', type: 'gateway', scopes: ['fleet:read'] } });
     const address = await started();
 
@@ -131,7 +128,6 @@ describe('argo connects the gateway', () => {
   });
 
   it('is connected again after a restart with the kept crew token', async () => {
-    await registerNetworkingPlugin(fleet, cookie);
     await connectGateway(await started(), { cookie, ...gatewayShip });
     await Promise.all(apps.splice(0).map((app) => app.close()));
 
@@ -157,7 +153,7 @@ describe('the hosting service switches the gateway per fleet (decision 0021)', (
     await expect(status(address)).resolves.toMatchObject({ enabled: true });
   });
 
-  it('switches on a connected fleet with no networking plugin (interop I-3, Thomas 20 Oct)', async () => {
+  it('switches on a connected fleet with no rules of its own applied (interop I-3, Thomas 20 Oct)', async () => {
     const address = await started(INSTALLATION_TOKEN);
     const id = await fleetId();
     await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'r-1', fleetId: id, enabled: true } });

@@ -40,7 +40,7 @@
     "db:migrate": "tsx --env-file-if-exists=.env src/bin/aeolus-gateway.ts migrate"
   },
   "dependencies": {
-    "@aeolus-fleet/common": "^0.27.0",
+    "@aeolus-fleet/common": "^0.28.0",
     "@fastify/websocket": "^11.3.4",
     "@modelcontextprotocol/client": "^2.3.1",
     "@modelcontextprotocol/server": "^2.3.1",
@@ -53,7 +53,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@aeolus-fleet/core": "0.27.0",
+    "@aeolus-fleet/core": "^0.28.0",
     "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/ext-tasks": "0.2.2",
     "@testcontainers/postgresql": "^12.2.0",

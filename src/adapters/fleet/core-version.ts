@@ -11,7 +11,7 @@ import { ConfigError } from '../../config.js';
 import { runningVersion } from '../http/version.js';
 
 /** The oldest core the gateway runs against: the ship contract it calls (docs/compatibility.md). */
-export const MINIMUM_CORE_VERSION = '0.27.0';
+export const MINIMUM_CORE_VERSION = '0.28.0';
 
 /** Where core says its version, without authentication. */
 const CORE_VERSION_PATH = '/api/version';
