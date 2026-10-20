@@ -90,6 +90,12 @@ main.centred > .mark, main.centred > .ring, main.centred > .badge { width: auto;
 .going-on { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); }
 .going-on::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--tone-ok-fg); }
 .live-status { position: fixed; right: 16px; bottom: 16px; margin: 0; }
+.party-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.party-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.party-card .text { display: grid; min-width: 0; } .party-card .text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.party-card .facts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tag.protocol { padding: 0 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); font: 600 10px/16px var(--font-mono); color: var(--foreground); }
+.counts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0 0; }
 @media (max-width: 640px) { .actions > * { flex: 1; } button, .button { height: 44px; width: 100%; } }
 `;
 
