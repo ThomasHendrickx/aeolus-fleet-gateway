@@ -9,6 +9,8 @@ import { setTimeout as wait } from 'node:timers/promises';
 
 import {
   ACCOUNT_TOKEN_HEADER,
+  ON_BEHALF_OF_HEADER,
+  shipOutputSchema,
   busyWaitMs,
   commissionShipOutputSchema,
   discoverOutputSchema,
@@ -22,6 +24,7 @@ import {
   sendOutputSchema,
   shipDetailOutputSchema,
   startingPromptOutputSchema,
+  type ShipId,
 } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
@@ -29,7 +32,7 @@ import type { FleetDoor, FleetRefusal } from '../../core/connection/ports.js';
 import type { CallSender, Discovery } from '../../core/mcp-in/ports.js';
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
-import type { ProxyShipDoor, ProxyShipReads } from '../../core/parties/ports.js';
+import type { ProxyShipDoor } from '../../core/parties/ports.js';
 import type { AccountDoor, PersonShipDoor } from '../../core/people/ports.js';
 import type { Owners } from '../../core/requests/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
@@ -52,6 +55,8 @@ interface FleetCall<T> {
   crewToken?: string;
   /** The account a call is made for, beside the gateway's crew token (decision 0057). */
   accountToken?: string;
+  /** The ship a read is made on behalf of (fleet:on-behalf): it answers within that ship's read reach (decision 0034). */
+  onBehalfOf?: ShipId;
   body?: unknown;
   answers: z.ZodType<T>;
   /** Ends a call that waits, such as pushReceive, once it aborts. */
@@ -85,6 +90,9 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
   if (request.accountToken !== undefined) {
     headers[ACCOUNT_TOKEN_HEADER] = request.accountToken;
   }
+  if (request.onBehalfOf !== undefined) {
+    headers[ON_BEHALF_OF_HEADER] = request.onBehalfOf;
+  }
   if (request.body !== undefined) {
     headers['content-type'] = 'application/json';
   }
@@ -116,7 +124,7 @@ function questionOf(payload: string) {
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & ProxyShipReads & StatementDoor & ProxyShipCrew & Discovery & CallSender & AccountDoor & Owners & { person: PersonShipDoor } {
+): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & AccountDoor & Owners & { person: PersonShipDoor } {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   const done = async (crewToken: string, request: { path: string; body: unknown }) => {
@@ -141,23 +149,22 @@ export function createRestFleetDoor(
         crewToken,
         answers: z.object({ shipId: idSchema('ship'), fleetId: idSchema('fleet'), name: z.string(), type: z.string() }),
       }),
-    read: async (crewToken, ship) => {
-      const read = await call({ path: '/fleet/ship', method: 'POST', crewToken, body: ship, answers: shipDetailOutputSchema });
-      return read.isOk ? ok({ ownerShipId: read.value.owner?.id ?? null, scopes: [...read.value.scopes] }) : read;
-    },
     ownerOf: async (crewToken, shipId) => {
       const read = await call({ path: '/fleet/ship', method: 'POST', crewToken, body: { shipId }, answers: shipDetailOutputSchema });
       return read.isOk ? ok(read.value.owner?.id ?? null) : read;
     },
-    getShip: async (crewToken, ship) => {
-      const read = await call({ path: '/fleet/ship', method: 'POST', crewToken, body: ship, answers: shipDetailOutputSchema });
+    getShip: async (crewToken, { shipId, onBehalfOf }) => {
+      const read = await call({ path: '/fleet/ship', method: 'POST', crewToken, onBehalfOf, body: { shipId }, answers: shipOutputSchema });
       if (!read.isOk) {
         return read;
+      }
+      if ('isInReadReach' in read.value) {
+        return err({ code: 'FORBIDDEN', message: `${read.value.name} is outside the read reach` });
       }
       const { status, scopes } = read.value;
       return ok({ status, scopes });
     },
-    // An app ship owned by the owner argo picked: core 0.28's commission (aeolus-fleet#959).
+    // An app ship owned by the owner argo picked (decision 0045).
     commissionAppShip: async (crewToken, { name, type, owner, idempotencyKey, scopes }) => {
       const commissioned = await call({
         path: '/fleet/commission',
@@ -172,7 +179,7 @@ export function createRestFleetDoor(
       const ended = await call({ path: '/ship/deregister', method: 'POST', crewToken, body: {}, answers: z.unknown() });
       return ended.isOk ? ok(undefined) : ended;
     },
-    // The whole statement, as the proxy ship's crew; core 0.27 refuses the fields it does not know yet (aeolus-fleet#956).
+    // The whole statement, as the proxy ship's crew.
     setStatement: async (crewToken, statement) => {
       const stated = await call({ path: '/ship/setStatement', method: 'POST', crewToken, body: statement, answers: z.object({ version: z.int() }) });
       return stated.isOk ? ok(undefined) : stated;

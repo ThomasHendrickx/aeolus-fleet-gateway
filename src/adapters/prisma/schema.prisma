@@ -181,7 +181,7 @@ model ClientCall {
   capability        String
   outputContentType String?  @map("output_content_type")
   sentAt            DateTime @map("sent_at")
-  deadlineAt        DateTime @map("deadline_at")
+  deadlineAt        DateTime? @map("deadline_at")
 
   @@id([fleetId, messageId])
   @@unique([fleetId, handle])

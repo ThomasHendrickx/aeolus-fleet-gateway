@@ -59,7 +59,8 @@ export function createAuthenticateActor(deps: {
       if (gateway === undefined) {
         return refusal;
       }
-      const ship = await deps.door.getShip(gateway.crewToken, { shipId: who.value.shipId });
+      // On the ship's own behalf: its read reach holds itself, whatever the gateway's ship reaches (decision 0034).
+      const ship = await deps.door.getShip(gateway.crewToken, { shipId: who.value.shipId, onBehalfOf: who.value.shipId });
       return ship.isOk ? ok({ fleetId: who.value.fleetId, kind: 'ship', shipId: who.value.shipId, scopes: ship.value.scopes }) : refusal;
     }
     const session = cookie === undefined ? undefined : deps.sessions.inCookie(cookie);

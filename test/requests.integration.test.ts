@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaPendingRequests } from '../src/adapters/prisma/pending-requests.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
-import { commission, register, signIn } from './support/argo.js';
+import { applyEmptyOwnRules, commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
@@ -85,6 +85,12 @@ async function toDecide(): Promise<string[]> {
 }
 
 describe('an approver decides a pending request through the gateway', () => {
+  it("lists To decide for an approver outside the gateway's own read reach, in a fleet that applies its own network rules: an actor reads itself", async () => {
+    await applyEmptyOwnRules(fleet, argoCookie);
+
+    await expect(toDecide()).resolves.toEqual([REQUEST_ID]);
+  });
+
   it('denies it as an agent ship holding gateway:approve, and it leaves To decide', async () => {
     await expect(toDecide()).resolves.toEqual([REQUEST_ID]);
 
@@ -94,9 +100,19 @@ describe('an approver decides a pending request through the gateway', () => {
     await expect(toDecide()).resolves.toEqual([]);
   });
 
-  // Core 0.27 commissions no app ship for the gateway (aeolus-fleet#959), so the fleet refuses
-  // the proxy ship here: the unhappy path of an approval, end to end. The approval itself is
-  // proven against the fleet's stand-in in decide-request.test.ts until core 0.28.0.
+  it("approves it as an agent ship holding gateway:approve: the gateway commissions and crews the client's proxy ship, owned by the owner picked (aeolus-fleet#959)", async () => {
+    const decided = await mutate(address, {
+      procedure: 'requests.decide',
+      crewToken: approver,
+      body: { requestId: REQUEST_ID, decision: { kind: 'approve', party: { name: 'orderbot', ownerShipId: owner, scopes: ['messages:send', 'messages:receive'] } } },
+    });
+
+    expect(decided.status, await decided.clone().text()).toBe(200);
+    const read = await query(address, { procedure: 'parties.get', crewToken: approver, input: { name: 'orderbot' } });
+    expect(z.object({ result: z.object({ data: z.object({ state: z.string(), ownerShipId: z.string().nullable() }) }) }).parse(await read.json()).result.data).toEqual({ state: 'crewed', ownerShipId: owner });
+    await expect(toDecide()).resolves.toEqual([]);
+  });
+
   it('keeps it pending, undecided, when the fleet refuses the proxy ship', async () => {
     const decided = await mutate(address, {
       procedure: 'requests.decide',

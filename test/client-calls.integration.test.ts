@@ -44,6 +44,13 @@ describe("outside clients' calls in Postgres", () => {
     await expect(Promise.all([calls.findByHandle({ fleetId: FLEET, party: 'claude' }, 'handle-1'), calls.findByHandle({ fleetId: FLEET, party: 'cursor' }, 'handle-1'), calls.findByHandle({ fleetId: OTHER_FLEET, party: 'claude' }, 'handle-1')])).resolves.toEqual([aCall(), undefined, undefined]);
   });
 
+  it('keeps a call with no deadline, as its capability stated none (interop 3.4)', async () => {
+    const calls = createPrismaClientCalls(prisma);
+    await calls.save(aCall({ messageId: 'msg_01m3tbfspe96yf1rnr4ank9m09', handle: 'handle-9', deadlineAt: null }));
+
+    await expect(calls.findByHandle({ fleetId: FLEET, party: 'claude' }, 'handle-9')).resolves.toMatchObject({ deadlineAt: null });
+  });
+
   it('keeps one call per message: the same send again changes nothing', async () => {
     const calls = createPrismaClientCalls(prisma);
     const call = aCall({ messageId: 'msg_01m3tbfspe96yf1rnr4ank9m02', handle: 'handle-2' });

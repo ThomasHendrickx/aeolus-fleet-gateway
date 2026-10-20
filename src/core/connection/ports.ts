@@ -25,8 +25,12 @@ export interface FleetShip {
 export interface FleetDoor {
   register(claim: { shipId: ShipId; secret: string }): Promise<Result<{ crewToken: string }, FleetRefusal>>;
   whoami(crewToken: string): Promise<Result<{ shipId: ShipId; fleetId: FleetId; name: string; type: string }, FleetRefusal>>;
-  /** A ship of the fleet, retired ones included; needs fleet:read. */
-  getShip(crewToken: string, ship: { shipId: ShipId }): Promise<Result<FleetShip, FleetRefusal>>;
+  /**
+   * A ship of the fleet, retired ones included; needs fleet:read. Read on
+   * behalf of a ship (fleet:on-behalf), it answers within that ship's read
+   * reach; outside the reader's read reach it is refused.
+   */
+  getShip(crewToken: string, ship: { shipId: ShipId; onBehalfOf?: ShipId }): Promise<Result<FleetShip, FleetRefusal>>;
   /** Ends this session's crew of its ship: the lease and the secret it claimed with. */
   deregister(crewToken: string): Promise<Result<undefined, FleetRefusal>>;
   /** Declares the ship's own namespace and its whole list of scopes; the fleet stores them, the gateway enforces them (decision 0046). */

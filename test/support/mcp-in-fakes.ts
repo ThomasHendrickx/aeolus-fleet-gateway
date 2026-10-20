@@ -29,6 +29,8 @@ export function aDiscoveredShip(overrides: Partial<DiscoveredShip> = {}): Discov
           outputSchema: { type: 'object', properties: { deals: { type: 'array' } } },
           inputModes: ['application/vnd.aeolus.mcp-tool+json; name=list_deals'],
           outputModes: ['application/vnd.aeolus.mcp-result+json; name=list_deals'],
+          waitMs: 10_000,
+          deadlineMs: 600_000,
         },
       ],
     },

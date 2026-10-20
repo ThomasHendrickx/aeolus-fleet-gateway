@@ -2,8 +2,7 @@
  * A proxy ship's statement (decision 0047), written from its outside MCP
  * server's `tools/list`: each tool is one capability, with MCP's fields as
  * the server states them (decision 0048), the content types that call it
- * and carry its result, and argo's repeatable mark (interop 5.2). The fields
- * `annotations` and `repeatable` are core 0.28's (aeolus-fleet#956).
+ * and carry its result, and argo's repeatable mark (interop 5.2).
  */
 import { toolInputType, toolResultType } from './content-types.js';
 import type { OutsideTool, ToolAnnotations } from './ports.js';
@@ -18,7 +17,7 @@ export interface Capability {
   readonly outputModes: readonly string[];
   readonly annotations?: ToolAnnotations;
   /** argo's mark that a call may be handed again when it died unanswered; the server's hints never set it. */
-  // eslint-disable-next-line @typescript-eslint/naming-convention -- the statement's own field (aeolus-fleet#956), kept as the fleet names it.
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the statement's own field, kept as the fleet names it.
   readonly repeatable?: true;
 }
 
