@@ -19,6 +19,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 import type { Clock } from '../../core/shared/clock.js';
 import { gatewayRouter, type Context, type GatewayRouter } from '../trpc/router.js';
 import { acceptForms, escaped, isSameOrigin, refusalMessage } from './html.js';
+import type { LivePage } from './live.js';
 import { handshake, icon, partyMark, ring, signalPage, statusBadge } from './signal.js';
 
 /** A pending request as the API shows it. */
@@ -78,7 +79,9 @@ function subjectKind(request: ShownRequest): string {
 /** Days left of the 7 a request is kept, counted up, so its last day reads as such (in the attention tone). */
 function daysLeft(request: ShownRequest, now: Date): string {
   const days = Math.ceil((Date.parse(request.expiresAt) - now.getTime()) / DAY_MS);
-  return days <= 1 ? statusBadge({ tone: 'attention', icon: 'hourglass', label: 'Last day' }) : statusBadge({ tone: 'waiting', icon: 'hourglass', label: `${days} d left` });
+  const badge = days <= 1 ? statusBadge({ tone: 'attention', icon: 'hourglass', label: 'Last day' }) : statusBadge({ tone: 'waiting', icon: 'hourglass', label: `${days} d left` });
+  // The page counts it down from here, with no call to the gateway.
+  return `<span data-expires-at="${escaped(request.expiresAt)}">${badge}</span>`;
 }
 
 function queueItem(request: ShownRequest, shown: { now: Date; isCurrent: boolean }): string {
@@ -98,7 +101,8 @@ async function toDecideOf(caller: Caller): Promise<ShownRequest[] | undefined> {
   }
 }
 
-function overviewBody(toDecide: readonly ShownRequest[] | undefined, now: Date): string {
+/** The overview's live section: what the page shows, read again whenever the fleet's requests change. */
+function overviewSection(toDecide: readonly ShownRequest[] | undefined, now: Date): string {
   if (toDecide === undefined) {
     return `<div class="lead">${ring({ tone: 'ok', center: { icon: 'check' }, label: 'Nothing waits on you' })}<h1>Nothing waits on you</h1></div>`;
   }
@@ -154,12 +158,15 @@ ${request.subject.kind === 'server' ? SERVER_FIELDS : ''}
 
 function requestBody(shown: { request: ShownRequest; toDecide: readonly ShownRequest[]; scopes: readonly string[]; now: Date; notice?: string }): string {
   const { request, toDecide, scopes, now, notice } = shown;
-  const count = toDecide.length;
   const requesters = request.requesters.length;
   const card = `<section class="card" style="justify-items:center;text-align:center">${handshake({ name: subjectName(request) })}<span class="tag">${subjectKind(request)}${icon('users', 12)}${requesters} ${requesters === 1 ? 'requester' : 'requesters'}</span>${daysLeft(request, now)}</section>`;
   const alert = notice === undefined ? '' : `<section class="card alert tone-attention" role="alert"><p>${escaped(notice)}</p></section>`;
-  const queue = `<aside class="queue"><h2>Queue</h2>${toDecide.map((other) => queueItem(other, { now, isCurrent: other.requestId === request.requestId })).join('')}</aside>`;
-  return `<div class="lead"><h1>${count} to decide</h1></div><div class="split"><div style="display:grid;gap:16px">${alert}${card}${decisionCard(request, scopes)}</div>${queue}</div>`;
+  return `<div class="lead"><h1>To decide</h1></div><div class="split"><div data-live="request" style="display:grid;gap:16px">${alert}${card}${decisionCard(request, scopes)}</div><aside class="queue" data-live="queue">${queueSection(toDecide, { now, currentId: request.requestId })}</aside></div>`;
+}
+
+/** A request page's live queue: every request to decide, the one open marked. */
+function queueSection(toDecide: readonly ShownRequest[], shown: { now: Date; currentId: string }): string {
+  return `<h2>Queue · ${toDecide.length}</h2>${toDecide.map((other) => queueItem(other, { now: shown.now, isCurrent: other.requestId === shown.currentId })).join('')}`;
 }
 
 function noLongerWaits(): string {
@@ -190,12 +197,27 @@ function decisionOf(form: Form): Parameters<Caller['requests']['decide']>[0]['de
   return { kind: 'approve', party, server: { credential, concurrencyLimit: Number(field(form, 'concurrencyLimit')) } };
 }
 
-function html(reply: FastifyReply, page: { status: number; body: string; isWide?: boolean }): FastifyReply {
-  return reply
-    .code(page.status)
-    .type('text/html; charset=utf-8')
-    .header('cache-control', 'no-store')
-    .send(signalPage({ title: TITLE, tab: 'overview', body: page.body, ...(page.isWide === undefined ? {} : { isWide: page.isWide }) }));
+function html(reply: FastifyReply, page: { status: number; body: string; isWide?: boolean; live?: string }): FastifyReply {
+  const { status, ...shown } = page;
+  return reply.code(status).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(signalPage({ title: TITLE, tab: 'overview', ...shown }));
+}
+
+/** The overview's pages on the live channel: each reads To decide again as its caller. */
+export function overviewLivePages(deps: { clock: Clock }): { overview: LivePage; request: LivePage } {
+  return {
+    overview: {
+      render: async (context) => ({ overview: overviewSection(await toDecideOf(gatewayRouter.createCaller(context)), deps.clock.now()) }),
+    },
+    request: {
+      render: async (context, params): Promise<Record<string, string>> => {
+        const toDecide = (await toDecideOf(gatewayRouter.createCaller(context))) ?? [];
+        const currentId = params.get('requestId') ?? '';
+        const queue = queueSection(toDecide, { now: deps.clock.now(), currentId });
+        // The decision being typed stays as it is while the request still waits.
+        return toDecide.some((open) => open.requestId === currentId) ? { queue } : { queue, request: noLongerWaits() };
+      },
+    },
+  };
 }
 
 function signInPage(reply: FastifyReply, refusal: { fleetUrl: string; error: TRPCError }): FastifyReply {
@@ -216,7 +238,7 @@ export function registerOverviewPage(server: FastifyInstance, deps: { contextFor
     }
     const actor = await context.authenticateActor({ cookie: context.cookie, crewToken: context.crewToken });
     const scopes = actor.isOk ? actor.value.scopes : [];
-    return html(reply, { status: shown.status ?? 200, isWide: true, body: requestBody({ request, toDecide, scopes, now: deps.clock.now(), ...(shown.notice === undefined ? {} : { notice: shown.notice }) }) });
+    return html(reply, { status: shown.status ?? 200, isWide: true, live: `page=request&requestId=${encodeURIComponent(requestId)}`, body: requestBody({ request, toDecide, scopes, now: deps.clock.now(), ...(shown.notice === undefined ? {} : { notice: shown.notice }) }) });
   };
 
   const answer = async (exchange: {
@@ -254,7 +276,7 @@ export function registerOverviewPage(server: FastifyInstance, deps: { contextFor
       reply,
       render: async (context) => {
         const toDecide = await toDecideOf(gatewayRouter.createCaller(context));
-        return html(reply, { status: 200, body: overviewBody(toDecide, deps.clock.now()) });
+        return html(reply, { status: 200, live: 'page=overview', body: `<div data-live="overview" style="display:grid;gap:24px">${overviewSection(toDecide, deps.clock.now())}</div>` });
       },
     }),
   );

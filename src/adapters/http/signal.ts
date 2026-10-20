@@ -80,6 +80,7 @@ input[type="text"], input[type="password"], input[type="number"], input[type="ur
 .scopes { display: grid; gap: 6px; }
 fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
 legend { font-size: 13px; font-weight: 500; padding: 0; margin-bottom: 4px; }
+.live-status { position: fixed; right: 16px; bottom: 16px; margin: 0; }
 @media (max-width: 640px) { .actions > * { flex: 1; } button, .button { height: 44px; width: 100%; } }
 `;
 
@@ -161,7 +162,50 @@ function topBar(current: Tab | undefined): string {
   return `<header class="top"><a class="mark" href="/overview">${MARK}Aeolus</a><nav class="tabs">${tabs}</nav></header>`;
 }
 
-/** A whole Signal page: the top bar with its tabs, then the page's own body. */
-export function signalPage(page: { title: string; tab?: Tab; body: string; isWide?: boolean }): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escaped(page.title)}</title><style>${STYLE}</style></head><body>${topBar(page.tab)}<main${page.isWide === true ? ' class="wide"' : ''}>${page.body}</main></body></html>`;
+/**
+ * What a live page runs: it opens /live for itself and swaps in each section
+ * it is sent; when the socket drops it shows Reconnecting and opens again
+ * with backoff, never for a refusal (4401 to 4404). Every minute it counts
+ * each days left down from its expiry, with no call to the gateway.
+ */
+const LIVE_SCRIPT = `(function (query) {
+  var DAY = 86400000, wait = 500, status = document.querySelector('[data-live-status]');
+  function countDown() {
+    document.querySelectorAll('[data-expires-at]').forEach(function (holder) {
+      var badge = holder.querySelector('.badge'), label = badge && badge.lastChild;
+      if (!label) return;
+      var days = Math.ceil((Date.parse(holder.getAttribute('data-expires-at')) - Date.now()) / DAY);
+      badge.className = 'badge ' + (days <= 0 ? 'tone-ended' : days <= 1 ? 'tone-attention' : 'tone-waiting');
+      label.textContent = days <= 0 ? 'Expired' : days <= 1 ? 'Last day' : days + ' d left';
+    });
+  }
+  function open() {
+    var socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/live?' + query);
+    socket.onopen = function () { wait = 500; status.hidden = true; };
+    socket.onmessage = function (event) {
+      var sections = JSON.parse(event.data).sections;
+      Object.keys(sections).forEach(function (name) {
+        var section = document.querySelector('[data-live="' + name + '"]');
+        if (section) section.innerHTML = sections[name];
+      });
+      countDown();
+    };
+    socket.onclose = function (event) {
+      if (event.code >= 4401 && event.code <= 4404) return;
+      status.hidden = false;
+      setTimeout(open, wait);
+      wait = Math.min(wait * 2, 10000);
+    };
+  }
+  open();
+  setInterval(countDown, 60000);
+})(document.currentScript.getAttribute('data-live-query'));`;
+
+/** A whole Signal page: the top bar with its tabs, then the page's own body; a live page names itself to the live channel. */
+export function signalPage(page: { title: string; tab?: Tab; body: string; isWide?: boolean; live?: string }): string {
+  const live =
+    page.live === undefined
+      ? ''
+      : `<p data-live-status hidden class="live-status">${statusBadge({ tone: 'waiting', icon: 'hourglass', label: 'Reconnecting' })}</p><script data-live-query="${escaped(page.live)}">${LIVE_SCRIPT}</script>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escaped(page.title)}</title><style>${STYLE}</style></head><body>${topBar(page.tab)}<main${page.isWide === true ? ' class="wide"' : ''}>${page.body}</main>${live}</body></html>`;
 }

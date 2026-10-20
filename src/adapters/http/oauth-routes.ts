@@ -16,9 +16,11 @@ import type { AuthorizationRefusal, AuthorizationRequest, ReadAuthorization } fr
 import type { ClientAnswer } from '../../core/requests/ask-for-client.js';
 import { REQUEST_LIFETIME_MS } from '../../core/requests/open-request.js';
 import type { ReadWaiting } from '../../core/requests/read-waiting.js';
+import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
 import type { CompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
 import { SIGN_IN_LIFETIME_MS, type StartSignIn } from '../../core/sign-in/start-sign-in.js';
-import { acceptForms, documentOf, escaped } from './html.js';
+import { acceptForms, documentOf, escaped, isSameOrigin } from './html.js';
+import { acceptWebsockets, type ChangeHub } from './live.js';
 
 const HTTP_FOUND = 302;
 const HTTP_BAD_REQUEST = 400;
@@ -28,8 +30,8 @@ const HTTP_NOT_FOUND = 404;
 const HTTP_BAD_GATEWAY = 502;
 const MS_PER_SECOND = 1000;
 
-/** How often the waiting page looks again. */
-const WAITING_RELOAD_SECONDS = 5;
+/** Why the waiting page's live channel was closed: it does not open again. */
+const CLOSE_OTHER_ORIGIN = 4403;
 
 /** Whether the gateway is served over HTTPS, so its cookies go over HTTPS only. */
 const isHttps = (issuer: string) => new URL(issuer).protocol === 'https:';
@@ -49,8 +51,8 @@ export interface OAuthRoutesDeps {
   resource: string;
   readAuthorization: ReadAuthorization;
   exchangeToken: ExchangeToken;
-  /** Signing people in through pagasae (decision 0054) and their clients' waits; unset where no pagasae is set. */
-  signIn?: { start: StartSignIn; complete: CompleteSignIn; readWaiting: ReadWaiting };
+  /** Signing people in through pagasae (decision 0054) and their clients' waits, followed live; unset where no pagasae is set. */
+  signIn?: { start: StartSignIn; complete: CompleteSignIn; readWaiting: ReadWaiting; watchWaiting: WatchWaiting; hub: ChangeHub };
 }
 
 function fieldsOf(value: unknown): Record<string, string> {
@@ -127,10 +129,37 @@ function pickPage(request: Record<string, string | undefined>, authorization: Au
 </form>`;
 }
 
-/** The waiting page: the client waits for approval, and the page looks again by itself. */
+/**
+ * What the waiting page runs: it follows its request on the live channel
+ * and goes to its own address again once told to, there to be sent on; it
+ * goes there too when the request expires. A dropped socket opens again
+ * with backoff. It never reloads on a timer.
+ */
+const WAITING_SCRIPT = `(function () {
+  var wait = 500, expiry;
+  function goOn() { location.replace(location.href); }
+  function open() {
+    var socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '${WAITING_COOKIE.path}/live' + location.search);
+    socket.onopen = function () { wait = 500; };
+    socket.onmessage = function (event) {
+      var told = JSON.parse(event.data);
+      if (told.go) return goOn();
+      if (told.expiresAt) { clearTimeout(expiry); expiry = setTimeout(goOn, Math.max(0, Date.parse(told.expiresAt) - Date.now())); }
+    };
+    socket.onclose = function (event) {
+      if (event.code === ${String(CLOSE_OTHER_ORIGIN)}) return;
+      setTimeout(open, wait);
+      wait = Math.min(wait * 2, 10000);
+    };
+  }
+  open();
+})();`;
+
+/** The waiting page: the client waits for approval, and the page goes on by itself once it is decided. */
 function waitingPage(clientName: string): string {
   return `<h1>Waiting for approval</h1>
-<p><strong>${escaped(clientName)}</strong> waits for an approver of your fleet. This page goes on by itself once it is decided; you may close it and connect again later.</p>`;
+<p><strong>${escaped(clientName)}</strong> waits for an approver of your fleet. This page goes on by itself once it is decided; you may close it and connect again later.</p>
+<script>${WAITING_SCRIPT}</script>`;
 }
 
 /** Client credentials in an HTTP Basic header (RFC 6749, 2.3.1): each part form-urlencoded. */
@@ -210,7 +239,7 @@ function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn:
     const title = 'Waiting for approval';
     if (read.isOk) {
       if (read.value.kind === 'waiting') {
-        return htmlPage(reply, { status: 200, title, body: waitingPage(read.value.clientName), head: `<meta http-equiv="refresh" content="${String(WAITING_RELOAD_SECONDS)}">` });
+        return htmlPage(reply, { status: 200, title, body: waitingPage(read.value.clientName) });
       }
       const cleared = cookieHeader(WAITING_COOKIE, { value: '', maxAgeSeconds: 0, isSecure });
       return reply.code(HTTP_FOUND).header('location', read.value.redirectTo).header('set-cookie', cleared).send();
@@ -225,6 +254,36 @@ function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn:
       case 'otherBrowser':
         return errorPage(reply, { status: HTTP_BAD_REQUEST, title, message: 'This request was made in another browser, so it is not yours to follow. Start again from your MCP client.' });
     }
+  });
+
+  // The waiting page's live channel: told when its request expires, and to go on once the request no longer waits.
+  acceptWebsockets(server, () => {
+    server.get(`${WAITING_COOKIE.path}/live`, { websocket: true }, async (socket, request) => {
+      if (!isSameOrigin(request)) {
+        socket.close(CLOSE_OTHER_ORIGIN, 'Opened only from the waiting page');
+        return;
+      }
+      const opened = { waiting: fieldsOf(request.query).waiting ?? '', browserSecret: cookieValue(WAITING_COOKIE, request.headers.cookie) };
+      const watched = await signIn.watchWaiting(opened);
+      // Whatever does not wait, refused or decided, the page's own address says.
+      if (!watched.isOk || !watched.value.isWaiting) {
+        socket.send(JSON.stringify({ go: true }));
+        return;
+      }
+      socket.send(JSON.stringify({ expiresAt: watched.value.expiresAt.toISOString() }));
+      const unsubscribe = signIn.hub.subscribe({
+        fleetId: watched.value.fleetId,
+        read: () => {
+          void signIn.watchWaiting(opened).then((again) => {
+            if (!again.isOk || !again.value.isWaiting) {
+              socket.send(JSON.stringify({ go: true }));
+              unsubscribe();
+            }
+          });
+        },
+      });
+      socket.on('close', unsubscribe);
+    });
   });
 }
 
