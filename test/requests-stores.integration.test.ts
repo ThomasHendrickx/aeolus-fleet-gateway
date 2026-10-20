@@ -91,6 +91,21 @@ describe('pending requests in Postgres', () => {
     await expect(requests.listOpen(fleet, AFTER).then((listed) => listed.map((request) => request.requestId))).resolves.toEqual([older.requestId, newer.requestId]);
   });
 
+  it('lists the requests an account asked or joined, in its fleet only, the newest first', async () => {
+    const requests = createPrismaPendingRequests(prisma);
+    const fleet: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8x2';
+    const older = aRequest({ fleetId: fleet, askedAt: new Date('2026-10-20T08:00:00.000Z'), requesters: [{ accountId: 'acc-mine', personShipId: null }] });
+    const joined = aRequest({ fleetId: fleet, requesters: [{ accountId: 'acc-pieter', personShipId: null }] });
+    const pieters = aRequest({ fleetId: fleet, requesters: [{ accountId: 'acc-pieter', personShipId: null }] });
+    const otherFleet = aRequest({ fleetId: OTHER_FLEET, requesters: [{ accountId: 'acc-mine', personShipId: null }] });
+    for (const request of [older, joined, pieters, otherFleet]) {
+      await requests.open({ ...request, now: ASKED_AT });
+    }
+    await requests.open({ ...joined, requestId: 'req_01m5c7hmbt9f1vrkwb37azjoin', requesters: [{ accountId: 'acc-mine', personShipId: null }], now: ASKED_AT });
+
+    await expect(requests.listMine(fleet, 'acc-mine').then((listed) => listed.map((request) => request.requestId))).resolves.toEqual([joined.requestId, older.requestId]);
+  });
+
   it('lets one of two approvers claim a request at once, and the first decision count', async () => {
     const requests = createPrismaPendingRequests(prisma);
     const request = aRequest();

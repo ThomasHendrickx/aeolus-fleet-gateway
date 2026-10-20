@@ -74,6 +74,12 @@ export function memoryPendingRequests(): PendingRequests & { held: PendingReques
       told.add(`${requestId} ${accountId}`);
       return Promise.resolve();
     },
+    listMine: (fleetId, accountId) =>
+      Promise.resolve(
+        held
+          .filter((request) => request.fleetId === fleetId && request.requesters.some((requester) => requester.accountId === accountId))
+          .toSorted((first, second) => second.askedAt.getTime() - first.askedAt.getTime()),
+      ),
     listOpen: (fleetId, now) => Promise.resolve(held.filter((request) => request.fleetId === fleetId && isOpen(request) && request.expiresAt > now)),
     claim: (fleetId, { requestId, now }) => {
       const index = indexOf(fleetId, requestId);

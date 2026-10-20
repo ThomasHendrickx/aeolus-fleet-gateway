@@ -98,6 +98,10 @@ export function createPrismaPendingRequests(db: PrismaClient): PendingRequests {
       const row = await db.pendingRequest.findUnique({ where: { fleetId_requestId: { fleetId, requestId } } });
       return row === null ? undefined : requestOf(row);
     },
+    listMine: async (fleetId, accountId) => {
+      const rows = await db.pendingRequest.findMany({ where: { fleetId, requesters: { array_contains: [{ accountId }] } }, orderBy: { askedAt: 'desc' } });
+      return rows.map(requestOf);
+    },
     listOpen: async (fleetId, now) => {
       const rows = await db.pendingRequest.findMany({ where: { fleetId, state: { in: ['pending', 'approving'] }, expiresAt: { gt: now } }, orderBy: { askedAt: 'asc' } });
       return rows.map(requestOf);
