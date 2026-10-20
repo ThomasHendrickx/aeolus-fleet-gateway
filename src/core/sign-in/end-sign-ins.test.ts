@@ -16,7 +16,7 @@ let grants: ReturnType<typeof memoryAccountGrants>;
 let tokens: ReturnType<typeof memoryIssuedTokens>;
 
 function aGrant(overrides: Partial<AccountGrant>): AccountGrant {
-  return { grantId: 'grant-1', fleetId: FLEET_ID, accountId: 'acc-burak', personShipId: PERSON_SHIP_ID, refreshToken: 'pagasae-refresh', accountToken: 'account-token', accountTokenExpiresAt: NOW, ...overrides };
+  return { grantId: 'grant-1', fleetId: FLEET_ID, accountId: 'acc-burak', personShipId: PERSON_SHIP_ID, scopes: [], refreshToken: 'pagasae-refresh', accountToken: 'account-token', accountTokenExpiresAt: NOW, ...overrides };
 }
 
 async function signedIn(grant: AccountGrant, accessHash: string): Promise<void> {

@@ -32,7 +32,15 @@ export type DecideRefusal =
 export type DecideRequest = (input: { actor: Actor; requestId: string; decision: Decision }) => Promise<Result<{ state: 'approved' | 'denied'; party: ShownParty | null }, DecideRefusal>>;
 
 function decidedByOf(actor: Actor): DecidedBy {
-  return actor.kind === 'ship' ? { kind: 'ship', shipId: actor.shipId } : { kind: actor.kind };
+  switch (actor.kind) {
+    case 'ship':
+      return { kind: 'ship', shipId: actor.shipId };
+    case 'account':
+      return { kind: 'account', accountId: actor.accountId };
+    case 'operator':
+    case 'viewer':
+      return { kind: actor.kind };
+  }
 }
 
 /**

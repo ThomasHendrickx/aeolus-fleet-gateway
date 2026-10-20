@@ -27,7 +27,7 @@ export interface Requester {
 export type RequestState = 'pending' | 'approving' | 'approved' | 'denied' | 'expired';
 
 /** Who decided: an actor (decision 0057), without its scopes. */
-export type DecidedBy = { readonly kind: 'operator' | 'viewer' } | { readonly kind: 'ship'; readonly shipId: ShipId };
+export type DecidedBy = { readonly kind: 'operator' | 'viewer' } | { readonly kind: 'ship'; readonly shipId: ShipId } | { readonly kind: 'account'; readonly accountId: string };
 
 export interface PendingRequest {
   readonly fleetId: FleetId;

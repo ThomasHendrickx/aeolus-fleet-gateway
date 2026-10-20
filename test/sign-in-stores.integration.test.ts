@@ -27,6 +27,7 @@ function aGrant(overrides: Partial<AccountGrant> = {}): AccountGrant {
     fleetId: FLEET,
     accountId: 'acc-charlotte',
     personShipId: PERSON_SHIP,
+    scopes: ['fleet:read', 'gateway:approve'],
     refreshToken: 'pagasae-refresh-1',
     accountToken: 'account-token-1',
     accountTokenExpiresAt: new Date('2026-10-19T09:10:00.000Z'),
@@ -35,7 +36,7 @@ function aGrant(overrides: Partial<AccountGrant> = {}): AccountGrant {
 }
 
 describe("signed-in accounts' grants in Postgres (decision 0054)", () => {
-  it('keeps a grant with its fleet, account, person ship and pagasae tokens', async () => {
+  it('keeps a grant with its fleet, account, person ship, scopes and pagasae tokens', async () => {
     await createPrismaAccountGrants(prisma).save(aGrant());
 
     await expect(prisma.accountGrant.findMany({ where: { grantId: 'grant-1' } })).resolves.toMatchObject([aGrant()]);
@@ -52,8 +53,8 @@ describe("signed-in accounts' grants in Postgres (decision 0054)", () => {
     await grants.save(aGrant({ grantId: 'grant-3' }));
     await expect(grants.find(OTHER_FLEET, 'grant-3')).resolves.toBeUndefined();
 
-    await grants.renew({ fleetId: FLEET, grantId: 'grant-3' }, { refreshToken: 'pagasae-refresh-2', accountToken: 'account-token-2', accountTokenExpiresAt: new Date('2026-10-19T09:19:00.000Z'), personShipId: null });
-    await expect(grants.find(FLEET, 'grant-3')).resolves.toEqual(aGrant({ grantId: 'grant-3', refreshToken: 'pagasae-refresh-2', accountToken: 'account-token-2', accountTokenExpiresAt: new Date('2026-10-19T09:19:00.000Z'), personShipId: null }));
+    await grants.renew({ fleetId: FLEET, grantId: 'grant-3' }, { refreshToken: 'pagasae-refresh-2', accountToken: 'account-token-2', accountTokenExpiresAt: new Date('2026-10-19T09:19:00.000Z'), personShipId: null, scopes: ['fleet:read'] });
+    await expect(grants.find(FLEET, 'grant-3')).resolves.toEqual(aGrant({ grantId: 'grant-3', refreshToken: 'pagasae-refresh-2', accountToken: 'account-token-2', accountTokenExpiresAt: new Date('2026-10-19T09:19:00.000Z'), personShipId: null, scopes: ['fleet:read'] }));
 
     await grants.end(FLEET, 'grant-3');
     await expect(grants.find(FLEET, 'grant-3')).resolves.toBeUndefined();

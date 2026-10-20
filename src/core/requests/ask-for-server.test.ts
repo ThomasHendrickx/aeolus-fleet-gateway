@@ -24,7 +24,7 @@ beforeEach(async () => {
   requests = memoryPendingRequests();
   parties = memoryPartyStore();
   grants = memoryAccountGrants();
-  await grants.save({ grantId: CHARLOTTE_GRANT.grantId, fleetId: FLEET_ID, accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, refreshToken: 'r', accountToken: 'a', accountTokenExpiresAt: ASKED_AT });
+  await grants.save({ grantId: CHARLOTTE_GRANT.grantId, fleetId: FLEET_ID, accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, scopes: [], refreshToken: 'r', accountToken: 'a', accountTokenExpiresAt: ASKED_AT });
   isOn = true;
 });
 

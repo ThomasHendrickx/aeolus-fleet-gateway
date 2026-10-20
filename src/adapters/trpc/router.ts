@@ -243,7 +243,7 @@ const pendingRequestSchema = z.object({
   askedAt: z.string(),
   expiresAt: z.string(),
   state: z.enum(['pending', 'approving', 'approved', 'denied', 'expired']),
-  decidedBy: z.union([z.object({ kind: z.literal('ship'), shipId: z.string() }), z.object({ kind: z.enum(['operator', 'viewer']) })]).nullable(),
+  decidedBy: z.union([z.object({ kind: z.literal('ship'), shipId: z.string() }), z.object({ kind: z.literal('account'), accountId: z.string() }), z.object({ kind: z.enum(['operator', 'viewer']) })]).nullable(),
   decidedAt: z.string().nullable(),
 });
 

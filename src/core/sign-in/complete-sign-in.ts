@@ -6,7 +6,7 @@ import type { AuthorizationRefusal, ReadAuthorization } from '../oauth/read-auth
 import type { AskForClient, ClientAnswer } from '../requests/ask-for-client.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { AccountGrants, Pagasae, SignInSeals } from './ports.js';
+import type { AccountGrants, Pagasae, PageSessions, PageSignIn, SignInSeals } from './ports.js';
 
 /**
  * Why a sign-in gave the client no code, beside the request's own refusals:
@@ -18,7 +18,17 @@ import type { AccountGrants, Pagasae, SignInSeals } from './ports.js';
  */
 export type SignInRefusal = AuthorizationRefusal | { readonly kind: 'unknownSignIn' } | { readonly kind: 'otherBrowser' } | { readonly kind: 'pagasaeRefused'; readonly message: string } | { readonly kind: 'fleetNotServed' } | { readonly kind: 'outsidePartiesOff' };
 
-export type CompleteSignIn = (back: { state?: string | undefined; code?: string | undefined; error?: string | undefined; browserSecret?: string | undefined }) => Promise<Result<ClientAnswer, SignInRefusal>>;
+/** What a sign-in answers: the client's answer, or, for the gateway's pages, the page session to hold and the page to go back to. */
+export type SignInAnswer = ClientAnswer | { readonly kind: 'signedIn'; readonly session: string; readonly redirectTo: string };
+
+interface Back {
+  state?: string | undefined;
+  code?: string | undefined;
+  error?: string | undefined;
+  browserSecret?: string | undefined;
+}
+
+export type CompleteSignIn = (back: Back) => Promise<Result<SignInAnswer, SignInRefusal>>;
 
 /**
  * Use case: pagasae sends the person back. Their sign-in is opened from its
@@ -27,7 +37,9 @@ export type CompleteSignIn = (back: { state?: string | undefined; code?: string 
  * picked: the account's grant is kept, and the client is sent back with the
  * gateway's own code for it, acting in the fleet as the account with no
  * approval (orchestrator-1, slice 7 Q1); or the account asks for access for
- * the client, as an outside party (decision 0056).
+ * the client, as an outside party (decision 0056). A sign-in to the
+ * gateway's pages keeps the account's grant too, and answers a page session
+ * naming it, so the pages act as the account.
  */
 export function createCompleteSignIn(deps: {
   readAuthorization: ReadAuthorization;
@@ -41,14 +53,37 @@ export function createCompleteSignIn(deps: {
   /** Whether the gateway serves the fleet: connected to it, and switched on where an installation switches fleets (decision 0021). */
   servesFleet: (fleetId: FleetId) => Promise<boolean>;
   askForClient: AskForClient;
+  sessions: PageSessions;
 }): CompleteSignIn {
-  return async ({ state, code, error, browserSecret }) => {
+  /** A sign-in to the pages: the grant kept, and the session naming it; no client to send back, so pagasae's error is said. */
+  const signInToPages = async (signIn: PageSignIn, { code, error }: Back): Promise<Result<SignInAnswer, SignInRefusal>> => {
+    if (error !== undefined || code === undefined) {
+      return err({ kind: 'pagasaeRefused', message: error ?? 'pagasae sent no code' });
+    }
+    const redeemed = await deps.pagasae.redeemCode({ code, verifier: signIn.verifier });
+    if (!redeemed.isOk) {
+      return err({ kind: 'pagasaeRefused', message: redeemed.error.reason });
+    }
+    const { fleetId, accountId, personShipId, scopes, refreshToken, accountToken, accountTokenExpiresAt } = redeemed.value;
+    if (!(await deps.servesFleet(fleetId))) {
+      return err({ kind: 'fleetNotServed' });
+    }
+    const grantId = deps.secrets.newSecret();
+    await deps.grants.save({ grantId, fleetId, accountId, personShipId, scopes, refreshToken, accountToken, accountTokenExpiresAt });
+    return ok({ kind: 'signedIn', session: deps.sessions.seal({ fleetId, grantId }), redirectTo: signIn.returnTo });
+  };
+
+  return async (back) => {
+    const { state, code, error, browserSecret } = back;
     const signIn = state === undefined ? undefined : deps.seals.open(state);
     if (signIn === undefined || signIn.expiresAt.getTime() <= deps.clock.now().getTime()) {
       return err({ kind: 'unknownSignIn' });
     }
     if (browserSecret !== signIn.browserSecret) {
       return err({ kind: 'otherBrowser' });
+    }
+    if (signIn.holder === 'page') {
+      return signInToPages(signIn, back);
     }
     const read = await deps.readAuthorization(signIn.request);
     if (!read.isOk) {
@@ -69,13 +104,13 @@ export function createCompleteSignIn(deps: {
     if (authorization.clientFleetId !== null && authorization.clientFleetId !== tokens.fleetId) {
       return err({ kind: 'invalidClient', message: `${authorization.clientName} is registered for another fleet` });
     }
-    const { fleetId, accountId, personShipId, refreshToken, accountToken, accountTokenExpiresAt } = tokens;
+    const { fleetId, accountId, personShipId, scopes, refreshToken, accountToken, accountTokenExpiresAt } = tokens;
     if (signIn.holder === 'party') {
       const asked = await deps.askForClient({ fleetId, requester: { accountId, personShipId }, authorization, request: signIn.request, browserSecret: signIn.browserSecret });
       return asked.isOk ? asked : err({ kind: 'outsidePartiesOff' });
     }
     const grantId = deps.secrets.newSecret();
-    await deps.grants.save({ grantId, fleetId, accountId, personShipId, refreshToken, accountToken, accountTokenExpiresAt });
+    await deps.grants.save({ grantId, fleetId, accountId, personShipId, scopes, refreshToken, accountToken, accountTokenExpiresAt });
     return ok({ kind: 'answered', redirectTo: await issueCode(deps, { fleetId, authorization, holder: { kind: 'account', grantId } }) });
   };
 }

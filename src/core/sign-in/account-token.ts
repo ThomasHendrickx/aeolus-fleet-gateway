@@ -15,7 +15,15 @@ export const ACCOUNT_TOKEN_MARGIN_MS = 60_000;
  */
 export type AccountTokenRefusal = { readonly kind: 'signedOut' } | { readonly kind: 'pagasaeUnavailable' };
 
-export type AccountTokenOf = (grant: { fleetId: FleetId; grantId: string }) => Promise<Result<{ accountToken: string; personShipId: ShipId | null }, AccountTokenRefusal>>;
+/** An account token to call with, and the account, person ship and scopes it names. */
+export interface AccountToken {
+  readonly accountToken: string;
+  readonly accountId: string;
+  readonly personShipId: ShipId | null;
+  readonly scopes: readonly string[];
+}
+
+export type AccountTokenOf = (grant: { fleetId: FleetId; grantId: string }) => Promise<Result<AccountToken, AccountTokenRefusal>>;
 
 /**
  * Use case: the account token a signed-in person's call carries to core
@@ -34,7 +42,7 @@ export function createAccountTokenOf(deps: { grants: AccountGrants; tokens: Issu
       return err({ kind: 'signedOut' });
     }
     if (grant.accountTokenExpiresAt.getTime() - ACCOUNT_TOKEN_MARGIN_MS > deps.clock.now().getTime()) {
-      return ok({ accountToken: grant.accountToken, personShipId: grant.personShipId });
+      return ok({ accountToken: grant.accountToken, accountId: grant.accountId, personShipId: grant.personShipId, scopes: grant.scopes });
     }
     const refreshed = await deps.pagasae.refresh(grant.refreshToken);
     if (!refreshed.isOk && refreshed.error.kind === 'unavailable') {
@@ -45,9 +53,9 @@ export function createAccountTokenOf(deps: { grants: AccountGrants; tokens: Issu
       await deps.tokens.revokeGrant(fleetId, grantId);
       return err({ kind: 'signedOut' });
     }
-    const { refreshToken, accountToken, accountTokenExpiresAt, personShipId } = refreshed.value;
-    await deps.grants.renew({ fleetId, grantId }, { refreshToken, accountToken, accountTokenExpiresAt, personShipId });
-    return ok({ accountToken, personShipId });
+    const { refreshToken, accountToken, accountTokenExpiresAt, personShipId, scopes } = refreshed.value;
+    await deps.grants.renew({ fleetId, grantId }, { refreshToken, accountToken, accountTokenExpiresAt, personShipId, scopes });
+    return ok({ accountToken, accountId: grant.accountId, personShipId, scopes });
   };
 
   return (grant) => {
