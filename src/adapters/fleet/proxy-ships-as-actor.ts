@@ -1,3 +1,5 @@
+import { grantScopesOutputSchema } from '@aeolus-fleet/common';
+
 import type { ProxyShipsAsActor } from '../../core/parties/ports.js';
 import { err, ok } from '../../core/shared/result.js';
 import { mutateAs } from './actor-door.js';
@@ -8,6 +10,18 @@ export function createProxyShipsAsActor(fleetUrl: string): ProxyShipsAsActor {
     retire: async (as, { shipId }) => {
       const retired = await mutateAs(fleetUrl, { as, procedure: 'retire', input: { shipId } });
       return retired.isOk ? ok(undefined) : err(retired.error);
+    },
+    setOwner: async (as, { shipId, ownerShipId }) => {
+      const set = await mutateAs(fleetUrl, { as, procedure: 'setOwner', input: { shipId, ownerShipId }, isTrpcOnly: true });
+      return set.isOk ? ok(undefined) : err(set.error);
+    },
+    grantScopes: async (as, { shipId, grant, revoke }) => {
+      const changed = await mutateAs(fleetUrl, { as, procedure: 'grantScopes', input: { shipId, grant, revoke } });
+      if (!changed.isOk) {
+        return changed;
+      }
+      const held = grantScopesOutputSchema.safeParse(changed.value);
+      return held.success ? ok({ scopes: [...held.data.scopes] }) : err({ code: 'UNAVAILABLE', message: 'The fleet answered no scopes' });
     },
   };
 }

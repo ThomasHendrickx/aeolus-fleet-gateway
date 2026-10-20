@@ -98,10 +98,11 @@ import { createApproveClientParty, createApproveParty, type ApproveClientParty, 
 import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
 import { createListParties, createReadParty } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
-import { createAuthenticateActor } from './core/actors/authenticate-actor.js';
+import { createAuthenticateActor, type Actor } from './core/actors/authenticate-actor.js';
 import { createRetireParty } from './core/parties/retire-party.js';
+import { createChangePartyOwner, createChangePartyScopes } from './core/parties/change-party.js';
 import { createProxyShipsAsActor } from './adapters/fleet/proxy-ships-as-actor.js';
-import { createCredentialOf } from './core/actors/credential-of.js';
+import { createCredentialOf, type ActorCredential } from './core/actors/credential-of.js';
 import { createDecideRequest } from './core/requests/decide-request.js';
 import { createListMine } from './core/requests/list-mine.js';
 import { createListToDecide } from './core/requests/list-to-decide.js';
@@ -261,7 +262,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     }
     return approved;
   };
-  const retireParty = createRetireParty({ parties, fleet: createProxyShipsAsActor(options.fleetUrl), tokens: createPrismaIssuedTokens(prisma), credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const proxyShipsAsActor = createProxyShipsAsActor(options.fleetUrl);
+  // Calls as an account need its account token, set up with the sign-in below.
+  const asActor = { parties, fleet: proxyShipsAsActor, credentialOf: (actor: Actor, sent: ActorCredential) => credentialOf(actor, sent) };
+  const retireParty = createRetireParty({ ...asActor, tokens: createPrismaIssuedTokens(prisma) });
+  const changePartyOwner = createChangePartyOwner(asActor);
+  const changePartyScopes = createChangePartyScopes(asActor);
   const listParties = createListParties({ parties, connections, fleet: door });
   const readParty = createReadParty({ parties, connections, fleet: door });
   // An account's credential needs its account token, set up with the sign-in below.
@@ -408,6 +414,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     crewParty,
     listParties,
     retireParty,
+    changePartyOwner,
+    changePartyScopes,
     readParty,
     stateParty,
     markTool,

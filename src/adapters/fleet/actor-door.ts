@@ -33,12 +33,14 @@ export function restHeaders(as: ActorCredential): Record<string, string> {
 }
 
 /** One fleet mutation as the actor, by the door its credential goes through: what the fleet answered, unparsed. */
-export async function mutateAs(fleetUrl: string, call: { as: ActorCredential; procedure: string; input: unknown }): Promise<Result<unknown, FleetRefusal>> {
+export async function mutateAs(fleetUrl: string, call: { as: ActorCredential; procedure: string; input: unknown; isTrpcOnly?: boolean }): Promise<Result<unknown, FleetRefusal>> {
   const { as, procedure, input } = call;
   const isConsole = as.crewToken === undefined;
+  // A call with no REST door goes over tRPC with the same headers a REST call carries.
+  const isTrpc = isConsole || call.isTrpcOnly === true;
   const request = isConsole
     ? { url: `${fleetUrl}/trpc/fleet.${procedure}`, headers: { cookie: as.cookie ?? '' } }
-    : { url: `${fleetUrl}/api/v1/fleet/${procedure}`, headers: restHeaders(as) };
+    : { url: isTrpc ? `${fleetUrl}/trpc/fleet.${procedure}` : `${fleetUrl}/api/v1/fleet/${procedure}`, headers: restHeaders(as) };
   let response: Response;
   try {
     response = await fetch(request.url, { method: 'POST', headers: { 'content-type': 'application/json', ...request.headers }, body: JSON.stringify(input) });
@@ -49,7 +51,7 @@ export async function mutateAs(fleetUrl: string, call: { as: ActorCredential; pr
   if (!response.ok) {
     return err(refusalOf(response.status, body));
   }
-  if (!isConsole) {
+  if (!isTrpc) {
     return ok(body);
   }
   const answer = trpcAnswerSchema.safeParse(body);
