@@ -83,8 +83,8 @@ export function createApproveAuthorization(deps: {
       return read;
     }
     const authorization = read.value;
-    if (authorization.fleetId !== fleetId) {
-      return err({ kind: 'invalidClient', message: `${authorization.clientName} asks for another fleet's MCP endpoint` });
+    if (authorization.clientFleetId !== null && authorization.clientFleetId !== fleetId) {
+      return err({ kind: 'invalidClient', message: `${authorization.clientName} is registered for another fleet` });
     }
     if (!isApproved) {
       return ok({ redirectTo: redirectWith(authorization.redirectUri, { error: 'access_denied', state: authorization.state, iss: deps.issuer }) });

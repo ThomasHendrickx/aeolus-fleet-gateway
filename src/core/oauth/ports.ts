@@ -27,12 +27,6 @@ export interface ClientMetadataDocuments {
 }
 
 /** A code argo's approval issued: used once, within its minute, by the client and redirect URI it was issued to. */
-/** Outbound port: each fleet's MCP endpoint, the resource its tokens are bound to (RFC 8707), served at an alias of the fleet (interop 1: one fleet URL). */
-export interface FleetEndpoints {
-  /** The fleet whose MCP endpoint the URL is, among the fleets the gateway is connected to; none for any other URL. */
-  fleetOf(resource: string): Promise<FleetId | undefined>;
-}
-
 export interface AuthorizationCode {
   readonly codeHash: string;
   readonly fleetId: FleetId;

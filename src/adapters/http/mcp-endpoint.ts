@@ -13,15 +13,14 @@ import type { CallTool } from '../../core/mcp-in/call-tool.js';
 import type { ListTools } from '../../core/mcp-in/list-tools.js';
 import type { ReadCall, ReadClientCall } from '../../core/mcp-in/read-client-call.js';
 import { isToolResultType } from '../../core/mcp-out/content-types.js';
-import { FLEET_ENDPOINT_PATH } from '../crypto/fleet-endpoints.js';
 import { createdTaskOf, DEADLINE_PASSED, taskOf, TASKS_EXTENSION } from './mcp-task.js';
 import { runningVersion } from './version.js';
 
 const HTTP_UNAUTHORIZED = 401;
 
 export interface McpEndpointDeps {
-  /** The gateway's public URL: each fleet's MCP endpoint is under it, as its tokens are bound to it. */
-  issuer: string;
+  /** The MCP endpoint's URL, as tokens are bound to it. */
+  resource: string;
   authenticateAccessToken: AuthenticateAccessToken;
   listTools: ListTools;
   callTool: CallTool;
@@ -152,25 +151,21 @@ function serverFor(holder: AccessTokenHolder, deps: McpEndpointDeps): McpServer 
 }
 
 export function registerMcpEndpoint(server: FastifyInstance, deps: McpEndpointDeps): void {
-  const endpointPath = `${new URL(deps.issuer).pathname.replace(/\/$/, '')}${FLEET_ENDPOINT_PATH}`;
-  const unauthorized = (reply: FastifyReply, failure: { error: string | undefined; resource: string }) => {
-    const resourceMetadata = `${new URL(failure.resource).origin}/.well-known/oauth-protected-resource${new URL(failure.resource).pathname}`;
-    return reply
+  const resourceMetadata = `${new URL(deps.resource).origin}/.well-known/oauth-protected-resource${new URL(deps.resource).pathname}`;
+  const unauthorized = (reply: FastifyReply, error: string | undefined) =>
+    reply
       .code(HTTP_UNAUTHORIZED)
-      .header('www-authenticate', `Bearer ${failure.error === undefined ? '' : `error="${failure.error}", `}resource_metadata="${resourceMetadata}"`)
-      .send({ error: failure.error ?? 'unauthorized' });
-  };
+      .header('www-authenticate', `Bearer ${error === undefined ? '' : `error="${error}", `}resource_metadata="${resourceMetadata}"`)
+      .send({ error: error ?? 'unauthorized' });
 
-  // A token is taken only at the fleet's endpoint it was issued for, so the alias needs no lookup here.
-  server.all<{ Params: { alias: string } }>(endpointPath, async (request, reply) => {
-    const resource = `${deps.issuer}${FLEET_ENDPOINT_PATH.replace(':alias', request.params.alias)}`;
+  server.all(new URL(deps.resource).pathname, async (request, reply) => {
     const authorization = request.headers.authorization;
     if (authorization?.startsWith('Bearer ') !== true) {
-      return unauthorized(reply, { error: undefined, resource });
+      return unauthorized(reply, undefined);
     }
-    const holder = await deps.authenticateAccessToken(authorization.slice('Bearer '.length), resource);
+    const holder = await deps.authenticateAccessToken(authorization.slice('Bearer '.length));
     if (!holder.isOk) {
-      return unauthorized(reply, { error: 'invalid_token', resource });
+      return unauthorized(reply, 'invalid_token');
     }
     const handler = createMcpHandler(() => serverFor(holder.value, deps));
     return handler.fetch(webRequestOf(request), { parsedBody: request.body });

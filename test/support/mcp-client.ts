@@ -9,11 +9,10 @@ import { expect } from 'vitest';
 import { z } from 'zod';
 
 import { createPrismaClient } from '../../src/adapters/prisma/client.js';
-import { createPrismaConnectionStore } from '../../src/adapters/prisma/connection-store.js';
 import { createPrismaPartyStore } from '../../src/adapters/prisma/party-store.js';
 import { commission, register } from './argo.js';
 import type { FleetServer } from './fleet-server.js';
-import { mutate, query } from './gateway-api.js';
+import { mutate } from './gateway-api.js';
 
 /** The gateway secret every test gateway runs with. */
 export const TEST_GATEWAY_SECRET = 'a-test-gateway-secret-of-at-least-32-characters';
@@ -29,12 +28,6 @@ export interface Setting {
 }
 
 const registered = z.object({ result: z.object({ data: z.object({ clientId: z.string(), clientSecret: z.string().nullable() }) }) });
-
-/** The fleet's MCP endpoint, as argo reads it: where its MCP clients connect. */
-export async function mcpEndpointOf(setting: Setting): Promise<string> {
-  const response = await query(setting.address, { procedure: 'mcp.endpoint', cookie: setting.cookie });
-  return z.object({ result: z.object({ data: z.string() }) }).parse(await response.json()).result.data;
-}
 
 /** argo pre-registers a client: its id, and its secret when confidential. */
 export async function aRegisteredClient(setting: Setting, isConfidential: boolean): Promise<{ clientId: string; clientSecret: string | null }> {
@@ -94,9 +87,6 @@ export async function aCrewedClientParty(setting: Setting, clientId: string): Pr
   const whoami = await fetch(`${fleet.url}/api/v1/ship/whoami`, { headers: { authorization: `Bearer ${await register(fleet, owner)}` } });
   const { fleetId } = z.object({ fleetId: idSchema('fleet') }).parse(await whoami.json());
   const prisma = createPrismaClient(setting.databaseUrl);
-  // The gateway connected to the fleet, as connection.connect leaves it: its ship's crew token, without the networking plugin connect checks for.
-  const gateway = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway' } });
-  await createPrismaConnectionStore(prisma).save({ fleetId, shipId: gateway.shipId, name: 'gateway', crewToken: await register(fleet, gateway), crewedAt: new Date() });
   await createPrismaPartyStore(prisma).save({
     fleetId,
     name: 'test-client',
@@ -123,9 +113,9 @@ export async function aSignedInClient(setting: Setting, isConfidential = true) {
   const information = await aRegisteredClient(setting, isConfidential);
   await aCrewedClientParty(setting, information.clientId);
   const client = aClientProvider(information);
-  const serverUrl = await mcpEndpointOf(setting);
+  const serverUrl = `${setting.address}/mcp`;
   await auth(client.provider, { serverUrl });
   const { code, iss } = await approved(setting, z.instanceof(URL).parse(client.sentTo()));
   await auth(client.provider, { serverUrl, authorizationCode: code, ...(iss === null ? {} : { iss }) });
-  return { ...client, endpoint: serverUrl };
+  return client;
 }

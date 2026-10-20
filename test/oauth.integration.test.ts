@@ -6,7 +6,7 @@ import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
-import { aClientProvider, aCrewedClientParty, aRegisteredClient, approved, mcpEndpointOf, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
+import { aClientProvider, aCrewedClientParty, aRegisteredClient, approved, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
 
 // An MCP client signs in to the gateway with the MCP TypeScript SDK, as
 // Claude or Cursor would: argo pre-registers it, approves it at /authorize
@@ -37,7 +37,7 @@ describe('an MCP client signs in to the gateway with the MCP TypeScript SDK', ()
     const information = await aRegisteredClient(setting, isConfidential);
     await aCrewedClientParty(setting, information.clientId);
     const client = aClientProvider(information);
-    const serverUrl = await mcpEndpointOf(setting);
+    const serverUrl = `${setting.address}/mcp`;
 
     await expect(auth(client.provider, { serverUrl })).resolves.toBe('REDIRECT');
     const { code, iss } = await approved(setting, z.instanceof(URL).parse(client.sentTo()));
