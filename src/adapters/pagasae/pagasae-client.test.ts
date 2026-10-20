@@ -91,7 +91,7 @@ describe('redeeming the code pagasae sent the person back with', () => {
   });
 
   it('answers no person ship for an account with none', async () => {
-    const { person_ship: _none, ...withoutShip } = CHARLOTTE;
+    const withoutShip = Object.fromEntries(Object.entries(CHARLOTTE).filter(([claim]) => claim !== 'person_ship'));
     answer = { status: 200, body: { ...(typeof answer.body === 'object' ? answer.body : {}), access_token: anAccountToken(withoutShip) } };
 
     await expect(pagasae().redeemCode({ code: 'pagasae-code-1', verifier: 'verifier-1' })).resolves.toMatchObject({ isOk: true, value: { personShipId: null } });

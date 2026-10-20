@@ -43,6 +43,11 @@ import { createClientMetadataDocuments } from './adapters/oauth/client-metadata-
 import { createPrismaAuthorizationCodes, createPrismaIssuedTokens, createPrismaOAuthClients } from './adapters/prisma/oauth-stores.js';
 import { createApproveAuthorization } from './core/oauth/approve-authorization.js';
 import { createExchangeToken } from './core/oauth/exchange-token.js';
+import { createSignInSeals } from './adapters/crypto/sign-in-seals.js';
+import { createPagasae } from './adapters/pagasae/pagasae-client.js';
+import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
+import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
+import { createStartSignIn } from './core/sign-in/start-sign-in.js';
 import { createReadAuthorization } from './core/oauth/read-authorization.js';
 import { createRegisterClient } from './core/oauth/register-client.js';
 import { createConnect } from './core/connection/connect.js';
@@ -79,6 +84,8 @@ export interface GatewayAppOptions {
   mcpWaitMaxMs?: number;
   /** How long the gateway waits for an outside tool's answer before the call counts as unanswered: 5 minutes unless set. */
   toolCallTimeoutMs?: number;
+  /** pagasae, where people sign in, and the gateway's client there (decision 0054): unset, people do not sign in. */
+  pagasae?: { url: string; clientId: string; clientSecret: string };
 }
 
 /** Within the fleet's 10 minutes a handed delivery may wait for its confirmation (decision 0040). */
@@ -89,6 +96,9 @@ const DEFAULT_PUBLIC_URL = 'http://127.0.0.1:4200';
 
 /** How long a client's metadata document may take to answer. */
 const CLIENT_METADATA_TIMEOUT_MS = 5_000;
+
+/** How long pagasae's token endpoint may take to answer. */
+const PAGASAE_TIMEOUT_MS = 10_000;
 
 /** How often a proxy ship's worker looks again while the fleet hands it only what it holds, or does not answer. */
 const POLL_MS = 2_000;
@@ -209,7 +219,28 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const readAuthorization = createReadAuthorization({ clients: oauthClients, documents: createClientMetadataDocuments({ timeoutMs: CLIENT_METADATA_TIMEOUT_MS }), resource });
   const registerClient = createRegisterClient({ clients: oauthClients, secrets: oauthSecrets });
   const issuedTokens = createPrismaIssuedTokens(prisma);
+  const seals = createSignInSeals(options.gatewaySecret);
+  // People sign in through pagasae where it is set (decision 0054); else argo alone approves clients.
+  const pagasae = options.pagasae === undefined ? undefined : createPagasae({ ...options.pagasae, redirectUri: `${issuer}/pagasae/callback`, timeoutMs: PAGASAE_TIMEOUT_MS });
+  const signIn =
+    pagasae === undefined
+      ? undefined
+      : {
+          start: createStartSignIn({ readAuthorization, seals, pagasae, secrets: oauthSecrets, clock }),
+          complete: createCompleteSignIn({
+            readAuthorization,
+            seals,
+            pagasae,
+            grants: createPrismaAccountGrants(prisma),
+            codes: authorizationCodes,
+            secrets: oauthSecrets,
+            clock,
+            issuer,
+            servesFleet: async (fleetId) => (await connections.find(fleetId)) !== undefined && (await isServed(fleetId)),
+          }),
+        };
   registerOAuthRoutes(server, {
+    ...(signIn === undefined ? {} : { signIn }),
     issuer,
     resource,
     fleetUrl: options.fleetUrl,

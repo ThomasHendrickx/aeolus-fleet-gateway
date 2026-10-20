@@ -19,6 +19,9 @@ const environmentSchema = z.object({
   GATEWAY_PUBLIC_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).optional(),
   MCP_WAIT_MAX_MS: z.coerce.number().int().min(0).default(MCP_WAIT_MAX_MS_DEFAULT),
   INSTALLATION_TOKEN: z.string().min(INSTALLATION_TOKEN_MIN_LENGTH, { error: `must hold at least ${String(INSTALLATION_TOKEN_MIN_LENGTH)} characters` }).optional(),
+  PAGASAE_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).optional(),
+  PAGASAE_CLIENT_ID: z.string().min(1).optional(),
+  PAGASAE_CLIENT_SECRET: z.string().min(1).optional(),
 });
 
 /** What `aeolus-gateway migrate` reads: the database alone. */
@@ -47,6 +50,12 @@ export interface Config {
   gatewaySecret: string;
   /** How long an outside MCP client's call waits for its answer before it is answered its handle. */
   mcpWaitMaxMs: number;
+  /**
+   * pagasae, where people sign in (decision 0054), and the gateway's client
+   * there, registered with the redirect URI `<public URL>/pagasae/callback`.
+   * Unset, people do not sign in, and argo alone approves clients.
+   */
+  pagasae: { url: string; clientId: string; clientSecret: string } | undefined;
 }
 
 export class ConfigError extends Error {
@@ -74,7 +83,20 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     publicUrl: (variables.GATEWAY_PUBLIC_URL ?? `http://127.0.0.1:${String(variables.PORT)}`).replace(/\/$/, ''),
     gatewaySecret: variables.GATEWAY_SECRET,
     mcpWaitMaxMs: variables.MCP_WAIT_MAX_MS,
+    pagasae: pagasaeOf(variables),
   };
+}
+
+/** pagasae's three settings: all of them, or none. */
+function pagasaeOf(variables: { PAGASAE_URL?: string | undefined; PAGASAE_CLIENT_ID?: string | undefined; PAGASAE_CLIENT_SECRET?: string | undefined }): Config['pagasae'] {
+  const { PAGASAE_URL: url, PAGASAE_CLIENT_ID: clientId, PAGASAE_CLIENT_SECRET: clientSecret } = variables;
+  if (url === undefined && clientId === undefined && clientSecret === undefined) {
+    return undefined;
+  }
+  if (url === undefined || clientId === undefined || clientSecret === undefined) {
+    throw new ConfigError('PAGASAE_URL, PAGASAE_CLIENT_ID and PAGASAE_CLIENT_SECRET: set all three, or none');
+  }
+  return { url: url.replace(/\/$/, ''), clientId, clientSecret };
 }
 
 /** The database URL alone, for `aeolus-gateway migrate`. */

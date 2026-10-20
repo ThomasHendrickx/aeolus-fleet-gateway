@@ -194,3 +194,18 @@ model ClientCallReply {
   @@index([fleetId, callMessageId])
   @@map("client_call_replies")
 }
+
+/// A person's sign-in through pagasae, kept for their MCP client (decision 0054): the account in the fleet, and pagasae's tokens to act as it.
+model AccountGrant {
+  grantId               String   @id @map("grant_id")
+  fleetId               String   @map("fleet_id")
+  accountId             String   @map("account_id")
+  personShipId          String?  @map("person_ship_id")
+  /// pagasae's refresh token, kept as crew tokens are.
+  refreshToken          String   @map("refresh_token")
+  accountToken          String   @map("account_token")
+  accountTokenExpiresAt DateTime @map("account_token_expires_at") @db.Timestamptz(3)
+
+  @@index([fleetId])
+  @@map("account_grants")
+}
