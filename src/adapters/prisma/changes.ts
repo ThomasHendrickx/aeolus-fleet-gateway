@@ -3,8 +3,9 @@
  * announces each committed change to a fleet's pending requests on the
  * `gateway_changes` channel, naming only the fleet and the topic, so every
  * gateway instance hears a decision made on any of them. One connection per
- * instance listens; when it is lost, it connects again and asks its listener
- * to read everything anew, as changes made meanwhile were not heard.
+ * instance listens; when it is lost, or the database does not answer at
+ * start, it connects again and asks its listener to read everything anew,
+ * as changes made meanwhile were not heard.
  */
 import { idSchema, type FleetId } from '@aeolus-fleet/common';
 import pg from 'pg';
@@ -63,6 +64,11 @@ export async function listenToChanges(databaseUrl: string, listener: { onChange:
       await connecting.end().catch(() => undefined);
       throw error;
     }
+    if (isClosed) {
+      // Closed while it was connecting: it is not kept.
+      await connecting.end();
+      return;
+    }
     client = connecting;
     wait = RECONNECT_FIRST_MS;
   };
@@ -83,7 +89,8 @@ export async function listenToChanges(databaseUrl: string, listener: { onChange:
     }, wait);
   };
 
-  await connect();
+  // A database that does not answer yet keeps the gateway starting: the listener connects once it does.
+  await connect().catch(reconnect);
   return {
     close: async () => {
       isClosed = true;

@@ -6,6 +6,7 @@ import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/cl
 import { createPrismaPendingRequests } from '../src/adapters/prisma/pending-requests.js';
 import type { PendingRequest } from '../src/core/requests/ports.js';
 import { migratedDatabase } from './support/database.js';
+import { aNewDatabaseUrl } from './support/fleet-server.js';
 
 // What the pages' live channel hears from Postgres: each committed change to
 // a fleet's pending requests, on every gateway instance listening, and a call
@@ -113,5 +114,11 @@ describe("the changes to a fleet's pending requests, heard by the pages", () => 
     await createPrismaPendingRequests(prisma).open({ ...aRequest(), now: NOW });
     await until(() => heard.length > 0);
     expect(heard).toEqual([{ fleetId: FLEET, topic: 'requests' }]);
+  });
+
+  it('starts while the database does not answer, without failing', async () => {
+    const waiting = await listenToChanges(aNewDatabaseUrl(inject('postgresUrl'), 'never_created'), { onChange: () => undefined, onResync: () => undefined });
+
+    await expect(waiting.close()).resolves.toBeUndefined();
   });
 });
