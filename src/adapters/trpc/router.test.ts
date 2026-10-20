@@ -15,6 +15,9 @@ const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 const ARGO_COOKIE = 'aeolus_session=argo';
 const VIEWER_COOKIE = 'aeolus_session=viewer';
+/** A person signed in to the gateway's pages, and one whose sign-in ended at pagasae. */
+const PERSON_COOKIE = 'aeolus_gateway_session=charlotte';
+const SIGNED_OUT_COOKIE = 'aeolus_gateway_session=ended';
 const MANAGER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9mgr';
 /** A ship's own crew tokens: one holding fleet:manage, one only reading. */
 const MANAGER_CREW = 'aeolus_ct_v1_manager';
@@ -22,6 +25,7 @@ const READER_CREW = 'aeolus_ct_v1_reader';
 /** A ship's own crew token holding gateway:approve. */
 const APPROVER_CREW = 'aeolus_ct_v1_approver';
 const REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0001';
+const DELIVERY = 'dlv_01m3tbfspe96yf1rnr4ank9dlv';
 const DECIDED = 'req_01m5c7hmbt9f1vrkwb37az0002';
 const ORDERBOT_REQUEST: PendingRequest = {
   fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8sv',
@@ -42,11 +46,13 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   marks: Parameters<MarkTool>[0][];
   decisions: Parameters<DecideRequest>[0][];
   switched: Parameters<SetOutsideParties>[0][];
+  answers: Record<string, string>[];
 } {
   const approvals: Parameters<ApproveParty>[0][] = [];
   const switched: Parameters<SetOutsideParties>[0][] = [];
   const decisions: Parameters<DecideRequest>[0][] = [];
   const marks: Parameters<MarkTool>[0][] = [];
+  const answers: Record<string, string>[] = [];
   const unused = () => Promise.reject(new Error('not used by the parties procedures'));
   const context: Context = {
     cookie,
@@ -56,7 +62,32 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         const scopes = { [MANAGER_CREW]: ['fleet:read', 'fleet:manage'], [APPROVER_CREW]: ['fleet:read', 'gateway:approve'] }[sent.crewToken] ?? ['fleet:read'];
         return Promise.resolve(ok({ fleetId: FLEET, kind: 'ship' as const, shipId: MANAGER, scopes }));
       }
+      if (sent.cookie === PERSON_COOKIE || sent.cookie === SIGNED_OUT_COOKIE) {
+        return Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: OWNER, grantId: sent.cookie === PERSON_COOKIE ? 'grant-1' : 'grant-ended', scopes: ['fleet:read'] }));
+      }
       return Promise.resolve(ok(sent.cookie === ARGO_COOKIE ? { fleetId: FLEET, kind: 'operator' as const, scopes: ['fleet:read', 'fleet:manage'] } : { fleetId: FLEET, kind: 'viewer' as const, scopes: ['fleet:read'] }));
+    },
+    person: {
+      readInbox: (caller) =>
+        Promise.resolve(
+          caller.grantId === 'grant-1'
+            ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }] })
+            : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
+        ),
+      openDelivery: ({ caller, deliveryId }) =>
+        Promise.resolve(
+          deliveryId === DELIVERY && caller.grantId === 'grant-1'
+            ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?' })
+            : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} waits for you: read your inbox again` }),
+        ),
+      answerDelivery: (input) => {
+        answers.push({ grantId: input.caller.grantId, deliveryId: input.deliveryId, contentType: input.contentType, payload: input.payload });
+        return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
+      },
+      doneDelivery: (input) => {
+        answers.push({ grantId: input.caller.grantId, deliveryId: input.deliveryId });
+        return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
+      },
     },
     isServed: () => Promise.resolve(true),
     heldConnection: unused,
@@ -99,7 +130,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, decisions, switched };
+  return { context, approvals, marks, decisions, switched, answers };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -280,5 +311,53 @@ describe("outside parties are switched per fleet through the gateway's API (inte
       code: 'PRECONDITION_FAILED',
       message: 'This fleet applies no network rules',
     });
+  });
+});
+
+describe("a person reads and deals with their person ship's deliveries through the gateway's API, signed in to its pages", () => {
+  it('reads what waits, by titles only', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.inbox()).resolves.toEqual({
+      waiting: 1,
+      deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }],
+    });
+  });
+
+  it('opens one, whole', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.open({ deliveryId: DELIVERY })).resolves.toMatchObject({ contentType: 'text/plain', payload: 'Publish it?' });
+  });
+
+  it('answers one it opened, and is done with another, as its own grant', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+    const caller = gatewayRouter.createCaller(context);
+
+    await caller.people.answer({ deliveryId: DELIVERY, contentType: 'text/plain', payload: 'Yes' });
+    await caller.people.done({ deliveryId: DELIVERY });
+
+    expect(answers).toEqual([
+      { grantId: 'grant-1', deliveryId: DELIVERY, contentType: 'text/plain', payload: 'Yes' },
+      { grantId: 'grant-1', deliveryId: DELIVERY },
+    ]);
+  });
+
+  it('says a delivery that no longer waits is not found', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.open({ deliveryId: 'dlv_gone' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('asks a person whose sign-in ended to sign in again', async () => {
+    const { context } = aContext(SIGNED_OUT_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('refuses any other actor: only a person has a person ship', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

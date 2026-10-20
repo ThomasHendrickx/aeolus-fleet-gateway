@@ -35,6 +35,11 @@ import type { DecideRequest, DecideRefusal } from '../../core/requests/decide-re
 import type { ListToDecide } from '../../core/requests/list-to-decide.js';
 import type { EndSignIns } from '../../core/sign-in/end-sign-ins.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
+import type { AnswerDelivery } from '../../core/people/answer-delivery.js';
+import type { DoneDelivery } from '../../core/people/done-delivery.js';
+import type { OpenDelivery } from '../../core/people/open-delivery.js';
+import type { ReadInbox } from '../../core/people/read-inbox.js';
+import type { Result } from '../../core/shared/result.js';
 
 export interface Context {
   /** The Cookie header the console's server or the gateway's page forwarded. */
@@ -63,6 +68,8 @@ export interface Context {
   registerClient: RegisterClient;
   listToDecide: ListToDecide;
   decideRequest: DecideRequest;
+  /** A person's own person ship's deliveries; unset where no pagasae signs anyone in. */
+  person?: { readInbox: ReadInbox; openDelivery: OpenDelivery; answerDelivery: AnswerDelivery; doneDelivery: DoneDelivery };
   readOutsideParties: ReadOutsideParties;
   setOutsideParties: SetOutsideParties;
 }
@@ -273,6 +280,33 @@ const decisionSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
+/** The largest payload a message carries. */
+const PAYLOAD_MAX_BYTES = 64 * 1024;
+
+/** The refusals of a person's own deliveries, as the API states them. */
+const PERSON_CODES = {
+  NOT_A_PERSON: 'FORBIDDEN',
+  SIGNED_OUT: 'UNAUTHORIZED',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+  NO_SUCH_DELIVERY: 'NOT_FOUND',
+  SEND_REFUSED: 'BAD_REQUEST',
+} as const satisfies Record<string, TRPCError['code']>;
+
+function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES; message: string }>): T {
+  if (!answered.isOk) {
+    throw new TRPCError({ code: PERSON_CODES[answered.error.kind], message: answered.error.message });
+  }
+  return answered.value;
+}
+
+/** A person signed in to the pages, acting on their own person ship: only an account has one. */
+const personProcedure = actorProcedure.use(({ ctx, next }) => {
+  if (ctx.actor.kind !== 'account' || ctx.person === undefined) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: "Only a person signed in to the gateway's pages has a person ship's deliveries here" });
+  }
+  return next({ ctx: { person: ctx.person, caller: { fleetId: ctx.actor.fleetId, grantId: ctx.actor.grantId } } });
+});
+
 export const gatewayRouter = t.router({
   connection: t.router({
     /** Whether the gateway is connected to the operator's fleet, as which ship, and the ship it was last connected as. */
@@ -376,6 +410,18 @@ export const gatewayRouter = t.router({
         }
         return stated.value;
       }),
+  }),
+  people: t.router({
+    /** What waits for the person's own ship, by titles only (Q20). */
+    inbox: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readInbox(ctx.caller))),
+    /** Opens one delivery, whole; the gateway acknowledges it for them. */
+    open: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.openDelivery({ caller: ctx.caller, ...input }))),
+    /** Answers a delivery they opened, to its sender. */
+    answer: personProcedure
+      .input(z.strictObject({ deliveryId: z.string().min(1), contentType: z.string().min(1), payload: z.string().max(PAYLOAD_MAX_BYTES) }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.answerDelivery({ caller: ctx.caller, ...input }))),
+    /** Is done with a delivery they opened, with no answer. */
+    done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, ...input }))),
   }),
   requests: t.router({
     /** Every open request of the fleet, for an actor holding gateway:approve (decision 0056). */

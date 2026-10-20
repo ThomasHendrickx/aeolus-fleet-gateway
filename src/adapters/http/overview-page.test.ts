@@ -2,6 +2,9 @@ import type { FleetId } from '@aeolus-fleet/common';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { ANSWER_CONTENT_TYPE, QUESTION_CONTENT_TYPE } from '@aeolus-fleet/common';
+
+import type { InboxEntry } from '../../core/people/inbox-entry.js';
 import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
@@ -38,6 +41,27 @@ let server: FastifyInstance;
 let toDecide: PendingRequest[];
 let decisions: Omit<Parameters<DecideRequest>[0], 'actor'>[];
 let refusal: { kind: 'ALREADY_DECIDED'; message: string } | undefined;
+let dealt: Record<string, string>[];
+
+const QUESTION_ID = '0f7f8d2a-5c1e-4b8e-9d3a-2a6b1c9e7f10';
+const QUESTION = {
+  id: QUESTION_ID,
+  title: 'Publish the PRD draft to Linear?',
+  context: 'The draft <is> ready.',
+  options: [
+    { key: 1, label: 'Publish', detail: '' },
+    { key: 2, label: 'Hold', detail: '' },
+  ],
+  pick: { option: 1, why: 'It is reviewed.' },
+};
+const WAITING: InboxEntry[] = [
+  { deliveryId: 'dlv_question', from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T10:00:00.000Z' },
+  { deliveryId: 'dlv_message', from: 'research-01', title: 'Weekly summary is ready', sentAt: '2026-10-20T11:00:00.000Z' },
+];
+const OPENED: Record<string, { contentType: string; payload: string }> = {
+  dlv_question: { contentType: QUESTION_CONTENT_TYPE, payload: JSON.stringify(QUESTION) },
+  dlv_message: { contentType: 'text/plain', payload: 'Read it <here>.' },
+};
 
 function contextFor(cookie: string | undefined): Context {
   const unused = () => Promise.reject(new Error('not used by the page'));
@@ -77,6 +101,24 @@ function contextFor(cookie: string | undefined): Context {
     setOutsideParties: unused,
     listToDecide: (actor) =>
       Promise.resolve(actor.scopes.includes('gateway:approve') ? ok(toDecide) : err({ kind: 'NOT_AN_APPROVER' as const, message: 'Deciding requests needs gateway:approve' })),
+    person: {
+      readInbox: () => Promise.resolve(ok({ waiting: WAITING.length, deliveries: WAITING })),
+      openDelivery: ({ deliveryId }) => {
+        const entry = WAITING.find((waiting) => waiting.deliveryId === deliveryId);
+        const opened = OPENED[deliveryId];
+        return Promise.resolve(
+          entry === undefined || opened === undefined ? err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} waits for you: read your inbox again` }) : ok({ ...entry, ...opened }),
+        );
+      },
+      answerDelivery: ({ deliveryId, contentType, payload }) => {
+        dealt.push({ deliveryId, contentType, payload });
+        return Promise.resolve(ok({ deliveryId, isHandled: true as const }));
+      },
+      doneDelivery: ({ deliveryId }) => {
+        dealt.push({ deliveryId });
+        return Promise.resolve(ok({ deliveryId, isHandled: true as const }));
+      },
+    },
     decideRequest: ({ requestId, decision }) => {
       const decided = { requestId, decision };
       decisions.push(decided);
@@ -93,6 +135,7 @@ beforeEach(async () => {
   toDecide = [ORDERBOT, LINEAR];
   decisions = [];
   refusal = undefined;
+  dealt = [];
   server = Fastify({ logger: false });
   registerOverviewPage(server, { contextFor, signIn: { kind: 'pages' }, clock: { now: () => NOW } });
   await server.ready();
@@ -283,5 +326,70 @@ describe('the Overview page, live', () => {
     const sections = await live.request.render(contextFor(APPROVER), new URLSearchParams('page=request&requestId=req_orderbot'));
 
     expect(sections.request).toContain('no longer waits');
+  });
+});
+
+describe('the Overview page: what waits on a person', () => {
+  function post(url: string, form: Record<string, string> & { origin?: string }) {
+    const { origin = ORIGIN, ...fields } = form;
+    return server.inject({ method: 'POST', url, headers: { host: HOST, 'content-type': 'application/x-www-form-urlencoded', cookie: PERSON, origin }, payload: new URLSearchParams(fields).toString() });
+  }
+
+  it('leads a person with how many deliveries wait on them, each by its sender and title', async () => {
+    const page = await get('/overview', PERSON);
+
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('aria-label="2 wait on you"');
+    expect(page.body).toContain('prd-writer');
+    expect(page.body).toContain('Weekly summary is ready');
+    expect(page.body).toContain('action="/overview/deliveries/dlv_question/open"');
+  });
+
+  it("opens a question with one button per option, each naming what it sends, the asker's pick marked", async () => {
+    const opened = await post('/overview/deliveries/dlv_question/open', {});
+
+    expect(opened.statusCode).toBe(200);
+    expect(opened.body).toContain('The draft &lt;is&gt; ready.');
+    expect(opened.body).toContain('name="option" value="1"');
+    expect(opened.body).toContain('name="option" value="2"');
+    expect(opened.body).toMatch(/class="[^"]*pick[^"]*"[^>]*name="option" value="1"/);
+    expect(opened.body).toContain('Publish is the pick of prd-writer');
+  });
+
+  it('answers a question with the option tapped, as the answer content type', async () => {
+    const answered = await post('/overview/deliveries/dlv_question/answer', { questionId: QUESTION_ID, option: '2' });
+
+    expect(answered.statusCode).toBe(303);
+    expect(answered.headers.location).toBe('/overview');
+    expect(dealt).toEqual([{ deliveryId: 'dlv_question', contentType: ANSWER_CONTENT_TYPE, payload: JSON.stringify({ questionId: QUESTION_ID, option: 2 }) }]);
+  });
+
+  it('opens a message, escaped, and is done with it', async () => {
+    const opened = await post('/overview/deliveries/dlv_message/open', {});
+    const done = await post('/overview/deliveries/dlv_message/done', {});
+
+    expect(opened.body).toContain('Read it &lt;here&gt;.');
+    expect(done.statusCode).toBe(303);
+    expect(dealt).toEqual([{ deliveryId: 'dlv_message' }]);
+  });
+
+  it('answers a message with a note of its own', async () => {
+    const answered = await post('/overview/deliveries/dlv_message/answer', { note: 'Thanks' });
+
+    expect(answered.statusCode).toBe(303);
+    expect(dealt).toEqual([{ deliveryId: 'dlv_message', contentType: 'text/plain', payload: 'Thanks' }]);
+  });
+
+  it('says a delivery that no longer waits', async () => {
+    const opened = await post('/overview/deliveries/dlv_gone/open', {});
+
+    expect(opened.statusCode).toBe(404);
+    expect(opened.body).toContain('href="/overview"');
+  });
+
+  it('refuses a form sent from another origin, opening nothing', async () => {
+    const opened = await post('/overview/deliveries/dlv_question/open', { origin: 'https://elsewhere.example.com' });
+
+    expect(opened.statusCode).toBe(403);
   });
 });
