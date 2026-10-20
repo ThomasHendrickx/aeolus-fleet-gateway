@@ -13,11 +13,8 @@ export const POSTGRES_IMAGE = 'public.ecr.aws/docker/library/postgres:16-alpine'
 /** Ryuk, the reaper Testcontainers starts to remove containers a run leaves behind, from Testcontainers' own GitHub registry. */
 export const REAPER_IMAGE = 'ghcr.io/testcontainers/ryuk:0.14.0';
 
-/** A company identity provider: navikt's mock OAuth2 server, a real OpenID provider, from its GitHub registry. */
-export const OIDC_PROVIDER_IMAGE = 'ghcr.io/navikt/mock-oauth2-server:6.0.4';
-
 /** Every image the tests start, one per line when this file runs, for CI to cache. */
-export const TEST_IMAGES: readonly string[] = [POSTGRES_IMAGE, REAPER_IMAGE, OIDC_PROVIDER_IMAGE];
+export const TEST_IMAGES: readonly string[] = [POSTGRES_IMAGE, REAPER_IMAGE];
 
 if (import.meta.main) {
   console.log(TEST_IMAGES.join('\n'));

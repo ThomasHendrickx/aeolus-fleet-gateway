@@ -71,19 +71,6 @@ const APPROVE_FORM = (requestId: string) => `<h2>Approve an MCP server</h2>
 <button>Approve</button>
 </form>`;
 
-const IDENTITY_PROVIDER_FORM = `<form method="post" action="${PAGE}/identity-provider">
-<label>Issuer<input name="issuer" type="url" required></label>
-<label>Client id<input name="clientId" required></label>
-<label>Client secret<input name="clientSecret" type="password" required></label>
-<button>Set</button>
-</form>`;
-
-/** The fleet's identity provider, people's sign-in, never its secret; argo's form to set it. */
-function identityProviderPart(provider: { issuer: string; clientId: string } | null, canManage: boolean): string {
-  const shown = provider ? `<p>${escaped(provider.issuer)}, client ${escaped(provider.clientId)}</p>` : '<p class="muted">None set: people cannot sign in yet.</p>';
-  return `<h2>Identity provider</h2>${shown}${canManage ? IDENTITY_PROVIDER_FORM : ''}`;
-}
-
 /** Why the API refused, as the page says it: the form's fields that are not valid, or the API's message. */
 function messageOf(error: TRPCError): string {
   if (error.cause instanceof z.ZodError) {
@@ -97,7 +84,6 @@ async function renderPage(reply: FastifyReply, page: { context: Context; failure
   const caller = gatewayRouter.createCaller(context);
   const operator = await context.authenticateOperator(context.cookie);
   const parties = await caller.parties.list();
-  const provider = await caller.identityProvider.get();
   const canManage = operator.isOk && operator.value.scopes.includes('fleet:manage');
   const body = [
     '<h1>Parties</h1>',
@@ -107,7 +93,6 @@ async function renderPage(reply: FastifyReply, page: { context: Context; failure
       ? '<p class="muted">No party yet.</p>'
       : `<table><thead><tr><th>Name</th><th>URL</th><th>Credential</th><th>State</th><th>Proxy ship</th><th></th></tr></thead><tbody>${parties.map((party) => partyRow(party, canManage)).join('')}</tbody></table>`,
     canManage ? APPROVE_FORM(randomUUID()) : '',
-    identityProviderPart(provider, canManage),
   ].join('');
   return reply.code(failure?.status ?? 200).type('text/html; charset=utf-8').send(layout('Gateway parties', body));
 }
@@ -143,7 +128,6 @@ const ACTIONS: Record<string, (caller: ReturnType<typeof gatewayRouter.createCal
   },
   crew: (caller, form) => caller.parties.crew({ name: field(form, 'name'), secret: field(form, 'secret') }),
   state: (caller, form) => caller.parties.state({ name: field(form, 'name') }),
-  'identity-provider': (caller, form) => caller.identityProvider.set({ issuer: field(form, 'issuer'), clientId: field(form, 'clientId'), clientSecret: field(form, 'clientSecret') }),
   mark: (caller, form) => caller.parties.markTool({ name: field(form, 'name'), tool: field(form, 'tool'), isRepeatable: form.isRepeatable === 'on' }),
 };
 
