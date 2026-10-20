@@ -69,6 +69,7 @@ function contextFor(cookie: string | undefined): Context {
     approveParty: unused,
     crewParty: unused,
     listParties: unused,
+    retireParty: unused,
     stateParty: unused,
     markTool: unused,
     registerClient: unused,

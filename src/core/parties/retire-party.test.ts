@@ -81,7 +81,7 @@ describe('retiring an outside party', () => {
 
     await retireParty().retireParty({ actor: MANAGER, as: AS, name: 'orderbot' });
 
-    expect(tokens.held.map(({ party, state }) => ({ party, state }))).toEqual([
+    expect(tokens.held).toMatchObject([
       { party: 'orderbot', state: 'revoked' },
       { party: 'crm', state: 'active' },
     ]);

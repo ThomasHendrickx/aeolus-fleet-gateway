@@ -1,5 +1,6 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
+import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
 import type { Party } from './party.js';
@@ -28,4 +29,10 @@ export interface ProxyShipDoor {
     ship: { name: string; type: string; owner: ShipId; idempotencyKey: string; scopes: readonly string[] },
   ): Promise<Result<{ shipId: ShipId; secret: string | null }, FleetRefusal>>;
   register(claim: { shipId: ShipId; secret: string }): Promise<Result<{ crewToken: string }, FleetRefusal>>;
+}
+
+/** Outbound port: the fleet's calls on a party's proxy ship made as the actor (decision 0057), so the fleet checks its scopes and reach. */
+export interface ProxyShipsAsActor {
+  /** Retires the proxy ship (fleet.retire); a ship retired already is refused with CONFLICT. */
+  retire(as: ActorCredential, ship: { shipId: ShipId }): Promise<Result<undefined, FleetRefusal>>;
 }

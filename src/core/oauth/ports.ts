@@ -77,6 +77,8 @@ export interface IssuedTokens {
   revokeIssuedBy(codeHash: string): Promise<void>;
   /** Revokes every pair that stands for the account grant in the fleet: its person signs in again. */
   revokeGrant(fleetId: FleetId, grantId: string): Promise<void>;
+  /** Revokes every pair that stands for the party in the fleet: its client is refused at its next call. */
+  revokeParty(fleetId: FleetId, party: string): Promise<void>;
 }
 
 /** active: in use; rotated: its refresh token was traded for a new pair; revoked: refused for good. */

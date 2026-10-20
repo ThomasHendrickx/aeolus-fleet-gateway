@@ -27,6 +27,7 @@ import type { ReadOutsideParties, SetOutsideParties } from '../../core/outside-p
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListParties } from '../../core/parties/list-parties.js';
+import type { RetireParty, RetirePartyRefusal } from '../../core/parties/retire-party.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { StateParty } from '../../core/mcp-out/state-party.js';
 import type { RegisterClient } from '../../core/oauth/register-client.js';
@@ -56,6 +57,7 @@ export interface Context {
   approveParty: ApproveParty;
   crewParty: CrewParty;
   listParties: ListParties;
+  retireParty: RetireParty;
   stateParty: StateParty;
   markTool: MarkTool;
   registerClient: RegisterClient;
@@ -155,6 +157,15 @@ const APPROVE_CODES = {
 } as const satisfies Record<string, TRPCError['code']>;
 
 /** The refusals of crewing a party's proxy ship with a new secret, as the API states them. */
+/** The refusals of retiring a party, as the API states them. */
+const RETIRE_CODES = {
+  NOT_A_MANAGER: 'FORBIDDEN',
+  NO_SUCH_PARTY: 'NOT_FOUND',
+  RETIRE_REFUSED: 'FORBIDDEN',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+  NOT_AN_ACTOR: 'UNAUTHORIZED',
+} as const satisfies Record<RetirePartyRefusal['kind'], TRPCError['code']>;
+
 const CREW_CODES = {
   NO_SUCH_PARTY: 'NOT_FOUND',
   NOT_AWAITING_CREW: 'CONFLICT',
@@ -316,6 +327,21 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: APPROVE_CODES[approved.error.kind], message: approved.error.message });
         }
         return approved.value;
+      }),
+    /**
+     * An actor holding fleet:manage retires a party (decision 0056): its proxy
+     * ship is retired in the fleet as the actor, within its manage reach, and
+     * the gateway forgets the party. Adding it again is a new request.
+     */
+    retire: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema }))
+      .output(z.object({}))
+      .mutation(async ({ ctx, input }) => {
+        const retired = await ctx.retireParty({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, ...input });
+        if (!retired.isOk) {
+          throw new TRPCError({ code: RETIRE_CODES[retired.error.kind], message: retired.error.message });
+        }
+        return {};
       }),
     /** argo hands over a new secret, from a new starting prompt in the console, for a proxy ship that awaits crew. */
     crew: managing(servedProcedure)

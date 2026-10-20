@@ -99,6 +99,8 @@ import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
 import { createListParties } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
 import { createAuthenticateActor } from './core/actors/authenticate-actor.js';
+import { createRetireParty } from './core/parties/retire-party.js';
+import { createProxyShipsAsActor } from './adapters/fleet/proxy-ships-as-actor.js';
 import { createCredentialOf } from './core/actors/credential-of.js';
 import { createDecideRequest } from './core/requests/decide-request.js';
 import { createListToDecide } from './core/requests/list-to-decide.js';
@@ -259,6 +261,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     return approved;
   };
   const listParties = createListParties({ parties });
+  const retireParty = createRetireParty({ parties, fleet: createProxyShipsAsActor(options.fleetUrl), tokens: createPrismaIssuedTokens(prisma), credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // An account's credential needs its account token, set up with the sign-in below.
   const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // Off stops the fleet's workers; on starts its crewed parties' workers again.
@@ -402,6 +405,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     approveParty,
     crewParty,
     listParties,
+    retireParty,
     stateParty,
     markTool,
     readOutsideParties: createReadOutsideParties({ switches: outsidePartySwitches }),

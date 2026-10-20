@@ -69,6 +69,7 @@ function contextFor(cookie: string | undefined): Context {
       return Promise.resolve(ok({ ...CRM, state: 'crewed' as const }));
     },
     listParties: () => Promise.resolve([CRM]),
+    retireParty: unused,
     registerClient: unused,
     stateParty: ({ name }) => {
       stated.push(name);

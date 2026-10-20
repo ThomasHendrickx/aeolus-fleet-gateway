@@ -9,7 +9,7 @@ import { MOCK_CRM_BEARER, startMockCrm, type MockCrm } from './fixtures/mock-crm
 import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
-import { mutate, query } from './support/gateway-api.js';
+import { connectGateway, mutate, query } from './support/gateway-api.js';
 import { receiveOne, send } from './support/ship.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 import { outsidePartiesOn } from './support/outside-parties.js';
@@ -133,12 +133,16 @@ describe('a ship of the fleet calls an outside MCP server through its proxy ship
   });
 });
 
-describe('argo retires an outside MCP server party (decision 0056)', () => {
+describe('a ship holding fleet:manage retires an outside MCP server party (decision 0056)', () => {
   it('retires its proxy ship in the fleet and forgets the party, so a call to it is refused', async () => {
     const address = await started();
     await crewed(address);
+    // A ship is an actor of a fleet the gateway is connected to, its scopes read by the gateway's ship.
+    const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'] } });
+    expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
+    const manager = await commission(fleet, { cookie, ship: { name: 'manager', type: 'agent', scopes: ['fleet:manage'] } });
 
-    const retired = await mutate(address, { procedure: 'parties.retire', cookie, body: { name: 'crm' } });
+    const retired = await mutate(address, { procedure: 'parties.retire', crewToken: await register(fleet, manager), body: { name: 'crm' } });
 
     expect(retired.status).toBe(200);
     const listed = await query(address, { procedure: 'parties.list', cookie });
