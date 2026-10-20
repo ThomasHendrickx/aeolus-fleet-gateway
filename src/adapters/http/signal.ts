@@ -89,6 +89,9 @@ main.centred > .mark, main.centred > .ring, main.centred > .badge { width: auto;
 .tile:hover { border-color: var(--primary); }
 .going-on { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); }
 .going-on::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--tone-ok-fg); }
+.tab { white-space: nowrap; }
+@media (max-width: 480px) { .top .label { display: none; } .top { gap: 8px; } }
+.sign-out { margin-left: auto; } .sign-out button { height: 32px; border: 0; background: transparent; color: var(--muted-foreground); }
 .live-status { position: fixed; right: 16px; bottom: 16px; margin: 0; }
 .party-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .party-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
@@ -103,7 +106,7 @@ main.centred > .mark, main.centred > .ring, main.centred > .badge { width: auto;
 export type Tone = 'waiting' | 'active' | 'ok' | 'attention' | 'ended';
 
 /** An icon the pages draw, from the console's icon set (Lucide), as inline SVG paths. */
-export type Icon = 'plug' | 'power' | 'powerOff' | 'alert' | 'signIn' | 'house' | 'hourglass' | 'check' | 'x' | 'ban' | 'lock' | 'server' | 'laptop' | 'arrowLeftRight' | 'users' | 'shieldX' | 'timerOff';
+export type Icon = 'plug' | 'power' | 'powerOff' | 'alert' | 'signIn' | 'house' | 'hourglass' | 'check' | 'x' | 'ban' | 'lock' | 'server' | 'laptop' | 'arrowLeftRight' | 'users' | 'shieldX' | 'timerOff' | 'signOut';
 
 const ICON_PATHS: Record<Icon, string> = {
   plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
@@ -120,6 +123,7 @@ const ICON_PATHS: Record<Icon, string> = {
   server: '<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/>',
   laptop: '<path d="M18 5a2 2 0 0 1 2 2v8.526a2 2 0 0 0 .212.897l1.068 2.127a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45l1.068-2.127A2 2 0 0 0 4 15.526V7a2 2 0 0 1 2-2z"/><path d="M20.054 15.987H3.946"/>',
   arrowLeftRight: '<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>',
+  signOut: '<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
   shieldX: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m14.5 9.5-5 5"/><path d="m9.5 9.5 5 5"/>',
   timerOff: '<path d="M10 2h4"/><path d="M4.6 11a8 8 0 0 0 1.7 8.7 8 8 0 0 0 8.7 1.7"/><path d="M7.4 7.4a8 8 0 0 1 10.3 1 8 8 0 0 1 .9 10.2"/><path d="m2 2 20 20"/><path d="M12 12v-2"/>',
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
@@ -179,11 +183,25 @@ const TABS: Record<Tab, { label: string; icon: Icon; href: string }> = {
   outsideParties: { label: 'Outside parties', icon: 'plug', href: '/outside-parties' },
 };
 
-function topBar(current: Tab | undefined): string {
+function topBar(current: Tab | undefined, isSignedIn: boolean): string {
   const tabs = Object.entries(TABS)
-    .map(([tab, shown]) => `<a class="tab" href="${shown.href}"${tab === current ? ' aria-current="page"' : ''}>${icon(shown.icon, 14)}${escaped(shown.label)}</a>`)
+    .map(([tab, shown]) => `<a class="tab" href="${shown.href}" aria-label="${escaped(shown.label)}"${tab === current ? ' aria-current="page"' : ''}>${icon(shown.icon, 14)}<span class="label">${escaped(shown.label)}</span></a>`)
     .join('');
-  return `<header class="top"><a class="mark" href="/overview">${MARK}Aeolus</a><nav class="tabs">${tabs}</nav></header>`;
+  // A person signed in to the pages signs out here; a console session signs out in the console.
+  const signOut = isSignedIn ? `<form method="post" action="/sign-out" class="sign-out"><button aria-label="Sign out">${icon('signOut', 14)}<span class="label">Sign out</span></button></form>` : '';
+  return `<header class="top"><a class="mark" href="/overview">${MARK}Aeolus</a><nav class="tabs">${tabs}</nav>${signOut}</header>`;
+}
+
+/** Where a signed-out caller signs in: the gateway's own sign-in through pagasae, or, on a gateway that signs no one in, the console. */
+export type SignInWay = { kind: 'pages' } | { kind: 'console'; fleetUrl: string };
+
+/** What a signed-out caller is shown: why, and the one way to sign in, coming back to the page they asked for. */
+export function signInPrompt(shown: { message: string; way: SignInWay; returnTo: string }): string {
+  const link =
+    shown.way.kind === 'pages'
+      ? `<a class="button" href="/sign-in?${new URLSearchParams({ return_to: shown.returnTo }).toString().replaceAll('&', '&amp;')}">${icon('signIn', 14)}Sign in</a>`
+      : `<a class="button" href="${escaped(shown.way.fleetUrl)}">${icon('signIn', 14)}Sign in to the console of your fleet</a>`;
+  return `<section class="card"><h2>${escaped(shown.message)}</h2><div class="actions">${link}</div></section>`;
 }
 
 /**
@@ -235,10 +253,10 @@ export function signInPage(page: { title: string; body: string }): string {
 }
 
 /** A whole Signal page: the top bar with its tabs, then the page's own body; a live page names itself to the live channel. */
-export function signalPage(page: { title: string; tab?: Tab; body: string; isWide?: boolean; live?: string }): string {
+export function signalPage(page: { title: string; tab?: Tab; body: string; isWide?: boolean; live?: string; isSignedIn?: boolean }): string {
   const live =
     page.live === undefined
       ? ''
       : `<p data-live-status hidden class="live-status">${statusBadge({ tone: 'waiting', icon: 'hourglass', label: 'Reconnecting' })}</p><script data-live-query="${escaped(page.live)}">${LIVE_SCRIPT}</script>`;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escaped(page.title)}</title><style>${STYLE}</style></head><body>${topBar(page.tab)}<main${page.isWide === true ? ' class="wide"' : ''}>${page.body}</main>${live}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escaped(page.title)}</title><style>${STYLE}</style></head><body>${topBar(page.tab, page.isSignedIn === true)}<main${page.isWide === true ? ' class="wide"' : ''}>${page.body}</main>${live}</body></html>`;
 }

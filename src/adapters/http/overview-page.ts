@@ -20,7 +20,7 @@ import type { Clock } from '../../core/shared/clock.js';
 import { gatewayRouter, type Context, type GatewayRouter } from '../trpc/router.js';
 import { acceptForms, escaped, isSameOrigin, refusalMessage } from './html.js';
 import type { LivePage } from './live.js';
-import { handshake, icon, partyMark, ring, signalPage, statusBadge } from './signal.js';
+import { handshake, icon, partyMark, ring, signalPage, signInPrompt, statusBadge, type SignInWay } from './signal.js';
 
 /** A pending request as the API shows it. */
 type ShownRequest = inferRouterOutputs<GatewayRouter>['requests']['toDecide'][number];
@@ -197,7 +197,7 @@ function decisionOf(form: Form): Parameters<Caller['requests']['decide']>[0]['de
   return { kind: 'approve', party, server: { credential, concurrencyLimit: Number(field(form, 'concurrencyLimit')) } };
 }
 
-function html(reply: FastifyReply, page: { status: number; body: string; isWide?: boolean; live?: string }): FastifyReply {
+function html(reply: FastifyReply, page: { status: number; body: string; isWide?: boolean; live?: string; isSignedIn?: boolean }): FastifyReply {
   const { status, ...shown } = page;
   return reply.code(status).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(signalPage({ title: TITLE, tab: 'overview', ...shown }));
 }
@@ -220,13 +220,18 @@ export function overviewLivePages(deps: { clock: Clock }): { overview: LivePage;
   };
 }
 
-function signInPage(reply: FastifyReply, refusal: { fleetUrl: string; error: TRPCError }): FastifyReply {
-  const { fleetUrl, error } = refusal;
-  const body = `<section class="card"><h2>${escaped(error.message)}</h2><div class="actions"><a class="button" href="${escaped(fleetUrl)}">${icon('signIn', 14)}Sign in to the console of your fleet</a></div></section>`;
-  return reply.code(getHTTPStatusCodeFromError(error)).type('text/html; charset=utf-8').send(signalPage({ title: TITLE, body }));
+function signInPage(reply: FastifyReply, refusal: { way: SignInWay; error: TRPCError; returnTo: string }): FastifyReply {
+  const body = signInPrompt({ message: refusal.error.message, way: refusal.way, returnTo: refusal.returnTo });
+  return reply.code(getHTTPStatusCodeFromError(refusal.error)).type('text/html; charset=utf-8').send(signalPage({ title: TITLE, body }));
 }
 
-export function registerOverviewPage(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; fleetUrl: string; clock: Clock }): void {
+/** Whether the caller is a person signed in to the pages, who signs out here. */
+async function isPersonSignedIn(context: Context): Promise<boolean> {
+  const actor = await context.authenticateActor({ cookie: context.cookie, crewToken: context.crewToken });
+  return actor.isOk && actor.value.kind === 'account';
+}
+
+export function registerOverviewPage(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; signIn: SignInWay; clock: Clock }): void {
   acceptForms(server);
 
   const renderRequest = async (reply: FastifyReply, shown: { context: Context; requestId: string; status?: number; notice?: string }) => {
@@ -238,7 +243,8 @@ export function registerOverviewPage(server: FastifyInstance, deps: { contextFor
     }
     const actor = await context.authenticateActor({ cookie: context.cookie, crewToken: context.crewToken });
     const scopes = actor.isOk ? actor.value.scopes : [];
-    return html(reply, { status: shown.status ?? 200, isWide: true, live: `page=request&requestId=${encodeURIComponent(requestId)}`, body: requestBody({ request, toDecide, scopes, now: deps.clock.now(), ...(shown.notice === undefined ? {} : { notice: shown.notice }) }) });
+    const isSignedIn = actor.isOk && actor.value.kind === 'account';
+    return html(reply, { status: shown.status ?? 200, isWide: true, isSignedIn, live: `page=request&requestId=${encodeURIComponent(requestId)}`, body: requestBody({ request, toDecide, scopes, now: deps.clock.now(), ...(shown.notice === undefined ? {} : { notice: shown.notice }) }) });
   };
 
   const answer = async (exchange: {
@@ -256,7 +262,7 @@ export function registerOverviewPage(server: FastifyInstance, deps: { contextFor
         throw error;
       }
       if (error.code === 'UNAUTHORIZED') {
-        return signInPage(reply, { fleetUrl: deps.fleetUrl, error });
+        return signInPage(reply, { way: deps.signIn, error, returnTo: request.url });
       }
       const refused = { status: error.code === 'INTERNAL_SERVER_ERROR' ? HTTP_INTERNAL_ERROR : getHTTPStatusCodeFromError(error), message: refusalMessage(error) };
       try {
@@ -276,7 +282,7 @@ export function registerOverviewPage(server: FastifyInstance, deps: { contextFor
       reply,
       render: async (context) => {
         const toDecide = await toDecideOf(gatewayRouter.createCaller(context));
-        return html(reply, { status: 200, live: 'page=overview', body: `<div data-live="overview" style="display:grid;gap:24px">${overviewSection(toDecide, deps.clock.now())}</div>` });
+        return html(reply, { status: 200, isSignedIn: await isPersonSignedIn(context), live: 'page=overview', body: `<div data-live="overview" style="display:grid;gap:24px">${overviewSection(toDecide, deps.clock.now())}</div>` });
       },
     }),
   );

@@ -32,6 +32,7 @@ import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc
 import { registerOutsidePartiesPage } from './adapters/http/outside-parties-page.js';
 import { createChangeHub, registerLive } from './adapters/http/live.js';
 import { overviewLivePages, registerOverviewPage } from './adapters/http/overview-page.js';
+import type { SignInWay } from './adapters/http/signal.js';
 import { listenToChanges } from './adapters/prisma/changes.js';
 import { registerPartiesPage } from './adapters/http/parties-page.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
@@ -431,8 +432,10 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // The page calls the API as the caller, with the forwarded console session; it never takes the installation token.
   const pageContextFor = (cookie: string | undefined) => contextFor({ cookie, crewToken: undefined, installationTokenSent: undefined });
   registerPartiesPage(server, { contextFor: pageContextFor, fleetUrl: options.fleetUrl });
-  registerOutsidePartiesPage(server, { contextFor: pageContextFor, fleetUrl: options.fleetUrl });
-  registerOverviewPage(server, { contextFor: pageContextFor, fleetUrl: options.fleetUrl, clock });
+  // Pages sign people in through pagasae; a gateway that signs no one in sends them to the console.
+  const pageSignIn: SignInWay = pagasae === undefined ? { kind: 'console', fleetUrl: options.fleetUrl } : { kind: 'pages' };
+  registerOutsidePartiesPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
+  registerOverviewPage(server, { contextFor: pageContextFor, signIn: pageSignIn, clock });
 
   registerLive(server, { contextFor: pageContextFor, hub, pages: overviewLivePages({ clock }) });
   let changes: { close(): Promise<void> } | undefined;
