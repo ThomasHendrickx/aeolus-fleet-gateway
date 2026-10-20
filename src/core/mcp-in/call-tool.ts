@@ -3,8 +3,10 @@
  * message the party's proxy ship sends to the tool's ship, and the client is
  * answered a handle only once the fleet's send answered OK: the message is
  * stored before any answer, and the gateway never answers OK itself. It
- * then waits a bounded time for the answer (interop 3.3): answered within
- * it, the client gets the answer itself; else its handle and the state.
+ * then waits for the answer as long as the capability states, at most the
+ * gateway's own most (interop 3.3, 5.3): answered within it, the client gets
+ * the answer itself; else its handle and the state. The call fails at the
+ * capability's deadline, and never by time when it states none (3.4).
  */
 import type { FleetId, MessageId } from '@aeolus-fleet/common';
 
@@ -31,11 +33,9 @@ interface CallToolDeps {
   calls: ClientCalls;
   keys: CallKeys;
   clock: Clock;
-  /** How long a call waits for its answer before it fails: the gateway default, while statements state none. */
-  deadlineMs: number;
   sleep: Sleep;
-  /** How long a call waits for its answer before it is answered its handle. */
-  waitMs: number;
+  /** The most a call waits for its answer before it is answered its handle, whatever its capability states. */
+  waitMaxMs: number;
   /** How often it reads the call while it waits. */
   waitPollMs: number;
 }
@@ -64,8 +64,8 @@ function refusalOf(refused: { code: string; message: string }): ReturnType<typeo
 const UNENDING = new AbortController().signal;
 
 /** The call as it stands once its answer came or the wait passed, read after each poll; it never sleeps past the wait's end. */
-async function answerWithin(deps: CallToolDeps, sent: { fleetId: FleetId; messageId: MessageId; handle: string; since: Date }): Promise<ReadCall> {
-  const waitEnd = sent.since.getTime() + deps.waitMs;
+async function answerWithin(deps: CallToolDeps, sent: { fleetId: FleetId; messageId: MessageId; handle: string; since: Date; waitMs: number }): Promise<ReadCall> {
+  const waitEnd = sent.since.getTime() + Math.min(sent.waitMs, deps.waitMaxMs);
   for (;;) {
     const call = await deps.calls.findByMessage(sent.fleetId, sent.messageId);
     const read = call ? readCallOf(call, deps.clock.now()) : { handle: sent.handle, createdAt: sent.since, updatedAt: sent.since, state: 'submitted' as const };
@@ -116,8 +116,8 @@ export function createCallTool(deps: CallToolDeps): CallTool {
       capability: tool.target.capability,
       outputContentType: tool.target.outputContentType,
       sentAt,
-      deadlineAt: new Date(sentAt.getTime() + deps.deadlineMs),
+      deadlineAt: tool.target.deadlineMs === null ? null : new Date(sentAt.getTime() + tool.target.deadlineMs),
     });
-    return ok(await answerWithin(deps, { fleetId: caller.fleetId, messageId, handle, since: sentAt }));
+    return ok(await answerWithin(deps, { fleetId: caller.fleetId, messageId, handle, since: sentAt, waitMs: tool.target.waitMs }));
   };
 }

@@ -25,8 +25,8 @@ export interface ClientCall {
   /** The capability's stated output type, its first output mode; none when it states none. */
   outputContentType: string | null;
   sentAt: Date;
-  /** When the call fails without its answer: a gateway default while statements carry none. */
-  deadlineAt: Date;
+  /** When the call fails without its answer, from its capability's deadline; none never fails by time. */
+  deadlineAt: Date | null;
   /** In the order the gateway kept them. */
   replies: CallReply[];
 }
@@ -46,7 +46,7 @@ const normalized = (contentType: string) =>
 const essenceOf = (contentType: string) => normalized(contentType).split(';')[0] ?? '';
 
 function isAnswer(call: ClientCall, reply: CallReply): boolean {
-  if (reply.receivedAt.getTime() >= call.deadlineAt.getTime()) {
+  if (call.deadlineAt !== null && reply.receivedAt.getTime() >= call.deadlineAt.getTime()) {
     return false;
   }
   return call.outputContentType === null ? essenceOf(reply.contentType) === PLAIN_TEXT : normalized(reply.contentType) === normalized(call.outputContentType);
@@ -58,7 +58,7 @@ function standing(call: ClientCall, now: Date): { state: CallState; since: Date 
   if (answer) {
     return { state: { state: 'completed', answer: { contentType: answer.contentType, payload: answer.payload } }, since: answer.receivedAt };
   }
-  if (now.getTime() >= call.deadlineAt.getTime()) {
+  if (call.deadlineAt !== null && now.getTime() >= call.deadlineAt.getTime()) {
     return { state: { state: 'failed' }, since: call.deadlineAt };
   }
   const [first] = call.replies;

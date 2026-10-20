@@ -228,14 +228,20 @@ describe('an outside MCP client waits a bounded time for the answer to its call 
     expect(sleeps).toEqual([]);
   });
 
-  it("keeps the call with the deadline its capability states, and none for a capability that states none (interop 3.4)", async () => {
+  it('keeps the call with the deadline its capability states (interop 3.4)', async () => {
     discovery.state.ships = [aCrmStating({ deadlineMs: 30_000 })];
-    await callTool(CALLER, { name: 'a9cr2__list_deals', arguments: { [IDEMPOTENCY_ARGUMENT]: 'k-1' } });
+
+    await callTool(CALLER, { name: 'a9cr2__list_deals', arguments: {} });
+
+    expect(calls.held.map(({ deadlineAt }) => deadlineAt)).toEqual([new Date('2026-10-19T12:00:30.000Z')]);
+  });
+
+  it('keeps the call with no deadline for a capability that states none (interop 3.4)', async () => {
     discovery.state.ships = [aCrmStating({})];
 
-    await callTool(CALLER, { name: 'a9cr2__list_deals', arguments: { [IDEMPOTENCY_ARGUMENT]: 'k-2' } });
+    await callTool(CALLER, { name: 'a9cr2__list_deals', arguments: {} });
 
-    expect(calls.held.map(({ deadlineAt }) => deadlineAt)).toEqual([new Date('2026-10-19T12:00:30.000Z'), null]);
+    expect(calls.held.map(({ deadlineAt }) => deadlineAt)).toEqual([null]);
   });
 
   it('waits not at all with no wait', async () => {

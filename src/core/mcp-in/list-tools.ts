@@ -39,6 +39,10 @@ export interface ToolTarget {
   isText: boolean;
   /** The type the answer comes in, the capability's first output mode; none when it states none. */
   outputContentType: string | null;
+  /** How long a call waits for its answer, as the capability states it; 0 when it states none. */
+  waitMs: number;
+  /** How long a call may take before it fails, as the capability states it; none when it states none. */
+  deadlineMs: number | null;
 }
 
 /** A tool as an MCP client lists it, with where its call goes. */
@@ -89,7 +93,7 @@ function toolOf({ alias, summary, shipId }: { alias: string; summary: string; sh
     ...(capability.title === undefined ? {} : { title: capability.title }),
     description: [capability.description, `Offered by: ${summary}`].filter((part) => part !== undefined).join('\n\n'),
     inputSchema,
-    target: { shipId, capability: capability.name, contentType, isText, outputContentType: capability.outputModes?.[0] ?? null },
+    target: { shipId, capability: capability.name, contentType, isText, outputContentType: capability.outputModes?.[0] ?? null, waitMs: capability.waitMs ?? 0, deadlineMs: capability.deadlineMs ?? null },
   };
 }
 

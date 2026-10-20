@@ -63,12 +63,27 @@ async function aConnectedClient(tool: string): Promise<{ mcp: Client; name: stri
   return { mcp, name: z.string().parse(tools.find((each) => each.name.endsWith(`__${tool}`))?.name) };
 }
 
+/** How often, and how many times, a test reads a call's result while it travels. */
+const RESULT_POLL_MS = 250;
+const RESULT_ATTEMPTS = 80;
+
+/** The call's result, read with aeolus_result under the handle it was answered: the proxy ship states no wait, so the call answers at once (interop 5.3). */
+async function resultOf(mcp: Client, called: Awaited<ReturnType<Client['callTool']>>) {
+  const { handle } = z.object({ handle: z.string() }).parse(JSON.parse(z.string().parse(z.array(z.object({ text: z.string() })).parse(called.content)[0]?.text)));
+  let read = await mcp.callTool({ name: 'aeolus_result', arguments: { handle } });
+  for (let attempt = 0; attempt < RESULT_ATTEMPTS && JSON.stringify(read.content).includes(`\\"handle\\":\\"${handle}\\"`); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, RESULT_POLL_MS));
+    read = await mcp.callTool({ name: 'aeolus_result', arguments: { handle } });
+  }
+  return read;
+}
+
 describe('an outside MCP client calls an outside MCP server through the fleet', () => {
   it("is answered the server's tool result, through both proxy ships", async () => {
     await aCrewedCrmParty();
     const { mcp, name } = await aConnectedClient('list_deals');
 
-    const result = await mcp.callTool({ name, arguments: { contactId: 'c1' } });
+    const result = await resultOf(mcp, await mcp.callTool({ name, arguments: { contactId: 'c1' } }));
     await mcp.close();
 
     const deals = [{ id: 'd1', contactId: 'c1', title: 'Analytical engine', amount: 1200 }];

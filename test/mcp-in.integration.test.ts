@@ -39,7 +39,7 @@ afterEach(async () => {
 });
 
 /** A ship of the fleet that states one capability, as its crew: its crew token. */
-async function aStatingShip(): Promise<string> {
+async function aStatingShip(timing: { waitMs?: number } = {}): Promise<string> {
   const ship = await commission(setting.fleet, { cookie: setting.cookie, ship: { name: 'crm', type: 'crm', kind: 'app' } });
   const crewToken = await register(setting.fleet, ship);
   const response = await fetch(`${setting.fleet.url}/api/v1/ship/setStatement`, {
@@ -47,7 +47,7 @@ async function aStatingShip(): Promise<string> {
     headers: { 'content-type': 'application/json', authorization: `Bearer ${crewToken}` },
     body: JSON.stringify({
       summary: 'The CRM: contacts and deals.',
-      capabilities: [{ name: 'list_deals', description: "Lists a contact's deals.", inputSchema: { type: 'object', properties: { contactId: { type: 'string' } } }, inputModes: ['application/json'] }],
+      capabilities: [{ name: 'list_deals', description: "Lists a contact's deals.", inputSchema: { type: 'object', properties: { contactId: { type: 'string' } } }, inputModes: ['application/json'], ...timing }],
     }),
   });
   expect(response.status).toBe(200);
@@ -157,8 +157,8 @@ describe("an outside MCP client's tool call is a message its proxy ship sends", 
     expect({ text: textOf(read), isError: read.isError }).toEqual({ text: 'Two deals: Analytical engine, Difference engine.', isError: undefined });
   });
 
-  it("answers the ship's reply itself when it comes within the wait", async () => {
-    const crm = await aStatingShip();
+  it("answers the ship's reply itself when it comes within the wait its capability states", async () => {
+    const crm = await aStatingShip({ waitMs: 10_000 });
     const mcp = await aConnectedClient();
     const [tool] = (await mcp.listTools()).tools.filter((each) => each.name.endsWith('__list_deals'));
 

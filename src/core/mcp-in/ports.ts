@@ -15,6 +15,10 @@ export interface Capability {
   inputModes?: string[];
   /** The media types that come back, the first the one to expect. */
   outputModes?: string[];
+  /** How long a call waits for its answer before the caller is answered a handle or task; none is no wait (interop 5.3). */
+  waitMs?: number;
+  /** How long a call may take before it fails; none is no deadline (interop 3.4). */
+  deadlineMs?: number;
 }
 
 /** A ship's statement as discovery shows it: its crew's, the note it was commissioned with, or none. */
