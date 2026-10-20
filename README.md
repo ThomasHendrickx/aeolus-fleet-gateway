@@ -31,7 +31,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 
 ## Connect
 
-argo commissions the gateway's ship in the console with `fleet:read`, `fleet:commission` and `fleet:on-behalf`, and connects the gateway with it; the gateway registers with the ship's secret and keeps only the crew token. The gateway serves only a fleet with a registered networking plugin (interop I-3): it refuses to connect without one, and refuses to be switched on for a connected fleet without one. Until core says whether a plugin is registered, a crewed ship of type `networking-plugin` counts as one.
+argo commissions the gateway's ship in the console with `fleet:read`, `fleet:commission`, `fleet:on-behalf` and `scopes:declare`, and connects the gateway with it; the gateway registers with the ship's secret, keeps only the crew token, and declares its own scope, `gateway:approve` (decision 0056): any actor the fleet grants it approves outside parties. A fleet that does not take the declaration, as when another ship holds the `gateway` namespace, is refused (CONFLICT). The gateway serves only a fleet with a registered networking plugin (interop I-3): it refuses to connect without one, and refuses to be switched on for a connected fleet without one. Until core says whether a plugin is registered, a crewed ship of type `networking-plugin` counts as one.
 
 The API is tRPC at `/trpc`: `connection.status` and `connection.connect` take argo's console session cookie, checked with the fleet's `console.session`; `installation.setEnabled`, `installation.get` and `installation.delete` take the installation token in `x-aeolus-installation-token`.
 

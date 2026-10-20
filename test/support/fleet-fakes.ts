@@ -16,6 +16,7 @@ export const GATEWAY_SCOPES = ['messages:send', 'messages:receive', 'fleet:read'
  * It has a registered networking plugin or none, as the fleet answers it.
  */
 export function fakeGatewayFleet() {
+  const noRefusal = (): FleetRefusal | undefined => undefined;
   const state = {
     secret: 'aeolus_sk_v1_good',
     fleetId: FLEET_ID,
@@ -29,7 +30,7 @@ export function fakeGatewayFleet() {
     /** The namespaces the gateway's ship declared, as the fleet took them. */
     declared: new Array<{ namespace: string; scopes: { scope: string; description: string }[] }>(),
     /** The fleet's refusal of a declaration, as when another ship holds the namespace. */
-    declareRefusal: undefined as FleetRefusal | undefined,
+    declareRefusal: noRefusal(),
   };
   const unavailable = () => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
   const released = () => Promise.resolve(err({ code: 'LEASE_ENDED', message: 'This ship was released; this session no longer crews it.' }));

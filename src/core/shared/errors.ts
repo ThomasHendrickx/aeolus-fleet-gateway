@@ -7,6 +7,7 @@ export type DomainErrorKind =
   | 'OTHER_FLEET'
   | 'MISSING_SCOPES'
   | 'NO_NETWORKING_PLUGIN'
+  | 'SCOPE_REFUSED'
   | 'NOT_THE_OPERATOR'
   | 'REQUEST_ID_USED'
   | 'FLEET_UNAVAILABLE'

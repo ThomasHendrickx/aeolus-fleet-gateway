@@ -78,7 +78,10 @@ describe('connecting the gateway', () => {
   it('is refused when the fleet does not take the gateway\'s scope, as when another ship holds its namespace, and lets the ship go again', async () => {
     fleet.state.declareRefusal = { code: 'CONFLICT', message: 'The namespace gateway is taken by another ship' };
 
-    await expect(connect({ secret: 'aeolus_sk_v1_good' })).resolves.toMatchObject({ isOk: false, error: { kind: 'SCOPE_REFUSED', message: expect.stringContaining('taken by another ship') } });
+    await expect(connect({ secret: 'aeolus_sk_v1_good' })).resolves.toMatchObject({
+      isOk: false,
+      error: { kind: 'SCOPE_REFUSED', message: "The fleet did not take the gateway's scope gateway:approve: The namespace gateway is taken by another ship" },
+    });
     expect([store.held.size, fleet.state.deregistered]).toEqual([0, ['aeolus_ct_v1_1']]);
   });
 

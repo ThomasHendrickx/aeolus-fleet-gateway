@@ -29,6 +29,8 @@ export interface FleetDoor {
   getShip(crewToken: string, ship: { shipId: ShipId }): Promise<Result<FleetShip, FleetRefusal>>;
   /** Ends this session's crew of its ship: the lease and the secret it claimed with. */
   deregister(crewToken: string): Promise<Result<undefined, FleetRefusal>>;
+  /** Declares the ship's own namespace and its whole list of scopes; the fleet stores them, the gateway enforces them (decision 0046). */
+  declareScopes(crewToken: string, declaration: { namespace: string; scopes: { scope: string; description: string }[] }): Promise<Result<undefined, FleetRefusal>>;
   /** Whether the crew token's fleet has a registered networking plugin (interop I-3). */
   hasNetworkingPlugin(crewToken: string): Promise<Result<boolean, FleetRefusal>>;
 }

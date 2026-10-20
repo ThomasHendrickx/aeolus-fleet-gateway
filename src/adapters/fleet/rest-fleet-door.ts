@@ -244,6 +244,10 @@ export function createRestFleetDoor(
       const found = await call({ path: '/ship/discover', method: 'GET', crewToken, answers: discoverOutputSchema });
       return found.isOk ? ok(found.value.ships.map(({ id, kind, statement }) => ({ shipId: id, kind, statement }))) : found;
     },
+    declareScopes: async (crewToken, declaration) => {
+      const declared = await call({ path: '/fleet/declareScopes', method: 'POST', crewToken, body: declaration, answers: z.unknown() });
+      return declared.isOk ? ok(undefined) : declared;
+    },
     hasNetworkingPlugin: async (crewToken) => {
       const listed = await call({ path: '/fleet/list', method: 'POST', crewToken, body: {}, answers: fleetListOutputSchema });
       return listed.isOk ? ok(listed.value.some((ship) => ship.type === NETWORKING_PLUGIN_TYPE && ship.status === 'crewed')) : listed;
