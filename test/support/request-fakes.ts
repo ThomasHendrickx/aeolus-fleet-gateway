@@ -127,7 +127,7 @@ export function memoryOwnerQuestions(requests: { held: PendingRequest[] }): Owne
     const state = stateAt(request, now);
     return state === 'pending' || state === 'approving';
   };
-  const replace = (fleetId: string, requestId: string, change: Partial<OwnerQuestion>) => {
+  const replace = ({ fleetId, requestId }: { fleetId: string; requestId: string }, change: Partial<OwnerQuestion>) => {
     const index = held.findIndex((question) => question.fleetId === fleetId && question.requestId === requestId);
     const question = held[index];
     if (question !== undefined) {
@@ -152,7 +152,7 @@ export function memoryOwnerQuestions(requests: { held: PendingRequest[] }): Owne
       return Promise.resolve(questionId);
     },
     markAsked: (fleetId, { requestId, askedShipId, at }) => {
-      replace(fleetId, requestId, { askedShipId, askedAt: at });
+      replace({ fleetId, requestId }, { askedShipId, askedAt: at });
       return Promise.resolve();
     },
     listToWithdraw: (now, limit) =>
@@ -165,7 +165,7 @@ export function memoryOwnerQuestions(requests: { held: PendingRequest[] }): Owne
           .slice(0, limit),
       ),
     markWithdrawn: (fleetId, { requestId, at }) => {
-      replace(fleetId, requestId, { withdrawnAt: at });
+      replace({ fleetId, requestId }, { withdrawnAt: at });
       return Promise.resolve();
     },
   };
