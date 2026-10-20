@@ -99,6 +99,7 @@ function contextFor(cookie: string | undefined): Context {
     changePartyScopes: unused,
     readParty: unused,
     checkServer: unused,
+    readPartyTools: unused,
     stateParty: unused,
     markTool: unused,
     registerClient: unused,

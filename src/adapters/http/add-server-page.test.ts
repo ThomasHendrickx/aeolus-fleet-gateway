@@ -52,6 +52,7 @@ function contextFor(cookie: string | undefined): Context {
       }
       return Promise.resolve(ok({ tools: [{ name: 'list_issues', description: 'List issues <by team>' }, { name: 'get_issue' }] }));
     },
+    readPartyTools: unused,
     approveParty: (input) => {
       approvals.push(input);
       if (input.name === 'taken') {
