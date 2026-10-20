@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { OWNER_SHIP_ID, PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { CHARLOTTE_GRANT } from '../../../test/support/people-fakes.js';
 import { memoryPendingRequests } from '../../../test/support/request-fakes.js';
 import { memoryAccountGrants, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
@@ -64,7 +64,7 @@ describe('a person asks for an outside MCP server', () => {
   });
 
   it('says which outside party a server is already, opening nothing', async () => {
-    await parties.save({ fleetId: FLEET_ID, name: 'linear', kind: 'mcpServer', url: LINEAR, credential: { kind: 'bearer', token: 't' }, concurrencyLimit: 4, ownerShipId: OWNER_SHIP_ID, state: 'crewed', proxyShipId: PROXY_SHIP_ID, secret: null, crewToken: 'c', requestId: 'r', requestHash: 'h', approvedAt: ASKED_AT });
+    await parties.save({ fleetId: FLEET_ID, name: 'linear', kind: 'mcpServer', url: LINEAR, credential: { kind: 'bearer', token: 't' }, concurrencyLimit: 4, state: 'crewed', proxyShipId: PROXY_SHIP_ID, secret: null, crewToken: 'c', requestId: 'r', requestHash: 'h', approvedAt: ASKED_AT });
 
     await expect(askForServer()({ caller: CHARLOTTE_GRANT, url: LINEAR })).resolves.toEqual({ isOk: false, error: { kind: 'PARTY_EXISTS', message: `${LINEAR} is the outside party linear already` } });
     expect(requests.held).toEqual([]);

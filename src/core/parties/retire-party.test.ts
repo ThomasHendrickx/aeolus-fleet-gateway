@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { memoryIssuedTokens } from '../../../test/support/oauth-fakes.js';
-import { fakeProxyShipsAsActor, memoryPartyStore, OWNER_SHIP_ID, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
+import { fakeProxyShipsAsActor, memoryPartyStore, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import type { ActorCredential } from '../actors/credential-of.js';
 import { err, ok } from '../shared/result.js';
@@ -24,7 +24,6 @@ const CRM: McpServerParty = {
   url: 'https://crm.example.com/mcp',
   credential: { kind: 'bearer', token: 't' },
   concurrencyLimit: 4,
-  ownerShipId: OWNER_SHIP_ID,
   state: 'crewed',
   proxyShipId: PROXY_SHIP_ID,
   secret: null,

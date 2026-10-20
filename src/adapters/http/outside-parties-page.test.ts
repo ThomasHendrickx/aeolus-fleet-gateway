@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
-import type { ShownParty } from '../../core/parties/shown-party.js';
+import type { ListedParty } from '../../core/parties/shown-party.js';
 import { err, ok } from '../../core/shared/result.js';
 import type { Context } from '../trpc/router.js';
 import { registerOutsidePartiesPage } from './outside-parties-page.js';
@@ -19,19 +19,20 @@ let server: FastifyInstance;
 let isOn: boolean;
 let isNetworkOpen: boolean;
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
-const LINEAR: ShownParty = {
+const LINEAR: ListedParty = {
   name: 'linear',
   kind: 'mcpServer',
   url: 'https://mcp.linear.app/mcp',
   credentialKind: 'bearer',
-  ownerShipId: OWNER,
   concurrencyLimit: 4,
   state: 'crewed',
   proxyShipId: 'shp_01m3tbfspe96yf1rnr4ank9lin',
+  ownerShipId: OWNER,
+  scopes: ['messages:send', 'messages:receive'],
 };
-const ORDERBOT: ShownParty = { name: 'orderbot<x>', kind: 'mcpClient', clientId: 'https://orderbot.example.com/client.json', ownerShipId: OWNER, state: 'awaitingCrew', proxyShipId: null };
+const ORDERBOT: ListedParty = { name: 'orderbot<x>', kind: 'mcpClient', clientId: 'https://orderbot.example.com/client.json', state: 'awaitingCrew', proxyShipId: null, ownerShipId: OWNER, scopes: null };
 
-let parties: ShownParty[];
+let parties: ListedParty[];
 let signInWay: { kind: 'pages' } | { kind: 'console'; fleetUrl: string };
 let switches: Omit<Parameters<SetOutsideParties>[0], 'actor' | 'as'>[];
 
@@ -63,6 +64,7 @@ function contextFor(cookie: string | undefined): Context {
     crewParty: unused,
     listParties: () => Promise.resolve(parties),
     retireParty: unused,
+    readParty: unused,
     stateParty: unused,
     markTool: unused,
     registerClient: unused,

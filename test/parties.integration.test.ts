@@ -9,7 +9,6 @@ import { migratedDatabase } from './support/database.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OTHER_FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8zz';
-const OWNER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 const PROXY: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9crm';
 const AT = new Date('2026-10-18T13:00:00.000Z');
 
@@ -30,7 +29,6 @@ function aParty(overrides: Partial<McpServerParty> = {}): McpServerParty {
     kind: 'mcpServer',
     url: 'https://crm.example.com/mcp',
     credential: { kind: 'clientCredentials', clientId: 'gw', clientSecret: 's', issuer: 'https://auth.example.com', scope: 'crm.read' },
-    ownerShipId: OWNER,
     concurrencyLimit: 4,
     state: 'commissioning',
     proxyShipId: null,
@@ -64,8 +62,8 @@ describe("the gateway's parties and their vault in Postgres", () => {
 
   it('keeps an MCP client party, found by its client id', async () => {
     const store = createPrismaPartyStore(prisma);
-    const { fleetId, ownerShipId, state, proxyShipId, secret, crewToken, requestId, requestHash, approvedAt } = aParty();
-    const party = { fleetId, name: 'claude', kind: 'mcpClient' as const, clientId: 'https://claude.example.com/client.json', ownerShipId, state, proxyShipId, secret, crewToken, requestId, requestHash, approvedAt };
+    const { fleetId, state, proxyShipId, secret, crewToken, requestId, requestHash, approvedAt } = aParty();
+    const party = { fleetId, name: 'claude', kind: 'mcpClient' as const, clientId: 'https://claude.example.com/client.json', state, proxyShipId, secret, crewToken, requestId, requestHash, approvedAt };
     await store.save(party);
 
     await expect(Promise.all([store.findByClient(FLEET, 'https://claude.example.com/client.json'), store.findByClient(OTHER_FLEET, 'https://claude.example.com/client.json')])).resolves.toEqual([party, undefined]);

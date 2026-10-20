@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
-import type { ShownParty } from '../../core/parties/shown-party.js';
+import type { ListedParty } from '../../core/parties/shown-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import { err, ok } from '../../core/shared/result.js';
 import type { Context } from '../trpc/router.js';
@@ -17,15 +17,16 @@ const VIEWER = 'aeolus_session=viewer';
 const HOST = 'gateway.example.com';
 const ORIGIN = `http://${HOST}`;
 
-const CRM: ShownParty = {
+const CRM: ListedParty = {
   name: 'crm',
   kind: 'mcpServer',
   url: 'https://crm.example.com/mcp?a=1&b=<2>',
   credentialKind: 'bearer',
-  ownerShipId: OWNER,
   concurrencyLimit: 4,
   state: 'awaitingCrew',
   proxyShipId: 'shp_01m3tbfspe96yf1rnr4ank9crm',
+  ownerShipId: OWNER,
+  scopes: ['messages:send', 'messages:receive'],
 };
 
 let server: FastifyInstance;
@@ -70,6 +71,7 @@ function contextFor(cookie: string | undefined): Context {
     },
     listParties: () => Promise.resolve([CRM]),
     retireParty: unused,
+    readParty: unused,
     registerClient: unused,
     stateParty: ({ name }) => {
       stated.push(name);

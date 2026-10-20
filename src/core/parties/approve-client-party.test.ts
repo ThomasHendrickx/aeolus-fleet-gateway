@@ -38,7 +38,7 @@ describe('argo approves an outside MCP client as a party, at its first authoriza
   it('crews the proxy ship and keeps its crew token with the client id', async () => {
     await expect(approve(anApproval())).resolves.toEqual({
       isOk: true,
-      value: { name: 'claude', kind: 'mcpClient', clientId: CLAUDE, ownerShipId: OWNER_SHIP_ID, state: 'crewed', proxyShipId: PROXY_SHIP_ID },
+      value: { name: 'claude', kind: 'mcpClient', clientId: CLAUDE, state: 'crewed', proxyShipId: PROXY_SHIP_ID },
     });
     await expect(parties.findByClient(FLEET_ID, CLAUDE)).resolves.toMatchObject({ name: 'claude', state: 'crewed', crewToken: 'aeolus_ct_v1_proxy' });
   });

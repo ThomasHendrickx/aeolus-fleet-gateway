@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { aPushedDelivery, fakeProxyShipCrew } from '../../../test/support/mcp-out-fakes.js';
-import { OWNER_SHIP_ID, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
+import { PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
 import type { McpServerParty } from '../parties/party.js';
 import type { HandCall, HandOutcome } from './hand-call.js';
 import { createRunParty, type Sleep } from './run-party.js';
@@ -14,7 +14,6 @@ const CRM: McpServerParty = {
   kind: 'mcpServer',
   url: 'https://crm.example.com/mcp',
   credential: { kind: 'bearer', token: 'crm-token' },
-  ownerShipId: OWNER_SHIP_ID,
   concurrencyLimit: 2,
   state: 'crewed',
   proxyShipId: PROXY_SHIP_ID,

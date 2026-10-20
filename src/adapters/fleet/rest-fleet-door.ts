@@ -28,7 +28,7 @@ import type { FleetDoor, FleetRefusal } from '../../core/connection/ports.js';
 import type { CallSender, Discovery } from '../../core/mcp-in/ports.js';
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
-import type { ProxyShipDoor } from '../../core/parties/ports.js';
+import type { ProxyShipDoor, ProxyShipReads } from '../../core/parties/ports.js';
 import type { AccountDoor, PersonShipDoor } from '../../core/people/ports.js';
 import type { Owners } from '../../core/requests/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
@@ -118,7 +118,7 @@ function questionOf(payload: string) {
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & AccountDoor & Owners & { person: PersonShipDoor } {
+): FleetDoor & ProxyShipDoor & ProxyShipReads & StatementDoor & ProxyShipCrew & Discovery & CallSender & AccountDoor & Owners & { person: PersonShipDoor } {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   const done = async (crewToken: string, request: { path: string; body: unknown }) => {
@@ -143,6 +143,10 @@ export function createRestFleetDoor(
         crewToken,
         answers: z.object({ shipId: idSchema('ship'), fleetId: idSchema('fleet'), name: z.string(), type: z.string() }),
       }),
+    read: async (crewToken, ship) => {
+      const read = await call({ path: '/fleet/ship', method: 'POST', crewToken, body: ship, answers: shipDetailOutputSchema });
+      return read.isOk ? ok({ ownerShipId: read.value.owner?.id ?? null, scopes: [...read.value.scopes] }) : read;
+    },
     ownerOf: async (crewToken, shipId) => {
       const read = await call({ path: '/fleet/ship', method: 'POST', crewToken, body: { shipId }, answers: shipDetailOutputSchema });
       return read.isOk ? ok(read.value.owner?.id ?? null) : read;

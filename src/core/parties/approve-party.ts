@@ -53,6 +53,8 @@ interface ApprovalDeps {
 interface Approval<P extends Party> {
   fleetId: FleetId;
   type: string;
+  /** The owner the approver picked: named at the commission, then the fleet's alone (decision 0056). */
+  owner: ShipId;
   scopes: readonly string[];
   requestHash: string;
   party: (fields: { approvedAt: Date }) => P;
@@ -108,7 +110,7 @@ async function approved<P extends Party>(deps: ApprovalDeps, approval: Approval<
   }
   await deps.parties.save(party);
 
-  const commissioned = await deps.door.commissionAppShip(gateway.crewToken, { name: party.name, type: approval.type, owner: party.ownerShipId, idempotencyKey: party.requestId, scopes: approval.scopes });
+  const commissioned = await deps.door.commissionAppShip(gateway.crewToken, { name: party.name, type: approval.type, owner: approval.owner, idempotencyKey: party.requestId, scopes: approval.scopes });
   if (!commissioned.isOk) {
     if (commissioned.error.code === 'UNAVAILABLE') {
       return refuse('FLEET_UNAVAILABLE', `The fleet did not answer the commission: ${commissioned.error.message}`);
@@ -139,7 +141,8 @@ export function createApproveParty(deps: ApprovalDeps): ApproveParty {
       type: MCP_SERVER_SHIP_TYPE,
       scopes,
       requestHash,
-      party: ({ approvedAt }) => ({ fleetId, name, kind: 'mcpServer', url, credential, ownerShipId, concurrencyLimit, ...UNCOMMISSIONED, requestId, requestHash, approvedAt }),
+      owner: ownerShipId,
+      party: ({ approvedAt }) => ({ fleetId, name, kind: 'mcpServer', url, credential, concurrencyLimit, ...UNCOMMISSIONED, requestId, requestHash, approvedAt }),
       isOwn: (earlier): earlier is McpServerParty => earlier.kind === 'mcpServer',
     });
   };
@@ -163,7 +166,8 @@ export function createApproveClientParty(deps: ApprovalDeps): ApproveClientParty
       type: MCP_CLIENT_SHIP_TYPE,
       scopes,
       requestHash,
-      party: ({ approvedAt }) => ({ fleetId, name, kind: 'mcpClient', clientId, ownerShipId, ...UNCOMMISSIONED, requestId, requestHash, approvedAt }),
+      owner: ownerShipId,
+      party: ({ approvedAt }) => ({ fleetId, name, kind: 'mcpClient', clientId, ...UNCOMMISSIONED, requestId, requestHash, approvedAt }),
       isOwn: (earlier): earlier is McpClientParty => earlier.kind === 'mcpClient',
     });
   };

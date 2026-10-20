@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
-import { OWNER_SHIP_ID, PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { fakeWaitingSeals, memoryPendingRequests } from '../../../test/support/request-fakes.js';
 import { CHARLOTTE_TOKENS, fakePagasae, fakePageSessions, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
 import { createExchangeToken } from '../../core/oauth/exchange-token.js';
@@ -128,7 +128,7 @@ function waitingPage(waiting: string, cookie: string | null = 'aeolus_waiting=se
 
 /** The client's party, crewed. */
 async function aCrewedParty() {
-  await parties.save({ fleetId: FLEET, name: 'cursor', kind: 'mcpClient', clientId: CLIENT, ownerShipId: OWNER_SHIP_ID, state: 'crewed', proxyShipId: PROXY_SHIP_ID, secret: null, crewToken: 'aeolus_ct_v1_cursor', requestId: 'req_1', requestHash: 'h', approvedAt: new Date('2026-10-19T09:00:00.000Z') });
+  await parties.save({ fleetId: FLEET, name: 'cursor', kind: 'mcpClient', clientId: CLIENT, state: 'crewed', proxyShipId: PROXY_SHIP_ID, secret: null, crewToken: 'aeolus_ct_v1_cursor', requestId: 'req_1', requestHash: 'h', approvedAt: new Date('2026-10-19T09:00:00.000Z') });
 }
 
 /** The client's request decided as an approver would. */

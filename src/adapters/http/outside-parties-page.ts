@@ -99,7 +99,7 @@ function lead(parties: readonly ShownParty[]): string {
 function partyCard(party: ShownParty): string {
   const { protocol, side } = PARTY_KINDS[party.kind];
   const where = party.kind === 'mcpServer' ? party.url : party.clientId;
-  return `<article class="party-card">${partyMark(party.name)}<div class="text"><span><strong>${escaped(party.name)}</strong> <span class="tag protocol">${escaped(protocol)}</span></span><span class="tag">${icon(SIDES[side].icon, 12)}${escaped(protocol)} ${SIDES[side].one}</span><span class="tag mono" title="${escaped(where)}">${escaped(where)}</span></div><div class="facts">${statusBadge(PARTY_STATES[party.state])}<span class="tag">${icon('users', 12)}<span class="mono">${escaped(party.ownerShipId)}</span></span></div></article>`;
+  return `<article class="party-card">${partyMark(party.name)}<div class="text"><span><strong>${escaped(party.name)}</strong> <span class="tag protocol">${escaped(protocol)}</span></span><span class="tag">${icon(SIDES[side].icon, 12)}${escaped(protocol)} ${SIDES[side].one}</span><span class="tag mono" title="${escaped(where)}">${escaped(where)}</span></div><div class="facts">${statusBadge(PARTY_STATES[party.state])}${party.ownerShipId === null ? '' : `<span class="tag">${icon('users', 12)}<span class="mono">${escaped(party.ownerShipId)}</span></span>`}</div></article>`;
 }
 
 function partyList(parties: readonly ShownParty[], side: Side | undefined): string {

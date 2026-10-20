@@ -108,7 +108,6 @@ export async function aCrewedClientParty(setting: Setting, clientId: string): Pr
     kind: 'mcpClient',
     clientId,
     // The owner is only kept by the gateway; core 0.28 checks it at the commission.
-    ownerShipId: owner.shipId,
     state: 'awaitingCrew',
     proxyShipId: proxy.shipId,
     secret: null,

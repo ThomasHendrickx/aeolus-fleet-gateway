@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeSecrets, ISSUER, memoryAuthorizationCodes, RESOURCE } from '../../../test/support/oauth-fakes.js';
-import { OWNER_SHIP_ID, PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { fakeWaitingSeals, memoryPendingRequests } from '../../../test/support/request-fakes.js';
 import type { AuthorizationRequest } from '../oauth/read-authorization.js';
 import type { McpClientParty } from '../parties/party.js';
@@ -30,7 +30,6 @@ function aClientParty(state: McpClientParty['state']): McpClientParty {
     name: 'orderbot',
     kind: 'mcpClient',
     clientId: CLIENT_ID,
-    ownerShipId: OWNER_SHIP_ID,
     state,
     proxyShipId: PROXY_SHIP_ID,
     secret: null,

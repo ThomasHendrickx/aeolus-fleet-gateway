@@ -3,7 +3,7 @@ import type { FleetId, ShipId } from '@aeolus-fleet/common';
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { Party } from '../../src/core/parties/party.js';
 import type { ActorCredential } from '../../src/core/actors/credential-of.js';
-import type { PartyStore, ProxyShipDoor, ProxyShipsAsActor } from '../../src/core/parties/ports.js';
+import type { PartyStore, ProxyShipDoor, ProxyShipReads, ProxyShipsAsActor } from '../../src/core/parties/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 export const OWNER_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
@@ -97,6 +97,19 @@ export function fakeProxyShipsAsActor(answer: Result<undefined, FleetRefusal> = 
     retire: (as, { shipId }) => {
       retired.push({ as, shipId });
       return Promise.resolve(answer);
+    },
+  };
+}
+
+/** The fleet's answer for each proxy ship, read as the gateway's ship; a ship it has no answer for is as when the fleet does not answer. */
+export function fakeProxyShipReads(ships: Readonly<Record<string, { ownerShipId: ShipId | null; scopes: string[] }>>): ProxyShipReads & { readers: string[] } {
+  const readers: string[] = [];
+  return {
+    readers,
+    read: (crewToken, { shipId }) => {
+      readers.push(crewToken);
+      const ship = ships[shipId];
+      return Promise.resolve(ship === undefined ? err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }) : ok(ship));
     },
   };
 }
