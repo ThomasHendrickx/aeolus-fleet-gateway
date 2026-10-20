@@ -12,6 +12,7 @@ const TAG_BYTES = 16;
 
 const sealedSchema = z.object({
   verifier: z.string(),
+  browserSecret: z.string(),
   request: z.record(z.string(), z.string()),
   expiresAt: z.iso.datetime(),
 });
@@ -25,11 +26,11 @@ const sealedSchema = z.object({
 export function createSignInSeals(secret: string): SignInSeals {
   const key = createHmac('sha256', secret).update(SEAL_LABEL).digest();
   return {
-    seal: ({ verifier, request, expiresAt }) => {
+    seal: ({ verifier, browserSecret, request, expiresAt }) => {
       const kept = Object.fromEntries(Object.entries(request).filter((entry): entry is [string, string] => entry[1] !== undefined));
       const nonce = randomBytes(NONCE_BYTES);
       const cipher = createCipheriv(CIPHER, key, nonce);
-      const sealed = Buffer.concat([cipher.update(JSON.stringify({ verifier, request: kept, expiresAt: expiresAt.toISOString() }), 'utf8'), cipher.final()]);
+      const sealed = Buffer.concat([cipher.update(JSON.stringify({ verifier, browserSecret, request: kept, expiresAt: expiresAt.toISOString() }), 'utf8'), cipher.final()]);
       return Buffer.concat([nonce, sealed, cipher.getAuthTag()]).toString('base64url');
     },
     open: (state) => {

@@ -17,7 +17,7 @@ import type { AuthenticateOperator } from '../../core/operator/authenticate-oper
 import type { ReadClientParty } from '../../core/parties/read-client-party.js';
 import type { ShownParty } from '../../core/parties/shown-party.js';
 import type { CompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
-import type { StartSignIn } from '../../core/sign-in/start-sign-in.js';
+import { SIGN_IN_LIFETIME_MS, type StartSignIn } from '../../core/sign-in/start-sign-in.js';
 import { acceptForms, escaped, isSameOrigin, layout } from './html.js';
 import { randomUUID } from 'node:crypto';
 
@@ -27,6 +27,10 @@ const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_CONFLICT = 409;
 const HTTP_BAD_GATEWAY = 502;
+const MS_PER_SECOND = 1000;
+
+/** Whether the gateway is served over HTTPS, so its cookies go over HTTPS only. */
+const isHttps = (issuer: string) => new URL(issuer).protocol === 'https:';
 
 /** The parameters of an authorization request the page carries from its query to its form. */
 const AUTHORIZATION_PARAMETERS = ['response_type', 'client_id', 'redirect_uri', 'code_challenge', 'code_challenge_method', 'resource', 'state', 'scope'] as const;
@@ -59,6 +63,25 @@ function authorizationRequestOf(fields: Record<string, string>): Record<string, 
 
 function htmlPage(reply: FastifyReply, page: { status: number; body: string }): FastifyReply {
   return reply.code(page.status).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(layout('Approve an MCP client', page.body));
+}
+
+/** The cookie the browser that started a sign-in holds its secret in, sent back to the callback only. */
+const SIGN_IN_COOKIE = 'aeolus_sign_in';
+const SIGN_IN_COOKIE_PATH = '/pagasae/callback';
+
+/** The sign-in cookie: the browser's secret for the sign-in's lifetime, or cleared. Lax, so it comes back on pagasae's redirect. */
+function signInCookie(cookie: { value: string; maxAgeSeconds: number; isSecure: boolean }): string {
+  return `${SIGN_IN_COOKIE}=${cookie.value}; Path=${SIGN_IN_COOKIE_PATH}; Max-Age=${String(cookie.maxAgeSeconds)}; HttpOnly;${cookie.isSecure ? ' Secure;' : ''} SameSite=Lax`;
+}
+
+/** The browser's sign-in secret from a Cookie header, if it sent one. */
+function browserSecretOf(cookieHeader: string | undefined): string | undefined {
+  const prefix = `${SIGN_IN_COOKIE}=`;
+  return cookieHeader
+    ?.split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix))
+    ?.slice(prefix.length);
 }
 
 /** A page that tells a person why their sign-in gave their client nothing, sending them nowhere. */
@@ -123,9 +146,10 @@ function basicCredentials(header: string | undefined): Record<string, string> {
 
 /** Where pagasae sends a person back (decision 0054): their client gets its code, or the person a page saying why not. */
 function registerSignInCallback(server: FastifyInstance, deps: { issuer: string; complete: CompleteSignIn }): void {
-  server.get('/pagasae/callback', async (request, reply) => {
+  server.get(SIGN_IN_COOKIE_PATH, async (request, reply) => {
     const { state, code, error } = fieldsOf(request.query);
-    const completed = await deps.complete({ state, code, error });
+    const completed = await deps.complete({ state, code, error, browserSecret: browserSecretOf(request.headers.cookie) });
+    reply.header('set-cookie', signInCookie({ value: '', maxAgeSeconds: 0, isSecure: isHttps(deps.issuer) }));
     if (completed.isOk) {
       return reply.code(HTTP_FOUND).header('location', completed.value.redirectTo).send();
     }
@@ -136,6 +160,8 @@ function registerSignInCallback(server: FastifyInstance, deps: { issuer: string;
         return sendBack(reply, { refusal, issuer: deps.issuer });
       case 'unknownSignIn':
         return signInPage(reply, { status: HTTP_BAD_REQUEST, message: 'This sign-in is unknown, or took over 10 minutes. Start again from your MCP client.' });
+      case 'otherBrowser':
+        return signInPage(reply, { status: HTTP_BAD_REQUEST, message: 'This sign-in was started in another browser, so it is not yours to finish. Start again from your MCP client.' });
       case 'fleetNotServed':
         return signInPage(reply, { status: HTTP_FORBIDDEN, message: 'This gateway does not serve the fleet you signed in to.' });
       case 'pagasaeRefused':
@@ -185,7 +211,11 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
     const { signIn } = deps;
     if (signIn !== undefined && !(await deps.authenticateOperator(request.headers.cookie)).isOk) {
       const started = await signIn.start(parameters);
-      return started.isOk ? reply.code(HTTP_FOUND).header('location', started.value.redirectTo).send() : sendBack(reply, { refusal: started.error, issuer: deps.issuer });
+      if (!started.isOk) {
+        return sendBack(reply, { refusal: started.error, issuer: deps.issuer });
+      }
+      const cookie = signInCookie({ value: started.value.browserSecret, maxAgeSeconds: SIGN_IN_LIFETIME_MS / MS_PER_SECOND, isSecure: isHttps(deps.issuer) });
+      return reply.code(HTTP_FOUND).header('location', started.value.redirectTo).header('set-cookie', cookie).send();
     }
     const argo = await argoOrRefusal(request, reply);
     if ('refused' in argo) {

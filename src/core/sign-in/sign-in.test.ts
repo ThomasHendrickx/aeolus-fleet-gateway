@@ -69,21 +69,25 @@ function aRequest(overrides: Record<string, string | undefined> = {}): Record<st
   return { response_type: 'code', client_id: CIMD_CLIENT, redirect_uri: CALLBACK, code_challenge: 'S256(verifier-1)', code_challenge_method: 'S256', resource: RESOURCE, state: 'state-1', scope: undefined, ...overrides };
 }
 
-/** The person started at /authorize; pagasae sends them back with this. */
+/** The person started at /authorize; pagasae sends them back with this, to the browser holding the secret the start drew after the verifier. */
 async function started(request = aRequest()) {
   await startSignIn()(request);
-  return { state: 'sealed-1', code: 'pagasae-code-1' };
+  return { state: 'sealed-1', code: 'pagasae-code-1', browserSecret: 'secret-2' };
 }
 
 describe('a person starts signing in at /authorize', () => {
   it("is sent to pagasae with the gateway's own PKCE challenge and the sign-in sealed in the state, naming no fleet, so pagasae picks it", async () => {
-    await expect(startSignIn()(aRequest())).resolves.toEqual({ isOk: true, value: { redirectTo: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)` } });
+    await expect(startSignIn()(aRequest())).resolves.toMatchObject({ isOk: true, value: { redirectTo: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)` } });
   });
 
-  it("seals the client's request for 10 minutes with the verifier, storing nothing", async () => {
+  it('answers a new secret for the browser to hold, so only that browser finishes the sign-in', async () => {
+    await expect(startSignIn()(aRequest())).resolves.toMatchObject({ isOk: true, value: { browserSecret: 'secret-2' } });
+  });
+
+  it("seals the client's request for 10 minutes with the verifier and the browser's secret, storing nothing", async () => {
     await startSignIn()(aRequest());
 
-    expect([...seals.held.values()]).toEqual([{ verifier: 'secret-1', request: aRequest(), expiresAt: new Date('2026-10-19T09:10:00.000Z') }]);
+    expect([...seals.held.values()]).toEqual([{ verifier: 'secret-1', browserSecret: 'secret-2', request: aRequest(), expiresAt: new Date('2026-10-19T09:10:00.000Z') }]);
   });
 
   it('is refused as /authorize refuses a request, keeping nothing', async () => {
@@ -97,7 +101,7 @@ describe('pagasae sends the person back', () => {
   it("sends the client back with the gateway's code for the account's grant, with its state and the issuer", async () => {
     const back = await started();
 
-    await expect(completeSignIn()(back)).resolves.toEqual({ isOk: true, value: { redirectTo: `${CALLBACK}?code=secret-3&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
+    await expect(completeSignIn()(back)).resolves.toEqual({ isOk: true, value: { redirectTo: `${CALLBACK}?code=secret-4&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
   });
 
   it("keeps the account's grant: its fleet, account and person ship, pagasae's refresh token and the account token", async () => {
@@ -105,7 +109,7 @@ describe('pagasae sends the person back', () => {
 
     expect(grants.held).toEqual([
       {
-        grantId: 'secret-2',
+        grantId: 'secret-3',
         fleetId: FLEET_ID,
         accountId: 'acc-charlotte',
         personShipId: PERSON_SHIP_ID,
@@ -121,7 +125,7 @@ describe('pagasae sends the person back', () => {
 
     expect([...codes.held.values()]).toEqual([
       {
-        codeHash: 'hash(secret-3)',
+        codeHash: 'hash(secret-4)',
         fleetId: FLEET_ID,
         clientId: CIMD_CLIENT,
         redirectUri: CALLBACK,
@@ -129,7 +133,7 @@ describe('pagasae sends the person back', () => {
         resource: RESOURCE,
         scope: null,
         kind: 'account',
-        grantId: 'secret-2',
+        grantId: 'secret-3',
         expiresAt: new Date('2026-10-19T09:01:00.000Z'),
         isUsed: false,
       },
@@ -146,18 +150,31 @@ describe('pagasae sends the person back', () => {
   });
 
   it.each([
-    ['no state', { state: undefined, code: 'pagasae-code-1' }],
-    ['a state the gateway never gave', { state: 'forged', code: 'pagasae-code-1' }],
+    ['no state', { state: undefined, code: 'pagasae-code-1', browserSecret: 'secret-2' }],
+    ['a state the gateway never gave', { state: 'forged', code: 'pagasae-code-1', browserSecret: 'secret-2' }],
   ])('refuses %s', async (_what, back) => {
     await started();
 
     await expect(completeSignIn()(back)).resolves.toEqual({ isOk: false, error: { kind: 'unknownSignIn' } });
   });
 
-  it("sends the client back with access_denied when pagasae answers an error, keeping no grant", async () => {
-    const { state } = await started();
+  it.each([
+    ['holds no secret', undefined],
+    ["holds another sign-in's secret", 'secret-9'],
+  ])('refuses a browser that %s, as when another site makes it finish its own sign-in, redeeming nothing', async (_what, browserSecret) => {
+    const back = await started();
+    const redeemed: string[] = [];
+    const pagasae = fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-1', tokens: CHARLOTTE_TOKENS });
+    const watched: Pagasae = { ...pagasae, redeemCode: (code) => { redeemed.push(code.code); return pagasae.redeemCode(code); } };
 
-    await expect(completeSignIn()({ state, error: 'access_denied' })).resolves.toEqual({ isOk: true, value: { redirectTo: `${CALLBACK}?error=access_denied&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
+    await expect(completeSignIn(watched)({ ...back, browserSecret })).resolves.toEqual({ isOk: false, error: { kind: 'otherBrowser' } });
+    expect({ redeemed, grants: grants.held.length, codes: codes.held.size }).toEqual({ redeemed: [], grants: 0, codes: 0 });
+  });
+
+  it("sends the client back with access_denied when pagasae answers an error, keeping no grant", async () => {
+    const { state, browserSecret } = await started();
+
+    await expect(completeSignIn()({ state, browserSecret, error: 'access_denied' })).resolves.toEqual({ isOk: true, value: { redirectTo: `${CALLBACK}?error=access_denied&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
     expect(grants.held).toEqual([]);
   });
 

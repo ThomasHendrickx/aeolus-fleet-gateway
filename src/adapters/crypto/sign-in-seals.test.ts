@@ -5,6 +5,7 @@ import { createSignInSeals } from './sign-in-seals.js';
 const SECRET = 'a-gateway-secret-of-at-least-32-characters';
 const SIGN_IN = {
   verifier: 'the-gateway-verifier-kept-secret-on-the-way',
+  browserSecret: 'the-secret-the-browser-holds-in-a-cookie',
   request: { client_id: 'https://claude.example.com/oauth/client.json', redirect_uri: 'https://claude.example.com/callback', state: 'state-1', scope: undefined },
   expiresAt: new Date('2026-10-19T09:10:00.000Z'),
 };
@@ -16,10 +17,15 @@ describe("a sign-in sealed into pagasae's state", () => {
     expect(seals.open(seals.seal(SIGN_IN))).toEqual({ ...SIGN_IN, request: { client_id: SIGN_IN.request.client_id, redirect_uri: SIGN_IN.request.redirect_uri, state: 'state-1' } });
   });
 
-  it('is safe in a URL and shows neither the verifier nor the request', () => {
+  it("is safe in a URL and shows neither the verifier, the browser's secret nor the request", () => {
     const state = createSignInSeals(SECRET).seal(SIGN_IN);
 
-    expect({ isUrlSafe: /^[A-Za-z0-9_-]+$/.test(state), showsVerifier: state.includes('verifier'), showsClient: state.includes('claude') }).toEqual({ isUrlSafe: true, showsVerifier: false, showsClient: false });
+    expect({ isUrlSafe: /^[A-Za-z0-9_-]+$/.test(state), showsVerifier: state.includes('verifier'), showsBrowserSecret: state.includes('cookie'), showsClient: state.includes('claude') }).toEqual({
+      isUrlSafe: true,
+      showsVerifier: false,
+      showsBrowserSecret: false,
+      showsClient: false,
+    });
   });
 
   it('differs each time, though it seals the same sign-in', () => {
