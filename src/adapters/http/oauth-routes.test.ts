@@ -123,7 +123,7 @@ async function aCrewedParty() {
 
 /** The client's request decided as an approver would. */
 async function decided(outcome: 'approved' | 'denied') {
-  await requests.decide(FLEET, { requestId: 'req_1', from: ['pending'], decision: { outcome, decidedBy: { kind: 'operator' }, decidedAt: new Date('2026-10-19T09:00:00.000Z') } });
+  await requests.decide(FLEET, { requestId: 'req_1', from: ['pending'], decision: { outcome, decidedBy: { kind: 'operator' }, decidedAt: new Date('2026-10-19T09:00:00.000Z') }, notices: [] });
 }
 
 function token(form: Record<string, string>, headers: Record<string, string> = {}) {

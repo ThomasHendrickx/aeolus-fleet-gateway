@@ -103,6 +103,39 @@ describe('an approver approves a person\'s request for an outside MCP server', (
   });
 });
 
+describe("the outcome of a person's request for an outside MCP server is told to each requester with a person ship (decision 0056)", () => {
+  const PIETER = { accountId: 'acc-pieter', personShipId: null };
+  const LINEAR = 'https://mcp.linear.app/mcp';
+
+  beforeEach(() => {
+    requests.held.splice(1, 1, { ...SERVER_REQUEST, requesters: [CHARLOTTE, PIETER] });
+  });
+
+  it('writes the denial to tell with the decision, for Charlotte, who has a person ship', async () => {
+    await decide({ actor: APPROVER_ACTOR, requestId: SERVER_REQUEST.requestId, decision: { kind: 'deny' } });
+
+    expect(requests.notices).toEqual([
+      { fleetId: FLEET_ID, requestId: SERVER_REQUEST.requestId, accountId: 'acc-charlotte', personShipId: OWNER_SHIP_ID, url: LINEAR, outcome: 'denied', partyName: null, isEnded: false },
+    ]);
+  });
+
+  it('writes the approval to tell with the decision, naming the outside party', async () => {
+    await decide({
+      actor: APPROVER_ACTOR,
+      requestId: SERVER_REQUEST.requestId,
+      decision: { kind: 'approve', party: { name: 'linear', ownerShipId: OWNER_SHIP_ID, scopes: [] }, server: { credential: { kind: 'bearer', token: 'lin-token' }, concurrencyLimit: 4 } },
+    });
+
+    expect(requests.notices.map(({ accountId, outcome, partyName }) => ({ accountId, outcome, partyName }))).toEqual([{ accountId: 'acc-charlotte', outcome: 'approved', partyName: 'linear' }]);
+  });
+
+  it("writes nothing to tell for a client's request: its browser is told", async () => {
+    await decide({ actor: APPROVER_ACTOR, requestId: CLIENT_ID, decision: { kind: 'deny' } });
+
+    expect(requests.notices).toEqual([]);
+  });
+});
+
 describe('deciding a pending request', () => {
   it("refuses an approval while the fleet's outside parties are off, keeping the request pending", async () => {
     isOn = false;

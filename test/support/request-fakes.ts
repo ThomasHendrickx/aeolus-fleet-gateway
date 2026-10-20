@@ -1,10 +1,12 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
-import type { PendingRequest, PendingRequests, Waiting, WaitingSeals } from '../../src/core/requests/ports.js';
+import type { OutcomeNotice, OutcomeNotices, PendingRequest, PendingRequests, Waiting, WaitingSeals } from '../../src/core/requests/ports.js';
 
 /** Pending requests in memory, as the store keeps them: one open request per client or server in a fleet. */
-export function memoryPendingRequests(): PendingRequests & { held: PendingRequest[]; told: Set<string> } {
+export function memoryPendingRequests(): PendingRequests & { held: PendingRequest[]; told: Set<string>; notices: (OutcomeNotice & { isEnded: boolean })[]; outcomeNotices: OutcomeNotices } {
   const held: PendingRequest[] = [];
+  /** The outcomes to tell, written with each decision or expiry. */
+  const notices: (OutcomeNotice & { isEnded: boolean })[] = [];
   /** Each requester told its request's end, as `<request id> <account id>`. */
   const told = new Set<string>();
   const isOpen = (request: PendingRequest) => request.state === 'pending' || request.state === 'approving';
@@ -16,6 +18,29 @@ export function memoryPendingRequests(): PendingRequests & { held: PendingReques
   return {
     held,
     told,
+    notices,
+    outcomeNotices: {
+      listUnended: (limit) => Promise.resolve(notices.filter((notice) => !notice.isEnded).slice(0, limit)),
+      end: ({ fleetId, requestId, accountId }) => {
+        const index = notices.findIndex((notice) => notice.fleetId === fleetId && notice.requestId === requestId && notice.accountId === accountId);
+        const notice = notices[index];
+        if (notice !== undefined) {
+          notices.splice(index, 1, { ...notice, isEnded: true });
+        }
+        return Promise.resolve();
+      },
+    },
+    listDue: (now) => Promise.resolve(held.filter((request) => request.state === 'pending' && request.expiresAt <= now)),
+    expire: (fleetId, { requestId, now, notices: told }) => {
+      const index = indexOf(fleetId, requestId);
+      const request = held[index];
+      if (request?.state !== 'pending' || request.expiresAt > now) {
+        return Promise.resolve(false);
+      }
+      replace(index, { ...request, state: 'expired' });
+      notices.push(...told.map((notice) => ({ ...notice, isEnded: false })));
+      return Promise.resolve(true);
+    },
     open: (asked) => {
       const { now, ...fresh } = asked;
       held.forEach((request, index) => {
@@ -63,13 +88,14 @@ export function memoryPendingRequests(): PendingRequests & { held: PendingReques
       }
       return Promise.resolve();
     },
-    decide: (fleetId, { requestId, decision, from }) => {
+    decide: (fleetId, { requestId, decision, from, notices: told }) => {
       const index = indexOf(fleetId, requestId);
       const request = held[index];
       if (request === undefined || !from.includes(request.state)) {
         return Promise.resolve(false);
       }
       replace(index, { ...request, state: decision.outcome, decidedBy: decision.decidedBy, decidedAt: decision.decidedAt });
+      notices.push(...told.map((notice) => ({ ...notice, isEnded: false })));
       return Promise.resolve(true);
     },
   };

@@ -1,4 +1,6 @@
-import type { ShipId } from '@aeolus-fleet/common';
+import { setTimeout as wait } from 'node:timers/promises';
+
+import type { FleetId, ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
@@ -11,6 +13,7 @@ import { aFreePort, startFleetServer, type FleetServer } from './support/fleet-s
 import { connectGateway, mutate, query } from './support/gateway-api.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 import { outsidePartiesOn } from './support/outside-parties.js';
+import { receiveOne } from './support/ship.js';
 
 // An agent ship holding gateway:approve decides a pending request through
 // the gateway's API (decision 0056): the gateway, as its own ship,
@@ -18,6 +21,7 @@ import { outsidePartiesOn } from './support/outside-parties.js';
 
 const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
 const REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0001';
+const SERVER_REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0002';
 
 let fleet: FleetServer;
 let app: GatewayApp;
@@ -25,6 +29,9 @@ let prisma: PrismaClient;
 let address: string;
 let approver: string;
 let owner: ShipId;
+/** Charlotte's person ship's crew token. */
+let charlotte: string;
+let fleetId: FleetId;
 
 beforeEach(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
@@ -38,10 +45,12 @@ beforeEach(async () => {
   const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', scopes: GATEWAY_SCOPES } });
   expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
   approver = await register(fleet, await commission(fleet, { cookie, ship: { name: 'approver', type: 'agent', scopes: ['fleet:read', 'gateway:approve'] } }));
-  owner = (await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } })).shipId;
+  const charlotteShip = await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } });
+  owner = charlotteShip.shipId;
+  charlotte = await register(fleet, charlotteShip);
   prisma = createPrismaClient(databaseUrl);
   const whoami = await fetch(`${fleet.url}/api/v1/ship/whoami`, { headers: { authorization: `Bearer ${approver}` } });
-  const { fleetId } = z.object({ fleetId: z.templateLiteral(['flt_', z.string()]) }).parse(await whoami.json());
+  ({ fleetId } = z.object({ fleetId: z.templateLiteral(['flt_', z.string()]) }).parse(await whoami.json()));
   const asked = new Date();
   await createPrismaPendingRequests(prisma).open({
     fleetId,
@@ -92,5 +101,37 @@ describe('an approver decides a pending request through the gateway', () => {
 
     expect(decided.status).toBe(400);
     await expect(toDecide()).resolves.toEqual([REQUEST_ID]);
+  });
+});
+
+describe("a person hears the outcome of their request for an outside MCP server (decision 0056)", () => {
+  it("is sent the denial as a message from the gateway's ship to their person ship", async () => {
+    const asked = new Date();
+    await createPrismaPendingRequests(prisma).open({
+      fleetId,
+      requestId: SERVER_REQUEST_ID,
+      subject: { kind: 'server', url: 'https://mcp.linear.app/mcp' },
+      requesters: [{ accountId: 'acc-charlotte', personShipId: owner }],
+      askedAt: asked,
+      expiresAt: new Date(asked.getTime() + 7 * 24 * 60 * 60_000),
+      state: 'pending',
+      decidedBy: null,
+      decidedAt: null,
+      now: asked,
+    });
+
+    const decided = await mutate(address, { procedure: 'requests.decide', crewToken: approver, body: { requestId: SERVER_REQUEST_ID, decision: { kind: 'deny' } } });
+    let delivery = await receiveOne(fleet, charlotte);
+    for (let attempt = 0; attempt < 50 && delivery === undefined; attempt += 1) {
+      await wait(100);
+      delivery = await receiveOne(fleet, charlotte);
+    }
+
+    expect({ decided: decided.status, from: delivery?.senderName, contentType: delivery?.contentType, payload: delivery?.payload }).toEqual({
+      decided: 200,
+      from: 'gateway',
+      contentType: 'text/plain',
+      payload: 'Your request for https://mcp.linear.app/mcp was denied.',
+    });
   });
 });
