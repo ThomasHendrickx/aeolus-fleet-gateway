@@ -9,6 +9,13 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          name: 'scripts:unit',
+          include: ['scripts/**/*.test.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
           name: 'gateway:unit',
           include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
           exclude: [...configDefaults.exclude, '**/*.integration.test.ts'],
