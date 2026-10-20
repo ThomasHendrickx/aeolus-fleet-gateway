@@ -52,7 +52,7 @@ describe("signed-in accounts' grants in Postgres (decision 0054)", () => {
     await grants.save(aGrant({ grantId: 'grant-3' }));
     await expect(grants.find(OTHER_FLEET, 'grant-3')).resolves.toBeUndefined();
 
-    await grants.renew(FLEET, 'grant-3', { refreshToken: 'pagasae-refresh-2', accountToken: 'account-token-2', accountTokenExpiresAt: new Date('2026-10-19T09:19:00.000Z'), personShipId: null });
+    await grants.renew({ fleetId: FLEET, grantId: 'grant-3' }, { refreshToken: 'pagasae-refresh-2', accountToken: 'account-token-2', accountTokenExpiresAt: new Date('2026-10-19T09:19:00.000Z'), personShipId: null });
     await expect(grants.find(FLEET, 'grant-3')).resolves.toEqual(aGrant({ grantId: 'grant-3', refreshToken: 'pagasae-refresh-2', accountToken: 'account-token-2', accountTokenExpiresAt: new Date('2026-10-19T09:19:00.000Z'), personShipId: null }));
 
     await grants.end(FLEET, 'grant-3');

@@ -61,7 +61,7 @@ describe("a signed-in person's account token", () => {
 
   it('takes the person ship pagasae names at the refresh, as the account may have gained one', async () => {
     now = new Date('2026-10-19T09:09:30.000Z');
-    await grants.renew(FLEET_ID, 'grant-1', { personShipId: null });
+    await grants.renew(GRANT, { personShipId: null });
 
     await expect(accountTokenOf().accountTokenOf(GRANT)).resolves.toMatchObject({ isOk: true, value: { personShipId: PERSON_SHIP_ID } });
   });

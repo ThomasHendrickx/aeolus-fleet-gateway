@@ -75,6 +75,8 @@ export interface IssuedTokens {
   rotate(refreshHash: string): Promise<boolean>;
   revokeFamily(familyId: string): Promise<void>;
   revokeIssuedBy(codeHash: string): Promise<void>;
+  /** Revokes every pair that stands for the account grant in the fleet: its person signs in again. */
+  revokeGrant(fleetId: FleetId, grantId: string): Promise<void>;
 }
 
 /** active: in use; rotated: its refresh token was traded for a new pair; revoked: refused for good. */

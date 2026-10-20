@@ -42,6 +42,12 @@ export interface Pagasae {
   /** pagasae's authorize address for the gateway, with the state and the PKCE challenge, naming no fleet. */
   authorizeUrl(signIn: { state: string; codeChallenge: string }): string;
   redeemCode(code: { code: string; verifier: string }): Promise<Result<PagasaeTokens, { reason: string }>>;
+  /**
+   * New tokens for a refresh token, which pagasae replaces on use: refused
+   * when pagasae ended the grant (disabled, signed out, no right left, the
+   * token used twice), unavailable when it did not answer.
+   */
+  refresh(refreshToken: string): Promise<Result<PagasaeTokens, { kind: 'refused' | 'unavailable'; reason: string }>>;
 }
 
 /** A person's sign-in kept for their MCP client: the account in the fleet, and pagasae's tokens to act as it. */
@@ -57,4 +63,8 @@ export interface AccountGrant {
 
 export interface AccountGrants {
   save(grant: AccountGrant): Promise<void>;
+  find(fleetId: FleetId, grantId: string): Promise<AccountGrant | undefined>;
+  /** Keeps pagasae's new tokens for the grant, and the person ship they name. */
+  renew(grant: { fleetId: FleetId; grantId: string }, tokens: Partial<Pick<AccountGrant, 'refreshToken' | 'accountToken' | 'accountTokenExpiresAt' | 'personShipId'>>): Promise<void>;
+  end(fleetId: FleetId, grantId: string): Promise<void>;
 }

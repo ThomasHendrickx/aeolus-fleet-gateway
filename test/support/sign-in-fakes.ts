@@ -42,7 +42,7 @@ export function memoryAccountGrants(): AccountGrants & { held: AccountGrant[] } 
       return Promise.resolve();
     },
     find: (fleetId, grantId) => Promise.resolve(held[indexOf(fleetId, grantId)]),
-    renew: (fleetId, grantId, tokens) => {
+    renew: ({ fleetId, grantId }, tokens) => {
       const index = indexOf(fleetId, grantId);
       const grant = held[index];
       if (grant !== undefined) {
