@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ANSWER_CONTENT_TYPE, QUESTION_CONTENT_TYPE } from '@aeolus-fleet/common';
 
+import type { InboxEntry } from '../../core/people/inbox-entry.js';
 import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
@@ -53,7 +54,7 @@ const QUESTION = {
   ],
   pick: { option: 1, why: 'It is reviewed.' },
 };
-const WAITING = [
+const WAITING: InboxEntry[] = [
   { deliveryId: 'dlv_question', from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T10:00:00.000Z' },
   { deliveryId: 'dlv_message', from: 'research-01', title: 'Weekly summary is ready', sentAt: '2026-10-20T11:00:00.000Z' },
 ];

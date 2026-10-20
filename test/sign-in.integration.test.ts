@@ -148,6 +148,18 @@ describe("a person signs in to the gateway's pages through pagasae", () => {
     await expect(toDecideStatus(browser)).resolves.toBe(403);
   });
 
+  it('sees the overview as their account, with no person ship to read and a way to sign out', async () => {
+    pagasae.answer({ ...charlotteIn(pagasae, fleetId), scope: 'fleet:read gateway:approve' });
+    const browser = aBrowser();
+    await browser.follow(`${setting.address}/sign-in`, `${setting.address}/overview`);
+
+    const overview = await browser.visit(`${setting.address}/overview`);
+    const page = await overview.text();
+
+    // pagasae names no person ship for Charlotte here, so only To decide waits on her.
+    expect({ status: overview.status, waits: page.includes('0 to decide') && !page.includes('for you'), signOut: page.includes('action="/sign-out"') }).toEqual({ status: 200, waits: true, signOut: true });
+  });
+
   it('signs out: the page session ends, so the next call is signed out', async () => {
     pagasae.answer({ ...charlotteIn(pagasae, fleetId), scope: 'fleet:read gateway:approve' });
     const browser = aBrowser();

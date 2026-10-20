@@ -19,8 +19,12 @@ import type { inferRouterOutputs } from '@trpc/server';
 import type { Clock } from '../../core/shared/clock.js';
 import { gatewayRouter, type Context, type GatewayRouter } from '../trpc/router.js';
 import { acceptForms, escaped, isSameOrigin, refusalMessage } from './html.js';
+import { registerDeliveryPages, waitingItem } from './delivery-page.js';
 import type { LivePage } from './live.js';
 import { handshake, icon, partyMark, ring, signalPage, signInPrompt, statusBadge, type SignInWay } from './signal.js';
+
+/** What waits on a person's own ship, as the API shows it. */
+type Inbox = inferRouterOutputs<GatewayRouter>['people']['inbox'];
 
 /** A pending request as the API shows it. */
 type ShownRequest = inferRouterOutputs<GatewayRouter>['requests']['toDecide'][number];
@@ -102,17 +106,45 @@ async function toDecideOf(caller: Caller): Promise<ShownRequest[] | undefined> {
 }
 
 /** The overview's live section: what the page shows, read again whenever the fleet's requests change. */
-function overviewSection(toDecide: readonly ShownRequest[] | undefined, now: Date): string {
-  if (toDecide === undefined) {
+function overviewSection(shown: { toDecide: readonly ShownRequest[] | undefined; inbox: Inbox | undefined; now: Date }): string {
+  const { toDecide, inbox, now } = shown;
+  if (toDecide === undefined && inbox === undefined) {
     return `<div class="lead">${ring({ tone: 'ok', center: { icon: 'check' }, label: 'Nothing waits on you' })}<h1>Nothing waits on you</h1></div>`;
   }
-  const count = toDecide.length;
-  const lead = `<div class="lead">${ring({ tone: count === 0 ? 'ok' : 'waiting', center: { count }, label: `${count} to decide` })}<div><h1>Waits on you</h1><p class="muted">${icon('hourglass', 14)} ${count} to decide</p></div></div>`;
-  const queue =
-    count === 0
-      ? '<p class="muted">No request waits for a decision.</p>'
-      : `<section class="queue"><h2>To decide · ${count}</h2>${toDecide.map((request) => queueItem(request, { now, isCurrent: false })).join('')}</section>`;
-  return lead + queue;
+  const total = (inbox?.waiting ?? 0) + (toDecide?.length ?? 0);
+  const counts = [
+    inbox === undefined ? '' : `<span>${icon('users', 14)} ${String(inbox.waiting)} for you</span>`,
+    toDecide === undefined ? '' : `<span>${icon('hourglass', 14)} ${String(toDecide.length)} to decide</span>`,
+  ].filter((count) => count !== '');
+  const lead = `<div class="lead">${ring({ tone: total === 0 ? 'ok' : 'waiting', center: { count: total }, label: `${String(total)} wait on you` })}<div><h1>Waits on you</h1><p class="muted counts">${counts.join(' · ')}</p></div></div>`;
+  const next =
+    inbox === undefined || inbox.deliveries.length === 0 ? '' : `<section class="queue"><h2>Next · ${String(inbox.waiting)}</h2>${inbox.deliveries.map(waitingItem).join('')}</section>`;
+  const decide =
+    toDecide === undefined
+      ? ''
+      : toDecide.length === 0
+        ? '<p class="muted">No request waits for a decision.</p>'
+        : `<section class="queue"><h2>To decide · ${String(toDecide.length)}</h2>${toDecide.map((request) => queueItem(request, { now, isCurrent: false })).join('')}</section>`;
+  return lead + next + decide;
+}
+
+/** Reads what waits on the caller's own person ship; an actor who is no person has none. */
+async function inboxOf(caller: Caller): Promise<Inbox | undefined> {
+  try {
+    return await caller.people.inbox();
+  } catch (error) {
+    if (error instanceof TRPCError && error.code === 'FORBIDDEN') {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+/** Everything the Overview's live section shows, read as the caller. */
+async function overviewOf(context: Context, now: Date): Promise<string> {
+  const caller = gatewayRouter.createCaller(context);
+  const [toDecide, inbox] = await Promise.all([toDecideOf(caller), inboxOf(caller)]);
+  return overviewSection({ toDecide, inbox, now });
 }
 
 function scopeRow(scope: string, isLocked: boolean): string {
@@ -206,7 +238,7 @@ function html(reply: FastifyReply, page: { status: number; body: string; isWide?
 export function overviewLivePages(deps: { clock: Clock }): { overview: LivePage; request: LivePage } {
   return {
     overview: {
-      render: async (context) => ({ overview: overviewSection(await toDecideOf(gatewayRouter.createCaller(context)), deps.clock.now()) }),
+      render: async (context) => ({ overview: await overviewOf(context, deps.clock.now()) }),
     },
     request: {
       render: async (context, params): Promise<Record<string, string>> => {
@@ -251,8 +283,8 @@ export function registerOverviewPage(server: FastifyInstance, deps: { contextFor
     request: FastifyRequest;
     reply: FastifyReply;
     render: (context: Context) => Promise<FastifyReply>;
-    onRefused?: (context: Context, refused: { status: number; message: string }) => Promise<FastifyReply>;
-  }) => {
+    onRefused?: (context: Context, refused: { status: number; message: string }) => FastifyReply | Promise<FastifyReply>;
+  }): Promise<FastifyReply> => {
     const { request, reply, render, onRefused } = exchange;
     const context = deps.contextFor(request.headers.cookie);
     try {
@@ -262,7 +294,8 @@ export function registerOverviewPage(server: FastifyInstance, deps: { contextFor
         throw error;
       }
       if (error.code === 'UNAUTHORIZED') {
-        return signInPage(reply, { way: deps.signIn, error, returnTo: request.url });
+        // A form's own address is no page to come back to: the Overview is.
+        return signInPage(reply, { way: deps.signIn, error, returnTo: request.method === 'GET' ? request.url : PAGE });
       }
       const refused = { status: error.code === 'INTERNAL_SERVER_ERROR' ? HTTP_INTERNAL_ERROR : getHTTPStatusCodeFromError(error), message: refusalMessage(error) };
       try {
@@ -276,13 +309,15 @@ export function registerOverviewPage(server: FastifyInstance, deps: { contextFor
     }
   };
 
+  registerDeliveryPages(server, { answer });
+
   server.get(PAGE, (request, reply) =>
     answer({
       request,
       reply,
       render: async (context) => {
-        const toDecide = await toDecideOf(gatewayRouter.createCaller(context));
-        return html(reply, { status: 200, isSignedIn: await isPersonSignedIn(context), live: 'page=overview', body: `<div data-live="overview" style="display:grid;gap:24px">${overviewSection(toDecide, deps.clock.now())}</div>` });
+        const section = await overviewOf(context, deps.clock.now());
+        return html(reply, { status: 200, isSignedIn: await isPersonSignedIn(context), live: 'page=overview', body: `<div data-live="overview" style="display:grid;gap:24px">${section}</div>` });
       },
     }),
   );

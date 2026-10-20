@@ -92,6 +92,11 @@ main.centred > .mark, main.centred > .ring, main.centred > .badge { width: auto;
 .tab { white-space: nowrap; }
 @media (max-width: 480px) { .top .label { display: none; } .top { gap: 8px; } }
 .sign-out { margin-left: auto; } .sign-out button { height: 32px; border: 0; background: transparent; color: var(--muted-foreground); }
+.answers { display: grid; gap: 8px; } .answers button { height: 44px; }
+button.pick { outline: 2px dashed var(--ring); outline-offset: 2px; }
+.payload { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+textarea { padding: 8px 10px; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--background); color: var(--foreground); font: inherit; resize: vertical; }
+form > button.item { width: 100%; height: auto; justify-content: flex-start; text-align: left; font-weight: 400; }
 .live-status { position: fixed; right: 16px; bottom: 16px; margin: 0; }
 .party-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .party-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
