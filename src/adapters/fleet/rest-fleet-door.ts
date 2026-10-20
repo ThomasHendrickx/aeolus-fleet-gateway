@@ -8,6 +8,7 @@
 import { setTimeout as wait } from 'node:timers/promises';
 
 import {
+  ACCOUNT_TOKEN_HEADER,
   busyWaitMs,
   commissionShipOutputSchema,
   discoverOutputSchema,
@@ -43,9 +44,6 @@ const LOCATION = { kind: 'SERVER' } as const;
 
 /** The harness the gateway states when it registers a ship: it is software, not a model. */
 const HARNESS = 'aeolus-gateway';
-
-/** The header an account's token travels in; common's ACCOUNT_TOKEN_HEADER replaces it once published (aeolus-fleet#991). */
-const ACCOUNT_TOKEN_HEADER = 'aeolus-account-token';
 
 /** One call to the fleet. */
 interface FleetCall<T> {
