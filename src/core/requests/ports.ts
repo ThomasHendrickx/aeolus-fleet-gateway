@@ -57,8 +57,19 @@ export interface PendingRequests {
   claim(fleetId: FleetId, claim: { requestId: string; now: Date }): Promise<boolean>;
   /** Gives an approving request back as pending, when its proxy ship was refused. */
   release(fleetId: FleetId, requestId: string): Promise<void>;
-  /** Records the decision on a request in one of the states given; false when it was in none, so the first decision counts. */
-  decide(fleetId: FleetId, decided: { requestId: string; from: readonly RequestState[]; decision: { outcome: 'approved' | 'denied'; decidedBy: DecidedBy; decidedAt: Date } }): Promise<boolean>;
+  /**
+   * Records the decision on a request in one of the states given, and the
+   * outcomes to tell, in one step; false when it was in none, so the first
+   * decision counts and only it is told.
+   */
+  decide(
+    fleetId: FleetId,
+    decided: { requestId: string; from: readonly RequestState[]; decision: { outcome: 'approved' | 'denied'; decidedBy: DecidedBy; decidedAt: Date }; notices: readonly OutcomeNotice[] },
+  ): Promise<boolean>;
+  /** The requests still pending once their 7 days passed by now, in every fleet: the ones to expire. */
+  listDue(now: Date): Promise<PendingRequest[]>;
+  /** Expires a request still pending and due by now, with the outcomes to tell, in one step; false when it is not. */
+  expire(fleetId: FleetId, expired: { requestId: string; now: Date; notices: readonly OutcomeNotice[] }): Promise<boolean>;
 }
 
 /** Outbound port: new request ids, prefixed `req_` and time-ordered. */
@@ -85,4 +96,24 @@ export interface WaitingSeals {
   seal(waiting: Waiting): string;
   /** The waiting a sealed address holds; none for one the gateway did not seal. */
   open(sealed: string): Waiting | undefined;
+}
+
+/** An outcome of a request for an outside MCP server, to tell one requester by a message to their person ship (decision 0056). */
+export interface OutcomeNotice {
+  readonly fleetId: FleetId;
+  readonly requestId: string;
+  readonly accountId: string;
+  readonly personShipId: ShipId;
+  readonly url: string;
+  readonly outcome: 'approved' | 'denied' | 'expired';
+  /** The outside party the server is, once approved. */
+  readonly partyName: string | null;
+}
+
+/** Outbound port: the outcomes still to tell, kept until the fleet stored the message or refused it. */
+export interface OutcomeNotices {
+  /** The outcomes not ended yet, in every fleet, the oldest first. */
+  listUnended(limit: number): Promise<OutcomeNotice[]>;
+  /** Ends an outcome: told, or refused by the fleet. */
+  end(notice: Pick<OutcomeNotice, 'fleetId' | 'requestId' | 'accountId'>): Promise<void>;
 }

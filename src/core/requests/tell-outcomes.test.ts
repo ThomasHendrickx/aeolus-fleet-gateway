@@ -57,9 +57,9 @@ describe("telling a person their request's outcome", () => {
   });
 
   it.each([
-    ['approval', { outcome: 'approved' as const, partyName: 'linear' }, `Your request for ${LINEAR} was approved: it is the outside party linear.`],
-    ['expiry', { outcome: 'expired' as const, partyName: null }, `Your request for ${LINEAR} expired after 7 days with no decision: ask again to try anew.`],
-  ])('says the %s', async (_what, outcome, text) => {
+    { what: 'approval', outcome: { outcome: 'approved' as const, partyName: 'linear' }, text: `Your request for ${LINEAR} was approved: it is the outside party linear.` },
+    { what: 'expiry', outcome: { outcome: 'expired' as const, partyName: null }, text: `Your request for ${LINEAR} expired after 7 days with no decision: ask again to try anew.` },
+  ])('says the $what', async ({ outcome, text }) => {
     await tellOutcomes({ ...DENIED, ...outcome });
 
     expect(sent.map(({ payload }) => payload)).toEqual([text]);

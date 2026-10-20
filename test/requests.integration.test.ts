@@ -42,7 +42,7 @@ beforeEach(async () => {
   app = createGatewayApp({ databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET });
   await app.server.listen({ host: '127.0.0.1', port });
   await registerNetworkingPlugin(fleet, cookie);
-  const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', scopes: GATEWAY_SCOPES } });
+  const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: GATEWAY_SCOPES } });
   expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
   approver = await register(fleet, await commission(fleet, { cookie, ship: { name: 'approver', type: 'agent', scopes: ['fleet:read', 'gateway:approve'] } }));
   const charlotteShip = await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } });

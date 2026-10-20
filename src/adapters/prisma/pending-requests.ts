@@ -1,8 +1,8 @@
 import { idSchema, type FleetId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
-import type { PendingRequest, PendingRequests, RequestSubject } from '../../core/requests/ports.js';
-import type { Db } from './client.js';
+import type { OutcomeNotice, PendingRequest, PendingRequests, RequestSubject } from '../../core/requests/ports.js';
+import type { PrismaClient } from './client.js';
 
 const requestersSchema = z.array(z.object({ accountId: z.string(), personShipId: idSchema('ship').nullable() }));
 const decidedBySchema = z.union([z.object({ kind: z.literal('ship'), shipId: idSchema('ship') }), z.object({ kind: z.enum(['operator', 'viewer']) })]).nullable();
@@ -47,13 +47,18 @@ function requestOf(raw: unknown): PendingRequest {
   };
 }
 
+/** The outcomes to tell, as rows written with the step that ends their request. */
+function noticeRowsOf(notices: readonly OutcomeNotice[], createdAt: Date) {
+  return notices.map((notice) => ({ ...notice, createdAt }));
+}
+
 /**
  * The pending requests in Postgres. Opening is one insert that joins the
  * open request for the same client or server on the partial unique index,
  * so two requesters asking at once share one request; every decision is a
  * conditional update, so the first counts.
  */
-export function createPrismaPendingRequests(db: Db): PendingRequests {
+export function createPrismaPendingRequests(db: PrismaClient): PendingRequests {
   return {
     open: async ({ now, ...request }) => {
       const subjectKey = subjectKeyOf(request.subject);
@@ -101,12 +106,27 @@ export function createPrismaPendingRequests(db: Db): PendingRequests {
     release: async (fleetId, requestId) => {
       await db.pendingRequest.updateMany({ where: { fleetId, requestId, state: 'approving' }, data: { state: 'pending' } });
     },
-    decide: async (fleetId, { requestId, from, decision }) => {
-      const decided = await db.pendingRequest.updateMany({
-        where: { fleetId, requestId, state: { in: [...from] } },
-        data: { state: decision.outcome, decidedBy: decision.decidedBy, decidedAt: decision.decidedAt },
-      });
-      return decided.count === 1;
-    },
+    decide: (fleetId, { requestId, from, decision, notices }) =>
+      db.$transaction(async (tx) => {
+        const decided = await tx.pendingRequest.updateMany({
+          where: { fleetId, requestId, state: { in: [...from] } },
+          data: { state: decision.outcome, decidedBy: decision.decidedBy, decidedAt: decision.decidedAt },
+        });
+        if (decided.count !== 1) {
+          return false;
+        }
+        await tx.requestOutcomeNotice.createMany({ data: noticeRowsOf(notices, decision.decidedAt), skipDuplicates: true });
+        return true;
+      }),
+    listDue: async (now) => (await db.pendingRequest.findMany({ where: { state: 'pending', expiresAt: { lte: now } }, orderBy: { expiresAt: 'asc' } })).map(requestOf),
+    expire: (fleetId, { requestId, now, notices }) =>
+      db.$transaction(async (tx) => {
+        const expired = await tx.pendingRequest.updateMany({ where: { fleetId, requestId, state: 'pending', expiresAt: { lte: now } }, data: { state: 'expired' } });
+        if (expired.count !== 1) {
+          return false;
+        }
+        await tx.requestOutcomeNotice.createMany({ data: noticeRowsOf(notices, now), skipDuplicates: true });
+        return true;
+      }),
   };
 }

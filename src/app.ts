@@ -49,6 +49,11 @@ import { createWaitingSeals } from './adapters/crypto/waiting-seals.js';
 import { createRequestIds } from './adapters/crypto/request-ids.js';
 import { createAskForClient } from './core/requests/ask-for-client.js';
 import { createAskForServer } from './core/requests/ask-for-server.js';
+import { createExpireRequests } from './core/requests/expire-requests.js';
+import { createTellOutcomes } from './core/requests/tell-outcomes.js';
+import type { DecideRequest } from './core/requests/decide-request.js';
+import { createPrismaOutcomeNotices } from './adapters/prisma/outcome-notices.js';
+import { createOutcomeWorker } from './outcome-worker.js';
 import { createOpenRequest } from './core/requests/open-request.js';
 import { createReadWaiting } from './core/requests/read-waiting.js';
 import { createPagasae } from './adapters/pagasae/pagasae-client.js';
@@ -128,6 +133,9 @@ const BEARER = 'Bearer ';
 
 /** How often a proxy ship's worker looks again while the fleet hands it only what it holds, or does not answer. */
 const POLL_MS = 2_000;
+
+/** How often the gateway expires due requests and tells outcomes still to tell (P5-1 a). */
+const OUTCOME_ROUND_MS = 60_000;
 
 /** How long an outside client's call waits for its answer before it fails: the fleet's 10 minutes for a handed delivery, while statements state no deadline. */
 const CLIENT_CALL_DEADLINE_MS = 10 * 60_000;
@@ -333,6 +341,22 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
 
   // What every call of the API reads, from the request's console session and installation token.
   const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections });
+  const outcomes = createOutcomeWorker({
+    expireRequests: createExpireRequests({ requests: pendingRequests, clock }),
+    tellOutcomes: createTellOutcomes({ notices: createPrismaOutcomeNotices(prisma), requests: pendingRequests, connections, sender: door }),
+    sleep,
+    intervalMs: OUTCOME_ROUND_MS,
+    log: server.log,
+  });
+  const decideRequestOnly = createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock });
+  // A decided request's outcomes are told at once, not at the next round.
+  const decideRequest: DecideRequest = async (input) => {
+    const decided = await decideRequestOnly(input);
+    if (decided.isOk) {
+      outcomes.tellNow();
+    }
+    return decided;
+  };
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; installationTokenSent: string | undefined }): Context => ({
     ...sent,
     authenticateActor,
@@ -354,7 +378,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     setOutsideParties,
     registerClient,
     listToDecide: createListToDecide({ requests: pendingRequests, clock }),
-    decideRequest: createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock }),
+    decideRequest,
   });
 
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {
@@ -401,9 +425,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           await workers.start(party);
         }
       }
+      outcomes.start();
       return restored;
     },
     close: async () => {
+      await outcomes.stop();
       await workers.stop();
       await server.close();
     },
