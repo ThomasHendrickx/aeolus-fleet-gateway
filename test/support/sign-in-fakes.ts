@@ -42,6 +42,7 @@ export function memoryAccountGrants(): AccountGrants & { held: AccountGrant[] } 
       return Promise.resolve();
     },
     find: (fleetId, grantId) => Promise.resolve(held[indexOf(fleetId, grantId)]),
+    ofAccount: (fleetId, accountId) => Promise.resolve(held.filter((grant) => grant.fleetId === fleetId && grant.accountId === accountId)),
     renew: ({ fleetId, grantId }, tokens) => {
       const index = indexOf(fleetId, grantId);
       const grant = held[index];
