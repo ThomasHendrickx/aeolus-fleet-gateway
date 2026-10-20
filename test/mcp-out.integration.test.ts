@@ -163,3 +163,20 @@ describe("an outside party's owner and scopes are the fleet's (decision 0056)", 
     expect({ name: party?.name, isOwned: (party?.ownerShipId ?? '').startsWith('shp_'), canMessage: ['messages:send', 'messages:receive'].every((scope) => party?.scopes?.includes(scope)) }).toEqual({ name: 'crm', isOwned: true, canMessage: true });
   });
 });
+
+describe("a ship holding scopes:grant changes an outside party's scopes (decision 0056)", () => {
+  it('grants its proxy ship a scope the ship holds, which the party then shows from the fleet', async () => {
+    const address = await started();
+    await crewed(address);
+    const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'] } });
+    expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
+    const granter = await commission(fleet, { cookie, ship: { name: 'granter', type: 'agent', scopes: ['scopes:grant', 'fleet:read'] } });
+
+    const changed = await mutate(address, { procedure: 'parties.changeScopes', crewToken: await register(fleet, granter), body: { name: 'crm', grant: ['fleet:read'], revoke: [] } });
+
+    expect(changed.status).toBe(200);
+    const read = await query(address, { procedure: 'parties.get', cookie, input: { name: 'crm' } });
+    const { scopes } = z.object({ result: z.object({ data: z.object({ scopes: z.array(z.string()).nullable() }) }) }).parse(await read.json()).result.data;
+    expect(scopes?.includes('fleet:read')).toBe(true);
+  });
+});

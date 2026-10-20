@@ -35,6 +35,10 @@ export interface ProxyShipDoor {
 export interface ProxyShipsAsActor {
   /** Retires the proxy ship (fleet.retire); a ship retired already is refused with CONFLICT. */
   retire(as: ActorCredential, ship: { shipId: ShipId }): Promise<Result<undefined, FleetRefusal>>;
+  /** Sets the proxy ship's owner (fleet.setOwner, fleet:owner). */
+  setOwner(as: ActorCredential, ship: { shipId: ShipId; ownerShipId: ShipId }): Promise<Result<undefined, FleetRefusal>>;
+  /** Grants and revokes the proxy ship's scopes (fleet.grantScopes, scopes:grant): every scope it holds now. */
+  grantScopes(as: ActorCredential, change: { shipId: ShipId; grant: readonly string[]; revoke: readonly string[] }): Promise<Result<{ scopes: string[] }, FleetRefusal>>;
 }
 
 /** Outbound port: what the fleet holds for a proxy ship, read as the gateway's ship (fleet:read). */

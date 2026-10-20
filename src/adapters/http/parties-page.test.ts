@@ -72,6 +72,8 @@ function contextFor(cookie: string | undefined): Context {
     },
     listParties: () => Promise.resolve([CRM]),
     retireParty: unused,
+    changePartyOwner: unused,
+    changePartyScopes: unused,
     readParty: unused,
     registerClient: unused,
     stateParty: ({ name }) => {

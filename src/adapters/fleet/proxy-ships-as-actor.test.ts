@@ -73,6 +73,22 @@ describe("a party's proxy ship, retired as the actor", () => {
     });
   });
 
+  it("sets the owner over tRPC, as no REST door has it: a ship's crew token, with an account's token when it presents one", async () => {
+    answer = { status: 200, body: { result: { data: {} } } };
+
+    await expect(createProxyShipsAsActor(base).setOwner({ crewToken: 'aeolus_ct_v1_gateway', accountToken: 'account-token-1' }, { shipId: PROXY, ownerShipId: 'shp_01m3tbfspe96yf1rnr4ank9new' })).resolves.toEqual({ isOk: true, value: undefined });
+    expect(received.map(({ url, headers, body }) => ({ url, authorization: headers.authorization, account: headers['aeolus-account-token'], body }))).toEqual([
+      { url: '/trpc/fleet.setOwner', authorization: 'Bearer aeolus_ct_v1_gateway', account: 'account-token-1', body: JSON.stringify({ shipId: PROXY, ownerShipId: 'shp_01m3tbfspe96yf1rnr4ank9new' }) },
+    ]);
+  });
+
+  it('grants and revokes scopes over REST, answering every scope the ship holds now', async () => {
+    answer = { status: 200, body: { scopes: ['messages:send', 'messages:receive', 'fleet:read'] } };
+
+    await expect(createProxyShipsAsActor(base).grantScopes({ crewToken: 'aeolus_ct_v1_manager' }, { shipId: PROXY, grant: ['fleet:read'], revoke: [] })).resolves.toEqual({ isOk: true, value: { scopes: ['messages:send', 'messages:receive', 'fleet:read'] } });
+    expect(received.map(({ url, body }) => ({ url, body }))).toEqual([{ url: '/api/v1/fleet/grantScopes', body: JSON.stringify({ shipId: PROXY, grant: ['fleet:read'], revoke: [] }) }]);
+  });
+
   it('answers UNAVAILABLE when the fleet does not answer', async () => {
     await expect(createProxyShipsAsActor('http://127.0.0.1:1').retire({ crewToken: 'aeolus_ct_v1_manager' }, { shipId: PROXY })).resolves.toMatchObject({ isOk: false, error: { code: 'UNAVAILABLE' } });
   });

@@ -89,14 +89,30 @@ export function fakeProxyShipFleet() {
   return { state, door };
 }
 
-/** The fleet's calls on proxy ships as the actor, as a test sees them: each retire with its credential, answered as given. */
-export function fakeProxyShipsAsActor(answer: Result<undefined, FleetRefusal> = ok(undefined)): ProxyShipsAsActor & { retired: { as: ActorCredential; shipId: ShipId }[] } {
+/** The fleet's calls on proxy ships as the actor, as a test sees them: each call with its credential, answered as given. */
+export function fakeProxyShipsAsActor(answer: Result<undefined, FleetRefusal> = ok(undefined)): ProxyShipsAsActor & {
+  retired: { as: ActorCredential; shipId: ShipId }[];
+  owned: { as: ActorCredential; shipId: ShipId; ownerShipId: ShipId }[];
+  granted: { as: ActorCredential; shipId: ShipId; grant: readonly string[]; revoke: readonly string[] }[];
+} {
   const retired: { as: ActorCredential; shipId: ShipId }[] = [];
+  const owned: { as: ActorCredential; shipId: ShipId; ownerShipId: ShipId }[] = [];
+  const granted: { as: ActorCredential; shipId: ShipId; grant: readonly string[]; revoke: readonly string[] }[] = [];
   return {
     retired,
+    owned,
+    granted,
     retire: (as, { shipId }) => {
       retired.push({ as, shipId });
       return Promise.resolve(answer);
+    },
+    setOwner: (as, { shipId, ownerShipId }) => {
+      owned.push({ as, shipId, ownerShipId });
+      return Promise.resolve(answer);
+    },
+    grantScopes: (as, { shipId, grant, revoke }) => {
+      granted.push({ as, shipId, grant, revoke });
+      return Promise.resolve(answer.isOk ? ok({ scopes: ['messages:send', 'messages:receive', ...grant] }) : answer);
     },
   };
 }

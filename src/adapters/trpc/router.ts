@@ -28,6 +28,7 @@ import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListParties, ReadParty } from '../../core/parties/list-parties.js';
 import type { RetireParty, RetirePartyRefusal } from '../../core/parties/retire-party.js';
+import type { ChangePartyOwner, ChangePartyRefusal, ChangePartyScopes } from '../../core/parties/change-party.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { StateParty } from '../../core/mcp-out/state-party.js';
 import type { RegisterClient } from '../../core/oauth/register-client.js';
@@ -64,6 +65,8 @@ export interface Context {
   crewParty: CrewParty;
   listParties: ListParties;
   retireParty: RetireParty;
+  changePartyOwner: ChangePartyOwner;
+  changePartyScopes: ChangePartyScopes;
   readParty: ReadParty;
   stateParty: StateParty;
   markTool: MarkTool;
@@ -168,6 +171,16 @@ const APPROVE_CODES = {
 
 /** The refusals of crewing a party's proxy ship with a new secret, as the API states them. */
 /** The refusals of retiring a party, as the API states them. */
+/** The refusals of changing a party's owner or scopes, as the API states them. */
+const CHANGE_CODES = {
+  SCOPE_NOT_HELD: 'FORBIDDEN',
+  NO_SUCH_PARTY: 'NOT_FOUND',
+  PARTY_NOT_COMMISSIONED: 'PRECONDITION_FAILED',
+  CHANGE_REFUSED: 'FORBIDDEN',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+  NOT_AN_ACTOR: 'UNAUTHORIZED',
+} as const satisfies Record<ChangePartyRefusal['kind'], TRPCError['code']>;
+
 const RETIRE_CODES = {
   NOT_A_MANAGER: 'FORBIDDEN',
   NO_SUCH_PARTY: 'NOT_FOUND',
@@ -388,6 +401,28 @@ export const gatewayRouter = t.router({
      * ship is retired in the fleet as the actor, within its manage reach, and
      * the gateway forgets the party. Adding it again is a new request.
      */
+    /** An actor holding fleet:owner sets a party's owner: its proxy ship's, in the fleet, as the actor (decision 0056). */
+    changeOwner: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema, ownerShipId: idSchema('ship') }))
+      .output(z.object({}))
+      .mutation(async ({ ctx, input }) => {
+        const changed = await ctx.changePartyOwner({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, ...input });
+        if (!changed.isOk) {
+          throw new TRPCError({ code: CHANGE_CODES[changed.error.kind], message: changed.error.message });
+        }
+        return {};
+      }),
+    /** An actor holding scopes:grant grants and revokes a party's scopes, only scopes it holds: every scope its proxy ship holds now (decision 0056). */
+    changeScopes: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema, grant: z.array(z.string()), revoke: z.array(z.string()) }))
+      .output(z.object({ scopes: z.array(z.string()) }))
+      .mutation(async ({ ctx, input }) => {
+        const changed = await ctx.changePartyScopes({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, ...input });
+        if (!changed.isOk) {
+          throw new TRPCError({ code: CHANGE_CODES[changed.error.kind], message: changed.error.message });
+        }
+        return changed.value;
+      }),
     retire: servedProcedure
       .input(z.strictObject({ name: shipHandleSchema }))
       .output(z.object({}))
