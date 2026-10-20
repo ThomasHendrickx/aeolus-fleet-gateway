@@ -93,7 +93,7 @@ beforeEach(async () => {
   marks = [];
   stated = [];
   server = Fastify({ logger: false });
-  registerPartiesPage(server, { contextFor, fleetUrl: 'https://fleet.example.com' });
+  registerPartiesPage(server, { contextFor, signIn: 'pages' });
   await server.ready();
 });
 
@@ -123,12 +123,11 @@ describe("the gateway's page of parties, for argo signed in to the console", () 
     expect(page.body).not.toContain('<2>');
   });
 
-  it('asks a caller with no session to sign in to the console', async () => {
+  it('asks a caller with no session to sign in, coming back to this page', async () => {
     const page = await server.inject({ url: '/parties', headers: { host: HOST } });
 
     expect(page.statusCode).toBe(401);
-    expect(page.body).toContain('Sign in to the console of your fleet');
-    expect(page.body).toContain('href="https://fleet.example.com"');
+    expect(page.body).toContain('href="/sign-in?return_to=%2Fparties"');
   });
 
   it('shows a viewer the parties without the forms that change them', async () => {

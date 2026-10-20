@@ -141,7 +141,7 @@ beforeEach(async () => {
   dealt = [];
   mine = [];
   server = Fastify({ logger: false });
-  registerOverviewPage(server, { contextFor, signIn: { kind: 'pages' }, clock: { now: () => NOW } });
+  registerOverviewPage(server, { contextFor, signIn: 'pages', clock: { now: () => NOW } });
   await server.ready();
 });
 

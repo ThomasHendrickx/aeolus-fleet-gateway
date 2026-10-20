@@ -51,7 +51,7 @@ import { createPrismaAuthorizationCodes, createPrismaIssuedTokens, createPrismaO
 import { createExchangeToken } from './core/oauth/exchange-token.js';
 import { createSignInSeals } from './adapters/crypto/sign-in-seals.js';
 import { createWaitingSeals } from './adapters/crypto/waiting-seals.js';
-import { createPageSessions } from './adapters/crypto/page-sessions.js';
+import { createPageSessions, pageCookieOf } from './adapters/crypto/page-sessions.js';
 import { createRequestIds } from './adapters/crypto/request-ids.js';
 import { createAskForClient } from './core/requests/ask-for-client.js';
 import { createAskForServer } from './core/requests/ask-for-server.js';
@@ -439,10 +439,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   };
   void server.register(fastifyTRPCPlugin, trpc);
   // The page calls the API as the caller, with the forwarded console session; it never takes the installation token.
-  const pageContextFor = (cookie: string | undefined) => contextFor({ cookie, crewToken: undefined, installationTokenSent: undefined });
-  registerPartiesPage(server, { contextFor: pageContextFor, fleetUrl: options.fleetUrl });
-  // Pages sign people in through pagasae; a gateway that signs no one in sends them to the console.
-  const pageSignIn: SignInWay = pagasae === undefined ? { kind: 'console', fleetUrl: options.fleetUrl } : { kind: 'pages' };
+  // The pages are accounts only (Thomas, 20 Oct): only the page session's cookie reaches them, never the console's.
+  const pageContextFor = (cookie: string | undefined) => contextFor({ cookie: pageCookieOf(cookie), crewToken: undefined, installationTokenSent: undefined });
+  // Pages sign people in through pagasae; a gateway that signs no one in says so.
+  const pageSignIn: SignInWay = pagasae === undefined ? 'none' : 'pages';
+  registerPartiesPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOutsidePartiesPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOverviewPage(server, { contextFor: pageContextFor, signIn: pageSignIn, clock });
 

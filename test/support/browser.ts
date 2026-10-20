@@ -15,6 +15,8 @@ export interface Browser {
   post(url: string): Promise<Response>;
   /** Follows the redirects from the address until it lands, or until it is sent to an address starting with `stopAt`: the last answer. */
   follow(url: string, stopAt: string): Promise<Response>;
+  /** The Cookie header it sends the site, as a page's own websocket sends it. */
+  cookieFor(url: string): string;
 }
 
 export function aBrowser(options: { isKeepingCookies: boolean } = { isKeepingCookies: true }): Browser {
@@ -41,6 +43,7 @@ export function aBrowser(options: { isKeepingCookies: boolean } = { isKeepingCoo
   };
   const visit = (url: string) => send(url, 'GET');
   return {
+    cookieFor: (url) => [...(jar.get(new URL(url).origin) ?? new Map<string, string>())].map(([name, value]) => `${name}=${value}`).join('; '),
     visit,
     post: (url) => send(url, 'POST'),
     follow: async (url, stopAt) => {

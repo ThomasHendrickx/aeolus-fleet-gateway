@@ -1,8 +1,8 @@
 /**
- * The gateway's page of parties: one small server-rendered page where argo,
- * signed in to the console, approves outside MCP servers, hands over a
- * secret, states a party and marks its tools. Each form calls the gateway's
- * own API as argo, with the forwarded console session, so the page checks
+ * The gateway's page of parties: one small server-rendered page where a
+ * person signed in to the pages, holding fleet:manage, approves outside MCP
+ * servers, hands over a secret, states a party and marks its tools. Each
+ * form calls the gateway's own API as that account, so the page checks
  * nothing the API does not; it only refuses a form sent from another origin.
  */
 import { randomUUID } from 'node:crypto';
@@ -17,6 +17,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 
 import { gatewayRouter, type Context, type GatewayRouter } from '../trpc/router.js';
 import { acceptForms, escaped, isSameOrigin, layout, refusalMessage } from './html.js';
+import { signInPrompt, type SignInWay } from './signal.js';
 
 /** A party as the API shows it. */
 type ShownParty = inferRouterOutputs<GatewayRouter>['parties']['list'][number];
@@ -89,12 +90,9 @@ async function renderPage(reply: FastifyReply, page: { context: Context; failure
   return reply.code(failure?.status ?? 200).type('text/html; charset=utf-8').send(layout('Gateway parties', body));
 }
 
-function signInPage(reply: FastifyReply, refusal: { fleetUrl: string; error: TRPCError }): FastifyReply {
-  const { fleetUrl, error } = refusal;
-  return reply
-    .code(getHTTPStatusCodeFromError(error))
-    .type('text/html; charset=utf-8')
-    .send(layout('Gateway parties', `<h1>Parties</h1><p class="error">${escaped(refusalMessage(error))}</p><p><a href="${escaped(fleetUrl)}">Sign in to the console of your fleet</a>, then come back.</p>`));
+function signInPage(reply: FastifyReply, refusal: { way: SignInWay; error: TRPCError }): FastifyReply {
+  const body = signInPrompt({ message: refusalMessage(refusal.error), way: refusal.way, returnTo: PAGE });
+  return reply.code(getHTTPStatusCodeFromError(refusal.error)).type('text/html; charset=utf-8').send(layout('Gateway parties', `<h1>Parties</h1>${body}`));
 }
 
 
@@ -123,7 +121,7 @@ const ACTIONS: Record<string, (caller: ReturnType<typeof gatewayRouter.createCal
   mark: (caller, form) => caller.parties.markTool({ name: field(form, 'name'), tool: field(form, 'tool'), isRepeatable: form.isRepeatable === 'on' }),
 };
 
-export function registerPartiesPage(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; fleetUrl: string }): void {
+export function registerPartiesPage(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; signIn: SignInWay }): void {
   acceptForms(server);
 
   const answer = async (exchange: { request: FastifyRequest; reply: FastifyReply }, act?: (caller: ReturnType<typeof gatewayRouter.createCaller>) => Promise<unknown>) => {
@@ -140,7 +138,7 @@ export function registerPartiesPage(server: FastifyInstance, deps: { contextFor:
         throw error;
       }
       if (error.code === 'UNAUTHORIZED') {
-        return signInPage(reply, { fleetUrl: deps.fleetUrl, error });
+        return signInPage(reply, { way: deps.signIn, error });
       }
       const failure = { status: error.code === 'INTERNAL_SERVER_ERROR' ? HTTP_INTERNAL_ERROR : getHTTPStatusCodeFromError(error), message: refusalMessage(error) };
       try {

@@ -7,6 +7,20 @@ import { createSealer } from './sealer.js';
 /** The cookie a browser signed in to the gateway's pages holds; not the console's aeolus_session, which the fleet reads. */
 export const PAGE_SESSION_COOKIE = 'aeolus_gateway_session';
 
+const PREFIX = `${PAGE_SESSION_COOKIE}=`;
+
+/**
+ * The page session's own pair in a Cookie header, and nothing else: the
+ * pages are accounts only (Thomas, 20 Oct), so no other cookie the browser
+ * sends, such as the console's, reaches them.
+ */
+export function pageCookieOf(header: string | undefined): string | undefined {
+  return header
+    ?.split(';')
+    .map((pair) => pair.trim())
+    .find((pair) => pair.startsWith(PREFIX) && pair.length > PREFIX.length);
+}
+
 /** Its own label, so the sealing key is never also a key the gateway derives elsewhere. */
 const SEAL_LABEL = 'page-session';
 
@@ -19,16 +33,11 @@ const sealedSchema = z.object({ fleetId: idSchema('fleet'), grantId: z.string().
  */
 export function createPageSessions(secret: string): PageSessions {
   const sealer = createSealer(secret, SEAL_LABEL);
-  const prefix = `${PAGE_SESSION_COOKIE}=`;
   return {
     seal: ({ fleetId, grantId }) => sealer.seal({ fleetId, grantId }),
     inCookie: (cookie) => {
-      const sealed = cookie
-        .split(';')
-        .map((pair) => pair.trim())
-        .find((pair) => pair.startsWith(prefix))
-        ?.slice(prefix.length);
-      if (sealed === undefined || sealed === '') {
+      const sealed = pageCookieOf(cookie)?.slice(PREFIX.length);
+      if (sealed === undefined) {
         return undefined;
       }
       const session = sealedSchema.safeParse(sealer.open(sealed));

@@ -33,7 +33,7 @@ const LINEAR: ListedParty = {
 const ORDERBOT: ListedParty = { name: 'orderbot<x>', kind: 'mcpClient', clientId: 'https://orderbot.example.com/client.json', state: 'awaitingCrew', proxyShipId: null, ownerShipId: OWNER, scopes: null };
 
 let parties: ListedParty[];
-let signInWay: { kind: 'pages' } | { kind: 'console'; fleetUrl: string };
+let signInWay: 'pages' | 'none';
 let switches: Omit<Parameters<SetOutsideParties>[0], 'actor' | 'as'>[];
 
 function contextFor(cookie: string | undefined): Context {
@@ -90,7 +90,7 @@ beforeEach(async () => {
   isOn = false;
   isNetworkOpen = false;
   parties = [LINEAR, ORDERBOT];
-  signInWay = { kind: 'pages' };
+  signInWay = 'pages';
   switches = [];
   server = Fastify({ logger: false });
   registerOutsidePartiesPage(server, { contextFor, signIn: signInWay });
@@ -206,9 +206,9 @@ describe("the outside parties page: the fleet's switch", () => {
     expect(shown.body).toContain('href="/sign-in?return_to=%2Foutside-parties"');
   });
 
-  it('sends a caller with no session to the console on a gateway that signs no one in', async () => {
+  it('says a gateway that signs no one in does, sending nobody to the console', async () => {
     await server.close();
-    signInWay = { kind: 'console', fleetUrl: 'https://fleet.example.com' };
+    signInWay = 'none';
     server = Fastify({ logger: false });
     registerOutsidePartiesPage(server, { contextFor, signIn: signInWay });
     await server.ready();
@@ -216,7 +216,8 @@ describe("the outside parties page: the fleet's switch", () => {
     const shown = await page();
 
     expect(shown.statusCode).toBe(401);
-    expect(shown.body).toContain('href="https://fleet.example.com"');
+    expect(shown.body).toContain('This gateway signs no one in');
+    expect(shown.body).not.toContain('fleet.example.com');
   });
 });
 
