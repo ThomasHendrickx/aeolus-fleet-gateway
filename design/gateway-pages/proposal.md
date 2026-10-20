@@ -62,7 +62,10 @@ A2A is not built yet (0048, interop I-6), so no A2A flow is drawn. Nothing on th
 - **Who sees requests:** "Requester sees it under your requests and potential approvers see them all on the overview page." B has no Requests tab: Overview holds what waits on you, To decide (every pending request, for those who may approve) and Your requests (the requests you made); To decide opens the requests one at a time.
 - **Refusals:** "No rule matches" only: "network has no grey area, it works or doesnt."
 
+## Decided
+
+- **Scopes an approver grants:** any scope the approver holds itself, never more (0053, the commission check). The scope rows offer only those; `fleet:read` in the screens is one such scope.
+
 ## Questions
 
-1. Which scopes may an approver grant to a proxy ship beyond `messages:send` and `messages:receive`? The screens offer `fleet:read` as an example.
-2. Who may change an outside party's owner or scopes, or retire it, on the gateway's page: holders of the approving scope, or `fleet:owner`, `scopes:grant` and `fleet:manage` within reach as for any ship? Still with Thomas.
+1. Who may change an outside party's owner or scopes, or retire it, on the gateway's page: holders of the approving scope, or `fleet:owner`, `scopes:grant` and `fleet:manage` within reach as for any ship? Still with Thomas.
