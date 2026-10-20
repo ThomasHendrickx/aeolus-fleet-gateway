@@ -71,7 +71,8 @@ function contextFor(cookie: string | undefined): Context {
     setOutsideParties: unused,
     listToDecide: (actor) =>
       Promise.resolve(actor.scopes.includes('gateway:approve') ? ok(toDecide) : err({ kind: 'NOT_AN_APPROVER' as const, message: 'Deciding requests needs gateway:approve' })),
-    decideRequest: ({ actor: _actor, ...decided }) => {
+    decideRequest: ({ requestId, decision }) => {
+      const decided = { requestId, decision };
       decisions.push(decided);
       if (refusal !== undefined) {
         return Promise.resolve(err(refusal));
@@ -99,12 +100,13 @@ function get(url: string, cookie?: string) {
   return server.inject({ url, headers: { host: HOST, ...(cookie === undefined ? {} : { cookie }) } });
 }
 
-function decide(requestId: string, form: Record<string, string>, origin = ORIGIN) {
+function decide(requestId: string, form: Record<string, string> & { origin?: string }) {
+  const { origin = ORIGIN, ...fields } = form;
   return server.inject({
     method: 'POST',
     url: `/overview/requests/${requestId}/decide`,
     headers: { host: HOST, 'content-type': 'application/x-www-form-urlencoded', cookie: APPROVER, origin },
-    payload: new URLSearchParams(form).toString(),
+    payload: new URLSearchParams(fields).toString(),
   });
 }
 
@@ -206,7 +208,7 @@ describe('the Overview page: To decide', () => {
   });
 
   it('refuses a form sent from another origin, deciding nothing', async () => {
-    const answer = await decide('req_orderbot', { decision: 'deny' }, 'https://elsewhere.example.com');
+    const answer = await decide('req_orderbot', { decision: 'deny', origin: 'https://elsewhere.example.com' });
 
     expect(answer.statusCode).toBe(403);
     expect(decisions).toEqual([]);

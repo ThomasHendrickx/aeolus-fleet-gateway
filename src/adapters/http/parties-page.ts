@@ -16,7 +16,7 @@ import { z } from 'zod';
 import type { inferRouterOutputs } from '@trpc/server';
 
 import { gatewayRouter, type Context, type GatewayRouter } from '../trpc/router.js';
-import { acceptForms, escaped, isSameOrigin, layout } from './html.js';
+import { acceptForms, escaped, isSameOrigin, layout, refusalMessage } from './html.js';
 
 /** A party as the API shows it. */
 type ShownParty = inferRouterOutputs<GatewayRouter>['parties']['list'][number];
@@ -71,14 +71,6 @@ const APPROVE_FORM = (requestId: string) => `<h2>Approve an MCP server</h2>
 <button>Approve</button>
 </form>`;
 
-/** Why the API refused, as the page says it: the form's fields that are not valid, or the API's message. */
-function messageOf(error: TRPCError): string {
-  if (error.cause instanceof z.ZodError) {
-    return `The form is not valid: ${error.cause.issues.map((issue) => `${issue.path.join('.') || 'form'}: ${issue.message}`).join('; ')}`;
-  }
-  return error.code === 'INTERNAL_SERVER_ERROR' ? 'Internal error' : error.message;
-}
-
 async function renderPage(reply: FastifyReply, page: { context: Context; failure?: { status: number; message: string } }): Promise<FastifyReply> {
   const { context, failure } = page;
   const caller = gatewayRouter.createCaller(context);
@@ -102,7 +94,7 @@ function signInPage(reply: FastifyReply, refusal: { fleetUrl: string; error: TRP
   return reply
     .code(getHTTPStatusCodeFromError(error))
     .type('text/html; charset=utf-8')
-    .send(layout('Gateway parties', `<h1>Parties</h1><p class="error">${escaped(messageOf(error))}</p><p><a href="${escaped(fleetUrl)}">Sign in to the console of your fleet</a>, then come back.</p>`));
+    .send(layout('Gateway parties', `<h1>Parties</h1><p class="error">${escaped(refusalMessage(error))}</p><p><a href="${escaped(fleetUrl)}">Sign in to the console of your fleet</a>, then come back.</p>`));
 }
 
 
@@ -150,7 +142,7 @@ export function registerPartiesPage(server: FastifyInstance, deps: { contextFor:
       if (error.code === 'UNAUTHORIZED') {
         return signInPage(reply, { fleetUrl: deps.fleetUrl, error });
       }
-      const failure = { status: error.code === 'INTERNAL_SERVER_ERROR' ? HTTP_INTERNAL_ERROR : getHTTPStatusCodeFromError(error), message: messageOf(error) };
+      const failure = { status: error.code === 'INTERNAL_SERVER_ERROR' ? HTTP_INTERNAL_ERROR : getHTTPStatusCodeFromError(error), message: refusalMessage(error) };
       try {
         return await renderPage(reply, { context, failure });
       } catch {
