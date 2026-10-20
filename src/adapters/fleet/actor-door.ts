@@ -4,14 +4,12 @@
  * viewer's console session over tRPC, as the console calls it. Each answers
  * the fleet's refusal as its code and message.
  */
+import { ACCOUNT_TOKEN_HEADER } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
 import type { ActorCredential } from '../../core/actors/credential-of.js';
 import type { FleetRefusal } from '../../core/connection/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
-
-/** The header an account's token travels in; common's ACCOUNT_TOKEN_HEADER replaces it once published (aeolus-fleet#991). */
-export const ACCOUNT_TOKEN_HEADER = 'aeolus-account-token';
 
 const refusalSchema = z.object({ code: z.string(), message: z.string() });
 const trpcRefusalSchema = z.object({ error: z.object({ message: z.string(), data: z.object({ code: z.string() }) }) });

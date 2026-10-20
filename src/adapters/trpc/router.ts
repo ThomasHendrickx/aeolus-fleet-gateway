@@ -358,8 +358,8 @@ export const gatewayRouter = t.router({
     /**
      * Connects the gateway with its ship's secret, which the console's server
      * hands over server to server: it registers with it and keeps only the
-     * crew token. Only while not connected, while the gateway serves the
-     * fleet, and in a fleet with a registered networking plugin (interop I-3).
+     * crew token. Only while not connected, and while the gateway serves the
+     * fleet.
      */
     connect: managing(servedProcedure)
       .input(z.object({ shipId: idSchema('ship'), secret: z.string().min(1) }))

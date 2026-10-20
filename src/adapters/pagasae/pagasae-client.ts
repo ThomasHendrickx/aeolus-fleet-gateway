@@ -7,20 +7,16 @@
  * person picked; the gateway reads what it names, and core checks its
  * signature on every call it is presented to.
  */
-import { idSchema } from '@aeolus-fleet/common';
+import { accountTokenClaimsSchema } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
 import { err, ok, type Result } from '../../core/shared/result.js';
 import type { Pagasae, PagasaeTokens } from '../../core/sign-in/ports.js';
 
-const MILLISECONDS_PER_SECOND = 1000;
 const HTTP_SERVER_ERROR = 500;
 
 const tokenAnswerSchema = z.object({ access_token: z.string(), refresh_token: z.string() });
 const errorAnswerSchema = z.object({ error: z.string() });
-
-/** What the gateway reads of an account token: its fleet (the audience), its account, its person ship there, its scopes, and its end; common's accountTokenClaimsSchema replaces it once published (aeolus-fleet#991). */
-const accountTokenSchema = z.object({ aud: idSchema('fleet'), sub: z.string().min(1), person_ship: idSchema('ship').optional(), scope: z.string().optional(), exp: z.number() });
 
 function claimsOf(accountToken: string): unknown {
   const payload = accountToken.split('.')[1];
@@ -58,18 +54,18 @@ export function createPagasae(options: { url: string; clientId: string; clientSe
       return err({ kind: 'refused', reason: refusal.success ? refusal.data.error : `pagasae answered ${String(response.status)}` });
     }
     const answer = tokenAnswerSchema.safeParse(body);
-    const claims = accountTokenSchema.safeParse(answer.success ? claimsOf(answer.data.access_token) : undefined);
+    const claims = accountTokenClaimsSchema.safeParse(answer.success ? claimsOf(answer.data.access_token) : undefined);
     if (!answer.success || !claims.success) {
       return err({ kind: 'refused', reason: 'pagasae answered no account token the gateway can read' });
     }
     return ok({
       accountToken: answer.data.access_token,
-      accountTokenExpiresAt: new Date(claims.data.exp * MILLISECONDS_PER_SECOND),
+      accountTokenExpiresAt: claims.data.endsAt,
       refreshToken: answer.data.refresh_token,
-      fleetId: claims.data.aud,
-      accountId: claims.data.sub,
-      personShipId: claims.data.person_ship ?? null,
-      scopes: (claims.data.scope ?? '').split(' ').filter((scope) => scope !== ''),
+      fleetId: claims.data.fleetId,
+      accountId: claims.data.accountId,
+      personShipId: claims.data.personShipId,
+      scopes: claims.data.scopes,
     });
   };
 
