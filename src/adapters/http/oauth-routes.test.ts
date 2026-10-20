@@ -12,9 +12,11 @@ import { createReadAuthorization } from '../../core/oauth/read-authorization.js'
 import { createAskForClient } from '../../core/requests/ask-for-client.js';
 import { createOpenRequest } from '../../core/requests/open-request.js';
 import { createReadWaiting } from '../../core/requests/read-waiting.js';
+import { createWatchWaiting } from '../../core/requests/watch-waiting.js';
 import type { Pagasae } from '../../core/sign-in/ports.js';
 import { createCompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
 import { createStartSignIn } from '../../core/sign-in/start-sign-in.js';
+import { createChangeHub, type ChangeHub } from './live.js';
 import { registerOAuthRoutes } from './oauth-routes.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
@@ -30,6 +32,7 @@ let served: FleetId[];
 let isOn: boolean;
 /** pagasae redeems pagasae-code-1 for the verifier a person's start draws first, secret-1, unless a test sets it. */
 let pagasae: Pagasae;
+let hub: ChangeHub;
 
 /** The routes over in-memory ports; signing people in through pagasae only where it is set. */
 async function startServer(isSigningPeopleIn: boolean) {
@@ -44,6 +47,7 @@ async function startServer(isSigningPeopleIn: boolean) {
   served = [FLEET];
   isOn = true;
   pagasae = fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-1', tokens: CHARLOTTE_TOKENS });
+  hub = createChangeHub();
   const seals = fakeSignInSeals();
   const waitings = fakeWaitingSeals();
   let ids = 0;
@@ -71,6 +75,8 @@ async function startServer(isSigningPeopleIn: boolean) {
             complete: (back) =>
               createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)), askForClient })(back),
             readWaiting: createReadWaiting({ waitings, readAuthorization, requests, parties, codes, secrets, clock, issuer: ISSUER }),
+            watchWaiting: createWatchWaiting({ waitings, requests, parties, clock }),
+            hub,
           },
         }
       : {}),
@@ -128,6 +134,24 @@ async function decided(outcome: 'approved' | 'denied') {
 
 function token(form: Record<string, string>, headers: Record<string, string> = {}) {
   return server.inject({ method: 'POST', url: '/token', headers: { host: HOST, 'content-type': 'application/x-www-form-urlencoded', ...headers }, payload: new URLSearchParams(form).toString() });
+}
+
+/** The waiting page's live channel, as its browser opens it, holding the cookie given. */
+async function waitingLive(waiting: string, cookie = 'aeolus_waiting=secret-2') {
+  const received: unknown[] = [];
+  // Heard from before the socket opens, as the first message may come at once.
+  await server.injectWS(`/authorize/waiting/live?waiting=${waiting}`, { headers: { host: HOST, origin: `http://${HOST}`, cookie } }, { onInit: (socket) => socket.on('message', (data: Buffer) => received.push(JSON.parse(data.toString()))) });
+  return { received };
+}
+
+async function until(isDone: () => boolean): Promise<void> {
+  const deadline = Date.now() + 2000;
+  while (!isDone()) {
+    if (Date.now() > deadline) {
+      throw new Error('not in time');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 const tokenAnswer = z.object({ access_token: z.string(), token_type: z.literal('Bearer'), expires_in: z.number(), refresh_token: z.string() });
@@ -258,17 +282,51 @@ describe('a person who asked for access for the client (decision 0056)', () => {
     });
   });
 
-  it('is shown that the client waits for approval, on a page that reloads itself and is never cached', async () => {
+  it('is shown that the client waits for approval, on a page that follows its request live and is never cached', async () => {
     await askedForAccess();
 
     const page = await waitingPage('waiting-1');
 
-    expect({ status: page.statusCode, cache: page.headers['cache-control'], reloads: page.body.includes('http-equiv="refresh"'), says: page.body.includes('Waiting for approval') && page.body.includes('Cursor &lt;IDE&gt;') }).toEqual({
-      status: 200,
-      cache: 'no-store',
-      reloads: true,
-      says: true,
-    });
+    expect({
+      status: page.statusCode,
+      cache: page.headers['cache-control'],
+      reloadsOnATimer: page.body.includes('http-equiv="refresh"'),
+      followsLive: page.body.includes('/authorize/waiting/live'),
+      says: page.body.includes('Waiting for approval') && page.body.includes('Cursor &lt;IDE&gt;'),
+    }).toEqual({ status: 200, cache: 'no-store', reloadsOnATimer: false, followsLive: true, says: true });
+  });
+
+  it('is told over the live channel when its request expires, then to go on once it is decided', async () => {
+    await askedForAccess();
+    const live = await waitingLive('waiting-1');
+    await until(() => live.received.length === 1);
+
+    await decided('denied');
+    hub.publish({ fleetId: FLEET, topic: 'requests' });
+
+    await until(() => live.received.length === 2);
+    expect(live.received).toEqual([{ expiresAt: '2026-10-26T09:00:00.000Z' }, { go: true }]);
+  });
+
+  it("hears nothing over the live channel for another fleet's change", async () => {
+    await askedForAccess();
+    const live = await waitingLive('waiting-1');
+    await until(() => live.received.length === 1);
+
+    await decided('denied');
+    hub.publish({ fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8zz', topic: 'requests' });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(live.received).toHaveLength(1);
+  });
+
+  it('is told at once to go on over the live channel when it does not wait, so its page says why', async () => {
+    await askedForAccess();
+
+    const live = await waitingLive('waiting-1', 'aeolus_waiting=secret-9');
+
+    await until(() => live.received.length === 1);
+    expect(live.received).toEqual([{ go: true }]);
   });
 
   it("goes on to the client with its party's code once approved, and the cookie is cleared", async () => {
