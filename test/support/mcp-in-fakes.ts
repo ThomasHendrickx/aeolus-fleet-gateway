@@ -1,7 +1,7 @@
 import { idSchema, type FleetId, type MessageId, type ShipId } from '@aeolus-fleet/common';
 
 import type { CallReply, ClientCall } from '../../src/core/mcp-in/client-call.js';
-import type { CallKeys, CallSender, ClientCalls, DiscoveredShip, Discovery, ShipAliases } from '../../src/core/mcp-in/ports.js';
+import type { CallKeys, CallSender, ClientCalls, DiscoveredShip, Discovery, ReceivedReply, ReplyReceiver, ShipAliases } from '../../src/core/mcp-in/ports.js';
 import { err, ok } from '../../src/core/shared/result.js';
 import { FLEET_ID } from './fleet-fakes.js';
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
@@ -145,7 +145,44 @@ export function memoryClientCalls(): ClientCalls & { held: ClientCall[]; isFaili
       return Promise.resolve();
     },
     findByMessage: (fleetId: FleetId, messageId: MessageId) => Promise.resolve(find(fleetId, messageId)),
+    waitedOn: ({ fleetId, party }: { fleetId: FleetId; party: string }, now: Date) =>
+      Promise.resolve(store.held.filter((call) => call.fleetId === fleetId && call.party === party && (call.deadlineAt === null || call.deadlineAt.getTime() > now.getTime()))),
     findByHandle: ({ fleetId, party }: { fleetId: FleetId; party: string }, handle: string) =>
       Promise.resolve(store.held.find((call) => call.fleetId === fleetId && call.party === party && call.handle === handle)),
   });
+}
+
+/**
+ * The fleet's receiveReply, as a proxy ship's crew calls it: each message's
+ * replies, handed one at a time and again until acknowledged, none once
+ * none waits; or the refusal set. It counts the calls in flight at once.
+ */
+export function fakeReplyReceiver() {
+  const state = {
+    replies: new Map<MessageId, ReceivedReply[]>(),
+    refusal: undefined as FleetRefusal | undefined,
+    asked: new Array<{ crewToken: string; messageId: MessageId }>(),
+    inFlight: 0,
+    mostInFlight: 0,
+  };
+  const receiver: ReplyReceiver = {
+    receiveReply: async (crewToken, { messageId }) => {
+      state.asked.push({ crewToken, messageId });
+      state.inFlight += 1;
+      state.mostInFlight = Math.max(state.mostInFlight, state.inFlight);
+      await new Promise((resolve) => setImmediate(resolve));
+      state.inFlight -= 1;
+      if (state.refusal !== undefined) {
+        return err(state.refusal);
+      }
+      return ok(state.replies.get(messageId)?.[0]);
+    },
+  };
+  /** The fleet took the acknowledgement of a delivery: it hands it no more. */
+  const acknowledged = (deliveryId: string) => {
+    for (const [messageId, replies] of state.replies) {
+      state.replies.set(messageId, replies.filter((reply) => reply.deliveryId !== deliveryId));
+    }
+  };
+  return { state, receiver, acknowledged };
 }
