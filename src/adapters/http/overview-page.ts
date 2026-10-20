@@ -21,7 +21,7 @@ import { gatewayRouter, type Context, type GatewayRouter } from '../trpc/router.
 import { acceptForms, escaped, isSameOrigin, refusalMessage } from './html.js';
 import { registerDeliveryPages, waitingItem } from './delivery-page.js';
 import type { LivePage } from './live.js';
-import { handshake, icon, partyMark, ring, signalPage, signInPrompt, statusBadge, type SignInWay } from './signal.js';
+import { handshake, icon, partyMark, ring, signalPage, signInPrompt, statusBadge, type Icon, type SignInWay, type Tone } from './signal.js';
 
 /** What waits on a person's own ship, as the API shows it. */
 type Inbox = inferRouterOutputs<GatewayRouter>['people']['inbox'];
@@ -106,10 +106,37 @@ async function toDecideOf(caller: Caller): Promise<ShownRequest[] | undefined> {
 }
 
 /** The overview's live section: what the page shows, read again whenever the fleet's requests change. */
-function overviewSection(shown: { toDecide: readonly ShownRequest[] | undefined; inbox: Inbox | undefined; now: Date }): string {
-  const { toDecide, inbox, now } = shown;
+/** A request's state as the console shows a status; one still pending shows its days left. */
+const REQUEST_STATES: Record<Exclude<ShownRequest['state'], 'pending'>, { tone: Tone; icon: Icon; label: string }> = {
+  approving: { tone: 'active', icon: 'hourglass', label: 'Approving' },
+  approved: { tone: 'ok', icon: 'check', label: 'Approved' },
+  denied: { tone: 'ended', icon: 'ban', label: 'Denied' },
+  expired: { tone: 'ended', icon: 'timerOff', label: 'Expired' },
+};
+
+function mineItem(request: ShownRequest, now: Date): string {
+  const name = subjectName(request);
+  const state = request.state === 'pending' ? daysLeft(request, now) : statusBadge(REQUEST_STATES[request.state]);
+  return `<div class="item">${partyMark(name)}<span class="text"><span>${escaped(name)}</span><span class="tag">${subjectKind(request)}</span></span>${state}</div>`;
+}
+
+/** Reads the requests the caller asked; an actor who asks none has none. */
+async function mineOf(caller: Caller): Promise<ShownRequest[] | undefined> {
+  try {
+    return await caller.requests.mine();
+  } catch (error) {
+    if (error instanceof TRPCError && error.code === 'FORBIDDEN') {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+function overviewSection(shown: { toDecide: readonly ShownRequest[] | undefined; inbox: Inbox | undefined; mine: readonly ShownRequest[] | undefined; now: Date }): string {
+  const { toDecide, inbox, mine, now } = shown;
+  const yours = mine === undefined || mine.length === 0 ? '' : `<section class="queue"><h2>Your requests · ${String(mine.length)}</h2>${mine.map((request) => mineItem(request, now)).join('')}</section>`;
   if (toDecide === undefined && inbox === undefined) {
-    return `<div class="lead">${ring({ tone: 'ok', center: { icon: 'check' }, label: 'Nothing waits on you' })}<h1>Nothing waits on you</h1></div>`;
+    return `<div class="lead">${ring({ tone: 'ok', center: { icon: 'check' }, label: 'Nothing waits on you' })}<h1>Nothing waits on you</h1></div>${yours}`;
   }
   const total = (inbox?.waiting ?? 0) + (toDecide?.length ?? 0);
   const counts = [
@@ -125,7 +152,7 @@ function overviewSection(shown: { toDecide: readonly ShownRequest[] | undefined;
       : toDecide.length === 0
         ? '<p class="muted">No request waits for a decision.</p>'
         : `<section class="queue"><h2>To decide · ${String(toDecide.length)}</h2>${toDecide.map((request) => queueItem(request, { now, isCurrent: false })).join('')}</section>`;
-  return lead + next + decide;
+  return lead + next + decide + yours;
 }
 
 /** Reads what waits on the caller's own person ship; an actor who is no person has none. */
@@ -143,8 +170,8 @@ async function inboxOf(caller: Caller): Promise<Inbox | undefined> {
 /** Everything the Overview's live section shows, read as the caller. */
 async function overviewOf(context: Context, now: Date): Promise<string> {
   const caller = gatewayRouter.createCaller(context);
-  const [toDecide, inbox] = await Promise.all([toDecideOf(caller), inboxOf(caller)]);
-  return overviewSection({ toDecide, inbox, now });
+  const [toDecide, inbox, mine] = await Promise.all([toDecideOf(caller), inboxOf(caller), mineOf(caller)]);
+  return overviewSection({ toDecide, inbox, mine, now });
 }
 
 function scopeRow(scope: string, isLocked: boolean): string {
