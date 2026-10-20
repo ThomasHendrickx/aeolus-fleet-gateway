@@ -48,7 +48,7 @@ describe('the gateway hands a call to its outside MCP server (interop 5.2)', () 
 
     expect(servers.called).toEqual([{ connection: { url: CRM.url, credential: CRM.credential }, call: { name: 'list_deals', arguments: { contactId: 'c1' }, timeoutMs: 60_000 } }]);
     expect(crew.log).toEqual([
-      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 1 }],
+      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 1, channel: 'mcp' }],
       [
         'send',
         {
@@ -103,8 +103,8 @@ describe('the gateway hands a call to its outside MCP server (interop 5.2)', () 
 
     await expect(handCall({ party: CRM, delivery: aPushedDelivery({ state: 'handed', handOverNumber: 1 }) })).resolves.toEqual({ kind: 'handled' });
     expect(crew.log.filter(([call]) => call === 'handed')).toEqual([
-      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 1 }],
-      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 2 }],
+      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 1, channel: 'mcp' }],
+      ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 2, channel: 'mcp' }],
     ]);
   });
 
@@ -132,10 +132,10 @@ describe('the gateway hands a call to its outside MCP server (interop 5.2)', () 
     await marks.mark(FLEET_ID, { party: 'crm', tool: 'list_deals', isRepeatable: true });
 
     await expect(handCall({ party: CRM, delivery: aPushedDelivery({ state: 'handed', handOverNumber: 1 }) })).resolves.toEqual({ kind: 'handled' });
-    expect(crew.log[0]).toEqual(['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 2 }]);
+    expect(crew.log[0]).toEqual(['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 2, channel: 'mcp' }]);
   });
 
-  it('never calls again a call it judged may have run, though the fleet refused the report (core 0.27, aeolus-fleet#955)', async () => {
+  it('never calls again a call it judged may have run, though the fleet refused the report', async () => {
     servers.state.outcome = { kind: 'unanswered', reason: 'timed out' };
     crew.state.notHandledRefusal = { code: 'CONFLICT', message: 'A delivery never handed once more is refused' };
     await handCall({ party: CRM, delivery: aPushedDelivery() });
