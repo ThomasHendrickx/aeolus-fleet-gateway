@@ -110,6 +110,8 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     changePartyScopes: unused,
     readParty: unused,
     registerClient: (input) => Promise.resolve(input.redirectUris.length === 0 ? err({ kind: 'INVALID_REDIRECT_URIS' as const, message: 'A client registers 1 to 10 redirect URIs' }) : ok({ clientId: 'client-1', clientSecret: input.isConfidential ? 's' : null })),
+    checkServer: ({ url }) =>
+      Promise.resolve(url === 'https://down.example.com/mcp' ? err({ kind: 'SERVER_UNREACHABLE' as const, message: 'The MCP server could not be listed: connect ECONNREFUSED' }) : ok({ tools: [{ name: 'list_issues', description: 'List issues' }] })),
     stateParty: ({ name }) => Promise.resolve(name === 'crm' ? ok({ capabilities: ['list_deals'] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `No party named ${name}` })),
     markTool: (input) => {
       marks.push(input);
@@ -201,6 +203,22 @@ describe("argo approves parties through the gateway's API", () => {
     await gatewayRouter.createCaller(context).parties.approve({ ...APPROVAL, concurrencyLimit: 10 });
 
     expect(approvals[0]?.concurrencyLimit).toBe(10);
+  });
+});
+
+describe("an actor holding fleet:manage checks an outside MCP server through the gateway's API (F10)", () => {
+  const CHECK = { url: 'https://mcp.linear.app/mcp', credential: { kind: 'bearer' as const, token: 'linear-token' } };
+
+  it('answers the tools the server lists', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.check(CHECK)).resolves.toEqual({ tools: [{ name: 'list_issues', description: 'List issues' }] });
+  });
+
+  it('answers BAD_GATEWAY when the server cannot be listed', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.check({ ...CHECK, url: 'https://down.example.com/mcp' })).rejects.toMatchObject({ code: 'BAD_GATEWAY', message: 'The MCP server could not be listed: connect ECONNREFUSED' });
+  });
+
+  it('refuses an actor without fleet:manage', async () => {
+    await expect(gatewayRouter.createCaller(aContext(VIEWER_COOKIE).context).parties.check(CHECK)).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 
