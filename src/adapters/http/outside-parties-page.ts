@@ -13,9 +13,41 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import { SWITCHING_SCOPE } from '../../core/outside-parties/set-outside-parties.js';
-import { gatewayRouter, type Context } from '../trpc/router.js';
+import type { inferRouterOutputs } from '@trpc/server';
+
+import { gatewayRouter, type Context, type GatewayRouter } from '../trpc/router.js';
 import { acceptForms, escaped, isSameOrigin } from './html.js';
-import { icon, ring, signalPage, statusBadge } from './signal.js';
+import { icon, partyMark, ring, signalPage, statusBadge, type Icon, type Tone } from './signal.js';
+
+/** An outside party as the API shows it. */
+type ShownParty = inferRouterOutputs<GatewayRouter>['parties']['list'][number];
+
+/** Which side an outside party is on: a server the fleet's ships call, or a client that calls them. */
+type Side = 'server' | 'client';
+
+/**
+ * An outside party is a party and its protocol (design B, How A2A slots in):
+ * the protocol is a tag on every card and the list counts per protocol, so
+ * an A2A agent joins as one more row here.
+ */
+const PARTY_KINDS: Record<ShownParty['kind'], { protocol: string; side: Side }> = {
+  mcpServer: { protocol: 'MCP', side: 'server' },
+  mcpClient: { protocol: 'MCP', side: 'client' },
+};
+
+const SIDES: Record<Side, { icon: Icon; one: string; many: string }> = {
+  server: { icon: 'server', one: 'server', many: 'servers' },
+  client: { icon: 'laptop', one: 'client', many: 'clients' },
+};
+
+/** A proxy ship's state as the console shows a status: tone, icon and label. */
+const PARTY_STATES: Record<ShownParty['state'], { tone: Tone; icon: Icon; label: string }> = {
+  commissioning: { tone: 'active', icon: 'hourglass', label: 'Commissioning' },
+  awaitingCrew: { tone: 'waiting', icon: 'hourglass', label: 'Awaiting crew' },
+  crewed: { tone: 'ok', icon: 'check', label: 'Crewed' },
+};
+
+const sideSchema = z.object({ kind: z.enum(['server', 'client']).optional() });
 
 const HTTP_FORBIDDEN = 403;
 const HTTP_SEE_OTHER = 303;
@@ -50,14 +82,47 @@ function noticeCard(notice: Notice): string {
   }
 }
 
-async function renderPage(reply: FastifyReply, page: { context: Context; status?: number; notice?: Notice }): Promise<FastifyReply> {
+function counted(count: number, side: Side): string {
+  return `${icon(SIDES[side].icon, 14)} ${String(count)} ${count === 1 ? SIDES[side].one : SIDES[side].many}`;
+}
+
+/** How many outside parties the fleet has, per side and per protocol, under one ring. */
+function lead(parties: readonly ShownParty[]): string {
+  const sides = (['server', 'client'] as const).map((side) => counted(parties.filter((party) => PARTY_KINDS[party.kind].side === side).length, side));
+  const protocols = [...new Set(parties.map((party) => PARTY_KINDS[party.kind].protocol))].map(
+    (protocol) => `<span>${escaped(protocol)} ${String(parties.filter((party) => PARTY_KINDS[party.kind].protocol === protocol).length)}</span>`,
+  );
+  const count = parties.length;
+  return `<div class="lead">${ring({ tone: count === 0 ? 'ended' : 'active', center: { count }, label: `${String(count)} outside parties` })}<div><h1>${TITLE}</h1><p class="muted counts">${[...sides, ...protocols].join(' · ')}</p></div></div>`;
+}
+
+function partyCard(party: ShownParty): string {
+  const { protocol, side } = PARTY_KINDS[party.kind];
+  const where = party.kind === 'mcpServer' ? party.url : party.clientId;
+  return `<article class="party-card">${partyMark(party.name)}<div class="text"><span><strong>${escaped(party.name)}</strong> <span class="tag protocol">${escaped(protocol)}</span></span><span class="tag">${icon(SIDES[side].icon, 12)}${escaped(protocol)} ${SIDES[side].one}</span><span class="tag mono" title="${escaped(where)}">${escaped(where)}</span></div><div class="facts">${statusBadge(PARTY_STATES[party.state])}<span class="tag">${icon('users', 12)}<span class="mono">${escaped(party.ownerShipId)}</span></span></div></article>`;
+}
+
+function partyList(parties: readonly ShownParty[], side: Side | undefined): string {
+  const filters = [
+    { label: 'All', href: PAGE, isCurrent: side === undefined },
+    { label: 'Servers', href: `${PAGE}?kind=server`, isCurrent: side === 'server' },
+    { label: 'Clients', href: `${PAGE}?kind=client`, isCurrent: side === 'client' },
+  ]
+    .map((filter) => `<a class="tab" href="${filter.href}"${filter.isCurrent ? ' aria-current="page"' : ''}>${filter.label}</a>`)
+    .join('');
+  const shown = side === undefined ? parties : parties.filter((party) => PARTY_KINDS[party.kind].side === side);
+  const cards = shown.length === 0 ? '<p class="muted">No outside party yet.</p>' : `<div class="party-cards">${shown.map(partyCard).join('')}</div>`;
+  return `<section style="display:grid;gap:12px"><nav class="tabs" aria-label="Show">${filters}</nav>${cards}</section>`;
+}
+
+async function renderPage(reply: FastifyReply, page: { context: Context; side?: Side; status?: number; notice?: Notice }): Promise<FastifyReply> {
   const { context, notice } = page;
   const caller = gatewayRouter.createCaller(context);
   const { isOn } = await caller.outsideParties.status();
+  const parties = await caller.parties.list();
   const actor = await context.authenticateActor({ cookie: context.cookie, crewToken: context.crewToken });
   const canSwitch = actor.isOk && actor.value.scopes.includes(SWITCHING_SCOPE);
-  const lead = `<div class="lead">${ring({ tone: isOn ? 'ok' : 'ended', center: { icon: isOn ? 'power' : 'powerOff' }, label: isOn ? 'On' : 'Off', isDashed: !isOn })}<h1>${TITLE}</h1></div>`;
-  const body = [lead, notice ? noticeCard(notice) : '', switchCard({ isOn, canSwitch })].join('');
+  const body = [lead(parties), notice ? noticeCard(notice) : '', switchCard({ isOn, canSwitch }), partyList(parties, page.side)].join('');
   return reply.code(page.status ?? 200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(signalPage({ title: TITLE, tab: 'outsideParties', body }));
 }
 
@@ -78,7 +143,8 @@ export function registerOutsidePartiesPage(server: FastifyInstance, deps: { cont
         await act(gatewayRouter.createCaller(context));
         return await reply.code(HTTP_SEE_OTHER).header('location', PAGE).send();
       }
-      return await renderPage(reply, { context });
+      const side = sideSchema.safeParse(request.query);
+      return await renderPage(reply, { context, ...(side.success && side.data.kind !== undefined ? { side: side.data.kind } : {}) });
     } catch (error) {
       if (!(error instanceof TRPCError)) {
         throw error;
