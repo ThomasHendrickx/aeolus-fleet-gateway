@@ -1,10 +1,12 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
-import type { PendingRequest, PendingRequests } from '../../src/core/requests/ports.js';
+import type { PendingRequest, PendingRequests, Waiting, WaitingSeals } from '../../src/core/requests/ports.js';
 
 /** Pending requests in memory, as the store keeps them: one open request per client or server in a fleet. */
-export function memoryPendingRequests(): PendingRequests & { held: PendingRequest[] } {
+export function memoryPendingRequests(): PendingRequests & { held: PendingRequest[]; told: Set<string> } {
   const held: PendingRequest[] = [];
+  /** Each requester told its request's end, as `<request id> <account id>`. */
+  const told = new Set<string>();
   const isOpen = (request: PendingRequest) => request.state === 'pending' || request.state === 'approving';
   const indexOf = (fleetId: FleetId, requestId: string) => held.findIndex((request) => request.fleetId === fleetId && request.requestId === requestId);
   const subjectOf = (request: Pick<PendingRequest, 'subject'>) => (request.subject.kind === 'client' ? `client:${request.subject.clientId}` : `server:${request.subject.url}`);
@@ -13,6 +15,7 @@ export function memoryPendingRequests(): PendingRequests & { held: PendingReques
   };
   return {
     held,
+    told,
     open: (asked) => {
       const { now, ...fresh } = asked;
       held.forEach((request, index) => {
@@ -33,6 +36,15 @@ export function memoryPendingRequests(): PendingRequests & { held: PendingReques
       return Promise.resolve(joined);
     },
     find: (fleetId, requestId) => Promise.resolve(held[indexOf(fleetId, requestId)]),
+    latestAskedBy: (fleetId, { subject, accountId }) => {
+      const asked = held.filter((request) => request.fleetId === fleetId && subjectOf(request) === subjectOf({ subject }) && request.requesters.some((each) => each.accountId === accountId));
+      const latest = asked.reduce<PendingRequest | undefined>((last, request) => (last === undefined || request.askedAt >= last.askedAt ? request : last), undefined);
+      return Promise.resolve(latest === undefined ? undefined : { request: latest, isTold: told.has(`${latest.requestId} ${accountId}`) });
+    },
+    markTold: (_fleetId, { requestId, accountId }) => {
+      told.add(`${requestId} ${accountId}`);
+      return Promise.resolve();
+    },
     listOpen: (fleetId, now) => Promise.resolve(held.filter((request) => request.fleetId === fleetId && isOpen(request) && request.expiresAt > now)),
     claim: (fleetId, { requestId, now }) => {
       const index = indexOf(fleetId, requestId);
@@ -60,5 +72,19 @@ export function memoryPendingRequests(): PendingRequests & { held: PendingReques
       replace(index, { ...request, state: decision.outcome, decidedBy: decision.decidedBy, decidedAt: decision.decidedAt });
       return Promise.resolve(true);
     },
+  };
+}
+
+/** Waitings sealed as a test reads them: numbered in the order they are made, opened from the same seals only. */
+export function fakeWaitingSeals(): WaitingSeals & { held: Map<string, Waiting> } {
+  const held = new Map<string, Waiting>();
+  return {
+    held,
+    seal: (waiting) => {
+      const sealed = `waiting-${String(held.size + 1)}`;
+      held.set(sealed, waiting);
+      return sealed;
+    },
+    open: (sealed) => held.get(sealed),
   };
 }

@@ -6,15 +6,18 @@ import { z } from 'zod';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, registerNetworkingPlugin, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
-import { startFakePagasae, PAGASAE_CLIENT, type FakePagasae } from './support/fake-pagasae.js';
+import { aBrowser, pickedAt } from './support/browser.js';
+import { charlotteIn, startFakePagasae, PAGASAE_CLIENT, type FakePagasae } from './support/fake-pagasae.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
-import { connectGateway } from './support/gateway-api.js';
+import { connectGateway, mutate, query } from './support/gateway-api.js';
 import { aClientProvider, aRegisteredClient, CALLBACK, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
+import { outsidePartiesOn } from './support/outside-parties.js';
 
 // A person signs in to the gateway through pagasae from their MCP client, as
-// Claude would (decision 0054): with no console session, /authorize sends
-// them to pagasae, pagasae sends them back, and the client takes the
-// gateway's code for tokens. Here pagasae is a fake; the fleet and the
+// Claude would (decision 0054): /authorize asks them to sign in as
+// themselves or to ask for access for the client (Q1 a), sends them to
+// pagasae, pagasae sends them back, and the client takes the gateway's code
+// for tokens, or waits for an approver (decision 0056). Here pagasae is a fake; the fleet and the
 // gateway are real.
 
 const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
@@ -29,7 +32,7 @@ beforeEach(async () => {
   const port = await aFreePort();
   const address = `http://127.0.0.1:${String(port)}`;
   pagasae = await startFakePagasae();
-  setting = { fleet, address, cookie: await signIn(fleet), databaseUrl: await migratedDatabase(inject('postgresUrl')) };
+  setting = { fleet, address, cookie: await signIn(fleet), databaseUrl: await migratedDatabase(inject('postgresUrl')), pagasae };
   app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET, pagasae: { url: pagasae.url, ...PAGASAE_CLIENT } });
   await app.server.listen({ host: '127.0.0.1', port });
   const gatewayShip = await commission(fleet, { cookie: setting.cookie, ship: { name: 'gateway', type: 'gateway', scopes: GATEWAY_SCOPES } });
@@ -46,48 +49,14 @@ afterEach(async () => {
   await setting.fleet.stop();
 });
 
-/** Charlotte's account token claims in a fleet. */
-function charlotteIn(fleet: string): Record<string, unknown> {
-  const now = Math.floor(Date.now() / 1000);
-  return { iss: pagasae.url, aud: fleet, sub: 'acc-charlotte', org: 'org-acme', scope: 'fleet:read', group: ['sales'], iat: now, exp: now + 600 };
-}
-
-/**
- * Follows the browser through the redirects from the gateway's /authorize,
- * with no console session: where it lands last. It sends each site back the
- * cookies it set, as a browser does; one that keeps no cookies stands for
- * another browser finishing the sign-in.
- */
-async function browserFrom(sentTo: URL, browser: { isKeepingCookies: boolean } = { isKeepingCookies: true }): Promise<Response> {
-  const jar = new Map<string, string[]>();
-  const visit = async (url: string) => {
-    const { origin } = new URL(url);
-    const cookies = jar.get(origin) ?? [];
-    const response = await fetch(url, { redirect: 'manual', headers: cookies.length === 0 ? {} : { cookie: cookies.join('; ') } });
-    if (browser.isKeepingCookies) {
-      jar.set(origin, [...cookies, ...response.headers.getSetCookie().map((cookie) => cookie.split(';', 1)[0] ?? '')]);
-    }
-    return response;
-  };
-  let response = await visit(sentTo.toString());
-  for (let hop = 0; hop < 3 && response.status === 302; hop += 1) {
-    const next = z.string().parse(response.headers.get('location'));
-    if (next.startsWith(CALLBACK)) {
-      return response;
-    }
-    response = await visit(next);
-  }
-  return response;
-}
-
 describe('a person signs in from their MCP client through pagasae', () => {
   it("gets tokens with no approval, and their MCP session lists their person ship's tools", async () => {
-    pagasae.answer(charlotteIn(fleetId));
+    pagasae.answer(charlotteIn(pagasae, fleetId));
     const client = aClientProvider(await aRegisteredClient(setting, false));
     const serverUrl = `${setting.address}/mcp`;
     await expect(auth(client.provider, { serverUrl })).resolves.toBe('REDIRECT');
 
-    const back = new URL(z.string().parse((await browserFrom(z.instanceof(URL).parse(client.sentTo()))).headers.get('location')));
+    const back = new URL(z.string().parse((await aBrowser().follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'account'), CALLBACK)).headers.get('location')));
     const iss = back.searchParams.get('iss');
     await expect(auth(client.provider, { serverUrl, authorizationCode: z.string().parse(back.searchParams.get('code')), ...(iss === null ? {} : { iss }) })).resolves.toBe('AUTHORIZED');
     const mcp = new Client({ name: 'charlotte', version: '1' });
@@ -105,22 +74,49 @@ describe('a person signs in from their MCP client through pagasae', () => {
   });
 
   it('is refused when the sign-in finishes in another browser than the one that started it (login CSRF)', async () => {
-    pagasae.answer(charlotteIn(fleetId));
+    pagasae.answer(charlotteIn(pagasae, fleetId));
     const client = aClientProvider(await aRegisteredClient(setting, false));
     await auth(client.provider, { serverUrl: `${setting.address}/mcp` });
 
-    const landed = await browserFrom(z.instanceof(URL).parse(client.sentTo()), { isKeepingCookies: false });
+    const landed = await aBrowser({ isKeepingCookies: false }).follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'account'), CALLBACK);
 
     expect({ status: landed.status, says: (await landed.text()).includes('another browser') }).toEqual({ status: 400, says: true });
   });
 
   it('is told when this gateway does not serve the fleet pagasae signed them in to', async () => {
-    pagasae.answer(charlotteIn('flt_01m3tb1zgr5h2ffee12xnch8zz'));
+    pagasae.answer(charlotteIn(pagasae, 'flt_01m3tb1zgr5h2ffee12xnch8zz'));
     const client = aClientProvider(await aRegisteredClient(setting, false));
     await auth(client.provider, { serverUrl: `${setting.address}/mcp` });
 
-    const landed = await browserFrom(z.instanceof(URL).parse(client.sentTo()));
+    const landed = await aBrowser().follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'account'), CALLBACK);
 
     expect({ status: landed.status, says: (await landed.text()).includes('does not serve the fleet') }).toEqual({ status: 403, says: true });
+  });
+});
+
+describe('a person asks for access for their MCP client (decision 0056)', () => {
+  const toDecideSchema = z.object({ result: z.object({ data: z.array(z.object({ requestId: z.string(), subject: z.object({ clientName: z.string() }) })) }) });
+
+  it('waits on the gateway\'s page while an approver sees the request to decide, and the client is told access_denied once it is denied', async () => {
+    pagasae.answer(charlotteIn(pagasae, fleetId));
+    await outsidePartiesOn(setting.databaseUrl, fleetId);
+    const client = aClientProvider(await aRegisteredClient(setting, false));
+    await auth(client.provider, { serverUrl: `${setting.address}/mcp` });
+    const approver = await register(setting.fleet, await commission(setting.fleet, { cookie: setting.cookie, ship: { name: 'approver', type: 'agent', scopes: ['fleet:read', 'gateway:approve'] } }));
+    const browser = aBrowser();
+
+    const landed = await browser.follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'party'), CALLBACK);
+    const waiting = landed.url;
+    const toDecide = toDecideSchema.parse(await (await query(setting.address, { procedure: 'requests.toDecide', crewToken: approver })).json()).result.data;
+    const [request] = toDecide;
+    const denied = await mutate(setting.address, { procedure: 'requests.decide', crewToken: approver, body: { requestId: request?.requestId, decision: { kind: 'deny' } } });
+    const answer = await browser.visit(waiting);
+
+    expect({
+      waited: { status: landed.status, isWaitingPage: new URL(waiting).pathname.startsWith('/authorize/waiting/'), says: (await landed.text()).includes('Waiting for approval') },
+      toDecide: toDecide.map(({ subject }) => subject.clientName),
+      denied: denied.status,
+      back: new URL(z.string().parse(answer.headers.get('location'))).searchParams.get('error'),
+    }).toEqual({ waited: { status: 200, isWaitingPage: true, says: true }, toDecide: ['Test client'], denied: 200, back: 'access_denied' });
   });
 });
