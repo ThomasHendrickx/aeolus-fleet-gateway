@@ -50,6 +50,7 @@ import { createPrismaAuthorizationCodes, createPrismaIssuedTokens, createPrismaO
 import { createExchangeToken } from './core/oauth/exchange-token.js';
 import { createSignInSeals } from './adapters/crypto/sign-in-seals.js';
 import { createWaitingSeals } from './adapters/crypto/waiting-seals.js';
+import { createPageSessions } from './adapters/crypto/page-sessions.js';
 import { createRequestIds } from './adapters/crypto/request-ids.js';
 import { createAskForClient } from './core/requests/ask-for-client.js';
 import { createAskForServer } from './core/requests/ask-for-server.js';
@@ -67,7 +68,10 @@ import { createPagasae } from './adapters/pagasae/pagasae-client.js';
 import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
-import { createAccountTokenOf } from './core/sign-in/account-token.js';
+import { createStartPageSignIn } from './core/sign-in/start-page-sign-in.js';
+import { createSignOut } from './core/sign-in/sign-out.js';
+import { createAccountTokenOf, type AccountTokenOf } from './core/sign-in/account-token.js';
+import { err } from './core/shared/result.js';
 import { createEndSignIns } from './core/sign-in/end-sign-ins.js';
 import { createAnswerDelivery } from './core/people/answer-delivery.js';
 import { createCrewPersonShip } from './core/people/crew-person-ship.js';
@@ -97,7 +101,6 @@ import { createAuthenticateActor } from './core/actors/authenticate-actor.js';
 import { createDecideRequest } from './core/requests/decide-request.js';
 import { createListToDecide } from './core/requests/list-to-decide.js';
 import { createPrismaPendingRequests } from './adapters/prisma/pending-requests.js';
-import type { Pagasae } from './core/sign-in/ports.js';
 
 export const systemClock: Clock = { now: () => new Date() };
 
@@ -285,6 +288,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const grants = createPrismaAccountGrants(prisma);
   const pendingRequests = createPrismaPendingRequests(prisma);
   const waitings = createWaitingSeals(options.gatewaySecret);
+  const pageSessions = createPageSessions(options.gatewaySecret);
   const issuing = { codes: authorizationCodes, secrets: oauthSecrets, clock, issuer };
   const openRequestOnly = createOpenRequest({ requests: pendingRequests, ids: createRequestIds(), clock });
   // A request opened has the gateway's owner asked at once, not at the next round.
@@ -310,6 +314,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             clock,
             issuer,
             servesFleet: async (fleetId) => (await connections.find(fleetId)) !== undefined && (await isServed(fleetId)),
+            sessions: pageSessions,
             askForClient: createAskForClient({
               parties,
               requests: pendingRequests,
@@ -323,6 +328,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           watchWaiting: createWatchWaiting({ waitings, requests: pendingRequests, parties, clock }),
           hub,
           clock,
+          pages: { start: createStartPageSignIn({ seals, pagasae, secrets: oauthSecrets, clock }), signOut: createSignOut({ grants }), sessions: pageSessions },
         };
   registerOAuthRoutes(server, {
     ...(signIn === undefined ? {} : { signIn }),
@@ -331,11 +337,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readAuthorization,
     exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
   });
+  // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
+  const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });
   // A signed-in person's messaging, as the crew of their person ship (decision 0057).
-  const personToolsOf = (signedIn: { pagasae: Pagasae }) => {
+  const personToolsOf = () => {
     const crews = createPrismaPersonCrews(prisma);
     const opened = createPrismaOpenedDeliveries(prisma);
-    const accountTokenOf = createAccountTokenOf({ grants, tokens: issuedTokens, pagasae: signedIn.pagasae, clock });
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
       readInbox: createReadInbox(asCrew),
@@ -345,7 +352,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
     };
   };
-  const person = pagasae === undefined ? undefined : personToolsOf({ pagasae });
+  const person = pagasae === undefined ? undefined : personToolsOf();
   const listTools = createListTools({ parties, discovery: door, aliases: createShipAliases(options.gatewaySecret) });
   registerMcpEndpoint(server, {
     resource,
@@ -358,7 +365,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
 
   // What every call of the API reads, from the request's console session and installation token.
-  const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections });
+  const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections, sessions: pageSessions, accountTokenOf });
   const outcomes = createOutcomeWorker({
     expireRequests: createExpireRequests({ requests: pendingRequests, clock }),
     tellOutcomes: createTellOutcomes({ notices: createPrismaOutcomeNotices(prisma), requests: pendingRequests, connections, sender: door }),

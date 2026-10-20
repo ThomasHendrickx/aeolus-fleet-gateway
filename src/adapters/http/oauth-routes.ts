@@ -4,27 +4,33 @@
  * 8414; /authorize, where a person picks what the client acts as (Q1 a) and
  * is sent to pagasae to sign in; /pagasae/callback, where pagasae sends them
  * back; the waiting page, where a client asked for waits for an approver
- * (decision 0056); and /token. Each route parses the request and calls one
- * use case. Only a signed-in account asks for a client, so a gateway where
- * no pagasae is set answers no client (Thomas's question A).
+ * (decision 0056); and /token. /sign-in and /sign-out sign a person in to
+ * the gateway's own pages through pagasae too, the browser holding a page
+ * session. Each route parses the request and calls one use case. Only a
+ * signed-in account asks for a client, so a gateway where no pagasae is set
+ * answers no client (Thomas's question A), and signs no one in to its pages.
  */
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 
 import type { ExchangeToken } from '../../core/oauth/exchange-token.js';
 import type { AuthorizationRefusal, AuthorizationRequest, ReadAuthorization } from '../../core/oauth/read-authorization.js';
-import type { ClientAnswer } from '../../core/requests/ask-for-client.js';
 import { REQUEST_LIFETIME_MS } from '../../core/requests/open-request.js';
 import type { ReadWaiting } from '../../core/requests/read-waiting.js';
 import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
 import type { Clock } from '../../core/shared/clock.js';
-import type { CompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
+import type { CompleteSignIn, SignInAnswer } from '../../core/sign-in/complete-sign-in.js';
+import type { PageSessions } from '../../core/sign-in/ports.js';
+import type { SignOut } from '../../core/sign-in/sign-out.js';
+import { FIRST_PAGE, type StartPageSignIn } from '../../core/sign-in/start-page-sign-in.js';
 import { SIGN_IN_LIFETIME_MS, type StartSignIn } from '../../core/sign-in/start-sign-in.js';
+import { PAGE_SESSION_COOKIE } from '../crypto/page-sessions.js';
 import { acceptForms, escaped, isSameOrigin } from './html.js';
 import { acceptWebsockets, type ChangeHub } from './live.js';
 import { handshake, icon, ring, signInPage, statusBadge, type Icon, type Tone } from './signal.js';
 
 const HTTP_FOUND = 302;
+const HTTP_SEE_OTHER = 303;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
@@ -54,7 +60,14 @@ export interface OAuthRoutesDeps {
   readAuthorization: ReadAuthorization;
   exchangeToken: ExchangeToken;
   /** Signing people in through pagasae (decision 0054) and their clients' waits, followed live; unset where no pagasae is set. */
-  signIn?: { start: StartSignIn; complete: CompleteSignIn; readWaiting: ReadWaiting; watchWaiting: WatchWaiting; hub: ChangeHub; clock: Clock };
+  signIn?: { start: StartSignIn; complete: CompleteSignIn; readWaiting: ReadWaiting; watchWaiting: WatchWaiting; hub: ChangeHub; clock: Clock; pages: PageSignInDeps };
+}
+
+/** Signing a person in to the gateway's own pages, and out again. */
+export interface PageSignInDeps {
+  start: StartPageSignIn;
+  signOut: SignOut;
+  sessions: PageSessions;
 }
 
 function fieldsOf(value: unknown): Record<string, string> {
@@ -102,6 +115,17 @@ const SIGN_IN_COOKIE: BrowserCookie = { name: 'aeolus_sign_in', path: '/pagasae/
 
 /** The cookie the browser that asked for a client holds the same secret in, sent back to the waiting page only. */
 const WAITING_COOKIE: BrowserCookie = { name: 'aeolus_waiting', path: '/authorize/waiting' };
+
+/**
+ * The page session cookie: every page and the API under it, for the browser's
+ * session. Lax, so a link to a page from elsewhere arrives signed in, while a
+ * form from another site does not (and each page form checks its origin too).
+ */
+const PAGE_SESSION: BrowserCookie = { name: PAGE_SESSION_COOKIE, path: '/' };
+
+function pageSessionHeader(set: { value: string; isSecure: boolean; isEnding: boolean }): string {
+  return `${PAGE_SESSION.name}=${set.value}; Path=${PAGE_SESSION.path};${set.isEnding ? ' Max-Age=0;' : ''} HttpOnly;${set.isSecure ? ' Secure;' : ''} SameSite=Lax`;
+}
 
 function cookieHeader(cookie: BrowserCookie, set: { value: string; maxAgeSeconds: number; isSecure: boolean }): string {
   return `${cookie.name}=${set.value}; Path=${cookie.path}; Max-Age=${String(set.maxAgeSeconds)}; HttpOnly;${set.isSecure ? ' Secure;' : ''} SameSite=Lax`;
@@ -234,11 +258,33 @@ function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn:
     return reply.code(HTTP_FOUND).header('location', started.value.redirectTo).header('set-cookie', cookie).send();
   });
 
-  /** Where the browser goes next: back to the client, or, holding the secret in its waiting cookie, to the waiting page. */
-  const goOn = (reply: FastifyReply, { answer, browserSecret }: { answer: ClientAnswer; browserSecret: string | undefined }): FastifyReply => {
+  server.get('/sign-in', (request, reply) => {
+    const { return_to: returnTo } = fieldsOf(request.query);
+    const started = signIn.pages.start({ returnTo });
+    const cookie = cookieHeader(SIGN_IN_COOKIE, { value: started.browserSecret, maxAgeSeconds: SIGN_IN_LIFETIME_MS / MS_PER_SECOND, isSecure });
+    return reply.code(HTTP_FOUND).header('location', started.redirectTo).header('set-cookie', cookie).send();
+  });
+
+  server.post('/sign-out', async (request, reply) => {
+    if (!isSameOrigin(request)) {
+      return reply.code(HTTP_FORBIDDEN).type('text/plain; charset=utf-8').send('Signing out is sent only from the gateway\'s own pages.');
+    }
+    const session = request.headers.cookie === undefined ? undefined : signIn.pages.sessions.inCookie(request.headers.cookie);
+    if (session !== undefined) {
+      await signIn.pages.signOut(session);
+    }
+    return reply.code(HTTP_SEE_OTHER).header('location', FIRST_PAGE).header('set-cookie', pageSessionHeader({ value: '', isSecure, isEnding: true })).send();
+  });
+
+  /** Where the browser goes next: back to the client or the page, or, holding the secret in its waiting cookie, to the waiting page. */
+  const goOn = (reply: FastifyReply, { answer, browserSecret }: { answer: SignInAnswer; browserSecret: string | undefined }): FastifyReply => {
     const cleared = cookieHeader(SIGN_IN_COOKIE, { value: '', maxAgeSeconds: 0, isSecure });
     if (answer.kind === 'answered') {
       return reply.code(HTTP_FOUND).header('location', answer.redirectTo).header('set-cookie', cleared).send();
+    }
+    if (answer.kind === 'signedIn') {
+      const session = pageSessionHeader({ value: answer.session, isSecure, isEnding: false });
+      return reply.code(HTTP_FOUND).header('location', answer.redirectTo).header('set-cookie', [cleared, session]).send();
     }
     const waiting = cookieHeader(WAITING_COOKIE, { value: browserSecret ?? '', maxAgeSeconds: REQUEST_LIFETIME_MS / MS_PER_SECOND, isSecure });
     return reply.code(HTTP_FOUND).header('location', `${WAITING_COOKIE.path}?${new URLSearchParams({ waiting: answer.waiting }).toString()}`).header('set-cookie', [cleared, waiting]).send();

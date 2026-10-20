@@ -211,6 +211,8 @@ model AccountGrant {
   fleetId               String   @map("fleet_id")
   accountId             String   @map("account_id")
   personShipId          String?  @map("person_ship_id")
+  /// The scopes its account token carries.
+  scopes                String[] @default([])
   /// pagasae's refresh token, kept as crew tokens are.
   refreshToken          String   @map("refresh_token")
   accountToken          String   @map("account_token")

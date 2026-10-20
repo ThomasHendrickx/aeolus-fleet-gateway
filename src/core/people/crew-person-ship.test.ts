@@ -23,7 +23,7 @@ beforeEach(async () => {
   connections = memoryConnectionStore();
   await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: AT });
   crews = memoryPersonCrews();
-  accountTokenOf = () => Promise.resolve(ok({ accountToken: 'account-token-1', personShipId: PERSON_SHIP_ID }));
+  accountTokenOf = () => Promise.resolve(ok({ accountToken: 'account-token-1', accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, scopes: [] }));
 });
 
 function crewPersonShip(fleet = fakePersonShipFleet({ personShipId: PERSON_SHIP_ID })) {
@@ -65,7 +65,7 @@ describe("a signed-in person's person ship", () => {
   });
 
   it('is none for an account with no person ship: it may not message there (decision 0052)', async () => {
-    accountTokenOf = () => Promise.resolve(ok({ accountToken: 'account-token-1', personShipId: null }));
+    accountTokenOf = () => Promise.resolve(ok({ accountToken: 'account-token-1', accountId: 'acc-charlotte', personShipId: null, scopes: [] }));
     const { fleet, crewPersonShip: crew } = crewPersonShip();
 
     await expect(crew(GRANT)).resolves.toEqual({ isOk: false, error: { kind: 'noPersonShip' } });
@@ -88,7 +88,7 @@ describe("a signed-in person's person ship", () => {
   });
 
   it("says the fleet's refusal, keeping no crew", async () => {
-    accountTokenOf = () => Promise.resolve(ok({ accountToken: 'account-token-other', personShipId: PERSON_SHIP_ID }));
+    accountTokenOf = () => Promise.resolve(ok({ accountToken: 'account-token-other', accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, scopes: [] }));
 
     await expect(crewPersonShip().crewPersonShip(GRANT)).resolves.toEqual({ isOk: false, error: { kind: 'fleetRefused', message: 'is not your person ship' } });
     expect(crews.held).toEqual([]);

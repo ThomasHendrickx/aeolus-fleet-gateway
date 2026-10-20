@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
-import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
+import { CHARLOTTE_TOKENS, fakePagasae, fakePageSessions, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createReadAuthorization } from '../oauth/read-authorization.js';
 import type { AskForClient } from '../requests/ask-for-client.js';
 import { err, ok } from '../shared/result.js';
@@ -76,6 +76,7 @@ function completeSignIn(pagasae: Pagasae = fakePagasae({ code: 'pagasae-code-1',
     issuer: ISSUER,
     servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)),
     askForClient,
+    sessions: fakePageSessions(),
   });
 }
 

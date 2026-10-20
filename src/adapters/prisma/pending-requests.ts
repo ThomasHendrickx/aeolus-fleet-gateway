@@ -5,7 +5,9 @@ import type { OutcomeNotice, PendingRequest, PendingRequests, RequestSubject } f
 import type { PrismaClient } from './client.js';
 
 const requestersSchema = z.array(z.object({ accountId: z.string(), personShipId: idSchema('ship').nullable() }));
-const decidedBySchema = z.union([z.object({ kind: z.literal('ship'), shipId: idSchema('ship') }), z.object({ kind: z.enum(['operator', 'viewer']) })]).nullable();
+const decidedBySchema = z
+  .union([z.object({ kind: z.literal('ship'), shipId: idSchema('ship') }), z.object({ kind: z.literal('account'), accountId: z.string() }), z.object({ kind: z.enum(['operator', 'viewer']) })])
+  .nullable();
 const toldAccountIdsSchema = z.array(z.string());
 const stateSchema = z.enum(['pending', 'approving', 'approved', 'denied', 'expired']);
 

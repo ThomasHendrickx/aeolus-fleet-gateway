@@ -1,21 +1,37 @@
 /**
  * A person signs in to the gateway through pagasae, the one identity
  * provider (decision 0054): the gateway is its OpenID Connect client, and
- * the person acts in the fleet as their account, by its account token.
+ * the person acts in the fleet as their account, by its account token, from
+ * their MCP client or on the gateway's own pages.
  */
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import type { Result } from '../shared/result.js';
 
-/** A person's sign-in at pagasae under way: the client's authorization request, with the gateway's PKCE verifier. */
-export interface PendingSignIn {
+/**
+ * A person's sign-in at pagasae under way, with the gateway's PKCE verifier:
+ * for an MCP client, its authorization request; for the gateway's pages, the
+ * page to go back to.
+ */
+export type PendingSignIn = ClientSignIn | PageSignIn;
+
+interface SignInUnderWay {
   readonly verifier: string;
   /** The secret the browser that started the sign-in holds, so no other browser finishes it (login CSRF). */
   readonly browserSecret: string;
+  readonly expiresAt: Date;
+}
+
+export interface ClientSignIn extends SignInUnderWay {
   readonly request: Readonly<Record<string, string | undefined>>;
   /** What the person picked the client to act as: their account, or a party they ask access for (Q1 a). */
   readonly holder: SignInHolder;
-  readonly expiresAt: Date;
+}
+
+export interface PageSignIn extends SignInUnderWay {
+  readonly holder: 'page';
+  /** The gateway's own path the browser goes back to once signed in. */
+  readonly returnTo: string;
 }
 
 /** What a client acts as once its person signed in: the account itself, or an outside party (decision 0056). */
@@ -42,6 +58,8 @@ export interface PagasaeTokens {
   readonly accountId: string;
   /** The account's person ship in the fleet, if it has one (decision 0052). */
   readonly personShipId: ShipId | null;
+  /** The scopes the account token carries: what the account may do in the fleet. */
+  readonly scopes: readonly string[];
 }
 
 /** Outbound port: pagasae, where the gateway sends a person to sign in, and redeems the code they come back with. */
@@ -57,12 +75,14 @@ export interface Pagasae {
   refresh(refreshToken: string): Promise<Result<PagasaeTokens, { kind: 'refused' | 'unavailable'; reason: string }>>;
 }
 
-/** A person's sign-in kept for their MCP client: the account in the fleet, and pagasae's tokens to act as it. */
+/** A person's sign-in kept for their MCP client or the gateway's pages: the account in the fleet, and pagasae's tokens to act as it. */
 export interface AccountGrant {
   readonly grantId: string;
   readonly fleetId: FleetId;
   readonly accountId: string;
   readonly personShipId: ShipId | null;
+  /** The scopes its account token carries. */
+  readonly scopes: readonly string[];
   readonly refreshToken: string;
   readonly accountToken: string;
   readonly accountTokenExpiresAt: Date;
@@ -73,7 +93,21 @@ export interface AccountGrants {
   find(fleetId: FleetId, grantId: string): Promise<AccountGrant | undefined>;
   /** Every grant of the account in the fleet: one per client it signed in from. */
   ofAccount(fleetId: FleetId, accountId: string): Promise<readonly AccountGrant[]>;
-  /** Keeps pagasae's new tokens for the grant, and the person ship they name. */
-  renew(grant: { fleetId: FleetId; grantId: string }, tokens: Partial<Pick<AccountGrant, 'refreshToken' | 'accountToken' | 'accountTokenExpiresAt' | 'personShipId'>>): Promise<void>;
+  /** Keeps pagasae's new tokens for the grant, and the person ship and scopes they name. */
+  renew(grant: { fleetId: FleetId; grantId: string }, tokens: Partial<Pick<AccountGrant, 'refreshToken' | 'accountToken' | 'accountTokenExpiresAt' | 'personShipId' | 'scopes'>>): Promise<void>;
   end(fleetId: FleetId, grantId: string): Promise<void>;
+}
+
+/** A browser signed in to the gateway's pages: the account's grant it acts by. */
+export interface PageSession {
+  readonly fleetId: FleetId;
+  readonly grantId: string;
+}
+
+/** Outbound port: the page session a browser holds in the gateway's own cookie, sealed so no one forges or reads it. */
+export interface PageSessions {
+  /** The cookie's value for the session. */
+  seal(session: PageSession): string;
+  /** The session a Cookie header carries; none when it carries none the gateway sealed. */
+  inCookie(cookie: string): PageSession | undefined;
 }
