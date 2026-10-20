@@ -54,6 +54,9 @@ const HTTP_SEE_OTHER = 303;
 const HTTP_INTERNAL_ERROR = 500;
 
 const PAGE = '/outside-parties';
+
+/** The scope that adds an outside MCP server: approving one needs it (0056). */
+const ADDING_SCOPE = 'fleet:manage';
 const TITLE = 'Outside parties';
 
 const switchFormSchema = z.object({ isOn: z.enum(['true', 'false']), isOpenNetworkConfirmed: z.enum(['true', 'false']).optional() });
@@ -123,7 +126,9 @@ async function renderPage(reply: FastifyReply, page: { context: Context; side?: 
   const actor = await context.authenticateActor({ cookie: context.cookie, crewToken: context.crewToken });
   const canSwitch = actor.isOk && actor.value.scopes.includes(SWITCHING_SCOPE);
   const isSignedIn = actor.isOk && actor.value.kind === 'account';
-  const body = [lead(parties), notice ? noticeCard(notice) : '', switchCard({ isOn, canSwitch }), partyList(parties, page.side)].join('');
+  const canAdd = actor.isOk && actor.value.scopes.includes(ADDING_SCOPE);
+  const add = canAdd ? `<div class="actions"><a class="button primary" href="${PAGE}/add">${icon('plug', 14)}Add server</a></div>` : '';
+  const body = [lead(parties), add, notice ? noticeCard(notice) : '', switchCard({ isOn, canSwitch }), partyList(parties, page.side)].join('');
   return reply.code(page.status ?? 200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(signalPage({ title: TITLE, tab: 'outsideParties', body, isSignedIn }));
 }
 

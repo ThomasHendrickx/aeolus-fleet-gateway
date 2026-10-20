@@ -23,6 +23,7 @@ import { createPrismaToolMarks } from './adapters/prisma/tool-marks.js';
 import { createMcpServers } from './adapters/mcp/mcp-servers.js';
 import { createMarkTool } from './core/mcp-out/mark-tool.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
+import { createCheckServer } from './core/parties/check-server.js';
 import { createHandCall } from './core/mcp-out/hand-call.js';
 import { createRunParty } from './core/mcp-out/run-party.js';
 import { createPrismaCalls } from './adapters/prisma/calls.js';
@@ -30,6 +31,7 @@ import { sleep } from './adapters/timers/sleep.js';
 import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerOutsidePartiesPage } from './adapters/http/outside-parties-page.js';
+import { registerAddServerPage } from './adapters/http/add-server-page.js';
 import { registerOutsidePartyPage } from './adapters/http/outside-party-page.js';
 import { createChangeHub, registerLive } from './adapters/http/live.js';
 import { overviewLivePages, registerOverviewPage } from './adapters/http/overview-page.js';
@@ -229,6 +231,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const clientCalls = createPrismaClientCalls(prisma);
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
+  const checkServer = createCheckServer({ servers, servesOutsideParties });
   const workers = createPartyWorkers({
     parties,
     stateParty,
@@ -418,6 +421,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     changePartyOwner,
     changePartyScopes,
     readParty,
+    checkServer,
     stateParty,
     markTool,
     readOutsideParties: createReadOutsideParties({ switches: outsidePartySwitches }),
@@ -454,6 +458,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const pageSignIn: SignInWay = pagasae === undefined ? 'none' : 'pages';
   registerPartiesPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOutsidePartiesPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
+  registerAddServerPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOutsidePartyPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOverviewPage(server, { contextFor: pageContextFor, signIn: pageSignIn, clock });
 

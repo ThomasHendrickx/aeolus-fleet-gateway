@@ -55,8 +55,8 @@ main { max-width: 720px; margin: 0 auto; padding: 32px 16px; display: grid; gap:
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 form { margin: 0; }
 button, .button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border: 1px solid var(--input); border-radius: var(--radius-md); font: inherit; font-weight: 500; color: var(--foreground); background: var(--card); text-decoration: none; cursor: pointer; }
-button.primary { color: var(--primary-foreground); background: var(--primary); border-color: var(--primary); }
-button.primary:hover { background: var(--primary-hover); }
+button.primary, .button.primary { color: var(--primary-foreground); background: var(--primary); border-color: var(--primary); }
+button.primary:hover, .button.primary:hover { background: var(--primary-hover); }
 button.destructive { color: var(--destructive-foreground); background: var(--destructive); border-color: var(--destructive); }
 button:focus-visible, .button:focus-visible, .tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .alert { border-width: 1px; border-style: solid; }
@@ -113,6 +113,11 @@ form > button.item { width: 100%; height: auto; justify-content: flex-start; tex
 .fact-rows dt { display: inline-flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 13px; }
 .fact-rows dd { margin: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; min-width: 0; overflow-wrap: anywhere; text-align: right; }
 .fact-rows dd a { margin-left: 8px; color: var(--primary); font-size: 13px; font-weight: 500; text-decoration: none; }
+.steps { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 12px; color: var(--muted-foreground); }
+.steps li { padding-top: 8px; border-top: 4px solid var(--border); }
+.steps li.done { border-top-color: var(--primary); color: var(--foreground); }
+.tool-rows { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; width: 100%; text-align: left; }
+.tool-rows li { display: grid; gap: 2px; padding: 8px 0; border-top: 1px solid var(--border); }
 .consequences { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .consequences li { display: flex; align-items: center; gap: 8px; }
 .counts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0 0; }

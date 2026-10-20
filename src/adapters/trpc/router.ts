@@ -31,6 +31,7 @@ import type { RetireParty, RetirePartyRefusal } from '../../core/parties/retire-
 import type { ChangePartyOwner, ChangePartyRefusal, ChangePartyScopes } from '../../core/parties/change-party.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { StateParty } from '../../core/mcp-out/state-party.js';
+import type { CheckServer } from '../../core/parties/check-server.js';
 import type { RegisterClient } from '../../core/oauth/register-client.js';
 import type { DecideRequest, DecideRefusal } from '../../core/requests/decide-request.js';
 import type { ListMine } from '../../core/requests/list-mine.js';
@@ -68,6 +69,7 @@ export interface Context {
   changePartyOwner: ChangePartyOwner;
   changePartyScopes: ChangePartyScopes;
   readParty: ReadParty;
+  checkServer: CheckServer;
   stateParty: StateParty;
   markTool: MarkTool;
   registerClient: RegisterClient;
@@ -194,6 +196,12 @@ const CREW_CODES = {
   NOT_AWAITING_CREW: 'CONFLICT',
   SECRET_REFUSED: 'BAD_REQUEST',
 } as const satisfies Record<string, TRPCError['code']>;
+
+/** The refusals of checking an outside MCP server, as the API states them. */
+const CHECK_CODES = {
+  OUTSIDE_PARTIES_OFF: 'PRECONDITION_FAILED',
+  SERVER_UNREACHABLE: 'BAD_GATEWAY',
+} as const satisfies Record<'OUTSIDE_PARTIES_OFF' | 'SERVER_UNREACHABLE', TRPCError['code']>;
 
 /** The refusals of stating a party's proxy ship, as the API states them. */
 const STATE_CODES = {
@@ -370,6 +378,22 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: 'NOT_FOUND', message: read.error.message });
         }
         return read.value;
+      }),
+    /**
+     * An actor holding fleet:manage checks an outside MCP server before
+     * approving it (F10): the tools it lists with the credential sent. The
+     * gateway keeps nothing and commissions nothing. A mutation, so the
+     * credential travels in the body, never in a URL.
+     */
+    check: managing(servedProcedure)
+      .input(z.strictObject({ url: z.url({ protocol: /^https?$/ }), credential: credentialInputSchema }))
+      .output(z.object({ tools: z.array(z.object({ name: z.string(), description: z.string().optional() })) }))
+      .mutation(async ({ ctx, input }) => {
+        const checked = await ctx.checkServer({ fleetId: ctx.fleetId, ...input });
+        if (!checked.isOk) {
+          throw new TRPCError({ code: CHECK_CODES[checked.error.kind], message: checked.error.message });
+        }
+        return checked.value;
       }),
     /**
      * argo approves an outside MCP server as a party: the gateway commissions

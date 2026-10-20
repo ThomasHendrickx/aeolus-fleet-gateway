@@ -67,6 +67,7 @@ function contextFor(cookie: string | undefined): Context {
     changePartyOwner: unused,
     changePartyScopes: unused,
     readParty: unused,
+    checkServer: unused,
     stateParty: unused,
     markTool: unused,
     registerClient: unused,
@@ -231,6 +232,11 @@ describe('the outside parties page: every outside party of the fleet', () => {
     expect(shown.body).toContain('1 server');
     expect(shown.body).toContain('1 client');
     expect(shown.body).toContain('MCP 2');
+  });
+
+  it('offers Add server only to an actor holding fleet:manage', async () => {
+    expect((await page(NETWORKER)).body).toContain('href="/outside-parties/add"');
+    expect((await page(VIEWER)).body).not.toContain('href="/outside-parties/add"');
   });
 
   it('opens each party on its own page from its card', async () => {

@@ -12,7 +12,7 @@ import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 // server to server (decision 0043). Here no pagasae is set, so the pages
 // sign no one in.
 
-const PAGES = ['/overview', '/overview/requests/req_1', '/outside-parties', '/outside-parties/linear', '/outside-parties/linear/retire', '/outside-parties/linear/change', '/parties'];
+const PAGES = ['/overview', '/overview/requests/req_1', '/outside-parties', '/outside-parties/linear', '/outside-parties/linear/retire', '/outside-parties/linear/change', '/outside-parties/add', '/parties'];
 
 let fleet: FleetServer;
 let app: GatewayApp;

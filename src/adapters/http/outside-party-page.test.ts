@@ -88,6 +88,7 @@ function contextFor(cookie: string | undefined): Context {
       parties = parties.filter((party) => party.name !== name);
       return Promise.resolve(ok(undefined));
     },
+    checkServer: unused,
     stateParty: unused,
     markTool: unused,
     registerClient: unused,
