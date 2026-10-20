@@ -105,6 +105,7 @@ import type { Clock } from './core/shared/clock.js';
 import { createAuthenticateActor, type Actor } from './core/actors/authenticate-actor.js';
 import { createRetireParty } from './core/parties/retire-party.js';
 import { createChangePartyOwner, createChangePartyScopes } from './core/parties/change-party.js';
+import { logRefusedFacts } from './adapters/fleet/logged-verified-facts.js';
 import { createProxyShipReads } from './adapters/fleet/proxy-ship-reads.js';
 import { createProxyShipsAsActor } from './adapters/fleet/proxy-ships-as-actor.js';
 import { createCredentialOf, type ActorCredential } from './core/actors/credential-of.js';
@@ -241,7 +242,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     servesOutsideParties,
     log: server.log,
   });
-  const approvePartyOnly = createApproveParty({ connections, parties, door, hasher: sha256RequestHasher, servesOutsideParties, clock });
+  // The approval goes on without facts the fleet refuses; the log shows them (decision 0059).
+  const approvalDoor = { ...door, ...logRefusedFacts(door, server.log) };
+  const approvePartyOnly = createApproveParty({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock });
   const crewPartyOnly = createCrewParty({ parties, door });
   // A party crewed by approving it, or by a new secret, has its calls taken at once.
   const approveParty: ApproveParty = async (input) => {
@@ -258,7 +261,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     }
     return crewed;
   };
-  const approveClientPartyOnly = createApproveClientParty({ connections, parties, door, hasher: sha256RequestHasher, servesOutsideParties, clock });
+  const approveClientPartyOnly = createApproveClientParty({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock });
   // A client party crewed at its first approval has the replies to its calls taken at once.
   const approveClientParty: ApproveClientParty = async (input) => {
     const approved = await approveClientPartyOnly(input);
