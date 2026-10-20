@@ -46,6 +46,7 @@ function contextFor(cookie: string | undefined): Context {
     readOutsideParties: unused,
     setOutsideParties: unused,
     listToDecide: unused,
+    listMine: unused,
     decideRequest: unused,
     endSignIns: unused,
   };

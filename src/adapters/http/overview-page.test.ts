@@ -42,6 +42,7 @@ let toDecide: PendingRequest[];
 let decisions: Omit<Parameters<DecideRequest>[0], 'actor'>[];
 let refusal: { kind: 'ALREADY_DECIDED'; message: string } | undefined;
 let dealt: Record<string, string>[];
+let mine: PendingRequest[];
 
 const QUESTION_ID = '0f7f8d2a-5c1e-4b8e-9d3a-2a6b1c9e7f10';
 const QUESTION = {
@@ -100,6 +101,7 @@ function contextFor(cookie: string | undefined): Context {
     registerClient: unused,
     readOutsideParties: unused,
     setOutsideParties: unused,
+    listMine: (actor) => Promise.resolve(actor.kind === 'account' ? ok(mine) : err({ kind: 'NOT_AN_ACCOUNT' as const, message: 'Only a person signed in to the gateway has requests of their own' })),
     listToDecide: (actor) =>
       Promise.resolve(actor.scopes.includes('gateway:approve') ? ok(toDecide) : err({ kind: 'NOT_AN_APPROVER' as const, message: 'Deciding requests needs gateway:approve' })),
     person: {
@@ -137,6 +139,7 @@ beforeEach(async () => {
   decisions = [];
   refusal = undefined;
   dealt = [];
+  mine = [];
   server = Fastify({ logger: false });
   registerOverviewPage(server, { contextFor, signIn: { kind: 'pages' }, clock: { now: () => NOW } });
   await server.ready();
