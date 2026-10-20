@@ -62,20 +62,33 @@ afterEach(async () => {
   await fleet.stop();
 });
 
-describe('an approver decides a pending request through the gateway', () => {
-  it("approves it: the client's proxy ship is commissioned and crewed in the fleet, and the request leaves To decide", async () => {
-    const listed = await query(address, { procedure: 'requests.toDecide', crewToken: approver });
-    expect(listed.status, await listed.clone().text()).toBe(200);
+/** The request ids To decide lists for the approver. */
+async function toDecide(): Promise<string[]> {
+  const listed = await query(address, { procedure: 'requests.toDecide', crewToken: approver });
+  return z.object({ result: z.object({ data: z.array(z.object({ requestId: z.string() })) }) }).parse(await listed.json()).result.data.map(({ requestId }) => requestId);
+}
 
+describe('an approver decides a pending request through the gateway', () => {
+  it('denies it as an agent ship holding gateway:approve, and it leaves To decide', async () => {
+    await expect(toDecide()).resolves.toEqual([REQUEST_ID]);
+
+    const decided = await mutate(address, { procedure: 'requests.decide', crewToken: approver, body: { requestId: REQUEST_ID, decision: { kind: 'deny' } } });
+
+    expect(decided.status, await decided.clone().text()).toBe(200);
+    await expect(toDecide()).resolves.toEqual([]);
+  });
+
+  // Core 0.27 commissions no app ship for the gateway (aeolus-fleet#959), so the fleet refuses
+  // the proxy ship here: the unhappy path of an approval, end to end. The approval itself is
+  // proven against the fleet's stand-in in decide-request.test.ts until core 0.28.0.
+  it('keeps it pending, undecided, when the fleet refuses the proxy ship', async () => {
     const decided = await mutate(address, {
       procedure: 'requests.decide',
       crewToken: approver,
       body: { requestId: REQUEST_ID, decision: { kind: 'approve', party: { name: 'orderbot', ownerShipId: owner, scopes: ['messages:send', 'messages:receive'] } } },
     });
 
-    expect(decided.status, await decided.clone().text()).toBe(200);
-    expect(z.object({ result: z.object({ data: z.object({ state: z.string(), party: z.object({ state: z.string() }) }) }) }).parse(await decided.json()).result.data).toEqual({ state: 'approved', party: { state: 'crewed' } });
-    const after = z.object({ result: z.object({ data: z.array(z.unknown()) }) }).parse(await (await query(address, { procedure: 'requests.toDecide', crewToken: approver })).json());
-    expect(after.result.data).toEqual([]);
+    expect(decided.status).toBe(400);
+    await expect(toDecide()).resolves.toEqual([REQUEST_ID]);
   });
 });

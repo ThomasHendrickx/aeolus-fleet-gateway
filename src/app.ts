@@ -72,6 +72,9 @@ import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
 import { createListParties } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
 import { createAuthenticateActor } from './core/actors/authenticate-actor.js';
+import { createDecideRequest } from './core/requests/decide-request.js';
+import { createListToDecide } from './core/requests/list-to-decide.js';
+import { createPrismaPendingRequests } from './adapters/prisma/pending-requests.js';
 import type { Pagasae } from './core/sign-in/ports.js';
 
 export const systemClock: Clock = { now: () => new Date() };
@@ -298,6 +301,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
 
   // What every call of the API reads, from the request's console session and installation token.
   const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections });
+  const pendingRequests = createPrismaPendingRequests(prisma);
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; installationTokenSent: string | undefined }): Context => ({
     ...sent,
     authenticateActor,
@@ -315,6 +319,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     stateParty,
     markTool,
     registerClient,
+    listToDecide: createListToDecide({ requests: pendingRequests, clock }),
+    decideRequest: createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock }),
   });
 
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {

@@ -49,6 +49,8 @@ function contextFor(cookie: string | undefined): Context {
       return Promise.resolve(err({ kind: 'NOT_AN_ACTOR' as const, message: 'Sign in to the console of your fleet' }));
     },
     isServed: () => Promise.resolve(true),
+    listToDecide: unused,
+    decideRequest: unused,
     heldConnection: unused,
     installationTokenSent: undefined,
     installation: { mode: 'open', token: undefined },
