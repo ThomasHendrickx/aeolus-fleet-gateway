@@ -20,7 +20,7 @@ let tokens: ReturnType<typeof memoryIssuedTokens>;
 beforeEach(async () => {
   now = new Date('2026-10-19T09:00:00.000Z');
   grants = memoryAccountGrants();
-  await grants.save({ ...GRANT, accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, refreshToken: 'pagasae-refresh-1', accountToken: 'account-token-1', accountTokenExpiresAt: new Date('2026-10-19T09:10:00.000Z') });
+  await grants.save({ ...GRANT, accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, scopes: ['fleet:read'], refreshToken: 'pagasae-refresh-1', accountToken: 'account-token-1', accountTokenExpiresAt: new Date('2026-10-19T09:10:00.000Z') });
   tokens = memoryIssuedTokens();
   const pair = { familyId: 'family-1', codeHash: 'code-1', fleetId: FLEET_ID, clientId: 'client-1', resource: 'http://gateway.example.com/mcp', scope: null, accessExpiresAt: now, refreshExpiresAt: now };
   await tokens.save({ ...pair, kind: 'account', grantId: 'grant-1', accessHash: 'access-1', refreshHash: 'refresh-1' });
@@ -36,15 +36,15 @@ describe("a signed-in person's account token", () => {
     now = new Date('2026-10-19T09:08:59.999Z');
     const { pagasae, accountTokenOf: tokenOf } = accountTokenOf();
 
-    await expect(tokenOf(GRANT)).resolves.toEqual({ isOk: true, value: { accountToken: 'account-token-1', personShipId: PERSON_SHIP_ID } });
+    await expect(tokenOf(GRANT)).resolves.toEqual({ isOk: true, value: { accountToken: 'account-token-1', accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, scopes: ['fleet:read'] } });
     expect(pagasae.refreshed).toEqual([]);
   });
 
-  it("is refreshed through pagasae a minute before it ends, and the grant keeps pagasae's new tokens", async () => {
+  it("is refreshed through pagasae a minute before it ends, and the grant keeps pagasae's new tokens and the scopes they carry", async () => {
     now = new Date('2026-10-19T09:09:00.000Z');
 
-    await expect(accountTokenOf().accountTokenOf(GRANT)).resolves.toEqual({ isOk: true, value: { accountToken: 'account-token-2', personShipId: PERSON_SHIP_ID } });
-    expect(grants.held).toMatchObject([{ refreshToken: 'pagasae-refresh-2', accountToken: 'account-token-2', accountTokenExpiresAt: new Date('2026-10-19T09:19:00.000Z') }]);
+    await expect(accountTokenOf().accountTokenOf(GRANT)).resolves.toEqual({ isOk: true, value: { accountToken: 'account-token-2', accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, scopes: ['fleet:read', 'gateway:approve'] } });
+    expect(grants.held).toMatchObject([{ refreshToken: 'pagasae-refresh-2', accountToken: 'account-token-2', accountTokenExpiresAt: new Date('2026-10-19T09:19:00.000Z'), scopes: ['fleet:read', 'gateway:approve'] }]);
   });
 
   it('is refreshed once for calls made together, as pagasae ends a grant whose refresh token comes twice', async () => {

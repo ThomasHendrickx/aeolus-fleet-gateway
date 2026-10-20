@@ -21,7 +21,7 @@ function anAccountToken(claims: Record<string, unknown>): string {
  * gateway reads its own few of them until that schema is published
  * (aeolus-fleet#991).
  */
-const CHARLOTTE = { iss: 'https://pagasae.example.com', aud: FLEET, sub: 'acc-charlotte', org: 'org-acme', scope: 'fleet:read', group: ['sales'], person_ship: PERSON_SHIP, iat: 1_792_400_000, exp: 1_792_400_600 };
+const CHARLOTTE = { iss: 'https://pagasae.example.com', aud: FLEET, sub: 'acc-charlotte', org: 'org-acme', scope: 'fleet:read gateway:approve', group: ['sales'], person_ship: PERSON_SHIP, iat: 1_792_400_000, exp: 1_792_400_600 };
 
 let server: Server;
 let base: string;
@@ -82,7 +82,7 @@ describe('redeeming the code pagasae sent the person back with', () => {
     ]);
   });
 
-  it('answers the account token, the refresh token, and the fleet, account and person ship the token names', async () => {
+  it('answers the account token, the refresh token, and the fleet, account, person ship and scopes the token names', async () => {
     await expect(pagasae().redeemCode({ code: 'pagasae-code-1', verifier: 'verifier-1' })).resolves.toEqual({
       isOk: true,
       value: {
@@ -92,6 +92,7 @@ describe('redeeming the code pagasae sent the person back with', () => {
         fleetId: FLEET,
         accountId: 'acc-charlotte',
         personShipId: PERSON_SHIP,
+        scopes: ['fleet:read', 'gateway:approve'],
       },
     });
   });
@@ -112,6 +113,13 @@ describe('redeeming the code pagasae sent the person back with', () => {
     answer = { status: 200, body: { ...(typeof answer.body === 'object' ? answer.body : {}), access_token: anAccountToken(withoutShip) } };
 
     await expect(pagasae().redeemCode({ code: 'pagasae-code-1', verifier: 'verifier-1' })).resolves.toMatchObject({ isOk: true, value: { personShipId: null } });
+  });
+
+  it('answers no scopes for a token that carries none', async () => {
+    const withoutScope = Object.fromEntries(Object.entries(CHARLOTTE).filter(([claim]) => claim !== 'scope'));
+    answer = { status: 200, body: { ...(typeof answer.body === 'object' ? answer.body : {}), access_token: anAccountToken(withoutScope) } };
+
+    await expect(pagasae().redeemCode({ code: 'pagasae-code-1', verifier: 'verifier-1' })).resolves.toMatchObject({ isOk: true, value: { scopes: [] } });
   });
 
   it("answers pagasae's error", async () => {

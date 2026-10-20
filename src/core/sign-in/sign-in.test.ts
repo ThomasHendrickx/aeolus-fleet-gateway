@@ -119,7 +119,7 @@ describe('pagasae sends the person back', () => {
     await expect(completeSignIn()(back)).resolves.toEqual({ isOk: true, value: { kind: 'answered', redirectTo: `${CALLBACK}?code=secret-4&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
   });
 
-  it("keeps the account's grant: its fleet, account and person ship, pagasae's refresh token and the account token", async () => {
+  it("keeps the account's grant: its fleet, account, person ship and scopes, pagasae's refresh token and the account token", async () => {
     await completeSignIn()(await started());
 
     expect(grants.held).toEqual([
@@ -128,6 +128,7 @@ describe('pagasae sends the person back', () => {
         fleetId: FLEET_ID,
         accountId: 'acc-charlotte',
         personShipId: PERSON_SHIP_ID,
+        scopes: ['fleet:read', 'gateway:approve'],
         refreshToken: 'pagasae-refresh-1',
         accountToken: 'account-token-1',
         accountTokenExpiresAt: new Date('2026-10-19T09:10:00.000Z'),
