@@ -45,7 +45,7 @@ let parties: ReturnType<typeof memoryPartyStore>;
 let requests: ReturnType<typeof memoryPendingRequests>;
 let now: Date;
 
-beforeEach(async () => {
+beforeEach(() => {
   fleet = fakeProxyShipFleet();
   parties = memoryPartyStore();
   requests = memoryPendingRequests();
@@ -114,7 +114,7 @@ describe('deciding a pending request', () => {
   it('refuses a scope the approver does not hold, commissioning nothing; messages:send and messages:receive every app ship gets', async () => {
     const decision = { kind: 'approve' as const, party: { ...APPROVE.party, scopes: ['messages:send', 'fleet:commission'] } };
 
-    await expect(decide({ actor: APPROVER_ACTOR, requestId: CLIENT_ID, decision })).resolves.toMatchObject({ isOk: false, error: { kind: 'SCOPE_NOT_HELD', message: expect.stringContaining('fleet:commission') as unknown } });
+    await expect(decide({ actor: APPROVER_ACTOR, requestId: CLIENT_ID, decision })).resolves.toMatchObject({ isOk: false, error: { kind: 'SCOPE_NOT_HELD', message: 'You may grant only scopes you hold: not fleet:commission' } });
     expect(fleet.state.commissioned).toEqual([]);
   });
 
@@ -131,7 +131,7 @@ describe('deciding a pending request', () => {
   it('counts the first decision: a later one is refused, saying the outcome, and commissions nothing', async () => {
     await decide({ actor: APPROVER_ACTOR, requestId: CLIENT_ID, decision: { kind: 'deny' } });
 
-    await expect(decide({ actor: APPROVER_ACTOR, requestId: CLIENT_ID, decision: APPROVE })).resolves.toMatchObject({ isOk: false, error: { kind: 'ALREADY_DECIDED', message: expect.stringContaining('denied') as unknown } });
+    await expect(decide({ actor: APPROVER_ACTOR, requestId: CLIENT_ID, decision: APPROVE })).resolves.toMatchObject({ isOk: false, error: { kind: 'ALREADY_DECIDED', message: 'This request was denied already' } });
     expect(fleet.state.commissioned).toEqual([]);
   });
 

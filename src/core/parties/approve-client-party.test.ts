@@ -22,7 +22,7 @@ beforeEach(async () => {
 });
 
 function anApproval(overrides: Partial<Parameters<typeof approve>[0]> = {}): Parameters<typeof approve>[0] {
-  return { operatorFleetId: FLEET_ID, requestId: 'r-1', name: 'claude', clientId: CLAUDE, ownerShipId: OWNER_SHIP_ID, ...overrides };
+  return { operatorFleetId: FLEET_ID, requestId: 'r-1', name: 'claude', clientId: CLAUDE, ownerShipId: OWNER_SHIP_ID, scopes: [], ...overrides };
 }
 
 describe('argo approves an outside MCP client as a party, at its first authorization (interop I-5)', () => {

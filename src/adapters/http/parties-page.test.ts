@@ -134,7 +134,7 @@ describe("the gateway's page of parties, for argo signed in to the console", () 
     const answer = await post('/parties/approve', { requestId: 'r-1', name: 'erp', url: 'https://erp.example.com/mcp', credentialKind: 'bearer', token: 'erp-token', ownerShipId: OWNER, concurrencyLimit: '2' });
 
     expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 303, location: '/parties' });
-    expect(approvals).toEqual([{ operatorFleetId: FLEET, requestId: 'r-1', name: 'erp', url: 'https://erp.example.com/mcp', credential: { kind: 'bearer', token: 'erp-token' }, ownerShipId: OWNER, concurrencyLimit: 2 }]);
+    expect(approvals).toEqual([{ operatorFleetId: FLEET, requestId: 'r-1', name: 'erp', url: 'https://erp.example.com/mcp', credential: { kind: 'bearer', token: 'erp-token' }, ownerShipId: OWNER, concurrencyLimit: 2, scopes: [] }]);
   });
 
   it('approves a party with OAuth client credentials', async () => {

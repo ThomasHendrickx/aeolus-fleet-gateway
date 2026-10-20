@@ -79,7 +79,7 @@ describe('pending requests in Postgres', () => {
 
   it('lists the open requests of a fleet, unexpired, the oldest first', async () => {
     const requests = createPrismaPendingRequests(prisma);
-    const fleet: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8l1';
+    const fleet: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8x1';
     const older = aRequest({ fleetId: fleet, askedAt: new Date('2026-10-20T08:00:00.000Z') });
     const newer = aRequest({ fleetId: fleet });
     const expired = aRequest({ fleetId: fleet, expiresAt: AFTER });

@@ -69,7 +69,7 @@ describe("argo approves parties through the gateway's API", () => {
 
     await gatewayRouter.createCaller(context).parties.approve(APPROVAL);
 
-    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4 }]);
+    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [] }]);
   });
 
   it('refuses a viewer, who only reads', async () => {
@@ -84,7 +84,7 @@ describe("argo approves parties through the gateway's API", () => {
 
     await gatewayRouter.createCaller(context).parties.approve(APPROVAL);
 
-    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4 }]);
+    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [] }]);
   });
 
   it('refuses a ship that only reads, and lets it read the parties', async () => {

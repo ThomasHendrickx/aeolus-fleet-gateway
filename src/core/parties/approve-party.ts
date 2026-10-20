@@ -25,6 +25,8 @@ export type ApproveParty = (input: {
   url: string;
   credential: McpServerCredential;
   ownerShipId: ShipId;
+  /** The scopes granted its proxy ship beside the ones every app ship gets (decision 0046). */
+  scopes: readonly string[];
   concurrencyLimit: number;
 }) => Promise<Result<ShownParty, ApprovePartyRefusal>>;
 
@@ -34,6 +36,7 @@ export type ApproveClientParty = (input: {
   name: string;
   clientId: string;
   ownerShipId: ShipId;
+  scopes: readonly string[];
 }) => Promise<Result<ShownParty, ApprovePartyRefusal | DomainError<'CLIENT_HAS_PARTY'>>>;
 
 interface ApprovalDeps { connections: ConnectionStore; parties: PartyStore; door: ProxyShipDoor; hasher: RequestHasher; clock: Clock }
@@ -42,6 +45,7 @@ interface ApprovalDeps { connections: ConnectionStore; parties: PartyStore; door
 interface Approval<P extends Party> {
   fleetId: FleetId;
   type: string;
+  scopes: readonly string[];
   requestHash: string;
   party: (fields: { approvedAt: Date }) => P;
   /** Whether a party kept under the name is this approval's own kind, so a repeat finds it. */
@@ -92,7 +96,7 @@ async function approved<P extends Party>(deps: ApprovalDeps, approval: Approval<
   }
   await deps.parties.save(party);
 
-  const commissioned = await deps.door.commissionAppShip(gateway.crewToken, { name: party.name, type: approval.type, owner: party.ownerShipId, idempotencyKey: party.requestId });
+  const commissioned = await deps.door.commissionAppShip(gateway.crewToken, { name: party.name, type: approval.type, owner: party.ownerShipId, idempotencyKey: party.requestId, scopes: approval.scopes });
   if (!commissioned.isOk) {
     if (commissioned.error.code === 'UNAVAILABLE') {
       return refuse('FLEET_UNAVAILABLE', `The fleet did not answer the commission: ${commissioned.error.message}`);
@@ -116,11 +120,12 @@ const UNCOMMISSIONED = { state: 'commissioning', proxyShipId: null, secret: null
  */
 export function createApproveParty(deps: ApprovalDeps): ApproveParty {
   return (input) => {
-    const { operatorFleetId: fleetId, requestId, name, url, credential, ownerShipId, concurrencyLimit } = input;
-    const requestHash = deps.hasher.hash(JSON.stringify([requestId, name, url, credential, ownerShipId, concurrencyLimit]));
+    const { operatorFleetId: fleetId, requestId, name, url, credential, ownerShipId, scopes, concurrencyLimit } = input;
+    const requestHash = deps.hasher.hash(JSON.stringify([requestId, name, url, credential, ownerShipId, scopes, concurrencyLimit]));
     return approved<McpServerParty>(deps, {
       fleetId,
       type: MCP_SERVER_SHIP_TYPE,
+      scopes,
       requestHash,
       party: ({ approvedAt }) => ({ fleetId, name, kind: 'mcpServer', url, credential, ownerShipId, concurrencyLimit, ...UNCOMMISSIONED, requestId, requestHash, approvedAt }),
       isOwn: (earlier): earlier is McpServerParty => earlier.kind === 'mcpServer',
@@ -135,15 +140,16 @@ export function createApproveParty(deps: ApprovalDeps): ApproveParty {
  */
 export function createApproveClientParty(deps: ApprovalDeps): ApproveClientParty {
   return async (input) => {
-    const { operatorFleetId: fleetId, requestId, name, clientId, ownerShipId } = input;
+    const { operatorFleetId: fleetId, requestId, name, clientId, ownerShipId, scopes } = input;
     const held = await deps.parties.findByClient(fleetId, clientId);
     if (held && held.name !== name) {
       return refuse('CLIENT_HAS_PARTY', `This client is the party ${held.name} already`);
     }
-    const requestHash = deps.hasher.hash(JSON.stringify([requestId, name, clientId, ownerShipId]));
+    const requestHash = deps.hasher.hash(JSON.stringify([requestId, name, clientId, ownerShipId, scopes]));
     return approved<McpClientParty>(deps, {
       fleetId,
       type: MCP_CLIENT_SHIP_TYPE,
+      scopes,
       requestHash,
       party: ({ approvedAt }) => ({ fleetId, name, kind: 'mcpClient', clientId, ownerShipId, ...UNCOMMISSIONED, requestId, requestHash, approvedAt }),
       isOwn: (earlier): earlier is McpClientParty => earlier.kind === 'mcpClient',

@@ -54,7 +54,7 @@ export function createApproveAuthorization(deps: {
     if (named === undefined) {
       return err({ kind: 'needsParty' });
     }
-    const party = await deps.approveClientParty({ operatorFleetId: fleetId, clientId: approval.clientId, ...named });
+    const party = await deps.approveClientParty({ operatorFleetId: fleetId, clientId: approval.clientId, ...named, scopes: [] });
     if (!party.isOk) {
       return err({ kind: 'partyRefused', message: party.error.message });
     }

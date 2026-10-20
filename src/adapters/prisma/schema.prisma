@@ -235,3 +235,29 @@ model OpenedDelivery {
   @@id([fleetId, shipId, deliveryId])
   @@map("opened_deliveries")
 }
+
+/// A pending request for an outside party (decision 0056): an outside MCP client's authorize request, or a person's request for an outside MCP server, kept 7 days.
+/// One open request per client or server in a fleet (partial unique index pending_requests_one_open, in its migration).
+model PendingRequest {
+  fleetId    String    @map("fleet_id")
+  requestId  String    @map("request_id")
+  /// client or server.
+  kind       String
+  /// What one open request is unique by: client:<client id> or server:<url>.
+  subjectKey String    @map("subject_key")
+  clientId   String?   @map("client_id")
+  clientName String?   @map("client_name")
+  url        String?
+  /// The accounts that asked, each with its person ship, as JSON.
+  requesters Json
+  askedAt    DateTime  @map("asked_at") @db.Timestamptz(3)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  /// pending, approving, approved, denied or expired.
+  state      String
+  decidedBy  Json?     @map("decided_by")
+  decidedAt  DateTime? @map("decided_at") @db.Timestamptz(3)
+
+  @@id([fleetId, requestId])
+  @@index([fleetId, askedAt], map: "pending_requests_fleet_asked")
+  @@map("pending_requests")
+}
