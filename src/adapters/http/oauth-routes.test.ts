@@ -210,8 +210,12 @@ describe('argo approves an MCP client at /authorize, signed in to the console', 
 });
 
 describe('a person, with no console session, signs in through pagasae (Q25, decision 0054)', () => {
-  function callback(query: Record<string, string>) {
-    return server.inject({ url: `/pagasae/callback?${new URLSearchParams(query).toString()}`, headers: { host: HOST } });
+  /** The browser that started the sign-in holds the secret drawn after the verifier. */
+  const STARTED_BROWSER = 'aeolus_sign_in=secret-2';
+
+  /** pagasae sends the browser back, holding the cookie given, or none. */
+  function callback(query: Record<string, string>, cookie: string | null = STARTED_BROWSER) {
+    return server.inject({ url: `/pagasae/callback?${new URLSearchParams(query).toString()}`, headers: { host: HOST, ...(cookie === null ? {} : { cookie }) } });
   }
 
   it('is sent to pagasae from /authorize', async () => {
@@ -220,12 +224,33 @@ describe('a person, with no console session, signs in through pagasae (Q25, deci
     expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)` });
   });
 
-  it("is sent back from pagasae to the client with the gateway's code", async () => {
+  it("is given the browser's secret in a cookie only the callback reads, for the sign-in's 10 minutes, over plain HTTP here as the issuer is", async () => {
+    const answer = await authorizePage(undefined);
+
+    expect(answer.headers['set-cookie']).toBe('aeolus_sign_in=secret-2; Path=/pagasae/callback; Max-Age=600; HttpOnly; SameSite=Lax');
+  });
+
+  it("is sent back from pagasae to the client with the gateway's code, and the browser's secret is cleared", async () => {
     await authorizePage(undefined);
 
-    const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
+    const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' }, `console=other; ${STARTED_BROWSER}`);
 
-    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: `${CALLBACK}?code=secret-3&state=state-1&iss=${encodeURIComponent(ISSUER)}` });
+    expect({ status: answer.statusCode, location: answer.headers.location, cookie: answer.headers['set-cookie'] }).toEqual({
+      status: 302,
+      location: `${CALLBACK}?code=secret-4&state=state-1&iss=${encodeURIComponent(ISSUER)}`,
+      cookie: 'aeolus_sign_in=; Path=/pagasae/callback; Max-Age=0; HttpOnly; SameSite=Lax',
+    });
+  });
+
+  it('is told a sign-in started in another browser is not theirs, and sent nowhere (login CSRF)', async () => {
+    await authorizePage(undefined);
+
+    const answers = await Promise.all([callback({ state: 'sealed-1', code: 'pagasae-code-1' }, null), callback({ state: 'sealed-1', code: 'pagasae-code-1' }, 'aeolus_sign_in=secret-9')]);
+
+    expect(answers.map((answer) => ({ status: answer.statusCode, location: answer.headers.location, says: answer.body.includes('another browser') }))).toEqual([
+      { status: 400, location: undefined, says: true },
+      { status: 400, location: undefined, says: true },
+    ]);
   });
 
   it('is told a sign-in it did not start, or started too long ago, is unknown, and sent nowhere', async () => {

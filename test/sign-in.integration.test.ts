@@ -52,15 +52,30 @@ function charlotteIn(fleet: string): Record<string, unknown> {
   return { iss: pagasae.url, aud: fleet, sub: 'acc-charlotte', org: 'org-acme', scope: 'fleet:read', group: ['sales'], iat: now, exp: now + 600 };
 }
 
-/** Follows the browser through the redirects from the gateway's /authorize, with no console session: where it lands last. */
-async function browserFrom(sentTo: URL): Promise<Response> {
-  let response = await fetch(sentTo, { redirect: 'manual' });
+/**
+ * Follows the browser through the redirects from the gateway's /authorize,
+ * with no console session: where it lands last. It sends each site back the
+ * cookies it set, as a browser does; one that keeps no cookies stands for
+ * another browser finishing the sign-in.
+ */
+async function browserFrom(sentTo: URL, browser: { isKeepingCookies: boolean } = { isKeepingCookies: true }): Promise<Response> {
+  const jar = new Map<string, string[]>();
+  const visit = async (url: string) => {
+    const { origin } = new URL(url);
+    const cookies = jar.get(origin) ?? [];
+    const response = await fetch(url, { redirect: 'manual', headers: cookies.length === 0 ? {} : { cookie: cookies.join('; ') } });
+    if (browser.isKeepingCookies) {
+      jar.set(origin, [...cookies, ...response.headers.getSetCookie().map((cookie) => cookie.split(';', 1)[0] ?? '')]);
+    }
+    return response;
+  };
+  let response = await visit(sentTo.toString());
   for (let hop = 0; hop < 3 && response.status === 302; hop += 1) {
     const next = z.string().parse(response.headers.get('location'));
     if (next.startsWith(CALLBACK)) {
       return response;
     }
-    response = await fetch(next, { redirect: 'manual' });
+    response = await visit(next);
   }
   return response;
 }
@@ -87,6 +102,16 @@ describe('a person signs in from their MCP client through pagasae', () => {
       read: { content: [{ type: 'text', text: 'You have no person ship in this fleet: your rights there do not let you message' }], isError: true },
     });
     await mcp.close();
+  });
+
+  it('is refused when the sign-in finishes in another browser than the one that started it (login CSRF)', async () => {
+    pagasae.answer(charlotteIn(fleetId));
+    const client = aClientProvider(await aRegisteredClient(setting, false));
+    await auth(client.provider, { serverUrl: `${setting.address}/mcp` });
+
+    const landed = await browserFrom(z.instanceof(URL).parse(client.sentTo()), { isKeepingCookies: false });
+
+    expect({ status: landed.status, says: (await landed.text()).includes('another browser') }).toEqual({ status: 400, says: true });
   });
 
   it('is told when this gateway does not serve the fleet pagasae signed them in to', async () => {
