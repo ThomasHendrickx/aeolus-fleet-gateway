@@ -75,6 +75,17 @@ describe("the gateway's OAuth records in Postgres", () => {
     await expect(tokens.findByAccess('access-a')).resolves.toEqual({ ...aPair({ familyId: 'family-a', accessHash: 'access-a', refreshHash: 'refresh-a' }, { kind: 'account', grantId: 'grant-1' }), state: 'active' });
   });
 
+  it("revokes the tokens of an account grant, in its fleet, and no other's", async () => {
+    const tokens = createPrismaIssuedTokens(prisma);
+    await tokens.save(aPair({ familyId: 'family-g1', accessHash: 'access-g1', refreshHash: 'refresh-g1' }, { kind: 'account', grantId: 'grant-9' }));
+    await tokens.save(aPair({ familyId: 'family-g2', accessHash: 'access-g2', refreshHash: 'refresh-g2' }, { kind: 'account', grantId: 'grant-8' }));
+    await tokens.save(aPair({ fleetId: OTHER_FLEET, familyId: 'family-g3', accessHash: 'access-g3', refreshHash: 'refresh-g3' }, { kind: 'account', grantId: 'grant-9' }));
+
+    await tokens.revokeGrant(FLEET, 'grant-9');
+
+    await expect(Promise.all(['access-g1', 'access-g2', 'access-g3'].map(async (hash) => (await tokens.findByAccess(hash))?.state))).resolves.toEqual(['revoked', 'active', 'active']);
+  });
+
   it("forgets a fleet with its clients, codes and tokens (decision 0021)", async () => {
     const clients = createPrismaOAuthClients(prisma);
     const tokens = createPrismaIssuedTokens(prisma);

@@ -209,3 +209,14 @@ model AccountGrant {
   @@index([fleetId])
   @@map("account_grants")
 }
+
+/// The crew token the gateway holds for a signed-in person's person ship (decision 0054): one crew, shared by every client of its person.
+model PersonCrew {
+  fleetId   String   @map("fleet_id")
+  shipId    String   @map("ship_id")
+  crewToken String   @map("crew_token")
+  crewedAt  DateTime @map("crewed_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId])
+  @@map("person_crews")
+}

@@ -98,5 +98,9 @@ export function memoryIssuedTokens(): IssuedTokens & { held: (TokenPair & { stat
       set((pair) => pair.codeHash === codeHash, 'revoked');
       return Promise.resolve();
     },
+    revokeGrant: (fleetId, grantId) => {
+      set((pair) => pair.fleetId === fleetId && pair.kind === 'account' && pair.grantId === grantId, 'revoked');
+      return Promise.resolve();
+    },
   };
 }
