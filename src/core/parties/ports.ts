@@ -36,3 +36,8 @@ export interface ProxyShipsAsActor {
   /** Retires the proxy ship (fleet.retire); a ship retired already is refused with CONFLICT. */
   retire(as: ActorCredential, ship: { shipId: ShipId }): Promise<Result<undefined, FleetRefusal>>;
 }
+
+/** Outbound port: what the fleet holds for a proxy ship, read as the gateway's ship (fleet:read). */
+export interface ProxyShipReads {
+  read(crewToken: string, ship: { shipId: ShipId }): Promise<Result<{ ownerShipId: ShipId | null; scopes: string[] }, FleetRefusal>>;
+}

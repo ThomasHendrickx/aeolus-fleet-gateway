@@ -96,7 +96,7 @@ import { createSetFleetEnabled } from './core/installation/set-fleet-enabled.js'
 import { createAuthenticateOperator } from './core/operator/authenticate-operator.js';
 import { createApproveClientParty, createApproveParty, type ApproveClientParty, type ApproveParty } from './core/parties/approve-party.js';
 import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
-import { createListParties } from './core/parties/list-parties.js';
+import { createListParties, createReadParty } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
 import { createAuthenticateActor } from './core/actors/authenticate-actor.js';
 import { createRetireParty } from './core/parties/retire-party.js';
@@ -260,8 +260,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     }
     return approved;
   };
-  const listParties = createListParties({ parties });
   const retireParty = createRetireParty({ parties, fleet: createProxyShipsAsActor(options.fleetUrl), tokens: createPrismaIssuedTokens(prisma), credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const listParties = createListParties({ parties, connections, fleet: door });
+  const readParty = createReadParty({ parties, connections, fleet: door });
   // An account's credential needs its account token, set up with the sign-in below.
   const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // Off stops the fleet's workers; on starts its crewed parties' workers again.
@@ -406,6 +407,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     crewParty,
     listParties,
     retireParty,
+    readParty,
     stateParty,
     markTool,
     readOutsideParties: createReadOutsideParties({ switches: outsidePartySwitches }),

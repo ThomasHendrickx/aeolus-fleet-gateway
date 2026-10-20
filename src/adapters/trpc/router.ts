@@ -26,7 +26,7 @@ import type { AuthenticateActor } from '../../core/actors/authenticate-actor.js'
 import type { ReadOutsideParties, SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
-import type { ListParties } from '../../core/parties/list-parties.js';
+import type { ListParties, ReadParty } from '../../core/parties/list-parties.js';
 import type { RetireParty, RetirePartyRefusal } from '../../core/parties/retire-party.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { StateParty } from '../../core/mcp-out/state-party.js';
@@ -63,6 +63,7 @@ export interface Context {
   crewParty: CrewParty;
   listParties: ListParties;
   retireParty: RetireParty;
+  readParty: ReadParty;
   stateParty: StateParty;
   markTool: MarkTool;
   registerClient: RegisterClient;
@@ -214,11 +215,18 @@ const credentialInputSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
-/** A party as argo reads it: never its credential or its crew token. */
-const shownPartyBase = { name: z.string(), ownerShipId: z.string(), state: z.enum(['commissioning', 'awaitingCrew', 'crewed']), proxyShipId: z.string().nullable() };
+/** A party as any actor reads it: never its credential or its crew token. */
+const shownPartyBase = { name: z.string(), state: z.enum(['commissioning', 'awaitingCrew', 'crewed']), proxyShipId: z.string().nullable() };
 const shownPartySchema = z.discriminatedUnion('kind', [
   z.object({ ...shownPartyBase, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
   z.object({ ...shownPartyBase, kind: z.literal('mcpClient'), clientId: z.string() }),
+]);
+
+/** A party with its proxy ship's owner and scopes, read from the fleet (decision 0056): null while unknown. */
+const fromFleet = { ownerShipId: z.string().nullable(), scopes: z.array(z.string()).nullable() };
+const listedPartySchema = z.discriminatedUnion('kind', [
+  z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
+  z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpClient'), clientId: z.string() }),
 ]);
 
 /** The connection as the console reads it: whether the gateway serves the fleet, and its connection. */
@@ -335,8 +343,19 @@ export const gatewayRouter = t.router({
       }),
   }),
   parties: t.router({
-    /** The parties argo approved for its fleet, by name. A viewer reads them too. */
-    list: servedProcedure.output(z.array(shownPartySchema)).query(({ ctx }) => ctx.listParties(ctx.fleetId)),
+    /** The fleet's outside parties, by name, each with its proxy ship's owner and scopes from the fleet. Any actor reads them. */
+    list: servedProcedure.output(z.array(listedPartySchema)).query(({ ctx }) => ctx.listParties(ctx.fleetId)),
+    /** One outside party, as the list shows it. */
+    get: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema }))
+      .output(listedPartySchema)
+      .query(async ({ ctx, input }) => {
+        const read = await ctx.readParty({ fleetId: ctx.fleetId, ...input });
+        if (!read.isOk) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: read.error.message });
+        }
+        return read.value;
+      }),
     /**
      * argo approves an outside MCP server as a party: the gateway commissions
      * its app proxy ship owned by the owner argo picked, crews it, and keeps

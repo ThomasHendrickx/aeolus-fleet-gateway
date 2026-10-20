@@ -21,7 +21,6 @@ interface Row {
   credential: unknown;
   concurrencyLimit: number | null;
   clientId: string | null;
-  ownerShipId: string;
   state: string;
   proxyShipId: string | null;
   secret: string | null;
@@ -37,7 +36,6 @@ function partyOf(row: Row): Party {
   const base = {
     fleetId: idSchema('fleet').parse(row.fleetId),
     name: row.name,
-    ownerShipId: idSchema('ship').parse(row.ownerShipId),
     state: z.enum(['commissioning', 'awaitingCrew', 'crewed']).parse(row.state),
     proxyShipId: row.proxyShipId === null ? null : idSchema('ship').parse(row.proxyShipId),
     secret: row.secret,
@@ -82,7 +80,6 @@ export function createPrismaPartyStore(db: Db): PartyStore & { crewed(): Promise
       const columns = {
         kind: party.kind,
         ...outsideColumnsOf(party),
-        ownerShipId: party.ownerShipId,
         state: party.state,
         proxyShipId: party.proxyShipId,
         secret: party.secret,

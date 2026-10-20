@@ -80,7 +80,6 @@ model Party {
   concurrencyLimit Int?     @map("concurrency_limit")
   /// An MCP client's: its OAuth client id.
   clientId         String?  @map("client_id")
-  ownerShipId      String   @map("owner_ship_id")
   state            String
   proxyShipId      String?  @map("proxy_ship_id")
   /// Kept only from the proxy ship's commission until the gateway crews it.

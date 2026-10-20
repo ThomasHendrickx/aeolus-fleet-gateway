@@ -11,15 +11,14 @@ import type { McpServerCredential } from '../vault/credential.js';
 export type PartyState = 'commissioning' | 'awaitingCrew' | 'crewed';
 
 /**
- * What every party has: one app proxy ship (decision 0044), owned by the
- * person inside who answers for it (0045), crewed by the gateway. Known by
- * its ship's name, unique in the fleet.
+ * What every party has: one app proxy ship (decision 0044), crewed by the
+ * gateway. Known by its ship's name, unique in the fleet. Its owner, the
+ * person inside who answers for it (0045), is the fleet's alone: the gateway
+ * names it at the commission and reads it after (decision 0056).
  */
 interface PartyBase {
   readonly fleetId: FleetId;
   readonly name: string;
-  /** The owner argo picked: a person's ship, or argo. */
-  readonly ownerShipId: ShipId;
   readonly state: PartyState;
   readonly proxyShipId: ShipId | null;
   /** The proxy ship's secret, kept only from its commission until the gateway crews it, so a crash between them loses nothing. */
