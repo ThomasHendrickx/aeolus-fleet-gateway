@@ -1,6 +1,7 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
-import type { ActorCredential, FleetNetwork, OutsidePartySwitches } from '../../src/core/outside-parties/ports.js';
+import type { ActorCredential } from '../../src/core/actors/credential-of.js';
+import type { FleetNetwork, OutsidePartySwitches } from '../../src/core/outside-parties/ports.js';
 import { err, ok } from '../../src/core/shared/result.js';
 
 /** Outside party switches in memory: off for a fleet never set. */

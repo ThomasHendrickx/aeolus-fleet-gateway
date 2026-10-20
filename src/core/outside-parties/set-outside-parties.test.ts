@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeFleetNetwork, memoryOutsidePartySwitches } from '../../../test/support/outside-party-fakes.js';
 import type { Actor } from '../actors/authenticate-actor.js';
+import { ok } from '../shared/result.js';
 import { createReadOutsideParties, createSetOutsideParties } from './set-outside-parties.js';
 
 // Outside parties are a switch per fleet, off by default (interop I-3,
@@ -22,7 +23,12 @@ beforeEach(() => {
 });
 
 function setOutsideParties(network: ReturnType<typeof fakeFleetNetwork>) {
-  return createSetOutsideParties({ switches, network, clock: { now: () => AT } });
+  return createSetOutsideParties({
+    switches,
+    network,
+    clock: { now: () => AT },
+    credentialOf: (actor, sent) => Promise.resolve(ok(actor.kind === 'account' ? { crewToken: 'aeolus_ct_v1_gateway', accountToken: 'account-token-1' } : sent)),
+  });
 }
 
 describe('outside parties of a fleet', () => {
@@ -35,6 +41,15 @@ describe('outside parties of a fleet', () => {
 
     await expect(setOutsideParties(network)({ actor: NETWORKER, as: AS, isOn: true, isOpenNetworkConfirmed: false })).resolves.toEqual({ isOk: true, value: { isOn: true } });
     expect({ readers: network.readers, held: switches.held.get(FLEET_ID) }).toEqual({ readers: [AS], held: { isOn: true, at: AT } });
+  });
+
+  it("read the rules as an account on the gateway's pages, by its account token", async () => {
+    const network = fakeFleetNetwork({ isOpen: false });
+    const charlotte: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, grantId: 'grant-1', scopes: ['fleet:network'] };
+
+    await setOutsideParties(network)({ actor: charlotte, as: { cookie: 'aeolus_gateway_session=sealed' }, isOn: true, isOpenNetworkConfirmed: false });
+
+    expect(network.readers).toEqual([{ crewToken: 'aeolus_ct_v1_gateway', accountToken: 'account-token-1' }]);
   });
 
   it('warn, staying off, while the fleet applies no network rules', async () => {
