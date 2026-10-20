@@ -6,7 +6,7 @@ import { createPrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { MOCK_CRM_BEARER, startMockCrm, type MockCrm } from './fixtures/mock-crm/mock-crm.js';
-import { commission, register, signIn } from './support/argo.js';
+import { applyEmptyOwnRules, commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
@@ -161,6 +161,18 @@ describe("an outside party's owner and scopes are the fleet's (decision 0056)", 
 
     const [party] = z.object({ result: z.object({ data: z.array(z.object({ name: z.string(), ownerShipId: z.string().nullable(), scopes: z.array(z.string()).nullable() })) }) }).parse(await listed.json()).result.data;
     expect({ name: party?.name, isOwned: (party?.ownerShipId ?? '').startsWith('shp_'), canMessage: ['messages:send', 'messages:receive'].every((scope) => party?.scopes?.includes(scope)) }).toEqual({ name: 'crm', isOwned: true, canMessage: true });
+  });
+  it("lists the party without owner or scopes to a ship whose read reach does not hold its proxy ship, in a fleet that applies its own network rules", async () => {
+    const address = await started();
+    await crewed(address);
+    const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'] } });
+    expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
+    const reader = await register(fleet, await commission(fleet, { cookie, ship: { name: 'reader', type: 'agent', scopes: ['fleet:read'] } }));
+    await applyEmptyOwnRules(fleet, cookie);
+
+    const listed = await query(address, { procedure: 'parties.list', crewToken: reader });
+
+    expect(z.object({ result: z.object({ data: z.array(z.object({ name: z.string(), ownerShipId: z.string().nullable(), scopes: z.array(z.string()).nullable() })) }) }).parse(await listed.json()).result.data).toEqual([{ name: 'crm', ownerShipId: null, scopes: null }].map((party) => expect.objectContaining(party)));
   });
 });
 
