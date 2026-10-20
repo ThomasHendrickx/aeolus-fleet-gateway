@@ -56,6 +56,7 @@ import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
 import { createAccountTokenOf } from './core/sign-in/account-token.js';
+import { createEndSignIns } from './core/sign-in/end-sign-ins.js';
 import { createAnswerDelivery } from './core/people/answer-delivery.js';
 import { createCrewPersonShip } from './core/people/crew-person-ship.js';
 import { createDoneDelivery } from './core/people/done-delivery.js';
@@ -341,6 +342,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     setFleetEnabled,
     readFleet,
     deleteFleet,
+    endSignIns: createEndSignIns({ grants, tokens: issuedTokens }),
     readConnection,
     connect,
     approveParty,

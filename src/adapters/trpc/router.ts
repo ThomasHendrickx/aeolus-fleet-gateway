@@ -32,6 +32,7 @@ import type { StateParty } from '../../core/mcp-out/state-party.js';
 import type { RegisterClient } from '../../core/oauth/register-client.js';
 import type { DecideRequest, DecideRefusal } from '../../core/requests/decide-request.js';
 import type { ListToDecide } from '../../core/requests/list-to-decide.js';
+import type { EndSignIns } from '../../core/sign-in/end-sign-ins.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 
 export interface Context {
@@ -49,6 +50,7 @@ export interface Context {
   setFleetEnabled: SetFleetEnabled;
   readFleet: ReadFleet;
   deleteFleet: DeleteFleet;
+  endSignIns: EndSignIns;
   readConnection: ReadConnection;
   connect: Connect;
   approveParty: ApproveParty;
@@ -429,6 +431,14 @@ export const gatewayRouter = t.router({
         if (!deleted.isOk) {
           throw new TRPCError({ code: 'CONFLICT', message: deleted.error.message });
         }
+        return {};
+      }),
+    /** pagasae disabled the account (decision 0055): every sign-in of it in the fleet ends, and its clients' tokens are revoked. Told again, it ends nothing more. */
+    accountDisabled: installationProcedure
+      .input(z.strictObject({ fleetId: idSchema('fleet'), accountId: z.string().min(1) }))
+      .output(z.strictObject({}))
+      .mutation(async ({ ctx, input }) => {
+        await ctx.endSignIns(input);
         return {};
       }),
   }),

@@ -65,6 +65,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     setFleetEnabled: unused,
     readFleet: unused,
     deleteFleet: unused,
+    endSignIns: unused,
     readConnection: unused,
     connect: unused,
     approveParty: (input) => {
