@@ -116,6 +116,9 @@ form > button.item { width: 100%; height: auto; justify-content: flex-start; tex
 .steps { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 12px; color: var(--muted-foreground); }
 .steps li { padding-top: 8px; border-top: 4px solid var(--border); }
 .steps li.done { border-top-color: var(--primary); color: var(--foreground); }
+.split-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.split-heading > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
+.count { color: var(--muted-foreground); font-weight: 500; }
 .tool-rows { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; width: 100%; text-align: left; }
 .tool-rows li { display: grid; gap: 2px; padding: 8px 0; border-top: 1px solid var(--border); }
 .consequences { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }

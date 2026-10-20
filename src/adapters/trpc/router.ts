@@ -32,6 +32,7 @@ import type { ChangePartyOwner, ChangePartyRefusal, ChangePartyScopes } from '..
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { StateParty } from '../../core/mcp-out/state-party.js';
 import type { CheckServer } from '../../core/parties/check-server.js';
+import type { ReadPartyTools } from '../../core/parties/read-party-tools.js';
 import type { RegisterClient } from '../../core/oauth/register-client.js';
 import type { DecideRequest, DecideRefusal } from '../../core/requests/decide-request.js';
 import type { ListMine } from '../../core/requests/list-mine.js';
@@ -70,6 +71,7 @@ export interface Context {
   changePartyScopes: ChangePartyScopes;
   readParty: ReadParty;
   checkServer: CheckServer;
+  readPartyTools: ReadPartyTools;
   stateParty: StateParty;
   markTool: MarkTool;
   registerClient: RegisterClient;
@@ -196,6 +198,12 @@ const CREW_CODES = {
   NOT_AWAITING_CREW: 'CONFLICT',
   SECRET_REFUSED: 'BAD_REQUEST',
 } as const satisfies Record<string, TRPCError['code']>;
+
+/** The refusals of reading an outside MCP server's tools, as the API states them. */
+const TOOLS_CODES = {
+  NO_SUCH_PARTY: 'NOT_FOUND',
+  SERVER_UNREACHABLE: 'BAD_GATEWAY',
+} as const satisfies Record<'NO_SUCH_PARTY' | 'SERVER_UNREACHABLE', TRPCError['code']>;
 
 /** The refusals of checking an outside MCP server, as the API states them. */
 const CHECK_CODES = {
@@ -376,6 +384,17 @@ export const gatewayRouter = t.router({
         const read = await ctx.readParty({ fleetId: ctx.fleetId, ...input });
         if (!read.isOk) {
           throw new TRPCError({ code: 'NOT_FOUND', message: read.error.message });
+        }
+        return read.value;
+      }),
+    /** An outside MCP server's tools, as the server lists them now, asked with the credential the gateway keeps. Any actor reads them. */
+    tools: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema }))
+      .output(z.object({ tools: z.array(z.object({ name: z.string(), description: z.string().optional() })) }))
+      .query(async ({ ctx, input }) => {
+        const read = await ctx.readPartyTools({ fleetId: ctx.fleetId, ...input });
+        if (!read.isOk) {
+          throw new TRPCError({ code: TOOLS_CODES[read.error.kind], message: read.error.message });
         }
         return read.value;
       }),

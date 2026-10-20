@@ -1,7 +1,9 @@
 /**
  * One outside party, on its own page (design B, Signal, screens 12 and 14):
  * the handshake of party and fleet, its proxy ship's state, then its facts
- * as the fleet holds them: proxy ship, owner and scopes (decision 0056).
+ * as the fleet holds them: proxy ship, owner and scopes (decision 0056),
+ * and for an MCP server the tools it lists now, read-only (turning a tool
+ * off and on comes later).
  * An actor holding fleet:owner changes its owner, one holding scopes:grant
  * its scopes, only scopes it holds; one holding fleet:manage retires it,
  * after one confirm that lists what happens. Each page calls the gateway's own API as the caller, so it
@@ -24,6 +26,9 @@ import { handshake, icon, ring, signalPage, signInPrompt, statusBadge, type Sign
 
 /** An outside party as the API shows it. */
 type ListedParty = inferRouterOutputs<GatewayRouter>['parties']['get'];
+
+/** An outside MCP server's tools as the server answers them now, or why it could not be listed. */
+type ToolsRead = { tools: inferRouterOutputs<GatewayRouter>['parties']['tools']['tools'] } | { refusal: string };
 
 const HTTP_FORBIDDEN = 403;
 const HTTP_SEE_OTHER = 303;
@@ -68,10 +73,33 @@ function facts(party: ListedParty, scopes: readonly string[]): string {
   ].join('')}</dl>`;
 }
 
-function partyBody(party: ListedParty, shown: { scopes: readonly string[]; refusal?: string }): string {
+function toolsCard(read: ToolsRead): string {
+  if ('refusal' in read) {
+    return `<section class="card"><h2>${icon('plug', 14)} Tools</h2><p class="muted">${escaped(read.refusal)}</p></section>`;
+  }
+  const rows = read.tools.map((tool) => `<li><span class="mono">${escaped(tool.name)}</span>${tool.description === undefined ? '' : `<span class="muted">${escaped(tool.description)}</span>`}</li>`).join('');
+  return `<section class="card"><h2 class="split-heading"><span>${icon('plug', 14)} Tools</span><span class="count">${String(read.tools.length)}</span></h2><ul class="tool-rows">${rows}</ul></section>`;
+}
+
+/** The server's tools as the API answers them; a refusal is shown in their place, never failing the page. */
+async function toolsOf(caller: ReturnType<typeof gatewayRouter.createCaller>, party: ListedParty): Promise<ToolsRead | undefined> {
+  if (party.kind !== 'mcpServer') {
+    return undefined;
+  }
+  try {
+    return await caller.parties.tools({ name: party.name });
+  } catch (error) {
+    if (error instanceof TRPCError) {
+      return { refusal: error.code === 'INTERNAL_SERVER_ERROR' ? 'Internal error' : error.message };
+    }
+    throw error;
+  }
+}
+
+function partyBody(party: ListedParty, shown: { scopes: readonly string[]; refusal?: string; tools?: ToolsRead }): string {
   const refusal = shown.refusal === undefined ? '' : `<section class="card alert tone-attention" role="alert"><p>${escaped(shown.refusal)}</p></section>`;
   const retire = shown.scopes.includes(RETIRING_SCOPE) ? `<div class="actions"><a class="button" href="${partyPath(party.name, 'retire')}">${icon('archive', 14)}Retire ${escaped(party.name)}…</a></div>` : '';
-  return [BACK, head(party), refusal, facts(party, shown.scopes), retire].join('');
+  return [BACK, head(party), refusal, facts(party, shown.scopes), shown.tools === undefined ? '' : toolsCard(shown.tools), retire].join('');
 }
 
 /** The scope rows: every app ship's locked on, the actor's own to tick, and what the party holds beyond them locked as it is. */
@@ -179,7 +207,11 @@ export function registerOutsidePartyPage(server: FastifyInstance, deps: { contex
   };
 
   server.get<{ Params: { name: string } }>(`${LIST}/:name`, (request, reply) =>
-    answer({ request, reply }, async ({ caller, scopes, isSignedIn }) => html(reply, { status: 200, body: partyBody(await caller.parties.get({ name: request.params.name }), { scopes }), isSignedIn })),
+    answer({ request, reply }, async ({ caller, scopes, isSignedIn }) => {
+      const party = await caller.parties.get({ name: request.params.name });
+      const tools = await toolsOf(caller, party);
+      return html(reply, { status: 200, body: partyBody(party, { scopes, ...(tools === undefined ? {} : { tools }) }), isSignedIn });
+    }),
   );
   server.get<{ Params: { name: string } }>(`${LIST}/:name/change`, (request, reply) =>
     answer({ request, reply }, async ({ caller, scopes, isSignedIn }) => html(reply, { status: 200, body: changeBody(await caller.parties.get({ name: request.params.name }), scopes), isSignedIn })),

@@ -24,6 +24,7 @@ import { createMcpServers } from './adapters/mcp/mcp-servers.js';
 import { createMarkTool } from './core/mcp-out/mark-tool.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
 import { createCheckServer } from './core/parties/check-server.js';
+import { createReadPartyTools } from './core/parties/read-party-tools.js';
 import { createHandCall } from './core/mcp-out/hand-call.js';
 import { createRunParty } from './core/mcp-out/run-party.js';
 import { createPrismaCalls } from './adapters/prisma/calls.js';
@@ -232,6 +233,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
   const checkServer = createCheckServer({ servers, servesOutsideParties });
+  const readPartyTools = createReadPartyTools({ parties, servers });
   const workers = createPartyWorkers({
     parties,
     stateParty,
@@ -422,6 +424,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     changePartyScopes,
     readParty,
     checkServer,
+    readPartyTools,
     stateParty,
     markTool,
     readOutsideParties: createReadOutsideParties({ switches: outsidePartySwitches }),

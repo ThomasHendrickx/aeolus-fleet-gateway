@@ -77,6 +77,7 @@ function contextFor(cookie: string | undefined): Context {
     readParty: unused,
     registerClient: unused,
     checkServer: unused,
+    readPartyTools: unused,
     stateParty: ({ name }) => {
       stated.push(name);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));
