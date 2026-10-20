@@ -17,6 +17,7 @@ describe('the gateway configuration from the environment', () => {
       publicUrl: 'http://127.0.0.1:4200',
       gatewaySecret: GATEWAY_SECRET,
       mcpWaitMaxMs: 10_000,
+      pagasae: undefined,
     });
   });
 
@@ -31,6 +32,7 @@ describe('the gateway configuration from the environment', () => {
       publicUrl: 'http://127.0.0.1:8080',
       gatewaySecret: GATEWAY_SECRET,
       mcpWaitMaxMs: 10_000,
+      pagasae: undefined,
     });
   });
 
@@ -62,6 +64,22 @@ describe('the gateway configuration from the environment', () => {
     const environment = { DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' };
     expect(loadConfig({ ...environment, INSTALLATION_TOKEN: 'x'.repeat(32) }).installationToken).toBe('x'.repeat(32));
     expect(() => loadConfig({ ...environment, INSTALLATION_TOKEN: 'x'.repeat(31) })).toThrow('INSTALLATION_TOKEN: must hold at least 32 characters');
+  });
+
+  it('reads pagasae, which signs people in (decision 0054): its URL without its trailing slash, and the gateway\'s client there', () => {
+    expect(loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', PAGASAE_URL: 'https://pagasae.example/', PAGASAE_CLIENT_ID: 'gateway', PAGASAE_CLIENT_SECRET: 'p'.repeat(32) }).pagasae).toEqual({
+      url: 'https://pagasae.example',
+      clientId: 'gateway',
+      clientSecret: 'p'.repeat(32),
+    });
+  });
+
+  it.each([
+    ['no client id', { PAGASAE_URL: 'https://pagasae.example', PAGASAE_CLIENT_SECRET: 'p'.repeat(32) }],
+    ['no client secret', { PAGASAE_URL: 'https://pagasae.example', PAGASAE_CLIENT_ID: 'gateway' }],
+    ['a client but no URL', { PAGASAE_CLIENT_ID: 'gateway', PAGASAE_CLIENT_SECRET: 'p'.repeat(32) }],
+  ])('refuses pagasae with %s, naming the variables', (_what, pagasae) => {
+    expect(() => loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', ...pagasae })).toThrow(/PAGASAE_/);
   });
 
   it('refuses a missing database URL, naming the variable', () => {

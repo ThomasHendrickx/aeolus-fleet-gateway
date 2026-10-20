@@ -25,6 +25,7 @@ async function start(): Promise<void> {
     mcpWaitMaxMs: config.mcpWaitMaxMs,
     logger: { level: config.logLevel },
     ...(config.installationToken === undefined ? {} : { installationToken: config.installationToken }),
+    ...(config.pagasae === undefined ? {} : { pagasae: config.pagasae }),
   });
   // Every fleet the gateway was connected to, connected again with its kept crew token.
   const restored = await app.restoreConnections();

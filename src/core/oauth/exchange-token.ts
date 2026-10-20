@@ -1,6 +1,7 @@
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { AuthorizationCodes, IssuedTokens, OAuthClients, OAuthError, OAuthErrorCode, OAuthSecrets, TokenPair } from './ports.js';
+import { holderOf } from './authenticate-access-token.js';
+import type { AuthorizationCodes, IssuedTokens, OAuthClients, OAuthError, OAuthErrorCode, OAuthSecrets, TokenHolder, TokenPair } from './ports.js';
 
 /** An access token works one hour; its refresh token 30 days (orchestrator-1 on aeolus-fleet#877, Q13). */
 export const ACCESS_TOKEN_LIFETIME_MS = 60 * 60_000;
@@ -47,7 +48,7 @@ export function createExchangeToken(deps: { clients: OAuthClients; codes: Author
     return request.client_secret !== undefined && deps.secrets.hashOf(request.client_secret) === secretHash;
   };
 
-  const issue = async (from: Pick<TokenPair, 'familyId' | 'codeHash' | 'fleetId' | 'clientId' | 'resource' | 'scope' | 'party'>): Promise<IssuedPair> => {
+  const issue = async (from: Pick<TokenPair, 'familyId' | 'codeHash' | 'fleetId' | 'clientId' | 'resource' | 'scope'> & TokenHolder): Promise<IssuedPair> => {
     const accessToken = deps.secrets.newSecret();
     const refreshToken = deps.secrets.newSecret();
     const now = deps.clock.now().getTime();
@@ -86,8 +87,8 @@ export function createExchangeToken(deps: { clients: OAuthClients; codes: Author
     if (!isValid) {
       return refusal('invalid_grant', 'The code is expired, or was issued to another client, redirect URI or verifier');
     }
-    const { codeHash, fleetId, clientId, resource, scope, party } = issued;
-    return ok(await issue({ familyId: codeHash, codeHash, fleetId, clientId, resource, scope, party }));
+    const { codeHash, fleetId, clientId, resource, scope } = issued;
+    return ok(await issue({ familyId: codeHash, codeHash, fleetId, clientId, resource, scope, ...holderOf(issued) }));
   };
 
   const fromRefreshToken = async (request: TokenRequest): Promise<Result<IssuedPair, OAuthError>> => {
@@ -103,8 +104,8 @@ export function createExchangeToken(deps: { clients: OAuthClients; codes: Author
       await deps.tokens.revokeFamily(pair.familyId);
       return refusal('invalid_grant', 'The refresh token was used before; its tokens are revoked');
     }
-    const { familyId, codeHash, fleetId, clientId, resource, scope, party } = pair;
-    return ok(await issue({ familyId, codeHash, fleetId, clientId, resource, scope, party }));
+    const { familyId, codeHash, fleetId, clientId, resource, scope } = pair;
+    return ok(await issue({ familyId, codeHash, fleetId, clientId, resource, scope, ...holderOf(pair) }));
   };
 
   return async (request) => {

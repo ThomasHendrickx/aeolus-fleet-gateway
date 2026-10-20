@@ -14,6 +14,10 @@ import { createReadClientParty } from '../../core/parties/read-client-party.js';
 import { SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { plainHasher } from '../../../test/support/memory-installation.js';
 import { OWNER_SHIP_ID, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
+import type { Pagasae } from '../../core/sign-in/ports.js';
+import { createCompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
+import { createStartSignIn } from '../../core/sign-in/start-sign-in.js';
 import { registerOAuthRoutes } from './oauth-routes.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
@@ -35,8 +39,12 @@ const authenticateOperator: AuthenticateOperator = (cookie) => {
 
 let server: FastifyInstance;
 let parties: ReturnType<typeof memoryPartyStore>;
+let served: FleetId[];
+/** pagasae redeems pagasae-code-1 for the verifier a person's start draws first, secret-1, unless a test sets it. */
+let pagasae: Pagasae;
 
-beforeEach(async () => {
+/** The routes over in-memory ports; signing people in through pagasae only where it is set. */
+async function startServer(isSigningPeopleIn: boolean) {
   const clients = memoryOAuthClients();
   await clients.save({ clientId: CLIENT, fleetId: FLEET, name: 'Cursor <IDE>', redirectUris: [CALLBACK], secretHash: 'hash(cursor-secret)' });
   const codes = memoryAuthorizationCodes();
@@ -47,6 +55,9 @@ beforeEach(async () => {
   const connections = memoryConnectionStore();
   await connections.save({ fleetId: FLEET, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-19T09:00:00.000Z') });
   const approveClientParty = createApproveClientParty({ connections, parties, door: fakeProxyShipFleet().door, hasher: plainHasher, clock });
+  served = [FLEET];
+  pagasae = fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-1', tokens: CHARLOTTE_TOKENS });
+  const seals = fakeSignInSeals();
   server = Fastify({ logger: false });
   registerOAuthRoutes(server, {
     issuer: ISSUER,
@@ -57,8 +68,21 @@ beforeEach(async () => {
     approveAuthorization: createApproveAuthorization({ readAuthorization, codes, secrets, clock, issuer: ISSUER, parties, approveClientParty }),
     readClientParty: createReadClientParty({ parties }),
     exchangeToken: createExchangeToken({ clients, codes, tokens: memoryIssuedTokens(), secrets, clock, resource: RESOURCE }),
+    ...(isSigningPeopleIn
+      ? {
+          signIn: {
+            start: createStartSignIn({ readAuthorization, seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }),
+            complete: (back) =>
+              createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)) })(back),
+          },
+        }
+      : {}),
   });
   await server.ready();
+}
+
+beforeEach(async () => {
+  await startServer(true);
 });
 
 afterEach(async () => {
@@ -124,12 +148,6 @@ describe('argo approves an MCP client at /authorize, signed in to the console', 
     expect(page.body).not.toContain('<IDE>');
   });
 
-  it('asks a caller with no session to sign in to the console', async () => {
-    const page = await authorizePage(undefined);
-
-    expect(page.statusCode).toBe(401);
-    expect(page.body).toContain('href="https://fleet.example.com"');
-  });
 
   it('refuses a viewer, who may not approve', async () => {
     const page = await authorizePage(VIEWER);
@@ -188,6 +206,72 @@ describe('argo approves an MCP client at /authorize, signed in to the console', 
     const answers = await Promise.all([decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve', origin: 'https://evil.example.com' }), decide({ ...REQUEST, ...NEW_PARTY, decision: 'approve', cookie: VIEWER })]);
 
     expect(answers.map((answer) => answer.statusCode)).toEqual([403, 403]);
+  });
+});
+
+describe('a person, with no console session, signs in through pagasae (Q25, decision 0054)', () => {
+  function callback(query: Record<string, string>) {
+    return server.inject({ url: `/pagasae/callback?${new URLSearchParams(query).toString()}`, headers: { host: HOST } });
+  }
+
+  it('is sent to pagasae from /authorize', async () => {
+    const answer = await authorizePage(undefined);
+
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)` });
+  });
+
+  it("is sent back from pagasae to the client with the gateway's code", async () => {
+    await authorizePage(undefined);
+
+    const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
+
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: `${CALLBACK}?code=secret-3&state=state-1&iss=${encodeURIComponent(ISSUER)}` });
+  });
+
+  it('is told a sign-in it did not start, or started too long ago, is unknown, and sent nowhere', async () => {
+    const answer = await callback({ state: 'forged', code: 'pagasae-code-1' });
+
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 400, location: undefined });
+    expect(answer.body).toContain('Start again from your MCP client');
+  });
+
+  it('is told this gateway does not serve the fleet they signed in to', async () => {
+    served = [];
+    await authorizePage(undefined);
+
+    const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
+
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 403, location: undefined });
+  });
+
+  it('is told when pagasae did not take its code', async () => {
+    pagasae = fakePagasae({ refusal: 'invalid_grant' });
+    await authorizePage(undefined);
+
+    const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
+
+    expect(answer.statusCode).toBe(502);
+    expect(answer.body).toContain('invalid_grant');
+  });
+});
+
+describe('a gateway where no pagasae is set', () => {
+  beforeEach(async () => {
+    await server.close();
+    await startServer(false);
+  });
+
+  it('asks a caller with no session to sign in to the console', async () => {
+    const page = await authorizePage(undefined);
+
+    expect(page.statusCode).toBe(401);
+    expect(page.body).toContain('href="https://fleet.example.com"');
+  });
+
+  it('knows no callback from pagasae', async () => {
+    const answer = await server.inject({ url: '/pagasae/callback?state=sealed-1&code=pagasae-code-1', headers: { host: HOST } });
+
+    expect(answer.statusCode).toBe(404);
   });
 });
 

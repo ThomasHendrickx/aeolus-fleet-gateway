@@ -114,6 +114,7 @@ describe('argo approves an authorization request', () => {
         codeChallenge: 'S256(verifier-1)',
         resource: RESOURCE,
         scope: null,
+        kind: 'party',
         party: 'claude',
         expiresAt: new Date('2026-10-19T09:01:00.000Z'),
         isUsed: false,
@@ -171,7 +172,7 @@ describe('argo approves a client as a party: the proxy ship it calls the fleet a
     await approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true, newParty: NEW_PARTY });
 
     await expect(approveAuthorization({ fleetId: FLEET_ID, request: aRequest(), isApproved: true })).resolves.toMatchObject({ isOk: true });
-    expect([...codes.held.values()].map((code) => code.party)).toEqual(['claude', 'claude']);
+    expect([...codes.held.values()].map((code) => (code.kind === 'party' ? code.party : code.grantId))).toEqual(['claude', 'claude']);
     expect(fleet.state.commissioned).toHaveLength(1);
   });
 

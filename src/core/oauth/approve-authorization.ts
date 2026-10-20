@@ -5,11 +5,9 @@ import type { PartyStore } from '../parties/ports.js';
 
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
+import { issueCode, redirectWith } from './issue-code.js';
 import type { AuthorizationCodes, OAuthSecrets } from './ports.js';
 import type { AuthorizationRefusal, ReadAuthorization } from './read-authorization.js';
-
-/** How long a code may be taken for tokens: one minute, within OAuth's ten (RFC 6749, 4.1.2). */
-export const CODE_LIFETIME_MS = 60_000;
 
 /**
  * Why argo's approval issued no code, beside the request's own refusals:
@@ -25,17 +23,6 @@ export type ApproveAuthorization = (input: {
   /** The party argo names for a client that is none yet. */
   newParty?: { requestId: string; name: string; ownerShipId: ShipId };
 }) => Promise<Result<{ redirectTo: string }, ApprovalRefusal>>;
-
-/** The client's redirect URI with the answer's parameters added, its own query kept. */
-function redirectWith(redirectUri: string, parameters: Record<string, string | null>): string {
-  const url = new URL(redirectUri);
-  for (const [name, value] of Object.entries(parameters)) {
-    if (value !== null) {
-      url.searchParams.append(name, value);
-    }
-  }
-  return url.toString();
-}
 
 /**
  * Use case: argo, signed in to the console, approves or denies an MCP
@@ -93,18 +80,6 @@ export function createApproveAuthorization(deps: {
     if (!party.isOk) {
       return party;
     }
-    const code = deps.secrets.newSecret();
-    await deps.codes.save({
-      codeHash: deps.secrets.hashOf(code),
-      fleetId,
-      clientId: authorization.clientId,
-      redirectUri: authorization.redirectUri,
-      codeChallenge: authorization.codeChallenge,
-      resource: authorization.resource,
-      scope: authorization.scope,
-      party: party.value,
-      expiresAt: new Date(deps.clock.now().getTime() + CODE_LIFETIME_MS),
-    });
-    return ok({ redirectTo: redirectWith(authorization.redirectUri, { code, state: authorization.state, iss: deps.issuer }) });
+    return ok({ redirectTo: await issueCode(deps, { fleetId, authorization, holder: { kind: 'party', party: party.value } }) });
   };
 }

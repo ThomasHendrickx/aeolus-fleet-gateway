@@ -2,7 +2,8 @@
  * The gateway's OAuth 2.1 authorization server over HTTP, for outside MCP
  * clients (MCP 2026-07-28 authorization): the metadata of RFC 9728 and RFC
  * 8414, /authorize, where argo approves each client signed in to the
- * console, and /token. Each route parses the request and calls one use case.
+ * console and a person is sent to pagasae to sign in, /pagasae/callback,
+ * where pagasae sends them back, and /token. Each route parses the request and calls one use case.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -15,6 +16,8 @@ import type { AuthorizationRefusal, AuthorizationRequest, ReadAuthorization } fr
 import type { AuthenticateOperator } from '../../core/operator/authenticate-operator.js';
 import type { ReadClientParty } from '../../core/parties/read-client-party.js';
 import type { ShownParty } from '../../core/parties/shown-party.js';
+import type { CompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
+import type { StartSignIn } from '../../core/sign-in/start-sign-in.js';
 import { acceptForms, escaped, isSameOrigin, layout } from './html.js';
 import { randomUUID } from 'node:crypto';
 
@@ -23,6 +26,7 @@ const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_CONFLICT = 409;
+const HTTP_BAD_GATEWAY = 502;
 
 /** The parameters of an authorization request the page carries from its query to its form. */
 const AUTHORIZATION_PARAMETERS = ['response_type', 'client_id', 'redirect_uri', 'code_challenge', 'code_challenge_method', 'resource', 'state', 'scope'] as const;
@@ -40,6 +44,8 @@ export interface OAuthRoutesDeps {
   approveAuthorization: ApproveAuthorization;
   exchangeToken: ExchangeToken;
   readClientParty: ReadClientParty;
+  /** Signing people in through pagasae (decision 0054); unset where no pagasae is set, so only argo approves. */
+  signIn?: { start: StartSignIn; complete: CompleteSignIn };
 }
 
 function fieldsOf(value: unknown): Record<string, string> {
@@ -53,6 +59,11 @@ function authorizationRequestOf(fields: Record<string, string>): Record<string, 
 
 function htmlPage(reply: FastifyReply, page: { status: number; body: string }): FastifyReply {
   return reply.code(page.status).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(layout('Approve an MCP client', page.body));
+}
+
+/** A page that tells a person why their sign-in gave their client nothing, sending them nowhere. */
+function signInPage(reply: FastifyReply, page: { status: number; message: string }): FastifyReply {
+  return reply.code(page.status).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(layout('Sign in', `<h1>Sign in</h1><p class="error">${escaped(page.message)}</p>`));
 }
 
 function sendBack(reply: FastifyReply, answer: { refusal: AuthorizationRefusal; issuer: string }): FastifyReply {
@@ -110,6 +121,29 @@ function basicCredentials(header: string | undefined): Record<string, string> {
   return { client_id: decode(decoded.slice(0, separator)), client_secret: decode(decoded.slice(separator + 1)) };
 }
 
+/** Where pagasae sends a person back (decision 0054): their client gets its code, or the person a page saying why not. */
+function registerSignInCallback(server: FastifyInstance, deps: { issuer: string; complete: CompleteSignIn }): void {
+  server.get('/pagasae/callback', async (request, reply) => {
+    const { state, code, error } = fieldsOf(request.query);
+    const completed = await deps.complete({ state, code, error });
+    if (completed.isOk) {
+      return reply.code(HTTP_FOUND).header('location', completed.value.redirectTo).send();
+    }
+    const refusal = completed.error;
+    switch (refusal.kind) {
+      case 'invalidClient':
+      case 'redirect':
+        return sendBack(reply, { refusal, issuer: deps.issuer });
+      case 'unknownSignIn':
+        return signInPage(reply, { status: HTTP_BAD_REQUEST, message: 'This sign-in is unknown, or took over 10 minutes. Start again from your MCP client.' });
+      case 'fleetNotServed':
+        return signInPage(reply, { status: HTTP_FORBIDDEN, message: 'This gateway does not serve the fleet you signed in to.' });
+      case 'pagasaeRefused':
+        return signInPage(reply, { status: HTTP_BAD_GATEWAY, message: `The sign-in did not go through: ${refusal.message}. Start again from your MCP client.` });
+    }
+  });
+}
+
 export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDeps): void {
   acceptForms(server);
 
@@ -146,11 +180,17 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
   };
 
   server.get('/authorize', async (request, reply) => {
+    const parameters = authorizationRequestOf(fieldsOf(request.query));
+    // Who comes without argo's console session is a person, who signs in through pagasae (Q25, decision 0054).
+    const { signIn } = deps;
+    if (signIn !== undefined && !(await deps.authenticateOperator(request.headers.cookie)).isOk) {
+      const started = await signIn.start(parameters);
+      return started.isOk ? reply.code(HTTP_FOUND).header('location', started.value.redirectTo).send() : sendBack(reply, { refusal: started.error, issuer: deps.issuer });
+    }
     const argo = await argoOrRefusal(request, reply);
     if ('refused' in argo) {
       return argo.refused;
     }
-    const parameters = authorizationRequestOf(fieldsOf(request.query));
     const read = await deps.readAuthorization(parameters);
     if (!read.isOk) {
       return sendBack(reply, { refusal: read.error, issuer: deps.issuer });
@@ -158,6 +198,10 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
     const party = await deps.readClientParty({ fleetId: argo.fleetId, clientId: read.value.clientId });
     return htmlPage(reply, { status: 200, body: approvalForm({ request: parameters, authorization: read.value, party }) });
   });
+
+  if (deps.signIn !== undefined) {
+    registerSignInCallback(server, { issuer: deps.issuer, complete: deps.signIn.complete });
+  }
 
   server.post('/authorize', async (request, reply) => {
     if (!isSameOrigin(request)) {

@@ -2,18 +2,21 @@ import type { FleetId } from '@aeolus-fleet/common';
 
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { IssuedTokens, OAuthSecrets } from './ports.js';
+import type { IssuedTokens, OAuthSecrets, TokenHolder } from './ports.js';
 
-/** Who calls with an access token: the fleet and the client it was issued to. */
-export interface AccessTokenHolder {
+/** Who calls with an access token: the fleet and the client it was issued to, and whom it stands for. */
+export type AccessTokenHolder = {
   readonly fleetId: FleetId;
   readonly clientId: string;
-  /** The party the client is: the proxy ship it calls the fleet as. */
-  readonly party: string;
   readonly scope: string | null;
-}
+} & TokenHolder;
 
 export type AuthenticateAccessToken = (accessToken: string) => Promise<Result<AccessTokenHolder, { kind: 'invalidToken' }>>;
+
+/** Whom a code or a pair stands for, alone. */
+export function holderOf(held: TokenHolder): TokenHolder {
+  return held.kind === 'party' ? { kind: 'party', party: held.party } : { kind: 'account', grantId: held.grantId };
+}
 
 /**
  * Use case: the gateway knows an MCP client by its access token: active,
@@ -25,6 +28,6 @@ export function createAuthenticateAccessToken(deps: { tokens: IssuedTokens; secr
     if (pair?.state !== 'active' || pair.resource !== deps.resource || pair.accessExpiresAt.getTime() <= deps.clock.now().getTime()) {
       return err({ kind: 'invalidToken' });
     }
-    return ok({ fleetId: pair.fleetId, clientId: pair.clientId, party: pair.party, scope: pair.scope });
+    return ok({ fleetId: pair.fleetId, clientId: pair.clientId, scope: pair.scope, ...holderOf(pair) });
   };
 }

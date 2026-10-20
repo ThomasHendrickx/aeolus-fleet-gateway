@@ -27,7 +27,14 @@ export interface ClientMetadataDocuments {
 }
 
 /** A code argo's approval issued: used once, within its minute, by the client and redirect URI it was issued to. */
-export interface AuthorizationCode {
+/**
+ * Whom a code and the tokens it leads to stand for: a party argo approved,
+ * the proxy ship its client calls the fleet as; or an account a person
+ * signed in as through pagasae, by its grant (decision 0054).
+ */
+export type TokenHolder = { readonly kind: 'party'; readonly party: string } | { readonly kind: 'account'; readonly grantId: string };
+
+export type AuthorizationCode = {
   readonly codeHash: string;
   readonly fleetId: FleetId;
   readonly clientId: string;
@@ -36,10 +43,8 @@ export interface AuthorizationCode {
   readonly codeChallenge: string;
   readonly resource: string;
   readonly scope: string | null;
-  /** The party the client is: the proxy ship its token calls the fleet as. */
-  readonly party: string;
   readonly expiresAt: Date;
-}
+} & TokenHolder;
 
 export interface AuthorizationCodes {
   save(code: AuthorizationCode): Promise<void>;
@@ -48,19 +53,18 @@ export interface AuthorizationCodes {
 }
 
 /** An access token and its refresh token, issued together; a family is every pair one code led to. */
-export interface TokenPair {
+export type TokenPair = {
   readonly familyId: string;
   readonly codeHash: string;
   readonly fleetId: FleetId;
   readonly clientId: string;
   readonly resource: string;
   readonly scope: string | null;
-  readonly party: string;
   readonly accessHash: string;
   readonly accessExpiresAt: Date;
   readonly refreshHash: string;
   readonly refreshExpiresAt: Date;
-}
+} & TokenHolder;
 
 export interface IssuedTokens {
   /** A new pair, active. */
