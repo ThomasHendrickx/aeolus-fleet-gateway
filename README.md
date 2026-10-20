@@ -24,7 +24,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 
 | Command | Does |
 | --- | --- |
-| `aeolus-gateway start` | Reads core's version and exits 1 when core is older than it needs (core 0.27.0 or later), saying both versions; migrates its database; serves |
+| `aeolus-gateway start` | Reads core's version and exits 1 when core is older than it needs (core 0.28.0 or later), saying both versions; migrates its database; serves |
 | `aeolus-gateway migrate` | Migrates its database, and nothing else. Needs `DATABASE_URL` alone |
 
 `GET /api/version` answers the version it runs, and `GET /api/health` answers `{ "status": "ok" }` while its database answers, else 503.
