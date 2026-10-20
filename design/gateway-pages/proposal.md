@@ -57,8 +57,12 @@ A2A is not built yet (0048, interop I-6), so no A2A flow is drawn. Nothing on th
 - What differs per protocol stays in one fact on the detail: an MCP server's tools count, an A2A agent's skills from its agent card.
 - Adding by address works the same: the gateway reads what the address offers (an MCP server's tools, an A2A agent card) before it counts as added.
 
+## Answers from Thomas (20 Oct)
+
+- **Who sees requests:** "Requester sees it under your requests and potential approvers see them all on the overview page." B has no Requests tab: Overview holds what waits on you, To decide (every pending request, for those who may approve) and Your requests (the requests you made); To decide opens the requests one at a time.
+- **Refusals:** "No rule matches" only: "network has no grey area, it works or doesnt."
+
 ## Questions
 
-1. The approving scope has no name in the docs yet; the screens never show it, and show the Requests tab only to holders of it.
-2. Which scopes may an approver grant to a proxy ship beyond `messages:send` and `messages:receive`? The screens offer `fleet:read` as an example.
-3. Who may change an outside party's owner or scopes, or retire it, on the gateway's page: holders of the approving scope, or `fleet:owner`, `scopes:grant` and `fleet:manage` as for any ship? The screens show the controls to an approver.
+1. Which scopes may an approver grant to a proxy ship beyond `messages:send` and `messages:receive`? The screens offer `fleet:read` as an example.
+2. Who may change an outside party's owner or scopes, or retire it, on the gateway's page: holders of the approving scope, or `fleet:owner`, `scopes:grant` and `fleet:manage` within reach as for any ship? Still with Thomas.
