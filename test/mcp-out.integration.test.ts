@@ -172,7 +172,7 @@ describe("an outside party's owner and scopes are the fleet's (decision 0056)", 
 
     const listed = await query(address, { procedure: 'parties.list', crewToken: reader });
 
-    expect(z.object({ result: z.object({ data: z.array(z.object({ name: z.string(), ownerShipId: z.string().nullable(), scopes: z.array(z.string()).nullable() })) }) }).parse(await listed.json()).result.data).toEqual([{ name: 'crm', ownerShipId: null, scopes: null }].map((party) => expect.objectContaining(party)));
+    expect(z.object({ result: z.object({ data: z.array(z.object({ name: z.string(), ownerShipId: z.string().nullable(), scopes: z.array(z.string()).nullable() })) }) }).parse(await listed.json()).result.data).toMatchObject([{ name: 'crm', ownerShipId: null, scopes: null }]);
   });
 });
 

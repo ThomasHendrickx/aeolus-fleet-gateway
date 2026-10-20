@@ -105,6 +105,7 @@ import type { Clock } from './core/shared/clock.js';
 import { createAuthenticateActor, type Actor } from './core/actors/authenticate-actor.js';
 import { createRetireParty } from './core/parties/retire-party.js';
 import { createChangePartyOwner, createChangePartyScopes } from './core/parties/change-party.js';
+import { createProxyShipReads } from './adapters/fleet/proxy-ship-reads.js';
 import { createProxyShipsAsActor } from './adapters/fleet/proxy-ships-as-actor.js';
 import { createCredentialOf, type ActorCredential } from './core/actors/credential-of.js';
 import { createDecideRequest } from './core/requests/decide-request.js';
@@ -274,8 +275,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const retireParty = createRetireParty({ ...asActor, tokens: createPrismaIssuedTokens(prisma) });
   const changePartyOwner = createChangePartyOwner(asActor);
   const changePartyScopes = createChangePartyScopes(asActor);
-  const listParties = createListParties({ parties, connections, fleet: door });
-  const readParty = createReadParty({ parties, connections, fleet: door });
+  const proxyShipReads = createProxyShipReads(options.fleetUrl);
+  const listParties = createListParties({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const readParty = createReadParty({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // An account's credential needs its account token, set up with the sign-in below.
   const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // Off stops the fleet's workers; on starts its crewed parties' workers again.

@@ -41,7 +41,7 @@ export interface ProxyShipsAsActor {
   grantScopes(as: ActorCredential, change: { shipId: ShipId; grant: readonly string[]; revoke: readonly string[] }): Promise<Result<{ scopes: string[] }, FleetRefusal>>;
 }
 
-/** Outbound port: what the fleet holds for a proxy ship, read as the gateway's ship (fleet:read). */
+/** Outbound port: what the fleet holds for a proxy ship, read as the actor (fleet:read): its owner and scopes, neither outside the actor's read reach. */
 export interface ProxyShipReads {
-  read(crewToken: string, ship: { shipId: ShipId }): Promise<Result<{ ownerShipId: ShipId | null; scopes: string[] }, FleetRefusal>>;
+  read(as: ActorCredential, ship: { shipId: ShipId }): Promise<Result<{ ownerShipId: ShipId | null; scopes: string[] | null }, FleetRefusal>>;
 }

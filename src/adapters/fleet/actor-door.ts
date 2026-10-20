@@ -55,3 +55,26 @@ export async function mutateAs(fleetUrl: string, call: { as: ActorCredential; pr
   const answer = trpcAnswerSchema.safeParse(body);
   return answer.success ? ok(answer.data.result.data) : err({ code: 'UNAVAILABLE', message: 'The fleet answered no result' });
 }
+
+/** One fleet read as the actor: a ship or an account over REST, argo or a viewer over tRPC as a query; what the fleet answered, unparsed. */
+export async function readAs(fleetUrl: string, call: { as: ActorCredential; procedure: string; input: unknown }): Promise<Result<unknown, FleetRefusal>> {
+  const { as, procedure, input } = call;
+  const isConsole = as.crewToken === undefined;
+  let response: Response;
+  try {
+    response = isConsole
+      ? await fetch(`${fleetUrl}/trpc/fleet.${procedure}?input=${encodeURIComponent(JSON.stringify(input))}`, { headers: { cookie: as.cookie ?? '' } })
+      : await fetch(`${fleetUrl}/api/v1/fleet/${procedure}`, { method: 'POST', headers: { 'content-type': 'application/json', ...restHeaders(as) }, body: JSON.stringify(input) });
+  } catch (error) {
+    return err({ code: 'UNAVAILABLE', message: error instanceof Error ? error.message : 'The fleet did not answer' });
+  }
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    return err(refusalOf(response.status, body));
+  }
+  if (!isConsole) {
+    return ok(body);
+  }
+  const answer = trpcAnswerSchema.safeParse(body);
+  return answer.success ? ok(answer.data.result.data) : err({ code: 'UNAVAILABLE', message: 'The fleet answered no result' });
+}

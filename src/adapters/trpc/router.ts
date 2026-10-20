@@ -374,14 +374,14 @@ export const gatewayRouter = t.router({
       }),
   }),
   parties: t.router({
-    /** The fleet's outside parties, by name, each with its proxy ship's owner and scopes from the fleet. Any actor reads them. */
-    list: servedProcedure.output(z.array(listedPartySchema)).query(({ ctx }) => ctx.listParties(ctx.fleetId)),
+    /** The fleet's outside parties, by name, each with its proxy ship's owner and scopes from the fleet, read as the actor. Any actor reads them. */
+    list: servedProcedure.output(z.array(listedPartySchema)).query(({ ctx }) => ctx.listParties({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken } })),
     /** One outside party, as the list shows it. */
     get: servedProcedure
       .input(z.strictObject({ name: shipHandleSchema }))
       .output(listedPartySchema)
       .query(async ({ ctx, input }) => {
-        const read = await ctx.readParty({ fleetId: ctx.fleetId, ...input });
+        const read = await ctx.readParty({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, ...input });
         if (!read.isOk) {
           throw new TRPCError({ code: 'NOT_FOUND', message: read.error.message });
         }
