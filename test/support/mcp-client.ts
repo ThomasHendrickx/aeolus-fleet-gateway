@@ -10,12 +10,12 @@ import { expect } from 'vitest';
 import { z } from 'zod';
 
 import { createPrismaClient } from '../../src/adapters/prisma/client.js';
-import { createPrismaPartyStore } from '../../src/adapters/prisma/party-store.js';
+import { createPrismaPendingRequests } from '../../src/adapters/prisma/pending-requests.js';
 import { commission, register } from './argo.js';
 import { aBrowser, pickedAt } from './browser.js';
 import { charlotteIn, type FakePagasae } from './fake-pagasae.js';
 import type { FleetServer } from './fleet-server.js';
-import { connectGateway, mutate } from './gateway-api.js';
+import { connectGateway, mutate, query } from './gateway-api.js';
 import { outsidePartiesOn } from './outside-parties.js';
 
 /** The gateway secret every test gateway runs with. */
@@ -25,6 +25,12 @@ export const CALLBACK = 'http://127.0.0.1:33418/callback';
 
 /** The scopes argo commissions the gateway's ship with. */
 const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+
+/** The request a person opened for the test client, which argo approves. */
+const APPROVAL_REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0009';
+
+/** How long a pending request waits: 7 days (decision 0056). */
+const REQUEST_LIFETIME_MS = 7 * 24 * 60 * 60_000;
 
 /** Where a test's fleet, gateway and argo are. */
 export interface Setting {
@@ -89,38 +95,40 @@ export async function answered(setting: Setting, sentTo: URL): Promise<{ code: s
 }
 
 /**
- * The client's party, crewed by the gateway: what 0.28's commission at its
- * first approval leaves, made with 0.27's doors. Core 0.27 commissions no app
- * ship for the gateway (aeolus-fleet#959), so argo commissions the proxy
- * ship in the console, the party is kept awaiting crew as the gateway's
- * commission leaves it, and argo hands its secret over with parties.crew.
+ * The client's party, crewed by the gateway: a person asked for the client,
+ * and an approver holding gateway:approve approved the request through the
+ * gateway, which commissions and crews its proxy ship owned by the person
+ * (aeolus-fleet#959).
  */
 export async function aCrewedClientParty(setting: Setting, clientId: string): Promise<{ proxyShipId: string }> {
   const { fleet, cookie } = setting;
-  const proxy = await commission(fleet, { cookie, ship: { name: 'test-client', type: 'mcp-client', kind: 'app' } });
-  const owner = await commission(fleet, { cookie, ship: { name: 'owner', type: 'agent' } });
-  const whoami = await fetch(`${fleet.url}/api/v1/ship/whoami`, { headers: { authorization: `Bearer ${await register(fleet, owner)}` } });
-  const { fleetId } = z.object({ fleetId: idSchema('fleet') }).parse(await whoami.json());
+  const owner = await commission(fleet, { cookie, ship: { name: 'person-owner', type: 'person', kind: 'person' } });
+  const approver = await register(fleet, await commission(fleet, { cookie, ship: { name: 'approver', type: 'agent', scopes: ['fleet:read', 'gateway:approve'] } }));
+  const fleetId = await fleetIdOf(setting);
+  await outsidePartiesOn(setting.databaseUrl, fleetId);
+  const asked = new Date();
   const prisma = createPrismaClient(setting.databaseUrl);
-  await createPrismaPartyStore(prisma).save({
+  await createPrismaPendingRequests(prisma).open({
     fleetId,
-    name: 'test-client',
-    kind: 'mcpClient',
-    clientId,
-    // The owner is only kept by the gateway; core 0.28 checks it at the commission.
-    state: 'awaitingCrew',
-    proxyShipId: proxy.shipId,
-    secret: null,
-    crewToken: null,
-    requestId: 'approve-test-client',
-    requestHash: 'h',
-    approvedAt: new Date(),
+    requestId: APPROVAL_REQUEST_ID,
+    subject: { kind: 'client', clientId, clientName: 'Test client' },
+    requesters: [{ accountId: 'acc-owner', personShipId: owner.shipId }],
+    askedAt: asked,
+    expiresAt: new Date(asked.getTime() + REQUEST_LIFETIME_MS),
+    state: 'pending',
+    decidedBy: null,
+    decidedAt: null,
+    now: asked,
   });
   await prisma.$disconnect();
-  await outsidePartiesOn(setting.databaseUrl, fleetId);
-  const crewed = await mutate(setting.address, { procedure: 'parties.crew', cookie, body: { name: 'test-client', secret: proxy.secret } });
-  expect(crewed.status).toBe(200);
-  return { proxyShipId: proxy.shipId };
+  const decided = await mutate(setting.address, {
+    procedure: 'requests.decide',
+    crewToken: approver,
+    body: { requestId: APPROVAL_REQUEST_ID, decision: { kind: 'approve', party: { name: 'test-client', ownerShipId: owner.shipId, scopes: ['messages:send', 'messages:receive'] } } },
+  });
+  expect(decided.status, await decided.clone().text()).toBe(200);
+  const read = await query(setting.address, { procedure: 'parties.get', cookie, input: { name: 'test-client' } });
+  return z.object({ result: z.object({ data: z.object({ proxyShipId: idSchema('ship') }) }) }).parse(await read.json()).result.data;
 }
 
 /** A client that signed in: its provider holds its tokens. */
