@@ -82,11 +82,11 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         ),
       answerDelivery: (input) => {
         answers.push({ grantId: input.caller.grantId, deliveryId: input.deliveryId, contentType: input.contentType, payload: input.payload });
-        return Promise.resolve(ok({ deliveryId: DELIVERY, dealt: true }));
+        return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
       doneDelivery: (input) => {
         answers.push({ grantId: input.caller.grantId, deliveryId: input.deliveryId });
-        return Promise.resolve(ok({ deliveryId: DELIVERY, dealt: true }));
+        return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
     },
     isServed: () => Promise.resolve(true),

@@ -409,6 +409,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     registerClient,
     listToDecide: createListToDecide({ requests: pendingRequests, clock }),
     decideRequest,
+    ...(person === undefined ? {} : { person }),
   });
 
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {
