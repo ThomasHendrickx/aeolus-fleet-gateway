@@ -17,7 +17,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 
 import { gatewayRouter, type Context, type GatewayRouter } from '../trpc/router.js';
 import { acceptForms, escaped, isSameOrigin } from './html.js';
-import { icon, partyMark, ring, signalPage, statusBadge, type Icon, type Tone } from './signal.js';
+import { icon, partyMark, ring, signalPage, signInPrompt, statusBadge, type Icon, type SignInWay, type Tone } from './signal.js';
 
 /** An outside party as the API shows it. */
 type ShownParty = inferRouterOutputs<GatewayRouter>['parties']['list'][number];
@@ -122,17 +122,17 @@ async function renderPage(reply: FastifyReply, page: { context: Context; side?: 
   const parties = await caller.parties.list();
   const actor = await context.authenticateActor({ cookie: context.cookie, crewToken: context.crewToken });
   const canSwitch = actor.isOk && actor.value.scopes.includes(SWITCHING_SCOPE);
+  const isSignedIn = actor.isOk && actor.value.kind === 'account';
   const body = [lead(parties), notice ? noticeCard(notice) : '', switchCard({ isOn, canSwitch }), partyList(parties, page.side)].join('');
-  return reply.code(page.status ?? 200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(signalPage({ title: TITLE, tab: 'outsideParties', body }));
+  return reply.code(page.status ?? 200).type('text/html; charset=utf-8').header('cache-control', 'no-store').send(signalPage({ title: TITLE, tab: 'outsideParties', body, isSignedIn }));
 }
 
-function signInPage(reply: FastifyReply, refusal: { fleetUrl: string; error: TRPCError }): FastifyReply {
-  const { fleetUrl, error } = refusal;
-  const body = `<section class="card"><h2>${escaped(error.message)}</h2><div class="actions"><a class="button" href="${escaped(fleetUrl)}">${icon('signIn', 14)}Sign in to the console of your fleet</a></div></section>`;
-  return reply.code(getHTTPStatusCodeFromError(error)).type('text/html; charset=utf-8').send(signalPage({ title: TITLE, body }));
+function signInPage(reply: FastifyReply, refusal: { way: SignInWay; error: TRPCError }): FastifyReply {
+  const body = signInPrompt({ message: refusal.error.message, way: refusal.way, returnTo: PAGE });
+  return reply.code(getHTTPStatusCodeFromError(refusal.error)).type('text/html; charset=utf-8').send(signalPage({ title: TITLE, body }));
 }
 
-export function registerOutsidePartiesPage(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; fleetUrl: string }): void {
+export function registerOutsidePartiesPage(server: FastifyInstance, deps: { contextFor: (cookie: string | undefined) => Context; signIn: SignInWay }): void {
   acceptForms(server);
 
   const answer = async (exchange: { request: FastifyRequest; reply: FastifyReply }, act?: (caller: ReturnType<typeof gatewayRouter.createCaller>) => Promise<unknown>) => {
@@ -150,7 +150,7 @@ export function registerOutsidePartiesPage(server: FastifyInstance, deps: { cont
         throw error;
       }
       if (error.code === 'UNAUTHORIZED') {
-        return signInPage(reply, { fleetUrl: deps.fleetUrl, error });
+        return signInPage(reply, { way: deps.signIn, error });
       }
       const isInternal = error.code === 'INTERNAL_SERVER_ERROR';
       const status = isInternal ? HTTP_INTERNAL_ERROR : getHTTPStatusCodeFromError(error);
