@@ -233,6 +233,13 @@ describe('the outside parties page: every outside party of the fleet', () => {
     expect(shown.body).toContain('MCP 2');
   });
 
+  it('opens each party on its own page from its card', async () => {
+    const shown = await page(VIEWER);
+
+    expect(shown.body).toContain('href="/outside-parties/linear"');
+    expect(shown.body).toContain('href="/outside-parties/orderbot%3Cx%3E"');
+  });
+
   it('shows each party as a card: its mark, name, protocol, kind, proxy ship status and owner, escaped', async () => {
     const shown = await page(VIEWER);
 
