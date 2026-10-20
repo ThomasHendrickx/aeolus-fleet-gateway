@@ -121,6 +121,8 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       }
       return Promise.resolve(ok({ isOn: input.isOn }));
     },
+    listMine: (actor) =>
+      Promise.resolve(actor.kind === 'account' ? ok([{ ...ORDERBOT_REQUEST, state: 'denied' as const, decidedBy: { kind: 'account' as const, accountId: 'acc-pieter' }, decidedAt: new Date('2026-10-21T09:00:00.000Z') }]) : err({ kind: 'NOT_AN_ACCOUNT' as const, message: 'Only a person signed in to the gateway has requests of their own' })),
     listToDecide: (actor) =>
       Promise.resolve(actor.scopes.includes('gateway:approve') ? ok([ORDERBOT_REQUEST]) : err({ kind: 'NOT_AN_APPROVER' as const, message: 'Deciding requests needs gateway:approve' })),
     decideRequest: (input) => {
@@ -360,5 +362,28 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("a person lists the requests they asked through the gateway's API (decision 0056: Your requests)", () => {
+  it('answers them as the API answers To decide, its times as ISO text', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).requests.mine()).resolves.toEqual([
+      {
+        ...ORDERBOT_REQUEST,
+        state: 'denied',
+        askedAt: '2026-10-20T09:00:00.000Z',
+        expiresAt: '2026-10-27T09:00:00.000Z',
+        decidedBy: { kind: 'account', accountId: 'acc-pieter' },
+        decidedAt: '2026-10-21T09:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('refuses any other actor: only an account asks', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).requests.mine()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
