@@ -30,6 +30,7 @@ import { sleep } from './adapters/timers/sleep.js';
 import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerOutsidePartiesPage } from './adapters/http/outside-parties-page.js';
+import { registerOutsidePartyPage } from './adapters/http/outside-party-page.js';
 import { createChangeHub, registerLive } from './adapters/http/live.js';
 import { overviewLivePages, registerOverviewPage } from './adapters/http/overview-page.js';
 import type { SignInWay } from './adapters/http/signal.js';
@@ -453,6 +454,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const pageSignIn: SignInWay = pagasae === undefined ? 'none' : 'pages';
   registerPartiesPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOutsidePartiesPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
+  registerOutsidePartyPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOverviewPage(server, { contextFor: pageContextFor, signIn: pageSignIn, clock });
 
   registerLive(server, { contextFor: pageContextFor, hub, pages: overviewLivePages({ clock }) });

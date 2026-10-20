@@ -61,6 +61,8 @@ function contextFor(cookie: string | undefined): Context {
       const party = parties.find((each) => each.name === name);
       return Promise.resolve(party === undefined ? err({ kind: 'NO_SUCH_PARTY' as const, message: `There is no outside party ${name}` }) : ok(party));
     },
+    changePartyOwner: unused,
+    changePartyScopes: unused,
     retireParty: ({ actor, name }) => {
       if (!actor.scopes.includes('fleet:manage')) {
         return Promise.resolve(err({ kind: 'NOT_A_MANAGER' as const, message: 'Retiring an outside party needs fleet:manage' }));

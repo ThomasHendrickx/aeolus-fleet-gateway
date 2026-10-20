@@ -99,10 +99,21 @@ textarea { padding: 8px 10px; border: 1px solid var(--input); border-radius: var
 form > button.item { width: 100%; height: auto; justify-content: flex-start; text-align: left; font-weight: 400; }
 .live-status { position: fixed; right: 16px; bottom: 16px; margin: 0; }
 .party-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-.party-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.party-card { color: inherit; text-decoration: none; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.party-card:hover { border-color: var(--ring, var(--primary)); }
 .party-card .text { display: grid; min-width: 0; } .party-card .text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .party-card .facts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .tag.protocol { padding: 0 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); font: 600 10px/16px var(--font-mono); color: var(--foreground); }
+.back { display: inline-flex; align-items: center; gap: 6px; color: var(--primary); text-decoration: none; font-size: 14px; }
+.party-head { display: grid; justify-items: center; gap: 8px; }
+.party-head .facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.fact-rows { margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.fact-rows > div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+.fact-rows > div:first-child { border-top: 0; }
+.fact-rows dt { display: inline-flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 13px; }
+.fact-rows dd { margin: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.consequences { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.consequences li { display: flex; align-items: center; gap: 8px; }
 .counts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0 0; }
 @media (max-width: 640px) { .actions > * { flex: 1; } button, .button { height: 44px; width: 100%; } }
 `;
@@ -111,7 +122,7 @@ form > button.item { width: 100%; height: auto; justify-content: flex-start; tex
 export type Tone = 'waiting' | 'active' | 'ok' | 'attention' | 'ended';
 
 /** An icon the pages draw, from the console's icon set (Lucide), as inline SVG paths. */
-export type Icon = 'plug' | 'power' | 'powerOff' | 'alert' | 'signIn' | 'house' | 'hourglass' | 'check' | 'x' | 'ban' | 'lock' | 'server' | 'laptop' | 'arrowLeftRight' | 'users' | 'shieldX' | 'timerOff' | 'signOut';
+export type Icon = 'plug' | 'power' | 'powerOff' | 'alert' | 'signIn' | 'house' | 'hourglass' | 'check' | 'x' | 'ban' | 'lock' | 'server' | 'laptop' | 'arrowLeftRight' | 'users' | 'shieldX' | 'timerOff' | 'signOut' | 'archive' | 'arrowLeft' | 'ship' | 'shield';
 
 const ICON_PATHS: Record<Icon, string> = {
   plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
@@ -131,6 +142,10 @@ const ICON_PATHS: Record<Icon, string> = {
   signOut: '<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
   shieldX: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m14.5 9.5-5 5"/><path d="m9.5 9.5 5 5"/>',
   timerOff: '<path d="M10 2h4"/><path d="M4.6 11a8 8 0 0 0 1.7 8.7 8 8 0 0 0 8.7 1.7"/><path d="M7.4 7.4a8 8 0 0 1 10.3 1 8 8 0 0 1 .9 10.2"/><path d="m2 2 20 20"/><path d="M12 12v-2"/>',
+  archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  arrowLeft: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  ship: '<path d="M12 10.189V14"/><path d="M12 2v3"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-8.188-3.639a2 2 0 0 0-1.624 0L3 14a11.6 11.6 0 0 0 2.81 7.76"/><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1s1.2 1 2.5 1c2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
 };
 

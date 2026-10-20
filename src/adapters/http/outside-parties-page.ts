@@ -23,25 +23,25 @@ import { icon, partyMark, ring, signalPage, signInPrompt, statusBadge, type Icon
 type ShownParty = inferRouterOutputs<GatewayRouter>['parties']['list'][number];
 
 /** Which side an outside party is on: a server the fleet's ships call, or a client that calls them. */
-type Side = 'server' | 'client';
+export type Side = 'server' | 'client';
 
 /**
  * An outside party is a party and its protocol (design B, How A2A slots in):
  * the protocol is a tag on every card and the list counts per protocol, so
  * an A2A agent joins as one more row here.
  */
-const PARTY_KINDS: Record<ShownParty['kind'], { protocol: string; side: Side }> = {
+export const PARTY_KINDS: Record<ShownParty['kind'], { protocol: string; side: Side }> = {
   mcpServer: { protocol: 'MCP', side: 'server' },
   mcpClient: { protocol: 'MCP', side: 'client' },
 };
 
-const SIDES: Record<Side, { icon: Icon; one: string; many: string }> = {
+export const SIDES: Record<Side, { icon: Icon; one: string; many: string }> = {
   server: { icon: 'server', one: 'server', many: 'servers' },
   client: { icon: 'laptop', one: 'client', many: 'clients' },
 };
 
 /** A proxy ship's state as the console shows a status: tone, icon and label. */
-const PARTY_STATES: Record<ShownParty['state'], { tone: Tone; icon: Icon; label: string }> = {
+export const PARTY_STATES: Record<ShownParty['state'], { tone: Tone; icon: Icon; label: string }> = {
   commissioning: { tone: 'active', icon: 'hourglass', label: 'Commissioning' },
   awaitingCrew: { tone: 'waiting', icon: 'hourglass', label: 'Awaiting crew' },
   crewed: { tone: 'ok', icon: 'check', label: 'Crewed' },
@@ -99,7 +99,7 @@ function lead(parties: readonly ShownParty[]): string {
 function partyCard(party: ShownParty): string {
   const { protocol, side } = PARTY_KINDS[party.kind];
   const where = party.kind === 'mcpServer' ? party.url : party.clientId;
-  return `<article class="party-card">${partyMark(party.name)}<div class="text"><span><strong>${escaped(party.name)}</strong> <span class="tag protocol">${escaped(protocol)}</span></span><span class="tag">${icon(SIDES[side].icon, 12)}${escaped(protocol)} ${SIDES[side].one}</span><span class="tag mono" title="${escaped(where)}">${escaped(where)}</span></div><div class="facts">${statusBadge(PARTY_STATES[party.state])}${party.ownerShipId === null ? '' : `<span class="tag">${icon('users', 12)}<span class="mono">${escaped(party.ownerShipId)}</span></span>`}</div></article>`;
+  return `<a class="party-card" href="${PAGE}/${encodeURIComponent(party.name)}">${partyMark(party.name)}<div class="text"><span><strong>${escaped(party.name)}</strong> <span class="tag protocol">${escaped(protocol)}</span></span><span class="tag">${icon(SIDES[side].icon, 12)}${escaped(protocol)} ${SIDES[side].one}</span><span class="tag mono" title="${escaped(where)}">${escaped(where)}</span></div><div class="facts">${statusBadge(PARTY_STATES[party.state])}${party.ownerShipId === null ? '' : `<span class="tag">${icon('users', 12)}<span class="mono">${escaped(party.ownerShipId)}</span></span>`}</div></a>`;
 }
 
 function partyList(parties: readonly ShownParty[], side: Side | undefined): string {
