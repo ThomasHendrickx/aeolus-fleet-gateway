@@ -6,7 +6,7 @@ import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
 import type { Context } from '../trpc/router.js';
-import { registerOverviewPage } from './overview-page.js';
+import { overviewLivePages, registerOverviewPage } from './overview-page.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const APPROVER = 'aeolus_session=argo';
@@ -220,5 +220,51 @@ describe('the Overview page: To decide', () => {
 
     expect(page.statusCode).toBe(401);
     expect(page.body).toContain('href="https://fleet.example.com"');
+  });
+});
+
+describe('the Overview page, live', () => {
+  const live = overviewLivePages({ clock: { now: () => NOW } });
+
+  it('opens the live channel for its To decide, and counts each days left down in the page', async () => {
+    const page = await get('/overview', APPROVER);
+
+    expect(page.body).toContain('data-live="overview"');
+    expect(page.body).toContain("'page=overview'");
+    expect(page.body).toContain(`data-expires-at="${ORDERBOT.expiresAt.toISOString()}"`);
+  });
+
+  it('opens the live channel for one request, its queue and the request', async () => {
+    const page = await get('/overview/requests/req_orderbot', APPROVER);
+
+    expect(page.body).toContain('data-live="queue"');
+    expect(page.body).toContain('data-live="request"');
+    expect(page.body).toContain("'page=request&requestId=req_orderbot'");
+  });
+
+  it('reads To decide again as its caller', async () => {
+    toDecide = [LINEAR];
+
+    const sections = await live.overview.render(contextFor(APPROVER), new URLSearchParams('page=overview'));
+
+    expect(sections.overview).toContain('1 to decide');
+    expect(sections.overview).not.toContain('Orderbot');
+  });
+
+  it('reads the queue again and leaves the decision being typed alone while the request still waits', async () => {
+    toDecide = [ORDERBOT];
+
+    const sections = await live.request.render(contextFor(APPROVER), new URLSearchParams('page=request&requestId=req_orderbot'));
+
+    expect(Object.keys(sections)).toEqual(['queue']);
+    expect(sections.queue).not.toContain('mcp.linear.app');
+  });
+
+  it('says the request no longer waits once it was decided elsewhere', async () => {
+    toDecide = [LINEAR];
+
+    const sections = await live.request.render(contextFor(APPROVER), new URLSearchParams('page=request&requestId=req_orderbot'));
+
+    expect(sections.request).toContain('no longer waits');
   });
 });
