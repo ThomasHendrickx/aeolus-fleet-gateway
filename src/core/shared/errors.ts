@@ -38,7 +38,8 @@ export type DomainErrorKind =
   | 'NO_SUCH_DELIVERY'
   | 'NOT_A_NETWORKER'
   | 'OPEN_NETWORK'
-  | 'OUTSIDE_PARTIES_OFF';
+  | 'OUTSIDE_PARTIES_OFF'
+  | 'INVALID_SERVER_URL';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {

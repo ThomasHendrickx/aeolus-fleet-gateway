@@ -48,6 +48,7 @@ import { createSignInSeals } from './adapters/crypto/sign-in-seals.js';
 import { createWaitingSeals } from './adapters/crypto/waiting-seals.js';
 import { createRequestIds } from './adapters/crypto/request-ids.js';
 import { createAskForClient } from './core/requests/ask-for-client.js';
+import { createAskForServer } from './core/requests/ask-for-server.js';
 import { createOpenRequest } from './core/requests/open-request.js';
 import { createReadWaiting } from './core/requests/read-waiting.js';
 import { createPagasae } from './adapters/pagasae/pagasae-client.js';
@@ -269,6 +270,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const pendingRequests = createPrismaPendingRequests(prisma);
   const waitings = createWaitingSeals(options.gatewaySecret);
   const issuing = { codes: authorizationCodes, secrets: oauthSecrets, clock, issuer };
+  const openRequest = createOpenRequest({ requests: pendingRequests, ids: createRequestIds(), clock });
   const signIn =
     pagasae === undefined
       ? undefined
@@ -287,7 +289,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             askForClient: createAskForClient({
               parties,
               requests: pendingRequests,
-              openRequest: createOpenRequest({ requests: pendingRequests, ids: createRequestIds(), clock }),
+              openRequest,
               servesOutsideParties,
               waitings,
               ...issuing,
@@ -313,6 +315,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       openDelivery: createOpenDelivery({ ...asCrew, opened, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened }),
+      askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
     };
   };
   const person = pagasae === undefined ? undefined : personToolsOf({ pagasae });

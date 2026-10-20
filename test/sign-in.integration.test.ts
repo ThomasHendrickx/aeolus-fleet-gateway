@@ -66,7 +66,7 @@ describe('a person signs in from their MCP client through pagasae', () => {
     const read = await mcp.callTool({ name: 'aeolus_inbox', arguments: {} });
 
     expect({ tools: listed.tools.map(({ name }) => name), read }).toEqual({
-      tools: ['aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done'],
+      tools: ['aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ask_for_server'],
       // pagasae names no person ship for Charlotte here, so the gateway asks the fleet nothing.
       read: { content: [{ type: 'text', text: 'You have no person ship in this fleet: your rights there do not let you message' }], isError: true },
     });
@@ -118,5 +118,33 @@ describe('a person asks for access for their MCP client (decision 0056)', () => 
       denied: denied.status,
       back: new URL(z.string().parse(answer.headers.get('location'))).searchParams.get('error'),
     }).toEqual({ waited: { status: 200, isWaitingPage: true, says: true }, toDecide: ['Test client'], denied: 200, back: 'access_denied' });
+  });
+});
+
+describe('a person asks for an outside MCP server from their chat (decision 0056)', () => {
+  it('opens a pending request an approver sees to decide', async () => {
+    pagasae.answer(charlotteIn(pagasae, fleetId));
+    await outsidePartiesOn(setting.databaseUrl, fleetId);
+    const approver = await register(setting.fleet, await commission(setting.fleet, { cookie: setting.cookie, ship: { name: 'approver', type: 'agent', scopes: ['fleet:read', 'gateway:approve'] } }));
+    const client = aClientProvider(await aRegisteredClient(setting, false));
+    const serverUrl = `${setting.address}/mcp`;
+    await auth(client.provider, { serverUrl });
+    const back = new URL(z.string().parse((await aBrowser().follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'account'), CALLBACK)).headers.get('location')));
+    const iss = back.searchParams.get('iss');
+    await auth(client.provider, { serverUrl, authorizationCode: z.string().parse(back.searchParams.get('code')), ...(iss === null ? {} : { iss }) });
+    const mcp = new Client({ name: 'charlotte', version: '1' });
+    await mcp.connect(new StreamableHTTPClientTransport(new URL(serverUrl), { authProvider: client.provider }));
+
+    const asked = await mcp.callTool({ name: 'aeolus_ask_for_server', arguments: { url: 'https://mcp.linear.app/mcp' } });
+    const listed = await query(setting.address, { procedure: 'requests.toDecide', crewToken: approver });
+    await mcp.close();
+
+    expect({
+      isAsked: asked.isError !== true,
+      toDecide: z.object({ result: z.object({ data: z.array(z.object({ subject: z.unknown(), requesters: z.unknown() })) }) }).parse(await listed.json()).result.data,
+    }).toEqual({
+      isAsked: true,
+      toDecide: [{ subject: { kind: 'server', url: 'https://mcp.linear.app/mcp' }, requesters: [{ accountId: 'acc-charlotte', personShipId: null }] }],
+    });
   });
 });
