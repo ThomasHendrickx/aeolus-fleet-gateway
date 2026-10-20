@@ -9,7 +9,7 @@ import { receiveOne } from './support/ship.js';
 import { setTimeout as wait } from 'node:timers/promises';
 import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
-import { aSignedInClient, mcpEndpointOf, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
+import { aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
 
 // MCP in (interop 3.3): an outside MCP client, signed in, sees the
 // capabilities of the ships its party reaches as tools, named by alias.
@@ -19,8 +19,6 @@ const MCP_WAIT_MS = 3000;
 
 let setting: Setting;
 let app: GatewayApp;
-/** The fleet's MCP endpoint at the gateway. */
-let endpoint: string;
 
 beforeEach(async () => {
   const fleet = await startFleetServer(inject('postgresUrl'));
@@ -29,7 +27,6 @@ beforeEach(async () => {
   setting = { fleet, address, cookie: await signIn(fleet), databaseUrl: await migratedDatabase(inject('postgresUrl')) };
   app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET, mcpWaitMaxMs: MCP_WAIT_MS });
   await app.server.listen({ host: '127.0.0.1', port });
-  endpoint = await mcpEndpointOf(setting);
 });
 
 afterEach(async () => {
@@ -57,7 +54,7 @@ async function aStatingShip(): Promise<string> {
 async function aConnectedClient(): Promise<Client> {
   const client = await aSignedInClient(setting);
   const mcp = new Client({ name: 'test-client', version: '1' });
-  await mcp.connect(new StreamableHTTPClientTransport(new URL(client.endpoint), { authProvider: client.provider }));
+  await mcp.connect(new StreamableHTTPClientTransport(new URL(`${setting.address}/mcp`), { authProvider: client.provider }));
   return mcp;
 }
 
@@ -82,7 +79,7 @@ describe('an outside MCP client lists the tools of the ships its party reaches',
     await aStatingShip();
     const client = await aSignedInClient(setting);
     const mcp = new Client({ name: 'test-client', version: '1' });
-    await mcp.connect(new StreamableHTTPClientTransport(new URL(client.endpoint), { authProvider: client.provider }));
+    await mcp.connect(new StreamableHTTPClientTransport(new URL(`${setting.address}/mcp`), { authProvider: client.provider }));
 
     const { tools } = await mcp.listTools();
     await mcp.close();
@@ -95,27 +92,21 @@ describe('an outside MCP client lists the tools of the ships its party reaches',
   });
 
   it('answers 401 with where to sign in to a call without a token (RFC 9728)', async () => {
-    const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: '{}' });
+    const response = await fetch(`${setting.address}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: '{}' });
 
     expect({ status: response.status, challenge: response.headers.get('www-authenticate') }).toEqual({
       status: 401,
-      challenge: `Bearer resource_metadata="${setting.address}/.well-known/oauth-protected-resource${new URL(endpoint).pathname}"`,
+      challenge: `Bearer resource_metadata="${setting.address}/.well-known/oauth-protected-resource/mcp"`,
     });
   });
 
   it('answers 401 invalid_token to a token it did not issue', async () => {
-    const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer not-a-token' }, body: '{}' });
+    const response = await fetch(`${setting.address}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer not-a-token' }, body: '{}' });
 
     expect({ status: response.status, challenge: response.headers.get('www-authenticate') }).toEqual({
       status: 401,
-      challenge: `Bearer error="invalid_token", resource_metadata="${setting.address}/.well-known/oauth-protected-resource${new URL(endpoint).pathname}"`,
+      challenge: `Bearer error="invalid_token", resource_metadata="${setting.address}/.well-known/oauth-protected-resource/mcp"`,
     });
-  });
-
-  it('serves its fleets at their own MCP endpoints only, none at /mcp', async () => {
-    const response = await fetch(`${setting.address}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer not-a-token' }, body: '{}' });
-
-    expect({ isFleetEndpoint: /^\/fleets\/[a-z][a-z2-7]{7}\/mcp$/.test(new URL(endpoint).pathname), status: response.status }).toEqual({ isFleetEndpoint: true, status: 404 });
   });
 });
 
@@ -202,7 +193,7 @@ const rpcAnswer = z.object({ result: z.record(z.string(), z.unknown()).optional(
 
 /** One request to the gateway's MCP endpoint over Streamable HTTP, as a client that declares the Tasks extension sends it: its result or error. */
 async function rpc(accessToken: string, request: { method: string; params: Record<string, unknown>; name?: string }) {
-  const response = await fetch(endpoint, {
+  const response = await fetch(`${setting.address}/mcp`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

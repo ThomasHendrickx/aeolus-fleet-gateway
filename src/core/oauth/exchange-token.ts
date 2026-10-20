@@ -33,7 +33,7 @@ function refusal(error: OAuthErrorCode, description: string) {
  * is taken once too: the pair rotates, and a rotated one coming again
  * revokes its whole family.
  */
-export function createExchangeToken(deps: { clients: OAuthClients; codes: AuthorizationCodes; tokens: IssuedTokens; secrets: OAuthSecrets; clock: Clock }): ExchangeToken {
+export function createExchangeToken(deps: { clients: OAuthClients; codes: AuthorizationCodes; tokens: IssuedTokens; secrets: OAuthSecrets; clock: Clock; resource: string }): ExchangeToken {
   /** The client is who it says, as far as it has a secret. */
   const isAuthenticated = async (request: TokenRequest): Promise<boolean> => {
     const clientId = request.client_id;
@@ -66,6 +66,9 @@ export function createExchangeToken(deps: { clients: OAuthClients; codes: Author
     if (code === undefined || verifier === undefined) {
       return refusal('invalid_request', 'A code and its PKCE verifier are required');
     }
+    if (request.resource !== undefined && request.resource !== deps.resource) {
+      return refusal('invalid_target', `The resource must be ${deps.resource}`);
+    }
     const taken = await deps.codes.take(deps.secrets.hashOf(code));
     if (!taken) {
       return refusal('invalid_grant', 'No such code');
@@ -82,10 +85,6 @@ export function createExchangeToken(deps: { clients: OAuthClients; codes: Author
       deps.secrets.challengeOf(verifier) === issued.codeChallenge;
     if (!isValid) {
       return refusal('invalid_grant', 'The code is expired, or was issued to another client, redirect URI or verifier');
-    }
-    // A code is bound to the fleet's MCP endpoint it was asked for; asked for another, it is spent and gives nothing.
-    if (request.resource !== undefined && request.resource !== issued.resource) {
-      return refusal('invalid_target', `The resource must be ${issued.resource}, the code's`);
     }
     const { codeHash, fleetId, clientId, resource, scope, party } = issued;
     return ok(await issue({ familyId: codeHash, codeHash, fleetId, clientId, resource, scope, party }));

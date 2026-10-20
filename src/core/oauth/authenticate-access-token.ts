@@ -13,17 +13,16 @@ export interface AccessTokenHolder {
   readonly scope: string | null;
 }
 
-/** The token is checked for the MCP endpoint it was sent to. */
-export type AuthenticateAccessToken = (accessToken: string, resource: string) => Promise<Result<AccessTokenHolder, { kind: 'invalidToken' }>>;
+export type AuthenticateAccessToken = (accessToken: string) => Promise<Result<AccessTokenHolder, { kind: 'invalidToken' }>>;
 
 /**
  * Use case: the gateway knows an MCP client by its access token: active,
- * not expired, and issued for the fleet's MCP endpoint it was sent to (RFC 8707).
+ * not expired, and issued for the gateway's own MCP endpoint (RFC 8707).
  */
-export function createAuthenticateAccessToken(deps: { tokens: IssuedTokens; secrets: OAuthSecrets; clock: Clock }): AuthenticateAccessToken {
-  return async (accessToken, resource) => {
+export function createAuthenticateAccessToken(deps: { tokens: IssuedTokens; secrets: OAuthSecrets; clock: Clock; resource: string }): AuthenticateAccessToken {
+  return async (accessToken) => {
     const pair = await deps.tokens.findByAccess(deps.secrets.hashOf(accessToken));
-    if (pair?.state !== 'active' || pair.resource !== resource || pair.accessExpiresAt.getTime() <= deps.clock.now().getTime()) {
+    if (pair?.state !== 'active' || pair.resource !== deps.resource || pair.accessExpiresAt.getTime() <= deps.clock.now().getTime()) {
       return err({ kind: 'invalidToken' });
     }
     return ok({ fleetId: pair.fleetId, clientId: pair.clientId, party: pair.party, scope: pair.scope });

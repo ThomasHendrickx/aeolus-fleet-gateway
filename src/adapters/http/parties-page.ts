@@ -98,12 +98,10 @@ async function renderPage(reply: FastifyReply, page: { context: Context; failure
   const operator = await context.authenticateOperator(context.cookie);
   const parties = await caller.parties.list();
   const provider = await caller.identityProvider.get();
-  const endpoint = await caller.mcp.endpoint();
   const canManage = operator.isOk && operator.value.scopes.includes('fleet:manage');
   const body = [
     '<h1>Parties</h1>',
     '<p class="muted">Outside MCP servers argo approved for this fleet, each behind its proxy ship.</p>',
-    `<p>MCP clients connect to <code>${escaped(endpoint)}</code></p>`,
     failure ? `<p class="error">${escaped(failure.message)}</p>` : '',
     parties.length === 0
       ? '<p class="muted">No party yet.</p>'

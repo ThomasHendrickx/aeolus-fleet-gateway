@@ -51,7 +51,6 @@ function aContext(cookie: string): { context: Context; approvals: Parameters<App
       return Promise.resolve(input.issuer.startsWith('https://') ? ok({ issuer: input.issuer, clientId: input.clientId, setAt: SET_AT }) : err({ kind: 'INVALID_ISSUER' as const, message: 'An issuer is an https URL' }));
     },
     readIdentityProvider: () => Promise.resolve({ issuer: 'https://accounts.google.com', clientId: 'gateway', setAt: SET_AT }),
-    mcpEndpointOf: (fleetId) => `https://gateway.example.com/fleets/alias-of(${fleetId})/mcp`,
   };
   return { context, approvals, marks, providers };
 }
@@ -194,14 +193,5 @@ describe("argo sets the fleet's company identity provider through the gateway's 
 
     await expect(gatewayRouter.createCaller(context).identityProvider.set(z.custom<typeof GOOGLE>(() => true).parse(input))).rejects.toBeInstanceOf(TRPCError);
     expect(providers).toEqual([]);
-  });
-});
-
-describe("the fleet's MCP endpoint, which its MCP clients connect to", () => {
-  it.each([
-    { who: 'argo', cookie: ARGO_COOKIE },
-    { who: 'a viewer', cookie: VIEWER_COOKIE },
-  ])("answers $who the endpoint of the session's fleet", async ({ cookie }) => {
-    await expect(gatewayRouter.createCaller(aContext(cookie).context).mcp.endpoint()).resolves.toBe(`https://gateway.example.com/fleets/alias-of(${FLEET})/mcp`);
   });
 });

@@ -1,26 +1,9 @@
-import type { FleetId } from '@aeolus-fleet/common';
-
-import type { ClientMetadataDocuments, FleetEndpoints, OAuthClient, OAuthClients, AuthorizationCode, AuthorizationCodes, IssuedTokens, OAuthSecrets, TokenPair } from '../../src/core/oauth/ports.js';
+import type { ClientMetadataDocuments, OAuthClient, OAuthClients, AuthorizationCode, AuthorizationCodes, IssuedTokens, OAuthSecrets, TokenPair } from '../../src/core/oauth/ports.js';
 import { err, ok } from '../../src/core/shared/result.js';
 
-import { FLEET_ID, OTHER_FLEET_ID } from './fleet-fakes.js';
-
+/** The gateway's MCP endpoint in the tests: the resource every token is bound to (RFC 8707). */
+export const RESOURCE = 'http://gateway.example.com/mcp';
 export const ISSUER = 'http://gateway.example.com';
-/** The fleet's MCP endpoint in the tests: the resource its tokens are bound to (RFC 8707). */
-export const RESOURCE = `${ISSUER}/fleets/fleetaaa/mcp`;
-/** Another fleet's MCP endpoint, at the same gateway. */
-export const OTHER_RESOURCE = `${ISSUER}/fleets/fleetbbb/mcp`;
-
-/** The two fleets' MCP endpoints, each at its alias. */
-export function fakeFleetEndpoints(): FleetEndpoints {
-  const endpoints = new Map<FleetId, string>([
-    [FLEET_ID, RESOURCE],
-    [OTHER_FLEET_ID, OTHER_RESOURCE],
-  ]);
-  return {
-    fleetOf: (resource) => Promise.resolve([...endpoints].find(([, endpoint]) => endpoint === resource)?.[0]),
-  };
-}
 
 /**
  * Secrets as a test reads them: numbered in the order they are drawn, each
