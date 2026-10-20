@@ -56,7 +56,7 @@ beforeEach(async () => {
   await calls.save(aClientCall());
   stop = new AbortController();
   sleeps = 0;
-  const ack = crew.ack;
+  const ack = crew.ack.bind(crew);
   crew.ack = async (crewToken, deliveryId) => {
     const acked = await ack(crewToken, deliveryId);
     if (acked.isOk) {

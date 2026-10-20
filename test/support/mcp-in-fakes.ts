@@ -157,11 +157,19 @@ export function memoryClientCalls(): ClientCalls & { held: ClientCall[]; isFaili
  * replies, handed one at a time and again until acknowledged, none once
  * none waits; or the refusal set. It counts the calls in flight at once.
  */
+interface ReplyFleet {
+  replies: Map<MessageId, ReceivedReply[]>;
+  refusal: FleetRefusal | undefined;
+  asked: { crewToken: string; messageId: MessageId }[];
+  inFlight: number;
+  mostInFlight: number;
+}
+
 export function fakeReplyReceiver() {
-  const state = {
+  const state: ReplyFleet = {
     replies: new Map<MessageId, ReceivedReply[]>(),
-    refusal: undefined as FleetRefusal | undefined,
-    asked: new Array<{ crewToken: string; messageId: MessageId }>(),
+    refusal: undefined,
+    asked: [],
     inFlight: 0,
     mostInFlight: 0,
   };

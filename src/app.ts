@@ -237,7 +237,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     parties,
     stateParty,
     runParty: createRunParty({ crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
-    collectReplies: createCollectReplies({ crew: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
+    collectReplies: createCollectReplies({ crew: door, replies: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
     servesOutsideParties,
     log: server.log,
   });

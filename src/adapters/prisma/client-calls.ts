@@ -46,6 +46,15 @@ export function createPrismaClientCalls(db: Db): ClientCalls {
       await db.clientCallReply.upsert({ where: { deliveryId }, create: { deliveryId, fleetId, callMessageId: messageId, messageId: reply.messageId, contentType, payload, receivedAt }, update: {} });
     },
     findByMessage: (fleetId, messageId) => read({ fleetId_messageId: { fleetId, messageId } }),
+    waitedOn: async ({ fleetId, party }, now) => {
+      const rows = await db.clientCall.findMany({
+        where: { fleetId, party, OR: [{ deadlineAt: null }, { deadlineAt: { gt: now } }] },
+        orderBy: { sentAt: 'asc' },
+        select: { messageId: true },
+      });
+      const calls = await Promise.all(rows.map(({ messageId }) => read({ fleetId_messageId: { fleetId, messageId: idSchema('message').parse(messageId) } })));
+      return calls.filter((call) => call !== undefined);
+    },
     findByHandle: async ({ fleetId, party }, handle) => {
       const call = await read({ fleetId_handle: { fleetId, handle } });
       return call?.party === party ? call : undefined;
