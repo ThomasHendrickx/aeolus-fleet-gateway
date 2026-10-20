@@ -12,7 +12,6 @@ import {
   commissionShipOutputSchema,
   discoverOutputSchema,
   FLEET_BUSY_WAITS_MS,
-  fleetListOutputSchema,
   handedOutputSchema,
   idSchema,
   inboxOutputSchema,
@@ -46,9 +45,6 @@ const HARNESS = 'aeolus-gateway';
 
 /** The header an account's token travels in; common's ACCOUNT_TOKEN_HEADER replaces it once published (aeolus-fleet#991). */
 const ACCOUNT_TOKEN_HEADER = 'aeolus-account-token';
-
-/** The ship type the networking plugin's ship has (decision 0035). */
-const NETWORKING_PLUGIN_TYPE = 'networking-plugin';
 
 /** One call to the fleet. */
 interface FleetCall<T> {
@@ -235,9 +231,6 @@ export function createRestFleetDoor(
     ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
     handled: (crewToken, deliveryId) => done(crewToken, { path: '/ship/handled', body: { deliveryId } }),
     notHandled: (crewToken, report) => done(crewToken, { path: '/ship/notHandled', body: report }),
-    // Core 0.27 answers no call the gateway's ship may make with whether a
-    // networking plugin is registered, so a crewed ship of the networking
-    // plugin's type stands in for it until core answers it itself.
     send: async (crewToken, { to, contentType, payload, idempotencyKey }) =>
       call({ path: '/ship/send', method: 'POST', crewToken, body: { selector: { kind: 'ship', shipId: to }, contentType, payload, idempotencyKey }, answers: sendOutputSchema }),
     discover: async (crewToken) => {
@@ -247,10 +240,6 @@ export function createRestFleetDoor(
     declareScopes: async (crewToken, declaration) => {
       const declared = await call({ path: '/fleet/declareScopes', method: 'POST', crewToken, body: declaration, answers: z.unknown() });
       return declared.isOk ? ok(undefined) : declared;
-    },
-    hasNetworkingPlugin: async (crewToken) => {
-      const listed = await call({ path: '/fleet/list', method: 'POST', crewToken, body: {}, answers: fleetListOutputSchema });
-      return listed.isOk ? ok(listed.value.some((ship) => ship.type === NETWORKING_PLUGIN_TYPE && ship.status === 'crewed')) : listed;
     },
   };
 }

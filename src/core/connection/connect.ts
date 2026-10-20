@@ -5,7 +5,7 @@ import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { ConnectionStatus, ConnectionStore, FleetDoor } from './ports.js';
 
-export type ConnectRefusal = DomainError<'ALREADY_CONNECTED' | 'SECRET_REFUSED' | 'OTHER_FLEET' | 'MISSING_SCOPES' | 'NO_NETWORKING_PLUGIN' | 'SCOPE_REFUSED' | 'FLEET_UNAVAILABLE'>;
+export type ConnectRefusal = DomainError<'ALREADY_CONNECTED' | 'SECRET_REFUSED' | 'OTHER_FLEET' | 'MISSING_SCOPES' | 'SCOPE_REFUSED' | 'FLEET_UNAVAILABLE'>;
 
 export type Connect = (input: { operatorFleetId: FleetId; shipId: ShipId; secret: string }) => Promise<Result<ConnectionStatus, ConnectRefusal>>;
 
@@ -27,8 +27,7 @@ const GATEWAY_NAMESPACE = {
  * The console's server hands it its ship's secret, server to server; the
  * gateway registers with it as a server and keeps only the crew token. The
  * ship must be of argo's fleet and hold the gateway's scopes, and the fleet
- * must have a registered networking plugin (interop I-3), and the fleet must
- * take the gateway's declared scope, or the gateway lets
+ * must take the gateway's declared scope, or the gateway lets
  * the ship go again and keeps nothing. Each fleet has its own connection:
  * connect works only while the gateway is not connected to argo's fleet,
  * whatever other fleets it serves. The secret is never kept or logged.
@@ -58,13 +57,6 @@ export function createConnect(deps: { door: FleetDoor; store: ConnectionStore; c
     const ship = await deps.door.getShip(crewToken, { shipId });
     if (!ship.isOk || !GATEWAY_SCOPES.every((scope) => ship.value.scopes.includes(scope))) {
       return letGo('MISSING_SCOPES', `The ship needs ${GATEWAY_SCOPES.join(', ')}`);
-    }
-    const plugin = await deps.door.hasNetworkingPlugin(crewToken);
-    if (!plugin.isOk) {
-      return letGo('FLEET_UNAVAILABLE', `The fleet did not say whether it has a networking plugin: ${plugin.error.message}`);
-    }
-    if (!plugin.value) {
-      return letGo('NO_NETWORKING_PLUGIN', 'Connect the networking plugin first: the gateway serves only a fleet with a registered networking plugin');
     }
     const declared = await deps.door.declareScopes(crewToken, GATEWAY_NAMESPACE);
     if (!declared.isOk) {

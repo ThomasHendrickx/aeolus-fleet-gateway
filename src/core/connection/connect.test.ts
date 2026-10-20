@@ -85,11 +85,8 @@ describe('connecting the gateway', () => {
     expect([store.held.size, fleet.state.deregistered]).toEqual([0, ['aeolus_ct_v1_1']]);
   });
 
-  it('is refused for a fleet with no registered networking plugin, and lets the ship go again (interop I-3)', async () => {
-    fleet.state.hasNetworkingPlugin = false;
-
-    await expect(connect({ secret: 'aeolus_sk_v1_good' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_NETWORKING_PLUGIN' } });
-    expect([store.held.size, fleet.state.deregistered]).toEqual([0, ['aeolus_ct_v1_1']]);
+  it('connects whatever network the fleet has: no networking plugin is asked for (interop I-3, Thomas 20 Oct)', async () => {
+    await expect(connect({ secret: 'aeolus_sk_v1_good' })).resolves.toMatchObject({ isOk: true, value: { state: 'connected' } });
   });
 
   it('connects again after the crew token was dropped, as the same or another ship', async () => {

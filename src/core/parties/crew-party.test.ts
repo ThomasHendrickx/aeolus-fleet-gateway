@@ -6,6 +6,9 @@ import { OWNER_SHIP_ID, PROXY_SHIP_ID, fakeProxyShipFleet, memoryPartyStore } fr
 import { createApproveParty } from './approve-party.js';
 import { createCrewParty } from './crew-party.js';
 
+/** Outside parties are on for every fleet here. */
+const isServing = () => Promise.resolve(true);
+
 const AT = new Date('2026-10-18T13:00:00.000Z');
 
 let fleet: ReturnType<typeof fakeProxyShipFleet>;
@@ -17,7 +20,7 @@ beforeEach(async () => {
   parties = memoryPartyStore();
   const connections = memoryConnectionStore();
   await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: AT });
-  const approve = createApproveParty({ connections, parties, door: fleet.door, hasher: plainHasher, clock: { now: () => AT } });
+  const approve = createApproveParty({ connections, parties, door: fleet.door, hasher: plainHasher, servesOutsideParties: isServing, clock: { now: () => AT } });
   fleet.state.isLosingNextAnswer = true;
   const approval = { operatorFleetId: FLEET_ID, requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 't' }, ownerShipId: OWNER_SHIP_ID, scopes: [], concurrencyLimit: 4 };
   await approve(approval);

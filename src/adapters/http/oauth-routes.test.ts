@@ -20,6 +20,9 @@ import { createCompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
 import { createStartSignIn } from '../../core/sign-in/start-sign-in.js';
 import { registerOAuthRoutes } from './oauth-routes.js';
 
+/** Outside parties are on for every fleet here. */
+const isServing = () => Promise.resolve(true);
+
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const ARGO = 'aeolus_session=argo';
 const VIEWER = 'aeolus_session=viewer';
@@ -54,7 +57,7 @@ async function startServer(isSigningPeopleIn: boolean) {
   parties = memoryPartyStore();
   const connections = memoryConnectionStore();
   await connections.save({ fleetId: FLEET, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-19T09:00:00.000Z') });
-  const approveClientParty = createApproveClientParty({ connections, parties, door: fakeProxyShipFleet().door, hasher: plainHasher, clock });
+  const approveClientParty = createApproveClientParty({ connections, parties, door: fakeProxyShipFleet().door, hasher: plainHasher, servesOutsideParties: isServing, clock });
   served = [FLEET];
   pagasae = fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-1', tokens: CHARLOTTE_TOKENS });
   const seals = fakeSignInSeals();

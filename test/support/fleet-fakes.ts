@@ -13,7 +13,6 @@ export const GATEWAY_SCOPES = ['messages:send', 'messages:receive', 'fleet:read'
 /**
  * A fleet that knows the gateway's ship: its secret claims it once, its crew
  * tokens work while their lease holds, and it has the scopes it was given.
- * It has a registered networking plugin or none, as the fleet answers it.
  */
 export function fakeGatewayFleet() {
   const noRefusal = (): FleetRefusal | undefined => undefined;
@@ -21,7 +20,6 @@ export function fakeGatewayFleet() {
     secret: 'aeolus_sk_v1_good',
     fleetId: FLEET_ID,
     scopes: [...GATEWAY_SCOPES],
-    hasNetworkingPlugin: true,
     isCrewed: false,
     isAnswering: true,
     liveTokens: new Set<string>(),
@@ -78,12 +76,6 @@ export function fakeGatewayFleet() {
       }
       state.declared.push(declaration);
       return Promise.resolve(ok(undefined));
-    },
-    hasNetworkingPlugin: (crewToken) => {
-      if (!state.isAnswering) {
-        return unavailable();
-      }
-      return state.liveTokens.has(crewToken) ? Promise.resolve(ok(state.hasNetworkingPlugin)) : released();
     },
   };
   return { state, door };

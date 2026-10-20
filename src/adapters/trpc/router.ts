@@ -23,6 +23,7 @@ import type { ReadFleet } from '../../core/installation/read-fleet.js';
 import type { IsServed } from '../../core/installation/served.js';
 import type { SetFleetEnabled } from '../../core/installation/set-fleet-enabled.js';
 import type { AuthenticateActor } from '../../core/actors/authenticate-actor.js';
+import type { ReadOutsideParties, SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListParties } from '../../core/parties/list-parties.js';
@@ -58,6 +59,8 @@ export interface Context {
   registerClient: RegisterClient;
   listToDecide: ListToDecide;
   decideRequest: DecideRequest;
+  readOutsideParties: ReadOutsideParties;
+  setOutsideParties: SetOutsideParties;
 }
 
 /** What a caller reads of a failure: nothing of it, so no crew token, secret or query ever leaves; the log holds it whole. */
@@ -131,7 +134,6 @@ const CONNECT_CODES = {
   SECRET_REFUSED: 'BAD_REQUEST',
   OTHER_FLEET: 'BAD_REQUEST',
   MISSING_SCOPES: 'BAD_REQUEST',
-  NO_NETWORKING_PLUGIN: 'PRECONDITION_FAILED',
   SCOPE_REFUSED: 'CONFLICT',
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
 } as const satisfies Record<string, TRPCError['code']>;
@@ -139,12 +141,11 @@ const CONNECT_CODES = {
 /** The refusals of switching a fleet, as the API states them: a fleet that does not answer is tried again with the same request id. */
 const SET_ENABLED_CODES = {
   REQUEST_ID_USED: 'CONFLICT',
-  NO_NETWORKING_PLUGIN: 'PRECONDITION_FAILED',
-  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
 } as const satisfies Record<string, TRPCError['code']>;
 
 /** The refusals of approving a party, as the API states them: a fleet that does not answer is tried again with the same request id. */
 const APPROVE_CODES = {
+  OUTSIDE_PARTIES_OFF: 'PRECONDITION_FAILED',
   NOT_CONNECTED: 'PRECONDITION_FAILED',
   PARTY_EXISTS: 'CONFLICT',
   COMMISSION_REFUSED: 'BAD_REQUEST',
@@ -219,9 +220,17 @@ const DECIDE_CODES = {
   PARTY_EXISTS: 'CONFLICT',
   SERVER_DETAILS_MISSING: 'BAD_REQUEST',
   COMMISSION_REFUSED: 'BAD_REQUEST',
+  OUTSIDE_PARTIES_OFF: 'PRECONDITION_FAILED',
   NOT_CONNECTED: 'PRECONDITION_FAILED',
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
 } as const satisfies Record<DecideRefusal['kind'], TRPCError['code']>;
+
+/** The refusals of switching outside parties, as the API states them: an open network's warning is confirmed by calling again. */
+const OUTSIDE_PARTIES_CODES = {
+  NOT_A_NETWORKER: 'FORBIDDEN',
+  OPEN_NETWORK: 'PRECONDITION_FAILED',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+} as const satisfies Record<string, TRPCError['code']>;
 
 /** A pending request as the API answers it: its times as ISO text. */
 const pendingRequestSchema = z.object({
@@ -358,6 +367,21 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: DECIDE_CODES[decided.error.kind], message: decided.error.message });
         }
         return decided.value;
+      }),
+  }),
+  outsideParties: t.router({
+    /** Whether the fleet's outside parties are on (interop I-3). */
+    status: servedProcedure.output(z.object({ isOn: z.boolean() })).query(({ ctx }) => ctx.readOutsideParties(ctx.actor)),
+    /** Turns them on or off as an actor holding fleet:network; on in an open network needs its warning confirmed. */
+    set: servedProcedure
+      .input(z.strictObject({ isOn: z.boolean(), isOpenNetworkConfirmed: z.boolean() }))
+      .output(z.object({ isOn: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        const set = await ctx.setOutsideParties({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, ...input });
+        if (!set.isOk) {
+          throw new TRPCError({ code: OUTSIDE_PARTIES_CODES[set.error.kind], message: set.error.message });
+        }
+        return set.value;
       }),
   }),
   oauth: t.router({

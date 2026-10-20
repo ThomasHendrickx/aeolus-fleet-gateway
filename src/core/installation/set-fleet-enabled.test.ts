@@ -17,7 +17,7 @@ beforeEach(() => {
   switches = memoryFleetSwitches();
   requests = memoryInstallationRequests();
   connections = memoryConnectionStore();
-  setEnabled = createSetFleetEnabled({ switches, requests, hasher: plainHasher, clock: { now: () => AT }, connections, door: fleet.door });
+  setEnabled = createSetFleetEnabled({ switches, requests, hasher: plainHasher, clock: { now: () => AT } });
 });
 
 async function connected(): Promise<void> {
@@ -52,40 +52,11 @@ describe('switching the gateway on or off for a fleet (decision 0021)', () => {
   });
 });
 
-describe('the gateway does not switch on without a registered networking plugin (interop I-3)', () => {
-  it('switches on a connected fleet whose networking plugin is registered', async () => {
-    await connected();
-
-    await expect(setEnabled({ requestId: 'r-1', fleetId: FLEET_ID, isEnabled: true })).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, isEnabled: true } });
-  });
-
-  it('refuses to switch on a connected fleet with no networking plugin, and stays off', async () => {
-    await connected();
-    fleet.state.hasNetworkingPlugin = false;
-
-    await expect(setEnabled({ requestId: 'r-1', fleetId: FLEET_ID, isEnabled: true })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_NETWORKING_PLUGIN' } });
-    expect(switches.held.get(FLEET_ID)).toBeUndefined();
-  });
-
-  it('refuses to switch on a connected fleet that does not answer, and records nothing, so a retry may switch it', async () => {
+describe('the gateway switches on whatever network the fleet has (interop I-3, Thomas 20 Oct)', () => {
+  it('switches on a connected fleet, asking the fleet nothing, even while it does not answer', async () => {
     await connected();
     fleet.state.isAnswering = false;
 
-    await expect(setEnabled({ requestId: 'r-1', fleetId: FLEET_ID, isEnabled: true })).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
-    fleet.state.isAnswering = true;
-    await expect(setEnabled({ requestId: 'r-1', fleetId: FLEET_ID, isEnabled: true })).resolves.toMatchObject({ isOk: true });
-  });
-
-  it('switches off a fleet with no networking plugin', async () => {
-    await connected();
-    fleet.state.hasNetworkingPlugin = false;
-
-    await expect(setEnabled({ requestId: 'r-1', fleetId: FLEET_ID, isEnabled: false })).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, isEnabled: false } });
-  });
-
-  it('switches on a fleet it is not connected to yet: connecting checks the plugin then', async () => {
-    fleet.state.hasNetworkingPlugin = false;
-
-    await expect(setEnabled({ requestId: 'r-1', fleetId: FLEET_ID, isEnabled: true })).resolves.toMatchObject({ isOk: true });
+    await expect(setEnabled({ requestId: 'r-1', fleetId: FLEET_ID, isEnabled: true })).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, isEnabled: true } });
   });
 });

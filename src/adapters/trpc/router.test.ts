@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
+import type { SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
 import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
@@ -35,8 +36,15 @@ const ORDERBOT_REQUEST: PendingRequest = {
 };
 
 /** A context with only what the parties procedures read; every approval it is asked for is recorded. */
-function aContext(cookie: string | undefined, crewToken?: string): { context: Context; approvals: Parameters<ApproveParty>[0][]; marks: Parameters<MarkTool>[0][]; decisions: Parameters<DecideRequest>[0][] } {
+function aContext(cookie: string | undefined, crewToken?: string): {
+  context: Context;
+  approvals: Parameters<ApproveParty>[0][];
+  marks: Parameters<MarkTool>[0][];
+  decisions: Parameters<DecideRequest>[0][];
+  switched: Parameters<SetOutsideParties>[0][];
+} {
   const approvals: Parameters<ApproveParty>[0][] = [];
+  const switched: Parameters<SetOutsideParties>[0][] = [];
   const decisions: Parameters<DecideRequest>[0][] = [];
   const marks: Parameters<MarkTool>[0][] = [];
   const unused = () => Promise.reject(new Error('not used by the parties procedures'));
@@ -71,6 +79,14 @@ function aContext(cookie: string | undefined, crewToken?: string): { context: Co
       marks.push(input);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));
     },
+    readOutsideParties: () => Promise.resolve({ isOn: false }),
+    setOutsideParties: (input) => {
+      switched.push(input);
+      if (input.isOn && !input.isOpenNetworkConfirmed) {
+        return Promise.resolve(err({ kind: 'OPEN_NETWORK' as const, message: 'This fleet applies no network rules' }));
+      }
+      return Promise.resolve(ok({ isOn: input.isOn }));
+    },
     listToDecide: (actor) =>
       Promise.resolve(actor.scopes.includes('gateway:approve') ? ok([ORDERBOT_REQUEST]) : err({ kind: 'NOT_AN_APPROVER' as const, message: 'Deciding requests needs gateway:approve' })),
     decideRequest: (input) => {
@@ -81,7 +97,7 @@ function aContext(cookie: string | undefined, crewToken?: string): { context: Co
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, decisions };
+  return { context, approvals, marks, decisions, switched };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -241,5 +257,26 @@ describe("an approver decides pending requests through the gateway's API (decisi
 
     await expect(gatewayRouter.createCaller(context).requests.decide(z.custom<DecideInput>(() => true).parse(input))).rejects.toBeInstanceOf(TRPCError);
     expect(decisions).toEqual([]);
+  });
+});
+
+describe("outside parties are switched per fleet through the gateway's API (interop I-3)", () => {
+  it('reads whether they are on', async () => {
+    await expect(gatewayRouter.createCaller(aContext(VIEWER_COOKIE).context).outsideParties.status()).resolves.toEqual({ isOn: false });
+  });
+
+  it("switches them as the actor, with the actor's own credential to read the network", async () => {
+    const { context, switched } = aContext(undefined, MANAGER_CREW);
+
+    await gatewayRouter.createCaller(context).outsideParties.set({ isOn: true, isOpenNetworkConfirmed: true });
+
+    expect(switched).toEqual([{ actor: { fleetId: FLEET, kind: 'ship', shipId: MANAGER, scopes: ['fleet:read', 'fleet:manage'] }, as: { cookie: undefined, crewToken: MANAGER_CREW }, isOn: true, isOpenNetworkConfirmed: true }]);
+  });
+
+  it('answers PRECONDITION_FAILED with the warning for an open network, until it is confirmed', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).outsideParties.set({ isOn: true, isOpenNetworkConfirmed: false })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'This fleet applies no network rules',
+    });
   });
 });

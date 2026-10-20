@@ -14,6 +14,7 @@ import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
 import { mutate } from './support/gateway-api.js';
 import { aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
+import { outsidePartiesOn } from './support/outside-parties.js';
 
 // The journey of slice 2 end to end: an outside MCP client, signed in with
 // the MCP TypeScript SDK, calls the mock CRM's tool. Its call travels as a
@@ -55,6 +56,7 @@ async function aCrewedCrmParty(): Promise<void> {
     requestHash: 'h',
     approvedAt: new Date(),
   });
+  await outsidePartiesOn(setting.databaseUrl, fleetId);
   const crewed = await mutate(setting.address, { procedure: 'parties.crew', cookie, body: { name: 'crm', secret: proxy.secret } });
   expect(crewed.status).toBe(200);
   const crewToken = z.string().parse((await parties.find(fleetId, 'crm'))?.crewToken);

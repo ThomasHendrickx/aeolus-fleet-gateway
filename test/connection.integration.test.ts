@@ -11,8 +11,8 @@ import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
 // The gateway against a real core: it starts not connected, with no secret
 // anywhere; argo connects it as its ship, it keeps the crew token in its own
-// database and is connected again after a restart. It serves only a fleet with
-// a registered networking plugin (interop I-3).
+// database and is connected again after a restart, whatever network the
+// fleet has (interop I-3, Thomas 20 Oct).
 
 const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
 const INSTALLATION_TOKEN = 'an-installation-token-of-at-least-32-characters';
@@ -111,13 +111,13 @@ describe('argo connects the gateway', () => {
     expect([read.status, changed.status, forged.status]).toEqual([200, 403, 401]);
   });
 
-  it('is refused in a fleet with no networking plugin, and stays not connected (interop I-3)', async () => {
+  it('connects in a fleet with no networking plugin: the fleet decides its network (interop I-3, Thomas 20 Oct)', async () => {
     const address = await started();
 
     const response = await connectGateway(address, { cookie, ...gatewayShip });
 
-    await expect(refusalOf(response)).resolves.toMatchObject({ code: 'PRECONDITION_FAILED' });
-    await expect(status(address)).resolves.toMatchObject({ state: 'not-connected' });
+    expect(response.status, await response.clone().text()).toBe(200);
+    await expect(status(address)).resolves.toMatchObject({ state: 'connected' });
   });
 
   it('is refused for a ship without the gateway scopes', async () => {
@@ -157,22 +157,16 @@ describe('the hosting service switches the gateway per fleet (decision 0021)', (
     await expect(status(address)).resolves.toMatchObject({ enabled: true });
   });
 
-  it('refuses to switch on a connected fleet whose networking plugin is gone (interop I-3)', async () => {
-    await registerNetworkingPlugin(fleet, cookie);
+  it('switches on a connected fleet with no networking plugin (interop I-3, Thomas 20 Oct)', async () => {
     const address = await started(INSTALLATION_TOKEN);
     const id = await fleetId();
     await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'r-1', fleetId: id, enabled: true } });
     await connectGateway(address, { cookie, ...gatewayShip });
     await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'r-2', fleetId: id, enabled: false } });
-    await fetch(`${fleet.url}/trpc/fleet.retire`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', origin: fleet.url, cookie },
-      body: JSON.stringify({ shipId: await networkingPluginShipId() }),
-    });
 
-    const refused = await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'r-3', fleetId: id, enabled: true } });
+    const switched = await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'r-3', fleetId: id, enabled: true } });
 
-    await expect(refusalOf(refused)).resolves.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(switched.status, await switched.clone().text()).toBe(200);
   });
 
   it('refuses the installation procedures without the installation token', async () => {
@@ -184,8 +178,3 @@ describe('the hosting service switches the gateway per fleet (decision 0021)', (
   });
 });
 
-async function networkingPluginShipId(): Promise<string> {
-  const response = await fetch(`${fleet.url}/trpc/fleet.list`, { headers: { cookie } });
-  const ships = z.object({ result: z.object({ data: z.array(z.object({ id: z.string(), type: z.string() })) }) }).parse(await response.json()).result.data;
-  return z.string().parse(ships.find((ship) => ship.type === 'networking-plugin')?.id);
-}

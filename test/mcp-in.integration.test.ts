@@ -10,6 +10,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { migratedDatabase } from './support/database.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
 import { aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
+import { mutate } from './support/gateway-api.js';
 
 // MCP in (interop 3.3): an outside MCP client, signed in, sees the
 // capabilities of the ships its party reaches as tools, named by alias.
@@ -89,6 +90,16 @@ describe('an outside MCP client lists the tools of the ships its party reaches',
       [true, 'aeolus_result'],
     ]);
     expect(JSON.stringify(tools)).not.toContain('crm"');
+  });
+
+  it("refuses an outside client once argo turns the fleet's outside parties off (interop I-3)", async () => {
+    const mcp = await aConnectedClient();
+    await mcp.close();
+
+    const off = await mutate(setting.address, { procedure: 'outsideParties.set', cookie: setting.cookie, body: { isOn: false, isOpenNetworkConfirmed: false } });
+    expect(off.status, await off.clone().text()).toBe(200);
+
+    await expect(aConnectedClient()).rejects.toThrow();
   });
 
   it('answers 401 with where to sign in to a call without a token (RFC 9728)', async () => {

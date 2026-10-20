@@ -2,7 +2,8 @@
  * The gateway's MCP endpoint for outside MCP clients (interop 3.3), over
  * Streamable HTTP and stateless: each request is served by a fresh server for
  * the client its access token names. No token, or one the gateway did not
- * issue for this endpoint, gets 401 with where to sign in (RFC 9728).
+ * issue for this endpoint, gets 401 with where to sign in (RFC 9728). A
+ * client party gets 403 while its fleet's outside parties are off (interop I-3).
  */
 import { CLIENT_CAPABILITIES_META_KEY, createMcpHandler, isCallToolResult, McpServer, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -20,6 +21,7 @@ import { personServerFor, type PersonToolsDeps } from './person-tools.js';
 import { runningVersion } from './version.js';
 
 const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
 
 export interface McpEndpointDeps {
   /** The MCP endpoint's URL, as tokens are bound to it. */
@@ -28,6 +30,8 @@ export interface McpEndpointDeps {
   listTools: ListTools;
   callTool: CallTool;
   readClientCall: ReadClientCall;
+  /** Whether the fleet's outside parties are on (interop I-3). */
+  servesOutsideParties: (fleetId: FleetId) => Promise<boolean>;
   /** A signed-in person's tools, where people sign in (decision 0054). */
   person?: PersonToolsDeps;
 }
@@ -176,6 +180,9 @@ export function registerMcpEndpoint(server: FastifyInstance, deps: McpEndpointDe
     const { person } = deps;
     let serve: () => McpServer;
     if (held.kind === 'party') {
+      if (!(await deps.servesOutsideParties(held.fleetId))) {
+        return reply.code(HTTP_FORBIDDEN).send({ error: 'outside_parties_off', error_description: "This fleet's outside parties are off" });
+      }
       serve = () => serverFor({ fleetId: held.fleetId, party: held.party }, deps);
     } else if (person === undefined) {
       // An account's token is issued only where people sign in, so it finds their tools.
