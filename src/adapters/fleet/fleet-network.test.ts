@@ -48,6 +48,15 @@ describe("the fleet's network, read as the actor", () => {
     expect(received.map(({ url, headers }) => ({ url, cookie: headers.cookie }))).toEqual([{ url: '/trpc/fleet.networkRules', cookie: 'aeolus_session=argo' }]);
   });
 
+  it("is read by an account with its account token, presented by the gateway's ship over REST", async () => {
+    answer = { status: 200, body: RULES };
+
+    await expect(createFleetNetwork(base).isOpen({ crewToken: 'aeolus_ct_v1_gateway', accountToken: 'account-token-1' })).resolves.toEqual({ isOk: true, value: false });
+    expect(received.map(({ url, headers }) => ({ url, authorization: headers.authorization, account: headers['aeolus-account-token'] }))).toEqual([
+      { url: '/api/v1/fleet/networkRules', authorization: 'Bearer aeolus_ct_v1_gateway', account: 'account-token-1' },
+    ]);
+  });
+
   it("answers the fleet's refusal", async () => {
     answer = { status: 403, body: { code: 'FORBIDDEN', message: 'This call needs the fleet:network scope' } };
 
