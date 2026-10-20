@@ -222,14 +222,14 @@ describe("changing an outside party's owner and scopes", () => {
     expect(shown.body).toContain('<input type="checkbox" checked disabled aria-label="Send">');
     expect(shown.body).toContain('<input type="checkbox" name="scope:fleet:read" checked aria-label="Read the fleet">');
     expect(shown.body).toContain('<input type="checkbox" name="scope:deliveries:read" aria-label="deliveries:read">');
-    expect(shown.body).not.toContain('scope:scopes:grant"');
+    expect(shown.body).toContain('name="scopesShown" value="true"');
   });
 
   it('changes the owner, and grants and revokes only what the rows changed, then shows the party', async () => {
     parties = [{ ...LINEAR, scopes: ['messages:send', 'messages:receive', 'fleet:read'] }];
     const newOwner = 'shp_01m3tbfspe96yf1rnr4ank9new';
 
-    const sent = await change({ ownerShipId: newOwner, 'scope:deliveries:read': 'on' });
+    const sent = await change({ ownerShipId: newOwner, scopesShown: 'true', 'scope:deliveries:read': 'on' });
 
     expect(sent.statusCode).toBe(303);
     expect(sent.headers.location).toBe('/outside-parties/linear');
@@ -242,7 +242,15 @@ describe("changing an outside party's owner and scopes", () => {
   it('calls the fleet for nothing that did not change', async () => {
     parties = [{ ...LINEAR, scopes: ['messages:send', 'messages:receive', 'fleet:read'] }];
 
-    await change({ ownerShipId: OWNER, 'scope:fleet:read': 'on' });
+    await change({ ownerShipId: OWNER, scopesShown: 'true', 'scope:fleet:read': 'on' });
+
+    expect(changes).toEqual([]);
+  });
+
+  it('revokes nothing when the form showed no scope rows', async () => {
+    parties = [{ ...LINEAR, scopes: ['messages:send', 'messages:receive', 'fleet:read'] }];
+
+    await change({ ownerShipId: OWNER });
 
     expect(changes).toEqual([]);
   });

@@ -2,19 +2,24 @@
  * One outside party, on its own page (design B, Signal, screens 12 and 14):
  * the handshake of party and fleet, its proxy ship's state, then its facts
  * as the fleet holds them: proxy ship, owner and scopes (decision 0056).
- * An actor holding fleet:manage retires it, after one confirm that lists
- * what happens. Each page calls the gateway's own API as the caller, so it
- * checks nothing the API does not; it shows Retire only to an actor holding
- * its scope and refuses a form sent from another origin.
+ * An actor holding fleet:owner changes its owner, one holding scopes:grant
+ * its scopes, only scopes it holds; one holding fleet:manage retires it,
+ * after one confirm that lists what happens. Each page calls the gateway's own API as the caller, so it
+ * checks nothing the API does not; it shows each control only to an actor
+ * holding its scope and refuses a form sent from another origin.
  */
+import { idSchema } from '@aeolus-fleet/common';
 import { TRPCError, type inferRouterOutputs } from '@trpc/server';
 import { getHTTPStatusCodeFromError } from '@trpc/server/http';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 
+import { GRANTING_SCOPE, OWNING_SCOPE } from '../../core/parties/change-party.js';
 import { RETIRING_SCOPE } from '../../core/parties/retire-party.js';
 import { gatewayRouter, type Context, type GatewayRouter } from '../trpc/router.js';
 import { acceptForms, escaped, isSameOrigin } from './html.js';
 import { PARTY_KINDS, PARTY_STATES, SIDES } from './outside-parties-page.js';
+import { EVERY_APP_SHIP_SCOPES, SCOPE_FIELD_PREFIX, scopeRow } from './scope-rows.js';
 import { handshake, icon, ring, signalPage, signInPrompt, statusBadge, type SignInWay } from './signal.js';
 
 /** An outside party as the API shows it. */
@@ -27,7 +32,12 @@ const HTTP_INTERNAL_ERROR = 500;
 const LIST = '/outside-parties';
 const TITLE = 'Outside parties';
 
-function partyPath(name: string, action?: 'retire'): string {
+const formSchema = z.record(z.string(), z.string());
+
+/** The field a change form sends when it shows the scope rows, so rows it did not show revoke nothing. */
+const SCOPES_SHOWN_FIELD = 'scopesShown';
+
+function partyPath(name: string, action?: 'retire' | 'change'): string {
   return `${LIST}/${encodeURIComponent(name)}${action === undefined ? '' : `/${action}`}`;
 }
 
@@ -45,21 +55,72 @@ function fact(row: { icon: Parameters<typeof icon>[0]; label: string; value: str
 /** What the fleet holds is none while the party has no proxy ship, or the fleet does not answer. */
 const UNKNOWN = '<span class="muted">Not known</span>';
 
-function facts(party: ListedParty): string {
+function facts(party: ListedParty, scopes: readonly string[]): string {
   const where = party.kind === 'mcpServer' ? { label: 'Address', value: party.url } : { label: 'Client id', value: party.clientId };
-  const scopes = party.scopes === null ? UNKNOWN : party.scopes.map((scope) => `<span class="tag mono">${escaped(scope)}</span>`).join('');
+  const change = `<a href="${partyPath(party.name, 'change')}">Change</a>`;
+  const owner = (party.ownerShipId === null ? UNKNOWN : `<span class="mono">${escaped(party.ownerShipId)}</span>`) + (scopes.includes(OWNING_SCOPE) ? change : '');
+  const held = (party.scopes === null ? UNKNOWN : party.scopes.map((scope) => `<span class="tag mono">${escaped(scope)}</span>`).join('')) + (scopes.includes(GRANTING_SCOPE) ? change : '');
   return `<dl class="fact-rows">${[
     fact({ icon: 'ship', label: 'Proxy ship', value: party.proxyShipId === null ? UNKNOWN : `<span class="mono">${escaped(party.proxyShipId)}</span>` }),
-    fact({ icon: 'users', label: 'Owner', value: party.ownerShipId === null ? UNKNOWN : `<span class="mono">${escaped(party.ownerShipId)}</span>` }),
-    fact({ icon: 'shield', label: 'Scopes', value: scopes }),
+    fact({ icon: 'users', label: 'Owner', value: owner }),
+    fact({ icon: 'shield', label: 'Scopes', value: held }),
     fact({ icon: SIDES[PARTY_KINDS[party.kind].side].icon, label: where.label, value: `<span class="mono">${escaped(where.value)}</span>` }),
   ].join('')}</dl>`;
 }
 
-function partyBody(party: ListedParty, shown: { canRetire: boolean; refusal?: string }): string {
+function partyBody(party: ListedParty, shown: { scopes: readonly string[]; refusal?: string }): string {
   const refusal = shown.refusal === undefined ? '' : `<section class="card alert tone-attention" role="alert"><p>${escaped(shown.refusal)}</p></section>`;
-  const retire = shown.canRetire ? `<div class="actions"><a class="button" href="${partyPath(party.name, 'retire')}">${icon('archive', 14)}Retire ${escaped(party.name)}…</a></div>` : '';
-  return [BACK, head(party), refusal, facts(party), retire].join('');
+  const retire = shown.scopes.includes(RETIRING_SCOPE) ? `<div class="actions"><a class="button" href="${partyPath(party.name, 'retire')}">${icon('archive', 14)}Retire ${escaped(party.name)}…</a></div>` : '';
+  return [BACK, head(party), refusal, facts(party, shown.scopes), retire].join('');
+}
+
+/** The scope rows: every app ship's locked on, the actor's own to tick, and what the party holds beyond them locked as it is. */
+function scopeRows(party: ListedParty & { scopes: string[] }, scopes: readonly string[]): string {
+  const own = scopes.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope));
+  const beyond = party.scopes.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope) && !own.includes(scope));
+  return [
+    ...EVERY_APP_SHIP_SCOPES.map((scope) => scopeRow({ scope, isLocked: true })),
+    ...own.map((scope) => scopeRow({ scope, isChecked: party.scopes.includes(scope) })),
+    ...beyond.map((scope) => scopeRow({ scope, isLocked: true })),
+  ].join('');
+}
+
+function changeBody(party: ListedParty, scopes: readonly string[]): string {
+  const owner = scopes.includes(OWNING_SCOPE)
+    ? `<label class="field"><span>Owner</span><input type="text" name="ownerShipId" value="${escaped(party.ownerShipId ?? '')}" placeholder="shp_..." required><span class="muted">A person ship. It answers for this party.</span></label>`
+    : '';
+  const { scopes: held } = party;
+  const rows =
+    scopes.includes(GRANTING_SCOPE) && held !== null
+      ? `<input type="hidden" name="${SCOPES_SHOWN_FIELD}" value="true"><fieldset><legend>Scopes</legend><div class="scopes">${scopeRows({ ...party, scopes: held }, scopes)}</div></fieldset>`
+      : '';
+  return `${BACK}<section class="card"><h2>${escaped(party.name)}: owner and scopes</h2>
+<form method="post" action="${partyPath(party.name, 'change')}" style="display:grid;gap:12px">${owner}${rows}<div class="actions"><button class="primary">${icon('check', 14)}Save</button><a class="button" href="${partyPath(party.name)}">Cancel</a></div></form></section>`;
+}
+
+/** What a change form asks of the API: only what differs from the party as the fleet holds it. */
+function changesOf(party: ListedParty, sent: { form: Record<string, string>; scopes: readonly string[] }): { ownerShipId?: z.infer<ReturnType<typeof idSchema<'ship'>>>; grant: string[]; revoke: string[] } {
+  const { form, scopes } = sent;
+  const sentOwner = form.ownerShipId?.trim();
+  let ownerShipId;
+  if (sentOwner !== undefined && sentOwner !== party.ownerShipId) {
+    const parsed = idSchema('ship').safeParse(sentOwner);
+    if (!parsed.success) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: "The owner's ship id is not a ship id (shp_...)" });
+    }
+    ownerShipId = parsed.data;
+  }
+  const held = party.scopes;
+  if (form[SCOPES_SHOWN_FIELD] !== 'true' || held === null) {
+    return { ...(ownerShipId === undefined ? {} : { ownerShipId }), grant: [], revoke: [] };
+  }
+  const own = scopes.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope));
+  const isTicked = (scope: string) => form[`${SCOPE_FIELD_PREFIX}${scope}`] !== undefined;
+  return {
+    ...(ownerShipId === undefined ? {} : { ownerShipId }),
+    grant: own.filter((scope) => isTicked(scope) && !held.includes(scope)),
+    revoke: own.filter((scope) => !isTicked(scope) && held.includes(scope)),
+  };
 }
 
 function retireBody(party: ListedParty): string {
@@ -83,16 +144,16 @@ export function registerOutsidePartyPage(server: FastifyInstance, deps: { contex
   /** Renders a page as the caller, and says why the API refused, or asks to sign in. */
   const answer = async (
     exchange: { request: FastifyRequest<{ Params: { name: string } }>; reply: FastifyReply },
-    render: (shown: { caller: ReturnType<typeof gatewayRouter.createCaller>; canRetire: boolean; isSignedIn: boolean }) => Promise<FastifyReply>,
+    render: (shown: { caller: ReturnType<typeof gatewayRouter.createCaller>; scopes: readonly string[]; isSignedIn: boolean }) => Promise<FastifyReply>,
   ) => {
     const { request, reply } = exchange;
     const context = deps.contextFor(request.headers.cookie);
     const caller = gatewayRouter.createCaller(context);
     const actor = await context.authenticateActor({ cookie: context.cookie, crewToken: context.crewToken });
-    const canRetire = actor.isOk && actor.value.scopes.includes(RETIRING_SCOPE);
+    const scopes = actor.isOk ? actor.value.scopes : [];
     const isSignedIn = actor.isOk && actor.value.kind === 'account';
     try {
-      return await render({ caller, canRetire, isSignedIn });
+      return await render({ caller, scopes, isSignedIn });
     } catch (error) {
       if (!(error instanceof TRPCError)) {
         throw error;
@@ -111,18 +172,38 @@ export function registerOutsidePartyPage(server: FastifyInstance, deps: { contex
       // A refused form shows the party again, with why; a party that is not there, or not to be read either, shows only why.
       const party = error.code === 'NOT_FOUND' ? undefined : await caller.parties.get({ name }).catch(() => undefined);
       if (party !== undefined) {
-        return html(reply, { status, body: partyBody(party, { canRetire, refusal }), isSignedIn });
+        return html(reply, { status, body: partyBody(party, { scopes, refusal }), isSignedIn });
       }
       return html(reply, { status, body: `${BACK}<section class="card alert tone-attention" role="alert"><p>${escaped(refusal)}</p></section>`, isSignedIn });
     }
   };
 
   server.get<{ Params: { name: string } }>(`${LIST}/:name`, (request, reply) =>
-    answer({ request, reply }, async ({ caller, canRetire, isSignedIn }) => html(reply, { status: 200, body: partyBody(await caller.parties.get({ name: request.params.name }), { canRetire }), isSignedIn })),
+    answer({ request, reply }, async ({ caller, scopes, isSignedIn }) => html(reply, { status: 200, body: partyBody(await caller.parties.get({ name: request.params.name }), { scopes }), isSignedIn })),
+  );
+  server.get<{ Params: { name: string } }>(`${LIST}/:name/change`, (request, reply) =>
+    answer({ request, reply }, async ({ caller, scopes, isSignedIn }) => html(reply, { status: 200, body: changeBody(await caller.parties.get({ name: request.params.name }), scopes), isSignedIn })),
   );
   server.get<{ Params: { name: string } }>(`${LIST}/:name/retire`, (request, reply) =>
     answer({ request, reply }, async ({ caller, isSignedIn }) => html(reply, { status: 200, body: retireBody(await caller.parties.get({ name: request.params.name })), isSignedIn })),
   );
+  server.post<{ Params: { name: string } }>(`${LIST}/:name/change`, (request, reply) => {
+    if (!isSameOrigin(request)) {
+      return reply.code(HTTP_FORBIDDEN).type('text/plain; charset=utf-8').send('A form for this page is sent only from this page.');
+    }
+    const form = formSchema.safeParse(request.body);
+    return answer({ request, reply }, async ({ caller, scopes }) => {
+      const { name } = request.params;
+      const { ownerShipId, grant, revoke } = changesOf(await caller.parties.get({ name }), { form: form.success ? form.data : {}, scopes });
+      if (ownerShipId !== undefined) {
+        await caller.parties.changeOwner({ name, ownerShipId });
+      }
+      if (grant.length > 0 || revoke.length > 0) {
+        await caller.parties.changeScopes({ name, grant, revoke });
+      }
+      return reply.code(HTTP_SEE_OTHER).header('location', partyPath(name)).send();
+    });
+  });
   server.post<{ Params: { name: string } }>(`${LIST}/:name/retire`, (request, reply) => {
     if (!isSameOrigin(request)) {
       return reply.code(HTTP_FORBIDDEN).type('text/plain; charset=utf-8').send('A form for this page is sent only from this page.');
