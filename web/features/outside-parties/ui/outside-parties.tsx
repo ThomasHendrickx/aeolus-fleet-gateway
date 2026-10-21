@@ -6,6 +6,10 @@ import { ADD_SERVER_PATH, OUTSIDE_PARTIES_PATH, partyPath } from '../paths';
 import { StatusBadge, Tag } from './status-badge';
 import { SwitchCard } from './switch-card';
 
+/** The scopes that turn outside parties on or off, and that add an outside MCP server (0056). */
+const SWITCHING_SCOPE = 'fleet:network';
+const ADDING_SCOPE = 'fleet:manage';
+
 function PartyCard({ party, fleetId }: { party: ListedParty; fleetId: string }) {
   const { protocol, side } = PARTY_KINDS[party.kind];
   const where = party.kind === 'mcpServer' ? party.url : party.clientId;
@@ -32,7 +36,7 @@ function PartyCard({ party, fleetId }: { party: ListedParty; fleetId: string }) 
  * place of what it would show.
  */
 export async function OutsideParties({ page, side }: { page: SignedInPage; side: Side | undefined }) {
-  const { api, fleetId } = page;
+  const { api, fleetId, scopes } = page;
   const [status, parties] = await Promise.all([readOf(api.outsideParties.status.query()), readOf(api.parties.list.query())]);
   const listed = parties.isOk ? parties.value : [];
   const counts = countsOf(listed);
@@ -55,12 +59,14 @@ export async function OutsideParties({ page, side }: { page: SignedInPage; side:
             ].join(' · ')}
           </p>
         </div>
-        <a className={BUTTONS.primary} href={inFleet(ADD_SERVER_PATH, fleetId)} data-testid="outside-parties-add">
-          Add server
-        </a>
+        {scopes.includes(ADDING_SCOPE) ? (
+          <a className={BUTTONS.primary} href={inFleet(ADD_SERVER_PATH, fleetId)} data-testid="outside-parties-add">
+            Add server
+          </a>
+        ) : null}
       </div>
       {status.isOk ? (
-        <SwitchCard isOn={status.value.isOn} fleetId={fleetId} />
+        <SwitchCard isOn={status.value.isOn} canSwitch={scopes.includes(SWITCHING_SCOPE)} fleetId={fleetId} />
       ) : (
         <p role="alert" className="rounded-md border border-tone-attention-border bg-tone-attention-bg px-3 py-2 text-tone-attention-fg">
           {status.refusal}

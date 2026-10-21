@@ -9,11 +9,15 @@ import { SubmitButton } from '../../forms/ui/submit-button';
 import { switchOutsideParties } from '../actions';
 import { StatusBadge } from './status-badge';
 
+/** The scope that turns outside parties on or off (0056). */
+const SWITCHING_SCOPE = 'fleet:network';
+
 /**
- * Whether the fleet's outside parties are on, and the switch. An open
- * network's warning asks to confirm, or to keep them off.
+ * Whether the fleet's outside parties are on, and the switch for an account
+ * holding fleet:network. An open network's warning asks to confirm, or to
+ * keep them off.
  */
-export function SwitchCard({ isOn, fleetId }: { isOn: boolean; fleetId: string }) {
+export function SwitchCard({ isOn, canSwitch, fleetId }: { isOn: boolean; canSwitch: boolean; fleetId: string }) {
   const [state, formAction] = useActionState(switchOutsideParties, IDLE);
   return (
     <section className={`${CARD} grid gap-3`} data-testid="outside-parties-switch">
@@ -39,7 +43,7 @@ export function SwitchCard({ isOn, fleetId }: { isOn: boolean; fleetId: string }
             </a>
           </div>
         </form>
-      ) : (
+      ) : canSwitch ? (
         <form action={formAction}>
           <input type="hidden" name={FLEET_FIELD} value={fleetId} />
           <input type="hidden" name="isOn" value={String(!isOn)} />
@@ -47,6 +51,8 @@ export function SwitchCard({ isOn, fleetId }: { isOn: boolean; fleetId: string }
             {isOn ? 'Turn off' : 'Turn on'}
           </SubmitButton>
         </form>
+      ) : (
+        <p className="text-muted-foreground">Turning them on or off needs {SWITCHING_SCOPE}.</p>
       )}
       {state.kind === 'openNetwork' ? null : <Outcome state={state} />}
     </section>
