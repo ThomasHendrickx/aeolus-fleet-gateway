@@ -14,6 +14,7 @@ import type { SetOutsideParties } from '../../core/outside-parties/set-outside-p
 import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
+import { createChangeHub, type ChangeHub } from '../http/live.js';
 import { gatewayRouter, type Context } from './router.js';
 
 /** The grant a person called by, or the account token their shared sign-in was exchanged for. */
@@ -59,6 +60,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   decisions: Parameters<DecideRequest>[0][];
   switched: Parameters<SetOutsideParties>[0][];
   answers: Record<string, string>[];
+  changes: ChangeHub;
 } {
   const approvals: Parameters<ApproveParty>[0][] = [];
   const switched: Parameters<SetOutsideParties>[0][] = [];
@@ -66,6 +68,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   const marks: Parameters<MarkTool>[0][] = [];
   const answers: Record<string, string>[] = [];
   const unused = () => Promise.reject(new Error('not used by the parties procedures'));
+  const changes = createChangeHub();
   const context: Context = {
     cookie,
     crewToken,
@@ -104,6 +107,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
     },
+    changes,
     isServed: () => Promise.resolve(true),
     heldConnection: unused,
     installationTokenSent: undefined,
@@ -153,7 +157,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, decisions, switched, answers };
+  return { context, approvals, marks, decisions, switched, answers, changes };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -419,6 +423,42 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("a page follows its fleet's request changes through the gateway's API, to read itself again", () => {
+  it('hears each change to its own fleet, and none of another fleet', async () => {
+    const { context, changes } = aContext(PERSON_COOKIE);
+    const stop = new AbortController();
+    const followed = await gatewayRouter.createCaller(context, { signal: stop.signal }).requests.changes();
+    const heard = followed[Symbol.asyncIterator]();
+    const next = heard.next();
+    await expect.poll(() => changes.listeners()).toBe(1);
+
+    changes.publish({ fleetId: OTHER_FLEET_ID, topic: 'requests' });
+    changes.publish({ fleetId: FLEET, topic: 'requests' });
+
+    await expect(next).resolves.toEqual({ done: false, value: { fleetId: FLEET } });
+    stop.abort();
+  });
+
+  it('stops following once the page goes', async () => {
+    const { context, changes } = aContext(PERSON_COOKIE);
+    const stop = new AbortController();
+    const heard = (await gatewayRouter.createCaller(context, { signal: stop.signal }).requests.changes())[Symbol.asyncIterator]();
+    const next = heard.next();
+    await expect.poll(() => changes.listeners()).toBe(1);
+
+    stop.abort();
+
+    await expect(next).resolves.toMatchObject({ done: true });
+    expect(changes.listeners()).toBe(0);
+  });
+
+  it('asks a browser with no sign-in to sign in', async () => {
+    const { context } = aContext(undefined);
+
+    await expect(gatewayRouter.createCaller(context).requests.changes()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 });
 
