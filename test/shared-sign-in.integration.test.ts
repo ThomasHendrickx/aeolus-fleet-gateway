@@ -1,0 +1,80 @@
+import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+
+import { createGatewayApp, type GatewayApp } from '../src/app.js';
+import { migratedDatabase } from './support/database.js';
+import { charlotteIn, PAGASAE_APP_CLIENT, PAGASAE_CLIENT, startFakePagasae, type FakePagasae } from './support/fake-pagasae.js';
+import { aFreePort } from './support/fleet-server.js';
+import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
+
+// A person signs in to the gateway's pages with the account sign-in every
+// Aeolus app shares (header design H5): the gateway, an app at pagasae,
+// sends them there and back, and its API then knows them as their account
+// in the fleet the page names, by the token pagasae exchanges their sign-in
+// for. Here pagasae is a fake; the gateway and its database are real.
+
+const FLEET = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
+const SIGN_IN = 'charlotte-shared-sign-in';
+
+let app: GatewayApp;
+let pagasae: FakePagasae;
+let address: string;
+
+beforeEach(async () => {
+  pagasae = await startFakePagasae();
+  const port = await aFreePort();
+  address = `http://127.0.0.1:${String(port)}`;
+  app = createGatewayApp({
+    databaseUrl: await migratedDatabase(inject('postgresUrl')),
+    fleetUrl: 'http://127.0.0.1:9',
+    logger: false,
+    publicUrl: address,
+    gatewaySecret: TEST_GATEWAY_SECRET,
+    pagasae: { url: pagasae.url, ...PAGASAE_CLIENT },
+    pagasaeApp: PAGASAE_APP_CLIENT,
+  });
+  await app.server.listen({ host: '127.0.0.1', port });
+  pagasae.sharedSignIn(SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read gateway:approve' });
+});
+
+afterEach(async () => {
+  await app.close();
+  await pagasae.stop();
+});
+
+/** The API's account.inView, as the web app's server asks it: the browser's cookies forwarded, and the fleet its page names. */
+async function accountInView(sent: { cookie: string; fleet?: string }): Promise<{ status: number; body: unknown }> {
+  const response = await fetch(`${address}/trpc/account.inView`, { headers: { cookie: sent.cookie, ...(sent.fleet === undefined ? {} : { 'aeolus-fleet': sent.fleet }) } });
+  return { status: response.status, body: await response.json() };
+}
+
+describe("signing in to the gateway's pages with the shared sign-in", () => {
+  it('goes to pagasae and back to the page asked for', async () => {
+    const started = await fetch(`${address}/sign-in/start?return_to=${encodeURIComponent(`/overview?fleet=${FLEET}`)}`, { redirect: 'manual' });
+    const browserSecret = (started.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+    const atPagasae = await fetch(started.headers.get('location') ?? '', { redirect: 'manual' });
+
+    const back = await fetch(atPagasae.headers.get('location') ?? '', { redirect: 'manual', headers: { cookie: browserSecret } });
+
+    expect({ status: back.status, location: back.headers.get('location') }).toEqual({ status: 302, location: `/overview?fleet=${FLEET}` });
+  });
+
+  it('knows the account in the fleet the page names, with the scopes pagasae gives it there', async () => {
+    await expect(accountInView({ cookie: `aeolus_account_session=${SIGN_IN}`, fleet: FLEET })).resolves.toEqual({
+      status: 200,
+      body: { result: { data: { kind: 'signedIn', fleetId: FLEET, accountId: 'acc-charlotte', scopes: ['fleet:read', 'gateway:approve'] } } },
+    });
+  });
+
+  it('sends a page that names no fleet to the fleet whose gateway the account may open', async () => {
+    await expect(accountInView({ cookie: `aeolus_account_session=${SIGN_IN}` })).resolves.toMatchObject({ status: 200, body: { result: { data: { kind: 'goTo', fleetId: FLEET } } } });
+  });
+
+  it('signs out of every app: the API knows the browser no more, though it knew it a moment before', async () => {
+    await accountInView({ cookie: `aeolus_account_session=${SIGN_IN}`, fleet: FLEET });
+
+    const out = await fetch(`${address}/sign-in/end`, { method: 'POST', redirect: 'manual', headers: { origin: address, cookie: `aeolus_account_session=${SIGN_IN}` } });
+
+    expect(out.status).toBe(303);
+    await expect(accountInView({ cookie: `aeolus_account_session=${SIGN_IN}`, fleet: FLEET })).resolves.toMatchObject({ status: 401 });
+  });
+});
