@@ -34,6 +34,7 @@ async function start(): Promise<void> {
     logger: { level: config.logLevel },
     ...(config.installationToken === undefined ? {} : { installationToken: config.installationToken }),
     ...(config.pagasae === undefined ? {} : { pagasae: config.pagasae }),
+    ...(config.pagasaeApp === undefined ? {} : { pagasaeApp: config.pagasaeApp }),
     web: web.handle,
   });
   // Every fleet the gateway was connected to, connected again with its kept crew token.
