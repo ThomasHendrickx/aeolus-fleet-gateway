@@ -73,7 +73,7 @@ describe('signing in to the pages', () => {
 
 describe('signing out', () => {
   it('ends the shared sign-in the browser holds, then starts a new sign-in', async () => {
-    const out = await server.inject({ method: 'POST', url: '/sign-in/end', headers: { origin: 'http://localhost:80', host: 'localhost:80', cookie: `theme=dark; aeolus_account_session=${CHARLOTTE_SIGN_IN}` } });
+    const out = await server.inject({ method: 'POST', url: '/sign-in/end', headers: { origin: 'http://localhost:4200', host: 'localhost:4200', cookie: `theme=dark; aeolus_account_session=${CHARLOTTE_SIGN_IN}` } });
 
     expect({ status: out.statusCode, location: out.headers.location, revoked: signIns.revoked }).toEqual({ status: 303, location: '/sign-in/start', revoked: [CHARLOTTE_SIGN_IN] });
   });
