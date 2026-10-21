@@ -21,6 +21,14 @@ const WEB_APP_FILES = '/_next/*';
 /** The header a server action of the web app (a page's form) is posted with: Next.js reads its body itself. */
 const SERVER_ACTION_HEADER = 'next-action';
 
+/** A form a page sends before its script took over the browser: the server has no form of its own of this kind. */
+const PAGE_FORM_TYPE = 'multipart/form-data';
+
+/** Whether a page of the web app sends one of its forms (a server action), with or without its script. */
+function isPageForm(request: FastifyRequest): boolean {
+  return request.method === 'POST' && (request.headers[SERVER_ACTION_HEADER] !== undefined || (request.headers['content-type'] ?? '').startsWith(PAGE_FORM_TYPE));
+}
+
 /** The web app's request handler: it answers the request it is handed, in full. */
 export type WebApp = (request: IncomingMessage, response: ServerResponse) => Promise<void>;
 
@@ -41,7 +49,7 @@ export function registerFrontDoor(server: FastifyInstance, deps: { web?: WebApp 
     });
     // Before any route or body parser: the web app reads the form's body as the browser sent it.
     server.addHook('onRequest', async (request, reply) => {
-      if (request.method === 'POST' && request.headers[SERVER_ACTION_HEADER] !== undefined) {
+      if (isPageForm(request)) {
         reply.hijack();
         await web(request.raw, reply.raw);
       }
