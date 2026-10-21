@@ -35,9 +35,20 @@ function isPageForm(request: FastifyRequest): boolean {
 /** The web app's request handler: it answers the request it is handed, in full. */
 export type WebApp = (request: IncomingMessage, response: ServerResponse) => Promise<void>;
 
-/** Whether a browser asks for a page: a GET (or HEAD) that accepts HTML. */
+/** The header a page's refresh or navigation asks for its server components with. */
+const SERVER_COMPONENTS_HEADER = 'rsc';
+
+/**
+ * Whether a browser asks for a page or a page asks for its own: a GET (or
+ * HEAD) that accepts HTML, a page's refresh of its server components, or
+ * its live updates (an event stream).
+ */
 function isPageAsked(request: FastifyRequest): boolean {
-  return (request.method === 'GET' || request.method === 'HEAD') && (request.headers.accept ?? '').includes('text/html');
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return false;
+  }
+  const accept = request.headers.accept ?? '';
+  return accept.includes('text/html') || accept.includes('text/event-stream') || request.headers[SERVER_COMPONENTS_HEADER] !== undefined;
 }
 
 export function registerFrontDoor(server: FastifyInstance, deps: { web?: WebApp }): void {
