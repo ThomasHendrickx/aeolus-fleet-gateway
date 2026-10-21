@@ -156,6 +156,15 @@ describe("a person signs in to the gateway's pages through pagasae", () => {
     await expect(toDecideStatus(browser)).resolves.toBe(200);
   });
 
+  it('lands on the overview, on the gateway itself, when the page they asked for hides another site behind a tab (aeolus-fleet #1054)', async () => {
+    pagasae.answer(charlotteIn(pagasae, fleetId));
+    const browser = aBrowser();
+
+    const landed = await browser.follow(`${setting.address}/sign-in?return_to=/%09/evil.example`, `${setting.address}/overview`);
+
+    expect({ status: landed.status, location: landed.headers.get('location') }).toEqual({ status: 302, location: '/overview' });
+  });
+
   it('is refused what its account token does not carry the scope for', async () => {
     pagasae.answer(charlotteIn(pagasae, fleetId));
     const browser = aBrowser();

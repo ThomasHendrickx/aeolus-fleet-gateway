@@ -35,7 +35,7 @@ beforeEach(() => {
 });
 
 function startPageSignIn() {
-  return createStartPageSignIn({ seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock: { now: () => now } });
+  return createStartPageSignIn({ seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock: { now: () => now }, origin: ISSUER });
 }
 
 /** pagasae redeems its code pagasae-code-1 for the verifier the start drew, secret-1. */
@@ -66,6 +66,16 @@ describe('a person starts signing in to the pages', () => {
     expect(startPageSignIn()({ returnTo: '/overview' })).toEqual({ redirectTo: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)`, browserSecret: 'secret-2' });
   });
 
+  it.each([
+    { what: 'a page with its query and hash', returnTo: '/overview/requests/req_1?tab=scopes#owner', sealed: '/overview/requests/req_1?tab=scopes#owner' },
+    { what: "a page by the gateway's own address", returnTo: `${ISSUER}/overview?tab=ships`, sealed: '/overview?tab=ships' },
+    { what: 'a page with dot segments', returnTo: '/overview/../requests', sealed: '/requests' },
+  ])('goes back to $what, on the gateway itself', ({ returnTo, sealed }) => {
+    startPageSignIn()({ returnTo });
+
+    expect([...seals.held.values()]).toMatchObject([{ returnTo: sealed }]);
+  });
+
   it('seals the page to go back to for 10 minutes, with the verifier and the browser secret, storing nothing', () => {
     startPageSignIn()({ returnTo: '/overview/requests/req_1?tab=scopes' });
 
@@ -78,7 +88,12 @@ describe('a person starts signing in to the pages', () => {
     { what: 'another site', returnTo: 'https://evil.example.com/overview' },
     { what: 'another site without a scheme', returnTo: '//evil.example.com/overview' },
     { what: 'another site behind a backslash', returnTo: '/\\evil.example.com' },
-    { what: 'a relative path', returnTo: 'overview' },
+    { what: 'another site behind a tab', returnTo: '/\t/evil.example' },
+    { what: 'another site behind a newline', returnTo: '/\n/evil.example' },
+    { what: 'another site behind a carriage return', returnTo: '/\r/evil.example' },
+    { what: 'another site behind a tab and a backslash', returnTo: '/\t\\evil.example' },
+    { what: 'another site behind two backslashes', returnTo: '\\\\evil.example' },
+    { what: 'another site behind a backslash and a slash', returnTo: '\\/evil.example' },
   ])('goes back to the overview for $what, never to another site', ({ returnTo }) => {
     startPageSignIn()({ returnTo });
 
