@@ -2,8 +2,7 @@
 
 import { useEffect } from 'react';
 
-/** The gateway's waiting address, which sends the browser on once its request no longer waits. */
-export const WAITING_DOOR = '/authorize/waiting';
+import { WAITING_DOOR } from '../services/authorize';
 
 /** Why the gateway closed the live channel for good: it was not opened from the waiting page. */
 const CLOSE_OTHER_ORIGIN = 4403;

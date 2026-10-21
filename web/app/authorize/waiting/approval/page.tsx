@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import { readWaiting } from '../../../../features/authorize/hooks/read-authorize';
-import { WAITING_DOOR } from '../../../../features/authorize/hooks/use-follow-waiting';
+import { WAITING_DOOR } from '../../../../features/authorize/services/authorize';
 import { WaitingForApproval } from '../../../../features/authorize/ui/waiting-for-approval';
 import type { SearchParams } from '../../../../lib/gateway-api/page-api';
 

@@ -36,6 +36,9 @@ export function failedReasonText(reason: string | undefined): string {
   return (reason === undefined ? undefined : REASONS[reason]) ?? UNKNOWN_REASON;
 }
 
+/** The gateway's waiting address, which sends the browser on once its request no longer waits. */
+export const WAITING_DOOR = '/authorize/waiting';
+
 /** The pick the page adds to the request, as the sign-in door reads it. */
 export const HOLDER_FIELD = 'holder';
 

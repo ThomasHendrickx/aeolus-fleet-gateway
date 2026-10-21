@@ -96,6 +96,24 @@ describe('aeolus-gateway start and migrate', () => {
     expect({ status: page.status, nothing: body.includes('Nothing waits on you') }).toEqual({ status: 200, nothing: true });
   }, 60_000);
 
+  it("start sends a browser connecting an unknown MCP client to the web app's page saying why", async () => {
+    await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
+
+    const page = await fetch(`${address}/authorize?response_type=code&client_id=no-such-client`, { headers: { accept: 'text/html' } });
+    const body = await page.text();
+
+    expect({ status: page.status, url: new URL(page.url).pathname, says: body.includes('The gateway does not know this MCP client') }).toEqual({ status: 200, url: '/authorize/failed', says: true });
+  }, 60_000);
+
+  it("start shows a browser whose wait the gateway does not know the web app's page saying why", async () => {
+    await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
+
+    const page = await fetch(`${address}/authorize/waiting/approval?waiting=no-such-wait`, { headers: { accept: 'text/html' } });
+    const body = await page.text();
+
+    expect({ url: new URL(page.url).pathname, says: body.includes('This request is unknown, or ended long ago') }).toEqual({ url: '/authorize/failed', says: true });
+  }, 60_000);
+
   it('migrate migrates a new database and exits 0', async () => {
     const { code } = await runGateway(['migrate'], { DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway') });
     expect(code).toBe(0);
