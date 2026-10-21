@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { err, ok, type Result } from '../shared/result.js';
 import type { ClientMetadataDocuments, OAuthClients, OAuthErrorCode } from './ports.js';
-import { isLoopback, isRedirectUri } from './redirect-uri.js';
+import { isLoopback, isRedirectUri, isRegisteredRedirectUri } from './redirect-uri.js';
 
 /** An authorization request the gateway read and found valid, for argo to approve or deny. */
 export interface AuthorizationRequest {
@@ -89,7 +89,7 @@ export function createReadAuthorization(deps: { clients: OAuthClients; documents
       return err({ kind: 'invalidClient', message: client.error });
     }
     const redirectUri = request.redirect_uri;
-    if (redirectUri === undefined || !client.value.redirectUris.includes(redirectUri)) {
+    if (redirectUri === undefined || !client.value.redirectUris.some((registered) => isRegisteredRedirectUri(registered, redirectUri))) {
       return err({ kind: 'invalidClient', message: `${client.value.name} registered no such redirect URI` });
     }
     const state = request.state ?? null;
