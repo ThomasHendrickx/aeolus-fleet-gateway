@@ -70,6 +70,8 @@ export interface PersonShipDoor {
   pushReceive(crewToken: string, take: { max: number }): Promise<Result<PersonDelivery[], FleetRefusal>>;
   /** Acknowledges a delivery the person opened: their own act confirms it (interop 5.1). */
   ack(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
+  /** Reads a delivery the ship acknowledged again, whole, while it is not handled, recording nothing (decision 0040). */
+  delivery(crewToken: string, deliveryId: DeliveryId): Promise<Result<PersonDelivery, FleetRefusal>>;
   /** Sends the person's answer to the sender, in reply to its message, once under its key. */
   reply(crewToken: string, reply: { to: ShipId; inReplyTo: MessageId; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<undefined, FleetRefusal>>;
   /** Reports the person dealt with the delivery. */

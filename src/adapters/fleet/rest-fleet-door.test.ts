@@ -134,6 +134,8 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         payload: JSON.stringify(QUESTION),
         sentAt: '2026-10-19T08:00:00.000Z',
         inReplyTo: null,
+        attempts: 1,
+        isForced: false,
         state: 'acknowledged',
       },
     };

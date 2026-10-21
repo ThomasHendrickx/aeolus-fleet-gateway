@@ -20,12 +20,14 @@ import {
   idSchema,
   inboxOutputSchema,
   pushReceiveOutputSchema,
+  receivedDeliverySchema,
   receiveOutputSchema,
   QUESTION_CONTENT_TYPE,
   questionSchema,
   sendOutputSchema,
   shipDetailOutputSchema,
   startingPromptOutputSchema,
+  type ReceivedDelivery,
   type ShipId,
 } from '@aeolus-fleet/common';
 import { z } from 'zod';
@@ -35,7 +37,7 @@ import type { CallSender, Discovery, ReplyReceiver } from '../../core/mcp-in/por
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
-import type { AccountDoor, PersonShipDoor } from '../../core/people/ports.js';
+import type { AccountDoor, PersonDelivery, PersonShipDoor } from '../../core/people/ports.js';
 import type { Owners } from '../../core/requests/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
 
@@ -112,6 +114,21 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
     return err({ code: 'UNAVAILABLE', message: `The fleet did not answer: ${error instanceof Error ? error.message : String(error)}` });
   }
   return response.ok ? ok(request.answers.parse(body)) : err(refusalSchema.parse(body));
+}
+
+/** A delivery to a person ship as the gateway shows it, with a question's title read from its payload. */
+function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, contentType, payload, sentAt, inReplyTo }: ReceivedDelivery): PersonDelivery {
+  return {
+    deliveryId,
+    messageId,
+    senderShipId,
+    senderName,
+    contentType,
+    payload,
+    questionTitle: contentType === QUESTION_CONTENT_TYPE ? (questionOf(payload)?.title ?? null) : null,
+    sentAt: new Date(sentAt),
+    inReplyTo,
+  };
 }
 
 /** A question's payload, if it parses as one. */
@@ -230,23 +247,13 @@ export function createRestFleetDoor(
       inbox: (crewToken) => call({ path: '/ship/inbox', method: 'POST', crewToken, body: { waitSeconds: 0 }, answers: inboxOutputSchema }),
       pushReceive: async (crewToken, { max }) => {
         const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max }, answers: pushReceiveOutputSchema });
-        return taken.isOk
-          ? ok(
-              taken.value.deliveries.map(({ deliveryId, messageId, senderShipId, senderName, contentType, payload, sentAt, inReplyTo }) => ({
-                deliveryId,
-                messageId,
-                senderShipId,
-                senderName,
-                contentType,
-                payload,
-                questionTitle: contentType === QUESTION_CONTENT_TYPE ? (questionOf(payload)?.title ?? null) : null,
-                sentAt: new Date(sentAt),
-                inReplyTo,
-              })),
-            )
-          : taken;
+        return taken.isOk ? ok(taken.value.deliveries.map(personDeliveryOf)) : taken;
       },
       ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
+      delivery: async (crewToken, deliveryId) => {
+        const reread = await call({ path: '/ship/delivery', method: 'POST', crewToken, body: { deliveryId }, answers: receivedDeliverySchema });
+        return reread.isOk ? ok(personDeliveryOf(reread.value)) : reread;
+      },
       reply: (crewToken, { to, inReplyTo, contentType, payload, idempotencyKey }) =>
         done(crewToken, { path: '/ship/send', body: { selector: { kind: 'ship', shipId: to }, inReplyTo, contentType, payload, idempotencyKey } }),
       handled: (crewToken, deliveryId) => done(crewToken, { path: '/ship/handled', body: { deliveryId } }),
