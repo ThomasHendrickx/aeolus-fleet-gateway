@@ -33,6 +33,25 @@ describe('aeolus-gateway start and migrate', () => {
       .toEqual({ status: 'ok' });
   });
 
+  it("start answers an unknown page with the web app's Not found, in its frame", async () => {
+    const port = await aFreePort();
+    const child = spawn('npx', ['tsx', 'src/bin/aeolus-gateway.ts', 'start'], {
+      env: { ...process.env, DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway_web'), FLEET_URL: fleet.url, PORT: String(port), LOG_LEVEL: 'silent', GATEWAY_SECRET: TEST_GATEWAY_SECRET },
+      stdio: 'ignore',
+    });
+    started.push(child);
+    const address = `http://127.0.0.1:${String(port)}`;
+    await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
+
+    const page = await fetch(`${address}/no-such-page`, { headers: { accept: 'text/html' } });
+    const body = await page.text();
+
+    expect(page.status).toBe(404);
+    expect(body).toContain('This page does not exist');
+    expect(body).toContain('data-testid="frame-header"');
+    expect(body).toContain('href="/overview"');
+  });
+
   it('migrate migrates a new database and exits 0', async () => {
     const { code } = await runGateway(['migrate'], { DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway') });
     expect(code).toBe(0);
