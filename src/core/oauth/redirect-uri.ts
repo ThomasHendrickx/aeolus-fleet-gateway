@@ -19,3 +19,26 @@ export function isRedirectUri(text: string): boolean {
   const isSecure = url.protocol === 'https:' || (url.protocol === 'http:' && isLoopback(url));
   return isSecure && url.hash === '' && !text.includes('#');
 }
+
+/**
+ * Whether a redirect URI a request names is one the client registered: the
+ * same text, or, for a loopback URI registered without a port, the same URI
+ * on any port. A native client listens on a port the system picks at run
+ * time, so the authorization server must allow any port there (RFC 8252, 7.3).
+ */
+export function isRegisteredRedirectUri(registered: string, requested: string): boolean {
+  if (registered === requested) {
+    return true;
+  }
+  let registeredUrl: URL;
+  let requestedUrl: URL;
+  try {
+    registeredUrl = new URL(registered);
+    requestedUrl = new URL(requested);
+  } catch {
+    return false;
+  }
+  const isPortFree = registeredUrl.protocol === 'http:' && isLoopback(registeredUrl) && registeredUrl.port === '';
+  requestedUrl.port = '';
+  return isPortFree && requestedUrl.href === registeredUrl.href;
+}
