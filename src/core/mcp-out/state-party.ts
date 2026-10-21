@@ -5,7 +5,7 @@ import type { PartyStore } from '../parties/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { McpServers } from './ports.js';
-import { statementOf, type Statement } from './statement.js';
+import { statementOf, type CallTiming, type Statement } from './statement.js';
 
 /** Outbound port: the fleet's `setStatement`, called as a proxy ship's crew. */
 export interface StatementDoor {
@@ -28,7 +28,7 @@ export type StateParty = (input: { fleetId: FleetId; name: string }) => Promise<
  * crew: the tools its server lists now, with argo's marks. The whole
  * statement replaces the one before, so a tool the server dropped is gone.
  */
-export function createStateParty(deps: { parties: PartyStore; servers: McpServers; door: StatementDoor; marks: ToolMarks }): StateParty {
+export function createStateParty(deps: { parties: PartyStore; servers: McpServers; door: StatementDoor; marks: ToolMarks; timing: CallTiming }): StateParty {
   return async ({ fleetId, name }) => {
     const party = await deps.parties.find(fleetId, name);
     if (party?.kind !== 'mcpServer') {
@@ -41,7 +41,7 @@ export function createStateParty(deps: { parties: PartyStore; servers: McpServer
     if (!listed.isOk) {
       return refuse('SERVER_UNREACHABLE', `The MCP server of ${name} could not be listed: ${listed.error.reason}`);
     }
-    const statement = statementOf({ partyName: name, tools: listed.value, repeatable: await deps.marks.repeatable(fleetId, name) });
+    const statement = statementOf({ partyName: name, tools: listed.value, repeatable: await deps.marks.repeatable(fleetId, name), timing: deps.timing });
     const stated = await deps.door.setStatement(party.crewToken, statement);
     if (!stated.isOk) {
       return refuse('STATEMENT_REFUSED', `The fleet refused the statement: ${stated.error.message}`);

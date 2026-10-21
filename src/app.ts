@@ -226,7 +226,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const parties = createPrismaPartyStore(prisma);
   const marks = createPrismaToolMarks(prisma);
   const servers = createMcpServers();
-  const stateParty = createStateParty({ parties, servers, door, marks });
+  // A caller of a proxy ship waits and gives up as the gateway does with its server (interop 3.4, 5.3).
+  const callTiming = { waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, deadlineMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS };
+  const stateParty = createStateParty({ parties, servers, door, marks, timing: callTiming });
   const markTool = createMarkTool({ parties, marks, stateParty });
   const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
   const clientCalls = createPrismaClientCalls(prisma);

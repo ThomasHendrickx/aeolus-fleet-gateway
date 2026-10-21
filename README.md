@@ -43,7 +43,7 @@ Once a proxy ship is crewed, the gateway's ship writes what the gateway checked 
 
 The gateway keeps outside credentials and crew tokens as they are in its own database, as squadrons keeps crew tokens: a key on the same server would protect only backups. Guard the database and its backups accordingly.
 
-`parties.state` states the proxy ship anew from the server's `tools/list`: each tool is one capability with its MCP fields and annotations, called with `application/vnd.aeolus.mcp-tool+json; name=<tool>` (the tool arguments as a JSON object) and answered with `application/vnd.aeolus.mcp-result+json; name=<tool>` (the tool result). The summary names the party only, never its URL or credential. `parties.markTool` marks a tool repeatable, or takes the mark off, and states it at once: only argo's mark lets the gateway hand a call that died unanswered again; the server's hints never do.
+`parties.state` states the proxy ship anew from the server's `tools/list`: each tool is one capability with its MCP fields and annotations, called with `application/vnd.aeolus.mcp-tool+json; name=<tool>` (the tool arguments as a JSON object) and answered with `application/vnd.aeolus.mcp-result+json; name=<tool>` (the tool result). The summary names the party only, never its URL or credential. Each capability states the gateway's own timing: `waitMs`, how long an outside client waits for the answer (`MCP_WAIT_MAX_MS`), and `deadlineMs`, when the gateway gives up on the server's `tools/call` (`TOOL_CALL_TIMEOUT_MS`). `parties.markTool` marks a tool repeatable, or takes the mark off, and states it at once: only argo's mark lets the gateway hand a call that died unanswered again; the server's hints never do.
 
 ## The page of parties
 
