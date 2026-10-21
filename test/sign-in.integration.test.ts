@@ -121,45 +121,6 @@ describe('a person signs in from their MCP client through pagasae', () => {
   });
 });
 
-describe("a person signs in to the gateway's pages through pagasae", () => {
-  /** What the gateway's API answers the browser for the requests to decide, which needs gateway:approve. */
-  async function toDecideStatus(browser: ReturnType<typeof aBrowser>): Promise<number> {
-    const response = await browser.visit(`${setting.address}/trpc/requests.toDecide`);
-    await response.body?.cancel();
-    return response.status;
-  }
-
-  it('lands on the page they asked for, acting as their account with the scopes their account token carries', async () => {
-    pagasae.answer({ ...charlotteIn(pagasae, fleetId), scope: 'fleet:read gateway:approve' });
-    const browser = aBrowser();
-
-    const landed = await browser.follow(`${setting.address}/sign-in?return_to=${encodeURIComponent('/overview')}`, `${setting.address}/overview`);
-
-    expect({ status: landed.status, location: landed.headers.get('location') }).toEqual({ status: 302, location: '/overview' });
-    expect(landed.headers.getSetCookie().find((cookie) => cookie.startsWith('aeolus_gateway_session='))).toMatch(/^aeolus_gateway_session=[A-Za-z0-9_-]+; Path=\/; HttpOnly; SameSite=Lax$/);
-    await expect(toDecideStatus(browser)).resolves.toBe(200);
-  });
-
-  it('is refused what its account token does not carry the scope for', async () => {
-    pagasae.answer(charlotteIn(pagasae, fleetId));
-    const browser = aBrowser();
-    await browser.follow(`${setting.address}/sign-in`, `${setting.address}/overview`);
-
-    await expect(toDecideStatus(browser)).resolves.toBe(403);
-  });
-
-  it('signs out: the page session ends, so the next call is signed out', async () => {
-    pagasae.answer({ ...charlotteIn(pagasae, fleetId), scope: 'fleet:read gateway:approve' });
-    const browser = aBrowser();
-    await browser.follow(`${setting.address}/sign-in`, `${setting.address}/overview`);
-
-    const signedOut = await browser.post(`${setting.address}/sign-out`);
-
-    expect({ status: signedOut.status, location: signedOut.headers.get('location') }).toEqual({ status: 303, location: '/overview' });
-    await expect(toDecideStatus(browser)).resolves.toBe(401);
-  });
-});
-
 describe('a person asks for access for their MCP client (decision 0056)', () => {
   const toDecideSchema = z.object({ result: z.object({ data: z.array(z.object({ requestId: z.string(), subject: z.object({ clientName: z.string() }) })) }) });
 

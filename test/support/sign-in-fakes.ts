@@ -1,6 +1,6 @@
 import type { ShipId } from '@aeolus-fleet/common';
 
-import type { AccountGrant, AccountGrants, Pagasae, PagasaeTokens, PageSession, PageSessions, PendingSignIn, SignInSeals } from '../../src/core/sign-in/ports.js';
+import type { AccountGrant, AccountGrants, Pagasae, PagasaeTokens, PendingSignIn, SignInSeals } from '../../src/core/sign-in/ports.js';
 import { err, ok } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -30,23 +30,6 @@ export function fakeSignInSeals(): SignInSeals & { held: Map<string, PendingSign
       return state;
     },
     open: (state) => held.get(state),
-  };
-}
-
-/** Page sessions as a test reads them: numbered in the order they open, found in a Cookie header by the gateway's cookie name. */
-export function fakePageSessions(): PageSessions & { held: Map<string, PageSession> } {
-  const held = new Map<string, PageSession>();
-  return {
-    held,
-    seal: (session) => {
-      const sealed = `session-${String(held.size + 1)}`;
-      held.set(sealed, session);
-      return sealed;
-    },
-    inCookie: (cookie) => {
-      const sealed = /(?:^|;\s*)aeolus_gateway_session=([^;]*)/.exec(cookie)?.[1];
-      return sealed === undefined ? undefined : held.get(sealed);
-    },
   };
 }
 

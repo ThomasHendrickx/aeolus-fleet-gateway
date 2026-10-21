@@ -1,5 +1,6 @@
 /**
- * The gateway's pages in direction B, Signal (design/gateway-pages), drawn
+ * The gateway's authorize pages for outside MCP clients, in direction B,
+ * Signal (design/gateway-pages), drawn
  * with the operator console's tokens: one large shape leads each page, a
  * ring for a state or a count. The tokens are the console's own
  * (aeolus-fleet packages/console/app/tokens.css), light by default and dark
@@ -195,7 +196,7 @@ export function ring(shown: { tone: Tone; center: { icon: Icon } | { count: numb
 }
 
 /** An outside party's mark: the first two letters of its name on a tile, as the console's Avatar draws a ship. */
-export function partyMark(name: string): string {
+function partyMark(name: string): string {
   return `<span class="party-mark" aria-hidden="true">${escaped(name.replaceAll(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase())}</span>`;
 }
 
@@ -204,74 +205,6 @@ export function handshake(party: { name: string; fleet?: string }): string {
   return `<div class="handshake"><figure>${partyMark(party.name)}<figcaption>${escaped(party.name)}</figcaption></figure><span class="muted">${icon('arrowLeftRight', 16)}</span><figure><span class="fleet-mark">${MARK_LARGE}</span><figcaption>${escaped(party.fleet ?? 'Fleet')}</figcaption></figure></div>`;
 }
 
-/** A tab of the pages' top bar. */
-export type Tab = 'overview' | 'outsideParties';
-
-const TABS: Record<Tab, { label: string; icon: Icon; href: string }> = {
-  overview: { label: 'Overview', icon: 'house', href: '/overview' },
-  outsideParties: { label: 'Outside parties', icon: 'plug', href: '/outside-parties' },
-};
-
-function topBar(current: Tab | undefined, isSignedIn: boolean): string {
-  const tabs = Object.entries(TABS)
-    .map(([tab, shown]) => `<a class="tab" href="${shown.href}" aria-label="${escaped(shown.label)}"${tab === current ? ' aria-current="page"' : ''}>${icon(shown.icon, 14)}<span class="label">${escaped(shown.label)}</span></a>`)
-    .join('');
-  // A person signed in to the pages signs out here; a console session signs out in the console.
-  const signOut = isSignedIn ? `<form method="post" action="/sign-out" class="sign-out"><button aria-label="Sign out">${icon('signOut', 14)}<span class="label">Sign out</span></button></form>` : '';
-  return `<header class="top"><a class="mark" href="/overview">${MARK}Aeolus</a><nav class="tabs">${tabs}</nav>${signOut}</header>`;
-}
-
-/** Where a signed-out caller signs in: the gateway's own sign-in through pagasae, or nowhere, on a gateway that signs no one in. */
-export type SignInWay = 'pages' | 'none';
-
-/** What a signed-out caller is shown: why, and the one way to sign in, coming back to the page they asked for. */
-export function signInPrompt(shown: { message: string; way: SignInWay; returnTo: string }): string {
-  if (shown.way === 'none') {
-    return `<section class="card"><h2>This gateway signs no one in</h2><p class="muted">Its pages are for people signed in through pagasae, which its operator has not set.</p></section>`;
-  }
-  const link = `<a class="button" href="/sign-in?${new URLSearchParams({ return_to: shown.returnTo }).toString().replaceAll('&', '&amp;')}">${icon('signIn', 14)}Sign in</a>`;
-  return `<section class="card"><h2>${escaped(shown.message)}</h2><div class="actions">${link}</div></section>`;
-}
-
-/**
- * What a live page runs: it opens /live for itself and swaps in each section
- * it is sent; when the socket drops it shows Reconnecting and opens again
- * with backoff, never for a refusal (4401 to 4404). Every minute it counts
- * each days left down from its expiry, with no call to the gateway.
- */
-const LIVE_SCRIPT = `(function (query) {
-  var DAY = 86400000, wait = 500, status = document.querySelector('[data-live-status]');
-  function countDown() {
-    document.querySelectorAll('[data-expires-at]').forEach(function (holder) {
-      var badge = holder.querySelector('.badge'), label = badge && badge.lastChild;
-      if (!label) return;
-      var days = Math.ceil((Date.parse(holder.getAttribute('data-expires-at')) - Date.now()) / DAY);
-      badge.className = 'badge ' + (days <= 0 ? 'tone-ended' : days <= 1 ? 'tone-attention' : 'tone-waiting');
-      label.textContent = days <= 0 ? 'Expired' : days <= 1 ? 'Last day' : days + ' d left';
-    });
-  }
-  function open() {
-    var socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/live?' + query);
-    socket.onopen = function () { wait = 500; status.hidden = true; };
-    socket.onmessage = function (event) {
-      var sections = JSON.parse(event.data).sections;
-      Object.keys(sections).forEach(function (name) {
-        var section = document.querySelector('[data-live="' + name + '"]');
-        if (section) section.innerHTML = sections[name];
-      });
-      countDown();
-    };
-    socket.onclose = function (event) {
-      if (event.code >= 4401 && event.code <= 4404) return;
-      status.hidden = false;
-      setTimeout(open, wait);
-      wait = Math.min(wait * 2, 10000);
-    };
-  }
-  open();
-  setInterval(countDown, 60000);
-})(document.currentScript.getAttribute('data-live-query'));`;
-
 /**
  * A page a person meets on their way in, from an outside MCP client: the
  * mark and its name above one centred column, no tabs. Its own script, if
@@ -279,13 +212,4 @@ const LIVE_SCRIPT = `(function (query) {
  */
 export function signInPage(page: { title: string; body: string }): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escaped(page.title)}</title><style>${STYLE}</style></head><body><main class="centred"><div class="mark">${MARK}Aeolus</div>${page.body}</main></body></html>`;
-}
-
-/** A whole Signal page: the top bar with its tabs, then the page's own body; a live page names itself to the live channel. */
-export function signalPage(page: { title: string; tab?: Tab; body: string; isWide?: boolean; live?: string; isSignedIn?: boolean }): string {
-  const live =
-    page.live === undefined
-      ? ''
-      : `<p data-live-status hidden class="live-status">${statusBadge({ tone: 'waiting', icon: 'hourglass', label: 'Reconnecting' })}</p><script data-live-query="${escaped(page.live)}">${LIVE_SCRIPT}</script>`;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escaped(page.title)}</title><style>${STYLE}</style></head><body>${topBar(page.tab, page.isSignedIn === true)}<main${page.isWide === true ? ' class="wide"' : ''}>${page.body}</main>${live}</body></html>`;
 }

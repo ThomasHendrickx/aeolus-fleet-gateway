@@ -50,7 +50,6 @@ import { createPrismaAuthorizationCodes, createPrismaIssuedTokens, createPrismaO
 import { createExchangeToken } from './core/oauth/exchange-token.js';
 import { createSignInSeals } from './adapters/crypto/sign-in-seals.js';
 import { createWaitingSeals } from './adapters/crypto/waiting-seals.js';
-import { createPageSessions } from './adapters/crypto/page-sessions.js';
 import { createRequestIds } from './adapters/crypto/request-ids.js';
 import { createAskForClient } from './core/requests/ask-for-client.js';
 import { createAskForServer } from './core/requests/ask-for-server.js';
@@ -77,8 +76,6 @@ import { createStartAccountSignIn } from './core/account-sign-in/start-account-s
 import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
-import { createStartPageSignIn } from './core/sign-in/start-page-sign-in.js';
-import { createSignOut } from './core/sign-in/sign-out.js';
 import { createAccountTokenOf, type AccountTokenOf } from './core/sign-in/account-token.js';
 import { err } from './core/shared/result.js';
 import { createEndSignIns } from './core/sign-in/end-sign-ins.js';
@@ -323,7 +320,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const grants = createPrismaAccountGrants(prisma);
   const pendingRequests = createPrismaPendingRequests(prisma);
   const waitings = createWaitingSeals(options.gatewaySecret);
-  const pageSessions = createPageSessions(options.gatewaySecret);
   const issuing = { codes: authorizationCodes, secrets: oauthSecrets, clock, issuer };
   const openRequestOnly = createOpenRequest({ requests: pendingRequests, ids: createRequestIds(), clock });
   // A request opened has the gateway's owner asked at once, not at the next round.
@@ -332,7 +328,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     outcomes.tellNow();
     return opened;
   };
-  // The live pages hear each committed change to the fleet's requests, from whichever gateway made it.
+  // The web app's pages and the waiting page hear each committed change to the fleet's requests, from whichever gateway made it.
   const hub = createChangeHub();
   const signIn =
     pagasae === undefined
@@ -349,7 +345,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             clock,
             issuer,
             servesFleet: async (fleetId) => (await connections.find(fleetId)) !== undefined && (await isServed(fleetId)),
-            sessions: pageSessions,
             askForClient: createAskForClient({
               parties,
               requests: pendingRequests,
@@ -363,7 +358,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           watchWaiting: createWatchWaiting({ waitings, requests: pendingRequests, parties, clock }),
           hub,
           clock,
-          pages: { start: createStartPageSignIn({ seals, pagasae, secrets: oauthSecrets, clock }), signOut: createSignOut({ grants }), sessions: pageSessions },
         };
   registerOAuthRoutes(server, {
     ...(signIn === undefined ? {} : { signIn }),
@@ -420,8 +414,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     });
   }
 
-  const credentialOf = createCredentialOf({ connections, accountTokenOf });
-  const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections, sessions: pageSessions, accountTokenOf, accountOf });
+  const credentialOf = createCredentialOf({ connections });
+  const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections, accountOf });
   const outcomes = createOutcomeWorker({
     expireRequests: createExpireRequests({ requests: pendingRequests, clock }),
     tellOutcomes: createTellOutcomes({ notices: createPrismaOutcomeNotices(prisma), requests: pendingRequests, connections, sender: door }),

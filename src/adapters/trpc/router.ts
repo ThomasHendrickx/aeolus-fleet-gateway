@@ -349,22 +349,17 @@ function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES
   return answered.value;
 }
 
-/** The person an account calls as: by its grant, or by the account token its shared sign-in was exchanged for. */
-function personCallerOf(actor: AccountActor): PersonCaller | undefined {
-  const { fleetId, grantId, accountToken, personShipId } = actor;
-  if (grantId !== null) {
-    return { fleetId, grantId };
-  }
-  return accountToken === undefined ? undefined : { fleetId, signedIn: { accountToken, personShipId } };
+/** The person an account calls as: by the account token its shared sign-in was exchanged for. */
+function personCallerOf({ fleetId, accountToken, personShipId }: AccountActor): PersonCaller {
+  return { fleetId, signedIn: { accountToken, personShipId } };
 }
 
 /** A person signed in to the pages, acting on their own person ship: only an account has one. */
 const personProcedure = actorProcedure.use(({ ctx, next }) => {
-  const caller = ctx.actor.kind === 'account' ? personCallerOf(ctx.actor) : undefined;
-  if (caller === undefined || ctx.person === undefined) {
+  if (ctx.actor.kind !== 'account' || ctx.person === undefined) {
     throw new TRPCError({ code: 'FORBIDDEN', message: "Only a person signed in to the gateway's pages has a person ship's deliveries here" });
   }
-  return next({ ctx: { person: ctx.person, caller } });
+  return next({ ctx: { person: ctx.person, caller: personCallerOf(ctx.actor) } });
 });
 
 const accountInViewOutputSchema = z.discriminatedUnion('kind', [
