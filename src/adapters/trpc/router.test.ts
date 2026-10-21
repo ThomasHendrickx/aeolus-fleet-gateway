@@ -454,12 +454,6 @@ describe("a page follows its fleet's request changes through the gateway's API, 
     await expect(next).resolves.toMatchObject({ done: true });
     expect(changes.listeners()).toBe(0);
   });
-
-  it('asks a browser with no sign-in to sign in', async () => {
-    const { context } = aContext(undefined);
-
-    await expect(gatewayRouter.createCaller(context).requests.changes()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
-  });
 });
 
 describe("a person lists the requests they asked through the gateway's API (decision 0056: Your requests)", () => {

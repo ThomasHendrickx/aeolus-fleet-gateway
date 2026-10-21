@@ -15,6 +15,7 @@ import { idempotencyKeySchema, idSchema, shipHandleSchema, type FleetId } from '
 import { initTRPC, TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
+import type { ChangeHub } from '../http/live.js';
 import type { AccountInView } from '../../core/account-sign-in/account-in-view.js';
 import type { Connect } from '../../core/connection/connect.js';
 import type { ReadConnection } from '../../core/connection/read-connection.js';
@@ -59,6 +60,8 @@ export interface Context {
   /** The account a page of the web app shows its fleet as; unset where the gateway is no app at pagasae. */
   accountInView?: AccountInView | undefined;
   authenticateActor: AuthenticateActor;
+  /** Each committed change to a fleet's requests, as the live pages hear it. */
+  changes?: Pick<ChangeHub, 'subscribe'>;
   isServed: IsServed;
   /** The fleet's connection as the gateway holds it, without asking the fleet: what a fleet that is off reads. */
   heldConnection: ReadConnection;
@@ -576,6 +579,45 @@ export const gatewayRouter = t.router({
         throw new TRPCError({ code: 'FORBIDDEN', message: listed.error.message });
       }
       return listed.value.map(shownRequestOf);
+    }),
+    /**
+     * Each change to the actor's fleet's requests, carrying nothing of it:
+     * the page that follows reads itself again as its own caller, so it is
+     * never sent what its actor may not see. Changes heard while the last
+     * was not yet taken come as one.
+     */
+    changes: actorProcedure.subscription(async function* ({ ctx, signal }) {
+      const { fleetId, changes } = ctx;
+      if (changes === undefined) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'This gateway tells no changes' });
+      }
+      // Set by the hub between the generator's awaits, so held in an object the loop reads afresh.
+      const heard = { isChanged: false, wake: (): void => undefined };
+      const unsubscribe = changes.subscribe({
+        fleetId,
+        read: () => {
+          heard.isChanged = true;
+          heard.wake();
+        },
+      });
+      try {
+        while (signal?.aborted !== true) {
+          if (!heard.isChanged) {
+            await new Promise<void>((resolve) => {
+              heard.wake = resolve;
+              signal?.addEventListener('abort', () => {
+                resolve();
+              }, { once: true });
+            });
+          }
+          if (heard.isChanged) {
+            heard.isChanged = false;
+            yield { fleetId };
+          }
+        }
+      } finally {
+        unsubscribe();
+      }
     }),
     /** Every open request of the fleet, for an actor holding gateway:approve (decision 0056). */
     toDecide: servedProcedure.output(z.array(pendingRequestSchema)).query(async ({ ctx }) => {

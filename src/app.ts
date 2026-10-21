@@ -444,6 +444,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined }): Context => ({
     ...sent,
     authenticateActor,
+    changes: hub,
     accountInView,
     isServed,
     heldConnection,
