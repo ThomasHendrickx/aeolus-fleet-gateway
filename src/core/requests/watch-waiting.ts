@@ -6,9 +6,10 @@ import { err, ok, type Result } from '../shared/result.js';
 import type { PendingRequests, WaitingSeals } from './ports.js';
 import { isRefused } from './request-state.js';
 
-/** Whether the browser that asked still waits, the fleet its request is in, and when the request expires. */
+/** Whether the browser that asked still waits, the fleet its request is in, the client asked for, and when the request expires. */
 export interface WatchedWaiting {
   readonly fleetId: FleetId;
+  readonly clientName: string;
   readonly isWaiting: boolean;
   readonly expiresAt: Date;
 }
@@ -36,11 +37,11 @@ export function createWatchWaiting(deps: { waitings: WaitingSeals; requests: Pen
     if (request === undefined) {
       return err({ kind: 'unknownWaiting' });
     }
-    const watched = { fleetId: request.fleetId, expiresAt: request.expiresAt };
+    const clientId = waiting.request.client_id ?? '';
+    const watched = { fleetId: request.fleetId, clientName: request.subject.kind === 'client' ? request.subject.clientName : clientId, expiresAt: request.expiresAt };
     if (isRefused(request, deps.clock.now())) {
       return ok({ ...watched, isWaiting: false });
     }
-    const clientId = waiting.request.client_id ?? '';
     const party = request.state === 'approved' ? await deps.parties.findByClient(request.fleetId, clientId) : undefined;
     return ok({ ...watched, isWaiting: party?.state !== 'crewed' });
   };
