@@ -105,9 +105,9 @@ describe('a person signs in from their MCP client through pagasae', () => {
     const client = aClientProvider(await aRegisteredClient(setting, false));
     await auth(client.provider, { serverUrl: `${setting.address}/mcp` });
 
-    const landed = await aBrowser({ isKeepingCookies: false }).follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'account'), CALLBACK);
+    const landed = await aBrowser({ isKeepingCookies: false }).follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'account'), `${setting.address}/authorize/failed`);
 
-    expect({ status: landed.status, says: (await landed.text()).includes('another browser') }).toEqual({ status: 400, says: true });
+    expect(landed.headers.get('location')).toBe('/authorize/failed?reason=otherBrowser');
   });
 
   it('is told when this gateway does not serve the fleet pagasae signed them in to', async () => {
@@ -115,9 +115,9 @@ describe('a person signs in from their MCP client through pagasae', () => {
     const client = aClientProvider(await aRegisteredClient(setting, false));
     await auth(client.provider, { serverUrl: `${setting.address}/mcp` });
 
-    const landed = await aBrowser().follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'account'), CALLBACK);
+    const landed = await aBrowser().follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'account'), `${setting.address}/authorize/failed`);
 
-    expect({ status: landed.status, says: (await landed.text()).includes('does not serve the fleet') }).toEqual({ status: 403, says: true });
+    expect(landed.headers.get('location')).toBe('/authorize/failed?reason=fleetNotServed');
   });
 });
 
@@ -132,19 +132,24 @@ describe('a person asks for access for their MCP client (decision 0056)', () => 
     const approver = await register(setting.fleet, await commission(setting.fleet, { cookie: setting.cookie, ship: { name: 'approver', type: 'agent', scopes: ['fleet:read', 'gateway:approve'] } }));
     const browser = aBrowser();
 
-    const landed = await browser.follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'party'), CALLBACK);
-    const waiting = landed.url;
+    const landed = await browser.follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'party'), `${setting.address}/authorize/waiting/approval`);
+    const waitingPage = new URL(z.string().parse(landed.headers.get('location')), setting.address);
+    const waiting = new URL(`/authorize/waiting${waitingPage.search}`, setting.address).toString();
+    const browserSecret = new URLSearchParams(browser.cookieFor(waiting).replaceAll('; ', '&')).get('aeolus_waiting') ?? '';
+    const input = encodeURIComponent(JSON.stringify({ waiting: waitingPage.searchParams.get('waiting') }));
+    const shown: unknown = await (await fetch(`${setting.address}/trpc/oauth.waiting?input=${input}`, { headers: { 'aeolus-waiting-secret': browserSecret } })).json();
     const toDecide = toDecideSchema.parse(await (await query(setting.address, { procedure: 'requests.toDecide', crewToken: approver })).json()).result.data;
     const [request] = toDecide;
     const denied = await mutate(setting.address, { procedure: 'requests.decide', crewToken: approver, body: { requestId: request?.requestId, decision: { kind: 'deny' } } });
     const answer = await browser.visit(waiting);
 
     expect({
-      waited: { status: landed.status, isWaitingPage: new URL(waiting).pathname === '/authorize/waiting', says: (await landed.text()).includes('Waiting for approval') },
+      waited: { isWaitingPage: waitingPage.pathname === '/authorize/waiting/approval', isNamed: waitingPage.searchParams.has('waiting') },
+      shown: z.object({ result: z.object({ data: z.object({ kind: z.string(), clientName: z.string() }) }) }).parse(shown),
       toDecide: toDecide.map(({ subject }) => subject.clientName),
       denied: denied.status,
       back: new URL(z.string().parse(answer.headers.get('location'))).searchParams.get('error'),
-    }).toEqual({ waited: { status: 200, isWaitingPage: true, says: true }, toDecide: ['Test client'], denied: 200, back: 'access_denied' });
+    }).toEqual({ waited: { isWaitingPage: true, isNamed: true }, shown: { result: { data: { kind: 'waiting', clientName: 'Test client' } } }, toDecide: ['Test client'], denied: 200, back: 'access_denied' });
   });
 });
 

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
-import { OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { createAccountInView } from '../../core/account-sign-in/account-in-view.js';
 import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
@@ -38,6 +38,7 @@ const READER_CREW = 'aeolus_ct_v1_reader';
 /** A ship's own crew token holding gateway:approve. */
 const APPROVER_CREW = 'aeolus_ct_v1_approver';
 const REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0001';
+const CURSOR_CLIENT = 'https://cursor.example.com/client.json';
 const DELIVERY = 'dlv_01m3tbfspe96yf1rnr4ank9dlv';
 const DECIDED = 'req_01m5c7hmbt9f1vrkwb37az0002';
 const ORDERBOT_REQUEST: PendingRequest = {
@@ -128,6 +129,20 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     changePartyOwner: unused,
     changePartyScopes: unused,
     readParty: unused,
+    readAuthorization: (request) =>
+      Promise.resolve(
+        request.client_id === CURSOR_CLIENT
+          ? ok({ clientId: CURSOR_CLIENT, clientName: 'Cursor', clientFleetId: null, redirectUri: 'http://127.0.0.1:7777/callback', codeChallenge: 'challenge', resource: 'https://gateway.example.com/mcp', scope: null, state: 'state-1' })
+          : err({ kind: 'invalidClient' as const, message: 'No client client-unknown is known' }),
+      ),
+    watchWaiting: ({ waiting, browserSecret }) =>
+      Promise.resolve(
+        waiting === 'waiting-1' && browserSecret === 'secret-1'
+          ? ok({ fleetId: FLEET_ID, clientName: 'Cursor', isWaiting: true, expiresAt: new Date('2026-10-28T09:00:00.000Z') })
+          : waiting === 'waiting-1'
+            ? err({ kind: 'otherBrowser' as const })
+            : ok({ fleetId: FLEET_ID, clientName: 'Cursor', isWaiting: false, expiresAt: new Date('2026-10-28T09:00:00.000Z') }),
+      ),
     registerClient: (input) => Promise.resolve(input.redirectUris.length === 0 ? err({ kind: 'INVALID_REDIRECT_URIS' as const, message: 'A client registers 1 to 10 redirect URIs' }) : ok({ clientId: 'client-1', clientSecret: input.isConfidential ? 's' : null })),
     checkServer: ({ url }) =>
       Promise.resolve(url === 'https://down.example.com/mcp' ? err({ kind: 'SERVER_UNREACHABLE' as const, message: 'The MCP server could not be listed: connect ECONNREFUSED' }) : ok({ tools: [{ name: 'list_issues', description: 'List issues' }] })),
@@ -423,6 +438,41 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("the web app's authorize pages read the request they show through the API, as anyone", () => {
+  it('reads the client an authorization request is for, to show its picks', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined).context).oauth.authorization({ client_id: CURSOR_CLIENT, state: 'state-1' })).resolves.toEqual({
+      clientId: CURSOR_CLIENT,
+      clientName: 'Cursor',
+      redirectUri: 'http://127.0.0.1:7777/callback',
+    });
+  });
+
+  it('refuses a request the gateway would not serve, saying why', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined).context).oauth.authorization({ client_id: 'client-unknown' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: 'No client client-unknown is known' });
+  });
+
+  it('reads a waiting client by the secret its browser holds, sent beside the call, with the time it is kept', async () => {
+    const context = { ...aContext(undefined).context, waitingSecret: 'secret-1' };
+
+    await expect(gatewayRouter.createCaller(context).oauth.waiting({ waiting: 'waiting-1' })).resolves.toEqual({ kind: 'waiting', clientName: 'Cursor', expiresAt: '2026-10-28T09:00:00.000Z' });
+  });
+
+  it('tells the page to go on, to the door that says why, when the client no longer waits or the browser is another', async () => {
+    const decided = gatewayRouter.createCaller({ ...aContext(undefined).context, waitingSecret: 'secret-1' });
+    const other = gatewayRouter.createCaller({ ...aContext(undefined).context, waitingSecret: 'other' });
+    const none = gatewayRouter.createCaller(aContext(undefined).context);
+
+    await expect(Promise.all([decided.oauth.waiting({ waiting: 'waiting-2' }), other.oauth.waiting({ waiting: 'waiting-1' }), none.oauth.waiting({ waiting: 'waiting-1' })])).resolves.toEqual([{ kind: 'goOn' }, { kind: 'goOn' }, { kind: 'goOn' }]);
+  });
+
+  it("refuses the browser's secret in the call's input, which would travel in the address", async () => {
+    const caller = gatewayRouter.createCaller(aContext(undefined).context);
+    const sent = { waiting: 'waiting-1', browserSecret: 'secret-1' };
+
+    await expect(caller.oauth.waiting(sent)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
 

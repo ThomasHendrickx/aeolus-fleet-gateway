@@ -13,7 +13,7 @@ import { SHARED_SIGN_IN_COOKIE } from '../../core/account-sign-in/ports.js';
 import type { SignOutAccount } from '../../core/account-sign-in/sign-out-account.js';
 import type { StartAccountSignIn } from '../../core/account-sign-in/start-account-sign-in.js';
 import { SIGN_IN_LIFETIME_MS } from '../../core/sign-in/start-sign-in.js';
-import { isSameOrigin } from './html.js';
+import { isSameOrigin } from './forms.js';
 
 const HTTP_FOUND = 302;
 const HTTP_SEE_OTHER = 303;

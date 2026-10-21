@@ -1,12 +1,8 @@
 /**
- * What the gateway's server-rendered answers share: escaping, forms, and
- * the check that a form came from the gateway's own pages.
+ * What the gateway's doors share for a browser: forms, and the check that
+ * a form came from the gateway's own pages.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-
-export function escaped(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
-}
 
 /** A form from the gateway's own pages: its Origin is the gateway's, so no other site can send one with argo's cookie. */
 export function isSameOrigin(request: FastifyRequest): boolean {

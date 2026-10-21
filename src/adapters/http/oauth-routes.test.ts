@@ -183,21 +183,16 @@ describe("the gateway's OAuth metadata", () => {
 
 
 describe('a person comes to /authorize from an MCP client (Q1 a, decision 0054)', () => {
-  it('is shown the client, escaped, with the two choices: sign in as yourself, or ask for access for this client', async () => {
+  it("goes to the web app's pick page with the request, to choose: sign in as yourself, or ask for access for this client", async () => {
     const page = await authorizePage();
 
-    expect({ status: page.statusCode, cache: page.headers['cache-control'] }).toEqual({ status: 200, cache: 'no-store' });
-    expect({
-      isEscaped: page.body.includes('Cursor &lt;IDE&gt;') && !page.body.includes('<IDE>'),
-      asAccount: page.body.includes('name="holder" value="account"') && page.body.includes('Sign in as yourself'),
-      asParty: page.body.includes('name="holder" value="party"') && page.body.includes('Ask for access for this client'),
-    }).toEqual({ isEscaped: true, asAccount: true, asParty: true });
+    expect({ status: page.statusCode, location: page.headers.location }).toEqual({ status: 302, location: `/authorize/pick?${new URLSearchParams(REQUEST).toString()}` });
   });
 
-  it('says on the page that the client is unknown, sending nobody anywhere', async () => {
+  it("goes to the web app's page saying the client is unknown, sending the client nothing", async () => {
     const page = await authorizePage({ ...REQUEST, client_id: 'client-unknown' });
 
-    expect({ status: page.statusCode, location: page.headers.location }).toEqual({ status: 400, location: undefined });
+    expect({ status: page.statusCode, location: page.headers.location }).toEqual({ status: 302, location: '/authorize/failed?reason=invalidClient' });
   });
 
   it('sends a known client back with the error for a request it got wrong', async () => {
@@ -219,7 +214,7 @@ describe('a person comes to /authorize from an MCP client (Q1 a, decision 0054)'
   it('is told a pick the page does not offer, sent nowhere', async () => {
     const answer = await signIn('argo');
 
-    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 400, location: undefined });
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: '/authorize/failed?reason=noPick' });
   });
 });
 
@@ -241,16 +236,13 @@ describe('a person who signed in as themselves is sent back from pagasae', () =>
 
     const answers = await Promise.all([callback({ state: 'sealed-1', code: 'pagasae-code-1' }, null), callback({ state: 'sealed-1', code: 'pagasae-code-1' }, 'aeolus_sign_in=secret-9')]);
 
-    expect(answers.map((answer) => ({ status: answer.statusCode, location: answer.headers.location, says: answer.body.includes('another browser') }))).toEqual([
-      { status: 400, location: undefined, says: true },
-      { status: 400, location: undefined, says: true },
-    ]);
+    expect(answers.map((answer) => answer.headers.location)).toEqual(['/authorize/failed?reason=otherBrowser', '/authorize/failed?reason=otherBrowser']);
   });
 
   it('is told a sign-in it did not start, or started too long ago, is unknown, and sent nowhere', async () => {
     const answer = await callback({ state: 'forged', code: 'pagasae-code-1' });
 
-    expect({ status: answer.statusCode, location: answer.headers.location, says: answer.body.includes('Start again from your MCP client') }).toEqual({ status: 400, location: undefined, says: true });
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: '/authorize/failed?reason=unknownSignIn' });
   });
 
   it('is told this gateway does not serve the fleet they signed in to', async () => {
@@ -259,7 +251,7 @@ describe('a person who signed in as themselves is sent back from pagasae', () =>
 
     const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
 
-    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 403, location: undefined });
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: '/authorize/failed?reason=fleetNotServed' });
   });
 
   it('is told when pagasae did not take its code', async () => {
@@ -268,43 +260,7 @@ describe('a person who signed in as themselves is sent back from pagasae', () =>
 
     const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
 
-    expect({ status: answer.statusCode, says: answer.body.includes('invalid_grant') }).toEqual({ status: 502, says: true });
-  });
-});
-
-describe("the sign-in pages in design B, Signal, in the console's look", () => {
-  it('shows the client and the fleet side by side, and each pick as a tile', async () => {
-    const page = await authorizePage();
-
-    expect({
-      handshake: page.body.includes('class="handshake"'),
-      tiles: page.body.split('class="tile"').length - 1,
-      tokens: page.body.includes('--tone-attention-fg:oklch(0.5 0.19 27)'),
-    }).toEqual({ handshake: true, tiles: 2, tokens: true });
-  });
-
-  it('leads the waiting page with a ring of the time left, waiting for approval', async () => {
-    await askedForAccess();
-
-    const page = await waitingPage('waiting-1');
-
-    expect({
-      ring: page.body.includes('class="ring"') && page.body.includes('7 d 0 h'),
-      badge: page.body.includes('class="badge tone-waiting"') && page.body.includes('Waiting for approval'),
-    }).toEqual({ ring: true, badge: true });
-  });
-
-  it('leads an error page with one ring in its tone, its title and its reason', async () => {
-    served = [];
-    await signIn('account');
-
-    const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
-
-    expect({
-      ring: answer.body.includes('class="ring"') && answer.body.includes('stroke="var(--tone-attention-fg)"'),
-      title: answer.body.includes('<h1>No fleet for you</h1>'),
-      reason: answer.body.includes('This gateway does not serve the fleet you signed in to.'),
-    }).toEqual({ ring: true, title: true, reason: true });
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: '/authorize/failed?reason=pagasaeRefused' });
   });
 });
 
@@ -319,18 +275,12 @@ describe('a person who asked for access for the client (decision 0056)', () => {
     });
   });
 
-  it('is shown that the client waits for approval, on a page that follows its request live and is never cached', async () => {
+  it("goes to the web app's waiting page while the client waits for approval, under the waiting cookie's path", async () => {
     await askedForAccess();
 
     const page = await waitingPage('waiting-1');
 
-    expect({
-      status: page.statusCode,
-      cache: page.headers['cache-control'],
-      reloadsOnATimer: page.body.includes('http-equiv="refresh"'),
-      followsLive: page.body.includes('/authorize/waiting/live'),
-      says: page.body.includes('Waiting for approval') && page.body.includes('Cursor &lt;IDE&gt;'),
-    }).toEqual({ status: 200, cache: 'no-store', reloadsOnATimer: false, followsLive: true, says: true });
+    expect({ status: page.statusCode, location: page.headers.location }).toEqual({ status: 302, location: '/authorize/waiting/approval?waiting=waiting-1' });
   });
 
   it('is told over the live channel when its request expires, then to go on once it is decided', async () => {
@@ -402,7 +352,7 @@ describe('a person who asked for access for the client (decision 0056)', () => {
 
     const answer = await askedForAccess();
 
-    expect({ status: answer.statusCode, location: answer.headers.location, says: answer.body.includes('outside parties are off') }).toEqual({ status: 403, location: undefined, says: true });
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: '/authorize/failed?reason=outsidePartiesOff' });
   });
 
   it('is told a wait started in another browser is not theirs, or one the gateway does not know is unknown', async () => {
@@ -410,11 +360,7 @@ describe('a person who asked for access for the client (decision 0056)', () => {
 
     const answers = await Promise.all([waitingPage('waiting-1', null), waitingPage('waiting-1', 'aeolus_waiting=secret-9'), waitingPage('waiting-9')]);
 
-    expect(answers.map((answer) => ({ status: answer.statusCode, location: answer.headers.location }))).toEqual([
-      { status: 400, location: undefined },
-      { status: 400, location: undefined },
-      { status: 404, location: undefined },
-    ]);
+    expect(answers.map((answer) => answer.headers.location)).toEqual(['/authorize/failed?reason=otherBrowserWaiting', '/authorize/failed?reason=otherBrowserWaiting', '/authorize/failed?reason=unknownWaiting']);
   });
 });
 
@@ -427,7 +373,7 @@ describe('a gateway where no pagasae is set', () => {
   it('says at /authorize that it signs no one in, so no client asks (A a)', async () => {
     const page = await authorizePage();
 
-    expect({ status: page.statusCode, says: page.body.includes('signs no one in') }).toEqual({ status: 403, says: true });
+    expect({ status: page.statusCode, location: page.headers.location }).toEqual({ status: 302, location: '/authorize/failed?reason=noSignIn' });
   });
 
   it('knows no sign-in, callback from pagasae or waiting page', async () => {

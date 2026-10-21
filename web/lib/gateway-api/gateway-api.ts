@@ -29,11 +29,25 @@ export function forwardedCookieOf(header: string | undefined): string | undefine
   return signIn;
 }
 
-export function gatewayApi(sent: { url: string; cookie: string | undefined; fleetId: string | undefined }): GatewayApi {
+/** The header the waiting page sends its browser's secret in, so it never travels in an address (src/adapters/trpc/router.ts names the same). */
+const WAITING_SECRET_HEADER = 'aeolus-waiting-secret';
+
+/** What a call of the API is sent besides its input: the shared sign-in, the fleet the page names, and the waiting page's browser secret. */
+export interface ApiSent {
+  cookie: string | undefined;
+  fleetId: string | undefined;
+  waitingSecret?: string;
+}
+
+export function apiHeadersOf(sent: ApiSent): Record<string, string> {
   const cookie = forwardedCookieOf(sent.cookie);
-  const headers: Record<string, string> = {
+  return {
     ...(cookie === undefined ? {} : { cookie }),
     ...(sent.fleetId === undefined ? {} : { [FLEET_HEADER]: sent.fleetId }),
+    ...(sent.waitingSecret === undefined ? {} : { [WAITING_SECRET_HEADER]: sent.waitingSecret }),
   };
-  return createTRPCClient<GatewayRouter>({ links: [httpLink({ url: `${sent.url}/trpc`, headers })] });
+}
+
+export function gatewayApi(sent: ApiSent & { url: string }): GatewayApi {
+  return createTRPCClient<GatewayRouter>({ links: [httpLink({ url: `${sent.url}/trpc`, headers: apiHeadersOf(sent) })] });
 }

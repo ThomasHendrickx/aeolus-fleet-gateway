@@ -30,7 +30,7 @@ import { createRunParty } from './core/mcp-out/run-party.js';
 import { createPrismaCalls } from './adapters/prisma/calls.js';
 import { sleep } from './adapters/timers/sleep.js';
 import { createPartyWorkers } from './party-workers.js';
-import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
+import { gatewayRouter, WAITING_SECRET_HEADER, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerFrontDoor, type WebApp } from './adapters/http/front-door.js';
 import { createChangeHub } from './adapters/http/live.js';
 import { listenToChanges } from './adapters/prisma/changes.js';
@@ -433,7 +433,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     }
     return decided;
   };
-  const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined }): Context => ({
+  const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined; waitingSecret: string | undefined }): Context => ({
     ...sent,
     authenticateActor,
     changes: hub,
@@ -465,6 +465,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     listMine: createListMine({ requests: pendingRequests, clock }),
     decideRequest,
     ...(person === undefined ? {} : { person }),
+    // Only a gateway that signs people in connects MCP clients, so only it shows their authorize pages.
+    ...(signIn === undefined ? {} : { readAuthorization, watchWaiting: signIn.watchWaiting }),
   });
 
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {
@@ -483,6 +485,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           signIn: cookieValueOf(SHARED_SIGN_IN_COOKIE, req.headers.cookie),
           fleetInView: idSchema('fleet').safeParse(req.headers[FLEET_HEADER]).data,
           installationTokenSent: typeof req.headers['x-aeolus-installation-token'] === 'string' ? req.headers['x-aeolus-installation-token'] : undefined,
+          waitingSecret: typeof req.headers[WAITING_SECRET_HEADER] === 'string' ? req.headers[WAITING_SECRET_HEADER] : undefined,
         }),
     },
   };

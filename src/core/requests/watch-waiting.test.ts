@@ -66,8 +66,8 @@ function decided(state: 'approved' | 'denied') {
 }
 
 describe('the waiting page follows its request', () => {
-  it('still waits while the request is pending, naming its fleet and when it expires', async () => {
-    await expect(watchWaiting()({ waiting: 'waiting-1', browserSecret: 'browser-1' })).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, isWaiting: true, expiresAt: EXPIRES_AT } });
+  it('still waits while the request is pending, naming its fleet, its client and when it expires', async () => {
+    await expect(watchWaiting()({ waiting: 'waiting-1', browserSecret: 'browser-1' })).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, clientName: 'Orderbot', isWaiting: true, expiresAt: EXPIRES_AT } });
   });
 
   it('still waits while an approved party awaits crew', async () => {
