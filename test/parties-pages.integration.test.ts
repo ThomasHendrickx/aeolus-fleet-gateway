@@ -13,6 +13,7 @@ import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
 const FLEET = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const SIGN_IN = 'charlotte-shared-sign-in';
+const READER_SIGN_IN = 'charlotte-reads-shared-sign-in';
 const STARTUP_MS = 60_000;
 const POLL_MS = 250;
 const PAGE = { accept: 'text/html', cookie: `aeolus_account_session=${SIGN_IN}` };
@@ -42,6 +43,7 @@ beforeAll(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
   pagasae = await startFakePagasae();
   pagasae.sharedSignIn(SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read fleet:network fleet:manage' });
+  pagasae.sharedSignIn(READER_SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read' });
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
   gateway = spawn('npx', ['tsx', 'src/bin/aeolus-gateway.ts', 'start'], {
@@ -82,6 +84,14 @@ describe('the parties pages, as the account signed in', () => {
     expect(body).toContain('data-testid="outside-parties-turn"');
     expect(textOf(body)).toContain('Outside parties are off');
     expect(textOf(body)).toContain('No outside party yet.');
+  }, 60_000);
+
+  it('shows an account that only reads the fleet neither the switch nor Add server, and says what the switch needs', async () => {
+    const page = await fetch(`${address}/outside-parties?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${READER_SIGN_IN}` } });
+    const body = await page.text();
+
+    expect({ hasSwitch: body.includes('data-testid="outside-parties-turn"'), hasAdd: body.includes('data-testid="outside-parties-add"') }).toEqual({ hasSwitch: false, hasAdd: false });
+    expect(textOf(body)).toContain('Turning them on or off needs fleet:network.');
   }, 60_000);
 
   it("sends the switch's form, before the page's script took over, to the API and says why the API refused it", async () => {
