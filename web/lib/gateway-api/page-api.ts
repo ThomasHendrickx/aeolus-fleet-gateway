@@ -94,3 +94,14 @@ export async function signedInPage(page: { path: string; searchParams: SearchPar
       return { kind: 'signedIn', api, fleetId: account.fleetId, scopes: account.scopes };
   }
 }
+
+/** What a page reads from the API, or why the API refused it, for the page to say in its place. */
+export type Read<T> = { isOk: true; value: T } | { isOk: false; refusal: string };
+
+export async function readOf<T>(call: Promise<T>): Promise<Read<T>> {
+  try {
+    return { isOk: true, value: await call };
+  } catch (error) {
+    return { isOk: false, refusal: refusalMessageOf(error) };
+  }
+}

@@ -21,6 +21,14 @@ const SIGN_IN_START = '/sign-in/start';
 /** The parameter a page names its fleet by. */
 export const FLEET_PARAMETER = 'fleet';
 
+/** A page of the web app in a fleet: every link keeps the fleet in its address. */
+export function inFleet(page: string, fleetId: string): string {
+  const [path = '', query = ''] = page.split('?');
+  const parameters = new URLSearchParams(query);
+  parameters.set(FLEET_PARAMETER, fleetId);
+  return `${path}?${parameters.toString()}`;
+}
+
 /** Reads the answer for the page asked for, its path and query as the browser sent them. */
 export function pageAccountOf(read: { inView: InView } | { refusal: InViewRefusal }, page: string): PageAccount {
   if ('refusal' in read) {
@@ -30,12 +38,8 @@ export function pageAccountOf(read: { inView: InView } | { refusal: InViewRefusa
   switch (inView.kind) {
     case 'signedIn':
       return { kind: 'signedIn', fleetId: inView.fleetId, scopes: inView.scopes };
-    case 'goTo': {
-      const [path = '', query = ''] = page.split('?');
-      const parameters = new URLSearchParams(query);
-      parameters.set(FLEET_PARAMETER, inView.fleetId);
-      return { kind: 'goTo', location: `${path}?${parameters.toString()}` };
-    }
+    case 'goTo':
+      return { kind: 'goTo', location: inFleet(page, inView.fleetId) };
     case 'elsewhere':
       return { kind: 'goTo', location: inView.url };
   }
