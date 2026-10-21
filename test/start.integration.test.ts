@@ -45,6 +45,17 @@ describe('aeolus-gateway start and migrate', () => {
     expect(body).toContain('href="/overview"');
   }, 60_000);
 
+  it("start answers a sign-in that did not go through with the web app's page saying why, and the way to sign in again", async () => {
+    await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
+
+    const page = await fetch(`${address}/sign-in/failed?reason=otherBrowser`, { headers: { accept: 'text/html' } });
+    const body = await page.text();
+
+    expect(page.status).toBe(200);
+    expect(body).toContain('This sign-in was started in another browser');
+    expect(body).toContain('href="/sign-in/start"');
+  }, 60_000);
+
   it('migrate migrates a new database and exits 0', async () => {
     const { code } = await runGateway(['migrate'], { DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway') });
     expect(code).toBe(0);
