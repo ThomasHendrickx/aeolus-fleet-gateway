@@ -18,7 +18,7 @@ const AT = new Date('2026-10-18T13:00:00.000Z');
 const ERP_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9erp';
 const SHIP: Actor = { fleetId: FLEET_ID, kind: 'ship', shipId: 'shp_01m3tbfspe96yf1rnr4ank9agt', scopes: ['fleet:read'] };
 const SHIP_CREDENTIAL: ActorCredential = { crewToken: 'aeolus_ct_v1_agent' };
-const ACCOUNT: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, grantId: 'grant-1', scopes: ['fleet:read'] };
+const ACCOUNT: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, accountToken: 'account-token-1', scopes: ['fleet:read'] };
 const ACCOUNT_CREDENTIAL: ActorCredential = { crewToken: 'aeolus_ct_v1_gateway', accountToken: 'account-token-1' };
 
 function aParty(overrides: Partial<McpServerParty>): McpServerParty {

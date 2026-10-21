@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { OVERVIEW_PATH, readOverview } from '../hooks/read-overview';
-import { NoSignIn } from '../ui/no-sign-in';
+import { NoSignIn } from '../../sign-in/ui/no-sign-in';
 import { Notice } from '../ui/notice';
 import { OverviewLead } from '../ui/overview-lead';
 import { OverviewSkeleton } from '../ui/overview-skeleton';

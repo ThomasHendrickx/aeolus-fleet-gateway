@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { fakeWaitingSeals, memoryPendingRequests } from '../../../test/support/request-fakes.js';
-import { CHARLOTTE_TOKENS, fakePagasae, fakePageSessions, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
+import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
 import { createExchangeToken } from '../../core/oauth/exchange-token.js';
 import { createReadAuthorization } from '../../core/oauth/read-authorization.js';
 import { createAskForClient } from '../../core/requests/ask-for-client.js';
@@ -15,8 +15,6 @@ import { createReadWaiting } from '../../core/requests/read-waiting.js';
 import { createWatchWaiting } from '../../core/requests/watch-waiting.js';
 import type { Pagasae } from '../../core/sign-in/ports.js';
 import { createCompleteSignIn } from '../../core/sign-in/complete-sign-in.js';
-import { createSignOut } from '../../core/sign-in/sign-out.js';
-import { createStartPageSignIn } from '../../core/sign-in/start-page-sign-in.js';
 import { createStartSignIn } from '../../core/sign-in/start-sign-in.js';
 import { createChangeHub, type ChangeHub } from './live.js';
 import { registerOAuthRoutes } from './oauth-routes.js';
@@ -75,12 +73,11 @@ async function startServer(isSigningPeopleIn: boolean) {
           signIn: {
             start: createStartSignIn({ readAuthorization, seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }),
             complete: (back) =>
-              createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)), askForClient, sessions: fakePageSessions() })(back),
+              createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)), askForClient })(back),
             readWaiting: createReadWaiting({ waitings, readAuthorization, requests, parties, codes, secrets, clock, issuer: ISSUER }),
             watchWaiting: createWatchWaiting({ waitings, requests, parties, clock }),
             hub,
             clock,
-            pages: { start: createStartPageSignIn({ seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }), signOut: createSignOut({ grants: memoryAccountGrants() }), sessions: fakePageSessions() },
           },
         }
       : {}),

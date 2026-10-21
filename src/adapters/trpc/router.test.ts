@@ -17,7 +17,7 @@ import { err, ok } from '../../core/shared/result.js';
 import { createChangeHub, type ChangeHub } from '../http/live.js';
 import { gatewayRouter, type Context } from './router.js';
 
-/** The grant a person called by, or the account token their shared sign-in was exchanged for. */
+/** The grant a person called by from an MCP client, or the account token their shared sign-in was exchanged for. */
 function grantOf(caller: PersonCaller): string {
   return 'grantId' in caller ? caller.grantId : caller.signedIn.accountToken;
 }
@@ -26,10 +26,10 @@ const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 const ARGO_COOKIE = 'aeolus_session=argo';
 const VIEWER_COOKIE = 'aeolus_session=viewer';
-/** A person signed in to the gateway's pages, and one whose sign-in ended at pagasae. */
-const PERSON_COOKIE = 'aeolus_gateway_session=charlotte';
-const SIGNED_OUT_COOKIE = 'aeolus_gateway_session=ended';
-const PERSON_GRANT = 'grant-1';
+/** A person signed in to the gateway's pages, and one whose account token no longer works. */
+const PERSON_COOKIE = 'aeolus_account_session=charlotte';
+const SIGNED_OUT_COOKIE = 'aeolus_account_session=ended';
+const PERSON_TOKEN = 'account-token-1';
 const SHARED_ACCOUNT_TOKEN = 'account-token-shared';
 const MANAGER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9mgr';
 /** A ship's own crew tokens: one holding fleet:manage, one only reading. */
@@ -78,23 +78,23 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         return Promise.resolve(ok({ fleetId: FLEET, kind: 'ship' as const, shipId: MANAGER, scopes }));
       }
       if (sent.signIn === CHARLOTTE_SIGN_IN && sent.fleetId === FLEET) {
-        return Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: OWNER, grantId: null, accountToken: SHARED_ACCOUNT_TOKEN, scopes: ['fleet:read'] }));
+        return Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: OWNER, accountToken: SHARED_ACCOUNT_TOKEN, scopes: ['fleet:read'] }));
       }
       if (sent.cookie === PERSON_COOKIE || sent.cookie === SIGNED_OUT_COOKIE) {
-        return Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: OWNER, grantId: sent.cookie === PERSON_COOKIE ? 'grant-1' : 'grant-ended', scopes: ['fleet:read'] }));
+        return Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: OWNER, accountToken: sent.cookie === PERSON_COOKIE ? PERSON_TOKEN : 'account-token-ended', scopes: ['fleet:read'] }));
       }
       return Promise.resolve(ok(sent.cookie === ARGO_COOKIE ? { fleetId: FLEET, kind: 'operator' as const, scopes: ['fleet:read', 'fleet:manage'] } : { fleetId: FLEET, kind: 'viewer' as const, scopes: ['fleet:read'] }));
     },
     person: {
       readInbox: (caller) =>
         Promise.resolve(
-          [PERSON_GRANT, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
+          [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
             ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }], opened: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       openDelivery: ({ caller, deliveryId }) =>
         Promise.resolve(
-          deliveryId === DELIVERY && [PERSON_GRANT, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
+          deliveryId === DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
             ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?' })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} waits for you: read your inbox again` }),
         ),
@@ -384,7 +384,7 @@ describe("a person reads and deals with their person ship's deliveries through t
     await expect(gatewayRouter.createCaller(context).people.open({ deliveryId: DELIVERY })).resolves.toMatchObject({ contentType: 'text/plain', payload: 'Publish it?' });
   });
 
-  it('answers one it opened, and is done with another, as its own grant', async () => {
+  it('answers one it opened, and is done with another, as its own account', async () => {
     const { context, answers } = aContext(PERSON_COOKIE);
     const caller = gatewayRouter.createCaller(context);
 
@@ -392,8 +392,8 @@ describe("a person reads and deals with their person ship's deliveries through t
     await caller.people.done({ deliveryId: DELIVERY });
 
     expect(answers).toEqual([
-      { grantId: 'grant-1', deliveryId: DELIVERY, contentType: 'text/plain', payload: 'Yes' },
-      { grantId: 'grant-1', deliveryId: DELIVERY },
+      { grantId: PERSON_TOKEN, deliveryId: DELIVERY, contentType: 'text/plain', payload: 'Yes' },
+      { grantId: PERSON_TOKEN, deliveryId: DELIVERY },
     ]);
   });
 

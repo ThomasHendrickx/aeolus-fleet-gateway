@@ -2,14 +2,12 @@ import type { ShipId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, OTHER_FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
-import { CHARLOTTE_TOKENS, fakePagasae, fakePageSessions, memoryAccountGrants, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
-import { memoryIssuedTokens } from '../../../test/support/oauth-fakes.js';
+import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetDoor } from '../connection/ports.js';
 import type { AuthenticateOperator } from '../operator/authenticate-operator.js';
 import { err, ok } from '../shared/result.js';
 import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
 import { createAccountOfSignIn } from '../account-sign-in/account-of-sign-in.js';
-import { createAccountTokenOf } from '../sign-in/account-token.js';
 import { createAuthenticateActor } from './authenticate-actor.js';
 
 // Who calls the gateway's API (decision 0057): an account by the page
@@ -34,10 +32,6 @@ let agentFleet: typeof FLEET_ID;
 let readers: string[];
 /** Whether the agent is outside the gateway's own read reach, as in a fleet that applies its own network rules. */
 let isOutsideGatewayReach: boolean;
-let grants: ReturnType<typeof memoryAccountGrants>;
-let sessions: ReturnType<typeof fakePageSessions>;
-/** The page session cookie of Charlotte's grant. */
-let charlotte: string;
 
 const door: Pick<FleetDoor, 'whoami' | 'getShip'> = {
   whoami: (crewToken) =>
@@ -59,17 +53,12 @@ beforeEach(async () => {
   agentFleet = FLEET_ID;
   readers = [];
   isOutsideGatewayReach = false;
-  grants = memoryAccountGrants();
-  sessions = fakePageSessions();
-  await grants.save({ grantId: 'grant-1', fleetId: FLEET_ID, accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, scopes: ['fleet:read', 'gateway:approve'], refreshToken: 'pagasae-refresh-1', accountToken: 'account-token-1', accountTokenExpiresAt: new Date('2026-10-20T10:00:00.000Z') });
-  charlotte = `aeolus_gateway_session=${sessions.seal({ fleetId: FLEET_ID, grantId: 'grant-1' })}`;
 });
 
 function authenticate(sent: { cookie?: string; crewToken?: string; signIn?: string; fleetId?: typeof FLEET_ID }) {
   const clock = { now: () => new Date('2026-10-20T09:00:00.000Z') };
-  const accountTokenOf = createAccountTokenOf({ grants, tokens: memoryIssuedTokens(), pagasae: fakePagasae({ code: 'unused', verifier: 'unused', tokens: CHARLOTTE_TOKENS }), clock });
   const accountOf = createAccountOfSignIn({ signIns: fakeSharedSignIn({ tokens: new Map([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, endsAt: new Date('2026-10-20T09:10:00.000Z') }]]) }), clock });
-  return createAuthenticateActor({ authenticateOperator: operator, door, connections, sessions, accountTokenOf, accountOf })(sent);
+  return createAuthenticateActor({ authenticateOperator: operator, door, connections, accountOf })(sent);
 }
 
 describe('who calls the gateway', () => {
@@ -103,30 +92,10 @@ describe('who calls the gateway', () => {
     expect(readers).toEqual([]);
   });
 
-  it('is an account by its page session, with the scopes its account token carries and the grant to act as it', async () => {
-    await expect(authenticate({ cookie: `theme=dark; ${charlotte}` })).resolves.toEqual({
-      isOk: true,
-      value: { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, grantId: 'grant-1', scopes: ['fleet:read', 'gateway:approve'] },
-    });
-  });
-
-  it('takes the page session over a console session sent with it, and a crew token over both', async () => {
-    await expect(Promise.all([authenticate({ cookie: `aeolus_session=argo; ${charlotte}` }), authenticate({ cookie: charlotte, crewToken: AGENT_CREW })])).resolves.toMatchObject([
-      { isOk: true, value: { kind: 'account' } },
-      { isOk: true, value: { kind: 'ship' } },
-    ]);
-  });
-
-  it('refuses a page session whose sign-in ended', async () => {
-    await grants.end(FLEET_ID, 'grant-1');
-
-    await expect(authenticate({ cookie: charlotte })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_AN_ACTOR' } });
-  });
-
   it('is an account by the shared sign-in its browser holds, in the fleet its page names, acting by the token pagasae exchanged (H5)', async () => {
     await expect(authenticate({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID })).resolves.toEqual({
       isOk: true,
-      value: { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, grantId: null, accountToken: 'account-token-1', scopes: ['fleet:read', 'gateway:approve'] },
+      value: { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, accountToken: 'account-token-1', scopes: ['fleet:read', 'gateway:approve'] },
     });
   });
 

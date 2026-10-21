@@ -45,9 +45,9 @@ describe('outside parties of a fleet', () => {
 
   it("read the rules as an account on the gateway's pages, by its account token", async () => {
     const network = fakeFleetNetwork({ isOpen: false });
-    const charlotte: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, grantId: 'grant-1', scopes: ['fleet:network'] };
+    const charlotte: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, accountToken: 'account-token-1', scopes: ['fleet:network'] };
 
-    await setOutsideParties(network)({ actor: charlotte, as: { cookie: 'aeolus_gateway_session=sealed' }, isOn: true, isOpenNetworkConfirmed: false });
+    await setOutsideParties(network)({ actor: charlotte, as: { cookie: 'aeolus_account_session=charlotte' }, isOn: true, isOpenNetworkConfirmed: false });
 
     expect(network.readers).toEqual([{ crewToken: 'aeolus_ct_v1_gateway', accountToken: 'account-token-1' }]);
   });

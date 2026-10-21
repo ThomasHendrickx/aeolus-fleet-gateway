@@ -1,9 +1,11 @@
 import type { OAuthSecrets } from '../oauth/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { ownPageOf } from '../sign-in/own-page.js';
-import { FIRST_PAGE } from '../sign-in/start-page-sign-in.js';
 import { SIGN_IN_LIFETIME_MS } from '../sign-in/start-sign-in.js';
 import type { AccountSignInSeals, SharedSignIn } from './ports.js';
+
+/** Where a person lands once signed in, when they asked for no page of the gateway's own. */
+export const FIRST_PAGE = '/overview';
 
 export type StartAccountSignIn = (asked: { returnTo?: string | undefined }) => { redirectTo: string; browserSecret: string };
 

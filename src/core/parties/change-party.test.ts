@@ -62,9 +62,9 @@ describe("changing an outside party's owner", () => {
 
   it("sets it as an account on the gateway's pages, by its account token", async () => {
     const { fleet, deps: given } = deps();
-    const charlotte: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, grantId: 'grant-1', scopes: ['fleet:owner'] };
+    const charlotte: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, accountToken: 'account-token-1', scopes: ['fleet:owner'] };
 
-    await createChangePartyOwner(given)({ actor: charlotte, as: { cookie: 'aeolus_gateway_session=sealed' }, name: 'crm', ownerShipId: NEW_OWNER });
+    await createChangePartyOwner(given)({ actor: charlotte, as: { cookie: 'aeolus_account_session=charlotte' }, name: 'crm', ownerShipId: NEW_OWNER });
 
     expect(fleet.owned.map(({ as }) => as)).toEqual([{ crewToken: 'aeolus_ct_v1_gateway', accountToken: 'account-token-1' }]);
   });

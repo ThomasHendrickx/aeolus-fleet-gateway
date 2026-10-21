@@ -10,7 +10,7 @@ import type { PendingRequest } from './ports.js';
 // asked, in any state, the newest first.
 
 const NOW = new Date('2026-10-28T09:00:00.000Z');
-const CHARLOTTE: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, grantId: 'grant-1', scopes: ['fleet:read'] };
+const CHARLOTTE: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, accountToken: 'account-token-1', scopes: ['fleet:read'] };
 
 function aRequest(request: Partial<PendingRequest> & Pick<PendingRequest, 'requestId'>): PendingRequest {
   return {

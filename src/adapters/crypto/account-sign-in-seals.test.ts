@@ -31,7 +31,7 @@ describe("a sign-in to the pages sealed into pagasae's state", () => {
   });
 
   it("opens none for an MCP client's sign-in state, sealed under its own label", () => {
-    const state = createSignInSeals(SECRET).seal({ ...SIGN_IN, holder: 'page' });
+    const state = createSignInSeals(SECRET).seal({ verifier: SIGN_IN.verifier, browserSecret: SIGN_IN.browserSecret, expiresAt: SIGN_IN.expiresAt, holder: 'account', request: { client_id: 'https://client.example.com/client.json' } });
 
     expect(createAccountSignInSeals(SECRET).open(state)).toBeUndefined();
   });

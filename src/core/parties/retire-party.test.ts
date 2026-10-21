@@ -65,9 +65,9 @@ describe('retiring an outside party', () => {
 
   it("retires it as an account on the gateway's pages, by its account token", async () => {
     const { fleet, retireParty: retire } = retireParty();
-    const charlotte: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, grantId: 'grant-1', scopes: ['fleet:manage'] };
+    const charlotte: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, accountToken: 'account-token-1', scopes: ['fleet:manage'] };
 
-    await retire({ actor: charlotte, as: { cookie: 'aeolus_gateway_session=sealed' }, name: 'crm' });
+    await retire({ actor: charlotte, as: { cookie: 'aeolus_account_session=charlotte' }, name: 'crm' });
 
     expect(fleet.retired.map(({ as }) => as)).toEqual([{ crewToken: 'aeolus_ct_v1_gateway', accountToken: 'account-token-1' }]);
   });

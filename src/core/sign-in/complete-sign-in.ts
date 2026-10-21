@@ -6,7 +6,7 @@ import type { AuthorizationRefusal, ReadAuthorization } from '../oauth/read-auth
 import type { AskForClient, ClientAnswer } from '../requests/ask-for-client.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { AccountGrants, Pagasae, PageSessions, PageSignIn, SignInSeals } from './ports.js';
+import type { AccountGrants, Pagasae, SignInSeals } from './ports.js';
 
 /**
  * Why a sign-in gave the client no code, beside the request's own refusals:
@@ -18,8 +18,8 @@ import type { AccountGrants, Pagasae, PageSessions, PageSignIn, SignInSeals } fr
  */
 export type SignInRefusal = AuthorizationRefusal | { readonly kind: 'unknownSignIn' } | { readonly kind: 'otherBrowser' } | { readonly kind: 'pagasaeRefused'; readonly message: string } | { readonly kind: 'fleetNotServed' } | { readonly kind: 'outsidePartiesOff' };
 
-/** What a sign-in answers: the client's answer, or, for the gateway's pages, the page session to hold and the page to go back to. */
-export type SignInAnswer = ClientAnswer | { readonly kind: 'signedIn'; readonly session: string; readonly redirectTo: string };
+/** What a sign-in answers: the client's answer. */
+export type SignInAnswer = ClientAnswer;
 
 interface Back {
   state?: string | undefined;
@@ -37,9 +37,7 @@ export type CompleteSignIn = (back: Back) => Promise<Result<SignInAnswer, SignIn
  * picked: the account's grant is kept, and the client is sent back with the
  * gateway's own code for it, acting in the fleet as the account with no
  * approval (orchestrator-1, slice 7 Q1); or the account asks for access for
- * the client, as an outside party (decision 0056). A sign-in to the
- * gateway's pages keeps the account's grant too, and answers a page session
- * naming it, so the pages act as the account.
+ * the client, as an outside party (decision 0056).
  */
 export function createCompleteSignIn(deps: {
   readAuthorization: ReadAuthorization;
@@ -53,26 +51,7 @@ export function createCompleteSignIn(deps: {
   /** Whether the gateway serves the fleet: connected to it, and switched on where an installation switches fleets (decision 0021). */
   servesFleet: (fleetId: FleetId) => Promise<boolean>;
   askForClient: AskForClient;
-  sessions: PageSessions;
 }): CompleteSignIn {
-  /** A sign-in to the pages: the grant kept, and the session naming it; no client to send back, so pagasae's error is said. */
-  const signInToPages = async (signIn: PageSignIn, { code, error }: Back): Promise<Result<SignInAnswer, SignInRefusal>> => {
-    if (error !== undefined || code === undefined) {
-      return err({ kind: 'pagasaeRefused', message: error ?? 'pagasae sent no code' });
-    }
-    const redeemed = await deps.pagasae.redeemCode({ code, verifier: signIn.verifier });
-    if (!redeemed.isOk) {
-      return err({ kind: 'pagasaeRefused', message: redeemed.error.reason });
-    }
-    const { fleetId, accountId, personShipId, scopes, refreshToken, accountToken, accountTokenExpiresAt } = redeemed.value;
-    if (!(await deps.servesFleet(fleetId))) {
-      return err({ kind: 'fleetNotServed' });
-    }
-    const grantId = deps.secrets.newSecret();
-    await deps.grants.save({ grantId, fleetId, accountId, personShipId, scopes, refreshToken, accountToken, accountTokenExpiresAt });
-    return ok({ kind: 'signedIn', session: deps.sessions.seal({ fleetId, grantId }), redirectTo: signIn.returnTo });
-  };
-
   return async (back) => {
     const { state, code, error, browserSecret } = back;
     const signIn = state === undefined ? undefined : deps.seals.open(state);
@@ -81,9 +60,6 @@ export function createCompleteSignIn(deps: {
     }
     if (browserSecret !== signIn.browserSecret) {
       return err({ kind: 'otherBrowser' });
-    }
-    if (signIn.holder === 'page') {
-      return signInToPages(signIn, back);
     }
     const read = await deps.readAuthorization(signIn.request);
     if (!read.isOk) {

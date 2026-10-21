@@ -1,6 +1,6 @@
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { OVERVIEW_PATH, readRequestToDecide } from '../hooks/read-overview';
-import { NoSignIn } from '../ui/no-sign-in';
+import { NoSignIn } from '../../sign-in/ui/no-sign-in';
 import { subjectKind, subjectName } from '../services/requests';
 import { RequestsList } from '../ui/requests-list';
 import { DecisionPanel } from './decision-panel';
