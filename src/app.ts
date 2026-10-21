@@ -33,6 +33,7 @@ import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerOutsidePartiesPage } from './adapters/http/outside-parties-page.js';
 import { registerAddServerPage } from './adapters/http/add-server-page.js';
+import { registerFrontDoor } from './adapters/http/front-door.js';
 import { registerOutsidePartyPage } from './adapters/http/outside-party-page.js';
 import { createChangeHub, registerLive } from './adapters/http/live.js';
 import { overviewLivePages, registerOverviewPage } from './adapters/http/overview-page.js';
@@ -469,6 +470,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   registerAddServerPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOutsidePartyPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOverviewPage(server, { contextFor: pageContextFor, signIn: pageSignIn, clock });
+  registerFrontDoor(server);
 
   registerLive(server, { contextFor: pageContextFor, hub, pages: overviewLivePages({ clock }) });
   let changes: { close(): Promise<void> } | undefined;
