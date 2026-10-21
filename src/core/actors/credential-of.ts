@@ -22,7 +22,8 @@ export type CredentialOf = (actor: Actor, sent: ActorCredential) => Promise<Resu
  * Use case: the credential to call the fleet with as the actor. A ship, argo
  * or a viewer sent its own, which goes on as it came. An account on the
  * gateway's pages sent only its page session: its grant's account token goes,
- * refreshed when about to end, presented by the gateway's ship of its fleet.
+ * refreshed when about to end, presented by the gateway's ship of its fleet;
+ * signed in with the shared sign-in, the token pagasae exchanged it for goes.
  */
 export function createCredentialOf(deps: { connections: Pick<ConnectionStore, 'find'>; accountTokenOf: AccountTokenOf }): CredentialOf {
   return async (actor, sent) => {
@@ -32,6 +33,9 @@ export function createCredentialOf(deps: { connections: Pick<ConnectionStore, 'f
     const gateway = await deps.connections.find(actor.fleetId);
     if (gateway === undefined) {
       return refuse('FLEET_UNAVAILABLE', 'The gateway is not connected to your fleet');
+    }
+    if (actor.grantId === null) {
+      return actor.accountToken === undefined ? refuse('NOT_AN_ACTOR', 'Your sign-in ended: sign in again') : ok({ crewToken: gateway.crewToken, accountToken: actor.accountToken });
     }
     const token = await deps.accountTokenOf({ fleetId: actor.fleetId, grantId: actor.grantId });
     if (!token.isOk) {

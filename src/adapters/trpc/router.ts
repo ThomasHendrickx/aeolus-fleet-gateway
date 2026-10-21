@@ -50,6 +50,10 @@ export interface Context {
   cookie: string | undefined;
   /** The crew token a ship sent as its bearer token, if any. */
   crewToken: string | undefined;
+  /** The shared account sign-in the web app's server forwarded in pagasae's cookie, if any (header design H5). */
+  signIn?: string | undefined;
+  /** The fleet the web app's page shows, which it names in the aeolus-fleet header, if any. */
+  fleetInView?: FleetId | undefined;
   authenticateActor: AuthenticateActor;
   isServed: IsServed;
   /** The fleet's connection as the gateway holds it, without asking the fleet: what a fleet that is off reads. */
@@ -93,7 +97,7 @@ const t = initTRPC.context<Context>().create({
 });
 
 const actorProcedure = t.procedure.use(async ({ ctx, next }) => {
-  const actor = await ctx.authenticateActor({ cookie: ctx.cookie, crewToken: ctx.crewToken });
+  const actor = await ctx.authenticateActor({ cookie: ctx.cookie, crewToken: ctx.crewToken, signIn: ctx.signIn, fleetId: ctx.fleetInView });
   if (!actor.isOk) {
     throw new TRPCError({ code: 'UNAUTHORIZED', message: actor.error.message });
   }
@@ -340,7 +344,8 @@ function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES
 
 /** A person signed in to the pages, acting on their own person ship: only an account has one. */
 const personProcedure = actorProcedure.use(({ ctx, next }) => {
-  if (ctx.actor.kind !== 'account' || ctx.person === undefined) {
+  // A person signed in with the shared sign-in has no grant yet to crew their person ship by: their deliveries come with the Overview's move.
+  if (ctx.actor.kind !== 'account' || ctx.actor.grantId === null || ctx.person === undefined) {
     throw new TRPCError({ code: 'FORBIDDEN', message: "Only a person signed in to the gateway's pages has a person ship's deliveries here" });
   }
   return next({ ctx: { person: ctx.person, caller: { fleetId: ctx.actor.fleetId, grantId: ctx.actor.grantId } } });

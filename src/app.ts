@@ -5,7 +5,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
-import type { FleetId } from '@aeolus-fleet/common';
+import { FLEET_HEADER, idSchema, type FleetId } from '@aeolus-fleet/common';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 
@@ -71,6 +71,14 @@ import { createOpenRequest, type OpenRequest } from './core/requests/open-reques
 import { createReadWaiting } from './core/requests/read-waiting.js';
 import { createWatchWaiting } from './core/requests/watch-waiting.js';
 import { createPagasae } from './adapters/pagasae/pagasae-client.js';
+import { createSharedSignIn } from './adapters/pagasae/shared-sign-in.js';
+import { createAccountSignInSeals } from './adapters/crypto/account-sign-in-seals.js';
+import { cookieValueOf, registerAccountSignIn } from './adapters/http/account-sign-in-routes.js';
+import { createAccountOfSignIn, type AccountOfSignIn } from './core/account-sign-in/account-of-sign-in.js';
+import { createCompleteAccountSignIn } from './core/account-sign-in/complete-account-sign-in.js';
+import { SHARED_SIGN_IN_COOKIE } from './core/account-sign-in/ports.js';
+import { createSignOutAccount } from './core/account-sign-in/sign-out-account.js';
+import { createStartAccountSignIn } from './core/account-sign-in/start-account-sign-in.js';
 import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
@@ -139,6 +147,8 @@ export interface GatewayAppOptions {
   toolCallTimeoutMs?: number;
   /** pagasae, where people sign in, and the gateway's client there (decision 0054): unset, people do not sign in. */
   pagasae?: { url: string; clientId: string; clientSecret: string };
+  /** The gateway's pages as an app at pagasae, for the shared account sign-in (header design H5): unset, nobody signs in to the pages that way. */
+  pagasaeApp?: { clientId: string; clientSecret: string };
   /** The gateway's web app, answering the pages the server has none of: unset, an unknown page is answered as any unknown address. */
   web?: WebApp;
 }
@@ -397,8 +407,24 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
 
   // What every call of the API reads, from the request's console session and installation token.
+  // The pages' shared account sign-in, where the gateway is an app at pagasae (header design H5); else no shared sign-in names anyone.
+  const signIns =
+    options.pagasae === undefined || options.pagasaeApp === undefined
+      ? undefined
+      : createSharedSignIn({ url: options.pagasae.url, ...options.pagasaeApp, redirectUri: `${issuer}/sign-in/done`, timeoutMs: PAGASAE_TIMEOUT_MS });
+  const accountOf: AccountOfSignIn = signIns === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountOfSignIn({ signIns, clock });
+  if (signIns !== undefined) {
+    const accountSeals = createAccountSignInSeals(options.gatewaySecret);
+    registerAccountSignIn(server, {
+      issuer,
+      start: createStartAccountSignIn({ seals: accountSeals, signIns, secrets: oauthSecrets, clock }),
+      complete: createCompleteAccountSignIn({ seals: accountSeals, signIns, clock }),
+      signOut: createSignOutAccount({ signIns }),
+    });
+  }
+
   const credentialOf = createCredentialOf({ connections, accountTokenOf });
-  const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections, sessions: pageSessions, accountTokenOf });
+  const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections, sessions: pageSessions, accountTokenOf, accountOf });
   const outcomes = createOutcomeWorker({
     expireRequests: createExpireRequests({ requests: pendingRequests, clock }),
     tellOutcomes: createTellOutcomes({ notices: createPrismaOutcomeNotices(prisma), requests: pendingRequests, connections, sender: door }),
@@ -416,7 +442,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     }
     return decided;
   };
-  const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; installationTokenSent: string | undefined }): Context => ({
+  const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined }): Context => ({
     ...sent,
     authenticateActor,
     isServed,
@@ -461,6 +487,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
         contextFor({
           cookie: req.headers.cookie,
           crewToken: req.headers.authorization?.startsWith(BEARER) === true ? req.headers.authorization.slice(BEARER.length) : undefined,
+          signIn: cookieValueOf(SHARED_SIGN_IN_COOKIE, req.headers.cookie),
+          fleetInView: idSchema('fleet').safeParse(req.headers[FLEET_HEADER]).data,
           installationTokenSent: typeof req.headers['x-aeolus-installation-token'] === 'string' ? req.headers['x-aeolus-installation-token'] : undefined,
         }),
     },
@@ -468,7 +496,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   void server.register(fastifyTRPCPlugin, trpc);
   // The page calls the API as the caller, with the forwarded console session; it never takes the installation token.
   // The pages are accounts only (Thomas, 20 Oct): only the page session's cookie reaches them, never the console's.
-  const pageContextFor = (cookie: string | undefined) => contextFor({ cookie: pageCookieOf(cookie), crewToken: undefined, installationTokenSent: undefined });
+  const pageContextFor = (cookie: string | undefined) => contextFor({ cookie: pageCookieOf(cookie), crewToken: undefined, signIn: undefined, fleetInView: undefined, installationTokenSent: undefined });
   // Pages sign people in through pagasae; a gateway that signs no one in says so.
   const pageSignIn: SignInWay = pagasae === undefined ? 'none' : 'pages';
   registerPartiesPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
