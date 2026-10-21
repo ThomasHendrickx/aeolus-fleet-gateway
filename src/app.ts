@@ -393,6 +393,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readClientCall: createReadClientCall({ calls: clientCalls, clock }),
     servesOutsideParties,
     ...(person === undefined ? {} : { person }),
+    // Only a gateway that signs people in connects MCP clients, so only it shows their authorize pages.
+    ...(signIn === undefined ? {} : { readAuthorization, readWaiting: signIn.readWaiting }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.
@@ -465,6 +467,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     listMine: createListMine({ requests: pendingRequests, clock }),
     decideRequest,
     ...(person === undefined ? {} : { person }),
+    // Only a gateway that signs people in connects MCP clients, so only it shows their authorize pages.
+    ...(signIn === undefined ? {} : { readAuthorization, readWaiting: signIn.readWaiting }),
   });
 
   const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {

@@ -46,6 +46,8 @@ import type { DoneDelivery } from '../../core/people/done-delivery.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
+import type { ReadAuthorization } from '../../core/oauth/read-authorization.js';
+import type { ReadWaiting } from '../../core/requests/read-waiting.js';
 import type { Result } from '../../core/shared/result.js';
 
 export interface Context {
@@ -86,6 +88,10 @@ export interface Context {
   stateParty: StateParty;
   markTool: MarkTool;
   registerClient: RegisterClient;
+  /** An MCP client's authorization request, as the gateway reads it before it signs the person in. */
+  readAuthorization?: ReadAuthorization;
+  /** A client waiting for approval, as its browser follows it; unset where no pagasae signs anyone in. */
+  readWaiting?: ReadWaiting;
   listToDecide: ListToDecide;
   listMine: ListMine;
   decideRequest: DecideRequest;
@@ -650,6 +656,33 @@ export const gatewayRouter = t.router({
       }),
   }),
   oauth: t.router({
+    /** The client an authorization request is for, as the web app's pick page shows it; a request the gateway would not serve is refused. */
+    authorization: t.procedure
+      .input(z.record(z.string(), z.string()))
+      .output(z.object({ clientId: z.string(), clientName: z.string(), redirectUri: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const read = ctx.readAuthorization === undefined ? undefined : await ctx.readAuthorization(input);
+        if (read === undefined) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'This gateway signs no one in, so no MCP client connects' });
+        }
+        if (!read.isOk) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: read.error.kind === 'invalidClient' ? read.error.message : read.error.description });
+        }
+        const { clientId, clientName, redirectUri } = read.value;
+        return { clientId, clientName, redirectUri };
+      }),
+    /**
+     * A client waiting for approval, as the web app's waiting page shows it,
+     * by the secret its browser holds; anything else, decided or refused, the
+     * page goes on to the gateway's own waiting address to be told.
+     */
+    waiting: t.procedure
+      .input(z.strictObject({ waiting: z.string(), browserSecret: z.string().optional() }))
+      .output(z.discriminatedUnion('kind', [z.object({ kind: z.literal('waiting'), clientName: z.string(), expiresAt: z.string() }), z.object({ kind: z.literal('goOn') })]))
+      .query(async ({ ctx, input }) => {
+        const read = ctx.readWaiting === undefined ? undefined : await ctx.readWaiting({ waiting: input.waiting, browserSecret: input.browserSecret });
+        return read?.isOk === true && read.value.kind === 'waiting' ? { kind: 'waiting' as const, clientName: read.value.clientName, expiresAt: read.value.expiresAt.toISOString() } : { kind: 'goOn' as const };
+      }),
     /**
      * argo pre-registers an MCP client for its fleet: its name and redirect
      * URIs, and whether it keeps a secret. The secret is answered this once.
