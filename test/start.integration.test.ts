@@ -1,13 +1,11 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { aFreePort, aNewDatabaseUrl, startFleetServer, type FleetServer } from './support/fleet-server.js';
-import { runGateway } from './support/gateway-bin.js';
+import { runGateway, startGateway, type RunningGateway } from './support/gateway-bin.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
 let fleet: FleetServer;
-let gateway: ChildProcess | undefined;
+let gateway: RunningGateway | undefined;
 let address: string;
 
 beforeAll(async () => {
@@ -15,14 +13,11 @@ beforeAll(async () => {
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
   // One gateway for the file: its web app, compiled from source, takes one Next.js development server per folder.
-  gateway = spawn('npx', ['tsx', 'src/bin/aeolus-gateway.ts', 'start'], {
-    env: { ...process.env, DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'), FLEET_URL: fleet.url, PORT: String(port), LOG_LEVEL: 'silent', GATEWAY_SECRET: TEST_GATEWAY_SECRET },
-    stdio: 'ignore',
-  });
+  gateway = startGateway({ DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'), FLEET_URL: fleet.url, PORT: String(port), LOG_LEVEL: 'silent', GATEWAY_SECRET: TEST_GATEWAY_SECRET });
 });
 
 afterAll(async () => {
-  gateway?.kill('SIGTERM');
+  await gateway?.stop();
   await fleet.stop();
 });
 

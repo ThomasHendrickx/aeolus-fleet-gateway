@@ -1,9 +1,8 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { charlotteIn, PAGASAE_APP_CLIENT, PAGASAE_CLIENT, startFakePagasae, type FakePagasae } from './support/fake-pagasae.js';
 import { aFreePort, aNewDatabaseUrl, startFleetServer, type FleetServer } from './support/fleet-server.js';
+import { startGateway, type RunningGateway } from './support/gateway-bin.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
 // The parties pages are the web app's (header design part 5): its server
@@ -36,7 +35,7 @@ function hiddenFieldsOf(html: string, testId: string): FormData {
 
 let fleet: FleetServer;
 let pagasae: FakePagasae;
-let gateway: ChildProcess | undefined;
+let gateway: RunningGateway | undefined;
 let address: string;
 
 beforeAll(async () => {
@@ -46,21 +45,17 @@ beforeAll(async () => {
   pagasae.sharedSignIn(READER_SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read' });
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
-  gateway = spawn('npx', ['tsx', 'src/bin/aeolus-gateway.ts', 'start'], {
-    env: {
-      ...process.env,
-      DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'),
-      FLEET_URL: fleet.url,
-      PORT: String(port),
-      LOG_LEVEL: 'silent',
-      GATEWAY_SECRET: TEST_GATEWAY_SECRET,
-      PAGASAE_URL: pagasae.url,
-      PAGASAE_CLIENT_ID: PAGASAE_CLIENT.clientId,
-      PAGASAE_CLIENT_SECRET: PAGASAE_CLIENT.clientSecret,
-      PAGASAE_APP_CLIENT_ID: PAGASAE_APP_CLIENT.clientId,
-      PAGASAE_APP_CLIENT_SECRET: PAGASAE_APP_CLIENT.clientSecret,
-    },
-    stdio: 'ignore',
+  gateway = startGateway({
+    DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'),
+    FLEET_URL: fleet.url,
+    PORT: String(port),
+    LOG_LEVEL: 'silent',
+    GATEWAY_SECRET: TEST_GATEWAY_SECRET,
+    PAGASAE_URL: pagasae.url,
+    PAGASAE_CLIENT_ID: PAGASAE_CLIENT.clientId,
+    PAGASAE_CLIENT_SECRET: PAGASAE_CLIENT.clientSecret,
+    PAGASAE_APP_CLIENT_ID: PAGASAE_APP_CLIENT.clientId,
+    PAGASAE_APP_CLIENT_SECRET: PAGASAE_APP_CLIENT.clientSecret,
   });
   // The gateway takes a moment to start, and its web app compiles as it is first asked.
   const deadline = Date.now() + STARTUP_MS;
@@ -70,7 +65,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  gateway?.kill('SIGTERM');
+  await gateway?.stop();
   await pagasae.stop();
   await fleet.stop();
 });
