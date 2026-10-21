@@ -428,8 +428,8 @@ describe("the web app's page asks which account it shows the fleet in its addres
   const signIns = fakeSharedSignIn({ tokens: new Map([[FLEET, { ...CHARLOTTE_ACCOUNT_TOKEN, endsAt: new Date('2099-01-01T00:00:00.000Z') }]]) });
   const accountInView = createAccountInView({ signIns, accountOf: createAccountOfSignIn({ signIns, clock: { now: () => new Date('2026-10-21T09:00:00.000Z') } }) });
 
-  function asked(sent: { signIn?: string; fleetInView?: FleetId }, inView: Context['accountInView'] = accountInView) {
-    return gatewayRouter.createCaller({ ...aContext(undefined).context, ...sent, accountInView: inView }).account.inView();
+  function asked(sent: { signIn?: string; fleetInView?: FleetId }, inView: { accountInView: Context['accountInView'] } = { accountInView }) {
+    return gatewayRouter.createCaller({ ...aContext(undefined).context, ...sent, ...inView }).account.inView();
   }
 
   it('answers the account, its fleet and its scopes, never its token', async () => {
@@ -451,10 +451,10 @@ describe("the web app's page asks which account it shows the fleet in its addres
   it('says pagasae did not answer', async () => {
     const down = fakeSharedSignIn({ isAvailable: false });
 
-    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, createAccountInView({ signIns: down, accountOf: createAccountOfSignIn({ signIns: down, clock: { now: () => new Date() } }) }))).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, { accountInView: createAccountInView({ signIns: down, accountOf: createAccountOfSignIn({ signIns: down, clock: { now: () => new Date() } }) }) })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 
   it('refuses where the gateway signs no one in to its pages', async () => {
-    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, undefined)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, { accountInView: undefined })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
