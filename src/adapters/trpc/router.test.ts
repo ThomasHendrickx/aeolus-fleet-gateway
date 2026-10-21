@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
-import { OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { createAccountInView } from '../../core/account-sign-in/account-in-view.js';
 import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
@@ -135,13 +135,13 @@ function aContext(cookie: string | undefined, crewToken?: string): {
           ? ok({ clientId: CURSOR_CLIENT, clientName: 'Cursor', clientFleetId: null, redirectUri: 'http://127.0.0.1:7777/callback', codeChallenge: 'challenge', resource: 'https://gateway.example.com/mcp', scope: null, state: 'state-1' })
           : err({ kind: 'invalidClient' as const, message: 'No client client-unknown is known' }),
       ),
-    readWaiting: ({ waiting, browserSecret }) =>
+    watchWaiting: ({ waiting, browserSecret }) =>
       Promise.resolve(
         waiting === 'waiting-1' && browserSecret === 'secret-1'
-          ? ok({ kind: 'waiting' as const, clientName: 'Cursor', expiresAt: new Date('2026-10-28T09:00:00.000Z') })
+          ? ok({ fleetId: FLEET_ID, clientName: 'Cursor', isWaiting: true, expiresAt: new Date('2026-10-28T09:00:00.000Z') })
           : waiting === 'waiting-1'
             ? err({ kind: 'otherBrowser' as const })
-            : ok({ kind: 'answered' as const, redirectTo: 'http://127.0.0.1:7777/callback?code=c' }),
+            : ok({ fleetId: FLEET_ID, clientName: 'Cursor', isWaiting: false, expiresAt: new Date('2026-10-28T09:00:00.000Z') }),
       ),
     registerClient: (input) => Promise.resolve(input.redirectUris.length === 0 ? err({ kind: 'INVALID_REDIRECT_URIS' as const, message: 'A client registers 1 to 10 redirect URIs' }) : ok({ clientId: 'client-1', clientSecret: input.isConfidential ? 's' : null })),
     checkServer: ({ url }) =>
@@ -454,14 +454,25 @@ describe("the web app's authorize pages read the request they show through the A
     await expect(gatewayRouter.createCaller(aContext(undefined).context).oauth.authorization({ client_id: 'client-unknown' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: 'No client client-unknown is known' });
   });
 
-  it('reads a waiting client by the secret its browser holds, with the time it is kept', async () => {
-    await expect(gatewayRouter.createCaller(aContext(undefined).context).oauth.waiting({ waiting: 'waiting-1', browserSecret: 'secret-1' })).resolves.toEqual({ kind: 'waiting', clientName: 'Cursor', expiresAt: '2026-10-28T09:00:00.000Z' });
+  it('reads a waiting client by the secret its browser holds, sent beside the call, with the time it is kept', async () => {
+    const context = { ...aContext(undefined).context, waitingSecret: 'secret-1' };
+
+    await expect(gatewayRouter.createCaller(context).oauth.waiting({ waiting: 'waiting-1' })).resolves.toEqual({ kind: 'waiting', clientName: 'Cursor', expiresAt: '2026-10-28T09:00:00.000Z' });
   });
 
   it('tells the page to go on, to the door that says why, when the client no longer waits or the browser is another', async () => {
-    const caller = gatewayRouter.createCaller(aContext(undefined).context);
+    const decided = gatewayRouter.createCaller({ ...aContext(undefined).context, waitingSecret: 'secret-1' });
+    const other = gatewayRouter.createCaller({ ...aContext(undefined).context, waitingSecret: 'other' });
+    const none = gatewayRouter.createCaller(aContext(undefined).context);
 
-    await expect(Promise.all([caller.oauth.waiting({ waiting: 'waiting-2' }), caller.oauth.waiting({ waiting: 'waiting-1', browserSecret: 'other' })])).resolves.toEqual([{ kind: 'goOn' }, { kind: 'goOn' }]);
+    await expect(Promise.all([decided.oauth.waiting({ waiting: 'waiting-2' }), other.oauth.waiting({ waiting: 'waiting-1' }), none.oauth.waiting({ waiting: 'waiting-1' })])).resolves.toEqual([{ kind: 'goOn' }, { kind: 'goOn' }, { kind: 'goOn' }]);
+  });
+
+  it("refuses the browser's secret in the call's input, which would travel in the address", async () => {
+    const caller = gatewayRouter.createCaller(aContext(undefined).context);
+    const sent = { waiting: 'waiting-1', browserSecret: 'secret-1' };
+
+    await expect(caller.oauth.waiting(sent)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
 
