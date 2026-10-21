@@ -8,9 +8,20 @@ export const FIRST_PAGE = '/overview';
 
 export type StartPageSignIn = (asked: { returnTo?: string | undefined }) => { redirectTo: string; browserSecret: string };
 
-/** Whether the path is one of the gateway's own: one slash, then no second slash or backslash a browser reads as another site. */
-function isOwnPath(path: string): boolean {
-  return path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\');
+/** An origin no address is at: a way back resolved against it that keeps it is the gateway's own, wherever the gateway is. */
+const OWN_ORIGIN = 'https://gateway.invalid';
+
+/**
+ * The page of the gateway's own a way back names, as a browser resolves it
+ * (dropping tabs and newlines, reading a backslash as a slash), with its
+ * path, query and hash; undefined for another site.
+ */
+function ownPageOf(returnTo: string): string | undefined {
+  if (!returnTo.startsWith('/') || !URL.canParse(returnTo, OWN_ORIGIN)) {
+    return undefined;
+  }
+  const page = new URL(returnTo, OWN_ORIGIN);
+  return page.origin === OWN_ORIGIN ? `${page.pathname}${page.search}${page.hash}` : undefined;
 }
 
 /**
@@ -27,7 +38,7 @@ export function createStartPageSignIn(deps: { seals: SignInSeals; pagasae: Pagas
     const browserSecret = deps.secrets.newSecret();
     const state = deps.seals.seal({
       holder: 'page',
-      returnTo: returnTo !== undefined && isOwnPath(returnTo) ? returnTo : FIRST_PAGE,
+      returnTo: (returnTo === undefined ? undefined : ownPageOf(returnTo)) ?? FIRST_PAGE,
       verifier,
       browserSecret,
       expiresAt: new Date(deps.clock.now().getTime() + SIGN_IN_LIFETIME_MS),
