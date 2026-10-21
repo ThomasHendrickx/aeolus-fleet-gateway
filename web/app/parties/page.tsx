@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { PARTIES_PATH } from '../../features/parties/paths';
+import { Parties } from '../../features/parties/ui/parties';
 import { NoSignIn } from '../../features/sign-in/ui/no-sign-in';
 import { signedInPage, type SearchParams } from '../../lib/gateway-api/page-api';
 
@@ -11,5 +12,5 @@ export default async function PartiesPage({ searchParams }: { searchParams: Prom
   if (page.kind === 'noSignIn') {
     return <NoSignIn />;
   }
-  return <h1 className="text-title font-semibold">Parties</h1>;
+  return <Parties page={page} />;
 }
