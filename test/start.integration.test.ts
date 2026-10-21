@@ -1,24 +1,43 @@
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
+import { charlotteIn, PAGASAE_APP_CLIENT, PAGASAE_CLIENT, startFakePagasae, type FakePagasae } from './support/fake-pagasae.js';
 import { aFreePort, aNewDatabaseUrl, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { runGateway, startGateway, type RunningGateway } from './support/gateway-bin.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
+const FLEET = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
+const SIGN_IN = 'charlotte-shared-sign-in';
+
 let fleet: FleetServer;
+let pagasae: FakePagasae;
 let gateway: RunningGateway | undefined;
 let address: string;
 
 beforeAll(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
+  pagasae = await startFakePagasae();
+  pagasae.sharedSignIn(SIGN_IN, charlotteIn(pagasae, FLEET));
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
   // One gateway for the file: its web app, compiled from source, takes one Next.js development server per folder.
-  gateway = startGateway({ DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'), FLEET_URL: fleet.url, PORT: String(port), LOG_LEVEL: 'silent', GATEWAY_SECRET: TEST_GATEWAY_SECRET });
+  gateway = startGateway({
+    DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'),
+    FLEET_URL: fleet.url,
+    PORT: String(port),
+    LOG_LEVEL: 'silent',
+    GATEWAY_SECRET: TEST_GATEWAY_SECRET,
+    PAGASAE_URL: pagasae.url,
+    PAGASAE_CLIENT_ID: PAGASAE_CLIENT.clientId,
+    PAGASAE_CLIENT_SECRET: PAGASAE_CLIENT.clientSecret,
+    PAGASAE_APP_CLIENT_ID: PAGASAE_APP_CLIENT.clientId,
+    PAGASAE_APP_CLIENT_SECRET: PAGASAE_APP_CLIENT.clientSecret,
+  });
 });
 
 afterAll(async () => {
   await gateway?.stop();
   await fleet.stop();
+  await pagasae.stop();
 });
 
 describe('aeolus-gateway start and migrate', () => {
@@ -51,14 +70,31 @@ describe('aeolus-gateway start and migrate', () => {
     expect(body).toContain('href="/sign-in/start"');
   }, 60_000);
 
-  it("start answers the parties pages with the web app's, which say a gateway that is no app at pagasae signs no one in", async () => {
+  it("start answers the parties pages with the web app's, which send a person with no sign-in to sign in, and back", async () => {
     await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
     const pages = ['/parties', '/outside-parties', '/outside-parties/linear', '/outside-parties/linear/change', '/outside-parties/linear/retire', '/outside-parties/add'];
 
-    const answers = await Promise.all(pages.map(async (page) => (await fetch(`${address}${page}`, { headers: { accept: 'text/html' } })).text()));
+    const answers = await Promise.all(pages.map(async (page) => (await fetch(`${address}${page}?fleet=${FLEET}`, { headers: { accept: 'text/html' }, redirect: 'manual' })).headers.get('location')));
 
-    expect(answers.map((body) => body.includes('data-testid="frame-header"') && body.includes('signs no one in'))).toEqual(pages.map(() => true));
+    expect(answers).toEqual(pages.map((page) => `/sign-in/start?return_to=${encodeURIComponent(`${page}?fleet=${FLEET}`)}`));
   }, 120_000);
+
+  it("start sends a person with no sign-in who opens the web app's Overview to sign in, and back to it", async () => {
+    await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
+
+    const page = await fetch(`${address}/overview?fleet=${FLEET}`, { headers: { accept: 'text/html' }, redirect: 'manual' });
+
+    expect(page.headers.get('location')).toBe(`/sign-in/start?return_to=${encodeURIComponent(`/overview?fleet=${FLEET}`)}`);
+  }, 60_000);
+
+  it("start shows a signed-in person the web app's Overview, read through the gateway's API as their account", async () => {
+    await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
+
+    const page = await fetch(`${address}/overview?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${SIGN_IN}` } });
+    const body = await page.text();
+
+    expect({ status: page.status, nothing: body.includes('Nothing waits on you') }).toEqual({ status: 200, nothing: true });
+  }, 60_000);
 
   it('migrate migrates a new database and exits 0', async () => {
     const { code } = await runGateway(['migrate'], { DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway') });
