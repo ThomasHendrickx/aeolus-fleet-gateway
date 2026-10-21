@@ -23,7 +23,7 @@ import type { InstallationMode } from '../../core/installation/ports.js';
 import type { ReadFleet } from '../../core/installation/read-fleet.js';
 import type { IsServed } from '../../core/installation/served.js';
 import type { SetFleetEnabled } from '../../core/installation/set-fleet-enabled.js';
-import type { AuthenticateActor } from '../../core/actors/authenticate-actor.js';
+import type { AccountActor, AuthenticateActor } from '../../core/actors/authenticate-actor.js';
 import type { ReadOutsideParties, SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
@@ -43,6 +43,7 @@ import type { PendingRequest } from '../../core/requests/ports.js';
 import type { AnswerDelivery } from '../../core/people/answer-delivery.js';
 import type { DoneDelivery } from '../../core/people/done-delivery.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
+import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { Result } from '../../core/shared/result.js';
 
@@ -345,13 +346,22 @@ function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES
   return answered.value;
 }
 
+/** The person an account calls as: by its grant, or by the account token its shared sign-in was exchanged for. */
+function personCallerOf(actor: AccountActor): PersonCaller | undefined {
+  const { fleetId, grantId, accountToken, personShipId } = actor;
+  if (grantId !== null) {
+    return { fleetId, grantId };
+  }
+  return accountToken === undefined ? undefined : { fleetId, signedIn: { accountToken, personShipId } };
+}
+
 /** A person signed in to the pages, acting on their own person ship: only an account has one. */
 const personProcedure = actorProcedure.use(({ ctx, next }) => {
-  // A person signed in with the shared sign-in has no grant yet to crew their person ship by: their deliveries come with the Overview's move.
-  if (ctx.actor.kind !== 'account' || ctx.actor.grantId === null || ctx.person === undefined) {
+  const caller = ctx.actor.kind === 'account' ? personCallerOf(ctx.actor) : undefined;
+  if (caller === undefined || ctx.person === undefined) {
     throw new TRPCError({ code: 'FORBIDDEN', message: "Only a person signed in to the gateway's pages has a person ship's deliveries here" });
   }
-  return next({ ctx: { person: ctx.person, caller: { fleetId: ctx.actor.fleetId, grantId: ctx.actor.grantId } } });
+  return next({ ctx: { person: ctx.person, caller } });
 });
 
 const accountInViewOutputSchema = z.discriminatedUnion('kind', [
