@@ -38,6 +38,7 @@ const READER_CREW = 'aeolus_ct_v1_reader';
 /** A ship's own crew token holding gateway:approve. */
 const APPROVER_CREW = 'aeolus_ct_v1_approver';
 const REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0001';
+const CURSOR_CLIENT = 'https://cursor.example.com/client.json';
 const DELIVERY = 'dlv_01m3tbfspe96yf1rnr4ank9dlv';
 const DECIDED = 'req_01m5c7hmbt9f1vrkwb37az0002';
 const ORDERBOT_REQUEST: PendingRequest = {
@@ -128,6 +129,20 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     changePartyOwner: unused,
     changePartyScopes: unused,
     readParty: unused,
+    readAuthorization: (request) =>
+      Promise.resolve(
+        request.client_id === CURSOR_CLIENT
+          ? ok({ clientId: CURSOR_CLIENT, clientName: 'Cursor', clientFleetId: null, redirectUri: 'http://127.0.0.1:7777/callback', codeChallenge: 'challenge', resource: 'https://gateway.example.com/mcp', scope: null, state: 'state-1' })
+          : err({ kind: 'invalidClient' as const, message: 'No client client-unknown is known' }),
+      ),
+    readWaiting: ({ waiting, browserSecret }) =>
+      Promise.resolve(
+        waiting === 'waiting-1' && browserSecret === 'secret-1'
+          ? ok({ kind: 'waiting' as const, clientName: 'Cursor', expiresAt: new Date('2026-10-28T09:00:00.000Z') })
+          : waiting === 'waiting-1'
+            ? err({ kind: 'otherBrowser' as const })
+            : ok({ kind: 'answered' as const, redirectTo: 'http://127.0.0.1:7777/callback?code=c' }),
+      ),
     registerClient: (input) => Promise.resolve(input.redirectUris.length === 0 ? err({ kind: 'INVALID_REDIRECT_URIS' as const, message: 'A client registers 1 to 10 redirect URIs' }) : ok({ clientId: 'client-1', clientSecret: input.isConfidential ? 's' : null })),
     checkServer: ({ url }) =>
       Promise.resolve(url === 'https://down.example.com/mcp' ? err({ kind: 'SERVER_UNREACHABLE' as const, message: 'The MCP server could not be listed: connect ECONNREFUSED' }) : ok({ tools: [{ name: 'list_issues', description: 'List issues' }] })),
@@ -423,6 +438,30 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("the web app's authorize pages read the request they show through the API, as anyone", () => {
+  it('reads the client an authorization request is for, to show its picks', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined).context).oauth.authorization({ client_id: CURSOR_CLIENT, state: 'state-1' })).resolves.toEqual({
+      clientId: CURSOR_CLIENT,
+      clientName: 'Cursor',
+      redirectUri: 'http://127.0.0.1:7777/callback',
+    });
+  });
+
+  it('refuses a request the gateway would not serve, saying why', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined).context).oauth.authorization({ client_id: 'client-unknown' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: 'No client client-unknown is known' });
+  });
+
+  it('reads a waiting client by the secret its browser holds, with the time it is kept', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined).context).oauth.waiting({ waiting: 'waiting-1', browserSecret: 'secret-1' })).resolves.toEqual({ kind: 'waiting', clientName: 'Cursor', expiresAt: '2026-10-28T09:00:00.000Z' });
+  });
+
+  it('tells the page to go on, to the door that says why, when the client no longer waits or the browser is another', async () => {
+    const caller = gatewayRouter.createCaller(aContext(undefined).context);
+
+    await expect(Promise.all([caller.oauth.waiting({ waiting: 'waiting-2' }), caller.oauth.waiting({ waiting: 'waiting-1', browserSecret: 'other' })])).resolves.toEqual([{ kind: 'goOn' }, { kind: 'goOn' }]);
   });
 });
 
