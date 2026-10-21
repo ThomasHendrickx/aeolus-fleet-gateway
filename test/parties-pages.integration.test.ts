@@ -124,6 +124,17 @@ describe('the parties pages, as the account signed in', () => {
     expect({ isRefused: answer.includes('role="alert"'), isAddressKept: answer.includes('value="http://127.0.0.1:9/mcp"') }).toEqual({ isRefused: true, isAddressKept: true });
   }, 60_000);
 
+  it('shows the Parties page with the form that approves a server to an account holding fleet:manage, and not to one that only reads', async () => {
+    const bodies = await Promise.all(
+      [SIGN_IN, READER_SIGN_IN].map(async (signIn) => (await fetch(`${address}/parties?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${signIn}` } })).text()),
+    );
+
+    expect(bodies.map((body) => ({ hasNoParty: textOf(body).includes('No party yet.'), hasApprove: body.includes('data-testid="parties-approve"') }))).toEqual([
+      { hasNoParty: true, hasApprove: true },
+      { hasNoParty: true, hasApprove: false },
+    ]);
+  }, 60_000);
+
   it('sends a page that names no fleet to the same page in the fleet the account may open', async () => {
     const page = await fetch(`${address}/parties`, { headers: PAGE, redirect: 'manual' });
 
