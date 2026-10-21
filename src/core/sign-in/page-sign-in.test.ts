@@ -89,6 +89,13 @@ describe('a person starts signing in to the pages', () => {
     { what: 'another site behind a newline a browser drops', returnTo: '/\n/evil.example.com' },
     { what: 'another site behind a carriage return a browser drops', returnTo: '/\r/evil.example.com' },
     { what: 'another site behind a slash and a backslash', returnTo: '/\\/evil.example.com' },
+    { what: 'another site behind a dot segment', returnTo: '/.//evil.example.com' },
+    { what: 'another site behind a parent segment', returnTo: '/a/..//evil.example.com' },
+    { what: 'another site behind an encoded dot segment', returnTo: '/%2e//evil.example.com' },
+    { what: 'another site behind an upper-case encoded dot segment', returnTo: '/%2E//evil.example.com' },
+    { what: 'another site behind an encoded parent segment', returnTo: '/a/%2e%2e//evil.example.com' },
+    { what: 'another site behind a dot segment and a backslash', returnTo: '/./\\evil.example.com' },
+    { what: 'another site behind an encoded dot segment and a backslash', returnTo: '/%2e/\\evil.example.com' },
   ])('goes back to the overview for $what, never to another site', ({ returnTo }) => {
     startPageSignIn()({ returnTo });
 
