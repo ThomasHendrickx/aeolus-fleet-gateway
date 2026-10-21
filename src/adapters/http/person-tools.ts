@@ -12,7 +12,7 @@ import type { AnswerDelivery } from '../../core/people/answer-delivery.js';
 import type { DoneDelivery } from '../../core/people/done-delivery.js';
 import type { ListShips } from '../../core/people/list-ships.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
-import type { PersonCaller } from '../../core/people/person-crew.js';
+import type { GrantCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { SendMessage } from '../../core/people/send-message.js';
 import type { AskForServer } from '../../core/requests/ask-for-server.js';
@@ -118,7 +118,7 @@ const answered = (value: unknown) => ({ content: [{ type: 'text' as const, text:
 const toolError = (message: string) => ({ content: [{ type: 'text' as const, text: message }], isError: true });
 
 /** The MCP server one request of a person's client is served by. */
-export function personServerFor(caller: PersonCaller, deps: PersonToolsDeps): McpServer {
+export function personServerFor(caller: GrantCaller, deps: PersonToolsDeps): McpServer {
   const mcp = new McpServer({ name: 'aeolus-gateway', version: runningVersion() }, { capabilities: { tools: {} } });
   mcp.server.setRequestHandler('tools/list', () => ({ tools: PERSON_TOOLS }));
   mcp.server.setRequestHandler('tools/call', async ({ params }) => {

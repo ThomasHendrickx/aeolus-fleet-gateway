@@ -38,6 +38,21 @@ describe("a signed-in person's person ship", () => {
     expect(fleet.state.calls).toEqual([`startingPrompt ${PERSON_SHIP_ID}`, `register ${PERSON_SHIP_ID}`]);
   });
 
+  it('is crewed as the account a shared sign-in names, by the token pagasae exchanged it for, with no grant (header design H5)', async () => {
+    accountTokenOf = () => Promise.resolve(err({ kind: 'signedOut' as const }));
+    const { fleet, crewPersonShip: crew } = crewPersonShip();
+
+    await expect(crew({ fleetId: FLEET_ID, signedIn: { accountToken: 'account-token-1', personShipId: PERSON_SHIP_ID } })).resolves.toEqual({ isOk: true, value: { shipId: PERSON_SHIP_ID, crewToken: 'aeolus_ct_v1_person_1' } });
+    expect(fleet.state.calls).toEqual([`startingPrompt ${PERSON_SHIP_ID}`, `register ${PERSON_SHIP_ID}`]);
+  });
+
+  it('is none for a shared sign-in whose account has no person ship', async () => {
+    const { fleet, crewPersonShip: crew } = crewPersonShip();
+
+    await expect(crew({ fleetId: FLEET_ID, signedIn: { accountToken: 'account-token-1', personShipId: null } })).resolves.toEqual({ isOk: false, error: { kind: 'noPersonShip' } });
+    expect(fleet.state.calls).toEqual([]);
+  });
+
   it('keeps its crew token for every client of the person: the next call asks the fleet nothing', async () => {
     const { fleet, crewPersonShip: crew } = crewPersonShip();
     await crew(GRANT);

@@ -25,7 +25,8 @@ export interface SignedInPage {
   scopes: readonly string[];
 }
 
-function apiUrl(): string {
+/** The gateway's own address, where the API answers. */
+export function apiUrl(): string {
   const url = process.env[API_URL_VARIABLE];
   if (url === undefined) {
     throw new Error(`${API_URL_VARIABLE} is not set: the gateway's server starts the web app`);

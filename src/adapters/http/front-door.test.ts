@@ -49,6 +49,16 @@ describe("the gateway's address as a person opens it (#1030)", () => {
     expect(file.body).toBe('<p>the web app answered /_next/static/chunks/app.js</p>');
   });
 
+  it("hands a page's own calls to the web app: a refresh of its server components, and its live updates", async () => {
+    const refresh = await server.inject({ url: '/overview?fleet=f', headers: { accept: '*/*', rsc: '1' } });
+    const live = await server.inject({ url: '/overview/changes?fleet=f', headers: { accept: 'text/event-stream' } });
+
+    expect([refresh.body, live.body]).toEqual([
+      '<p>the web app answered /overview?fleet=f</p>',
+      '<p>the web app answered /overview/changes?fleet=f</p>',
+    ]);
+  });
+
   it('answers an unknown address a client calls as JSON, as before', async () => {
     const answer = await server.inject({ url: '/api/no-such-call', headers: { accept: 'application/json' } });
 

@@ -4,6 +4,7 @@ import type { ConnectionStore, FleetDoor } from '../connection/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { AccountTokenOf, AccountTokenRefusal } from '../sign-in/account-token.js';
+import type { PersonCaller } from './person-crew.js';
 import type { AccountDoor, PersonCrews } from './ports.js';
 
 /** The fleet's code for a ship that is crewed already: a starting prompt waits for its release. */
@@ -17,7 +18,7 @@ const SHIP_CREWED = 'CONFLICT';
  */
 export type CrewPersonShipRefusal = AccountTokenRefusal | { readonly kind: 'noPersonShip' } | { readonly kind: 'notConnected' } | { readonly kind: 'fleetRefused'; readonly message: string };
 
-export type CrewPersonShip = (grant: { fleetId: FleetId; grantId: string }) => Promise<Result<{ shipId: ShipId; crewToken: string }, CrewPersonShipRefusal>>;
+export type CrewPersonShip = (caller: PersonCaller) => Promise<Result<{ shipId: ShipId; crewToken: string }, CrewPersonShipRefusal>>;
 
 /**
  * Use case: the crew of a signed-in person's person ship (decisions 0054,
@@ -62,8 +63,8 @@ export function createCrewPersonShip(deps: {
     return ok({ crewToken: registered.value.crewToken });
   };
 
-  return async (grant) => {
-    const token = await deps.accountTokenOf(grant);
+  return async (caller) => {
+    const token = 'signedIn' in caller ? ok(caller.signedIn) : await deps.accountTokenOf(caller);
     if (!token.isOk) {
       return token;
     }
@@ -71,12 +72,13 @@ export function createCrewPersonShip(deps: {
     if (shipId === null) {
       return err({ kind: 'noPersonShip' });
     }
-    const held = await deps.crews.find(grant.fleetId, shipId);
+    const { fleetId } = caller;
+    const held = await deps.crews.find(fleetId, shipId);
     if (held !== undefined) {
       return ok({ shipId, crewToken: held.crewToken });
     }
-    const key = `${grant.fleetId}/${shipId}`;
-    const answer = crewing.get(key) ?? crew({ fleetId: grant.fleetId, shipId, accountToken }).finally(() => crewing.delete(key));
+    const key = `${fleetId}/${shipId}`;
+    const answer = crewing.get(key) ?? crew({ fleetId, shipId, accountToken }).finally(() => crewing.delete(key));
     crewing.set(key, answer);
     const crewed = await answer;
     return crewed.isOk ? ok({ shipId, crewToken: crewed.value.crewToken }) : crewed;

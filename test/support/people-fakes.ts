@@ -2,6 +2,7 @@ import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
+import type { PersonCaller } from '../../src/core/people/person-crew.js';
 import type { AccountDoor, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
@@ -83,8 +84,8 @@ export const CHARLOTTE_GRANT = { fleetId: FLEET_ID, grantId: 'grant-1' };
  */
 export function fakeCrewPersonShip(crews: PersonCrews): CrewPersonShip & { crewed: number } {
   const crew = Object.assign(
-    async (grant: { fleetId: FleetId; grantId: string }) => {
-      if (grant.fleetId !== CHARLOTTE_GRANT.fleetId || grant.grantId !== CHARLOTTE_GRANT.grantId) {
+    async (grant: PersonCaller) => {
+      if (grant.fleetId !== CHARLOTTE_GRANT.fleetId || !('grantId' in grant) || grant.grantId !== CHARLOTTE_GRANT.grantId) {
         return err({ kind: 'noPersonShip' as const });
       }
       const held = await crews.find(grant.fleetId, PERSON_SHIP_ID);

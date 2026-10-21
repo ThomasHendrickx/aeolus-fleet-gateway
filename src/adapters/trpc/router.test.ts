@@ -7,13 +7,20 @@ import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSign
 import { OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { createAccountInView } from '../../core/account-sign-in/account-in-view.js';
 import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
+import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
 import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
+import { createChangeHub, type ChangeHub } from '../http/live.js';
 import { gatewayRouter, type Context } from './router.js';
+
+/** The grant a person called by, or the account token their shared sign-in was exchanged for. */
+function grantOf(caller: PersonCaller): string {
+  return 'grantId' in caller ? caller.grantId : caller.signedIn.accountToken;
+}
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
@@ -22,6 +29,8 @@ const VIEWER_COOKIE = 'aeolus_session=viewer';
 /** A person signed in to the gateway's pages, and one whose sign-in ended at pagasae. */
 const PERSON_COOKIE = 'aeolus_gateway_session=charlotte';
 const SIGNED_OUT_COOKIE = 'aeolus_gateway_session=ended';
+const PERSON_GRANT = 'grant-1';
+const SHARED_ACCOUNT_TOKEN = 'account-token-shared';
 const MANAGER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9mgr';
 /** A ship's own crew tokens: one holding fleet:manage, one only reading. */
 const MANAGER_CREW = 'aeolus_ct_v1_manager';
@@ -51,6 +60,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   decisions: Parameters<DecideRequest>[0][];
   switched: Parameters<SetOutsideParties>[0][];
   answers: Record<string, string>[];
+  changes: ChangeHub;
 } {
   const approvals: Parameters<ApproveParty>[0][] = [];
   const switched: Parameters<SetOutsideParties>[0][] = [];
@@ -58,6 +68,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   const marks: Parameters<MarkTool>[0][] = [];
   const answers: Record<string, string>[] = [];
   const unused = () => Promise.reject(new Error('not used by the parties procedures'));
+  const changes = createChangeHub();
   const context: Context = {
     cookie,
     crewToken,
@@ -65,6 +76,9 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       if (sent.crewToken !== undefined) {
         const scopes = { [MANAGER_CREW]: ['fleet:read', 'fleet:manage'], [APPROVER_CREW]: ['fleet:read', 'gateway:approve'] }[sent.crewToken] ?? ['fleet:read'];
         return Promise.resolve(ok({ fleetId: FLEET, kind: 'ship' as const, shipId: MANAGER, scopes }));
+      }
+      if (sent.signIn === CHARLOTTE_SIGN_IN && sent.fleetId === FLEET) {
+        return Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: OWNER, grantId: null, accountToken: SHARED_ACCOUNT_TOKEN, scopes: ['fleet:read'] }));
       }
       if (sent.cookie === PERSON_COOKIE || sent.cookie === SIGNED_OUT_COOKIE) {
         return Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: OWNER, grantId: sent.cookie === PERSON_COOKIE ? 'grant-1' : 'grant-ended', scopes: ['fleet:read'] }));
@@ -74,25 +88,26 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     person: {
       readInbox: (caller) =>
         Promise.resolve(
-          caller.grantId === 'grant-1'
+          [PERSON_GRANT, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
             ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }], opened: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       openDelivery: ({ caller, deliveryId }) =>
         Promise.resolve(
-          deliveryId === DELIVERY && caller.grantId === 'grant-1'
+          deliveryId === DELIVERY && [PERSON_GRANT, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
             ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?' })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} waits for you: read your inbox again` }),
         ),
       answerDelivery: (input) => {
-        answers.push({ grantId: input.caller.grantId, deliveryId: input.deliveryId, contentType: input.contentType, payload: input.payload });
+        answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId, contentType: input.contentType, payload: input.payload });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
       doneDelivery: (input) => {
-        answers.push({ grantId: input.caller.grantId, deliveryId: input.deliveryId });
+        answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
     },
+    changes,
     isServed: () => Promise.resolve(true),
     heldConnection: unused,
     installationTokenSent: undefined,
@@ -142,7 +157,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, decisions, switched, answers };
+  return { context, approvals, marks, decisions, switched, answers, changes };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -394,10 +409,50 @@ describe("a person reads and deals with their person ship's deliveries through t
     await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
+  it("reads, opens and answers as the account their shared sign-in names in the page's fleet (header design H5)", async () => {
+    const { context, answers } = aContext(undefined);
+    const caller = gatewayRouter.createCaller({ ...context, signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET });
+
+    await expect(caller.people.inbox()).resolves.toMatchObject({ waiting: 1 });
+    await expect(caller.people.open({ deliveryId: DELIVERY })).resolves.toMatchObject({ payload: 'Publish it?' });
+    await caller.people.done({ deliveryId: DELIVERY });
+    expect(answers).toEqual([{ grantId: SHARED_ACCOUNT_TOKEN, deliveryId: DELIVERY }]);
+  });
+
   it('refuses any other actor: only a person has a person ship', async () => {
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("a page follows its fleet's request changes through the gateway's API, to read itself again", () => {
+  it('hears each change to its own fleet, and none of another fleet', async () => {
+    const { context, changes } = aContext(PERSON_COOKIE);
+    const stop = new AbortController();
+    const followed = await gatewayRouter.createCaller(context, { signal: stop.signal }).requests.changes();
+    const heard = followed[Symbol.asyncIterator]();
+    const next = heard.next();
+    await expect.poll(() => changes.listeners()).toBe(1);
+
+    changes.publish({ fleetId: OTHER_FLEET_ID, topic: 'requests' });
+    changes.publish({ fleetId: FLEET, topic: 'requests' });
+
+    await expect(next).resolves.toEqual({ done: false, value: { fleetId: FLEET } });
+    stop.abort();
+  });
+
+  it('stops following once the page goes', async () => {
+    const { context, changes } = aContext(PERSON_COOKIE);
+    const stop = new AbortController();
+    const heard = (await gatewayRouter.createCaller(context, { signal: stop.signal }).requests.changes())[Symbol.asyncIterator]();
+    const next = heard.next();
+    await expect.poll(() => changes.listeners()).toBe(1);
+
+    stop.abort();
+
+    await expect(next).resolves.toMatchObject({ done: true });
+    expect(changes.listeners()).toBe(0);
   });
 });
 

@@ -1,7 +1,7 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
 import type { PartyStore } from '../parties/ports.js';
-import type { PersonCaller } from '../people/person-crew.js';
+import type { GrantCaller } from '../people/person-crew.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { AccountGrants } from '../sign-in/ports.js';
@@ -16,7 +16,7 @@ export interface AskedServer {
   readonly expiresAt: Date;
 }
 
-export type AskForServer = (asked: { caller: PersonCaller; url: string }) => Promise<
+export type AskForServer = (asked: { caller: GrantCaller; url: string }) => Promise<
   Result<AskedServer, DomainError<'INVALID_SERVER_URL' | 'OUTSIDE_PARTIES_OFF' | 'SIGNED_OUT' | 'PARTY_EXISTS'>>
 >;
 
