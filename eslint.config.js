@@ -175,7 +175,7 @@ export default defineConfig(
   {
     // Tools read their config files' default export, and Next.js its route files' (typescript skill).
     name: 'aeolus/default-export-required',
-    files: ['*.config.{js,ts}', 'web/*.config.{mjs,ts}', 'web/app/**/{layout,page,not-found}.tsx'],
+    files: ['*.config.{js,ts}', 'web/*.config.{mjs,ts}', 'web/app/**/{layout,page,not-found,error}.tsx'],
     rules: { 'no-restricted-exports': 'off' },
   },
 
