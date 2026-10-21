@@ -135,6 +135,9 @@ describe('a person asks for access for their MCP client (decision 0056)', () => 
     const landed = await browser.follow(pickedAt(z.instanceof(URL).parse(client.sentTo()), 'party'), `${setting.address}/authorize/waiting/approval`);
     const waitingPage = new URL(z.string().parse(landed.headers.get('location')), setting.address);
     const waiting = new URL(`/authorize/waiting${waitingPage.search}`, setting.address).toString();
+    const browserSecret = new URLSearchParams(browser.cookieFor(waiting).replaceAll('; ', '&')).get('aeolus_waiting') ?? '';
+    const input = encodeURIComponent(JSON.stringify({ waiting: waitingPage.searchParams.get('waiting') }));
+    const shown: unknown = await (await fetch(`${setting.address}/trpc/oauth.waiting?input=${input}`, { headers: { 'aeolus-waiting-secret': browserSecret } })).json();
     const toDecide = toDecideSchema.parse(await (await query(setting.address, { procedure: 'requests.toDecide', crewToken: approver })).json()).result.data;
     const [request] = toDecide;
     const denied = await mutate(setting.address, { procedure: 'requests.decide', crewToken: approver, body: { requestId: request?.requestId, decision: { kind: 'deny' } } });
@@ -142,10 +145,11 @@ describe('a person asks for access for their MCP client (decision 0056)', () => 
 
     expect({
       waited: { isWaitingPage: waitingPage.pathname === '/authorize/waiting/approval', isNamed: waitingPage.searchParams.has('waiting') },
+      shown: z.object({ result: z.object({ data: z.object({ kind: z.string(), clientName: z.string() }) }) }).parse(shown),
       toDecide: toDecide.map(({ subject }) => subject.clientName),
       denied: denied.status,
       back: new URL(z.string().parse(answer.headers.get('location'))).searchParams.get('error'),
-    }).toEqual({ waited: { isWaitingPage: true, isNamed: true }, toDecide: ['Test client'], denied: 200, back: 'access_denied' });
+    }).toEqual({ waited: { isWaitingPage: true, isNamed: true }, shown: { result: { data: { kind: 'waiting', clientName: 'Test client' } } }, toDecide: ['Test client'], denied: 200, back: 'access_denied' });
   });
 });
 
