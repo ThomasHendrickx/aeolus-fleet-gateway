@@ -7,6 +7,8 @@ import { memoryIssuedTokens } from '../../../test/support/oauth-fakes.js';
 import type { FleetDoor } from '../connection/ports.js';
 import type { AuthenticateOperator } from '../operator/authenticate-operator.js';
 import { err, ok } from '../shared/result.js';
+import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
+import { createAccountOfSignIn } from '../account-sign-in/account-of-sign-in.js';
 import { createAccountTokenOf } from '../sign-in/account-token.js';
 import { createAuthenticateActor } from './authenticate-actor.js';
 
@@ -63,9 +65,11 @@ beforeEach(async () => {
   charlotte = `aeolus_gateway_session=${sessions.seal({ fleetId: FLEET_ID, grantId: 'grant-1' })}`;
 });
 
-function authenticate(sent: { cookie?: string; crewToken?: string }) {
-  const accountTokenOf = createAccountTokenOf({ grants, tokens: memoryIssuedTokens(), pagasae: fakePagasae({ code: 'unused', verifier: 'unused', tokens: CHARLOTTE_TOKENS }), clock: { now: () => new Date('2026-10-20T09:00:00.000Z') } });
-  return createAuthenticateActor({ authenticateOperator: operator, door, connections, sessions, accountTokenOf })(sent);
+function authenticate(sent: { cookie?: string; crewToken?: string; signIn?: string; fleetId?: typeof FLEET_ID }) {
+  const clock = { now: () => new Date('2026-10-20T09:00:00.000Z') };
+  const accountTokenOf = createAccountTokenOf({ grants, tokens: memoryIssuedTokens(), pagasae: fakePagasae({ code: 'unused', verifier: 'unused', tokens: CHARLOTTE_TOKENS }), clock });
+  const accountOf = createAccountOfSignIn({ signIns: fakeSharedSignIn({ tokens: new Map([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, endsAt: new Date('2026-10-20T09:10:00.000Z') }]]) }), clock });
+  return createAuthenticateActor({ authenticateOperator: operator, door, connections, sessions, accountTokenOf, accountOf })(sent);
 }
 
 describe('who calls the gateway', () => {
@@ -117,6 +121,21 @@ describe('who calls the gateway', () => {
     await grants.end(FLEET_ID, 'grant-1');
 
     await expect(authenticate({ cookie: charlotte })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_AN_ACTOR' } });
+  });
+
+  it('is an account by the shared sign-in its browser holds, in the fleet its page names, acting by the token pagasae exchanged (H5)', async () => {
+    await expect(authenticate({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID })).resolves.toEqual({
+      isOk: true,
+      value: { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, grantId: null, accountToken: 'account-token-1', scopes: ['fleet:read', 'gateway:approve'] },
+    });
+  });
+
+  it.each([
+    { what: 'that ended', sent: { signIn: 'ended-sign-in', fleetId: FLEET_ID } },
+    { what: 'in a fleet it holds no right in', sent: { signIn: CHARLOTTE_SIGN_IN, fleetId: OTHER_FLEET_ID } },
+    { what: 'with no fleet named', sent: { signIn: CHARLOTTE_SIGN_IN } },
+  ])('refuses a shared sign-in $what', async ({ sent }) => {
+    await expect(authenticate(sent)).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_AN_ACTOR' } });
   });
 
   it('refuses a caller with neither, or with a session that is no console session', async () => {
