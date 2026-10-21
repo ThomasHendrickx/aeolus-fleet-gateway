@@ -124,8 +124,8 @@ export const SENT_MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank0sen';
 /**
  * A person's ship in the fleet, as its crew's calls see it: the deliveries
  * waiting for it, each push receive handing the oldest again, up to max;
- * what its discover answers; the crew token it takes, and the calls the
- * gateway made.
+ * the ones it acknowledged, read again until handled; what its discover
+ * answers; the crew token it takes, and the calls the gateway made.
  */
 export function fakePersonShipDoor(ship: { crewToken: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery }) {
   const calls: string[] = [];
@@ -134,7 +134,9 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
   /** The messages the fleet took, as sent. */
   const sent: Parameters<PersonShipDoor['send']>[1][] = [];
   /** The fleet's answers to come for each call, before it takes them. */
-  const refusals: { reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[] } = { reply: [], handled: [], discover: [], send: [] };
+  const refusals: { reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[] } = { reply: [], handled: [], discover: [], send: [], delivery: [] };
+  /** The deliveries the ship acknowledged and has not handled yet. */
+  let acknowledged: PersonDelivery[] = [];
   const refusal: FleetRefusal = { code: 'UNAUTHORIZED', message: 'The crew token is not valid' };
   const crewed = <T>(crewToken: string, value: () => T): Promise<Result<T, FleetRefusal>> => Promise.resolve(crewToken === ship.crewToken ? ok(value()) : err(refusal));
   const door: PersonShipDoor = {
@@ -149,9 +151,16 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
     ack: (crewToken, deliveryId) => {
       calls.push(`ack(${deliveryId})`);
       return crewed(crewToken, () => {
+        acknowledged = [...acknowledged, ...ship.deliveries.filter((delivery) => delivery.deliveryId === deliveryId)];
         ship.deliveries = ship.deliveries.filter((delivery) => delivery.deliveryId !== deliveryId);
         return undefined;
       });
+    },
+    delivery: (crewToken, deliveryId) => {
+      calls.push(`delivery(${deliveryId})`);
+      const reread = acknowledged.find((delivery) => delivery.deliveryId === deliveryId);
+      const refused = refusals.delivery.shift() ?? (reread ? undefined : { code: 'DELIVERY_NOT_FOUND', message: `Delivery ${deliveryId} does not exist` });
+      return refused || !reread ? Promise.resolve(err(refused ?? refusal)) : crewed(crewToken, () => reread);
     },
     reply: (crewToken, reply) => {
       calls.push(`reply(${reply.inReplyTo})`);
@@ -167,7 +176,12 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
     handled: (crewToken, deliveryId) => {
       calls.push(`handled(${deliveryId})`);
       const refused = refusals.handled.shift();
-      return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => undefined);
+      return refused
+        ? Promise.resolve(err(refused))
+        : crewed(crewToken, () => {
+            acknowledged = acknowledged.filter((delivery) => delivery.deliveryId !== deliveryId);
+            return undefined;
+          });
     },
     discover: (crewToken) => {
       calls.push('discover');
