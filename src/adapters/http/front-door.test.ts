@@ -68,6 +68,12 @@ describe("the gateway's address as a person opens it (#1030)", () => {
     await echoing.close();
   });
 
+  it('hands a form sent before the page took over the browser (no server action header) to the web app, as it is multipart', async () => {
+    const answer = await server.inject({ method: 'POST', url: '/outside-parties', headers: { 'content-type': 'multipart/form-data; boundary=b' }, payload: '--b--\r\n' });
+
+    expect(answer.body).toBe('<p>the web app answered /outside-parties</p>');
+  });
+
   it('answers an unknown form post as JSON, as no page is asked for', async () => {
     const answer = await server.inject({ method: 'POST', url: '/no-such-form', headers: { accept: BROWSER_ACCEPT } });
 
