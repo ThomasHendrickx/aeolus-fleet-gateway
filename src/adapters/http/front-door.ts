@@ -10,7 +10,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
+import { isSameOrigin } from './html.js';
+
 const HTTP_SEE_OTHER = 303;
+const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
 
 const OVERVIEW = '/overview';
@@ -50,6 +53,10 @@ export function registerFrontDoor(server: FastifyInstance, deps: { web?: WebApp 
     // Before any route or body parser: the web app reads the form's body as the browser sent it.
     server.addHook('onRequest', async (request, reply) => {
       if (isPageForm(request)) {
+        // As the old pages did: a form comes from the gateway's own pages, never from another site with the browser's cookies.
+        if (!isSameOrigin(request)) {
+          return reply.code(HTTP_FORBIDDEN).type('text/plain; charset=utf-8').send('A form for this page is sent only from this page.');
+        }
         reply.hijack();
         await web(request.raw, reply.raw);
       }
