@@ -37,7 +37,7 @@ beforeEach(async () => {
   servers = fakeMcpServers();
   door = fakeStatementDoor();
   marks = memoryToolMarks();
-  stateParty = createStateParty({ parties, servers, door, marks });
+  stateParty = createStateParty({ parties, servers, door, marks, timing: { waitMs: 10_000, deadlineMs: 300_000 } });
 });
 
 describe('the gateway states what a proxy ship offers, as its crew (decision 0047)', () => {

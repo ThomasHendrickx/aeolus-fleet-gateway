@@ -63,27 +63,13 @@ async function aConnectedClient(tool: string): Promise<{ mcp: Client; name: stri
   return { mcp, name: z.string().parse(tools.find((each) => each.name.endsWith(`__${tool}`))?.name) };
 }
 
-/** How often, and how many times, a test reads a call's result while it travels. */
-const RESULT_POLL_MS = 250;
-const RESULT_ATTEMPTS = 80;
-
-/** The call's result, read with aeolus_result under the handle it was answered: the proxy ship states no wait, so the call answers at once (interop 5.3). */
-async function resultOf(mcp: Client, called: Awaited<ReturnType<Client['callTool']>>) {
-  const { handle } = z.object({ handle: z.string() }).parse(JSON.parse(z.string().parse(z.array(z.object({ text: z.string() })).parse(called.content)[0]?.text)));
-  let read = await mcp.callTool({ name: 'aeolus_result', arguments: { handle } });
-  for (let attempt = 0; attempt < RESULT_ATTEMPTS && JSON.stringify(read.content).includes(`\\"handle\\":\\"${handle}\\"`); attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, RESULT_POLL_MS));
-    read = await mcp.callTool({ name: 'aeolus_result', arguments: { handle } });
-  }
-  return read;
-}
-
 describe('an outside MCP client calls an outside MCP server through the fleet', () => {
   it("is answered the server's tool result, through both proxy ships", async () => {
     await aCrewedCrmParty();
     const { mcp, name } = await aConnectedClient('list_deals');
 
-    const result = await resultOf(mcp, await mcp.callTool({ name, arguments: { contactId: 'c1' } }));
+    // The proxy ship states the gateway's wait, so a fast tool answers within it (interop 5.3).
+    const result = await mcp.callTool({ name, arguments: { contactId: 'c1' } });
     await mcp.close();
 
     const deals = [{ id: 'd1', contactId: 'c1', title: 'Analytical engine', amount: 1200 }];
@@ -96,13 +82,11 @@ describe('an outside MCP client calls an outside MCP server through the fleet', 
     const { mcp, name } = await aConnectedClient('create_contact');
     const call = { name, arguments: { name: 'Grace Hopper', email: 'grace@example.com', aeolus_idempotency_key: 'create-grace' } };
 
-    const first = await mcp.callTool(call);
-    const again = await mcp.callTool(call);
-    // The call answers its handle at once; its result is read once the tool ran.
-    const result = await resultOf(mcp, first);
+    // The proxy ship states the gateway's wait, so each call answers the tool's result within it (interop 5.3).
+    const results = [await mcp.callTool(call), await mcp.callTool(call)];
     await mcp.close();
 
-    expect({ isSameCall: JSON.stringify(first) === JSON.stringify(again), isError: result.isError }).toEqual({ isSameCall: true, isError: false });
+    expect({ isSameResult: JSON.stringify(results[0]) === JSON.stringify(results[1]), isError: results[0]?.isError }).toEqual({ isSameResult: true, isError: false });
     expect({ runs: crm.calls.get('create_contact'), contacts: crm.contacts.filter((contact) => contact.name === 'Grace Hopper').length }).toEqual({ runs: 1, contacts: 1 });
   });
 });
