@@ -1,5 +1,6 @@
 import type { OAuthSecrets } from '../oauth/ports.js';
 import type { Clock } from '../shared/clock.js';
+import { ownPageOf } from './own-page.js';
 import type { Pagasae, SignInSeals } from './ports.js';
 import { SIGN_IN_LIFETIME_MS } from './start-sign-in.js';
 
@@ -7,11 +8,6 @@ import { SIGN_IN_LIFETIME_MS } from './start-sign-in.js';
 export const FIRST_PAGE = '/overview';
 
 export type StartPageSignIn = (asked: { returnTo?: string | undefined }) => { redirectTo: string; browserSecret: string };
-
-/** Whether the path is one of the gateway's own: one slash, then no second slash or backslash a browser reads as another site. */
-function isOwnPath(path: string): boolean {
-  return path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\');
-}
 
 /**
  * Use case: a person signs in to the gateway's own pages through pagasae
@@ -27,7 +23,7 @@ export function createStartPageSignIn(deps: { seals: SignInSeals; pagasae: Pagas
     const browserSecret = deps.secrets.newSecret();
     const state = deps.seals.seal({
       holder: 'page',
-      returnTo: returnTo !== undefined && isOwnPath(returnTo) ? returnTo : FIRST_PAGE,
+      returnTo: (returnTo === undefined ? undefined : ownPageOf(returnTo)) ?? FIRST_PAGE,
       verifier,
       browserSecret,
       expiresAt: new Date(deps.clock.now().getTime() + SIGN_IN_LIFETIME_MS),
