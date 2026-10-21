@@ -3,9 +3,10 @@
  * that asked: the client an authorization request is for, and a client
  * waiting for approval, by the waiting cookie the browser sent.
  */
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 
-import { refusalCodeOf, requestApi } from '../../../lib/gateway-api/page-api';
+import { gatewayApi } from '../../../lib/gateway-api/gateway-api';
+import { apiUrl, refusalCodeOf, requestApi } from '../../../lib/gateway-api/page-api';
 
 /** The cookie the gateway's waiting address set: the browser's secret for its request. */
 const WAITING_COOKIE = 'aeolus_waiting';
@@ -36,6 +37,7 @@ export async function readClient(fields: readonly [string, string][]): Promise<{
 /** A client waiting for approval, or goOn once its request no longer waits. */
 export async function readWaiting(waiting: string): Promise<{ kind: 'waiting'; clientName: string; expiresAt: string } | { kind: 'goOn' }> {
   const browserSecret = (await cookies()).get(WAITING_COOKIE)?.value;
-  const api = await requestApi(undefined);
-  return api.oauth.waiting.query(browserSecret === undefined ? { waiting } : { waiting, browserSecret });
+  // The secret goes beside the call, never in its input, which travels in the address the gateway logs.
+  const api = gatewayApi({ url: apiUrl(), cookie: (await headers()).get('cookie') ?? undefined, fleetId: undefined, ...(browserSecret === undefined ? {} : { waitingSecret: browserSecret }) });
+  return api.oauth.waiting.query({ waiting });
 }
