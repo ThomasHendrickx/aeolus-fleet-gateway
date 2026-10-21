@@ -5,6 +5,8 @@ import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { createAnswerDelivery } from './answer-delivery.js';
 import { createDoneDelivery } from './done-delivery.js';
+import { createOpenDelivery } from './open-delivery.js';
+import { createReadInbox } from './read-inbox.js';
 import type { OpenedDelivery } from './ports.js';
 
 // A person deals with a delivery they opened, from their MCP client: they
@@ -22,6 +24,7 @@ const OPENED: OpenedDelivery = {
   senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
   from: 'tracker',
   title: 'Go for release 1.4?',
+  sentAt: new Date('2026-10-19T08:00:00.000Z'),
   openedAt: AT,
 };
 
@@ -115,5 +118,20 @@ describe('a person is done with a delivery they opened, with no answer', () => {
 
   it('refuses an account with no person ship', async () => {
     await expect(doneDelivery({ caller: { fleetId: FLEET_ID, grantId: 'grant-2' }, deliveryId: OPENED.deliveryId })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_A_PERSON' } });
+  });
+});
+
+describe('a delivery the person dealt with', () => {
+  it.each([
+    { what: 'answered', deal: () => answerDelivery({ caller: CALLER, deliveryId: OPENED.deliveryId, ...ANSWER }) },
+    { what: 'done', deal: () => doneDelivery({ caller: CALLER, deliveryId: OPENED.deliveryId }) },
+  ])('is listed and opened by no client of the person once $what', async ({ deal }) => {
+    const asCrew = { crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened };
+    await deal();
+
+    const read = await createReadInbox(asCrew)(CALLER);
+    const reopened = await createOpenDelivery({ ...asCrew, clock: { now: () => AT } })({ caller: CALLER, deliveryId: OPENED.deliveryId });
+
+    expect({ listed: read.isOk && read.value.opened, reopened }).toMatchObject({ listed: [], reopened: { isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } } });
   });
 });

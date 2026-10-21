@@ -36,6 +36,7 @@ function anOpenedDelivery(overrides: Partial<OpenedDelivery> = {}): OpenedDelive
     senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
     from: 'tracker',
     title: 'Go for release 1.4?',
+    sentAt: new Date('2026-10-19T08:00:00.000Z'),
     openedAt: AT,
     ...overrides,
   };
@@ -75,6 +76,19 @@ describe('the deliveries people opened, in Postgres', () => {
     await expect(
       Promise.all([opened.find(FLEET, { shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003' }), opened.find(FLEET, { shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0004' })]),
     ).resolves.toEqual([undefined, anOpenedDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0004' })]);
+  });
+
+  it("lists a person ship's opened deliveries, oldest opened first, none of another ship or fleet", async () => {
+    const opened = createPrismaOpenedDeliveries(prisma);
+    const ship: ShipId = 'shp_01m3tb1zgr5h2ffee12xnch8p2';
+    const later = anOpenedDelivery({ shipId: ship, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0006', openedAt: new Date('2026-10-19T09:10:00.000Z') });
+    const earlier = anOpenedDelivery({ shipId: ship, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0005' });
+    await opened.save(later);
+    await opened.save(earlier);
+    await opened.save(anOpenedDelivery({ shipId: OTHER_PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0007' }));
+    await opened.save(anOpenedDelivery({ fleetId: OTHER_FLEET, shipId: ship, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0008' }));
+
+    await expect(opened.list(FLEET, ship)).resolves.toEqual([earlier, later]);
   });
 
   it('forgets a fleet with the deliveries its people opened (decision 0021)', async () => {

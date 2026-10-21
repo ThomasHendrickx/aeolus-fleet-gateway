@@ -82,8 +82,10 @@ import { createEndSignIns } from './core/sign-in/end-sign-ins.js';
 import { createAnswerDelivery } from './core/people/answer-delivery.js';
 import { createCrewPersonShip } from './core/people/crew-person-ship.js';
 import { createDoneDelivery } from './core/people/done-delivery.js';
+import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadInbox } from './core/people/read-inbox.js';
+import { createSendMessage } from './core/people/send-message.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createReadAuthorization } from './core/oauth/read-authorization.js';
@@ -371,10 +373,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     const opened = createPrismaOpenedDeliveries(prisma);
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
-      readInbox: createReadInbox(asCrew),
+      readInbox: createReadInbox({ ...asCrew, opened }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened }),
+      listShips: createListShips(asCrew),
+      sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
     };
   };

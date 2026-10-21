@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
-import type { PersonDelivery } from './ports.js';
+import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import { createReadInbox } from './read-inbox.js';
 
 // A person reads their own person ship's inbox from their MCP client, which
@@ -11,21 +11,37 @@ import { createReadInbox } from './read-inbox.js';
 // 0057; Q20).
 
 let crews: ReturnType<typeof memoryPersonCrews>;
+let opened: ReturnType<typeof memoryOpenedDeliveries>;
 
 beforeEach(() => {
   crews = memoryPersonCrews();
+  opened = memoryOpenedDeliveries();
 });
 
 function readInbox(deliveries: PersonDelivery[], crewToken = 'aeolus_ct_v1_charlotte') {
   const ship = fakePersonShipDoor({ crewToken, deliveries });
-  return { ...ship, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door }) };
+  return { ...ship, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened }) };
 }
+
+/** The issue tracker's note, as Charlotte opened it from one of her clients. */
+const OPENED: OpenedDelivery = {
+  fleetId: FLEET_ID,
+  shipId: PERSON_SHIP_ID,
+  deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0009',
+  messageId: 'msg_01m3tbfspe96yf1rnr4ank0009',
+  senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+  from: 'tracker',
+  title: 'The build is red',
+  sentAt: new Date('2026-10-19T07:00:00.000Z'),
+  openedAt: new Date('2026-10-19T07:30:00.000Z'),
+};
+const OPENED_ENTRY = { deliveryId: OPENED.deliveryId, from: 'tracker', title: 'The build is red', sentAt: '2026-10-19T07:00:00.000Z' };
 
 describe("a person reads their person ship's inbox: what waits, by titles only", () => {
   it('lists each waiting delivery by who sent it, when, and its title, never its payload', async () => {
     await expect(readInbox([aPersonDelivery()]).readInbox(CHARLOTTE_GRANT)).resolves.toEqual({
       isOk: true,
-      value: { waiting: 1, deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z' }] },
+      value: { waiting: 1, deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z' }], opened: [] },
     });
   });
 
@@ -54,8 +70,32 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
   it('takes nothing while nothing waits, so the person is never kept waiting', async () => {
     const { calls, readInbox: read } = readInbox([]);
 
-    await expect(read(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { waiting: 0, deliveries: [] } });
+    await expect(read(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { waiting: 0, deliveries: [], opened: [] } });
     expect(calls).toEqual(['inbox']);
+  });
+
+  it('lists apart the deliveries the person opened and has not answered or done yet, from any client, by titles only', async () => {
+    await opened.save(OPENED);
+
+    await expect(readInbox([aPersonDelivery()]).readInbox(CHARLOTTE_GRANT)).resolves.toEqual({
+      isOk: true,
+      value: { waiting: 1, deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z' }], opened: [OPENED_ENTRY] },
+    });
+  });
+
+  it('lists what the person opened while nothing waits', async () => {
+    await opened.save(OPENED);
+
+    await expect(readInbox([]).readInbox(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { waiting: 0, deliveries: [], opened: [OPENED_ENTRY] } });
+  });
+
+  it('lists a delivery as waiting only while the fleet did not take its acknowledgement', async () => {
+    const question = aPersonDelivery();
+    await opened.save({ ...OPENED, deliveryId: question.deliveryId, messageId: question.messageId, title: 'Go for release 1.4?' });
+
+    const read = await readInbox([question]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk && { deliveries: read.value.deliveries.map(({ deliveryId }) => deliveryId), opened: read.value.opened }).toEqual({ deliveries: [question.deliveryId], opened: [] });
   });
 
   it('crews the person ship again once when its crew no longer works, as when its lease ended', async () => {

@@ -109,7 +109,7 @@ function contextFor(cookie: string | undefined): Context {
     listToDecide: (actor) =>
       Promise.resolve(actor.scopes.includes('gateway:approve') ? ok(toDecide) : err({ kind: 'NOT_AN_APPROVER' as const, message: 'Deciding requests needs gateway:approve' })),
     person: {
-      readInbox: () => Promise.resolve(ok({ waiting: WAITING.length, deliveries: WAITING })),
+      readInbox: () => Promise.resolve(ok({ waiting: WAITING.length, deliveries: WAITING, opened: [] })),
       openDelivery: ({ deliveryId }) => {
         const entry = WAITING.find((waiting) => waiting.deliveryId === deliveryId);
         const opened = OPENED[deliveryId];

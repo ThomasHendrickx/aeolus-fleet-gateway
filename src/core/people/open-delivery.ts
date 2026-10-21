@@ -40,6 +40,7 @@ export function createOpenDelivery(deps: { crewPersonShip: CrewPersonShip; crews
       senderShipId: delivery.senderShipId,
       from: delivery.senderName,
       title: titleOf(delivery),
+      sentAt: delivery.sentAt,
       openedAt: deps.clock.now(),
     });
     const acknowledged = await asPersonCrew(deps, { caller, run: (crew) => deps.door.ack(crew.crewToken, delivery.deliveryId) });
