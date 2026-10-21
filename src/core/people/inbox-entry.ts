@@ -1,6 +1,6 @@
 import type { DeliveryId } from '@aeolus-fleet/common';
 
-import type { PersonDelivery } from './ports.js';
+import type { OpenedDelivery, PersonDelivery } from './ports.js';
 
 /** The longest title an inbox shows, as a message's headline is at most 80 characters. */
 export const TITLE_MAX_LENGTH = 80;
@@ -21,4 +21,8 @@ export function titleOf(delivery: PersonDelivery): string {
 
 export function inboxEntryOf(delivery: PersonDelivery): InboxEntry {
   return { deliveryId: delivery.deliveryId, from: delivery.senderName, title: titleOf(delivery), sentAt: delivery.sentAt.toISOString() };
+}
+
+export function openedEntryOf(opened: OpenedDelivery): InboxEntry {
+  return { deliveryId: opened.deliveryId, from: opened.from, title: opened.title, sentAt: opened.sentAt.toISOString() };
 }

@@ -31,7 +31,10 @@ export interface PersonToolsDeps {
 const INBOX_TOOL = {
   name: 'aeolus_inbox',
   title: 'Read your inbox',
-  description: 'What waits for you in your person ship: who sent each delivery, when, and its title, without its content. Lists at most 10, with how many wait in all.',
+  description: [
+    'Your person ship\'s inbox, by who sent each delivery, when, and its title, without its content, in two groups:',
+    'deliveries, what waits for you, at most 10, with how many wait in all; and opened, what you opened from any client and have not answered or done yet.',
+  ].join(' '),
   inputSchema: { type: 'object' as const, properties: {} },
 };
 

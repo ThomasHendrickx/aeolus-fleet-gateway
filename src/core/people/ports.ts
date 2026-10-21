@@ -83,8 +83,9 @@ export interface PersonShipDoor {
 /**
  * A delivery a person opened, as the gateway keeps it until they deal with
  * it (Q28 (a)): what their answer needs once the delivery is acknowledged,
- * its message and sender, and its title, never its payload. It is the person
- * ship's, so every client of the person finds it.
+ * its message and sender, and what their inbox lists, its title and when it
+ * was sent, never its payload. It is the person ship's, so every client of
+ * the person finds it.
  */
 export interface OpenedDelivery {
   readonly fleetId: FleetId;
@@ -94,6 +95,7 @@ export interface OpenedDelivery {
   readonly senderShipId: ShipId;
   readonly from: string;
   readonly title: string;
+  readonly sentAt: Date;
   readonly openedAt: Date;
 }
 
@@ -102,6 +104,8 @@ export interface OpenedDeliveries {
   /** Keeps it, or keeps it as last opened when it was opened before. */
   save(opened: OpenedDelivery): Promise<void>;
   find(fleetId: FleetId, opened: { shipId: ShipId; deliveryId: string }): Promise<OpenedDelivery | undefined>;
+  /** The person ship's, oldest opened first. */
+  list(fleetId: FleetId, shipId: ShipId): Promise<OpenedDelivery[]>;
   /** Forgets it once the person dealt with it. */
   remove(fleetId: FleetId, opened: { shipId: ShipId; deliveryId: string }): Promise<void>;
 }

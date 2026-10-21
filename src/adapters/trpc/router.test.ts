@@ -71,7 +71,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readInbox: (caller) =>
         Promise.resolve(
           caller.grantId === 'grant-1'
-            ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }] })
+            ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }], opened: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       openDelivery: ({ caller, deliveryId }) =>
@@ -355,6 +355,7 @@ describe("a person reads and deals with their person ship's deliveries through t
     await expect(gatewayRouter.createCaller(context).people.inbox()).resolves.toEqual({
       waiting: 1,
       deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }],
+      opened: [],
     });
   });
 

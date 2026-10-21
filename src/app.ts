@@ -373,7 +373,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     const opened = createPrismaOpenedDeliveries(prisma);
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
-      readInbox: createReadInbox(asCrew),
+      readInbox: createReadInbox({ ...asCrew, opened }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened }),
