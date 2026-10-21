@@ -7,10 +7,19 @@ import type { CrewPersonShip } from './crew-person-ship.js';
 import type { PersonCrews } from './ports.js';
 
 /** Who calls from a signed-in person's MCP client: the account grant its token stands for. */
-export interface PersonCaller {
+export interface GrantCaller {
   readonly fleetId: FleetId;
   readonly grantId: string;
 }
+
+/**
+ * Who calls as a signed-in person: from their MCP client, the account grant
+ * its token stands for; from the web app's pages, with the shared sign-in
+ * (header design H5), the account token pagasae exchanged it for.
+ */
+export type PersonCaller =
+  | GrantCaller
+  | { readonly fleetId: FleetId; readonly signedIn: { readonly accountToken: string; readonly personShipId: ShipId | null } };
 
 /** The person ship the gateway crews for the caller, and its crew token. */
 export interface PersonCrewToken {

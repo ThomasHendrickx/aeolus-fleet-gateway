@@ -7,6 +7,7 @@ import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSign
 import { OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { createAccountInView } from '../../core/account-sign-in/account-in-view.js';
 import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
+import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
@@ -14,6 +15,11 @@ import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
 import { gatewayRouter, type Context } from './router.js';
+
+/** The grant a person called by, or none for a shared sign-in. */
+function grantOf(caller: PersonCaller): string | undefined {
+  return 'grantId' in caller ? caller.grantId : undefined;
+}
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
@@ -74,22 +80,22 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     person: {
       readInbox: (caller) =>
         Promise.resolve(
-          caller.grantId === 'grant-1'
+          grantOf(caller) === 'grant-1'
             ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }], opened: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       openDelivery: ({ caller, deliveryId }) =>
         Promise.resolve(
-          deliveryId === DELIVERY && caller.grantId === 'grant-1'
+          deliveryId === DELIVERY && grantOf(caller) === 'grant-1'
             ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?' })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} waits for you: read your inbox again` }),
         ),
       answerDelivery: (input) => {
-        answers.push({ grantId: input.caller.grantId, deliveryId: input.deliveryId, contentType: input.contentType, payload: input.payload });
+        answers.push({ grantId: grantOf(input.caller) ?? 'shared sign-in', deliveryId: input.deliveryId, contentType: input.contentType, payload: input.payload });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
       doneDelivery: (input) => {
-        answers.push({ grantId: input.caller.grantId, deliveryId: input.deliveryId });
+        answers.push({ grantId: grantOf(input.caller) ?? 'shared sign-in', deliveryId: input.deliveryId });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
     },
