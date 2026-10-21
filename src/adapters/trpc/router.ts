@@ -15,6 +15,7 @@ import { idempotencyKeySchema, idSchema, shipHandleSchema, type FleetId } from '
 import { initTRPC, TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
+import type { AccountInView } from '../../core/account-sign-in/account-in-view.js';
 import type { Connect } from '../../core/connection/connect.js';
 import type { ReadConnection } from '../../core/connection/read-connection.js';
 import type { DeleteFleet } from '../../core/installation/delete-fleet.js';
@@ -50,6 +51,12 @@ export interface Context {
   cookie: string | undefined;
   /** The crew token a ship sent as its bearer token, if any. */
   crewToken: string | undefined;
+  /** The shared account sign-in the web app's server forwarded in pagasae's cookie, if any (header design H5). */
+  signIn?: string | undefined;
+  /** The fleet the web app's page shows, which it names in the aeolus-fleet header, if any. */
+  fleetInView?: FleetId | undefined;
+  /** The account a page of the web app shows its fleet as; unset where the gateway is no app at pagasae. */
+  accountInView?: AccountInView | undefined;
   authenticateActor: AuthenticateActor;
   isServed: IsServed;
   /** The fleet's connection as the gateway holds it, without asking the fleet: what a fleet that is off reads. */
@@ -93,7 +100,7 @@ const t = initTRPC.context<Context>().create({
 });
 
 const actorProcedure = t.procedure.use(async ({ ctx, next }) => {
-  const actor = await ctx.authenticateActor({ cookie: ctx.cookie, crewToken: ctx.crewToken });
+  const actor = await ctx.authenticateActor({ cookie: ctx.cookie, crewToken: ctx.crewToken, signIn: ctx.signIn, fleetId: ctx.fleetInView });
   if (!actor.isOk) {
     throw new TRPCError({ code: 'UNAUTHORIZED', message: actor.error.message });
   }
@@ -340,13 +347,42 @@ function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES
 
 /** A person signed in to the pages, acting on their own person ship: only an account has one. */
 const personProcedure = actorProcedure.use(({ ctx, next }) => {
-  if (ctx.actor.kind !== 'account' || ctx.person === undefined) {
+  // A person signed in with the shared sign-in has no grant yet to crew their person ship by: their deliveries come with the Overview's move.
+  if (ctx.actor.kind !== 'account' || ctx.actor.grantId === null || ctx.person === undefined) {
     throw new TRPCError({ code: 'FORBIDDEN', message: "Only a person signed in to the gateway's pages has a person ship's deliveries here" });
   }
   return next({ ctx: { person: ctx.person, caller: { fleetId: ctx.actor.fleetId, grantId: ctx.actor.grantId } } });
 });
 
+const accountInViewOutputSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('signedIn'), fleetId: z.string(), accountId: z.string(), scopes: z.array(z.string()) }),
+  z.object({ kind: z.literal('goTo'), fleetId: z.string() }),
+  z.object({ kind: z.literal('elsewhere'), url: z.string() }),
+]);
+
 export const gatewayRouter = t.router({
+  account: t.router({
+    /**
+     * The account a page of the web app shows the fleet in its address as,
+     * by the shared sign-in its server forwarded (header design H5): signed
+     * in, with its scopes and never its token; the fleet to go to when the
+     * page names none; or the app to go to where the account may not open
+     * the gateway (H9). No shared sign-in, or one that ended, is UNAUTHORIZED.
+     */
+    inView: t.procedure.output(accountInViewOutputSchema).query(async ({ ctx }) => {
+      if (ctx.accountInView === undefined) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: "This gateway signs no one in to its pages: it is no app at pagasae" });
+      }
+      const answer = await ctx.accountInView({ signIn: ctx.signIn, fleetId: ctx.fleetInView });
+      if (!answer.isOk) {
+        throw answer.error.kind === 'signedOut'
+          ? new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in with your account' })
+          : new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'The sign-in service did not answer: try again' });
+      }
+      const shown = answer.value;
+      return shown.kind === 'signedIn' ? { kind: 'signedIn' as const, fleetId: shown.fleetId, accountId: shown.token.accountId, scopes: [...shown.token.scopes] } : shown;
+    }),
+  }),
   connection: t.router({
     /** Whether the gateway is connected to the operator's fleet, as which ship, and the ship it was last connected as. */
     status: actorProcedure.output(connectionStatusOutputSchema).query(async ({ ctx }) => {

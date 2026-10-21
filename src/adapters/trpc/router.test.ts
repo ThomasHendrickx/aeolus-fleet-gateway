@@ -3,6 +3,10 @@ import { TRPCError } from '@trpc/server';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
+import { OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { createAccountInView } from '../../core/account-sign-in/account-in-view.js';
+import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
@@ -417,5 +421,40 @@ describe("a person lists the requests they asked through the gateway's API (deci
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).requests.mine()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("the web app's page asks which account it shows the fleet in its address as (H5)", () => {
+  const signIns = fakeSharedSignIn({ tokens: new Map([[FLEET, { ...CHARLOTTE_ACCOUNT_TOKEN, endsAt: new Date('2099-01-01T00:00:00.000Z') }]]) });
+  const accountInView = createAccountInView({ signIns, accountOf: createAccountOfSignIn({ signIns, clock: { now: () => new Date('2026-10-21T09:00:00.000Z') } }) });
+
+  function asked(sent: { signIn?: string; fleetInView?: FleetId }, inView: { accountInView: Context['accountInView'] } = { accountInView }) {
+    return gatewayRouter.createCaller({ ...aContext(undefined).context, ...sent, ...inView }).account.inView();
+  }
+
+  it('answers the account, its fleet and its scopes, never its token', async () => {
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET })).resolves.toEqual({ kind: 'signedIn', fleetId: FLEET, accountId: 'acc-charlotte', scopes: ['fleet:read', 'gateway:approve'] });
+  });
+
+  it('answers the fleet to go to when the page names none', async () => {
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN })).resolves.toEqual({ kind: 'goTo', fleetId: OTHER_FLEET_ID });
+  });
+
+  it('answers the app to go to where the account may not open the gateway (H9)', async () => {
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: OTHER_FLEET_ID })).resolves.toEqual({ kind: 'elsewhere', url: CONSOLE_URL });
+  });
+
+  it('refuses a browser with no shared sign-in, so the page signs it in', async () => {
+    await expect(asked({ fleetInView: FLEET })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('says pagasae did not answer', async () => {
+    const down = fakeSharedSignIn({ isAvailable: false });
+
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, { accountInView: createAccountInView({ signIns: down, accountOf: createAccountOfSignIn({ signIns: down, clock: { now: () => new Date() } }) }) })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+  });
+
+  it('refuses where the gateway signs no one in to its pages', async () => {
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, { accountInView: undefined })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

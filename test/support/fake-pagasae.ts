@@ -7,14 +7,25 @@
  * gateway reads it, and only core checks signatures.
  */
 import { createHash } from 'node:crypto';
-import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
 export const PAGASAE_CLIENT = { clientId: 'gateway', clientSecret: 'a-pagasae-client-secret-for-the-gateway' };
+
+/** The gateway's pages as an app at pagasae, for the shared account sign-in (header design H5). */
+export const PAGASAE_APP_CLIENT = { clientId: 'gateway-pages', clientSecret: 'a-pagasae-app-client-secret-for-the-pages' };
+
+const TOKEN_EXCHANGE = 'urn:ietf:params:oauth:grant-type:token-exchange';
 
 export interface FakePagasae {
   url: string;
   /** The account token claims the next redeemed code answers. */
   answer(claims: Record<string, unknown>): void;
+  /**
+   * A shared sign-in, as pagasae keeps it in its cookie on the shared
+   * domain: it exchanges for these claims in the fleet they name, and lists
+   * that fleet with the gateway, until it is revoked.
+   */
+  sharedSignIn(signIn: string, claims: Record<string, unknown>): void;
   stop(): Promise<void>;
 }
 
@@ -34,6 +45,9 @@ function anAccountToken(claims: Record<string, unknown>): string {
 export async function startFakePagasae(): Promise<FakePagasae> {
   const codes = new Map<string, { challenge: string; redirectUri: string }>();
   let claims: Record<string, unknown> = {};
+  const signIns = new Map<string, Record<string, unknown>>();
+  const json = (response: ServerResponse, answer: { status: number; body: unknown }) => response.writeHead(answer.status, { 'content-type': 'application/json' }).end(JSON.stringify(answer.body));
+  const isApp = (form: URLSearchParams) => form.get('client_id') === PAGASAE_APP_CLIENT.clientId && form.get('client_secret') === PAGASAE_APP_CLIENT.clientSecret;
   const server: Server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://pagasae.test');
     if (request.method === 'GET' && url.pathname === '/oauth/authorize') {
@@ -46,8 +60,49 @@ export async function startFakePagasae(): Promise<FakePagasae> {
       response.writeHead(302, { location: back.toString() }).end();
       return;
     }
+    if (request.method === 'GET' && url.pathname === '/api/apps') {
+      const basic = `Basic ${Buffer.from(`${PAGASAE_APP_CLIENT.clientId}:${PAGASAE_APP_CLIENT.clientSecret}`).toString('base64')}`;
+      const held = signIns.get(String(request.headers['aeolus-sign-in']));
+      if (request.headers.authorization !== basic) {
+        json(response, { status: 401, body: { error: 'invalid_client' } });
+      } else if (held === undefined) {
+        json(response, { status: 401, body: { error: 'invalid_grant' } });
+      } else {
+        json(response, { status: 200, body: { account: { id: held.sub, email: 'charlotte@example.com' }, apps: [{ app: 'account', url: `${url.origin}/account` }], fleets: [{ id: held.aud, name: 'Acme', argo: false, apps: [{ app: 'gateway', url: 'http://gateway.test' }] }] } });
+      }
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/oauth/revoke') {
+      void formOf(request).then((form) => {
+        if (!isApp(form)) {
+          json(response, { status: 401, body: { error: 'invalid_client' } });
+          return;
+        }
+        signIns.delete(form.get('token') ?? '');
+        response.writeHead(200).end();
+      });
+      return;
+    }
     if (request.method === 'POST' && url.pathname === '/oauth/token') {
       void formOf(request).then((form) => {
+        if (isApp(form) && form.get('grant_type') === TOKEN_EXCHANGE) {
+          const held = signIns.get(form.get('subject_token') ?? '');
+          if (held === undefined) {
+            json(response, { status: 400, body: { error: 'invalid_grant' } });
+          } else if (held.aud !== form.get('resource')) {
+            json(response, { status: 400, body: { error: 'invalid_target' } });
+          } else {
+            json(response, { status: 200, body: { access_token: anAccountToken(held), issued_token_type: 'urn:ietf:params:oauth:token-type:jwt', token_type: 'Bearer', expires_in: 600 } });
+          }
+          return;
+        }
+        if (isApp(form)) {
+          const held = codes.get(form.get('code') ?? '');
+          codes.delete(form.get('code') ?? '');
+          const isValid = form.get('redirect_uri') === held?.redirectUri && createHash('sha256').update(form.get('code_verifier') ?? '').digest('base64url') === held.challenge;
+          json(response, isValid ? { status: 200, body: { id_token: 'an-id-token', token_type: 'Bearer', expires_in: 600 } } : { status: 400, body: { error: 'invalid_grant' } });
+          return;
+        }
         const held = codes.get(form.get('code') ?? '');
         codes.delete(form.get('code') ?? '');
         const verifier = form.get('code_verifier') ?? '';
@@ -75,6 +130,9 @@ export async function startFakePagasae(): Promise<FakePagasae> {
     url: `http://127.0.0.1:${String(typeof address === 'object' && address !== null ? address.port : 0)}`,
     answer: (next) => {
       claims = next;
+    },
+    sharedSignIn: (signIn, held) => {
+      signIns.set(signIn, held);
     },
     stop: async () => {
       server.closeAllConnections();

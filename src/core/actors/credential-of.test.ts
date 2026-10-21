@@ -35,6 +35,12 @@ describe('the credential the gateway calls the fleet with, as the actor', () => 
     await expect(credentialOf()(CHARLOTTE, { cookie: 'aeolus_gateway_session=sealed' })).resolves.toEqual({ isOk: true, value: { crewToken: GATEWAY_CREW, accountToken: 'account-token-1' } });
   });
 
+  it("is the token pagasae exchanged the shared sign-in for, presented by the gateway's ship", async () => {
+    const signedIn: Actor = { ...CHARLOTTE, grantId: null, accountToken: 'account-token-9' };
+
+    await expect(credentialOf()(signedIn, {})).resolves.toEqual({ isOk: true, value: { crewToken: GATEWAY_CREW, accountToken: 'account-token-9' } });
+  });
+
   it("is a ship's own crew token, or argo's console session, as they sent it", async () => {
     const ship: Actor = { fleetId: FLEET_ID, kind: 'ship', shipId: SHIP_ID, scopes: [] };
     const argo: Actor = { fleetId: FLEET_ID, kind: 'operator', scopes: [] };
