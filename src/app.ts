@@ -32,9 +32,7 @@ import { sleep } from './adapters/timers/sleep.js';
 import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerFrontDoor, type WebApp } from './adapters/http/front-door.js';
-import { createChangeHub, registerLive } from './adapters/http/live.js';
-import { overviewLivePages, registerOverviewPage } from './adapters/http/overview-page.js';
-import type { SignInWay } from './adapters/http/signal.js';
+import { createChangeHub } from './adapters/http/live.js';
 import { listenToChanges } from './adapters/prisma/changes.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
@@ -52,7 +50,7 @@ import { createPrismaAuthorizationCodes, createPrismaIssuedTokens, createPrismaO
 import { createExchangeToken } from './core/oauth/exchange-token.js';
 import { createSignInSeals } from './adapters/crypto/sign-in-seals.js';
 import { createWaitingSeals } from './adapters/crypto/waiting-seals.js';
-import { createPageSessions, pageCookieOf } from './adapters/crypto/page-sessions.js';
+import { createPageSessions } from './adapters/crypto/page-sessions.js';
 import { createRequestIds } from './adapters/crypto/request-ids.js';
 import { createAskForClient } from './core/requests/ask-for-client.js';
 import { createAskForServer } from './core/requests/ask-for-server.js';
@@ -495,15 +493,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     },
   };
   void server.register(fastifyTRPCPlugin, trpc);
-  // The page calls the API as the caller, with the forwarded console session; it never takes the installation token.
-  // The pages are accounts only (Thomas, 20 Oct): only the page session's cookie reaches them, never the console's.
-  const pageContextFor = (cookie: string | undefined) => contextFor({ cookie: pageCookieOf(cookie), crewToken: undefined, signIn: undefined, fleetInView: undefined, installationTokenSent: undefined });
-  // Pages sign people in through pagasae; a gateway that signs no one in says so.
-  const pageSignIn: SignInWay = pagasae === undefined ? 'none' : 'pages';
-  registerOverviewPage(server, { contextFor: pageContextFor, signIn: pageSignIn, clock });
   registerFrontDoor(server, options.web === undefined ? {} : { web: options.web });
-
-  registerLive(server, { contextFor: pageContextFor, hub, pages: overviewLivePages({ clock }) });
   let changes: { close(): Promise<void> } | undefined;
   server.addHook('onReady', async () => {
     changes = await listenToChanges(options.databaseUrl, { onChange: hub.publish, onResync: hub.resync });
