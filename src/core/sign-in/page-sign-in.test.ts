@@ -73,12 +73,22 @@ describe('a person starts signing in to the pages', () => {
     expect(grants.held).toEqual([]);
   });
 
+  it('keeps the path, query and hash of a page of its own', () => {
+    startPageSignIn()({ returnTo: '/outside-parties/linear?tab=tools#tools' });
+
+    expect([...seals.held.values()]).toMatchObject([{ returnTo: '/outside-parties/linear?tab=tools#tools' }]);
+  });
+
   it.each([
     { what: 'no page', returnTo: undefined },
     { what: 'another site', returnTo: 'https://evil.example.com/overview' },
     { what: 'another site without a scheme', returnTo: '//evil.example.com/overview' },
     { what: 'another site behind a backslash', returnTo: '/\\evil.example.com' },
     { what: 'a relative path', returnTo: 'overview' },
+    { what: 'another site behind a tab a browser drops', returnTo: '/\t/evil.example.com' },
+    { what: 'another site behind a newline a browser drops', returnTo: '/\n/evil.example.com' },
+    { what: 'another site behind a carriage return a browser drops', returnTo: '/\r/evil.example.com' },
+    { what: 'another site behind a slash and a backslash', returnTo: '/\\/evil.example.com' },
   ])('goes back to the overview for $what, never to another site', ({ returnTo }) => {
     startPageSignIn()({ returnTo });
 
