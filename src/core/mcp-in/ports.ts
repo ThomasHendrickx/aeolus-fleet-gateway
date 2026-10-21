@@ -1,4 +1,4 @@
-import type { FleetId, MessageId, ShipId, ShipKind } from '@aeolus-fleet/common';
+import type { DeliveryId, FleetId, MessageId, ShipId, ShipKind } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
@@ -70,6 +70,21 @@ export interface ClientCalls {
   /** Keeps a reply on the call its message names, once per delivery. */
   addReply(call: { fleetId: FleetId; messageId: MessageId }, reply: CallReply): Promise<void>;
   findByMessage(fleetId: FleetId, messageId: MessageId): Promise<ClientCall | undefined>;
+  /** The party's calls whose deadline has not passed by now, or that have none: those whose answer may still come. */
+  waitedOn(caller: { fleetId: FleetId; party: string }, now: Date): Promise<ClientCall[]>;
   /** The party's call by its handle; none of another party's. */
   findByHandle(caller: { fleetId: FleetId; party: string }, handle: string): Promise<ClientCall | undefined>;
+}
+
+/** A reply the fleet hands a proxy ship's crew: its delivery and its message. */
+export interface ReceivedReply {
+  deliveryId: DeliveryId;
+  messageId: MessageId;
+  contentType: string;
+  payload: string;
+}
+
+/** Outbound port: the fleet's receiveReply, as a proxy ship's crew calls it: the reply to one message, if one came within the fleet's wait. */
+export interface ReplyReceiver {
+  receiveReply(crewToken: string, wait: { messageId: MessageId; signal: AbortSignal }): Promise<Result<ReceivedReply | undefined, FleetRefusal>>;
 }

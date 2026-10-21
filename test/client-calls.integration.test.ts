@@ -51,6 +51,20 @@ describe("outside clients' calls in Postgres", () => {
     await expect(calls.findByHandle({ fleetId: FLEET, party: 'claude' }, 'handle-9')).resolves.toMatchObject({ deadlineAt: null });
   });
 
+  it("reads the party's calls whose answer may still come: none past its deadline, another party's or another fleet's", async () => {
+    const calls = createPrismaClientCalls(prisma);
+    const now = new Date('2026-10-19T12:05:00.000Z');
+    await calls.save(aCall({ messageId: 'msg_01m3tbfspe96yf1rnr4ank9w01', handle: 'w-1', party: 'zed' }));
+    await calls.save(aCall({ messageId: 'msg_01m3tbfspe96yf1rnr4ank9w02', handle: 'w-2', party: 'zed', deadlineAt: null }));
+    await calls.save(aCall({ messageId: 'msg_01m3tbfspe96yf1rnr4ank9w03', handle: 'w-3', party: 'zed', deadlineAt: now }));
+    await calls.save(aCall({ messageId: 'msg_01m3tbfspe96yf1rnr4ank9w04', handle: 'w-4', party: 'cursor' }));
+    await calls.save(aCall({ messageId: 'msg_01m3tbfspe96yf1rnr4ank9w05', handle: 'w-5', party: 'zed', fleetId: OTHER_FLEET }));
+
+    const waited = await calls.waitedOn({ fleetId: FLEET, party: 'zed' }, now);
+
+    expect(waited.map(({ messageId }) => messageId)).toEqual(['msg_01m3tbfspe96yf1rnr4ank9w01', 'msg_01m3tbfspe96yf1rnr4ank9w02']);
+  });
+
   it('keeps one call per message: the same send again changes nothing', async () => {
     const calls = createPrismaClientCalls(prisma);
     const call = aCall({ messageId: 'msg_01m3tbfspe96yf1rnr4ank9m02', handle: 'handle-2' });

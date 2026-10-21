@@ -11,7 +11,7 @@ import { migratedDatabase } from './support/database.js';
 import { PAGASAE_CLIENT, startFakePagasae } from './support/fake-pagasae.js';
 import { aFreePort, startFleetServer } from './support/fleet-server.js';
 import { aConnectedGateway, aSignedInClient, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
-import { mutate } from './support/gateway-api.js';
+import { mutate, query } from './support/gateway-api.js';
 
 // MCP in (interop 3.3): an outside MCP client, signed in, sees the
 // capabilities of the ships its party reaches as tools, named by alias.
@@ -160,6 +160,30 @@ describe("an outside MCP client's tool call is a message its proxy ship sends", 
   it("answers the ship's reply itself when it comes within the wait its capability states", async () => {
     const crm = await aStatingShip({ waitMs: 10_000 });
     const mcp = await aConnectedClient();
+    const [tool] = (await mcp.listTools()).tools.filter((each) => each.name.endsWith('__list_deals'));
+
+    const calling = mcp.callTool({ name: z.string().parse(tool?.name), arguments: { contactId: 'c1' } });
+    const delivery = await receiveOne(setting.fleet, crm);
+    await replyTo(crm, { to: z.string().parse(delivery?.senderShipId), inReplyTo: z.string().parse(delivery?.messageId), payload: 'One deal: Analytical engine.' });
+    const called = await calling;
+    await mcp.close();
+
+    expect(textOf(called)).toBe('One deal: Analytical engine.');
+  });
+
+  it("answers the ship's reply though more than ten messages that reply to no call wait for the party's proxy ship (aeolus-fleet#953)", async () => {
+    const crm = await aStatingShip({ waitMs: 10_000 });
+    const mcp = await aConnectedClient();
+    const party = await query(setting.address, { procedure: 'parties.get', cookie: setting.cookie, input: { name: 'test-client' } });
+    const proxyShipId = z.object({ result: z.object({ data: z.object({ proxyShipId: z.string() }) }) }).parse(await party.json()).result.data.proxyShipId;
+    for (let index = 0; index < 11; index += 1) {
+      const sent = await fetch(`${setting.fleet.url}/api/v1/ship/send`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${crm}` },
+        body: JSON.stringify({ selector: { kind: 'ship', shipId: proxyShipId }, contentType: 'text/plain', payload: `Note ${String(index)}`, idempotencyKey: crypto.randomUUID() }),
+      });
+      expect(sent.status).toBe(200);
+    }
     const [tool] = (await mcp.listTools()).tools.filter((each) => each.name.endsWith('__list_deals'));
 
     const calling = mcp.callTool({ name: z.string().parse(tool?.name), arguments: { contactId: 'c1' } });

@@ -20,6 +20,7 @@ import {
   idSchema,
   inboxOutputSchema,
   pushReceiveOutputSchema,
+  receiveOutputSchema,
   QUESTION_CONTENT_TYPE,
   questionSchema,
   sendOutputSchema,
@@ -30,7 +31,7 @@ import {
 import { z } from 'zod';
 
 import type { FleetDoor, FleetRefusal } from '../../core/connection/ports.js';
-import type { CallSender, Discovery } from '../../core/mcp-in/ports.js';
+import type { CallSender, Discovery, ReplyReceiver } from '../../core/mcp-in/ports.js';
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
@@ -125,7 +126,7 @@ function questionOf(payload: string) {
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & AccountDoor & Owners & { person: PersonShipDoor } {
+): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & ReplyReceiver & AccountDoor & Owners & { person: PersonShipDoor } {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   const done = async (crewToken: string, request: { path: string; body: unknown }) => {
@@ -190,6 +191,14 @@ export function createRestFleetDoor(
       return stated.isOk ? ok(undefined) : stated;
     },
     // A proxy ship's crew calls (decision 0040), as the gateway's computer side makes them.
+    receiveReply: async (crewToken, { messageId, signal }) => {
+      const taken = await call({ path: '/ship/receiveReply', method: 'POST', crewToken, body: { messageId }, answers: receiveOutputSchema, signal });
+      if (!taken.isOk) {
+        return taken;
+      }
+      const [reply] = taken.value.deliveries;
+      return ok(reply === undefined ? undefined : { deliveryId: reply.deliveryId, messageId: reply.messageId, contentType: reply.contentType, payload: reply.payload });
+    },
     pushReceive: async (crewToken, { max, signal }) => {
       const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max }, answers: pushReceiveOutputSchema, signal });
       return taken.isOk
