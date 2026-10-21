@@ -21,7 +21,7 @@ import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
 import type { Clock } from '../../core/shared/clock.js';
 import type { CompleteSignIn, SignInAnswer } from '../../core/sign-in/complete-sign-in.js';
 import { SIGN_IN_LIFETIME_MS, type StartSignIn } from '../../core/sign-in/start-sign-in.js';
-import { acceptForms, isSameOrigin } from './html.js';
+import { acceptForms, isSameOrigin } from './forms.js';
 import { acceptWebsockets, type ChangeHub } from './live.js';
 
 const HTTP_FOUND = 302;

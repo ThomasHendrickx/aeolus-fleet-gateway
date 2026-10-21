@@ -10,7 +10,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 
-import { isSameOrigin } from './html.js';
+import { isSameOrigin } from './forms.js';
 
 const HTTP_SEE_OTHER = 303;
 const HTTP_FORBIDDEN = 403;
