@@ -109,7 +109,7 @@ describe('a person signs in from their MCP client through pagasae', () => {
     const read = await mcp.callTool({ name: 'aeolus_inbox', arguments: {} });
 
     expect({ tools: listed.tools.map(({ name }) => name), read }).toEqual({
-      tools: ['aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ask_for_server'],
+      tools: ['aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_ask_for_server'],
       // pagasae names no person ship for Charlotte here, so the gateway asks the fleet nothing.
       read: { content: [{ type: 'text', text: 'You have no person ship in this fleet: your rights there do not let you message' }], isError: true },
     });
