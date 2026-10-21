@@ -47,8 +47,11 @@ import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { ReadAuthorization } from '../../core/oauth/read-authorization.js';
-import type { ReadWaiting } from '../../core/requests/read-waiting.js';
+import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
 import type { Result } from '../../core/shared/result.js';
+
+/** The header the web app's waiting page sends its browser's secret in (web/lib/gateway-api/gateway-api.ts names the same). */
+export const WAITING_SECRET_HEADER = 'aeolus-waiting-secret';
 
 export interface Context {
   /** The Cookie header the console's server or the gateway's page forwarded. */
@@ -91,7 +94,9 @@ export interface Context {
   /** An MCP client's authorization request, as the gateway reads it before it signs the person in. */
   readAuthorization?: ReadAuthorization;
   /** A client waiting for approval, as its browser follows it; unset where no pagasae signs anyone in. */
-  readWaiting?: ReadWaiting;
+  watchWaiting?: WatchWaiting;
+  /** The secret of the browser that asked for a client, sent beside the call (WAITING_SECRET_HEADER), so it never travels in an address. */
+  waitingSecret?: string;
   listToDecide: ListToDecide;
   listMine: ListMine;
   decideRequest: DecideRequest;
@@ -673,15 +678,16 @@ export const gatewayRouter = t.router({
       }),
     /**
      * A client waiting for approval, as the web app's waiting page shows it,
-     * by the secret its browser holds; anything else, decided or refused, the
-     * page goes on to the gateway's own waiting address to be told.
+     * by the secret its browser holds, read with no side effect; anything
+     * else, decided or refused, the page goes on to the gateway's own waiting
+     * address, which alone issues the code or tells the account.
      */
     waiting: t.procedure
-      .input(z.strictObject({ waiting: z.string(), browserSecret: z.string().optional() }))
+      .input(z.strictObject({ waiting: z.string() }))
       .output(z.discriminatedUnion('kind', [z.object({ kind: z.literal('waiting'), clientName: z.string(), expiresAt: z.string() }), z.object({ kind: z.literal('goOn') })]))
       .query(async ({ ctx, input }) => {
-        const read = ctx.readWaiting === undefined ? undefined : await ctx.readWaiting({ waiting: input.waiting, browserSecret: input.browserSecret });
-        return read?.isOk === true && read.value.kind === 'waiting' ? { kind: 'waiting' as const, clientName: read.value.clientName, expiresAt: read.value.expiresAt.toISOString() } : { kind: 'goOn' as const };
+        const watched = ctx.watchWaiting === undefined ? undefined : await ctx.watchWaiting({ waiting: input.waiting, browserSecret: ctx.waitingSecret });
+        return watched?.isOk === true && watched.value.isWaiting ? { kind: 'waiting' as const, clientName: watched.value.clientName, expiresAt: watched.value.expiresAt.toISOString() } : { kind: 'goOn' as const };
       }),
     /**
      * argo pre-registers an MCP client for its fleet: its name and redirect
