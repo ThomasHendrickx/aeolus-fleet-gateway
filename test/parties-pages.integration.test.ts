@@ -112,6 +112,18 @@ describe('the parties pages, as the account signed in', () => {
     expect(bodies.map((body) => body.includes('role="alert"') && textOf(body).includes('← Outside parties'))).toEqual(pages.map(() => true));
   }, 60_000);
 
+  it("checks a server from the address step, and shows the check's refusal on that step with the address kept", async () => {
+    const page = await (await fetch(`${address}/outside-parties/add?fleet=${FLEET}`, { headers: PAGE })).text();
+    const form = hiddenFieldsOf(page, 'add-server-address');
+    form.append('url', 'http://127.0.0.1:9/mcp');
+    form.append('credentialKind', 'bearer');
+    form.append('token', 'a-token');
+
+    const answer = await (await fetch(`${address}/outside-parties/add?fleet=${FLEET}`, { method: 'POST', headers: { ...PAGE, origin: address }, body: form })).text();
+
+    expect({ isRefused: answer.includes('role="alert"'), isAddressKept: answer.includes('value="http://127.0.0.1:9/mcp"') }).toEqual({ isRefused: true, isAddressKept: true });
+  }, 60_000);
+
   it('sends a page that names no fleet to the same page in the fleet the account may open', async () => {
     const page = await fetch(`${address}/parties`, { headers: PAGE, redirect: 'manual' });
 
