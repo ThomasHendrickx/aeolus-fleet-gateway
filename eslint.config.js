@@ -115,7 +115,7 @@ function importRules({ patterns, syntax = [] }) {
 }
 
 export default defineConfig(
-  globalIgnores(['**/node_modules/', '**/dist/', '**/coverage/', 'src/adapters/prisma/generated/']),
+  globalIgnores(['**/node_modules/', '**/dist/', '**/coverage/', 'src/adapters/prisma/generated/', 'web/.next/', 'web/next-env.d.ts']),
 
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
@@ -134,7 +134,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['**/*.js'],
+    files: ['**/*.{js,mjs}'],
     extends: [tseslint.configs.disableTypeChecked],
   },
 
@@ -173,9 +173,9 @@ export default defineConfig(
     },
   },
   {
-    // Tools read their config files' default export.
+    // Tools read their config files' default export, and Next.js its route files' (typescript skill).
     name: 'aeolus/default-export-required',
-    files: ['*.config.{js,ts}'],
+    files: ['*.config.{js,ts}', 'web/*.config.{mjs,ts}', 'web/app/**/{layout,page,not-found}.tsx'],
     rules: { 'no-restricted-exports': 'off' },
   },
 
