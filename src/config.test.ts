@@ -15,6 +15,7 @@ describe('the gateway configuration from the environment', () => {
       logLevel: 'info',
       installationToken: undefined,
       publicUrl: 'http://127.0.0.1:4200',
+      apiUrl: 'http://127.0.0.1:4200',
       gatewaySecret: GATEWAY_SECRET,
       mcpWaitMaxMs: 10_000,
       pagasae: undefined,
@@ -31,6 +32,7 @@ describe('the gateway configuration from the environment', () => {
       logLevel: 'debug',
       installationToken: undefined,
       publicUrl: 'http://127.0.0.1:8080',
+      apiUrl: 'http://127.0.0.1:8080',
       gatewaySecret: GATEWAY_SECRET,
       mcpWaitMaxMs: 10_000,
       pagasae: undefined,
@@ -40,6 +42,10 @@ describe('the gateway configuration from the environment', () => {
 
   it('reads where outside MCP clients reach the gateway without its trailing slash: the OAuth issuer, and its MCP endpoint below it', () => {
     expect(loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', GATEWAY_PUBLIC_URL: 'https://gateway.example/' }).publicUrl).toBe('https://gateway.example');
+  });
+
+  it("reads where the web app's server calls the API: this machine at the gateway's port, whatever its host and public URL", () => {
+    expect(loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', HOST: '0.0.0.0', PORT: '8080', GATEWAY_PUBLIC_URL: 'https://gateway.example' }).apiUrl).toBe('http://127.0.0.1:8080');
   });
 
   it('refuses a missing gateway secret, and one of 31 characters: it keys aliases, handles and idempotency keys', () => {
