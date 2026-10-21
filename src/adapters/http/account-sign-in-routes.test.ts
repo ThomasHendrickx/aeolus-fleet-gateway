@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CHARLOTTE_SIGN_IN, fakeAccountSignInSeals, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
 import { fakeSecrets } from '../../../test/support/oauth-fakes.js';
 import { PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
+import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
 import { createCompleteAccountSignIn } from '../../core/account-sign-in/complete-account-sign-in.js';
 import { createSignOutAccount } from '../../core/account-sign-in/sign-out-account.js';
 import { createStartAccountSignIn } from '../../core/account-sign-in/start-account-sign-in.js';
@@ -27,7 +28,7 @@ beforeEach(async () => {
     issuer: ISSUER,
     start: createStartAccountSignIn({ seals, signIns, secrets: fakeSecrets(), clock }),
     complete: createCompleteAccountSignIn({ seals, signIns, clock }),
-    signOut: createSignOutAccount({ signIns }),
+    signOut: createSignOutAccount({ signIns, accountOf: createAccountOfSignIn({ signIns, clock }) }),
   });
   await server.ready();
 });

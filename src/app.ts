@@ -413,7 +413,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     options.pagasae === undefined || options.pagasaeApp === undefined
       ? undefined
       : createSharedSignIn({ url: options.pagasae.url, ...options.pagasaeApp, redirectUri: `${issuer}/sign-in/done`, timeoutMs: PAGASAE_TIMEOUT_MS });
-  const accountOf: AccountOfSignIn = signIns === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountOfSignIn({ signIns, clock });
+  const accountOf: AccountOfSignIn =
+    signIns === undefined ? Object.assign(() => Promise.resolve(err({ kind: 'signedOut' as const })), { forget: () => undefined }) : createAccountOfSignIn({ signIns, clock });
   const accountInView = signIns === undefined ? undefined : createAccountInView({ signIns, accountOf });
   if (signIns !== undefined) {
     const accountSeals = createAccountSignInSeals(options.gatewaySecret);
@@ -421,7 +422,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       issuer,
       start: createStartAccountSignIn({ seals: accountSeals, signIns, secrets: oauthSecrets, clock }),
       complete: createCompleteAccountSignIn({ seals: accountSeals, signIns, clock }),
-      signOut: createSignOutAccount({ signIns }),
+      signOut: createSignOutAccount({ signIns, accountOf }),
     });
   }
 
