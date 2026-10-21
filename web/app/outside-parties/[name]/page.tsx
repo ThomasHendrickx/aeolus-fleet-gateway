@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { OutsideParty } from '../../../features/outside-party/ui/outside-party';
 import { partyPath } from '../../../features/outside-parties/paths';
 import { NoSignIn } from '../../../features/sign-in/ui/no-sign-in';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
@@ -12,5 +13,5 @@ export default async function OutsidePartyPage({ params, searchParams }: { param
   if (page.kind === 'noSignIn') {
     return <NoSignIn />;
   }
-  return <h1 className="text-title font-semibold">{name}</h1>;
+  return <OutsideParty page={page} name={name} />;
 }
