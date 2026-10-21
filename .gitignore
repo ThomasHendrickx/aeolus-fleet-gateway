@@ -3,3 +3,6 @@ dist/
 coverage/
 .env
 src/adapters/prisma/generated/
+web/.next/
+web/next-env.d.ts
+*.tsbuildinfo
