@@ -74,6 +74,7 @@ import { createPagasae } from './adapters/pagasae/pagasae-client.js';
 import { createSharedSignIn } from './adapters/pagasae/shared-sign-in.js';
 import { createAccountSignInSeals } from './adapters/crypto/account-sign-in-seals.js';
 import { cookieValueOf, registerAccountSignIn } from './adapters/http/account-sign-in-routes.js';
+import { createAccountInView } from './core/account-sign-in/account-in-view.js';
 import { createAccountOfSignIn, type AccountOfSignIn } from './core/account-sign-in/account-of-sign-in.js';
 import { createCompleteAccountSignIn } from './core/account-sign-in/complete-account-sign-in.js';
 import { SHARED_SIGN_IN_COOKIE } from './core/account-sign-in/ports.js';
@@ -413,6 +414,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       ? undefined
       : createSharedSignIn({ url: options.pagasae.url, ...options.pagasaeApp, redirectUri: `${issuer}/sign-in/done`, timeoutMs: PAGASAE_TIMEOUT_MS });
   const accountOf: AccountOfSignIn = signIns === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountOfSignIn({ signIns, clock });
+  const accountInView = signIns === undefined ? undefined : createAccountInView({ signIns, accountOf });
   if (signIns !== undefined) {
     const accountSeals = createAccountSignInSeals(options.gatewaySecret);
     registerAccountSignIn(server, {
@@ -445,6 +447,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined }): Context => ({
     ...sent,
     authenticateActor,
+    accountInView,
     isServed,
     heldConnection,
     installation: { mode: installation, token: options.installationToken },
