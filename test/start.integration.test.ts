@@ -1,13 +1,11 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { aFreePort, aNewDatabaseUrl, startFleetServer, type FleetServer } from './support/fleet-server.js';
-import { runGateway } from './support/gateway-bin.js';
+import { runGateway, startGateway, type RunningGateway } from './support/gateway-bin.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
 let fleet: FleetServer;
-let gateway: ChildProcess | undefined;
+let gateway: RunningGateway | undefined;
 let address: string;
 
 beforeAll(async () => {
@@ -15,14 +13,11 @@ beforeAll(async () => {
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
   // One gateway for the file: its web app, compiled from source, takes one Next.js development server per folder.
-  gateway = spawn('npx', ['tsx', 'src/bin/aeolus-gateway.ts', 'start'], {
-    env: { ...process.env, DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'), FLEET_URL: fleet.url, PORT: String(port), LOG_LEVEL: 'silent', GATEWAY_SECRET: TEST_GATEWAY_SECRET },
-    stdio: 'ignore',
-  });
+  gateway = startGateway({ DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'), FLEET_URL: fleet.url, PORT: String(port), LOG_LEVEL: 'silent', GATEWAY_SECRET: TEST_GATEWAY_SECRET });
 });
 
 afterAll(async () => {
-  gateway?.kill('SIGTERM');
+  await gateway?.stop();
   await fleet.stop();
 });
 
@@ -55,6 +50,15 @@ describe('aeolus-gateway start and migrate', () => {
     expect(body).toContain('This sign-in was started in another browser');
     expect(body).toContain('href="/sign-in/start"');
   }, 60_000);
+
+  it("start answers the parties pages with the web app's, which say a gateway that is no app at pagasae signs no one in", async () => {
+    await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
+    const pages = ['/parties', '/outside-parties', '/outside-parties/linear', '/outside-parties/linear/change', '/outside-parties/linear/retire', '/outside-parties/add'];
+
+    const answers = await Promise.all(pages.map(async (page) => (await fetch(`${address}${page}`, { headers: { accept: 'text/html' } })).text()));
+
+    expect(answers.map((body) => body.includes('data-testid="frame-header"') && body.includes('signs no one in'))).toEqual(pages.map(() => true));
+  }, 120_000);
 
   it('migrate migrates a new database and exits 0', async () => {
     const { code } = await runGateway(['migrate'], { DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway') });

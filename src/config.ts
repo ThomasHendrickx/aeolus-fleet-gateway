@@ -48,6 +48,12 @@ export interface Config {
    * MCP endpoint below it. This machine at the gateway's port unless set.
    */
   publicUrl: string;
+  /**
+   * Where the web app's server calls the gateway's API: this machine at the
+   * gateway's port, never an address a request names, so a page forwards a
+   * browser's cookies only to the gateway itself.
+   */
+  apiUrl: string;
   /** Keys what the gateway derives: ship aliases, result handles and idempotency keys. Changing it renames every ship to outside clients. */
   gatewaySecret: string;
   /** How long an outside MCP client's call waits for its answer before it is answered its handle. */
@@ -90,6 +96,7 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     logLevel: variables.LOG_LEVEL,
     installationToken: variables.INSTALLATION_TOKEN,
     publicUrl: (variables.GATEWAY_PUBLIC_URL ?? `http://127.0.0.1:${String(variables.PORT)}`).replace(/\/$/, ''),
+    apiUrl: `http://127.0.0.1:${String(variables.PORT)}`,
     gatewaySecret: variables.GATEWAY_SECRET,
     mcpWaitMaxMs: variables.MCP_WAIT_MAX_MS,
     pagasae: pagasaeOf(variables),

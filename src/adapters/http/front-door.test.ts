@@ -1,3 +1,5 @@
+import { text } from 'node:stream/consumers';
+
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -10,6 +12,9 @@ const aWebApp: WebApp = (request, response) => {
   response.writeHead(404, { 'content-type': 'text/html; charset=utf-8' }).end(`<p>the web app answered ${request.url ?? ''}</p>`);
   return Promise.resolve();
 };
+
+const GATEWAY_HOST = 'gateway.example';
+const GATEWAY_ORIGIN = 'https://gateway.example';
 
 let server: FastifyInstance;
 
@@ -49,6 +54,38 @@ describe("the gateway's address as a person opens it (#1030)", () => {
 
     expect(answer.statusCode).toBe(404);
     expect(answer.json()).toEqual({ message: 'Route GET:/api/no-such-call not found', error: 'Not Found', statusCode: 404 });
+  });
+
+  it("hands a page's form, a server action of the web app, to the web app with its body as the browser sent it", async () => {
+    const form = '--b\r\ncontent-disposition: form-data; name="isOn"\r\n\r\ntrue\r\n--b--\r\n';
+    const echoing = Fastify({ logger: false });
+    registerFrontDoor(echoing, {
+      web: async (request, response) => {
+        response.writeHead(200).end(`${request.url ?? ''} ${await text(request)}`);
+      },
+    });
+
+    const answer = await echoing.inject({ method: 'POST', url: '/outside-parties?fleet=flt_1', headers: { 'next-action': 'a1b2', 'content-type': 'multipart/form-data; boundary=b', host: GATEWAY_HOST, origin: GATEWAY_ORIGIN }, payload: form });
+
+    expect({ status: answer.statusCode, body: answer.body }).toEqual({ status: 200, body: `/outside-parties?fleet=flt_1 ${form}` });
+    await echoing.close();
+  });
+
+  it('hands a form sent before the page took over the browser (no server action header) to the web app, as it is multipart', async () => {
+    const answer = await server.inject({ method: 'POST', url: '/outside-parties', headers: { 'content-type': 'multipart/form-data; boundary=b', host: GATEWAY_HOST, origin: GATEWAY_ORIGIN }, payload: '--b--\r\n' });
+
+    expect(answer.body).toBe('<p>the web app answered /outside-parties</p>');
+  });
+
+  it.each([
+    { what: 'with no Origin', sent: {} },
+    { what: 'from another site', sent: { origin: 'https://evil.example' } },
+  ])("refuses a page's form sent $what, and the web app never sees it", async ({ sent }) => {
+    for (const headers of [{ 'next-action': 'a1b2' }, { 'content-type': 'multipart/form-data; boundary=b' }]) {
+      const answer = await server.inject({ method: 'POST', url: '/outside-parties', headers: { 'content-type': 'multipart/form-data; boundary=b', host: GATEWAY_HOST, ...headers, ...sent }, payload: '--b--\r\n' });
+
+      expect({ status: answer.statusCode, body: answer.body }).toEqual({ status: 403, body: 'A form for this page is sent only from this page.' });
+    }
   });
 
   it('answers an unknown form post as JSON, as no page is asked for', async () => {

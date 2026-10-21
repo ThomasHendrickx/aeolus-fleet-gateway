@@ -50,6 +50,7 @@
     "@modelcontextprotocol/server": "^2.3.1",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
+    "@trpc/client": "^11.19.0",
     "@trpc/server": "^11.19.0",
     "fastify": "^5.12.7",
     "next": "^16.4.2",

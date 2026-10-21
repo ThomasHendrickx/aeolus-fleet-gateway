@@ -24,7 +24,7 @@ async function start(): Promise<void> {
   await requireCoreVersion(config.fleetUrl);
   await migrateDatabase(config.databaseUrl);
   // Started from source (tsx), the web app compiles as it is asked; from the package, it serves its build.
-  const web = await startNextWebApp({ dir: fileURLToPath(WEB_DIR), isDevelopment: import.meta.url.endsWith('.ts') });
+  const web = await startNextWebApp({ dir: fileURLToPath(WEB_DIR), isDevelopment: import.meta.url.endsWith('.ts'), apiUrl: config.apiUrl });
   const app = createGatewayApp({
     databaseUrl: config.databaseUrl,
     fleetUrl: config.fleetUrl,

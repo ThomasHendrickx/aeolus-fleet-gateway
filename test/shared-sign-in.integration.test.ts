@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
+import { gatewayApi } from '../web/lib/gateway-api/gateway-api.js';
 import { migratedDatabase } from './support/database.js';
 import { charlotteIn, PAGASAE_APP_CLIENT, PAGASAE_CLIENT, startFakePagasae, type FakePagasae } from './support/fake-pagasae.js';
 import { aFreePort } from './support/fleet-server.js';
@@ -63,6 +64,12 @@ describe("signing in to the gateway's pages with the shared sign-in", () => {
       status: 200,
       body: { result: { data: { kind: 'signedIn', fleetId: FLEET, accountId: 'acc-charlotte', scopes: ['fleet:read', 'gateway:approve'] } } },
     });
+  });
+
+  it("is the account in the page's fleet to the web app's server, which forwards the browser's cookies", async () => {
+    const api = gatewayApi({ url: address, cookie: `theme=dark; aeolus_account_session=${SIGN_IN}`, fleetId: FLEET });
+
+    await expect(api.account.inView.query()).resolves.toEqual({ kind: 'signedIn', fleetId: FLEET, accountId: 'acc-charlotte', scopes: ['fleet:read', 'gateway:approve'] });
   });
 
   it('sends a page that names no fleet to the fleet whose gateway the account may open', async () => {
