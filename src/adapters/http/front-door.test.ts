@@ -13,6 +13,9 @@ const aWebApp: WebApp = (request, response) => {
   return Promise.resolve();
 };
 
+const GATEWAY_HOST = 'gateway.example';
+const GATEWAY_ORIGIN = 'https://gateway.example';
+
 let server: FastifyInstance;
 
 beforeEach(async () => {
@@ -62,16 +65,27 @@ describe("the gateway's address as a person opens it (#1030)", () => {
       },
     });
 
-    const answer = await echoing.inject({ method: 'POST', url: '/outside-parties?fleet=flt_1', headers: { 'next-action': 'a1b2', 'content-type': 'multipart/form-data; boundary=b' }, payload: form });
+    const answer = await echoing.inject({ method: 'POST', url: '/outside-parties?fleet=flt_1', headers: { 'next-action': 'a1b2', 'content-type': 'multipart/form-data; boundary=b', host: GATEWAY_HOST, origin: GATEWAY_ORIGIN }, payload: form });
 
     expect({ status: answer.statusCode, body: answer.body }).toEqual({ status: 200, body: `/outside-parties?fleet=flt_1 ${form}` });
     await echoing.close();
   });
 
   it('hands a form sent before the page took over the browser (no server action header) to the web app, as it is multipart', async () => {
-    const answer = await server.inject({ method: 'POST', url: '/outside-parties', headers: { 'content-type': 'multipart/form-data; boundary=b' }, payload: '--b--\r\n' });
+    const answer = await server.inject({ method: 'POST', url: '/outside-parties', headers: { 'content-type': 'multipart/form-data; boundary=b', host: GATEWAY_HOST, origin: GATEWAY_ORIGIN }, payload: '--b--\r\n' });
 
     expect(answer.body).toBe('<p>the web app answered /outside-parties</p>');
+  });
+
+  it.each([
+    { what: 'with no Origin', sent: {} },
+    { what: 'from another site', sent: { origin: 'https://evil.example' } },
+  ])("refuses a page's form sent $what, and the web app never sees it", async ({ sent }) => {
+    for (const headers of [{ 'next-action': 'a1b2' }, { 'content-type': 'multipart/form-data; boundary=b' }]) {
+      const answer = await server.inject({ method: 'POST', url: '/outside-parties', headers: { 'content-type': 'multipart/form-data; boundary=b', host: GATEWAY_HOST, ...headers, ...sent }, payload: '--b--\r\n' });
+
+      expect({ status: answer.statusCode, body: answer.body }).toEqual({ status: 403, body: 'A form for this page is sent only from this page.' });
+    }
   });
 
   it('answers an unknown form post as JSON, as no page is asked for', async () => {
