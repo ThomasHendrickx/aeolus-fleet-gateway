@@ -33,7 +33,7 @@ import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerOutsidePartiesPage } from './adapters/http/outside-parties-page.js';
 import { registerAddServerPage } from './adapters/http/add-server-page.js';
-import { registerFrontDoor } from './adapters/http/front-door.js';
+import { registerFrontDoor, type WebApp } from './adapters/http/front-door.js';
 import { registerOutsidePartyPage } from './adapters/http/outside-party-page.js';
 import { createChangeHub, registerLive } from './adapters/http/live.js';
 import { overviewLivePages, registerOverviewPage } from './adapters/http/overview-page.js';
@@ -139,6 +139,8 @@ export interface GatewayAppOptions {
   toolCallTimeoutMs?: number;
   /** pagasae, where people sign in, and the gateway's client there (decision 0054): unset, people do not sign in. */
   pagasae?: { url: string; clientId: string; clientSecret: string };
+  /** The gateway's web app, answering the pages the server has none of: unset, an unknown page is answered as any unknown address. */
+  web?: WebApp;
 }
 
 /** Within the fleet's 10 minutes a handed delivery may wait for its confirmation (decision 0040). */
@@ -474,7 +476,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   registerAddServerPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOutsidePartyPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOverviewPage(server, { contextFor: pageContextFor, signIn: pageSignIn, clock });
-  registerFrontDoor(server);
+  registerFrontDoor(server, options.web === undefined ? {} : { web: options.web });
 
   registerLive(server, { contextFor: pageContextFor, hub, pages: overviewLivePages({ clock }) });
   let changes: { close(): Promise<void> } | undefined;
