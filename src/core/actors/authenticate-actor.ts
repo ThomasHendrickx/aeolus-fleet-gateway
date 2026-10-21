@@ -1,5 +1,6 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
+import type { AccountOfSignIn } from '../account-sign-in/account-of-sign-in.js';
 import type { ConnectionStore, FleetDoor } from '../connection/ports.js';
 import type { AuthenticateOperator } from '../operator/authenticate-operator.js';
 import type { AccountTokenOf } from '../sign-in/account-token.js';
@@ -19,17 +20,22 @@ export type Actor =
   | { readonly fleetId: FleetId; readonly kind: 'ship'; readonly shipId: ShipId; readonly scopes: readonly string[] }
   | AccountActor;
 
-/** An account on the gateway's pages, with the grant whose account token it acts by in the fleet. */
+/**
+ * An account on the gateway's pages: by the grant whose account token it
+ * acts by in the fleet, or, signed in with the shared sign-in (header design
+ * H5), by the account token pagasae exchanged it for, with no grant.
+ */
 export interface AccountActor {
   readonly fleetId: FleetId;
   readonly kind: 'account';
   readonly accountId: string;
   readonly personShipId: ShipId | null;
-  readonly grantId: string;
+  readonly grantId: string | null;
+  readonly accountToken?: string;
   readonly scopes: readonly string[];
 }
 
-export type AuthenticateActor = (sent: { cookie?: string | undefined; crewToken?: string | undefined }) => Promise<Result<Actor, DomainError<'NOT_AN_ACTOR'>>>;
+export type AuthenticateActor = (sent: { cookie?: string | undefined; crewToken?: string | undefined; signIn?: string | undefined; fleetId?: FleetId | undefined }) => Promise<Result<Actor, DomainError<'NOT_AN_ACTOR'>>>;
 
 /**
  * Use case: whom a call of the gateway's API is for. A crew token, sent
@@ -39,7 +45,9 @@ export type AuthenticateActor = (sent: { cookie?: string | undefined; crewToken?
  * fleet the gateway is not connected to is no actor here. The crew token is
  * never kept. Else the gateway's own page session cookie names an account,
  * with the scopes its account token carries, refreshed through pagasae when
- * it is about to end; a session whose sign-in ended is no actor.
+ * it is about to end; a session whose sign-in ended is no actor. Else the
+ * shared sign-in the page forwarded names an account in the fleet the page
+ * names, by the account token pagasae exchanges it for.
  */
 export function createAuthenticateActor(deps: {
   authenticateOperator: AuthenticateOperator;
@@ -47,9 +55,10 @@ export function createAuthenticateActor(deps: {
   connections: Pick<ConnectionStore, 'find'>;
   sessions: PageSessions;
   accountTokenOf: AccountTokenOf;
+  accountOf: AccountOfSignIn;
 }): AuthenticateActor {
   const refusal = refuse('NOT_AN_ACTOR', 'Sign in to the console of your fleet, or call with your ship\'s crew token');
-  return async ({ cookie, crewToken }) => {
+  return async ({ cookie, crewToken, signIn, fleetId }) => {
     if (crewToken !== undefined) {
       const who = await deps.door.whoami(crewToken);
       if (!who.isOk) {
@@ -71,6 +80,14 @@ export function createAuthenticateActor(deps: {
       }
       const { accountId, personShipId, scopes } = token.value;
       return ok({ fleetId: session.fleetId, kind: 'account', accountId, personShipId, grantId: session.grantId, scopes });
+    }
+    if (signIn !== undefined && fleetId !== undefined) {
+      const token = await deps.accountOf({ signIn, fleetId });
+      if (!token.isOk) {
+        return refusal;
+      }
+      const { accountId, personShipId, scopes, accountToken } = token.value;
+      return ok({ fleetId, kind: 'account', accountId, personShipId, grantId: null, accountToken, scopes });
     }
     const operator = await deps.authenticateOperator(cookie);
     return operator.isOk ? ok(operator.value) : refusal;
