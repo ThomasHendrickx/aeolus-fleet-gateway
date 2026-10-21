@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
+import { createPrismaClient } from '../src/adapters/prisma/client.js';
+import { createPrismaPendingRequests } from '../src/adapters/prisma/pending-requests.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
+import type { PendingRequest } from '../src/core/requests/ports.js';
 import { gatewayApi } from '../web/lib/gateway-api/gateway-api.js';
 import { migratedDatabase } from './support/database.js';
 import { charlotteIn, PAGASAE_APP_CLIENT, PAGASAE_CLIENT, startFakePagasae, type FakePagasae } from './support/fake-pagasae.js';
@@ -15,17 +18,30 @@ import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
 const FLEET = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const SIGN_IN = 'charlotte-shared-sign-in';
+const ORDERBOT_REQUEST: PendingRequest = {
+  fleetId: FLEET,
+  requestId: 'req_01m5c7hmbt9f1vrkwb37az0001',
+  subject: { kind: 'client', clientId: 'https://orderbot.example.com/client.json', clientName: 'Orderbot' },
+  requesters: [{ accountId: 'acc-charlotte', personShipId: null }],
+  askedAt: new Date('2026-10-21T09:00:00.000Z'),
+  expiresAt: new Date('2026-10-28T09:00:00.000Z'),
+  state: 'pending',
+  decidedBy: null,
+  decidedAt: null,
+};
 
 let app: GatewayApp;
 let pagasae: FakePagasae;
 let address: string;
+let databaseUrl: string;
 
 beforeEach(async () => {
   pagasae = await startFakePagasae();
   const port = await aFreePort();
+  databaseUrl = await migratedDatabase(inject('postgresUrl'));
   address = `http://127.0.0.1:${String(port)}`;
   app = createGatewayApp({
-    databaseUrl: await migratedDatabase(inject('postgresUrl')),
+    databaseUrl,
     fleetUrl: 'http://127.0.0.1:9',
     logger: false,
     publicUrl: address,
@@ -83,5 +99,35 @@ describe("signing in to the gateway's pages with the shared sign-in", () => {
 
     expect(out.status).toBe(303);
     await expect(accountInView({ cookie: `aeolus_account_session=${SIGN_IN}`, fleet: FLEET })).resolves.toMatchObject({ status: 401 });
+  });
+});
+
+describe("a page of the web app follows its fleet's request changes over the API, as the account signed in", () => {
+  it('hears a request opened in the fleet as an event on the stream', async () => {
+    const stop = new AbortController();
+    const stream = await fetch(`${address}/trpc/requests.changes`, { headers: { accept: 'text/event-stream', cookie: `aeolus_account_session=${SIGN_IN}`, 'aeolus-fleet': FLEET }, signal: stop.signal });
+    if (stream.body === null) {
+      throw new Error('The stream has no body');
+    }
+    const reader = stream.body.pipeThrough(new TextDecoderStream()).getReader();
+    const prisma = createPrismaClient(databaseUrl);
+    let heard = '';
+    try {
+      // The stream is open once its first event, connected, comes.
+      heard += (await reader.read()).value ?? '';
+      await createPrismaPendingRequests(prisma).open({ ...ORDERBOT_REQUEST, now: new Date() });
+      while (!heard.includes(`"fleetId":"${FLEET}"`)) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+        heard += value;
+      }
+    } finally {
+      stop.abort();
+      await prisma.$disconnect();
+    }
+
+    expect({ status: stream.status, type: stream.headers.get('content-type'), heard: heard.includes(`"fleetId":"${FLEET}"`) }).toEqual({ status: 200, type: 'text/event-stream', heard: true });
   });
 });
