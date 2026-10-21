@@ -1,8 +1,8 @@
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
-import type { AccountDoor, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonShipDoor } from '../../src/core/people/ports.js';
+import type { AccountDoor, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -117,17 +117,23 @@ export function aPersonDelivery(overrides: Partial<PersonDelivery> = {}): Person
   };
 }
 
+/** The id the fleet gives a message a person sends. */
+export const SENT_MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank0sen';
+
 /**
  * A person's ship in the fleet, as its crew's calls see it: the deliveries
- * waiting for it, each push receive handing the oldest again, up to max; the
- * crew token it takes, and the calls the gateway made.
+ * waiting for it, each push receive handing the oldest again, up to max;
+ * what its discover answers; the crew token it takes, and the calls the
+ * gateway made.
  */
-export function fakePersonShipDoor(ship: { crewToken: string; deliveries: PersonDelivery[] }) {
+export function fakePersonShipDoor(ship: { crewToken: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery }) {
   const calls: string[] = [];
   /** The replies the fleet took, as sent. */
   const replies: Parameters<PersonShipDoor['reply']>[1][] = [];
-  /** The fleet's answers to come for reply and handled, before it takes them. */
-  const refusals: { reply: FleetRefusal[]; handled: FleetRefusal[] } = { reply: [], handled: [] };
+  /** The messages the fleet took, as sent. */
+  const sent: Parameters<PersonShipDoor['send']>[1][] = [];
+  /** The fleet's answers to come for each call, before it takes them. */
+  const refusals: { reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[] } = { reply: [], handled: [], discover: [], send: [] };
   const refusal: FleetRefusal = { code: 'UNAUTHORIZED', message: 'The crew token is not valid' };
   const crewed = <T>(crewToken: string, value: () => T): Promise<Result<T, FleetRefusal>> => Promise.resolve(crewToken === ship.crewToken ? ok(value()) : err(refusal));
   const door: PersonShipDoor = {
@@ -162,8 +168,24 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
       const refused = refusals.handled.shift();
       return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => undefined);
     },
+    discover: (crewToken) => {
+      calls.push('discover');
+      const refused = refusals.discover.shift();
+      return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => ship.discovery ?? { ships: [], types: [] });
+    },
+    send: (crewToken, message) => {
+      calls.push(`send(${message.to.kind === 'ship' ? message.to.name : message.to.type})`);
+      const refused = refusals.send.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
+      return crewed(crewToken, () => {
+        sent.push(message);
+        return { messageId: SENT_MESSAGE_ID };
+      });
+    },
   };
-  return { door, calls, replies, refusals };
+  return { door, calls, replies, sent, refusals };
 }
 
 /** The deliveries people opened, in memory, by fleet, person ship and delivery. */
