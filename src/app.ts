@@ -358,7 +358,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           watchWaiting: createWatchWaiting({ waitings, requests: pendingRequests, parties, clock }),
           hub,
           clock,
-          pages: { start: createStartPageSignIn({ seals, pagasae, secrets: oauthSecrets, clock }), signOut: createSignOut({ grants }), sessions: pageSessions },
+          pages: { start: createStartPageSignIn({ seals, pagasae, secrets: oauthSecrets, clock, origin: issuer }), signOut: createSignOut({ grants }), sessions: pageSessions },
         };
   registerOAuthRoutes(server, {
     ...(signIn === undefined ? {} : { signIn }),

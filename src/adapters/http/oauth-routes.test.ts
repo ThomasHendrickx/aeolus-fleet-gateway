@@ -80,7 +80,7 @@ async function startServer(isSigningPeopleIn: boolean) {
             watchWaiting: createWatchWaiting({ waitings, requests, parties, clock }),
             hub,
             clock,
-            pages: { start: createStartPageSignIn({ seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }), signOut: createSignOut({ grants: memoryAccountGrants() }), sessions: fakePageSessions() },
+            pages: { start: createStartPageSignIn({ seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock, origin: ISSUER }), signOut: createSignOut({ grants: memoryAccountGrants() }), sessions: fakePageSessions() },
           },
         }
       : {}),
