@@ -49,6 +49,12 @@ describe('a person starts signing in to the pages', () => {
     expect(startSignIn()({ returnTo: '/overview' })).toEqual({ redirectTo: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)`, browserSecret: 'secret-2' });
   });
 
+  it('keeps the path, query and hash of a page of its own', () => {
+    startSignIn()({ returnTo: '/outside-parties/linear?fleet=flt_1#tools' });
+
+    expect([...seals.held.values()].map((signIn) => signIn.returnTo)).toEqual(['/outside-parties/linear?fleet=flt_1#tools']);
+  });
+
   it('seals the page to go back to for 10 minutes, with the verifier and the browser secret', () => {
     startSignIn()({ returnTo: '/overview?fleet=flt_1' });
 
@@ -60,6 +66,12 @@ describe('a person starts signing in to the pages', () => {
     { what: 'another site', returnTo: 'https://evil.example.com/overview' },
     { what: 'another site without a scheme', returnTo: '//evil.example.com/overview' },
     { what: 'another site behind a backslash', returnTo: '/\\evil.example.com' },
+    { what: 'another site behind a tab a browser drops', returnTo: '/\t/evil.example.com' },
+    { what: 'another site behind a newline a browser drops', returnTo: '/\n/evil.example.com' },
+    { what: 'another site behind a carriage return a browser drops', returnTo: '/\r/evil.example.com' },
+    { what: 'another site behind a slash and a backslash', returnTo: '/\\/evil.example.com' },
+    { what: 'another site behind a backslash and a tab', returnTo: '\\\t\\evil.example.com' },
+    { what: 'a path with no leading slash', returnTo: 'evil.example.com' },
   ])('goes back to the Overview for $what', ({ returnTo }) => {
     startSignIn()({ returnTo });
 
