@@ -39,14 +39,24 @@ describe('a person opens a delivery that waits for their person ship', () => {
     });
   });
 
-  it('acknowledges it for the person, once it kept what an answer needs: its message, its sender and title, never its payload', async () => {
+  it('acknowledges it for the person, once it kept what an answer and the inbox need: its message, its sender, title and when it was sent, never its payload', async () => {
     const { openDelivery, calls } = opening([QUESTION]);
 
     await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
 
     expect(calls).toEqual(['inbox', 'pushReceive(10)', `ack(${QUESTION.deliveryId})`]);
     expect([...opened.held.values()]).toEqual([
-      { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: QUESTION.deliveryId, messageId: QUESTION.messageId, senderShipId: QUESTION.senderShipId, from: 'tracker', title: 'Go for release 1.4?', openedAt: AT },
+      {
+        fleetId: FLEET_ID,
+        shipId: PERSON_SHIP_ID,
+        deliveryId: QUESTION.deliveryId,
+        messageId: QUESTION.messageId,
+        senderShipId: QUESTION.senderShipId,
+        from: 'tracker',
+        title: 'Go for release 1.4?',
+        sentAt: QUESTION.sentAt,
+        openedAt: AT,
+      },
     ]);
   });
 

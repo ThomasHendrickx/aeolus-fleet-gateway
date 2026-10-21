@@ -199,6 +199,7 @@ export function memoryOpenedDeliveries(): OpenedDeliveries & { held: Map<string,
       return Promise.resolve();
     },
     find: (fleetId, opened) => Promise.resolve(held.get(key(fleetId, opened))),
+    list: (fleetId, shipId) => Promise.resolve([...held.values()].filter((opened) => opened.fleetId === fleetId && opened.shipId === shipId).sort((a, b) => a.openedAt.getTime() - b.openedAt.getTime())),
     remove: (fleetId, opened) => {
       held.delete(key(fleetId, opened));
       return Promise.resolve();
