@@ -1,0 +1,9 @@
+/** The outside parties' pages. */
+export const OUTSIDE_PARTIES_PATH = '/outside-parties';
+
+export const ADD_SERVER_PATH = `${OUTSIDE_PARTIES_PATH}/add`;
+
+/** One outside party's page, or one of its own: changing it, retiring it. */
+export function partyPath(name: string, action?: 'change' | 'retire'): string {
+  return `${OUTSIDE_PARTIES_PATH}/${encodeURIComponent(name)}${action === undefined ? '' : `/${action}`}`;
+}

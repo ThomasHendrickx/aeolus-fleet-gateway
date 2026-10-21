@@ -31,15 +31,11 @@ import { createPrismaCalls } from './adapters/prisma/calls.js';
 import { sleep } from './adapters/timers/sleep.js';
 import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, type Context, type GatewayRouter } from './adapters/trpc/router.js';
-import { registerOutsidePartiesPage } from './adapters/http/outside-parties-page.js';
-import { registerAddServerPage } from './adapters/http/add-server-page.js';
 import { registerFrontDoor, type WebApp } from './adapters/http/front-door.js';
-import { registerOutsidePartyPage } from './adapters/http/outside-party-page.js';
 import { createChangeHub, registerLive } from './adapters/http/live.js';
 import { overviewLivePages, registerOverviewPage } from './adapters/http/overview-page.js';
 import type { SignInWay } from './adapters/http/signal.js';
 import { listenToChanges } from './adapters/prisma/changes.js';
-import { registerPartiesPage } from './adapters/http/parties-page.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
 import { createShipAliases } from './adapters/crypto/ship-aliases.js';
@@ -503,10 +499,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const pageContextFor = (cookie: string | undefined) => contextFor({ cookie: pageCookieOf(cookie), crewToken: undefined, signIn: undefined, fleetInView: undefined, installationTokenSent: undefined });
   // Pages sign people in through pagasae; a gateway that signs no one in says so.
   const pageSignIn: SignInWay = pagasae === undefined ? 'none' : 'pages';
-  registerPartiesPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
-  registerOutsidePartiesPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
-  registerAddServerPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
-  registerOutsidePartyPage(server, { contextFor: pageContextFor, signIn: pageSignIn });
   registerOverviewPage(server, { contextFor: pageContextFor, signIn: pageSignIn, clock });
   registerFrontDoor(server, options.web === undefined ? {} : { web: options.web });
 
