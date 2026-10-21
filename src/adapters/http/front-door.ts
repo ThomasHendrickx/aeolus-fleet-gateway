@@ -1,7 +1,8 @@
 /**
  * The gateway's address as a person opens it: the address itself sends them
  * to the Overview, and the gateway's web app (Next.js, header design H3)
- * answers an address with no page of the server's own, and its own files. A
+ * answers an address with no page of the server's own, its own files and its
+ * pages' forms (server actions). A
  * client that calls an unknown address (no page asked for: not a GET that
  * accepts HTML) gets Fastify's JSON answer as before.
  */
@@ -16,6 +17,9 @@ const OVERVIEW = '/overview';
 
 /** Where the web app's built files are served from. */
 const WEB_APP_FILES = '/_next/*';
+
+/** The header a server action of the web app (a page's form) is posted with: Next.js reads its body itself. */
+const SERVER_ACTION_HEADER = 'next-action';
 
 /** The web app's request handler: it answers the request it is handed, in full. */
 export type WebApp = (request: IncomingMessage, response: ServerResponse) => Promise<void>;
@@ -34,6 +38,13 @@ export function registerFrontDoor(server: FastifyInstance, deps: { web?: WebApp 
     server.get(WEB_APP_FILES, async (request, reply) => {
       reply.hijack();
       await web(request.raw, reply.raw);
+    });
+    // Before any route or body parser: the web app reads the form's body as the browser sent it.
+    server.addHook('onRequest', async (request, reply) => {
+      if (request.method === 'POST' && request.headers[SERVER_ACTION_HEADER] !== undefined) {
+        reply.hijack();
+        await web(request.raw, reply.raw);
+      }
     });
   }
 
