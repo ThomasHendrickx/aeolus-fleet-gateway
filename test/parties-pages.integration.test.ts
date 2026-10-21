@@ -104,6 +104,14 @@ describe('the parties pages, as the account signed in', () => {
     expect(textOf(await answer.text())).toContain('Turn onThe gateway is not connected to your fleet');
   }, 60_000);
 
+  it("says why the API refused a party's page, its change and its retire, with the way back to the list", async () => {
+    const pages = ['/outside-parties/linear', '/outside-parties/linear/change', '/outside-parties/linear/retire'];
+
+    const bodies = await Promise.all(pages.map(async (page) => (await fetch(`${address}${page}?fleet=${FLEET}`, { headers: PAGE })).text()));
+
+    expect(bodies.map((body) => body.includes('role="alert"') && textOf(body).includes('← Outside parties'))).toEqual(pages.map(() => true));
+  }, 60_000);
+
   it('sends a page that names no fleet to the same page in the fleet the account may open', async () => {
     const page = await fetch(`${address}/parties`, { headers: PAGE, redirect: 'manual' });
 
