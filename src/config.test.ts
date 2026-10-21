@@ -18,6 +18,7 @@ describe('the gateway configuration from the environment', () => {
       gatewaySecret: GATEWAY_SECRET,
       mcpWaitMaxMs: 10_000,
       pagasae: undefined,
+      pagasaeApp: undefined,
     });
   });
 
@@ -33,6 +34,7 @@ describe('the gateway configuration from the environment', () => {
       gatewaySecret: GATEWAY_SECRET,
       mcpWaitMaxMs: 10_000,
       pagasae: undefined,
+      pagasaeApp: undefined,
     });
   });
 
@@ -80,6 +82,20 @@ describe('the gateway configuration from the environment', () => {
     ['a client but no URL', { PAGASAE_CLIENT_ID: 'gateway', PAGASAE_CLIENT_SECRET: 'p'.repeat(32) }],
   ])('refuses pagasae with %s, naming the variables', (_what, pagasae) => {
     expect(() => loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', ...pagasae })).toThrow(/PAGASAE_/);
+  });
+
+  it("reads the gateway's pages' own app client at pagasae, for the shared account sign-in (header design H5)", () => {
+    const environment = { DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', PAGASAE_URL: 'https://pagasae.example', PAGASAE_CLIENT_ID: 'gateway-mcp', PAGASAE_CLIENT_SECRET: 'p'.repeat(32) };
+
+    expect(loadConfig({ ...environment, PAGASAE_APP_CLIENT_ID: 'gateway', PAGASAE_APP_CLIENT_SECRET: 'a'.repeat(32) }).pagasaeApp).toEqual({ clientId: 'gateway', clientSecret: 'a'.repeat(32) });
+    expect(loadConfig(environment).pagasaeApp).toBeUndefined();
+  });
+
+  it.each([
+    ['no app client secret', { PAGASAE_URL: 'https://pagasae.example', PAGASAE_CLIENT_ID: 'gateway-mcp', PAGASAE_CLIENT_SECRET: 'p'.repeat(32), PAGASAE_APP_CLIENT_ID: 'gateway' }],
+    ['an app client but no pagasae', { PAGASAE_APP_CLIENT_ID: 'gateway', PAGASAE_APP_CLIENT_SECRET: 'a'.repeat(32) }],
+  ])("refuses the pages' app client with %s, naming the variables", (_what, pagasae) => {
+    expect(() => loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', ...pagasae })).toThrow(/PAGASAE_APP_CLIENT_ID and PAGASAE_APP_CLIENT_SECRET/);
   });
 
   it('refuses a missing database URL, naming the variable', () => {
