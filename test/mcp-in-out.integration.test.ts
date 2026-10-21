@@ -96,10 +96,13 @@ describe('an outside MCP client calls an outside MCP server through the fleet', 
     const { mcp, name } = await aConnectedClient('create_contact');
     const call = { name, arguments: { name: 'Grace Hopper', email: 'grace@example.com', aeolus_idempotency_key: 'create-grace' } };
 
-    const results = [await mcp.callTool(call), await mcp.callTool(call)];
+    const first = await mcp.callTool(call);
+    const again = await mcp.callTool(call);
+    // The call answers its handle at once; its result is read once the tool ran.
+    const result = await resultOf(mcp, first);
     await mcp.close();
 
-    expect(results[0]).toEqual(results[1]);
+    expect({ isSameCall: JSON.stringify(first) === JSON.stringify(again), isError: result.isError }).toEqual({ isSameCall: true, isError: false });
     expect({ runs: crm.calls.get('create_contact'), contacts: crm.contacts.filter((contact) => contact.name === 'Grace Hopper').length }).toEqual({ runs: 1, contacts: 1 });
   });
 });

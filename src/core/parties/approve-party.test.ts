@@ -111,3 +111,34 @@ describe('an approval the fleet did not answer', () => {
     await expect(parties.find(FLEET_ID, 'crm')).resolves.toMatchObject({ secret: null, crewToken: 'aeolus_ct_v1_proxy' });
   });
 });
+
+describe("the gateway writes what it checked about the server's proxy ship (decision 0059)", () => {
+  it('writes the host it reached the server at over TLS, as the gateway, once the proxy ship is crewed', async () => {
+    await approve(anApproval());
+
+    expect(fleet.state.verified.get(PROXY_SHIP_ID)).toEqual({ crewToken: 'aeolus_ct_v1_gateway', facts: [{ checked: 'tlsHost', value: 'crm.example.com' }] });
+  });
+
+  it('writes nothing for a server reached without TLS', async () => {
+    await approve(anApproval({ url: 'http://127.0.0.1:4100/mcp' }));
+
+    expect(fleet.state.verified.size).toBe(0);
+  });
+
+  it('writes nothing while the proxy ship awaits crew', async () => {
+    fleet.state.isRegisterAnswering = false;
+    await approve(anApproval());
+
+    expect(fleet.state.verified.size).toBe(0);
+  });
+
+  it('crews the party all the same when the fleet refuses the facts, and writes them when approved again', async () => {
+    fleet.state.isVerifyRefused = true;
+    await expect(approve(anApproval())).resolves.toMatchObject({ isOk: true, value: { state: 'crewed' } });
+    fleet.state.isVerifyRefused = false;
+
+    await approve(anApproval());
+
+    expect(fleet.state.verified.get(PROXY_SHIP_ID)).toMatchObject({ facts: [{ checked: 'tlsHost', value: 'crm.example.com' }] });
+  });
+});

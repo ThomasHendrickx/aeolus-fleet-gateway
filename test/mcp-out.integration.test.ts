@@ -21,7 +21,7 @@ import { outsidePartiesOn } from './support/outside-parties.js';
 const TOOL_CALL_TIMEOUT_MS = 1_000;
 /** How many times a test reads Needs attention, a tool call timeout apart, before it counts it empty. */
 const NEEDS_ATTENTION_TRIES = 10;
-const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
 
 /** A reply's payload, read back. */
 const parsed = (payload: string): unknown => JSON.parse(payload);

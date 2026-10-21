@@ -19,7 +19,7 @@ import { receiveOne } from './support/ship.js';
 // the gateway's API (decision 0056): the gateway, as its own ship,
 // commissions and crews the outside client's proxy ship in the real fleet.
 
-const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
 const REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0001';
 const SERVER_REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0002';
 /** A ship the fleet does not hold: the fleet refuses a proxy ship it would own. */

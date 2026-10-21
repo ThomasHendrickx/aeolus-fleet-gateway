@@ -54,13 +54,13 @@ describe('connecting the gateway', () => {
     expect([store.held.size, fleet.state.deregistered]).toEqual([0, ['aeolus_ct_v1_1']]);
   });
 
-  it('connects a ship holding fleet:read, fleet:commission, fleet:on-behalf and scopes:declare, and no labels scope', async () => {
-    fleet.state.scopes = ['messages:send', 'messages:receive', 'fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+  it('connects a ship holding fleet:read, fleet:commission, fleet:on-behalf, scopes:declare and fleet:verify, and no labels scope', async () => {
+    fleet.state.scopes = ['messages:send', 'messages:receive', 'fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
 
     await expect(connect({ secret: 'aeolus_sk_v1_good' })).resolves.toMatchObject({ isOk: true, value: { state: 'connected' } });
   });
 
-  it.each(['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'])('is refused for a ship without %s, and lets the ship go again', async (missing) => {
+  it.each(['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'])('is refused for a ship without %s, and lets the ship go again', async (missing) => {
     fleet.state.scopes = GATEWAY_SCOPES.filter((scope) => scope !== missing);
 
     await expect(connect({ secret: 'aeolus_sk_v1_good' })).resolves.toMatchObject({ isOk: false, error: { kind: 'MISSING_SCOPES' } });

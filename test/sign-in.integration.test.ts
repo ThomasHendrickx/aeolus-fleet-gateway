@@ -24,7 +24,7 @@ import { outsidePartiesOn } from './support/outside-parties.js';
 // for tokens, or waits for an approver (decision 0056). Here pagasae is a fake; the fleet and the
 // gateway are real.
 
-const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare'];
+const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
 /** The hosting service's token (decision 0021), which pagasae presents when it tells the gateway an account was disabled. */
 const INSTALLATION_TOKEN = 'an-installation-token-of-at-least-32-characters';
 

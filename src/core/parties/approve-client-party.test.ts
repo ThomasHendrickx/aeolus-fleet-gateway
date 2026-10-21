@@ -70,3 +70,17 @@ describe('argo approves an outside MCP client as a party, at its first authoriza
     expect(parties.held.size).toBe(0);
   });
 });
+
+describe("the gateway writes what it checked about the client's proxy ship (decision 0059)", () => {
+  it('writes the domain of the client id metadata document it read over TLS, as the gateway, once the proxy ship is crewed', async () => {
+    await approve(anApproval());
+
+    expect(fleet.state.verified.get(PROXY_SHIP_ID)).toEqual({ crewToken: 'aeolus_ct_v1_gateway', facts: [{ checked: 'clientIdDocumentDomain', value: 'claude.example.com' }] });
+  });
+
+  it('writes nothing for a client argo registered, which has no document', async () => {
+    await approve(anApproval({ clientId: 'client-secret-1' }));
+
+    expect(fleet.state.verified.size).toBe(0);
+  });
+});

@@ -11,6 +11,7 @@ import {
   ACCOUNT_TOKEN_HEADER,
   ON_BEHALF_OF_HEADER,
   shipOutputSchema,
+  setVerifiedFactsOutputSchema,
   busyWaitMs,
   commissionShipOutputSchema,
   discoverOutputSchema,
@@ -174,6 +175,10 @@ export function createRestFleetDoor(
         answers: commissionShipOutputSchema,
       });
       return commissioned.isOk ? ok({ shipId: commissioned.value.shipId, secret: commissioned.value.secret }) : commissioned;
+    },
+    setVerifiedFacts: async (crewToken, written) => {
+      const set = await call({ path: '/fleet/setVerifiedFacts', method: 'POST', crewToken, body: written, answers: setVerifiedFactsOutputSchema });
+      return set.isOk ? ok(undefined) : set;
     },
     deregister: async (crewToken) => {
       const ended = await call({ path: '/ship/deregister', method: 'POST', crewToken, body: {}, answers: z.unknown() });

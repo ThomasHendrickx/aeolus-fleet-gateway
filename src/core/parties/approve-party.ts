@@ -6,7 +6,7 @@ import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { McpServerCredential } from '../vault/credential.js';
-import type { McpClientParty, McpServerParty, Party } from './party.js';
+import { verifiedFactsOf, type McpClientParty, type McpServerParty, type Party } from './party.js';
 import type { PartyStore, ProxyShipDoor } from './ports.js';
 import { shownPartyOf, type ShownParty } from './shown-party.js';
 
@@ -75,14 +75,27 @@ interface Approval<P extends Party> {
  * off, nothing is approved (interop I-3).
  */
 async function approved<P extends Party>(deps: ApprovalDeps, approval: Approval<P>): Promise<Result<ShownParty, ApprovePartyRefusal>> {
-  const crewed = async (party: P & { proxyShipId: ShipId; secret: string }): Promise<Result<ShownParty, ApprovePartyRefusal>> => {
+  /**
+   * The crewed party, once the gateway wrote what it checked about it
+   * (decision 0059). A fact the fleet refuses takes nothing from the
+   * approval: the facts are a claim beside it, written again when the same
+   * approval comes again.
+   */
+  const verified = async (party: P, gatewayCrewToken: string): Promise<Result<ShownParty, ApprovePartyRefusal>> => {
+    const facts = verifiedFactsOf(party);
+    if (party.proxyShipId !== null && facts.length > 0) {
+      await deps.door.setVerifiedFacts(gatewayCrewToken, { shipId: party.proxyShipId, facts });
+    }
+    return ok(shownPartyOf(party));
+  };
+  const crewed = async (party: P & { proxyShipId: ShipId; secret: string }, gatewayCrewToken: string): Promise<Result<ShownParty, ApprovePartyRefusal>> => {
     const registered = await deps.door.register({ shipId: party.proxyShipId, secret: party.secret });
     if (!registered.isOk) {
       return refuse('FLEET_UNAVAILABLE', `The fleet did not let the gateway crew the proxy ship: ${registered.error.message}`);
     }
     const done: P = { ...party, state: 'crewed', secret: null, crewToken: registered.value.crewToken };
     await deps.parties.save(done);
-    return ok(shownPartyOf(done));
+    return verified(done, gatewayCrewToken);
   };
 
   const { fleetId } = approval;
@@ -100,10 +113,10 @@ async function approved<P extends Party>(deps: ApprovalDeps, approval: Approval<
   }
   const party: P = earlier ?? fresh;
   if (party.state === 'crewed') {
-    return ok(shownPartyOf(party));
+    return verified(party, gateway.crewToken);
   }
   if (party.proxyShipId !== null && party.secret !== null) {
-    return crewed({ ...party, proxyShipId: party.proxyShipId, secret: party.secret });
+    return crewed({ ...party, proxyShipId: party.proxyShipId, secret: party.secret }, gateway.crewToken);
   }
   if (party.proxyShipId !== null) {
     return ok(shownPartyOf(party));
@@ -121,7 +134,7 @@ async function approved<P extends Party>(deps: ApprovalDeps, approval: Approval<
   const { shipId, secret } = commissioned.value;
   const awaiting: P = { ...party, state: 'awaitingCrew', proxyShipId: shipId, secret };
   await deps.parties.save(awaiting);
-  return secret === null ? ok(shownPartyOf(awaiting)) : crewed({ ...awaiting, proxyShipId: shipId, secret });
+  return secret === null ? ok(shownPartyOf(awaiting)) : crewed({ ...awaiting, proxyShipId: shipId, secret }, gateway.crewToken);
 }
 
 /** What a party is before its proxy ship is commissioned. */
