@@ -5,6 +5,7 @@ import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { BUTTONS, CARD } from '../../forms/ui/look';
 import { PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } from '../../outside-parties/party-kinds';
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
+import { scopeWords } from '../../outside-parties/scope-words';
 import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
 
 /** The scopes that change a party's owner, its scopes, and retire it (0056). */
@@ -92,11 +93,7 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
         <Fact label="Scopes">
           {party.scopes === null
             ? UNKNOWN
-            : party.scopes.map((scope) => (
-                <Tag key={scope} isMono>
-                  {scope}
-                </Tag>
-              ))}
+            : party.scopes.map((scope) => <Tag key={scope}>{scopeWords(scope)}</Tag>)}
           {scopes.includes(GRANTING_SCOPE) ? change : null}
         </Fact>
         <Fact label={party.kind === 'mcpServer' ? 'Address' : 'Client id'}>
