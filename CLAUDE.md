@@ -43,6 +43,7 @@ Load the matching skills from `.claude/skills/` (Codex: `.agents/skills/`) befor
 - `test-driven-development` and `aeolus-fleet-gateway`: every code change. Strict red, green, refactor.
 - `domain-modelling`: anything under `src/core` or `src/adapters`.
 - `typescript`: every `.ts` change.
+- `performance`: designing or building an API, a query, a list or a page that reads data.
 - `code-review`: reviewing a branch, pull request or diff.
 - `pull-request`: writing a pull request body.
 - `writing-for-agents`: editing CLAUDE.md, a skill, or a doc agents read.
