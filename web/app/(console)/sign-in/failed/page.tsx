@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { SignInFailed } from '../../../features/sign-in/ui/sign-in-failed';
+import { SignInFailed } from '../../../../features/sign-in/ui/sign-in-failed';
 
 export const metadata: Metadata = { title: 'Sign in' };
 

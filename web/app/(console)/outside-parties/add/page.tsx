@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 
-import { AddServer } from '../../../features/add-server/ui/add-server';
-import { ADD_SERVER_PATH, OUTSIDE_PARTIES_PATH } from '../../../features/outside-parties/paths';
-import { NoSignIn } from '../../../features/sign-in/ui/no-sign-in';
-import { inFleet } from '../../../lib/gateway-api/page-account';
-import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
+import { AddServer } from '../../../../features/add-server/ui/add-server';
+import { ADD_SERVER_PATH, OUTSIDE_PARTIES_PATH } from '../../../../features/outside-parties/paths';
+import { NoSignIn } from '../../../../features/sign-in/ui/no-sign-in';
+import { inFleet } from '../../../../lib/gateway-api/page-account';
+import { signedInPage, type SearchParams } from '../../../../lib/gateway-api/page-api';
 
 export const metadata: Metadata = { title: 'Add MCP server' };
 

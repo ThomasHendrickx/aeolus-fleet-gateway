@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
-import { Overview } from '../../features/overview/state/overview';
-import type { SearchParams } from '../../lib/gateway-api/page-api';
+import { Overview } from '../../../features/overview/state/overview';
+import type { SearchParams } from '../../../lib/gateway-api/page-api';
 
 export const metadata: Metadata = { title: 'Overview' };
 

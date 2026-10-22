@@ -1,11 +1,8 @@
 import type { Theme } from '@aeolus-fleet/common';
 import type { Metadata } from 'next';
-import { cookies } from 'next/headers';
 import type { ReactNode } from 'react';
 
-import { Header } from '../features/frame/state/header';
-import { THEME_COOKIE, themeFrom } from '../features/frame/theme';
-import { Frame } from '../features/frame/ui/frame';
+import { readTheme } from '../features/frame/hooks/read-theme';
 import { geistMono, geistSans } from './fonts';
 import './globals.css';
 
@@ -30,15 +27,13 @@ function themeScript(theme: Theme): string {
 }
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const theme = themeFrom((await cookies()).get(THEME_COOKIE)?.value);
+  const theme = await readTheme();
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript(theme) }} />
       </head>
-      <body>
-        <Frame header={<Header theme={theme} />}>{children}</Frame>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

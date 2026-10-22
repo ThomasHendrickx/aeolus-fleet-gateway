@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
-import { RequestToDecide } from '../../../../features/overview/state/request-to-decide';
-import type { SearchParams } from '../../../../lib/gateway-api/page-api';
+import { RequestToDecide } from '../../../../../features/overview/state/request-to-decide';
+import type { SearchParams } from '../../../../../lib/gateway-api/page-api';
 
 export const metadata: Metadata = { title: 'To decide' };
 
