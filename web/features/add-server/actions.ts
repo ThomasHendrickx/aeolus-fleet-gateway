@@ -14,6 +14,7 @@ import { redirect } from 'next/navigation';
 import { inFleet } from '../../lib/gateway-api/page-account';
 import { refusalMessageOf, requestApi } from '../../lib/gateway-api/page-api';
 import { FLEET_FIELD, fieldOf, fieldsOf } from '../forms/form-state';
+import type { OwnerChoice } from '../forms/ui/owner-field';
 import { partyPath } from '../outside-parties/paths';
 
 /** The tools a server answered the check with. */
@@ -24,12 +25,13 @@ export interface CheckedTool {
 
 /**
  * Where adding a server stands: the address step, or the owner step after
- * the check answered its tools. The address and credential travel on in
- * the fields, as the browser sent them.
+ * the check answered its tools, with the ships its owner may be picked
+ * from. The address and credential travel on in the fields, as the browser
+ * sent them.
  */
 export type AddServerState =
   | { step: 'address'; fields: Record<string, string>; refusal?: string }
-  | { step: 'owner'; fields: Record<string, string>; tools: CheckedTool[]; requestId: string };
+  | { step: 'owner'; fields: Record<string, string>; tools: CheckedTool[]; owners: OwnerChoice[]; requestId: string };
 
 function credentialOf(form: FormData) {
   if (fieldOf(form, 'credentialKind') === 'clientCredentials') {
@@ -44,7 +46,8 @@ export async function checkServer(_previous: AddServerState, form: FormData): Pr
   const api = await requestApi(fieldOf(form, FLEET_FIELD));
   try {
     const { tools } = await api.parties.check.mutate({ url: fieldOf(form, 'url'), credential: credentialOf(form) });
-    return { step: 'owner', fields, tools, requestId: randomUUID() };
+    const owners = await api.parties.ownerChoices.query();
+    return { step: 'owner', fields, tools, owners, requestId: randomUUID() };
   } catch (error) {
     return { step: 'address', fields, refusal: refusalMessageOf(error) };
   }

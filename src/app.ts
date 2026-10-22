@@ -60,6 +60,7 @@ import { createPrismaOwnerQuestions } from './adapters/prisma/owner-questions.js
 import type { DecideRequest } from './core/requests/decide-request.js';
 import { createPrismaOutcomeNotices } from './adapters/prisma/outcome-notices.js';
 import { createOutcomeWorker } from './outcome-worker.js';
+import { createPingWorker } from './ping-worker.js';
 import { createOpenRequest, type OpenRequest } from './core/requests/open-request.js';
 import { createReadWaiting } from './core/requests/read-waiting.js';
 import { createWatchWaiting } from './core/requests/watch-waiting.js';
@@ -94,6 +95,7 @@ import { createFleetNetwork } from './adapters/fleet/fleet-network.js';
 import { createPrismaOutsidePartySwitches } from './adapters/prisma/outside-party-switches.js';
 import { createReadOutsideParties, createSetOutsideParties, type SetOutsideParties } from './core/outside-parties/set-outside-parties.js';
 import { createConnect } from './core/connection/connect.js';
+import { createAnswerPings } from './core/connection/answer-pings.js';
 import { createReadConnection, type ReadConnection } from './core/connection/read-connection.js';
 import { createDeleteFleet } from './core/installation/delete-fleet.js';
 import type { InstallationMode } from './core/installation/ports.js';
@@ -103,12 +105,14 @@ import { createSetFleetEnabled } from './core/installation/set-fleet-enabled.js'
 import { createAuthenticateOperator } from './core/operator/authenticate-operator.js';
 import { createApproveClientParty, createApproveParty, type ApproveClientParty, type ApproveParty } from './core/parties/approve-party.js';
 import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
+import { createListOwnerChoices } from './core/parties/list-owner-choices.js';
 import { createListParties, createReadParty } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
 import { createAuthenticateActor, type Actor } from './core/actors/authenticate-actor.js';
 import { createRetireParty } from './core/parties/retire-party.js';
 import { createChangePartyOwner, createChangePartyScopes } from './core/parties/change-party.js';
 import { logRefusedFacts } from './adapters/fleet/logged-verified-facts.js';
+import { createFleetShips } from './adapters/fleet/fleet-ships.js';
 import { createProxyShipReads } from './adapters/fleet/proxy-ship-reads.js';
 import { createProxyShipsAsActor } from './adapters/fleet/proxy-ships-as-actor.js';
 import { createCredentialOf, type ActorCredential } from './core/actors/credential-of.js';
@@ -288,6 +292,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const proxyShipReads = createProxyShipReads(options.fleetUrl);
   const listParties = createListParties({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   const readParty = createReadParty({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const listOwnerChoices = createListOwnerChoices({ ships: createFleetShips(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // An account's credential needs its account token, set up with the sign-in below.
   const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // Off stops the fleet's workers; on starts its crewed parties' workers again.
@@ -424,6 +429,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     intervalMs: OUTCOME_ROUND_MS,
     log: server.log,
   });
+  const pings = createPingWorker({ answerPings: createAnswerPings({ connections, inbox: door.gatewayInbox }), sleep, intervalMs: POLL_MS, log: server.log });
   const decideRequestOnly = createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock });
   // A decided request's outcomes are told at once, not at the next round.
   const decideRequest: DecideRequest = async (input) => {
@@ -454,6 +460,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     changePartyOwner,
     changePartyScopes,
     readParty,
+    listOwnerChoices,
     checkServer,
     readPartyTools,
     stateParty,
@@ -518,10 +525,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
         }
       }
       outcomes.start();
+      pings.start();
       return restored;
     },
     close: async () => {
       await outcomes.stop();
+      await pings.stop();
       await workers.stop();
       await server.close();
     },

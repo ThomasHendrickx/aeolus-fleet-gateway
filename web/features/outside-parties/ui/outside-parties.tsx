@@ -24,7 +24,7 @@ function PartyCard({ party, fleetId }: { party: ListedParty; fleetId: string }) 
       </span>
       <span className="flex flex-wrap items-center gap-2">
         <StatusBadge tone={state.tone} label={state.label} />
-        {party.ownerShipId === null ? null : <Tag isMono>{party.ownerShipId}</Tag>}
+        {party.ownerName === null ? null : <Tag>{party.ownerName}</Tag>}
       </span>
     </a>
   );

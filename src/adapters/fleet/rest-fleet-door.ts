@@ -30,7 +30,7 @@ import {
 } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
-import type { FleetDoor, FleetRefusal } from '../../core/connection/ports.js';
+import type { FleetDoor, FleetRefusal, GatewayInbox } from '../../core/connection/ports.js';
 import type { CallSender, Discovery, ReplyReceiver } from '../../core/mcp-in/ports.js';
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
@@ -126,7 +126,7 @@ function questionOf(payload: string) {
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & ReplyReceiver & AccountDoor & Owners & { person: PersonShipDoor } {
+): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & ReplyReceiver & AccountDoor & Owners & { person: PersonShipDoor; gatewayInbox: GatewayInbox } {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   const done = async (crewToken: string, request: { path: string; body: unknown }) => {
@@ -215,6 +215,15 @@ export function createRestFleetDoor(
             })),
           )
         : taken;
+    },
+    // The gateway's own ship's deliveries: argo's ping, and whatever else reaches it.
+    gatewayInbox: {
+      receive: async (crewToken, { max, signal }) => {
+        const taken = await call({ path: '/ship/receive', method: 'POST', crewToken, body: { max }, answers: receiveOutputSchema, signal });
+        return taken.isOk ? ok(taken.value.deliveries.map(({ deliveryId, contentType, senderShipId }) => ({ deliveryId, contentType, senderShipId }))) : taken;
+      },
+      ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
+      pong: (crewToken, deliveryId) => done(crewToken, { path: '/ship/pong', body: { deliveryId } }),
     },
     // A person ship's crew calls, as the gateway makes them for the person (decision 0057).
     person: {

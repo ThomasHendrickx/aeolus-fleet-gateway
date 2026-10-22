@@ -1,7 +1,8 @@
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { ActionForm } from '../../forms/ui/action-form';
-import { BUTTONS, CARD, INPUT, LABEL } from '../../forms/ui/look';
+import { BUTTONS, CARD } from '../../forms/ui/look';
+import { OwnerField } from '../../forms/ui/owner-field';
 import { partyPath } from '../../outside-parties/paths';
 import { changeParty } from '../actions';
 import { EVERY_APP_SHIP_SCOPES, SCOPE_FIELD_PREFIX, SCOPES_SHOWN_FIELD } from '../scope-changes';
@@ -43,6 +44,7 @@ export async function ChangeParty({ page, name }: { page: SignedInPage; name: st
     );
   }
   const party = read.value;
+  const owners = scopes.includes(OWNING_SCOPE) ? await readOf(api.parties.ownerChoices.query()) : undefined;
   const held = party.scopes;
   const own = scopes.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope));
   const beyond = held === null ? [] : held.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope) && !own.includes(scope));
@@ -53,13 +55,15 @@ export async function ChangeParty({ page, name }: { page: SignedInPage; name: st
         <h2 className="text-section font-semibold">{party.name}: owner and scopes</h2>
         <ActionForm action={changeParty} fleetId={fleetId} submit={{ label: 'Save', pending: 'Saving…' }} testId="outside-party-change-form">
           <input type="hidden" name="name" value={party.name} />
-          {scopes.includes(OWNING_SCOPE) ? (
-            <label className={LABEL}>
-              <span>Owner</span>
-              <input className={INPUT} type="text" name="ownerShipId" defaultValue={party.ownerShipId ?? ''} placeholder="shp_..." required />
-              <span className="text-muted-foreground">A person ship. It answers for this party.</span>
-            </label>
-          ) : null}
+          {owners === undefined ? null : owners.isOk ? (
+            <OwnerField
+              choices={owners.value}
+              current={party.ownerShipId === null ? null : { shipId: party.ownerShipId, name: party.ownerName ?? party.ownerShipId }}
+              help="A person ship or argo. It answers for this party."
+            />
+          ) : (
+            <Refusal>{owners.refusal}</Refusal>
+          )}
           {scopes.includes(GRANTING_SCOPE) && held !== null ? (
             <fieldset className="grid gap-2">
               <legend className="font-medium">Scopes</legend>

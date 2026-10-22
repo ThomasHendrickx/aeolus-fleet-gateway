@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import { FLEET_FIELD } from '../../forms/form-state';
 import { BUTTONS, CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { Outcome } from '../../forms/ui/outcome';
+import { OwnerField } from '../../forms/ui/owner-field';
 import { SubmitButton } from '../../forms/ui/submit-button';
 import { approveServer, checkServer, type AddServerState, type ApproveState } from '../actions';
 import { suggestedName } from '../suggested-name';
@@ -122,11 +123,7 @@ function OwnerStep({ state, refused, action, onBack, fleetId }: { state: Extract
           <span>Proxy ship&apos;s name</span>
           <input className={INPUT} type="text" name="name" defaultValue={name} required />
         </label>
-        <label className={LABEL}>
-          <span>Owner</span>
-          <input className={INPUT} type="text" name="ownerShipId" defaultValue={fields.ownerShipId ?? ''} placeholder="shp_..." required />
-          <span className="text-muted-foreground">A person ship. It answers for this server.</span>
-        </label>
+        <OwnerField choices={state.owners} current={state.owners.find((owner) => owner.shipId === fields.ownerShipId) ?? null} help="A person ship or argo. It answers for this server." />
         <label className={LABEL}>
           <span>Calls at once</span>
           <input className={INPUT} type="number" name="concurrencyLimit" min={1} max={10} defaultValue={fields.concurrencyLimit ?? CONCURRENCY_LIMIT_DEFAULT} />

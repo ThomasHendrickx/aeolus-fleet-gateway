@@ -5,6 +5,7 @@ import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { BUTTONS, CARD } from '../../forms/ui/look';
 import { PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } from '../../outside-parties/party-kinds';
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
+import { scopeWords } from '../../outside-parties/scope-words';
 import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
 
 /** The scopes that change a party's owner, its scopes, and retire it (0056). */
@@ -84,19 +85,15 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
       <Back fleetId={fleetId} />
       <PartyHead party={party} />
       <dl className={`${CARD} grid gap-3`}>
-        <Fact label="Proxy ship">{party.proxyShipId === null ? UNKNOWN : <span className="font-mono">{party.proxyShipId}</span>}</Fact>
+        <Fact label="Proxy ship">{party.proxyShipName ?? UNKNOWN}</Fact>
         <Fact label="Owner">
-          {party.ownerShipId === null ? UNKNOWN : <span className="font-mono">{party.ownerShipId}</span>}
+          {party.ownerName ?? UNKNOWN}
           {scopes.includes(OWNING_SCOPE) ? change : null}
         </Fact>
         <Fact label="Scopes">
           {party.scopes === null
             ? UNKNOWN
-            : party.scopes.map((scope) => (
-                <Tag key={scope} isMono>
-                  {scope}
-                </Tag>
-              ))}
+            : party.scopes.map((scope) => <Tag key={scope}>{scopeWords(scope)}</Tag>)}
           {scopes.includes(GRANTING_SCOPE) ? change : null}
         </Fact>
         <Fact label={party.kind === 'mcpServer' ? 'Address' : 'Client id'}>

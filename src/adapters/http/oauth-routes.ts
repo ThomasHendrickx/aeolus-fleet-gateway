@@ -191,11 +191,13 @@ function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn:
       case 'invalidClient':
       case 'redirect':
         return sendBack(reply, { refusal, issuer });
+      case 'pagasaeRefused':
+        request.log.warn({ reason: refusal.message }, 'pagasae did not take the sign-in code');
+        return failed(reply, refusal.kind);
       case 'unknownSignIn':
       case 'otherBrowser':
       case 'fleetNotServed':
       case 'outsidePartiesOff':
-      case 'pagasaeRefused':
         return failed(reply, refusal.kind);
     }
   });

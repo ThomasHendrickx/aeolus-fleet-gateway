@@ -48,7 +48,13 @@ beforeEach(() => {
 
 /** The ship an actor reads as, and what its read reach holds: the CRM's proxy ship, and the ERP's, which no actor reaches here. */
 const reads = () =>
-  fakeProxyShipReads({ [PROXY_SHIP_ID]: { ownerShipId: OWNER_SHIP_ID, scopes: ['messages:send', 'messages:receive', 'fleet:read'] }, [ERP_SHIP_ID]: { ownerShipId: null, scopes: ['messages:send'] } }, { outsideReach: [ERP_SHIP_ID] });
+  fakeProxyShipReads(
+    {
+      [PROXY_SHIP_ID]: { proxyShipName: 'crm', ownerShipId: OWNER_SHIP_ID, ownerName: 'charlotte', scopes: ['messages:send', 'messages:receive', 'fleet:read'] },
+      [ERP_SHIP_ID]: { proxyShipName: 'erp', ownerShipId: null, ownerName: null, scopes: ['messages:send'] },
+    },
+    { outsideReach: [ERP_SHIP_ID] },
+  );
 
 /** Calls the fleet as the actor: a ship with its own crew token, an account with its token presented by the gateway's ship. */
 const credentialOf: CredentialOf = (actor, sent) => Promise.resolve(actor.kind === 'account' ? ok(ACCOUNT_CREDENTIAL) : ok(sent));
@@ -58,13 +64,13 @@ function listParties(fleet: ReturnType<typeof reads>, actor: Actor = SHIP) {
 }
 
 describe("an actor reads its fleet's outside parties", () => {
-  it("lists its fleet's parties by name, never another fleet's, each with the owner and scopes the fleet holds for its proxy ship, read as the actor", async () => {
+  it("lists its fleet's parties by name, never another fleet's, each with its proxy ship's name, owner and scopes as the fleet holds them, read as the actor", async () => {
     await parties.save(aParty({ name: 'crm' }));
     await parties.save(aParty({ name: 'other', fleetId: OTHER_FLEET_ID }));
     const fleet = reads();
 
     await expect(listParties(fleet)).resolves.toEqual([
-      { name: 'crm', kind: 'mcpServer', url: 'https://crm.example.com/mcp', credentialKind: 'bearer', concurrencyLimit: 4, state: 'crewed', proxyShipId: PROXY_SHIP_ID, ownerShipId: OWNER_SHIP_ID, scopes: ['messages:send', 'messages:receive', 'fleet:read'] },
+      { name: 'crm', kind: 'mcpServer', url: 'https://crm.example.com/mcp', credentialKind: 'bearer', concurrencyLimit: 4, state: 'crewed', proxyShipId: PROXY_SHIP_ID, proxyShipName: 'crm', ownerShipId: OWNER_SHIP_ID, ownerName: 'charlotte', scopes: ['messages:send', 'messages:receive', 'fleet:read'] },
     ]);
     expect(fleet.readers).toEqual([SHIP_CREDENTIAL]);
   });
@@ -78,34 +84,34 @@ describe("an actor reads its fleet's outside parties", () => {
     expect(fleet.readers).toEqual([ACCOUNT_CREDENTIAL]);
   });
 
-  it("knows no owner or scopes of a party whose proxy ship is outside the actor's read reach (Q-R1)", async () => {
+  it("knows only the proxy ship's name of a party whose proxy ship is outside the actor's read reach (Q-R1)", async () => {
     await parties.save(aParty({ name: 'erp', proxyShipId: ERP_SHIP_ID }));
 
-    await expect(listParties(reads())).resolves.toMatchObject([{ name: 'erp', ownerShipId: null, scopes: null }]);
+    await expect(listParties(reads())).resolves.toMatchObject([{ name: 'erp', proxyShipName: 'erp', ownerShipId: null, ownerName: null, scopes: null }]);
   });
 
   it('knows no owner or scopes of a party whose proxy ship is not commissioned yet, asking the fleet nothing', async () => {
     await parties.save(aParty({ state: 'commissioning', proxyShipId: null, crewToken: null }));
     const fleet = reads();
 
-    await expect(listParties(fleet)).resolves.toMatchObject([{ name: 'crm', ownerShipId: null, scopes: null }]);
+    await expect(listParties(fleet)).resolves.toMatchObject([{ name: 'crm', proxyShipName: null, ownerShipId: null, ownerName: null, scopes: null }]);
     expect(fleet.readers).toEqual([]);
   });
 
   it('knows no owner or scopes while the fleet does not answer', async () => {
     await parties.save(aParty({}));
 
-    await expect(listParties(fakeProxyShipReads({}))).resolves.toMatchObject([{ ownerShipId: null, scopes: null }]);
+    await expect(listParties(fakeProxyShipReads({}))).resolves.toMatchObject([{ proxyShipName: null, ownerShipId: null, ownerName: null, scopes: null }]);
   });
 });
 
 describe('an actor reads one outside party', () => {
-  it('reads it by name, with its owner and scopes from the fleet', async () => {
+  it("reads it by name, with its proxy ship's name, owner and scopes from the fleet", async () => {
     await parties.save(aParty({}));
 
     await expect(createReadParty({ parties, fleet: reads(), credentialOf })({ actor: SHIP, as: SHIP_CREDENTIAL, name: 'crm' })).resolves.toMatchObject({
       isOk: true,
-      value: { name: 'crm', ownerShipId: OWNER_SHIP_ID, scopes: ['messages:send', 'messages:receive', 'fleet:read'] },
+      value: { name: 'crm', proxyShipName: 'crm', ownerShipId: OWNER_SHIP_ID, ownerName: 'charlotte', scopes: ['messages:send', 'messages:receive', 'fleet:read'] },
     });
   });
 

@@ -6,8 +6,8 @@ import { readAs } from './actor-door.js';
 
 /**
  * A party's proxy ship as the actor reads it (fleet.ship, decision 0057): its
- * owner and scopes within the actor's read reach, and neither outside it,
- * where the fleet answers only the ship's name, type and status.
+ * name, owner and scopes within the actor's read reach, and only its name
+ * outside it, where the fleet answers only the ship's name, type and status.
  */
 export function createProxyShipReads(fleetUrl: string): ProxyShipReads {
   return {
@@ -20,7 +20,10 @@ export function createProxyShipReads(fleetUrl: string): ProxyShipReads {
       if (!ship.success) {
         return err({ code: 'UNAVAILABLE', message: 'The fleet answered no ship' });
       }
-      return 'isInReadReach' in ship.data ? ok({ ownerShipId: null, scopes: null }) : ok({ ownerShipId: ship.data.owner?.id ?? null, scopes: [...ship.data.scopes] });
+      if ('isInReadReach' in ship.data) {
+        return ok({ proxyShipName: ship.data.name, ownerShipId: null, ownerName: null, scopes: null });
+      }
+      return ok({ proxyShipName: ship.data.name, ownerShipId: ship.data.owner?.id ?? null, ownerName: ship.data.owner?.name ?? null, scopes: [...ship.data.scopes] });
     },
   };
 }
