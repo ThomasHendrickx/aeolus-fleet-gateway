@@ -3,17 +3,21 @@
  * HTTP on a free local port. It keeps contacts and deals in memory, and
  * counts every call it ran, so a test sees whether a call ran twice.
  *
- * - `list_contacts`, `create_contact`, `list_deals`, `create_deal`: the CRM itself.
- * - `forecast_revenue`: the slow tool; it answers after `slowToolMs`, or never while `isSlowToolHeld`.
+ * - `list_contacts`, `get_contact`, `create_contact`, `list_deals`, `create_deal`: the CRM itself.
+ * - `forecast_revenue`: the slow tool; it answers after `slowToolMs`, by default
+ *   longer than the gateway's default MCP_WAIT_MAX_MS, or never while `isSlowToolHeld`.
  * - `sync_ledger`: the tool that errors; it answers an error result (`isError`).
  *
  * It signs callers in by a static bearer token, or by OAuth client
  * credentials: RFC 9728 protected resource metadata, RFC 8414 authorization
- * server metadata and a token endpoint taking `client_secret_basic`.
+ * server metadata and a token endpoint taking `client_secret_basic`, for its
+ * MCP endpoint as the `resource` (RFC 8707).
  */
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
+
+import { MCP_WAIT_MAX_MS_DEFAULT } from '../../../src/config.js';
 
 export const MOCK_CRM_BEARER = 'crm-static-bearer-token';
 export const MOCK_CRM_CLIENT = { clientId: 'aeolus-gateway', clientSecret: 'crm-client-secret' };
@@ -24,8 +28,11 @@ const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_BAD_REQUEST = 400;
 
+/** How much longer than the gateway's default wait the slow tool takes, so a client calling it through the gateway is answered a handle. */
+const SLOW_TOOL_PAST_WAIT_MS = 1_000;
+
 export interface MockCrmOptions {
-  /** How long `forecast_revenue` takes. */
+  /** How long `forecast_revenue` takes; by default past the gateway's default MCP_WAIT_MAX_MS. */
   slowToolMs?: number;
 }
 
@@ -74,6 +81,24 @@ function crmServer(crm: MockCrm, options: MockCrmOptions): McpServer {
       counted('list_contacts');
       const contacts = crm.contacts.filter((contact) => query === undefined || contact.name.includes(query));
       return { content: textOf(contacts), structuredContent: { contacts } };
+    },
+  );
+
+  mcp.registerTool(
+    'get_contact',
+    {
+      title: 'Get a contact',
+      description: 'The contact with the id; an error when none has it.',
+      inputSchema: z.object({ id: z.string() }),
+      annotations: { readOnlyHint: true, idempotentHint: true },
+    },
+    ({ id }) => {
+      counted('get_contact');
+      const contact = crm.contacts.find((each) => each.id === id);
+      if (contact === undefined) {
+        return { content: [{ type: 'text' as const, text: `No contact has the id ${id}` }], isError: true };
+      }
+      return { content: textOf(contact), structuredContent: { contact } };
     },
   );
 
@@ -134,7 +159,7 @@ function crmServer(crm: MockCrm, options: MockCrmOptions): McpServer {
     },
     async () => {
       counted('forecast_revenue');
-      await new Promise((resolve) => setTimeout(resolve, options.slowToolMs ?? 0));
+      await new Promise((resolve) => setTimeout(resolve, options.slowToolMs ?? MCP_WAIT_MAX_MS_DEFAULT + SLOW_TOOL_PAST_WAIT_MS));
       while (crm.isSlowToolHeld) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -180,17 +205,24 @@ function isSignedIn(request: FastifyRequest): boolean {
   return authorization === `Bearer ${MOCK_CRM_BEARER}` || authorization === `Bearer ${ISSUED_ACCESS_TOKEN}`;
 }
 
-function tokenEndpoint(request: FastifyRequest, reply: FastifyReply): FastifyReply {
-  const authorization = basicCredentials.safeParse(request.headers.authorization);
-  const expected = `Basic ${Buffer.from(`${MOCK_CRM_CLIENT.clientId}:${MOCK_CRM_CLIENT.clientSecret}`).toString('base64')}`;
-  const grant = z.object({ grant_type: z.literal('client_credentials') }).safeParse(request.body);
-  if (!authorization.success || authorization.data !== expected) {
-    return reply.code(HTTP_UNAUTHORIZED).send({ error: 'invalid_client' });
-  }
-  if (!grant.success) {
-    return reply.code(HTTP_BAD_REQUEST).send({ error: 'unsupported_grant_type' });
-  }
-  return reply.send({ access_token: ISSUED_ACCESS_TOKEN, token_type: 'Bearer', expires_in: ACCESS_TOKEN_LIFETIME_SECONDS });
+/** The token endpoint, issuing tokens for the CRM's MCP endpoint only. */
+function tokenEndpointOf(crm: MockCrm): (request: FastifyRequest, reply: FastifyReply) => FastifyReply {
+  return (request, reply) => {
+    const authorization = basicCredentials.safeParse(request.headers.authorization);
+    const expected = `Basic ${Buffer.from(`${MOCK_CRM_CLIENT.clientId}:${MOCK_CRM_CLIENT.clientSecret}`).toString('base64')}`;
+    const grant = z.object({ grant_type: z.literal('client_credentials'), resource: z.string().optional() }).safeParse(request.body);
+    if (!authorization.success || authorization.data !== expected) {
+      return reply.code(HTTP_UNAUTHORIZED).send({ error: 'invalid_client' });
+    }
+    if (!grant.success) {
+      return reply.code(HTTP_BAD_REQUEST).send({ error: 'unsupported_grant_type' });
+    }
+    // RFC 8707: a token is for the MCP endpoint only, so a client that names no resource is refused too.
+    if (grant.data.resource !== crm.url) {
+      return reply.code(HTTP_BAD_REQUEST).send({ error: 'invalid_target' });
+    }
+    return reply.send({ access_token: ISSUED_ACCESS_TOKEN, token_type: 'Bearer', expires_in: ACCESS_TOKEN_LIFETIME_SECONDS });
+  };
 }
 
 /** Starts the mock CRM on a free local port, with a contact and a deal in it. */
@@ -225,7 +257,7 @@ export async function startMockCrm(options: MockCrmOptions = {}): Promise<MockCr
     token_endpoint_auth_methods_supported: ['client_secret_basic'],
     response_types_supported: ['token'],
   }));
-  server.post('/token', tokenEndpoint);
+  server.post('/token', tokenEndpointOf(crm));
   server.all('/mcp', async (request, reply) => {
     if (!isSignedIn(request)) {
       return reply

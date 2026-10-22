@@ -30,6 +30,7 @@ describe('listing an outside MCP server\'s tools', () => {
     const listed = await servers.listTools(withBearer());
     expect(listed.isOk && listed.value.map((tool) => tool.name)).toEqual([
       'list_contacts',
+      'get_contact',
       'create_contact',
       'list_deals',
       'create_deal',
@@ -56,7 +57,7 @@ describe('listing an outside MCP server\'s tools', () => {
 
   it('signs in with OAuth client credentials', async () => {
     const listed = await servers.listTools(withClientCredentials());
-    expect(listed.isOk && listed.value.length).toBe(6);
+    expect(listed.isOk && listed.value.length).toBe(7);
   });
 
   it('answers unreachable when the server refuses the credential', async () => {
