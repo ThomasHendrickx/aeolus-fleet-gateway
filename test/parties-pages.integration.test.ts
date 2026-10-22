@@ -137,6 +137,14 @@ describe('the parties pages, as the account signed in', () => {
     expect({ isPicked: approve.includes('data-testid="owner-field"'), isTyped: /<input[^>]*name="ownerShipId"/.test(approve) }).toEqual({ isPicked: true, isTyped: false });
   }, 60_000);
 
+  it('shows the header every Aeolus app shows: the fleet in view and Gateway in the title, and the avatar menu', async () => {
+    const body = await (await fetch(`${address}/parties?fleet=${FLEET}`, { headers: PAGE })).text();
+
+    expect(body).toContain('aria-label="Fleet: Acme. Switch fleet"');
+    expect(body).toContain('aria-label="App: Gateway. Switch app"');
+    expect(body).toContain('data-testid="avatar-menu"');
+  });
+
   it('sends a page that names no fleet to the same page in the fleet the account may open', async () => {
     const page = await fetch(`${address}/parties`, { headers: PAGE, redirect: 'manual' });
 
