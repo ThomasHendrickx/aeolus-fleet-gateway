@@ -25,6 +25,7 @@ const CLIENT = 'client-cursor';
 const CALLBACK = 'https://cursor.example.com/callback';
 
 let server: FastifyInstance;
+let logged: string[];
 let parties: ReturnType<typeof memoryPartyStore>;
 let requests: ReturnType<typeof memoryPendingRequests>;
 let served: FleetId[];
@@ -62,7 +63,8 @@ async function startServer(isSigningPeopleIn: boolean) {
     clock,
     issuer: ISSUER,
   });
-  server = Fastify({ logger: false });
+  logged = [];
+  server = Fastify({ logger: { level: 'warn', stream: { write: (line: string) => logged.push(line) } } });
   registerOAuthRoutes(server, {
     issuer: ISSUER,
     resource: RESOURCE,
@@ -261,6 +263,15 @@ describe('a person who signed in as themselves is sent back from pagasae', () =>
     const answer = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
 
     expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: '/authorize/failed?reason=pagasaeRefused' });
+  });
+
+  it("logs pagasae's reason for not taking its code", async () => {
+    pagasae = fakePagasae({ refusal: 'invalid_grant' });
+    await signIn('account');
+
+    await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
+
+    expect(logged.join('')).toContain('invalid_grant');
   });
 });
 
