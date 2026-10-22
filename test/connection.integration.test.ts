@@ -174,3 +174,21 @@ describe('the hosting service switches the gateway per fleet (decision 0021)', (
   });
 });
 
+describe("argo pings the gateway's ship (blueprint, Ping; aeolus-fleet#1093)", () => {
+  it('answers with pong, so the ship shows the ping answered', async () => {
+    const address = await started();
+    await connectGateway(address, { cookie, ...gatewayShip });
+
+    const pinged = await fetch(`${fleet.url}/trpc/fleet.ping`, { method: 'POST', headers: { 'content-type': 'application/json', origin: fleet.url, cookie }, body: JSON.stringify({ shipId: gatewayShip.shipId }) });
+    expect(pinged.status, await pinged.clone().text()).toBe(200);
+
+    await expect.poll(async () => pingStateOf(gatewayShip.shipId), { timeout: 15_000, interval: 500 }).toBe('answered');
+  });
+});
+
+/** How the ship's last ping stands, as argo reads the ship. */
+async function pingStateOf(shipId: ShipId): Promise<string | undefined> {
+  const answer = await fetch(`${fleet.url}/trpc/fleet.ship?input=${encodeURIComponent(JSON.stringify({ shipId }))}`, { headers: { cookie } });
+  const ship = z.object({ result: z.object({ data: z.object({ ping: z.object({ state: z.string() }).nullable() }) }) }).safeParse(await answer.json());
+  return ship.success ? ship.data.result.data.ping?.state : undefined;
+}
