@@ -48,3 +48,13 @@ describe("the header's switcher on the gateway's pages (header design H1, H9)", 
     expect(acme?.apps.map(({ label }) => label)).toEqual(['Console', 'Gateway', 'Account']);
   });
 });
+
+describe("the header's switcher on an answer it cannot read", () => {
+  it('offers no switcher for a malformed fleet id, so the page shows the plain bar', () => {
+    expect(headerSwitchersOf(aList({ fleets: [{ id: 'not-a-fleet', name: 'Acme', apps: [] }] }))).toEqual([]);
+  });
+
+  it('offers no switcher for a malformed account id, so the page shows the plain bar', () => {
+    expect(headerSwitchersOf(aList({ account: { id: '', email: 'charlotte@acme.example' } }))).toEqual([]);
+  });
+});
