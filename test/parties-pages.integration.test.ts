@@ -155,8 +155,8 @@ describe('the parties pages, as the account signed in', () => {
     expect(body).toContain('data-testid="avatar-menu"');
   });
 
-  it("links the overview and the outside parties of the fleet in view from the header, the page shown current (aeolus-fleet#1120)", async () => {
-    const bodies = await Promise.all(['/overview', '/outside-parties'].map(async (page) => (await fetch(`${address}${page}?fleet=${FLEET}`, { headers: PAGE })).text()));
+  it("links the overview, the outside parties and the parties of the fleet in view from the header, the page shown current (aeolus-fleet#1120, #1119)", async () => {
+    const bodies = await Promise.all(['/overview', '/outside-parties', '/parties'].map(async (page) => (await fetch(`${address}${page}?fleet=${FLEET}`, { headers: PAGE })).text()));
 
     // The desktop header and the phone bar each show the tabs: each tab is read once.
     const tabsOf = (body: string) => [...new Set([...body.matchAll(/<a[^>]*data-testid="frame-tab-[^"]*"[^>]*>/g)].map(([tab]) => tab))].map((tab) => ({ href: /href="([^"]*)"/.exec(tab)?.[1], isCurrent: tab.includes('aria-current="page"') }));
@@ -165,10 +165,17 @@ describe('the parties pages, as the account signed in', () => {
       [
         { href: `/overview?fleet=${FLEET}`, isCurrent: true },
         { href: `/outside-parties?fleet=${FLEET}`, isCurrent: false },
+        { href: `/parties?fleet=${FLEET}`, isCurrent: false },
       ],
       [
         { href: `/overview?fleet=${FLEET}`, isCurrent: false },
         { href: `/outside-parties?fleet=${FLEET}`, isCurrent: true },
+        { href: `/parties?fleet=${FLEET}`, isCurrent: false },
+      ],
+      [
+        { href: `/overview?fleet=${FLEET}`, isCurrent: false },
+        { href: `/outside-parties?fleet=${FLEET}`, isCurrent: false },
+        { href: `/parties?fleet=${FLEET}`, isCurrent: true },
       ],
     ]);
   }, 60_000);
