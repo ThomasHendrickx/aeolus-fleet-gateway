@@ -175,6 +175,25 @@ describe("an outside party's owner and scopes are the fleet's (decision 0056)", 
     const [party] = z.object({ result: z.object({ data: z.array(z.object({ name: z.string(), ownerShipId: z.string().nullable(), scopes: z.array(z.string()).nullable() })) }) }).parse(await listed.json()).result.data;
     expect({ name: party?.name, isOwned: (party?.ownerShipId ?? '').startsWith('shp_'), canMessage: ['messages:send', 'messages:receive'].every((scope) => party?.scopes?.includes(scope)) }).toEqual({ name: 'crm', isOwned: true, canMessage: true });
   });
+  it("names the party's proxy ship and its owner, as the fleet names them", async () => {
+    const address = await started();
+    await approved(address);
+
+    const listed = await query(address, { procedure: 'parties.list', cookie });
+
+    const [party] = z.object({ result: z.object({ data: z.array(z.object({ proxyShipName: z.string().nullable(), ownerName: z.string().nullable() })) }) }).parse(await listed.json()).result.data;
+    expect({ isProxyShipNamed: (party?.proxyShipName ?? '') !== '', ownerName: party?.ownerName }).toEqual({ isProxyShipNamed: true, ownerName: 'charlotte' });
+  });
+
+  it("offers as owners the fleet's person ships and argo, never an agent or app ship (decision 0045)", async () => {
+    const address = await started();
+
+    const choices = await query(address, { procedure: 'parties.ownerChoices', cookie });
+
+    const names = z.object({ result: z.object({ data: z.array(z.object({ shipId: z.string(), name: z.string() })) }) }).parse(await choices.json()).result.data.map((choice) => choice.name);
+    expect({ hasCharlotte: names.includes('charlotte'), hasAgent: names.includes('agent'), hasGateway: names.includes('gateway') }).toEqual({ hasCharlotte: true, hasAgent: false, hasGateway: false });
+  });
+
   it("lists the party without owner or scopes to a ship whose read reach does not hold its proxy ship, in a fleet that applies its own network rules", async () => {
     const address = await started();
     await approved(address);

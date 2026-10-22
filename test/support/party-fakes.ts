@@ -131,7 +131,7 @@ export function fakeProxyShipsAsActor(answer: Result<undefined, FleetRefusal> = 
 /** The fleet's answer for each proxy ship, read as the gateway's ship; a ship it has no answer for is as when the fleet does not answer. */
 /** The fleet as an actor reads proxy ships: each ship as given, a ship outside the actor's read reach without its owner and scopes, any other unanswered. */
 export function fakeProxyShipReads(
-  ships: Readonly<Record<string, { ownerShipId: ShipId | null; scopes: string[] }>>,
+  ships: Readonly<Record<string, { proxyShipName: string; ownerShipId: ShipId | null; ownerName: string | null; scopes: string[] }>>,
   reach: { outsideReach: readonly ShipId[] } = { outsideReach: [] },
 ): ProxyShipReads & { readers: ActorCredential[] } {
   const readers: ActorCredential[] = [];
@@ -143,7 +143,7 @@ export function fakeProxyShipReads(
       if (ship === undefined) {
         return Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
       }
-      return Promise.resolve(ok(reach.outsideReach.includes(shipId) ? { ownerShipId: null, scopes: null } : ship));
+      return Promise.resolve(ok(reach.outsideReach.includes(shipId) ? { proxyShipName: ship.proxyShipName, ownerShipId: null, ownerName: null, scopes: null } : ship));
     },
   };
 }
