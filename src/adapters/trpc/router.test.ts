@@ -1,5 +1,6 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 import { TRPCError } from '@trpc/server';
+import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -561,5 +562,21 @@ describe("the web app's page asks which account it shows the fleet in its addres
 
   it('refuses where the gateway signs no one in to its pages', async () => {
     await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, { accountInView: undefined })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('a call whose input is wrong is told so in a sentence', () => {
+  it('names the fields that are missing or wrong, never the raw validation', async () => {
+    const input = encodeURIComponent(JSON.stringify({ client_id: 1 }));
+    const answer = await fetchRequestHandler({
+      endpoint: '/trpc',
+      req: new Request(`http://gateway.test/trpc/oauth.authorization?input=${input}`),
+      router: gatewayRouter,
+      createContext: () => aContext(undefined).context,
+    });
+
+    const body: unknown = await answer.json();
+
+    expect(body).toMatchObject({ error: { message: 'Check what you filled in: client_id is missing or wrong.' } });
   });
 });
