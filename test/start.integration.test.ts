@@ -114,6 +114,15 @@ describe('aeolus-gateway start and migrate', () => {
     expect({ url: new URL(page.url).pathname, says: body.includes('This request is unknown, or ended long ago') }).toEqual({ url: '/authorize/failed', says: true });
   }, 60_000);
 
+  it('start shows the pages an MCP client sends a person to in the sign-in frame: the Aeolus mark above one column, no app header', async () => {
+    await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
+
+    const page = await fetch(`${address}/authorize/failed?reason=unknownClient`, { headers: { accept: 'text/html' } });
+    const body = await page.text();
+
+    expect({ isSignInFrame: body.includes('data-testid="sign-in-frame"'), hasAppHeader: body.includes('data-testid="frame-header"') }).toEqual({ isSignInFrame: true, hasAppHeader: false });
+  }, 60_000);
+
   it('migrate migrates a new database and exits 0', async () => {
     const { code } = await runGateway(['migrate'], { DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway') });
     expect(code).toBe(0);

@@ -1,4 +1,4 @@
-import { followChanges } from '../../../features/overview/hooks/follow-changes';
+import { followChanges } from '../../../../features/overview/hooks/follow-changes';
 
 export const dynamic = 'force-dynamic';
 

@@ -30,10 +30,10 @@ describe("the pick page shows the client and its two picks, each starting the si
   it('sends the request on to /authorize/sign-in, with the pick pressed', () => {
     const markup = shown();
     const form = /<form [^>]*>/.exec(markup)?.[0] ?? '';
-    const picks = [...markup.matchAll(/<button ([^>]*)><strong>([^<]*)<\/strong>/g)].map(([, attributes = '', label]) => ({
+    const picks = [...markup.matchAll(/<button ([^>]*)>(.*?)<\/button>/g)].map(([, attributes = '', inner = '']) => ({
       name: /name="([^"]*)"/.exec(attributes)?.[1],
       value: /value="([^"]*)"/.exec(attributes)?.[1],
-      label,
+      label: textOf(/<strong>(.*?)<\/strong>/.exec(inner)?.[1] ?? ''),
     }));
 
     expect({ isGet: form.includes('method="get"'), isToSignIn: form.includes('action="/authorize/sign-in"'), picks }).toEqual({
@@ -44,6 +44,22 @@ describe("the pick page shows the client and its two picks, each starting the si
         { name: 'holder', value: 'party', label: 'Ask for access for this client' },
       ],
     });
+  });
+
+  it("leads with the handshake: the client's mark and name, then the fleet's mark", () => {
+    const handshake = /<div [^>]*data-testid="authorize-handshake"[^>]*>(.*?)<\/figure><\/div>/.exec(shown())?.[1] ?? '';
+    const marks = [...handshake.matchAll(/data-slot="avatar"/g)].length;
+
+    expect({ marks, text: textOf(handshake) }).toEqual({ marks: 2, text: 'CuCursorAeolus' });
+  });
+
+  it('shows each pick as a tile holding its icon, its label and what it means', () => {
+    const tiles = [...shown().matchAll(/<button [^>]*>(.*?)<\/button>/g)].map(([, inner = '']) => ({ hasIcon: inner.startsWith('<svg'), text: textOf(inner) }));
+
+    expect(tiles).toEqual([
+      { hasIcon: true, text: 'Sign in as yourselfThe client acts as you.' },
+      { hasIcon: true, text: 'Ask for access for this clientAn approver of your fleet decides; the client then acts as its own party.' },
+    ]);
   });
 
   it('carries every parameter of the request as it came', () => {

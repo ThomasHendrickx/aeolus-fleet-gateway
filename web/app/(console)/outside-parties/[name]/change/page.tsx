@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 
-import { ChangeParty } from '../../../../features/outside-party/ui/change-party';
-import { partyPath } from '../../../../features/outside-parties/paths';
-import { NoSignIn } from '../../../../features/sign-in/ui/no-sign-in';
-import { signedInPage, type SearchParams } from '../../../../lib/gateway-api/page-api';
+import { ChangeParty } from '../../../../../features/outside-party/ui/change-party';
+import { partyPath } from '../../../../../features/outside-parties/paths';
+import { NoSignIn } from '../../../../../features/sign-in/ui/no-sign-in';
+import { signedInPage, type SearchParams } from '../../../../../lib/gateway-api/page-api';
 
 export const metadata: Metadata = { title: 'Outside parties' };
 

@@ -42,6 +42,14 @@ export const WAITING_DOOR = '/authorize/waiting';
 /** The pick the page adds to the request, as the sign-in door reads it. */
 export const HOLDER_FIELD = 'holder';
 
+/** The door that starts the sign-in through pagasae for the pick. */
+export const SIGN_IN_DOOR = '/authorize/sign-in';
+
+/** Where a pressed pick sends the browser: the sign-in door, with the request as it came and the pick. */
+export function signInAddressOf(fields: readonly [string, string][], holder: string): string {
+  return `${SIGN_IN_DOOR}?${new URLSearchParams([...fields, [HOLDER_FIELD, holder]]).toString()}`;
+}
+
 /** The request's parameters the browser sent once each, without a pick: the page adds its own. */
 export function pickFieldsOf(searchParams: SearchParams): [string, string][] {
   return Object.entries(searchParams).flatMap(([name, value]) => (typeof value === 'string' && name !== HOLDER_FIELD ? [[name, value]] : []));
