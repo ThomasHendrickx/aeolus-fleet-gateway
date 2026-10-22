@@ -36,7 +36,7 @@ interface GatewayHeaderProps {
  * gateway's pages: from 640 px the shared AppHeader, with the switcher in
  * the title and the avatar menu; on phone a bar with the switcher compact
  * and the avatar's bottom Sheet (H6). After the title, the tabs to the
- * overview and the outside parties. The fleet in view is the one the
+ * overview, the outside parties and the parties. The fleet in view is the one the
  * address names, else the account's first. Sign out ends the shared
  * sign-in in every app and shows "Signing out" until the page leaves.
  */
