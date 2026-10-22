@@ -33,7 +33,7 @@ describe("the pick page shows the client and its two picks, each starting the si
     const picks = [...markup.matchAll(/<button ([^>]*)>(.*?)<\/button>/g)].map(([, attributes = '', inner = '']) => ({
       name: /name="([^"]*)"/.exec(attributes)?.[1],
       value: /value="([^"]*)"/.exec(attributes)?.[1],
-      label: textOf(inner),
+      label: textOf(/<strong>(.*?)<\/strong>/.exec(inner)?.[1] ?? ''),
     }));
 
     expect({ isGet: form.includes('method="get"'), isToSignIn: form.includes('action="/authorize/sign-in"'), picks }).toEqual({
@@ -46,16 +46,19 @@ describe("the pick page shows the client and its two picks, each starting the si
     });
   });
 
-  it('shows the picks as the buttons every Aeolus app shows: signing in as yourself primary, asking for access outlined', () => {
-    const picks = [...shown().matchAll(/<button ([^>]*)>/g)].map(([, attributes = '']) => ({
-      isSharedButton: attributes.includes('data-slot="button"'),
-      isPrimary: attributes.includes('bg-primary'),
-      isOutlined: attributes.includes('border-input'),
-    }));
+  it("leads with the handshake: the client's mark and name, then the fleet's mark", () => {
+    const handshake = /<div [^>]*data-testid="authorize-handshake"[^>]*>(.*?)<\/figure><\/div>/.exec(shown())?.[1] ?? '';
+    const marks = [...handshake.matchAll(/data-slot="avatar"/g)].length;
 
-    expect(picks).toEqual([
-      { isSharedButton: true, isPrimary: true, isOutlined: false },
-      { isSharedButton: true, isPrimary: false, isOutlined: true },
+    expect({ marks, text: textOf(handshake) }).toEqual({ marks: 2, text: 'CUCursorAeolus' });
+  });
+
+  it('shows each pick as a tile holding its icon, its label and what it means', () => {
+    const tiles = [...shown().matchAll(/<button [^>]*>(.*?)<\/button>/g)].map(([, inner = '']) => ({ hasIcon: inner.startsWith('<svg'), text: textOf(inner) }));
+
+    expect(tiles).toEqual([
+      { hasIcon: true, text: 'Sign in as yourselfThe client acts as you.' },
+      { hasIcon: true, text: 'Ask for access for this clientAn approver of your fleet decides; the client then acts as its own party.' },
     ]);
   });
 
