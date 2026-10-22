@@ -20,7 +20,7 @@ import {
   idSchema,
   inboxOutputSchema,
   pushReceiveOutputSchema,
-  receivedDeliverySchema,
+  deliveryOutputSchema,
   receiveOutputSchema,
   QUESTION_CONTENT_TYPE,
   questionSchema,
@@ -251,7 +251,7 @@ export function createRestFleetDoor(
       },
       ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
       delivery: async (crewToken, deliveryId) => {
-        const reread = await call({ path: '/ship/delivery', method: 'POST', crewToken, body: { deliveryId }, answers: receivedDeliverySchema });
+        const reread = await call({ path: '/ship/delivery', method: 'POST', crewToken, body: { deliveryId }, answers: deliveryOutputSchema });
         return reread.isOk ? ok(personDeliveryOf(reread.value)) : reread;
       },
       reply: (crewToken, { to, inReplyTo, contentType, payload, idempotencyKey }) =>
