@@ -46,11 +46,13 @@ beforeAll(async () => {
   pagasae = await startFakePagasae();
   pagasae.sharedSignIn(SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read fleet:network fleet:manage' });
   pagasae.sharedSignIn(READER_SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read' });
-  pagasae.sharedSignIn(SECOND_FLEET_SIGN_IN, charlotteIn(pagasae, FLEET), [
+  pagasae.sharedSignIn(SECOND_FLEET_SIGN_IN, charlotteIn(pagasae, FLEET));
+  pagasae.listFor(SECOND_FLEET_SIGN_IN, [
     { id: LABS, name: 'Labs' },
     { id: FLEET, name: 'Acme' },
   ]);
-  pagasae.sharedSignIn(UNLISTED_SIGN_IN, charlotteIn(pagasae, FLEET), 'unavailable');
+  pagasae.sharedSignIn(UNLISTED_SIGN_IN, charlotteIn(pagasae, FLEET));
+  pagasae.listFor(UNLISTED_SIGN_IN, 'unavailable');
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
   gateway = startGateway({

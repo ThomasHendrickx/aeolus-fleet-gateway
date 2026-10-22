@@ -23,10 +23,11 @@ export interface FakePagasae {
   /**
    * A shared sign-in, as pagasae keeps it in its cookie on the shared
    * domain: it exchanges for these claims in the fleet they name, and lists
-   * the fleets given (else that fleet as Acme) with the gateway, until it is
-   * revoked. A list 'unavailable' answers the list with a server error.
+   * that fleet as Acme with the gateway, until it is revoked.
    */
-  sharedSignIn(signIn: string, claims: Record<string, unknown>, listed?: readonly { id: string; name: string }[] | 'unavailable'): void;
+  sharedSignIn(signIn: string, claims: Record<string, unknown>): void;
+  /** Lists these fleets with the gateway for a shared sign-in instead, or answers its list with a server error. */
+  listFor(signIn: string, listed: readonly { id: string; name: string }[] | 'unavailable'): void;
   stop(): Promise<void>;
 }
 
@@ -138,11 +139,11 @@ export async function startFakePagasae(): Promise<FakePagasae> {
     answer: (next) => {
       claims = next;
     },
-    sharedSignIn: (signIn, held, listed) => {
+    sharedSignIn: (signIn, held) => {
       signIns.set(signIn, held);
-      if (listed !== undefined) {
-        listings.set(signIn, listed);
-      }
+    },
+    listFor: (signIn, listed) => {
+      listings.set(signIn, listed);
     },
     stop: async () => {
       server.closeAllConnections();
