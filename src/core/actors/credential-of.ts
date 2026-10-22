@@ -18,14 +18,15 @@ export interface ActorCredential {
 export type CredentialOf = (actor: Actor, sent: ActorCredential) => Promise<Result<ActorCredential, DomainError<'FLEET_UNAVAILABLE'>>>;
 
 /**
- * Use case: the credential to call the fleet with as the actor. A ship, argo
- * or a viewer sent its own, which goes on as it came. An account signed in
+ * Use case: the credential to call the fleet with as the actor. A ship, argo,
+ * a viewer or an account by its console session sent its own, which goes on
+ * as it came. An account signed in
  * with the shared sign-in sent only that: the token pagasae exchanged it for
  * goes, presented by the gateway's ship of its fleet.
  */
 export function createCredentialOf(deps: { connections: Pick<ConnectionStore, 'find'> }): CredentialOf {
   return async (actor, sent) => {
-    if (actor.kind !== 'account') {
+    if (actor.kind !== 'account' || actor.accountToken === null) {
       return ok(sent);
     }
     const gateway = await deps.connections.find(actor.fleetId);

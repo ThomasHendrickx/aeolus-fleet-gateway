@@ -1,3 +1,5 @@
+import { createServer, type Server } from 'node:http';
+
 import type { ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
@@ -36,8 +38,8 @@ afterEach(async () => {
 });
 
 /** A gateway process on the test's database, serving on a free port; with an installation token, a fleet is served once switched on. */
-async function started(installationToken?: string): Promise<string> {
-  const app = createGatewayApp({ gatewaySecret: TEST_GATEWAY_SECRET, databaseUrl, fleetUrl: fleet.url, logger: false, ...(installationToken === undefined ? {} : { installationToken }) });
+async function started(installationToken?: string, fleetUrl = fleet.url): Promise<string> {
+  const app = createGatewayApp({ gatewaySecret: TEST_GATEWAY_SECRET, databaseUrl, fleetUrl, logger: false, ...(installationToken === undefined ? {} : { installationToken }) });
   apps.push(app);
   await app.restoreConnections();
   return app.server.listen({ host: '127.0.0.1', port: 0 });
@@ -134,6 +136,66 @@ describe('argo connects the gateway', () => {
     const address = await started();
 
     await expect(status(address)).resolves.toMatchObject({ state: 'connected', ship: { shipId: gatewayShip.shipId } });
+  });
+});
+
+describe("an account signed in to the console as itself sees the console's Gateway panel (decision 0053, aeolus-fleet#1108)", () => {
+  /** An account's console session, which core answers only where pagasae signs accounts in: the fleet in front of core answers it. */
+  const ACCOUNT_COOKIE = 'aeolus_session=charlotte';
+  let front: Server | undefined;
+
+  afterEach(async () => {
+    const closing = front;
+    front = undefined;
+    if (closing !== undefined) {
+      await new Promise((resolve) => {
+        closing.close(resolve);
+      });
+    }
+  });
+
+  /** The fleet as the gateway reaches it: core, with console.session answering the account's cookie as that account with fleet:read. */
+  async function fleetWithAccount(): Promise<string> {
+    const session = z.object({ result: z.object({ data: z.object({ fleetId: z.string(), fleetName: z.string(), expiresAt: z.string() }) }) });
+    const argo = session.parse(await (await fetch(`${fleet.url}/trpc/console.session`, { headers: { cookie } })).json()).result.data;
+    front = createServer((request, response) => {
+      if (request.url === '/trpc/console.session' && request.headers.cookie === ACCOUNT_COOKIE) {
+        const account = { ...argo, kind: 'account', accountId: 'acc-charlotte', scopes: ['fleet:read'] };
+        response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ result: { data: account } }));
+        return;
+      }
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.on('end', () => {
+        const headers = Object.fromEntries(Object.entries(request.headers).flatMap(([name, value]) => (typeof value === 'string' && name !== 'host' ? [[name, value]] : [])));
+        const body = chunks.length === 0 ? undefined : Buffer.concat(chunks);
+        void fetch(`${fleet.url}${request.url ?? '/'}`, { method: request.method ?? 'GET', headers, ...(body === undefined ? {} : { body }) }).then(async (answer) => {
+          response.writeHead(answer.status, { 'content-type': answer.headers.get('content-type') ?? 'application/json' }).end(Buffer.from(await answer.arrayBuffer()));
+        });
+      });
+    });
+    const listening = front;
+    await new Promise<void>((resolve) => listening.listen(0, '127.0.0.1', resolve));
+    const address = listening.address();
+    return typeof address === 'object' && address !== null ? `http://127.0.0.1:${String(address.port)}` : '';
+  }
+
+  it('reads the connection as argo reads it, by its console session', async () => {
+    const address = await started(undefined, await fleetWithAccount());
+    await connectGateway(address, { cookie, ...gatewayShip });
+
+    const [asAccount, asArgo] = await Promise.all([query(address, { procedure: 'connection.status', cookie: ACCOUNT_COOKIE }), query(address, { procedure: 'connection.status', cookie })]);
+
+    const expected = { enabled: true, state: 'connected', ship: { shipId: gatewayShip.shipId, name: 'gateway' }, lastShipId: gatewayShip.shipId };
+    expect([statusSchema.parse(await asAccount.json()).result.data, statusSchema.parse(await asArgo.json()).result.data]).toEqual([expected, expected]);
+  });
+
+  it('is told in a sentence what its scopes do not allow: connecting needs fleet:manage', async () => {
+    const address = await started(undefined, await fleetWithAccount());
+
+    const response = await connectGateway(address, { cookie: ACCOUNT_COOKIE, ...gatewayShip });
+
+    await expect(refusalOf(response)).resolves.toEqual({ code: 'FORBIDDEN', message: 'Needs fleet:manage' });
   });
 });
 
