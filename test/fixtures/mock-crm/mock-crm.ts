@@ -10,7 +10,8 @@
  *
  * It signs callers in by a static bearer token, or by OAuth client
  * credentials: RFC 9728 protected resource metadata, RFC 8414 authorization
- * server metadata and a token endpoint taking `client_secret_basic`.
+ * server metadata and a token endpoint taking `client_secret_basic`, for its
+ * MCP endpoint as the `resource` (RFC 8707).
  */
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
@@ -204,17 +205,24 @@ function isSignedIn(request: FastifyRequest): boolean {
   return authorization === `Bearer ${MOCK_CRM_BEARER}` || authorization === `Bearer ${ISSUED_ACCESS_TOKEN}`;
 }
 
-function tokenEndpoint(request: FastifyRequest, reply: FastifyReply): FastifyReply {
-  const authorization = basicCredentials.safeParse(request.headers.authorization);
-  const expected = `Basic ${Buffer.from(`${MOCK_CRM_CLIENT.clientId}:${MOCK_CRM_CLIENT.clientSecret}`).toString('base64')}`;
-  const grant = z.object({ grant_type: z.literal('client_credentials') }).safeParse(request.body);
-  if (!authorization.success || authorization.data !== expected) {
-    return reply.code(HTTP_UNAUTHORIZED).send({ error: 'invalid_client' });
-  }
-  if (!grant.success) {
-    return reply.code(HTTP_BAD_REQUEST).send({ error: 'unsupported_grant_type' });
-  }
-  return reply.send({ access_token: ISSUED_ACCESS_TOKEN, token_type: 'Bearer', expires_in: ACCESS_TOKEN_LIFETIME_SECONDS });
+/** The token endpoint, issuing tokens for the CRM's MCP endpoint only. */
+function tokenEndpointOf(crm: MockCrm): (request: FastifyRequest, reply: FastifyReply) => FastifyReply {
+  return (request, reply) => {
+    const authorization = basicCredentials.safeParse(request.headers.authorization);
+    const expected = `Basic ${Buffer.from(`${MOCK_CRM_CLIENT.clientId}:${MOCK_CRM_CLIENT.clientSecret}`).toString('base64')}`;
+    const grant = z.object({ grant_type: z.literal('client_credentials'), resource: z.string().optional() }).safeParse(request.body);
+    if (!authorization.success || authorization.data !== expected) {
+      return reply.code(HTTP_UNAUTHORIZED).send({ error: 'invalid_client' });
+    }
+    if (!grant.success) {
+      return reply.code(HTTP_BAD_REQUEST).send({ error: 'unsupported_grant_type' });
+    }
+    // RFC 8707: a token is for the MCP endpoint only, so a client that names no resource is refused too.
+    if (grant.data.resource !== crm.url) {
+      return reply.code(HTTP_BAD_REQUEST).send({ error: 'invalid_target' });
+    }
+    return reply.send({ access_token: ISSUED_ACCESS_TOKEN, token_type: 'Bearer', expires_in: ACCESS_TOKEN_LIFETIME_SECONDS });
+  };
 }
 
 /** Starts the mock CRM on a free local port, with a contact and a deal in it. */
@@ -249,7 +257,7 @@ export async function startMockCrm(options: MockCrmOptions = {}): Promise<MockCr
     token_endpoint_auth_methods_supported: ['client_secret_basic'],
     response_types_supported: ['token'],
   }));
-  server.post('/token', tokenEndpoint);
+  server.post('/token', tokenEndpointOf(crm));
   server.all('/mcp', async (request, reply) => {
     if (!isSignedIn(request)) {
       return reply
