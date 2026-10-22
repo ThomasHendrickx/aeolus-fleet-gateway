@@ -109,9 +109,20 @@ export interface Context {
 /** What a caller reads of a failure: nothing of it, so no crew token, secret or query ever leaves; the log holds it whole. */
 export const INTERNAL_ERROR_MESSAGE = 'Internal error';
 
+/** What a person reads of input the API refused: the fields to look at, never the raw validation. */
+function inputMessageOf(invalid: z.ZodError): string {
+  const fields = [...new Set(invalid.issues.map((issue) => (issue.path.length === 0 ? 'the form' : issue.path.map(String).join(' '))))];
+  return `Check what you filled in: ${fields.join(', ')} is missing or wrong.`;
+}
+
 const t = initTRPC.context<Context>().create({
   isDev: false,
-  errorFormatter: ({ shape, error }) => (error.code === 'INTERNAL_SERVER_ERROR' ? { ...shape, message: INTERNAL_ERROR_MESSAGE } : shape),
+  errorFormatter: ({ shape, error }) => {
+    if (error.code === 'INTERNAL_SERVER_ERROR') {
+      return { ...shape, message: INTERNAL_ERROR_MESSAGE };
+    }
+    return error.cause instanceof z.ZodError ? { ...shape, message: inputMessageOf(error.cause) } : shape;
+  },
 });
 
 const actorProcedure = t.procedure.use(async ({ ctx, next }) => {
