@@ -1,7 +1,7 @@
 import type { FleetId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { ACCOUNT_URL, CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
+import { ACCOUNT_URL, CHARLOTTE, CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { createAccountInView } from './account-in-view.js';
 import { createAccountOfSignIn } from './account-of-sign-in.js';
@@ -54,7 +54,7 @@ describe('the account a page shows the fleet in its address as', () => {
   });
 
   it('sends an account with nothing to open in the fleet to Account (H9)', async () => {
-    const signIns = fakeSharedSignIn({ tokens: new Map(), apps: { apps: [{ app: 'account', url: ACCOUNT_URL }], fleets: [] } });
+    const signIns = fakeSharedSignIn({ tokens: new Map(), apps: { account: CHARLOTTE, apps: [{ app: 'account', url: ACCOUNT_URL }], fleets: [] } });
 
     expect(await inView(signIns)({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID })).toEqual({ isOk: true, value: { kind: 'elsewhere', url: ACCOUNT_URL } });
   });
@@ -66,7 +66,7 @@ describe('a page asked for with no fleet in its address', () => {
   });
 
   it('goes to Account when the account may open no gateway', async () => {
-    const signIns = fakeSharedSignIn({ apps: { apps: [{ app: 'account', url: ACCOUNT_URL }], fleets: [{ fleetId: FLEET_ID, apps: [{ app: 'console', url: CONSOLE_URL }] }] } });
+    const signIns = fakeSharedSignIn({ apps: { account: CHARLOTTE, apps: [{ app: 'account', url: ACCOUNT_URL }], fleets: [{ fleetId: FLEET_ID, name: 'Acme', apps: [{ app: 'console', url: CONSOLE_URL }] }] } });
 
     expect(await inView(signIns)({ signIn: CHARLOTTE_SIGN_IN, fleetId: undefined })).toEqual({ isOk: true, value: { kind: 'elsewhere', url: ACCOUNT_URL } });
   });

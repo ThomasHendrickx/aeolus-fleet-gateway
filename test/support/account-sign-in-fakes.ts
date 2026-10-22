@@ -22,12 +22,16 @@ export const ACCOUNT_URL = `${PAGASAE_URL}/account`;
 export const CONSOLE_URL = 'https://fleet.example.com';
 export const GATEWAY_URL = 'https://gateway.example.com';
 
+/** Charlotte's account, as pagasae names it. */
+export const CHARLOTTE = { id: 'acc-charlotte', email: 'charlotte@example.com' };
+
 /** What Charlotte may open: the gateway in the other fleet only, the console in both. */
 export const CHARLOTTE_APPS: OpenableApps = {
+  account: CHARLOTTE,
   apps: [{ app: 'account', url: ACCOUNT_URL }],
   fleets: [
-    { fleetId: FLEET_ID, apps: [{ app: 'console', url: CONSOLE_URL }] },
-    { fleetId: OTHER_FLEET_ID, apps: [{ app: 'console', url: CONSOLE_URL }, { app: 'gateway', url: GATEWAY_URL }] },
+    { fleetId: FLEET_ID, name: 'Acme', apps: [{ app: 'console', url: CONSOLE_URL }] },
+    { fleetId: OTHER_FLEET_ID, name: 'Labs', apps: [{ app: 'console', url: CONSOLE_URL }, { app: 'gateway', url: GATEWAY_URL }] },
   ],
 };
 

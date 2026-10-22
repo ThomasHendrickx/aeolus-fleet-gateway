@@ -45,10 +45,11 @@ export interface OpenableApp {
   readonly url: string;
 }
 
-/** What the account may open (header design H1): its apps beside the fleets, and per fleet the apps it may open there. */
+/** What the account may open (header design H1): the account, its apps beside the fleets, and per fleet its name and the apps it may open there. */
 export interface OpenableApps {
+  readonly account: { readonly id: string; readonly email: string };
   readonly apps: readonly OpenableApp[];
-  readonly fleets: readonly { readonly fleetId: FleetId; readonly apps: readonly OpenableApp[] }[];
+  readonly fleets: readonly { readonly fleetId: FleetId; readonly name: string; readonly apps: readonly OpenableApp[] }[];
 }
 
 /**

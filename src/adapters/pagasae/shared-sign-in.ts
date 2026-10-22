@@ -24,7 +24,11 @@ const SIGN_IN_HEADER = 'aeolus-sign-in';
 const errorAnswerSchema = z.object({ error: z.string() });
 const exchangeAnswerSchema = z.object({ access_token: z.string() });
 const appSchema = z.object({ app: z.string(), url: z.string() });
-const appsAnswerSchema = z.object({ apps: z.array(appSchema), fleets: z.array(z.object({ id: idSchema('fleet'), apps: z.array(appSchema) })) });
+const appsAnswerSchema = z.object({
+  account: z.object({ id: z.string(), email: z.string() }),
+  apps: z.array(appSchema),
+  fleets: z.array(z.object({ id: idSchema('fleet'), name: z.string(), apps: z.array(appSchema) })),
+});
 
 function claimsOf(accountToken: string): unknown {
   const payload = accountToken.split('.')[1];
@@ -121,7 +125,7 @@ export function createSharedSignIn(options: { url: string; clientId: string; cli
       if (answer.status !== 200 || !apps.success) {
         return err(answer.status === 200 ? { kind: 'unavailable' } : { kind: 'signedOut' });
       }
-      return ok({ apps: apps.data.apps, fleets: apps.data.fleets.map((fleet) => ({ fleetId: fleet.id, apps: fleet.apps })) });
+      return ok({ account: apps.data.account, apps: apps.data.apps, fleets: apps.data.fleets.map((fleet) => ({ fleetId: fleet.id, name: fleet.name, apps: fleet.apps })) });
     },
     revoke: async (signIn) => {
       const answer = await call('/oauth/revoke', form({ token: signIn }));
