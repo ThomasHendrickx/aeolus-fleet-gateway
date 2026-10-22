@@ -84,9 +84,9 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
       <Back fleetId={fleetId} />
       <PartyHead party={party} />
       <dl className={`${CARD} grid gap-3`}>
-        <Fact label="Proxy ship">{party.proxyShipId === null ? UNKNOWN : <span className="font-mono">{party.proxyShipId}</span>}</Fact>
+        <Fact label="Proxy ship">{party.proxyShipName ?? UNKNOWN}</Fact>
         <Fact label="Owner">
-          {party.ownerShipId === null ? UNKNOWN : <span className="font-mono">{party.ownerShipId}</span>}
+          {party.ownerName ?? UNKNOWN}
           {scopes.includes(OWNING_SCOPE) ? change : null}
         </Fact>
         <Fact label="Scopes">
