@@ -4,6 +4,7 @@ import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
 import type { Party } from './party.js';
+import type { FromFleet } from './shown-party.js';
 
 /** Outbound port: the parties argo approved, one per proxy ship name in a fleet. */
 export interface PartyStore {
@@ -43,7 +44,20 @@ export interface ProxyShipsAsActor {
   grantScopes(as: ActorCredential, change: { shipId: ShipId; grant: readonly string[]; revoke: readonly string[] }): Promise<Result<{ scopes: string[] }, FleetRefusal>>;
 }
 
-/** Outbound port: what the fleet holds for a proxy ship, read as the actor (fleet:read): its owner and scopes, neither outside the actor's read reach. */
+/** Outbound port: what the fleet holds for a proxy ship, read as the actor (fleet:read): its name, owner and scopes, only its name outside the actor's read reach. */
 export interface ProxyShipReads {
-  read(as: ActorCredential, ship: { shipId: ShipId }): Promise<Result<{ ownerShipId: ShipId | null; scopes: string[] | null }, FleetRefusal>>;
+  read(as: ActorCredential, ship: { shipId: ShipId }): Promise<Result<FromFleet, FleetRefusal>>;
+}
+
+/** A ship of the fleet as fleet.list answers it within the actor's read reach. */
+export interface FleetShip {
+  shipId: ShipId;
+  name: string;
+  kind: 'operator' | 'agent' | 'viewer' | 'person' | 'app';
+  status: 'awaitingCrew' | 'crewed' | 'retired';
+}
+
+/** Outbound port: the fleet's ships, read as the actor (fleet.list), within its read reach. */
+export interface FleetShips {
+  list(as: ActorCredential): Promise<Result<FleetShip[], FleetRefusal>>;
 }

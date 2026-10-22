@@ -103,12 +103,14 @@ import { createSetFleetEnabled } from './core/installation/set-fleet-enabled.js'
 import { createAuthenticateOperator } from './core/operator/authenticate-operator.js';
 import { createApproveClientParty, createApproveParty, type ApproveClientParty, type ApproveParty } from './core/parties/approve-party.js';
 import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
+import { createListOwnerChoices } from './core/parties/list-owner-choices.js';
 import { createListParties, createReadParty } from './core/parties/list-parties.js';
 import type { Clock } from './core/shared/clock.js';
 import { createAuthenticateActor, type Actor } from './core/actors/authenticate-actor.js';
 import { createRetireParty } from './core/parties/retire-party.js';
 import { createChangePartyOwner, createChangePartyScopes } from './core/parties/change-party.js';
 import { logRefusedFacts } from './adapters/fleet/logged-verified-facts.js';
+import { createFleetShips } from './adapters/fleet/fleet-ships.js';
 import { createProxyShipReads } from './adapters/fleet/proxy-ship-reads.js';
 import { createProxyShipsAsActor } from './adapters/fleet/proxy-ships-as-actor.js';
 import { createCredentialOf, type ActorCredential } from './core/actors/credential-of.js';
@@ -288,6 +290,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const proxyShipReads = createProxyShipReads(options.fleetUrl);
   const listParties = createListParties({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   const readParty = createReadParty({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const listOwnerChoices = createListOwnerChoices({ ships: createFleetShips(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // An account's credential needs its account token, set up with the sign-in below.
   const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // Off stops the fleet's workers; on starts its crewed parties' workers again.
@@ -454,6 +457,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     changePartyOwner,
     changePartyScopes,
     readParty,
+    listOwnerChoices,
     checkServer,
     readPartyTools,
     stateParty,

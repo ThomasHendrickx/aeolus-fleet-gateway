@@ -21,7 +21,7 @@ interface ReadDeps {
   credentialOf: CredentialOf;
 }
 
-const UNKNOWN: FromFleet = { ownerShipId: null, scopes: null };
+const UNKNOWN: FromFleet = { proxyShipName: null, ownerShipId: null, ownerName: null, scopes: null };
 
 /** The parties with what the fleet holds for each proxy ship, read as the actor; unknown outside its read reach, or while it cannot be read. */
 async function listed(deps: ReadDeps, call: ReadCall & { parties: Party[] }): Promise<ListedParty[]> {

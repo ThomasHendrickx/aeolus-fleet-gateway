@@ -126,6 +126,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     },
     crewParty: unused,
     listParties: () => Promise.resolve([]),
+    listOwnerChoices: () => Promise.resolve(ok([])),
     retireParty: unused,
     changePartyOwner: unused,
     changePartyScopes: unused,

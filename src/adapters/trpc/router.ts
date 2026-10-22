@@ -28,6 +28,7 @@ import type { AccountActor, AuthenticateActor } from '../../core/actors/authenti
 import type { ReadOutsideParties, SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
+import type { ListOwnerChoices } from '../../core/parties/list-owner-choices.js';
 import type { ListParties, ReadParty } from '../../core/parties/list-parties.js';
 import type { RetireParty, RetirePartyRefusal } from '../../core/parties/retire-party.js';
 import type { ChangePartyOwner, ChangePartyRefusal, ChangePartyScopes } from '../../core/parties/change-party.js';
@@ -82,6 +83,7 @@ export interface Context {
   approveParty: ApproveParty;
   crewParty: CrewParty;
   listParties: ListParties;
+  listOwnerChoices: ListOwnerChoices;
   retireParty: RetireParty;
   changePartyOwner: ChangePartyOwner;
   changePartyScopes: ChangePartyScopes;
@@ -286,8 +288,8 @@ const shownPartySchema = z.discriminatedUnion('kind', [
   z.object({ ...shownPartyBase, kind: z.literal('mcpClient'), clientId: z.string() }),
 ]);
 
-/** A party with its proxy ship's owner and scopes, read from the fleet (decision 0056): null while unknown. */
-const fromFleet = { ownerShipId: z.string().nullable(), scopes: z.array(z.string()).nullable() };
+/** A party with its proxy ship's name, owner and scopes, read from the fleet (decision 0056): null while unknown. */
+const fromFleet = { proxyShipName: z.string().nullable(), ownerShipId: z.string().nullable(), ownerName: z.string().nullable(), scopes: z.array(z.string()).nullable() };
 const listedPartySchema = z.discriminatedUnion('kind', [
   z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
   z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpClient'), clientId: z.string() }),
@@ -442,6 +444,14 @@ export const gatewayRouter = t.router({
   parties: t.router({
     /** The fleet's outside parties, by name, each with its proxy ship's owner and scopes from the fleet, read as the actor. Any actor reads them. */
     list: servedProcedure.output(z.array(listedPartySchema)).query(({ ctx }) => ctx.listParties({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken } })),
+    /** The ships a party's owner may be picked from, by name: the fleet's person ships and argo within the actor's read reach (decision 0045). */
+    ownerChoices: servedProcedure.output(z.array(z.object({ shipId: z.string(), name: z.string() }))).query(async ({ ctx }) => {
+      const listed = await ctx.listOwnerChoices({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken } });
+      if (!listed.isOk) {
+        throw new TRPCError({ code: 'BAD_GATEWAY', message: listed.error.message });
+      }
+      return listed.value;
+    }),
     /** One outside party, as the list shows it. */
     get: servedProcedure
       .input(z.strictObject({ name: shipHandleSchema }))
