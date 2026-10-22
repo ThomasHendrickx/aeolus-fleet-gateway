@@ -130,6 +130,13 @@ describe('the parties pages, as the account signed in', () => {
     ]);
   }, 60_000);
 
+  it("has the owner of a server it approves picked from the fleet's owner choices, never typed as an id (aeolus-fleet#1092)", async () => {
+    const body = await (await fetch(`${address}/parties?fleet=${FLEET}`, { headers: PAGE })).text();
+
+    const approve = body.slice(body.indexOf('data-testid="parties-approve"'));
+    expect({ isPicked: approve.includes('data-testid="owner-field"'), isTyped: /<input[^>]*name="ownerShipId"/.test(approve) }).toEqual({ isPicked: true, isTyped: false });
+  }, 60_000);
+
   it('sends a page that names no fleet to the same page in the fleet the account may open', async () => {
     const page = await fetch(`${address}/parties`, { headers: PAGE, redirect: 'manual' });
 
