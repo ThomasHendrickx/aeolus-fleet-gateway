@@ -7,7 +7,7 @@ const INSTALLATION_TOKEN_MIN_LENGTH = 32;
 const GATEWAY_SECRET_MIN_LENGTH = 32;
 
 /** How long an MCP client's call waits for its answer unless set (Q13). */
-const MCP_WAIT_MAX_MS_DEFAULT = 10_000;
+export const MCP_WAIT_MAX_MS_DEFAULT = 10_000;
 
 const environmentSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// or postgresql:// URL' }),

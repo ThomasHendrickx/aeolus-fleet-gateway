@@ -99,6 +99,6 @@ describe('an outside MCP client calls an outside MCP server through the fleet', 
     const called = await mcp.callTool({ name, arguments: {} });
     await mcp.close();
 
-    expect(JSON.parse(textOf(called))).toMatchObject({ handle: expect.any(String) });
+    expect(z.object({ handle: z.string() }).safeParse(JSON.parse(textOf(called))).success).toBe(true);
   });
 });

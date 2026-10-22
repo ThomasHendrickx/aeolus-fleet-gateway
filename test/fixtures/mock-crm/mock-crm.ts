@@ -4,7 +4,8 @@
  * counts every call it ran, so a test sees whether a call ran twice.
  *
  * - `list_contacts`, `get_contact`, `create_contact`, `list_deals`, `create_deal`: the CRM itself.
- * - `forecast_revenue`: the slow tool; it answers after `slowToolMs`, or never while `isSlowToolHeld`.
+ * - `forecast_revenue`: the slow tool; it answers after `slowToolMs`, by default
+ *   longer than the gateway's default MCP_WAIT_MAX_MS, or never while `isSlowToolHeld`.
  * - `sync_ledger`: the tool that errors; it answers an error result (`isError`).
  *
  * It signs callers in by a static bearer token, or by OAuth client
@@ -15,6 +16,8 @@ import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
+import { MCP_WAIT_MAX_MS_DEFAULT } from '../../../src/config.js';
+
 export const MOCK_CRM_BEARER = 'crm-static-bearer-token';
 export const MOCK_CRM_CLIENT = { clientId: 'aeolus-gateway', clientSecret: 'crm-client-secret' };
 
@@ -24,8 +27,11 @@ const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_BAD_REQUEST = 400;
 
+/** How much longer than the gateway's default wait the slow tool takes, so a client calling it through the gateway is answered a handle. */
+const SLOW_TOOL_PAST_WAIT_MS = 1_000;
+
 export interface MockCrmOptions {
-  /** How long `forecast_revenue` takes. */
+  /** How long `forecast_revenue` takes; by default past the gateway's default MCP_WAIT_MAX_MS. */
   slowToolMs?: number;
 }
 
@@ -152,7 +158,7 @@ function crmServer(crm: MockCrm, options: MockCrmOptions): McpServer {
     },
     async () => {
       counted('forecast_revenue');
-      await new Promise((resolve) => setTimeout(resolve, options.slowToolMs ?? 0));
+      await new Promise((resolve) => setTimeout(resolve, options.slowToolMs ?? MCP_WAIT_MAX_MS_DEFAULT + SLOW_TOOL_PAST_WAIT_MS));
       while (crm.isSlowToolHeld) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
