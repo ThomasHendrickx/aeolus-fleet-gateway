@@ -1,4 +1,4 @@
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import type { DeliveryId, FleetId, ShipId } from '@aeolus-fleet/common';
 
 import type { Result } from '../shared/result.js';
 
@@ -35,6 +35,22 @@ export interface FleetDoor {
   deregister(crewToken: string): Promise<Result<undefined, FleetRefusal>>;
   /** Declares the ship's own namespace and its whole list of scopes; the fleet stores them, the gateway enforces them (decision 0046). */
   declareScopes(crewToken: string, declaration: { namespace: string; scopes: { scope: string; description: string }[] }): Promise<Result<undefined, FleetRefusal>>;
+}
+
+/** A delivery to the gateway's own ship: what tells a ping apart, and who sent it. */
+export interface GatewayDelivery {
+  deliveryId: DeliveryId;
+  contentType: string;
+  senderShipId: ShipId;
+}
+
+/** Outbound port: the deliveries to the gateway's own ship, as its crew takes, acks and pongs them. */
+export interface GatewayInbox {
+  /** Takes up to max deliveries for the ship, waiting while the fleet waits for one, until the signal aborts; none when none came. */
+  receive(crewToken: string, take: { max: number; signal: AbortSignal }): Promise<Result<GatewayDelivery[], FleetRefusal>>;
+  ack(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
+  /** Answers argo's ping, in place of the ack. */
+  pong(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
 }
 
 /** The crew token the gateway holds for its ship in a fleet, and when it got it. */
