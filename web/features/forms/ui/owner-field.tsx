@@ -6,6 +6,9 @@ export interface OwnerChoice {
   name: string;
 }
 
+/** The owner choices as a page read them, or why they could not be read. */
+export type OwnerChoices = { isOk: true; value: OwnerChoice[] } | { isOk: false; refusal: string };
+
 /**
  * The owner of a party, picked by name from the ships the fleet takes as an
  * owner. The owner it has now stays a choice, though the fleet no longer

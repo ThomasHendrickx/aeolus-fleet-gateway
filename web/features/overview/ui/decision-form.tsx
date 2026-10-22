@@ -2,6 +2,7 @@
 
 import { useState, type SyntheticEvent } from 'react';
 
+import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
 import { EVERY_APP_SHIP_SCOPES, scopeLabel, subjectName, suggestedName, type DecisionInput, type ServerCredentialInput, type ShownRequest } from '../services/requests';
 import { ActionButton } from './action-button';
 import { Notice } from './notice';
@@ -47,12 +48,14 @@ function serverOf(form: FormData): ServerCredentialInput {
 export function DecisionForm({
   request,
   heldScopes,
+  owners,
   working,
   failure,
   onDecide,
 }: {
   request: ShownRequest;
   heldScopes: readonly string[];
+  owners: OwnerChoices;
   working: DecisionInput['kind'] | undefined;
   failure: string | undefined;
   onDecide: (decision: DecisionInput) => void;
@@ -74,11 +77,7 @@ export function DecisionForm({
           <span>Proxy ship&apos;s name</span>
           <input name="name" defaultValue={suggestedName(name)} required className={FIELD} />
         </label>
-        <label className="grid gap-1">
-          <span>Owner</span>
-          <input name="ownerShipId" placeholder="shp_..." required className={FIELD} />
-          <span className="text-caption text-muted-foreground">A person ship. It answers for this party.</span>
-        </label>
+        <OwnerField choices={owners.isOk ? owners.value : []} current={null} help="A person ship or argo. It answers for this party." refusal={owners.isOk ? undefined : owners.refusal} />
         <fieldset className="grid gap-1">
           <legend>Scopes</legend>
           {EVERY_APP_SHIP_SCOPES.map((scope) => (

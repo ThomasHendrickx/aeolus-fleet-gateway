@@ -3,12 +3,13 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
+import type { OwnerChoices } from '../../forms/ui/owner-field';
 import { decideRequest } from '../hooks/overview-actions';
 import type { DecisionInput, ShownRequest } from '../services/requests';
 import { DecisionForm } from '../ui/decision-form';
 
 /** Decides one request as the signed-in approver, then goes back to the Overview, which says nothing more waits here. */
-export function DecisionPanel({ fleetId, request, heldScopes }: { fleetId: string; request: ShownRequest; heldScopes: readonly string[] }) {
+export function DecisionPanel({ fleetId, request, heldScopes, owners }: { fleetId: string; request: ShownRequest; heldScopes: readonly string[]; owners: OwnerChoices }) {
   const router = useRouter();
   const [working, setWorking] = useState<DecisionInput['kind'] | undefined>();
   const [failure, setFailure] = useState<string | undefined>();
@@ -26,5 +27,5 @@ export function DecisionPanel({ fleetId, request, heldScopes }: { fleetId: strin
       setFailure(outcome.message);
     });
   };
-  return <DecisionForm request={request} heldScopes={heldScopes} working={working} failure={failure} onDecide={decide} />;
+  return <DecisionForm request={request} heldScopes={heldScopes} owners={owners} working={working} failure={failure} onDecide={decide} />;
 }

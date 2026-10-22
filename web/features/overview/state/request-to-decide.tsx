@@ -1,4 +1,4 @@
-import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
+import { readOf, signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { OVERVIEW_PATH, readRequestToDecide } from '../hooks/read-overview';
 import { NoSignIn } from '../../sign-in/ui/no-sign-in';
 import { subjectKind, subjectName } from '../services/requests';
@@ -37,6 +37,7 @@ export async function RequestToDecide({ requestId, searchParams }: { requestId: 
       </div>
     );
   }
+  const owners = await readOf(page.api.parties.ownerChoices.query());
   const requesters = request.requesters.length;
   return (
     <div className="grid gap-6">
@@ -50,7 +51,7 @@ export async function RequestToDecide({ requestId, searchParams }: { requestId: 
               {subjectKind(request)} · {requesters} {requesters === 1 ? 'requester' : 'requesters'}
             </span>
           </section>
-          <DecisionPanel fleetId={fleetId} request={request} heldScopes={scopes} />
+          <DecisionPanel fleetId={fleetId} request={request} heldScopes={scopes} owners={owners} />
         </div>
         <aside>{queue}</aside>
       </div>

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { ActionForm } from '../../forms/ui/action-form';
 import { CARD, INPUT, LABEL } from '../../forms/ui/look';
-import { OwnerField, type OwnerChoice } from '../../forms/ui/owner-field';
+import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
 import { PARTY_STATES, type ListedParty } from '../../outside-parties/party-kinds';
 import { StatusBadge } from '../../outside-parties/ui/status-badge';
 import { approveParty, crewParty, markTool, stateParty } from '../actions';
@@ -38,7 +38,7 @@ function PartyForms({ party, fleetId }: { party: ListedParty; fleetId: string })
   );
 }
 
-function ApproveForm({ fleetId, owners }: { fleetId: string; owners: { isOk: true; value: OwnerChoice[] } | { isOk: false; refusal: string } }) {
+function ApproveForm({ fleetId, owners }: { fleetId: string; owners: OwnerChoices }) {
   return (
     <section className={`${CARD} grid gap-3`}>
       <h2 className="text-section font-semibold">Approve an MCP server</h2>
