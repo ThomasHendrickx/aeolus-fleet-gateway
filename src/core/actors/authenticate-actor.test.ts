@@ -19,12 +19,16 @@ const AGENT: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9agt';
 const GATEWAY_CREW = 'aeolus_ct_v1_gateway';
 const AGENT_CREW = 'aeolus_ct_v1_agent';
 
-const operator: AuthenticateOperator = (cookie) =>
-  Promise.resolve(
-    cookie === 'aeolus_session=argo'
-      ? ok({ fleetId: FLEET_ID, kind: 'operator' as const, scopes: ['fleet:read', 'fleet:manage'] })
+const operator: AuthenticateOperator = (cookie) => {
+  if (cookie === 'aeolus_session=argo') {
+    return Promise.resolve(ok({ fleetId: FLEET_ID, kind: 'operator' as const, scopes: ['fleet:read', 'fleet:manage'] }));
+  }
+  return Promise.resolve(
+    cookie === 'aeolus_session=charlotte'
+      ? ok({ fleetId: FLEET_ID, kind: 'account' as const, accountId: 'acc-charlotte', scopes: ['fleet:read'] })
       : err({ kind: 'NOT_THE_OPERATOR' as const, message: 'Sign in to the console of your fleet' }),
   );
+};
 
 let connections: ReturnType<typeof memoryConnectionStore>;
 let agentFleet: typeof FLEET_ID;
@@ -96,6 +100,13 @@ describe('who calls the gateway', () => {
     await expect(authenticate({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID })).resolves.toEqual({
       isOk: true,
       value: { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, accountToken: 'account-token-1', scopes: ['fleet:read', 'gateway:approve'] },
+    });
+  });
+
+  it("is an account by its console session, whose cookie the fleet takes as its account token: no token or person ship of its own here (decision 0057)", async () => {
+    await expect(authenticate({ cookie: 'aeolus_session=charlotte' })).resolves.toEqual({
+      isOk: true,
+      value: { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: null, accountToken: null, scopes: ['fleet:read'] },
     });
   });
 

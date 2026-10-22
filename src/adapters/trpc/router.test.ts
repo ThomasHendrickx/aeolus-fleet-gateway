@@ -30,6 +30,8 @@ const VIEWER_COOKIE = 'aeolus_session=viewer';
 /** A person signed in to the gateway's pages, and one whose account token no longer works. */
 const PERSON_COOKIE = 'aeolus_account_session=charlotte';
 const SIGNED_OUT_COOKIE = 'aeolus_account_session=ended';
+/** An account signed in to the console as itself (decision 0053): no account token or person ship the gateway holds. */
+const ACCOUNT_CONSOLE_COOKIE = 'aeolus_session=charlotte';
 const PERSON_TOKEN = 'account-token-1';
 const SHARED_ACCOUNT_TOKEN = 'account-token-shared';
 const MANAGER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9mgr';
@@ -81,6 +83,9 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       }
       if (sent.signIn === CHARLOTTE_SIGN_IN && sent.fleetId === FLEET) {
         return Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: OWNER, accountToken: SHARED_ACCOUNT_TOKEN, scopes: ['fleet:read'] }));
+      }
+      if (sent.cookie === ACCOUNT_CONSOLE_COOKIE) {
+        return Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: null, accountToken: null, scopes: ['fleet:read'] }));
       }
       if (sent.cookie === PERSON_COOKIE || sent.cookie === SIGNED_OUT_COOKIE) {
         return Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: OWNER, accountToken: sent.cookie === PERSON_COOKIE ? PERSON_TOKEN : 'account-token-ended', scopes: ['fleet:read'] }));
@@ -434,6 +439,12 @@ describe("a person reads and deals with their person ship's deliveries through t
     await expect(caller.people.open({ deliveryId: DELIVERY })).resolves.toMatchObject({ payload: 'Publish it?' });
     await caller.people.done({ deliveryId: DELIVERY });
     expect(answers).toEqual([{ grantId: SHARED_ACCOUNT_TOKEN, deliveryId: DELIVERY }]);
+  });
+
+  it("refuses an account by its console session in a sentence: its person ship's deliveries open on the gateway's pages", async () => {
+    const { context } = aContext(ACCOUNT_CONSOLE_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN', message: "Open the gateway's pages, signed in with your account, to read your person ship's deliveries" });
   });
 
   it('refuses any other actor: only a person has a person ship', async () => {

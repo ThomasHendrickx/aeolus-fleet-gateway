@@ -21,7 +21,7 @@ const sessions: ConsoleSessions = {
       return Promise.resolve(ok({ fleetId, kind: 'viewer' as const, scopes: ['fleet:read'] }));
     }
     if (cookie === ACCOUNT_COOKIE) {
-      return Promise.resolve(ok({ fleetId, kind: 'account' as const, scopes: ['fleet:read'] }));
+      return Promise.resolve(ok({ fleetId, kind: 'account' as const, accountId: 'acc-charlotte', scopes: ['fleet:read', 'fleet:network'] }));
     }
     return Promise.resolve(err({ code: 'UNAUTHORIZED', message: 'Sign in again' }));
   },
@@ -38,8 +38,8 @@ describe('whether a request comes from argo (console.session, decision 0043)', (
     await expect(authenticate(VIEWER_COOKIE)).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, kind: 'viewer', scopes: ['fleet:read'] } });
   });
 
-  it("refuses an account's session: an account reaches the gateway by its sign-in, not as argo", async () => {
-    await expect(authenticate(ACCOUNT_COOKIE)).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_THE_OPERATOR' } });
+  it("lets an account's session through as that account, with its account token's scopes (decision 0053)", async () => {
+    await expect(authenticate(ACCOUNT_COOKIE)).resolves.toEqual({ isOk: true, value: { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', scopes: ['fleet:read', 'fleet:network'] } });
   });
 
   it('refuses a request without a session cookie', async () => {

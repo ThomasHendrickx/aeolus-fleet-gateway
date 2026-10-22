@@ -39,6 +39,12 @@ describe('the credential the gateway calls the fleet with, as the actor', () => 
     ]);
   });
 
+  it('is the console session an account sent, as it sent it: the fleet takes its cookie as the account token (decision 0057)', async () => {
+    const byConsole: Actor = { ...CHARLOTTE, personShipId: null, accountToken: null };
+
+    await expect(credentialOf()(byConsole, { cookie: 'aeolus_session=charlotte' })).resolves.toEqual({ isOk: true, value: { cookie: 'aeolus_session=charlotte' } });
+  });
+
   it('refuses an account of a fleet the gateway is no longer connected to', async () => {
     await connections.drop(FLEET_ID);
 
