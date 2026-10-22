@@ -4,7 +4,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
+import { ACCOUNT_URL, CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn, GATEWAY_URL } from '../../../test/support/account-sign-in-fakes.js';
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { createAccountInView } from '../../core/account-sign-in/account-in-view.js';
 import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
@@ -563,6 +563,37 @@ describe("the web app's page asks which account it shows the fleet in its addres
 
   it('refuses where the gateway signs no one in to its pages', async () => {
     await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, { accountInView: undefined })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe("the web app's header asks which apps and fleets the account may open (H1)", () => {
+  const signIns = fakeSharedSignIn({});
+
+  function asked(sent: { signIn?: string }, apps: { accountApps: Context['accountApps'] } = { accountApps: signIns.apps }) {
+    return gatewayRouter.createCaller({ ...aContext(undefined).context, ...sent, ...apps }).account.apps();
+  }
+
+  it('answers the account, its apps, and each fleet with its name and apps', async () => {
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN })).resolves.toEqual({
+      account: { id: 'acc-charlotte', email: 'charlotte@example.com' },
+      apps: [{ app: 'account', url: ACCOUNT_URL }],
+      fleets: [
+        { id: FLEET_ID, name: 'Acme', apps: [{ app: 'console', url: CONSOLE_URL }] },
+        { id: OTHER_FLEET_ID, name: 'Labs', apps: [{ app: 'console', url: CONSOLE_URL }, { app: 'gateway', url: GATEWAY_URL }] },
+      ],
+    });
+  });
+
+  it('refuses a browser with no shared sign-in', async () => {
+    await expect(asked({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('says pagasae did not answer', async () => {
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN }, { accountApps: fakeSharedSignIn({ isAvailable: false }).apps })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+  });
+
+  it('refuses where the gateway signs no one in to its pages', async () => {
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN }, { accountApps: undefined })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
 
