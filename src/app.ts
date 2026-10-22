@@ -444,6 +444,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     authenticateActor,
     changes: hub,
     accountInView,
+    accountApps: signIns === undefined ? undefined : (signIn: string) => signIns.apps(signIn),
     isServed,
     heldConnection,
     installation: { mode: installation, token: options.installationToken },

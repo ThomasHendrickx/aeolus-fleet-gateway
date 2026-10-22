@@ -569,7 +569,7 @@ describe("the web app's page asks which account it shows the fleet in its addres
 describe("the web app's header asks which apps and fleets the account may open (H1)", () => {
   const signIns = fakeSharedSignIn({});
 
-  function asked(sent: { signIn?: string }, apps: { accountApps: Context['accountApps'] } = { accountApps: signIns.apps }) {
+  function asked(sent: { signIn?: string }, apps: { accountApps: Context['accountApps'] } = { accountApps: (signIn) => signIns.apps(signIn) }) {
     return gatewayRouter.createCaller({ ...aContext(undefined).context, ...sent, ...apps }).account.apps();
   }
 
@@ -589,7 +589,7 @@ describe("the web app's header asks which apps and fleets the account may open (
   });
 
   it('says pagasae did not answer', async () => {
-    await expect(asked({ signIn: CHARLOTTE_SIGN_IN }, { accountApps: fakeSharedSignIn({ isAvailable: false }).apps })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN }, { accountApps: (signIn) => fakeSharedSignIn({ isAvailable: false }).apps(signIn) })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 
   it('refuses where the gateway signs no one in to its pages', async () => {
