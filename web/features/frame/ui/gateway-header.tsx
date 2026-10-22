@@ -7,6 +7,7 @@ import { useRef, useState } from 'react';
 
 import { setTheme } from '../actions';
 import { THEMES } from '../theme';
+import { GatewayTabs } from './gateway-tabs';
 
 /** Where the avatar menu's Help leads, as in the console. */
 const HELP_URL = 'https://github.com/ThomasHendrickx/aeolus-fleet';
@@ -34,7 +35,8 @@ interface GatewayHeaderProps {
  * The header every Aeolus app shows (aeolus-fleet, header design), on the
  * gateway's pages: from 640 px the shared AppHeader, with the switcher in
  * the title and the avatar menu; on phone a bar with the switcher compact
- * and the avatar's bottom Sheet (H6). The fleet in view is the one the
+ * and the avatar's bottom Sheet (H6). After the title, the tabs to the
+ * overview and the outside parties. The fleet in view is the one the
  * address names, else the account's first. Sign out ends the shared
  * sign-in in every app and shows "Signing out" until the page leaves.
  */
@@ -68,9 +70,12 @@ export function GatewayHeader({ switchers, email, accountUrl, theme }: GatewayHe
   return (
     <>
       <form ref={signOutForm} method="post" action={SIGN_OUT_PATH} hidden />
-      <AppHeader switcher={switcher} account={account} className="max-sm:hidden" />
+      <AppHeader switcher={switcher} account={account} className="max-sm:hidden">
+        {switcher === undefined ? null : <GatewayTabs fleetId={switcher.fleet.id} />}
+      </AppHeader>
       <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-4 sm:hidden">
         {switcher === undefined ? null : <AppSwitcher switcher={switcher} layout="compact" className="min-w-0" />}
+        {switcher === undefined ? null : <GatewayTabs fleetId={switcher.fleet.id} />}
         <span className="grow" />
         <AvatarMenuSheet {...account} />
       </header>
