@@ -3,7 +3,7 @@
  * HTTP on a free local port. It keeps contacts and deals in memory, and
  * counts every call it ran, so a test sees whether a call ran twice.
  *
- * - `list_contacts`, `create_contact`, `list_deals`, `create_deal`: the CRM itself.
+ * - `list_contacts`, `get_contact`, `create_contact`, `list_deals`, `create_deal`: the CRM itself.
  * - `forecast_revenue`: the slow tool; it answers after `slowToolMs`, or never while `isSlowToolHeld`.
  * - `sync_ledger`: the tool that errors; it answers an error result (`isError`).
  *
@@ -74,6 +74,24 @@ function crmServer(crm: MockCrm, options: MockCrmOptions): McpServer {
       counted('list_contacts');
       const contacts = crm.contacts.filter((contact) => query === undefined || contact.name.includes(query));
       return { content: textOf(contacts), structuredContent: { contacts } };
+    },
+  );
+
+  mcp.registerTool(
+    'get_contact',
+    {
+      title: 'Get a contact',
+      description: 'The contact with the id; an error when none has it.',
+      inputSchema: z.object({ id: z.string() }),
+      annotations: { readOnlyHint: true, idempotentHint: true },
+    },
+    ({ id }) => {
+      counted('get_contact');
+      const contact = crm.contacts.find((each) => each.id === id);
+      if (contact === undefined) {
+        return { content: [{ type: 'text' as const, text: `No contact has the id ${id}` }], isError: true };
+      }
+      return { content: textOf(contact), structuredContent: { contact } };
     },
   );
 
