@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { failedReasonText, pickFieldsOf, timeLeft } from './authorize';
+import { failedReasonText, pickFieldsOf, signInAddressOf, timeLeft } from './authorize';
 
 describe("the time a request waiting for approval has left, as the waiting page's ring shows it", () => {
   it('says days and hours', () => {
@@ -45,5 +45,11 @@ describe('the authorization request the pick page carries on to the sign-in', ()
 
   it('leaves out a parameter sent twice, and a holder, which the page picks itself', () => {
     expect(pickFieldsOf({ client_id: 'c', scope: ['a', 'b'], holder: 'account' })).toEqual([['client_id', 'c']]);
+  });
+});
+
+describe('the address a pressed pick goes to, while its button shows the sign-in on its way', () => {
+  it('is the sign-in door with the request as it came and the pick last', () => {
+    expect(signInAddressOf([['client_id', 'https://cursor.example.com/client.json'], ['state', 's&1']], 'party')).toBe('/authorize/sign-in?client_id=https%3A%2F%2Fcursor.example.com%2Fclient.json&state=s%261&holder=party');
   });
 });

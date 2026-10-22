@@ -30,10 +30,10 @@ describe("the pick page shows the client and its two picks, each starting the si
   it('sends the request on to /authorize/sign-in, with the pick pressed', () => {
     const markup = shown();
     const form = /<form [^>]*>/.exec(markup)?.[0] ?? '';
-    const picks = [...markup.matchAll(/<button ([^>]*)><strong>([^<]*)<\/strong>/g)].map(([, attributes = '', label]) => ({
+    const picks = [...markup.matchAll(/<button ([^>]*)>(.*?)<\/button>/g)].map(([, attributes = '', inner = '']) => ({
       name: /name="([^"]*)"/.exec(attributes)?.[1],
       value: /value="([^"]*)"/.exec(attributes)?.[1],
-      label,
+      label: textOf(inner),
     }));
 
     expect({ isGet: form.includes('method="get"'), isToSignIn: form.includes('action="/authorize/sign-in"'), picks }).toEqual({
@@ -44,6 +44,19 @@ describe("the pick page shows the client and its two picks, each starting the si
         { name: 'holder', value: 'party', label: 'Ask for access for this client' },
       ],
     });
+  });
+
+  it('shows the picks as the buttons every Aeolus app shows: signing in as yourself primary, asking for access outlined', () => {
+    const picks = [...shown().matchAll(/<button ([^>]*)>/g)].map(([, attributes = '']) => ({
+      isSharedButton: attributes.includes('data-slot="button"'),
+      isPrimary: attributes.includes('bg-primary'),
+      isOutlined: attributes.includes('border-input'),
+    }));
+
+    expect(picks).toEqual([
+      { isSharedButton: true, isPrimary: true, isOutlined: false },
+      { isSharedButton: true, isPrimary: false, isOutlined: true },
+    ]);
   });
 
   it('carries every parameter of the request as it came', () => {
