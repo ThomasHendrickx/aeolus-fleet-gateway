@@ -8,8 +8,9 @@ import { ok, type Result } from '../shared/result.js';
 
 /**
  * Who calls the gateway's API (decision 0057): an account by the shared
- * sign-in the web app's page forwarded (header design H5), argo or a viewer
- * by the console session, or a ship by its own crew token. Its scopes are the
+ * sign-in the web app's page forwarded (header design H5) or by its console
+ * session, argo or a viewer by the console session, or a ship by its own
+ * crew token. Its scopes are the
  * fleet's or its account token's, never the request's, plugin scopes such
  * as gateway:approve among them.
  */
@@ -18,13 +19,18 @@ export type Actor =
   | { readonly fleetId: FleetId; readonly kind: 'ship'; readonly shipId: ShipId; readonly scopes: readonly string[] }
   | AccountActor;
 
-/** An account on the gateway's pages, by the account token pagasae exchanged its shared sign-in for. */
+/**
+ * An account: on the gateway's pages, by the account token pagasae exchanged
+ * its shared sign-in for; or by its console session, whose cookie the fleet
+ * takes as its account token, so the gateway holds neither token nor person
+ * ship for it (null).
+ */
 export interface AccountActor {
   readonly fleetId: FleetId;
   readonly kind: 'account';
   readonly accountId: string;
   readonly personShipId: ShipId | null;
-  readonly accountToken: string;
+  readonly accountToken: string | null;
   readonly scopes: readonly string[];
 }
 
@@ -37,7 +43,7 @@ export type AuthenticateActor = (sent: { cookie?: string | undefined; crewToken?
  * a fleet the gateway is not connected to is no actor here. The crew token
  * is never kept. Else the shared sign-in the page forwarded names an account
  * in the fleet the page names, by the account token pagasae exchanges it
- * for. Else the console session cookie names argo or a viewer.
+ * for. Else the console session cookie names argo, a viewer or an account.
  */
 export function createAuthenticateActor(deps: {
   authenticateOperator: AuthenticateOperator;
@@ -68,7 +74,11 @@ export function createAuthenticateActor(deps: {
       const { accountId, personShipId, scopes, accountToken } = token.value;
       return ok({ fleetId, kind: 'account', accountId, personShipId, accountToken, scopes });
     }
-    const operator = await deps.authenticateOperator(cookie);
-    return operator.isOk ? ok(operator.value) : refusal;
+    const session = await deps.authenticateOperator(cookie);
+    if (!session.isOk) {
+      return refusal;
+    }
+    const { value } = session;
+    return ok(value.kind === 'account' ? { ...value, personShipId: null, accountToken: null } : value);
   };
 }
