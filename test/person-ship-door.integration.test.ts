@@ -103,3 +103,40 @@ describe("a person ship sends the person's own message", () => {
     expect(!sent.isOk && sent.error.message).toContain('64 KB');
   });
 });
+
+describe('a person ship reads again a delivery the person opened (aeolus-fleet #1046)', () => {
+  /** The tracker sends charlotte a message; charlotte's crew takes it and acknowledges it, as the person opening it does. */
+  async function charlotteOpensTheTrackersMessage() {
+    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
+      body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType: 'text/plain', payload: 'Issue 7 is closed', idempotencyKey: 'tracker-1' }),
+    });
+    expect(sent.status).toBe(200);
+    const taken = await door.pushReceive(charlotte, { max: 1 });
+    const [opened] = taken.isOk ? taken.value : [];
+    if (opened === undefined) {
+      throw new Error('charlotte received no delivery');
+    }
+    expect((await door.ack(charlotte, opened.deliveryId)).isOk).toBe(true);
+    return opened;
+  }
+
+  it('reads it again whole by its id while it is not handled', async () => {
+    const opened = await charlotteOpensTheTrackersMessage();
+
+    const again = await door.delivery(charlotte, opened.deliveryId);
+
+    expect(again).toMatchObject({ isOk: true, value: { deliveryId: opened.deliveryId, messageId: opened.messageId, senderName: 'tracker', contentType: 'text/plain', payload: 'Issue 7 is closed' } });
+  });
+
+  it('is refused once the person dealt with it, saying why', async () => {
+    const opened = await charlotteOpensTheTrackersMessage();
+    expect((await door.handled(charlotte, opened.deliveryId)).isOk).toBe(true);
+
+    const again = await door.delivery(charlotte, opened.deliveryId);
+
+    expect(again.isOk).toBe(false);
+    expect(!again.isOk && again.error.message).not.toBe('');
+  });
+});

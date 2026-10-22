@@ -90,3 +90,41 @@ describe('a person opens a delivery that waits for their person ship', () => {
     expect(opened.held.size).toBe(1);
   });
 });
+
+describe('a person opens again a delivery they opened, from any client (aeolus-fleet #1046)', () => {
+  it('shows it whole again, as the fleet reads it again, acknowledging it once only', async () => {
+    const { openDelivery, calls } = opening([QUESTION]);
+    const first = await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+
+    const again = await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+
+    expect({ again, isSame: JSON.stringify(again) === JSON.stringify(first) }).toEqual({
+      again: {
+        isOk: true,
+        value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload },
+      },
+      isSame: true,
+    });
+    expect(calls.filter((call) => call.startsWith('ack'))).toEqual([`ack(${QUESTION.deliveryId})`]);
+  });
+
+  it('keeps no payload of it: the second open reads it from the fleet', async () => {
+    const { openDelivery, calls } = opening([QUESTION]);
+    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+
+    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+
+    expect({ isPayloadKept: JSON.stringify([...opened.held.values()]).includes('All checks are green'), lastCall: calls.at(-1) }).toEqual({ isPayloadKept: false, lastCall: `delivery(${QUESTION.deliveryId})` });
+  });
+
+  it('says why when the fleet no longer holds it opened', async () => {
+    const { openDelivery, refusals } = opening([QUESTION]);
+    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+    refusals.delivery.push({ code: 'DELIVERY_NOT_ACKNOWLEDGED', message: `Delivery ${QUESTION.deliveryId} is handled, not acknowledged` });
+
+    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toEqual({
+      isOk: false,
+      error: { kind: 'NO_SUCH_DELIVERY', message: `The fleet no longer holds it opened: Delivery ${QUESTION.deliveryId} is handled, not acknowledged` },
+    });
+  });
+});

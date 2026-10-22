@@ -119,6 +119,46 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     ]);
   });
 
+  it('reads a delivery the person opened again, whole, by its id', async () => {
+    answer = {
+      status: 200,
+      body: {
+        deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+        messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+        senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+        senderName: 'tracker',
+        senderType: 'tracker',
+        recipient: { kind: 'ship', shipId: 'shp_01m3tbfspe96yf1rnr4ank0per' },
+        model: null,
+        contentType: 'application/vnd.aeolus.question+json',
+        payload: JSON.stringify(QUESTION),
+        sentAt: '2026-10-19T08:00:00.000Z',
+        inReplyTo: null,
+        attempts: 1,
+        isForced: false,
+        state: 'acknowledged',
+      },
+    };
+
+    const reread = await createRestFleetDoor(base).person.delivery('aeolus_ct_v1_charlotte', 'dlv_01m3tbfspe96yf1rnr4ank0001');
+
+    expect(reread).toEqual({
+      isOk: true,
+      value: {
+        deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+        messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+        senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+        senderName: 'tracker',
+        contentType: 'application/vnd.aeolus.question+json',
+        payload: JSON.stringify(QUESTION),
+        questionTitle: 'Go for release 1.4?',
+        sentAt: new Date('2026-10-19T08:00:00.000Z'),
+        inReplyTo: null,
+      },
+    });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/delivery', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' } }]);
+  });
+
   it.each([
     ['ack', '/api/v1/ship/ack'],
     ['handled', '/api/v1/ship/handled'],

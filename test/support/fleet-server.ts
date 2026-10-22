@@ -84,17 +84,36 @@ async function waitForVersion(url: string, exited: () => string | undefined): Pr
   throw new Error(`the fleet server at ${url} did not answer within ${String(START_TIMEOUT_MS)} ms`);
 }
 
-/** Creates the fleet and argo as an operator does once, answering the email and password on standard input. */
-async function initialiseFleet(bin: string, environment: Record<string, string>): Promise<void> {
-  const child = spawn(process.execPath, [bin, 'fleet:init', '--name', 'test fleet'], { env: { ...process.env, ...environment }, stdio: ['pipe', 'ignore', 'pipe'] });
+/** Creates the fleet and argo as an operator does once: the one-use sign-in ticket its printed link carries. */
+async function initialiseFleet(bin: string, environment: Record<string, string>): Promise<string> {
+  const child = spawn(process.execPath, [bin, 'fleet:init', '--name', 'test fleet'], { env: { ...process.env, ...environment }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '';
   let stderr = '';
+  child.stdout.on('data', (chunk: Buffer) => {
+    stdout += chunk.toString();
+  });
   child.stderr.on('data', (chunk: Buffer) => {
     stderr += chunk.toString();
   });
-  child.stdin.end(`${OPERATOR.email}\n${OPERATOR.password}\n${OPERATOR.password}\n`);
   const code = await new Promise<number | null>((resolve) => child.once('close', resolve));
-  if (code !== 0) {
+  const ticket = /[?&]ticket=([^\s&]+)/.exec(stdout)?.[1];
+  if (code !== 0 || ticket === undefined) {
     throw new Error(`aeolus-core fleet:init failed: ${stderr}`);
+  }
+  return decodeURIComponent(ticket);
+}
+
+/** argo signs in with the init link's ticket and sets its email and password in Settings, so a test signs in with them. */
+async function setOperatorLogin(url: string, ticket: string): Promise<void> {
+  const headers = { 'content-type': 'application/json', origin: url };
+  const redeemed = await fetch(`${url}/trpc/console.redeemSignInTicket`, { method: 'POST', headers, body: JSON.stringify({ ticket }) });
+  const cookie = redeemed.headers.getSetCookie().find((each) => each.startsWith('aeolus_session='))?.split(';')[0];
+  if (cookie === undefined) {
+    throw new Error(`argo could not sign in with the init link: ${await redeemed.text()}`);
+  }
+  const set = await fetch(`${url}/trpc/console.setLogin`, { method: 'POST', headers: { ...headers, cookie }, body: JSON.stringify({ email: OPERATOR.email, password: OPERATOR.password }) });
+  if (!set.ok) {
+    throw new Error(`argo could not set its email and password: ${await set.text()}`);
   }
 }
 
@@ -105,7 +124,7 @@ export async function startFleetServer(adminUrl: string): Promise<FleetServer> {
   await run(process.execPath, [bin, 'migrate'], { env: { ...process.env, DATABASE_URL: databaseUrl } });
   const port = await aFreePort();
   const url = `http://127.0.0.1:${String(port)}`;
-  await initialiseFleet(bin, { DATABASE_URL: databaseUrl, PUBLIC_URL: url });
+  const ticket = await initialiseFleet(bin, { DATABASE_URL: databaseUrl, PUBLIC_URL: url });
   const child = spawn(process.execPath, [bin, 'start'], {
     env: { ...process.env, DATABASE_URL: databaseUrl, PUBLIC_URL: url, HOST: '127.0.0.1', PORT: String(port), LOG_LEVEL: 'warn' },
     stdio: ['ignore', 'ignore', 'pipe'],
@@ -119,6 +138,7 @@ export async function startFleetServer(adminUrl: string): Promise<FleetServer> {
     exit = `exit ${String(code)}: ${stderr}`;
   });
   await waitForVersion(url, () => exit);
+  await setOperatorLogin(url, ticket);
   return {
     url,
     databaseUrl,

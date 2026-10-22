@@ -53,7 +53,7 @@ export interface ProxyShipReads {
 export interface FleetShip {
   shipId: ShipId;
   name: string;
-  kind: 'operator' | 'agent' | 'viewer' | 'person' | 'app';
+  kind: 'operator' | 'agent' | 'viewer' | 'person' | 'app' | 'plugin';
   status: 'awaitingCrew' | 'crewed' | 'retired';
 }
 
