@@ -9,9 +9,10 @@ export interface OwnerChoice {
 /**
  * The owner of a party, picked by name from the ships the fleet takes as an
  * owner. The owner it has now stays a choice, though the fleet no longer
- * lists it, so saving leaves it as it is.
+ * lists it, so saving leaves it as it is. Where the choices could not be
+ * read, it says why, with nothing to pick.
  */
-export function OwnerField({ choices, current, help }: { choices: readonly OwnerChoice[]; current: OwnerChoice | null; help: string }) {
+export function OwnerField({ choices, current, help, refusal }: { choices: readonly OwnerChoice[]; current: OwnerChoice | null; help: string; refusal?: string | undefined }) {
   const shown = current === null || choices.some((choice) => choice.shipId === current.shipId) ? choices : [current, ...choices];
   return (
     <label className={LABEL}>
@@ -28,7 +29,7 @@ export function OwnerField({ choices, current, help }: { choices: readonly Owner
           </option>
         ))}
       </select>
-      <span className="text-muted-foreground">{help}</span>
+      <span className="text-muted-foreground">{refusal ?? help}</span>
     </label>
   );
 }

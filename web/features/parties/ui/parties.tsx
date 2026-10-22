@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { ActionForm } from '../../forms/ui/action-form';
 import { CARD, INPUT, LABEL } from '../../forms/ui/look';
+import { OwnerField, type OwnerChoice } from '../../forms/ui/owner-field';
 import { PARTY_STATES, type ListedParty } from '../../outside-parties/party-kinds';
 import { StatusBadge } from '../../outside-parties/ui/status-badge';
 import { approveParty, crewParty, markTool, stateParty } from '../actions';
@@ -37,7 +38,7 @@ function PartyForms({ party, fleetId }: { party: ListedParty; fleetId: string })
   );
 }
 
-function ApproveForm({ fleetId }: { fleetId: string }) {
+function ApproveForm({ fleetId, owners }: { fleetId: string; owners: { isOk: true; value: OwnerChoice[] } | { isOk: false; refusal: string } }) {
   return (
     <section className={`${CARD} grid gap-3`}>
       <h2 className="text-section font-semibold">Approve an MCP server</h2>
@@ -78,10 +79,7 @@ function ApproveForm({ fleetId }: { fleetId: string }) {
           <span>Scope</span>
           <input className={INPUT} name="scope" />
         </label>
-        <label className={LABEL}>
-          <span>Owner&apos;s ship id (a person&apos;s ship)</span>
-          <input className={INPUT} name="ownerShipId" required />
-        </label>
+        <OwnerField choices={owners.isOk ? owners.value : []} current={null} help="A person ship or argo. It answers for this server." refusal={owners.isOk ? undefined : owners.refusal} />
         <label className={LABEL}>
           <span>Calls at once</span>
           <input className={INPUT} name="concurrencyLimit" type="number" min={1} max={10} defaultValue={4} />
@@ -101,6 +99,7 @@ export async function Parties({ page }: { page: SignedInPage }) {
   const { api, fleetId, scopes } = page;
   const parties = await readOf(api.parties.list.query());
   const canManage = scopes.includes(MANAGING_SCOPE);
+  const owners = canManage ? await readOf(api.parties.ownerChoices.query()) : undefined;
   return (
     <div className="grid gap-4">
       <h1 className="text-title font-semibold">Parties</h1>
@@ -144,7 +143,7 @@ export async function Parties({ page }: { page: SignedInPage }) {
           </table>
         </div>
       )}
-      {canManage ? <ApproveForm fleetId={fleetId} /> : null}
+      {owners === undefined ? null : <ApproveForm fleetId={fleetId} owners={owners} />}
     </div>
   );
 }
