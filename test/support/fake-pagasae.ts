@@ -23,9 +23,10 @@ export interface FakePagasae {
   /**
    * A shared sign-in, as pagasae keeps it in its cookie on the shared
    * domain: it exchanges for these claims in the fleet they name, and lists
-   * that fleet with the gateway, until it is revoked.
+   * the fleets given (else that fleet as Acme) with the gateway, until it is
+   * revoked. A list 'unavailable' answers the list with a server error.
    */
-  sharedSignIn(signIn: string, claims: Record<string, unknown>): void;
+  sharedSignIn(signIn: string, claims: Record<string, unknown>, listed?: readonly { id: string; name: string }[] | 'unavailable'): void;
   stop(): Promise<void>;
 }
 
@@ -46,6 +47,7 @@ export async function startFakePagasae(): Promise<FakePagasae> {
   const codes = new Map<string, { challenge: string; redirectUri: string }>();
   let claims: Record<string, unknown> = {};
   const signIns = new Map<string, Record<string, unknown>>();
+  const listings = new Map<string, readonly { id: string; name: string }[] | 'unavailable'>();
   const json = (response: ServerResponse, answer: { status: number; body: unknown }) => response.writeHead(answer.status, { 'content-type': 'application/json' }).end(JSON.stringify(answer.body));
   const isApp = (form: URLSearchParams) => form.get('client_id') === PAGASAE_APP_CLIENT.clientId && form.get('client_secret') === PAGASAE_APP_CLIENT.clientSecret;
   const server: Server = createServer((request, response) => {
@@ -62,13 +64,18 @@ export async function startFakePagasae(): Promise<FakePagasae> {
     }
     if (request.method === 'GET' && url.pathname === '/api/apps') {
       const basic = `Basic ${Buffer.from(`${PAGASAE_APP_CLIENT.clientId}:${PAGASAE_APP_CLIENT.clientSecret}`).toString('base64')}`;
-      const held = signIns.get(String(request.headers['aeolus-sign-in']));
+      const signIn = String(request.headers['aeolus-sign-in']);
+      const held = signIns.get(signIn);
+      const listed = listings.get(signIn) ?? [{ id: String(held?.aud), name: 'Acme' }];
       if (request.headers.authorization !== basic) {
         json(response, { status: 401, body: { error: 'invalid_client' } });
       } else if (held === undefined) {
         json(response, { status: 401, body: { error: 'invalid_grant' } });
+      } else if (listed === 'unavailable') {
+        json(response, { status: 503, body: { error: 'temporarily_unavailable' } });
       } else {
-        json(response, { status: 200, body: { account: { id: held.sub, email: 'charlotte@example.com' }, apps: [{ app: 'account', url: `${url.origin}/account` }], fleets: [{ id: held.aud, name: 'Acme', argo: false, apps: [{ app: 'gateway', url: 'http://gateway.test' }] }] } });
+        const fleets = listed.map(({ id, name }) => ({ id, name, argo: false, apps: [{ app: 'gateway', url: 'http://gateway.test' }] }));
+        json(response, { status: 200, body: { account: { id: held.sub, email: 'charlotte@example.com' }, apps: [{ app: 'account', url: `${url.origin}/account` }], fleets } });
       }
       return;
     }
@@ -131,8 +138,11 @@ export async function startFakePagasae(): Promise<FakePagasae> {
     answer: (next) => {
       claims = next;
     },
-    sharedSignIn: (signIn, held) => {
+    sharedSignIn: (signIn, held, listed) => {
       signIns.set(signIn, held);
+      if (listed !== undefined) {
+        listings.set(signIn, listed);
+      }
     },
     stop: async () => {
       server.closeAllConnections();
