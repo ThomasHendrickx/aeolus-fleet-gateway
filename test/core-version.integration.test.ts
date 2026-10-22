@@ -23,6 +23,6 @@ describe('the gateway against a real core (decision 0049)', () => {
   it('exits 1 before it listens when the fleet does not answer, naming its version and the minimum', async () => {
     const { code, stderr } = await runGateway(['start'], { DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'), FLEET_URL: 'http://127.0.0.1:9', PORT: '0', GATEWAY_SECRET: TEST_GATEWAY_SECRET });
     expect(code).toBe(1);
-    expect(stderr).toMatch(/^gateway 0\.0\.0 needs core 0\.28\.0 or later, and could not read the version of the fleet at http:\/\/127\.0\.0\.1:9: /);
+    expect(stderr).toMatch(/^gateway 0\.0\.0 needs core 0\.29\.0 or later, and could not read the version of the fleet at http:\/\/127\.0\.0\.1:9: /);
   });
 });

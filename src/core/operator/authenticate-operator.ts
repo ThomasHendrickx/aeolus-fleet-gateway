@@ -1,4 +1,4 @@
-import type { ConsoleSessionOutput, FleetId, Scope } from '@aeolus-fleet/common';
+import type { FleetId, Scope } from '@aeolus-fleet/common';
 
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
@@ -6,7 +6,7 @@ import type { ConsoleSessions } from './ports.js';
 
 export type AuthenticateOperator = (
   cookie: string | undefined,
-) => Promise<Result<{ fleetId: FleetId; kind: ConsoleSessionOutput['kind']; scopes: readonly Scope[] }, DomainError<'NOT_THE_OPERATOR'>>>;
+) => Promise<Result<{ fleetId: FleetId; kind: 'operator' | 'viewer'; scopes: readonly Scope[] }, DomainError<'NOT_THE_OPERATOR'>>>;
 
 /**
  * Use case: whether a request comes from argo. The gateway has no login of
@@ -16,7 +16,8 @@ export type AuthenticateOperator = (
  * signed-in operator there is let through as the operator of their own
  * fleet. A viewer session is let through as a viewer, with the viewer ship's
  * scopes, which the fleet answers; what each may call is the API's to check
- * (decision 0022).
+ * (decision 0022). An account's console session is no operator's: an
+ * account reaches the gateway by its shared sign-in.
  */
 export function createAuthenticateOperator(deps: { sessions: ConsoleSessions }): AuthenticateOperator {
   const refusal = refuse('NOT_THE_OPERATOR', 'Sign in to the console of your fleet');
@@ -28,6 +29,7 @@ export function createAuthenticateOperator(deps: { sessions: ConsoleSessions }):
     if (!session.isOk) {
       return refusal;
     }
-    return ok(session.value);
+    const { fleetId, kind, scopes } = session.value;
+    return kind === 'account' ? refusal : ok({ fleetId, kind, scopes });
   };
 }
