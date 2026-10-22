@@ -122,7 +122,7 @@ describe('the account token of a fleet, exchanged for the shared sign-in (RFC 86
 });
 
 describe('the apps and fleets the account may open (H1)', () => {
-  it("asks with the app's Basic credentials and the shared sign-in, and reads each fleet's apps", async () => {
+  it("asks with the app's Basic credentials and the shared sign-in, and reads the account and each fleet's name and apps", async () => {
     answer = {
       status: 200,
       body: {
@@ -134,7 +134,11 @@ describe('the apps and fleets the account may open (H1)', () => {
 
     expect(await signIns().apps(SIGN_IN)).toEqual({
       isOk: true,
-      value: { apps: [{ app: 'account', url: 'https://account.example.com/account' }], fleets: [{ fleetId: FLEET, apps: [{ app: 'gateway', url: 'https://gateway.example.com' }] }] },
+      value: {
+        account: { id: 'acc-charlotte', email: 'charlotte@example.com' },
+        apps: [{ app: 'account', url: 'https://account.example.com/account' }],
+        fleets: [{ fleetId: FLEET, name: 'Acme', apps: [{ app: 'gateway', url: 'https://gateway.example.com' }] }],
+      },
     });
     expect({ method: received[0]?.method, url: received[0]?.url, authorization: received[0]?.headers.authorization, signIn: received[0]?.headers['aeolus-sign-in'] }).toEqual({
       method: 'GET',
