@@ -50,7 +50,7 @@ describe("the pick page shows the client and its two picks, each starting the si
     const handshake = /<div [^>]*data-testid="authorize-handshake"[^>]*>(.*?)<\/figure><\/div>/.exec(shown())?.[1] ?? '';
     const marks = [...handshake.matchAll(/data-slot="avatar"/g)].length;
 
-    expect({ marks, text: textOf(handshake) }).toEqual({ marks: 2, text: 'CUCursorAeolus' });
+    expect({ marks, text: textOf(handshake) }).toEqual({ marks: 2, text: 'CuCursorAeolus' });
   });
 
   it('shows each pick as a tile holding its icon, its label and what it means', () => {
