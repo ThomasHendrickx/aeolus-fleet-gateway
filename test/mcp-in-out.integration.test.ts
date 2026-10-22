@@ -54,6 +54,8 @@ afterEach(async () => {
   await Promise.all([crm.close(), setting.fleet.stop()]);
 });
 
+const textOf = (result: Awaited<ReturnType<Client['callTool']>>) => z.string().parse(z.array(z.object({ text: z.string() })).parse(result.content)[0]?.text);
+
 /** The SDK client of a signed-in MCP client, connected to the gateway, and the name it knows a CRM tool by. */
 async function aConnectedClient(tool: string): Promise<{ mcp: Client; name: string }> {
   const client = await aSignedInClient(setting);
@@ -88,5 +90,15 @@ describe('an outside MCP client calls an outside MCP server through the fleet', 
 
     expect({ isSameResult: JSON.stringify(results[0]) === JSON.stringify(results[1]), isError: results[0]?.isError }).toEqual({ isSameResult: true, isError: false });
     expect({ runs: crm.calls.get('create_contact'), contacts: crm.contacts.filter((contact) => contact.name === 'Grace Hopper').length }).toEqual({ runs: 1, contacts: 1 });
+  });
+
+  it("answers a handle for the CRM's slow tool, which outlasts the gateway's default MCP_WAIT_MAX_MS", async () => {
+    await aCrewedCrmParty();
+    const { mcp, name } = await aConnectedClient('forecast_revenue');
+
+    const called = await mcp.callTool({ name, arguments: {} });
+    await mcp.close();
+
+    expect(JSON.parse(textOf(called))).toMatchObject({ handle: expect.any(String) });
   });
 });
