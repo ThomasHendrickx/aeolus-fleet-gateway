@@ -17,6 +17,7 @@ import { z } from 'zod';
 
 import type { ChangeHub } from '../http/live.js';
 import type { AccountInView } from '../../core/account-sign-in/account-in-view.js';
+import type { SharedSignIn } from '../../core/account-sign-in/ports.js';
 import type { Connect } from '../../core/connection/connect.js';
 import type { ReadConnection } from '../../core/connection/read-connection.js';
 import type { DeleteFleet } from '../../core/installation/delete-fleet.js';
@@ -65,6 +66,8 @@ export interface Context {
   fleetInView?: FleetId | undefined;
   /** The account a page of the web app shows its fleet as; unset where the gateway is no app at pagasae. */
   accountInView?: AccountInView | undefined;
+  /** The apps and fleets the account may open, as pagasae answers them; unset where the gateway is no app at pagasae. */
+  accountApps?: SharedSignIn['apps'] | undefined;
   authenticateActor: AuthenticateActor;
   /** Each committed change to a fleet's requests, as the live pages hear it. */
   changes?: Pick<ChangeHub, 'subscribe'>;
@@ -392,6 +395,13 @@ const accountInViewOutputSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('elsewhere'), url: z.string() }),
 ]);
 
+const appLinkOutputSchema = z.object({ app: z.string(), url: z.string() });
+const accountAppsOutputSchema = z.object({
+  account: z.object({ id: z.string(), email: z.string() }),
+  apps: z.array(appLinkOutputSchema),
+  fleets: z.array(z.object({ id: z.string(), name: z.string(), apps: z.array(appLinkOutputSchema) })),
+});
+
 export const gatewayRouter = t.router({
   account: t.router({
     /**
@@ -413,6 +423,27 @@ export const gatewayRouter = t.router({
       }
       const shown = answer.value;
       return shown.kind === 'signedIn' ? { kind: 'signedIn' as const, fleetId: shown.fleetId, accountId: shown.token.accountId, scopes: [...shown.token.scopes] } : shown;
+    }),
+    /**
+     * The apps and fleets the account may open, for the web app's header
+     * (header design H1), by the shared sign-in its server forwarded. No
+     * shared sign-in, or one that ended, is UNAUTHORIZED.
+     */
+    apps: t.procedure.output(accountAppsOutputSchema).query(async ({ ctx }) => {
+      if (ctx.accountApps === undefined) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: "This gateway signs no one in to its pages: it is no app at pagasae" });
+      }
+      if (ctx.signIn === undefined) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in with your account' });
+      }
+      const answer = await ctx.accountApps(ctx.signIn);
+      if (!answer.isOk) {
+        throw answer.error.kind === 'signedOut'
+          ? new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in with your account' })
+          : new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'The sign-in service did not answer: try again' });
+      }
+      const { account, apps, fleets } = answer.value;
+      return { account, apps: [...apps], fleets: fleets.map(({ fleetId, name, apps: inFleet }) => ({ id: fleetId, name, apps: [...inFleet] })) };
     }),
   }),
   connection: t.router({

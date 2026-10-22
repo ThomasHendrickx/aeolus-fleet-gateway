@@ -13,6 +13,9 @@ import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 const FLEET = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const SIGN_IN = 'charlotte-shared-sign-in';
 const READER_SIGN_IN = 'charlotte-reads-shared-sign-in';
+const LABS = 'flt_01m4ajt7abh4rypkmdnjene67g';
+const SECOND_FLEET_SIGN_IN = 'charlotte-in-labs-first-shared-sign-in';
+const UNLISTED_SIGN_IN = 'charlotte-pagasae-lists-nothing-shared-sign-in';
 const STARTUP_MS = 60_000;
 const POLL_MS = 250;
 const PAGE = { accept: 'text/html', cookie: `aeolus_account_session=${SIGN_IN}` };
@@ -43,6 +46,13 @@ beforeAll(async () => {
   pagasae = await startFakePagasae();
   pagasae.sharedSignIn(SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read fleet:network fleet:manage' });
   pagasae.sharedSignIn(READER_SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read' });
+  pagasae.sharedSignIn(SECOND_FLEET_SIGN_IN, charlotteIn(pagasae, FLEET));
+  pagasae.listFor(SECOND_FLEET_SIGN_IN, [
+    { id: LABS, name: 'Labs' },
+    { id: FLEET, name: 'Acme' },
+  ]);
+  pagasae.sharedSignIn(UNLISTED_SIGN_IN, charlotteIn(pagasae, FLEET));
+  pagasae.listFor(UNLISTED_SIGN_IN, 'unavailable');
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
   gateway = startGateway({
@@ -135,6 +145,32 @@ describe('the parties pages, as the account signed in', () => {
 
     const approve = body.slice(body.indexOf('data-testid="parties-approve"'));
     expect({ isPicked: approve.includes('data-testid="owner-field"'), isTyped: /<input[^>]*name="ownerShipId"/.test(approve) }).toEqual({ isPicked: true, isTyped: false });
+  }, 60_000);
+
+  it('shows the header every Aeolus app shows: the fleet in view and Gateway in the title, and the avatar menu', async () => {
+    const body = await (await fetch(`${address}/parties?fleet=${FLEET}`, { headers: PAGE })).text();
+
+    expect(body).toContain('aria-label="Fleet: Acme. Switch fleet"');
+    expect(body).toContain('aria-label="App: Gateway. Switch app"');
+    expect(body).toContain('data-testid="avatar-menu"');
+  });
+
+  it("shows the fleet the address names in the header's title, when it is not the first fleet the account may open", async () => {
+    const body = await (await fetch(`${address}/parties?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${SECOND_FLEET_SIGN_IN}` } })).text();
+
+    expect(body).toContain('aria-label="Fleet: Acme. Switch fleet"');
+  }, 60_000);
+
+  it('shows the plain bar when pagasae does not answer the apps and fleets the account may open', async () => {
+    const body = await (await fetch(`${address}/parties?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${UNLISTED_SIGN_IN}` } })).text();
+
+    expect({ isPlain: body.includes('data-testid="plain-header"'), hasAvatarMenu: body.includes('data-testid="avatar-menu"') }).toEqual({ isPlain: true, hasAvatarMenu: false });
+  }, 60_000);
+
+  it('shows the plain bar to a browser signed in to no account', async () => {
+    const body = await (await fetch(`${address}/sign-in/failed`, { headers: { accept: 'text/html' } })).text();
+
+    expect({ isPlain: body.includes('data-testid="plain-header"'), hasAvatarMenu: body.includes('data-testid="avatar-menu"') }).toEqual({ isPlain: true, hasAvatarMenu: false });
   }, 60_000);
 
   it('sends a page that names no fleet to the same page in the fleet the account may open', async () => {

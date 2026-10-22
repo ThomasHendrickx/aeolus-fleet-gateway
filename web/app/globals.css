@@ -15,6 +15,9 @@
 @import 'tw-animate-css';
 @import './tokens.css';
 
+/* The header every Aeolus app shows and the atoms it stands on come from common (header design H2). */
+@source '../../node_modules/@aeolus-fleet/common/dist/header';
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
