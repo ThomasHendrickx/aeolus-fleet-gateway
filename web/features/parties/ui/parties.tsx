@@ -135,7 +135,7 @@ export async function Parties({ page }: { page: SignedInPage }) {
                     <td className="p-2">
                       <StatusBadge tone={state.tone} label={state.label} />
                     </td>
-                    <td className="p-2 font-mono">{party.proxyShipId ?? ''}</td>
+                    <td className="p-2">{party.proxyShipName ?? ''}</td>
                     <td className="p-2">{canManage ? <PartyForms party={party} fleetId={fleetId} /> : null}</td>
                   </tr>
                 );
