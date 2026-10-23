@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { fakeResolver } from '../../../test/support/a2a-push-fakes.js';
 import { aWebPushSubscription, CHARLOTTE_GRANT, fakeCrewPersonShip, memoryPersonCrews, memoryWebPushSubscriptions } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createTurnOffWebPush } from './turn-off-web-push.js';
@@ -24,8 +25,17 @@ beforeEach(() => {
   subscriptions = memoryWebPushSubscriptions();
 });
 
+/** How the push services' hosts resolve: Mozilla's and the tests' own at public addresses, the rest as each test names them. */
+const HOSTS = {
+  'updates.push.services.mozilla.com': ['34.117.237.239'],
+  'push.example': ['93.184.215.14'],
+  'inside.example': ['10.0.0.7'],
+  'mixed.example': ['93.184.215.14', '192.168.1.20'],
+  'metadata.example': ['169.254.169.254'],
+};
+
 const turnOn = (options: { isWebPushOffered?: boolean } = {}) =>
-  createTurnOnWebPush({ crewPersonShip: fakeCrewPersonShip(crews), subscriptions, isWebPushOffered: options.isWebPushOffered ?? true, clock: { now: () => AT } });
+  createTurnOnWebPush({ crewPersonShip: fakeCrewPersonShip(crews), subscriptions, resolver: fakeResolver(HOSTS), isWebPushOffered: options.isWebPushOffered ?? true, clock: { now: () => AT } });
 
 describe('a person turns web push on for a browser', () => {
   it('keeps it for their person ship, with the fleet name its wakes say', async () => {
@@ -59,6 +69,21 @@ describe('a person turns web push on for a browser', () => {
     ['a browser name over 100 characters', { browser: 'x'.repeat(101) }],
   ])('refuses %s, keeping nothing', async (_what, wrong) => {
     const turned = await turnOn()({ caller: CALLER, fleetName: 'Acme', ...FIREFOX, ...wrong });
+
+    expect({ kind: !turned.isOk && turned.error.kind, held: subscriptions.held }).toEqual({ kind: 'INVALID_SUBSCRIPTION', held: [] });
+  });
+
+  it.each([
+    ['a private address', 'https://10.0.0.7/push'],
+    ['a loopback address', 'https://127.0.0.1/push'],
+    ['a link-local address', 'https://169.254.169.254/latest'],
+    ['an IPv6 loopback address', 'https://[::1]/push'],
+    ['a name that resolves to a private address', 'https://inside.example/push'],
+    ['a name that resolves to a public and a private address', 'https://mixed.example/push'],
+    ['a name that resolves to a link-local address', 'https://metadata.example/push'],
+    ['a name that resolves to nothing', 'https://nowhere.example/push'],
+  ])('refuses an endpoint at %s, keeping nothing: the gateway reaches push services at public addresses only', async (_what, endpoint) => {
+    const turned = await turnOn()({ caller: CALLER, fleetName: 'Acme', ...FIREFOX, endpoint });
 
     expect({ kind: !turned.isOk && turned.error.kind, held: subscriptions.held }).toEqual({ kind: 'INVALID_SUBSCRIPTION', held: [] });
   });

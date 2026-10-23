@@ -21,8 +21,14 @@ afterEach(async () => {
   await service.stop();
 });
 
-function webPush() {
-  return createWebPush({ publicKey: keys.publicKey, privateKey: keys.privateKey, subject: 'mailto:gateway@example.com', timeoutMs: 2000 });
+/** The tests' push service listens on this machine: allowed here, as no real push service is. */
+const allowingLocal = (address: string) => address === '127.0.0.1';
+
+/** Every name resolves to this machine, where the tests' push service listens. */
+const toThisMachine = () => Promise.resolve(['127.0.0.1']);
+
+function webPush(options: { isAllowedAddress?: (address: string) => boolean } = {}) {
+  return createWebPush({ publicKey: keys.publicKey, privateKey: keys.privateKey, subject: 'mailto:gateway@example.com', timeoutMs: 2000, addressesOf: toThisMachine, isAllowedAddress: options.isAllowedAddress ?? allowingLocal });
 }
 
 function subscriptionOf(path: string) {
@@ -59,5 +65,21 @@ describe('a wake sent to a browser through its push service', () => {
     await service.stop();
 
     await expect(webPush().send(subscriptionOf('/away'), WAKE)).resolves.toBe('failed');
+  });
+
+  it('never connects to an address the policy refuses, as the name resolves at the moment of sending: it failed, and nothing reached the push service', async () => {
+    const subscription = subscriptionOf('/inside');
+    const named = { ...subscription, endpoint: subscription.endpoint.replace('127.0.0.1', 'push.localhost') };
+
+    const sent = await webPush({ isAllowedAddress: () => false }).send(named, WAKE);
+
+    expect({ sent, taken: service.taken }).toEqual({ sent: 'failed', taken: [] });
+  });
+
+  it('reaches a name at the address it resolves to, once allowed', async () => {
+    const subscription = subscriptionOf('/named');
+    const named = { ...subscription, endpoint: subscription.endpoint.replace('127.0.0.1', 'push.localhost') };
+
+    await expect(webPush().send(named, WAKE)).resolves.toBe('sent');
   });
 });
