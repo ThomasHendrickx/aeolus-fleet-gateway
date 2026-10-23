@@ -117,8 +117,12 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
   return response.ok ? ok(request.answers.parse(body)) : err(refusalSchema.parse(body));
 }
 
-/** A delivery to a person ship as the gateway shows it, with a question's title read from its payload. */
-function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, contentType, payload, sentAt, inReplyTo }: ReceivedDelivery): PersonDelivery {
+/**
+ * A delivery to a person ship as the gateway shows it, with a question's
+ * title read from its payload, and its last hand-over number as the push
+ * receive states it; one read again was acknowledged, so it states none.
+ */
+function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, contentType, payload, sentAt, inReplyTo, ...delivery }: ReceivedDelivery & { handOverNumber?: number | null }): PersonDelivery {
   return {
     deliveryId,
     messageId,
@@ -129,6 +133,7 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     questionTitle: contentType === QUESTION_CONTENT_TYPE ? (questionOf(payload)?.title ?? null) : null,
     sentAt: new Date(sentAt),
     inReplyTo,
+    handOverNumber: delivery.handOverNumber ?? null,
   };
 }
 
@@ -259,7 +264,7 @@ export function createRestFleetDoor(
       // The gateway wakes the person for their person ship, so its lease states the gateway as its waker (interop 5.1).
       pushReceive: async (crewToken, { max }) => {
         const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max, waker: 'gateway' }, answers: pushReceiveOutputSchema });
-        return taken.isOk ? ok(taken.value.deliveries.map(personDeliveryOf)) : taken;
+        return taken.isOk ? ok(taken.value.deliveries.map((delivery) => personDeliveryOf(delivery))) : taken;
       },
       ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
       delivery: async (crewToken, deliveryId) => {
@@ -268,6 +273,10 @@ export function createRestFleetDoor(
       },
       reply: (crewToken, { to, inReplyTo, contentType, payload, idempotencyKey }) =>
         done(crewToken, { path: '/ship/send', body: { selector: { kind: 'ship', shipId: to }, inReplyTo, contentType, payload, idempotencyKey } }),
+      handed: async (crewToken, handOver) => {
+        const answered = await call({ path: '/ship/handed', method: 'POST', crewToken, body: handOver, answers: handedOutputSchema });
+        return answered.isOk ? ok(answered.value.state) : answered;
+      },
       handled: (crewToken, deliveryId) => done(crewToken, { path: '/ship/handled', body: { deliveryId } }),
       discover: async (crewToken) => {
         const found = await call({ path: '/ship/discover', method: 'GET', crewToken, answers: discoverOutputSchema });

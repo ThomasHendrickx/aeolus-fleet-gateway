@@ -83,6 +83,8 @@ export interface PersonDelivery {
   readonly questionTitle: string | null;
   readonly sentAt: Date;
   readonly inReplyTo: MessageId | null;
+  /** The last hand-over the crew reported for it; none while it was never handed (decision 0040). */
+  readonly handOverNumber: number | null;
 }
 
 /** What a person ship may send to now, as the fleet's discover answers it: each ship by name, with what it offers, and each type. */
@@ -110,6 +112,8 @@ export interface PersonShipDoor {
   delivery(crewToken: string, deliveryId: DeliveryId): Promise<Result<PersonDelivery, FleetRefusal>>;
   /** Sends the person's answer to the sender, in reply to its message, once under its key. */
   reply(crewToken: string, reply: { to: ShipId; inReplyTo: MessageId; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<undefined, FleetRefusal>>;
+  /** Reports the delivery handed to the person through the channel named; where it stands now (decision 0040, interop 5.1). */
+  handed(crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: WakeChannel }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>>;
   /** Reports the person dealt with the delivery. */
   handled(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
   /** The ships and types the ship may send to now: the fleet checks its scopes and the network rules. */
@@ -146,4 +150,75 @@ export interface OpenedDeliveries {
   list(fleetId: FleetId, shipId: ShipId): Promise<OpenedDelivery[]>;
   /** Forgets it once the person dealt with it. */
   remove(fleetId: FleetId, opened: { shipId: ShipId; deliveryId: string }): Promise<void>;
+}
+
+/**
+ * What hands a delivery to a person (wake a person, W6, W8): a page of
+ * theirs in focus, which shows it, or a wake through web push.
+ */
+export type WakeChannel = 'page' | 'web-push';
+
+/**
+ * A browser a person turned web push on in (W8): its push service's
+ * endpoint and keys, and the fleet's name its wakes say, as the person's
+ * page named it when they turned it on. A subscription its push service
+ * said is gone takes no wake again, and the overview says so.
+ */
+export interface WebPushSubscription {
+  readonly fleetId: FleetId;
+  readonly shipId: ShipId;
+  readonly endpoint: string;
+  readonly keys: { readonly p256dh: string; readonly auth: string };
+  /** The browser, as its person sees it named, such as Firefox on Linux. */
+  readonly browser: string;
+  readonly fleetName: string;
+  readonly addedAt: Date;
+  readonly goneAt: Date | null;
+}
+
+/** Outbound port: the browsers each person ship's person turned web push on in, by fleet, person ship and endpoint. */
+export interface WebPushSubscriptions {
+  /** The person ship's, oldest added first. */
+  list(fleetId: FleetId, shipId: ShipId): Promise<WebPushSubscription[]>;
+  /** Keeps it, or keeps it anew when its endpoint was kept before. */
+  save(subscription: WebPushSubscription): Promise<void>;
+  markGone(fleetId: FleetId, gone: { shipId: ShipId; endpoint: string; goneAt: Date }): Promise<void>;
+  remove(fleetId: FleetId, removed: { shipId: ShipId; endpoint: string }): Promise<void>;
+}
+
+/** What a wake says (W4): something waits in the fleet, by its name, and the link to the gateway's overview. Nothing else. */
+export interface Wake {
+  readonly fleetName: string;
+  readonly overviewUrl: string;
+}
+
+/** How a push service took a wake: sent, gone (it answered 404 or 410: the subscription ended), or failed otherwise. */
+export type WebPushSent = 'sent' | 'gone' | 'failed';
+
+/** Outbound port: sends a wake to one browser through its push service. */
+export interface WebPush {
+  send(subscription: WebPushSubscription, wake: Wake): Promise<WebPushSent>;
+}
+
+/** Outbound port: when each person ship was last woken through each channel, so a channel wakes at most once per window (W3, W10). */
+export interface PersonWakes {
+  lastWokenAt(ship: PersonShip, channel: WakeChannel): Promise<Date | undefined>;
+  record(ship: PersonShip, woken: { channel: WakeChannel; at: Date }): Promise<void>;
+}
+
+/** A page of a person in focus (W6): by its own id, with when it was last seen in focus. */
+export interface FocusedPage {
+  readonly fleetId: FleetId;
+  readonly shipId: ShipId;
+  readonly pageId: string;
+  readonly seenAt: Date;
+}
+
+/** Outbound port: the pages in focus of every gateway instance, so the waiter of a ship sees them wherever it runs. */
+export interface FocusedPages {
+  /** Keeps it, or keeps when it was seen anew. */
+  save(page: FocusedPage): Promise<void>;
+  remove(fleetId: FleetId, pageId: string): Promise<void>;
+  /** Whether any page of the person ship's person was seen in focus since then. */
+  isAnyInFocus(ship: PersonShip, since: Date): Promise<boolean>;
 }
