@@ -47,6 +47,19 @@ export interface PersonCrews {
   drop(fleetId: FleetId, shipId: ShipId): Promise<void>;
 }
 
+/**
+ * Outbound port: the lock of each person ship's waiter, held by one gateway
+ * instance at a time (wake a person, W9). An instance that loses its hold,
+ * as when its connection to the database ends, loses every lock it held.
+ */
+export interface WaiterLocks {
+  /** Takes the ship's lock unless another instance holds it: whether it holds it now. */
+  take(ship: PersonShip): Promise<boolean>;
+  give(ship: PersonShip): Promise<void>;
+  /** Hears each loss of every lock this instance held. */
+  onLost(listener: () => void): void;
+}
+
 /** A change to a person ship's inbox: its pages read it again (wake a person, #1014). */
 export interface InboxChange {
   readonly fleetId: FleetId;
