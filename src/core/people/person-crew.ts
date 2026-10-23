@@ -32,6 +32,11 @@ export type PersonCrewError = DomainError<'NOT_A_PERSON' | 'SIGNED_OUT' | 'FLEET
 /** The fleet's codes for a crew token that no longer works: its lease ended, or it is unknown. */
 const ENDED_CREW = new Set(['LEASE_ENDED', 'UNAUTHORIZED']);
 
+/** Whether the fleet refused a call because the crew token no longer works. */
+export function isEndedCrew(refusal: FleetRefusal): boolean {
+  return ENDED_CREW.has(refusal.code);
+}
+
 /** The crew of the caller's person ship, or why there is none, said so the person's model can tell them. */
 export async function personCrewOf(crewPersonShip: CrewPersonShip, caller: PersonCaller): Promise<Result<PersonCrewToken, PersonCrewError>> {
   const crewed = await crewPersonShip(caller);
@@ -70,7 +75,7 @@ export async function asPersonCrew<T>(
   if (answered.isOk) {
     return ok({ crew: crew.value, value: answered.value });
   }
-  if (!ENDED_CREW.has(answered.error.code)) {
+  if (!isEndedCrew(answered.error)) {
     return fleetDidNotAnswer(answered.error);
   }
   await deps.crews.drop(caller.fleetId, crew.value.shipId);
@@ -92,5 +97,5 @@ function fleetDidNotAnswer(refusal: FleetRefusal): Result<never, PersonCrewError
  */
 export async function withOwnRefusal<T>(called: Promise<Result<T, FleetRefusal>>): Promise<Result<Result<T, FleetRefusal>, FleetRefusal>> {
   const answered = await called;
-  return !answered.isOk && ENDED_CREW.has(answered.error.code) ? answered : ok(answered);
+  return !answered.isOk && isEndedCrew(answered.error) ? answered : ok(answered);
 }
