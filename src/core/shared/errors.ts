@@ -53,7 +53,8 @@ export type DomainErrorKind =
   | 'PUSH_CONFIG_NOT_FOUND'
   | 'CONTEXT_MISMATCH'
   | 'CARD_UNREACHABLE'
-  | 'CARD_INVALID';
+  | 'CARD_INVALID'
+  | 'INVALID_SUBSCRIPTION';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {
