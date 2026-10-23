@@ -6,7 +6,7 @@ import { aPersonDelivery } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { PersonDelivery, PersonShip, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
+import type { PersonShip, PushedPersonDelivery, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
 import { createWakePerson } from './wake-person.js';
 
 // The gateway wakes a person when something waits for their person ship
@@ -19,9 +19,9 @@ const CREW_TOKEN = 'aeolus_ct_v1_charlotte';
 const NOW = new Date('2026-10-23T12:00:00.000Z');
 const HOUR_MS = 3_600_000;
 
-function aDelivery(index: number, overrides: Partial<PersonDelivery> = {}): PersonDelivery {
+function aDelivery(index: number, overrides: Partial<PushedPersonDelivery> = {}): PushedPersonDelivery {
   const deliveryId: DeliveryId = `dlv_01m3tbfspe96yf1rnr4ank${String(index).padStart(4, '0')}`;
-  return aPersonDelivery({ deliveryId, handOverNumber: null, ...overrides });
+  return { ...aPersonDelivery({ deliveryId }), handOverNumber: null, ...overrides };
 }
 
 /** A channel the test holds: on or off, sending or failing, each wake it sent recorded. */
@@ -46,20 +46,20 @@ function memoryWakesSent(sent: { channel: WakeChannelName; at: Date }[] = []): W
   return {
     sent,
     lastSentAt: (ship, channel) => Promise.resolve(ship.fleetId === SHIP.fleetId && ship.shipId === SHIP.shipId ? sent.findLast((wake) => wake.channel === channel)?.at : undefined),
-    record: (_ship, channel, at) => {
-      sent.push({ channel, at });
+    record: ({ channel, sentAt }) => {
+      sent.push({ channel, at: sentAt });
       return Promise.resolve();
     },
   };
 }
 
 /** The person ship's deliveries in the fleet, as its push receive hands them, and the hand-overs the gateway reported. */
-function aShip(deliveries: PersonDelivery[], options: { pushReceive?: FleetRefusal } = {}) {
+function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: FleetRefusal } = {}) {
   const handOvers: { deliveryId: DeliveryId; handOverNumber: number; channel: string }[] = [];
   return {
     handOvers,
     door: {
-      pushReceive: (crewToken: string): Promise<Result<PersonDelivery[], FleetRefusal>> =>
+      pushReceive: (crewToken: string): Promise<Result<PushedPersonDelivery[], FleetRefusal>> =>
         Promise.resolve(options.pushReceive !== undefined ? err(options.pushReceive) : crewToken === CREW_TOKEN ? ok(deliveries) : err({ code: 'UNAUTHORIZED', message: 'no' })),
       handed: (_crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: string }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>> => {
         handOvers.push(handOver);

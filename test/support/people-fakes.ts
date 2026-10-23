@@ -128,7 +128,8 @@ export const SENT_MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank0sen';
 
 /**
  * A person's ship in the fleet, as its crew's calls see it: the deliveries
- * waiting for it, each push receive handing the oldest again, up to max;
+ * waiting for it, each push receive handing the oldest again, up to max,
+ * with the last number the gateway handed it with;
  * the ones it acknowledged, read again until handled; what its discover
  * answers; the crew token it takes, and the calls the gateway made.
  */
@@ -140,6 +141,8 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
   const sent: Parameters<PersonShipDoor['send']>[1][] = [];
   /** The fleet's answers to come for each call, before it takes them. */
   const refusals: { reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[] } = { reply: [], handled: [], discover: [], send: [], delivery: [] };
+  /** The hand-overs the gateway reported, in order. */
+  const handOvers: Parameters<PersonShipDoor['handed']>[1][] = [];
   /** The deliveries the ship acknowledged and has not handled yet. */
   let acknowledged: PersonDelivery[] = [];
   const refusal: FleetRefusal = { code: 'UNAUTHORIZED', message: 'The crew token is not valid' };
@@ -151,7 +154,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
     },
     pushReceive: (crewToken, { max }) => {
       calls.push(`pushReceive(${String(max)})`);
-      return crewed(crewToken, () => ship.deliveries.slice(0, max));
+      return crewed(crewToken, () => ship.deliveries.slice(0, max).map((delivery) => ({ ...delivery, handOverNumber: handOvers.findLast(({ deliveryId }) => deliveryId === delivery.deliveryId)?.handOverNumber ?? null })));
     },
     ack: (crewToken, deliveryId) => {
       calls.push(`ack(${deliveryId})`);
@@ -188,6 +191,13 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
             return undefined;
           });
     },
+    handed: (crewToken, handOver) => {
+      calls.push(`handed(${handOver.deliveryId})`);
+      return crewed(crewToken, () => {
+        handOvers.push(handOver);
+        return 'handed' as const;
+      });
+    },
     discover: (crewToken) => {
       calls.push('discover');
       const refused = refusals.discover.shift();
@@ -205,7 +215,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
       });
     },
   };
-  return { door, calls, replies, sent, refusals };
+  return { door, calls, replies, sent, refusals, handOvers };
 }
 
 /** The deliveries people opened, in memory, by fleet, person ship and delivery. */
