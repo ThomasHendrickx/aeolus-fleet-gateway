@@ -198,3 +198,25 @@ describe("a person ship's inbox, as the gateway's waiter asks it (wake a person,
     }
   });
 });
+
+describe('a person ship reports a delivery handed to its person (wake a person, W6)', () => {
+  it('is handed, number 1, through the channel named, and its push receive states that hand-over number again', async () => {
+    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
+      body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType: 'text/plain', payload: 'Issue 8 is open', idempotencyKey: 'tracker-hand-1' }),
+    });
+    expect(sent.status).toBe(200);
+    const taken = await door.pushReceive(charlotte, { max: 1 });
+    const [received] = taken.isOk ? taken.value : [];
+    if (received === undefined) {
+      throw new Error('charlotte received no delivery');
+    }
+
+    const handed = await door.handed(charlotte, { deliveryId: received.deliveryId, handOverNumber: 1, channel: 'web-push' });
+
+    expect({ before: received.handOverNumber, handed }).toEqual({ before: null, handed: { isOk: true, value: 'handed' } });
+    const again = await door.pushReceive(charlotte, { max: 1 });
+    expect(again.isOk && again.value.map(({ deliveryId, handOverNumber }) => ({ deliveryId, handOverNumber }))).toEqual([{ deliveryId: received.deliveryId, handOverNumber: 1 }]);
+  });
+});
