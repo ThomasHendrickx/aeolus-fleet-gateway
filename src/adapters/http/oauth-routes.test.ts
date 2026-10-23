@@ -39,6 +39,7 @@ let hub: ChangeHub;
 async function startServer(isSigningPeopleIn: boolean) {
   const clients = memoryOAuthClients();
   await clients.save({ clientId: CLIENT, fleetId: FLEET, name: 'Cursor <IDE>', redirectUris: [CALLBACK], secretHash: 'hash(cursor-secret)', grant: 'authorizationCode' });
+  await clients.save({ clientId: MACHINE_CLIENT, fleetId: FLEET, name: 'agentcore', redirectUris: [], secretHash: 'hash(agentcore-secret)', grant: 'clientCredentials' });
   const codes = memoryAuthorizationCodes();
   const secrets = fakeSecrets();
   const clock = { now: () => new Date('2026-10-19T09:00:00.000Z') };
@@ -130,6 +131,16 @@ async function aCrewedParty() {
   await parties.save({ fleetId: FLEET, name: 'cursor', kind: 'mcpClient', clientId: CLIENT, state: 'crewed', proxyShipId: PROXY_SHIP_ID, secret: null, crewToken: 'aeolus_ct_v1_cursor', requestId: 'req_1', requestHash: 'h', approvedAt: new Date('2026-10-19T09:00:00.000Z') });
 }
 
+/** The client id of a party with no human at the authorize step (vendor platforms V4). */
+const MACHINE_CLIENT = 'client-agentcore';
+
+/** An approver added the machine client as a party, and the gateway crews its proxy ship. */
+async function aClientCredentialsParty() {
+  await parties.save({ fleetId: FLEET, name: 'agentcore', kind: 'mcpClient', clientId: MACHINE_CLIENT, state: 'crewed', proxyShipId: PROXY_SHIP_ID, secret: null, crewToken: 'aeolus_ct_v1_agentcore', requestId: 'req_2', requestHash: 'h', approvedAt: new Date('2026-10-19T09:00:00.000Z') });
+}
+
+const MACHINE_BASIC = { authorization: `Basic ${Buffer.from(`${MACHINE_CLIENT}:agentcore-secret`).toString('base64')}` };
+
 /** The client's request decided as an approver would. */
 async function decided(outcome: 'approved' | 'denied') {
   await requests.decide(FLEET, { requestId: 'req_1', from: ['pending'], decision: { outcome, decidedBy: { kind: 'operator' }, decidedAt: new Date('2026-10-19T09:00:00.000Z') }, notices: [] });
@@ -174,7 +185,7 @@ describe("the gateway's OAuth metadata", () => {
       authorization_endpoint: `${ISSUER}/authorize`,
       token_endpoint: `${ISSUER}/token`,
       response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
+      grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
       code_challenge_methods_supported: ['S256'],
       token_endpoint_auth_methods_supported: ['none', 'client_secret_basic', 'client_secret_post'],
       client_id_metadata_document_supported: true,
@@ -423,5 +434,34 @@ describe('a client takes its code for tokens at /token', () => {
     const answer = await token({ grant_type: 'authorization_code', code: 'unknown', redirect_uri: CALLBACK, code_verifier: 'verifier-1', client_id: CLIENT, client_secret: 'cursor-secret' });
 
     expect({ status: answer.statusCode, body: answer.json<unknown>() }).toMatchObject({ status: 400, body: { error: 'invalid_grant' } });
+  });
+});
+
+describe('a client party signs in with client credentials at /token (vendor platforms V4)', () => {
+  it('answers an access token for one hour and no refresh token, never cached', async () => {
+    await aClientCredentialsParty();
+
+    const answer = await token({ grant_type: 'client_credentials', resource: RESOURCE }, MACHINE_BASIC);
+
+    expect({ status: answer.statusCode, cache: answer.headers['cache-control'], body: answer.json<unknown>() }).toEqual({
+      status: 200,
+      cache: 'no-store',
+      body: { access_token: expect.any(String), token_type: 'Bearer', expires_in: 3600 },
+    });
+  });
+
+  it("answers 400 unauthorized_client while the fleet's outside parties are off (interop I-3)", async () => {
+    await aClientCredentialsParty();
+    isOn = false;
+
+    const answer = await token({ grant_type: 'client_credentials', resource: RESOURCE }, MACHINE_BASIC);
+
+    expect({ status: answer.statusCode, body: answer.json<unknown>() }).toMatchObject({ status: 400, body: { error: 'unauthorized_client' } });
+  });
+
+  it('answers 401 invalid_client to a client whose party was retired', async () => {
+    const answer = await token({ grant_type: 'client_credentials', resource: RESOURCE }, MACHINE_BASIC);
+
+    expect({ status: answer.statusCode, body: answer.json<unknown>() }).toMatchObject({ status: 401, body: { error: 'invalid_client' } });
   });
 });
