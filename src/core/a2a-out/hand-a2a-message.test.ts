@@ -277,7 +277,7 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
 describe('the gateway follows on after a restart (slice 6)', () => {
   it('follows a task it acknowledged before, sending nothing to the agent, until it is handled', async () => {
     const agents = fakeA2aAgents({ reads: [readAs(aStatus('working'), aStatus('completed'))] });
-    await calls.save({ deliveryId: DELIVERY, fleetId: FLEET_ID, party: 'supplier', messageId: MESSAGE, senderShipId: CALLER_SHIP_ID, state: 'following', taskId: 'task-1', contextId: 'ctx-1', deadlineAt: new Date(clock.now().getTime() + DEADLINE_MS) });
+    await calls.save({ deliveryId: DELIVERY, fleetId: FLEET_ID, party: 'supplier', messageId: MESSAGE, senderShipId: CALLER_SHIP_ID, state: 'following', taskId: 'task-1', contextId: 'ctx-1', deadlineAt: new Date(clock.now().getTime() + DEADLINE_MS), answer: null });
     const sleep = (ms: number) => {
       clock.advance(ms);
       return Promise.resolve();

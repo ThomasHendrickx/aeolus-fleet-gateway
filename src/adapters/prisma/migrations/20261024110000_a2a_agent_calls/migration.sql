@@ -9,6 +9,7 @@ CREATE TABLE "a2a_agent_calls" (
     "task_id" TEXT,
     "context_id" TEXT,
     "deadline_at" TIMESTAMPTZ(3) NOT NULL,
+    "answer" JSONB,
 
     CONSTRAINT "a2a_agent_calls_pkey" PRIMARY KEY ("fleet_id", "delivery_id")
 );

@@ -87,7 +87,7 @@ describe("an outside A2A agent's worker (slice 6)", () => {
   });
 
   it('follows first the tasks it followed when it stopped', async () => {
-    await calls.save({ deliveryId: FOLLOWED, fleetId: FLEET_ID, party: 'supplier', messageId: 'msg_01m3tbfspe96yf1rnr4ank9m09', senderShipId: CALLER_SHIP_ID, state: 'following', taskId: 'task-9', contextId: 'ctx-9', deadlineAt: new Date('2026-10-23T13:00:00.000Z') });
+    await calls.save({ deliveryId: FOLLOWED, fleetId: FLEET_ID, party: 'supplier', messageId: 'msg_01m3tbfspe96yf1rnr4ank9m09', senderShipId: CALLER_SHIP_ID, state: 'following', taskId: 'task-9', contextId: 'ctx-9', deadlineAt: new Date('2026-10-23T13:00:00.000Z'), answer: null });
     const agents = fakeA2aAgents({ reads: [{ kind: 'read', events: [aStatus('completed', 'task-9')] }] });
 
     await runWith({ cards: fakeAgentCards({ [CARD_URL]: answeredCard() }), agents, waiting: [] });

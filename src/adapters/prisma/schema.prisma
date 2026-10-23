@@ -134,6 +134,8 @@ model A2aAgentCall {
   taskId       String?  @map("task_id")
   contextId    String?  @map("context_id")
   deadlineAt   DateTime @map("deadline_at") @db.Timestamptz(3)
+  /// The reply to the agent's message answer or refusal, kept before the ack.
+  answer       Json?
 
   @@id([fleetId, deliveryId])
   @@index([fleetId, party, state])

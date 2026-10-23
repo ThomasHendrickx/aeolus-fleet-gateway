@@ -6,7 +6,7 @@ import type { AgentEndpoint } from './agent-endpoint.js';
 import { replyContentOf, type AgentEvent } from './agent-event.js';
 import { outboundMessageOf } from './agent-message.js';
 import type { FollowAgentTask } from './follow-agent-task.js';
-import type { A2aAgents, AgentCall, AgentCalls, AgentKeys, AgentShipCrew, GatewayStatuses } from './ports.js';
+import type { A2aAgents, AgentAnswer, AgentCall, AgentCalls, AgentKeys, AgentShipCrew, GatewayStatuses } from './ports.js';
 
 export type HandA2aMessage = (input: { party: A2aAgentParty; endpoint: AgentEndpoint; delivery: PushedDelivery; signal: AbortSignal }) => Promise<HandOutcome>;
 
@@ -45,8 +45,15 @@ export function createHandA2aMessage(deps: {
     }
     const caller = { fleetId, party: party.name };
 
-    /** Replies once, under a key of the delivery and what it says, then acknowledges and handles it. */
-    const answered = async (call: AgentCall | undefined, event: { contentType: string; payload: string; key: string }): Promise<HandOutcome> => {
+    /**
+     * Replies once, under a key of the delivery and what it says, then acknowledges and handles it. The agent's
+     * answer is kept first, so a delivery that comes again after a lost acknowledgement sends the same reply and
+     * is handled, never judged as one that may have run.
+     */
+    const answered = async (call: AgentCall | undefined, event: AgentAnswer): Promise<HandOutcome> => {
+      if (call !== undefined && call.state !== 'answered') {
+        await deps.calls.save({ ...call, state: 'answered', answer: event });
+      }
       const steps = [
         () => deps.crew.send(crewToken, { to: delivery.senderShipId, inReplyTo: delivery.messageId, contentType: event.contentType, payload: event.payload, idempotencyKey: deps.keys.replyKeyOf(fleetId, { taskId: delivery.messageId, event: event.key }) }),
         () => deps.crew.ack(crewToken, delivery.deliveryId),
@@ -80,6 +87,9 @@ export function createHandA2aMessage(deps: {
     if (kept?.state === 'mayHaveRun') {
       return mayHaveRun(kept);
     }
+    if (kept?.state === 'answered' && kept.answer !== null) {
+      return answered(kept, kept.answer);
+    }
     if (kept?.state === 'following') {
       return followed(kept, []);
     }
@@ -97,6 +107,7 @@ export function createHandA2aMessage(deps: {
       taskId: continued?.taskId ?? null,
       contextId: continued?.contextId ?? null,
       deadlineAt: new Date(deps.clock.now().getTime() + deps.deadlineMs),
+      answer: null,
     };
     const message = outboundMessageOf(delivery, { messageId: deps.keys.messageIdOf(fleetId, delivery.messageId), taskId: call.taskId, contextId: call.contextId });
     if (!message.isOk) {

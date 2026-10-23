@@ -103,6 +103,7 @@ export interface AgentKeys {
  * What the gateway keeps of a message to an outside agent, so a restart never sends again what may have run, and follows on:
  * - sending: handed, and SendMessage sent or about to be;
  * - notSent: the agent was not reached, so nothing ran;
+ * - answered: the agent answered with a message or refused it; the reply kept, then sent, acknowledged and handled;
  * - following: the agent took it as its task; acknowledged, and followed until it ends;
  * - mayHaveRun: sent with no answer, and the agent is not repeatable;
  * - done: handled.
@@ -113,12 +114,21 @@ export interface AgentCall {
   readonly party: string;
   readonly messageId: MessageId;
   readonly senderShipId: ShipId;
-  readonly state: 'sending' | 'notSent' | 'following' | 'mayHaveRun' | 'done';
+  readonly state: 'sending' | 'notSent' | 'answered' | 'following' | 'mayHaveRun' | 'done';
   /** The agent's task: the one a follow-up continues while sending, its own once it took it. */
   readonly taskId: string | null;
   readonly contextId: string | null;
   /** When the gateway gives up following and replies failed (the gateway's timing). */
   readonly deadlineAt: Date;
+  /** The reply to the agent's answer, once it answered with a message or refused: sent again as the same reply when the delivery comes again. */
+  readonly answer: AgentAnswer | null;
+}
+
+/** A reply as the gateway sends it: its content, and what its idempotency key derives from. */
+export interface AgentAnswer {
+  readonly contentType: string;
+  readonly payload: string;
+  readonly key: string;
 }
 
 interface Caller { fleetId: FleetId; party: string }

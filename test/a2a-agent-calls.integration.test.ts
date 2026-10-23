@@ -31,6 +31,7 @@ function aCall(overrides: Partial<AgentCall> = {}): AgentCall {
     taskId: null,
     contextId: null,
     deadlineAt: new Date('2026-10-23T13:00:00.000Z'),
+    answer: null,
     ...overrides,
   };
 }
@@ -42,6 +43,14 @@ describe("the gateway's messages to outside A2A agents in Postgres (slice 6)", (
     await calls.save(aCall({ state: 'following', taskId: 'task-1', contextId: 'ctx-1' }));
 
     await expect(createPrismaAgentCalls(prisma).find({ fleetId: FLEET, party: 'supplier' }, 'dlv_01m3tbfspe96yf1rnr4ank9d01')).resolves.toEqual(aCall({ state: 'following', taskId: 'task-1', contextId: 'ctx-1' }));
+  });
+
+  it("keeps the reply to an agent's answer with its call", async () => {
+    const calls = createPrismaAgentCalls(prisma);
+    const answered = aCall({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9h01', state: 'answered', answer: { contentType: 'text/plain', payload: 'We sell no bolts', key: '{}' } });
+    await calls.save(answered);
+
+    await expect(calls.find({ fleetId: FLEET, party: 'supplier' }, answered.deliveryId)).resolves.toEqual(answered);
   });
 
   it("finds and keeps a call in the party's own fleet only", async () => {
