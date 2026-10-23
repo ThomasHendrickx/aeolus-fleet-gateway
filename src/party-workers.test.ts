@@ -148,3 +148,29 @@ describe("a client party's worker, its crew released and the same proxy ship cre
     await pool.stop();
   });
 });
+
+describe("an A2A client's worker (decision 0060)", () => {
+  it("takes the replies to its calls with its proxy ship's crew token", async () => {
+    const { fleetId, state, proxyShipId, secret, requestHash, approvedAt } = aCrewedServer(FLEET_ID, 'supplier');
+    await parties.save({ fleetId, name: 'supplier', kind: 'a2aClient', bearerHash: 'h(b)', state, proxyShipId, secret, crewToken: 'aeolus_ct_v1_supplier', requestId: 'r-supplier', requestHash, approvedAt });
+    const takenWith: (string | null)[] = [];
+    const pool = createPartyWorkers({
+      parties,
+      stateParty: () => Promise.resolve(ok({ capabilities: [] })),
+      runParty: () => Promise.resolve({ ended: 'stopped' }),
+      collectReplies: async ({ party, signal }) => {
+        takenWith.push(party.crewToken);
+        await new Promise((resolve) => { signal.addEventListener('abort', resolve); });
+        return { ended: 'stopped' };
+      },
+      servesOutsideParties: () => Promise.resolve(true),
+      log: Fastify({ logger: false }).log,
+    });
+
+    await pool.start({ fleetId: FLEET_ID, name: 'supplier' });
+    await settled();
+
+    expect(takenWith).toEqual(['aeolus_ct_v1_supplier']);
+    await pool.stop();
+  });
+});
