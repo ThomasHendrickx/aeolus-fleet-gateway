@@ -26,6 +26,8 @@ import type { SendOutcome, TaskRead } from './ports.js';
 
 const POLL_MS = 2_000;
 const DEADLINE_MS = 60_000;
+/** More waits than any follow in these tests takes: one that goes on waiting never ends. */
+const RUNAWAY_SLEEPS = 1_000;
 const POLLED: AgentEndpoint = { url: 'https://agent.supplier.example/a2a', protocolBinding: 'JSONRPC', isStreaming: false };
 const STREAMED: AgentEndpoint = { ...POLLED, isStreaming: true };
 const MESSAGE: MessageId = 'msg_01m3tbfspe96yf1rnr4ank9m01';
@@ -40,6 +42,8 @@ let calls: ReturnType<typeof memoryAgentCalls>;
 let parties: ReturnType<typeof memoryPartyStore>;
 let clock: ReturnType<typeof aMovingClock>;
 let slept: number[];
+/** What stops the gateway's follow, as a restart does. */
+let stop: AbortController;
 
 beforeEach(async () => {
   crew = fakeAgentShipCrew();
@@ -48,17 +52,21 @@ beforeEach(async () => {
   await parties.save(anAgentParty());
   clock = aMovingClock();
   slept = [];
+  stop = new AbortController();
 });
 
 function handWith(agents: ReturnType<typeof fakeA2aAgents>, endpoint = POLLED) {
   const sleep = (ms: number) => {
+    if (slept.length > RUNAWAY_SLEEPS) {
+      stop.abort();
+    }
     slept.push(ms);
     clock.advance(ms);
     return Promise.resolve();
   };
   const follow = createFollowAgentTask({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, clock, sleep, pollMs: POLL_MS, deadlineMs: DEADLINE_MS });
   const hand = createHandA2aMessage({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, parties, follow, clock, deadlineMs: DEADLINE_MS });
-  return (delivery: PushedDelivery = aQuote()) => hand({ party: anAgentParty(), endpoint, delivery, signal: new AbortController().signal });
+  return (delivery: PushedDelivery = aQuote()) => hand({ party: anAgentParty(), endpoint, delivery, signal: stop.signal });
 }
 
 /** What the crew did, by call, the replies by their content. */
@@ -129,6 +137,45 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
     await expect(handWith(agents, STREAMED)()).resolves.toEqual({ kind: 'handled' });
 
     expect(crew.replies().map(({ payload }) => payload.slice(0, 20))).toEqual(['4 ', 'EUR', aStatus('completed').json.slice(0, 20)]);
+  });
+
+  it('replies each chunk of an artifact once across a restart in its middle, the later chunks in their places, and its end once', async () => {
+    const before = fakeA2aAgents({ sends: [taken([])], streams: [{ events: [anArtifactChunk({ artifactId: 'a-1', text: '4 ', isAppended: false }), anArtifactChunk({ artifactId: 'a-1', text: 'EUR', isAppended: true }), aStatus('working')], end: { kind: 'closed' } }] });
+    const send = crew.send.bind(crew);
+    crew.send = async (crewToken, message) => {
+      const sent = await send(crewToken, message);
+      if (crew.replies().length === 2) {
+        stop.abort();
+      }
+      return sent;
+    };
+    await expect(handWith(before, STREAMED)()).resolves.toEqual({ kind: 'again' });
+    stop = new AbortController();
+    const after = fakeA2aAgents({
+      streams: [{ events: [anArtifactChunk({ artifactId: 'a-1', text: '4 EUR', isAppended: false }), anArtifactChunk({ artifactId: 'a-1', text: ' incl. VAT', isAppended: true }), aStatus('completed')], end: { kind: 'closed' } }],
+    });
+
+    await expect(handWith(after, STREAMED)(aQuote({ state: 'handed', handOverNumber: 1 }))).resolves.toEqual({ kind: 'handled' });
+
+    expect(crew.replies().map(({ payload }) => payload)).toEqual(['4 ', 'EUR', ' incl. VAT', aStatus('completed').json]);
+  });
+
+  it('counts a reply the fleet refuses under a key the follow derived as replied, and goes on to the end', async () => {
+    await crew.send('aeolus_ct_v1_proxy', { to: CALLER_SHIP_ID, inReplyTo: MESSAGE, contentType: 'text/plain', payload: 'an earlier reply', idempotencyKey: plainAgentKeys.replyKeyOf(FLEET_ID, { taskId: 'task-1', event: JSON.stringify(['artifact', 'a-1', 0]) }) });
+    const agents = fakeA2aAgents({ sends: [taken([anArtifactChunk({ artifactId: 'a-1', text: '4 EUR', isAppended: false }), aStatus('completed')])] });
+
+    await expect(handWith(agents)()).resolves.toEqual({ kind: 'handled' });
+
+    expect({ replies: crew.replies().map(({ payload }) => payload), slept }).toEqual({ replies: ['an earlier reply', aStatus('completed').json], slept: [] });
+  });
+
+  it('stops sending a reply the fleet does not take at the deadline', async () => {
+    const agents = fakeA2aAgents({ sends: [taken([aStatus('working')])] });
+    crew.state.isSendAnswering = false;
+
+    await expect(handWith(agents)()).resolves.toEqual({ kind: 'again' });
+
+    expect(clock.now().getTime() - new Date('2026-10-23T12:00:00.000Z').getTime()).toBeLessThanOrEqual(DEADLINE_MS + POLL_MS);
   });
 
   it('replies a status again on a follow-up of the same task, though the agent tells it as before', async () => {
@@ -357,7 +404,6 @@ describe('the gateway follows on after a restart (slice 6)', () => {
 });
 
 /** The message id the fleet gave the reply sent under this key, as the sender's answer names it. */
-async function replyMessageIdOf(idempotencyKey: string | undefined): Promise<MessageId | null> {
-  const sent = await crew.send('aeolus_ct_v1_proxy', { to: CALLER_SHIP_ID, contentType: 'text/plain', payload: '', idempotencyKey: idempotencyKey ?? '' });
-  return sent.isOk ? sent.value.messageId : null;
+function replyMessageIdOf(idempotencyKey: string | undefined): Promise<MessageId | null> {
+  return Promise.resolve(crew.messageIdOf(idempotencyKey ?? '') ?? null);
 }

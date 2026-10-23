@@ -146,15 +146,16 @@ export function fakeA2aAgents(script: { sends?: SendOutcome[]; reads?: TaskRead[
 
 type AgentCrewCall = ['handed', { deliveryId: DeliveryId; handOverNumber: number; channel: string }] | ['send', { to: ShipId; inReplyTo?: MessageId; contentType: string; payload: string; idempotencyKey: string }] | ['ack' | 'handled', DeliveryId] | ['notHandled', { deliveryId: DeliveryId; reason: string }];
 
-/** An agent's proxy ship's crew calls, as the fleet answers them: each logged in order; a send under a key sent before answers the same message, as the fleet's does. */
+/** An agent's proxy ship's crew calls, as the fleet answers them: each logged in order; a send under a key sent before answers the same message, or is refused when it says another thing, as the fleet's does. */
 export function fakeAgentShipCrew() {
   const state: { handedState: 'handed' | 'acknowledged' | 'undeliverable'; isSendAnswering: boolean; isAckAnswering: boolean } = { handedState: 'handed', isSendAnswering: true, isAckAnswering: true };
   const log: AgentCrewCall[] = [];
-  const keys = new Map<string, MessageId>();
-  const crew: AgentShipCrew & { state: typeof state; log: AgentCrewCall[]; replies: () => Extract<AgentCrewCall, ['send', unknown]>[1][] } = {
+  const keys = new Map<string, { messageId: MessageId; request: string }>();
+  const crew: AgentShipCrew & { state: typeof state; log: AgentCrewCall[]; replies: () => Extract<AgentCrewCall, ['send', unknown]>[1][]; messageIdOf: (idempotencyKey: string) => MessageId | undefined } = {
     state,
     log,
     replies: () => log.flatMap((call) => (call[0] === 'send' ? [call[1]] : [])),
+    messageIdOf: (idempotencyKey) => keys.get(idempotencyKey)?.messageId,
     pushReceive: () => Promise.resolve(ok([])),
     handed: (_crewToken, handOver) => {
       log.push(['handed', handOver]);
@@ -164,13 +165,14 @@ export function fakeAgentShipCrew() {
       if (!state.isSendAnswering) {
         return Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
       }
+      const request = JSON.stringify([message.to, message.inReplyTo, message.contentType, message.payload]);
       const known = keys.get(message.idempotencyKey);
       if (known !== undefined) {
-        return Promise.resolve(ok({ messageId: known }));
+        return Promise.resolve(known.request === request ? ok({ messageId: known.messageId }) : err({ code: 'IDEMPOTENCY_KEY_REUSED', message: 'This idempotency key was already used for another message' }));
       }
       log.push(['send', message]);
       const messageId: MessageId = `msg_01m3tbfspe96yf1rnr4ank9r${String(keys.size).padStart(2, '0')}`;
-      keys.set(message.idempotencyKey, messageId);
+      keys.set(message.idempotencyKey, { messageId, request });
       return Promise.resolve(ok({ messageId }));
     },
     ack: (_crewToken, deliveryId) => {

@@ -238,7 +238,7 @@ describe("a ship of the fleet sends to an outside A2A agent's proxy ship (slice 
     expect(taken.map(({ method }) => method)).toEqual(['SendMessage', 'SubscribeToTask', 'GetTask']);
   });
 
-  it('follows the task again after a restart, and replies no change twice', async () => {
+  it('follows the task again after a restart in the middle of a chunked artifact, and replies no change twice', async () => {
     isStreaming = true;
     let subscriptions = 0;
     answer = (method, response) => {
@@ -247,16 +247,25 @@ describe("a ship of the fleet sends to an outside A2A agent's proxy ship (slice 
         return;
       }
       subscriptions += 1;
-      stream(response, subscriptions === 1 ? { events: [{ statusUpdate: WORKING }, { artifactUpdate: QUOTE }], end: 'held' } : { events: [{ statusUpdate: WORKING }, { artifactUpdate: QUOTE }, { statusUpdate: COMPLETED }], end: 'ended' });
+      const firstChunk = { ...QUOTE, artifact: { artifactId: 'a-1', parts: [{ text: '4 ', mediaType: 'text/plain' }] } };
+      const secondChunk = { ...QUOTE, artifact: { artifactId: 'a-1', parts: [{ text: 'EUR', mediaType: 'text/plain' }] }, append: true };
+      const thirdChunk = { ...QUOTE, artifact: { artifactId: 'a-1', parts: [{ text: ' incl. VAT', mediaType: 'text/plain' }] }, append: true };
+      // After the restart the stream starts from the task as it stands: the artifact whole so far, then what comes next.
+      stream(
+        response,
+        subscriptions === 1
+          ? { events: [{ statusUpdate: WORKING }, { artifactUpdate: firstChunk }, { artifactUpdate: secondChunk }], end: 'held' }
+          : { events: [{ statusUpdate: WORKING }, { artifactUpdate: QUOTE }, { artifactUpdate: thirdChunk }, { statusUpdate: COMPLETED }], end: 'ended' },
+      );
     };
     await started();
     await askForAQuote();
-    const beforeRestart = [await receiveOne(setting.fleet, caller.crewToken), await receiveOne(setting.fleet, caller.crewToken)];
+    const beforeRestart = [await receiveOne(setting.fleet, caller.crewToken), await receiveOne(setting.fleet, caller.crewToken), await receiveOne(setting.fleet, caller.crewToken)];
 
     await restarted();
     const afterRestart = await repliesUntilCompleted();
 
-    expect(told([...beforeRestart.flatMap((reply) => (reply === undefined ? [] : [reply])), ...afterRestart])).toEqual(['TASK_STATE_WORKING', 'text/plain: 4 EUR', 'TASK_STATE_COMPLETED']);
+    expect(told([...beforeRestart.flatMap((reply) => (reply === undefined ? [] : [reply])), ...afterRestart])).toEqual(['TASK_STATE_WORKING', 'text/plain: 4 ', 'text/plain: EUR', 'text/plain:  incl. VAT', 'TASK_STATE_COMPLETED']);
     expect(taken.map(({ method }) => method)).toEqual(['SendMessage', 'SubscribeToTask', 'SubscribeToTask']);
   });
 
