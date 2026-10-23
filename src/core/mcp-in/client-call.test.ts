@@ -104,6 +104,12 @@ describe('a call that matched no capability (decision 0060)', () => {
 
     expect(stateOf(call, BEFORE_DEADLINE)).toEqual({ state: 'completed', answer: { contentType: 'application/json', payload: '{"ok":true}' } });
   });
+
+  it('is not completed by a question, which asks for input, nor by an A2A reply, which carries its own state (interop 3.4)', () => {
+    const replies = [aCallReply({ contentType: 'application/vnd.aeolus.question+json', payload: '{"id":"q-1"}' }), aCallReply({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9r02', contentType: 'application/a2a+json', payload: '{}' })];
+
+    expect(stateOf(aClientCall({ capability: null, deadlineAt: null, replies }), BEFORE_DEADLINE)).toEqual({ state: 'working' });
+  });
 });
 
 describe("since when an outside client's call is in its state", () => {
