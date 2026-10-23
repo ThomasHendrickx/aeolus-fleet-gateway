@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { CRM_SHIP_ID, MESSAGE_ID, aCallReply, aDiscoveredShip, fakeCallKeys, fakeCallSender, fakeDiscovery, memoryClientCalls } from '../../../test/support/mcp-in-fakes.js';
@@ -7,10 +8,13 @@ import { ISSUER, fakeSecrets } from '../../../test/support/oauth-fakes.js';
 import { PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { createAuthenticateA2aClient } from '../../core/a2a-in/authenticate-a2a-client.js';
 import { createFindReachedShip } from '../../core/a2a-in/find-reached-ship.js';
+import { createFollowA2aTask } from '../../core/a2a-in/follow-a2a-task.js';
 import { createListA2aTasks } from '../../core/a2a-in/list-a2a-tasks.js';
 import { createListReachedShips } from '../../core/a2a-in/list-reached-ships.js';
 import { createReadA2aTask } from '../../core/a2a-in/read-a2a-task.js';
 import { createSendA2aMessage } from '../../core/a2a-in/send-a2a-message.js';
+import { createSubscribeToA2aTask } from '../../core/a2a-in/subscribe-to-a2a-task.js';
+import type { Sleep } from '../../core/mcp-out/run-party.js';
 import { createShipAliases } from '../crypto/ship-aliases.js';
 import { registerA2aEndpoint } from './a2a-endpoint.js';
 
@@ -28,6 +32,16 @@ let discovery: ReturnType<typeof fakeDiscovery>;
 let sender: ReturnType<typeof fakeCallSender>;
 let calls: ReturnType<typeof memoryClientCalls>;
 let now: Date;
+/** What happens in the fleet while a stream follows its task, one step per poll; a poll with no step left fails the stream. */
+let steps: (() => Promise<void>)[];
+const sleep: Sleep = async (ms) => {
+  const step = steps.shift();
+  if (step === undefined) {
+    throw new Error('The stream polled past the steps the test gave');
+  }
+  now = new Date(now.getTime() + ms);
+  await step();
+};
 
 beforeEach(async () => {
   isOn = true;
@@ -38,7 +52,9 @@ beforeEach(async () => {
   sender = fakeCallSender();
   calls = memoryClientCalls();
   now = AT;
+  steps = [];
   const clock = { now: () => now };
+  const followTask = createFollowA2aTask({ calls, clock, sleep, pollMs: 250 });
   const findReachedShip = createFindReachedShip({ listReachedShips: createListReachedShips({ parties, discovery, aliases }) });
   server = Fastify();
   registerA2aEndpoint(server, {
@@ -48,6 +64,8 @@ beforeEach(async () => {
     sendMessage: createSendA2aMessage({ parties, findReachedShip, sender, calls, keys: fakeCallKeys(), clock, sleep: () => Promise.resolve(), waitMaxMs: 30_000, waitPollMs: 250 }),
     readTask: createReadA2aTask({ calls, clock }),
     listTasks: createListA2aTasks({ calls, clock }),
+    followTask,
+    subscribeToTask: createSubscribeToA2aTask({ calls, clock, follow: followTask }),
   });
   await server.ready();
 });
@@ -67,7 +85,7 @@ describe('the public card per alias (decision 0060)', () => {
       name: CRM_ALIAS,
       supportedInterfaces: [{ url: `${ISSUER}/gw/a2a/${CRM_ALIAS}`, protocolBinding: 'JSONRPC', protocolVersion: '1.0' }, { protocolBinding: 'HTTP+JSON' }],
       provider: { organization: 'Aeolus gateway', url: ISSUER },
-      capabilities: { extendedAgentCard: true },
+      capabilities: { streaming: true, pushNotifications: false, extendedAgentCard: true },
       securitySchemes: { bearer: { httpAuthSecurityScheme: { scheme: 'Bearer' } } },
       securityRequirements: [{ schemes: { bearer: {} } }],
     });
@@ -172,12 +190,6 @@ describe('GetExtendedAgentCard (decision 0060)', () => {
     expect(answered.json()).toMatchObject({ jsonrpc: '2.0', id: 2, error: { code: -32004 } });
   });
 
-  it('answers a streaming A2A method this gateway does not carry yet as an unsupported operation', async () => {
-    const message = { messageId: 'm-1', role: 'ROLE_USER', parts: [{ text: 'hello' }] };
-    const answered = await server.inject({ method: 'POST', url: `/gw/a2a/${CRM_ALIAS}`, headers: { ...BEARER, 'a2a-version': '1.0' }, payload: { jsonrpc: '2.0', id: 3, method: 'SendStreamingMessage', params: { message } } });
-
-    expect(answered.json()).toMatchObject({ jsonrpc: '2.0', id: 3, error: { code: -32004 } });
-  });
 });
 
 const TASK_ID = `handle(${FLEET_ID}:${MESSAGE_ID})`;
@@ -384,5 +396,97 @@ describe('the same methods over HTTP+JSON (decision 0060)', () => {
     const answered = await server.inject({ method: 'GET', url: `/gw/a2a/${CRM_ALIAS}/.well-known/agent-card.json` });
 
     expect(answered.json()).toMatchObject({ supportedInterfaces: [{ protocolBinding: 'JSONRPC' }, { url: `${ISSUER}/gw/a2a/${CRM_ALIAS}`, protocolBinding: 'HTTP+JSON', protocolVersion: '1.0' }] });
+  });
+});
+
+/** The events of a server-sent event stream, each event's data as JSON. */
+function eventsOf(body: string): unknown[] {
+  return body
+    .split('\n\n')
+    .filter((event) => event.startsWith('data: '))
+    .map((event): unknown => JSON.parse(event.slice('data: '.length)));
+}
+
+/** The ship's answer to the message, kept as the worker keeps it. */
+const theAnswer = () => calls.addReply({ fleetId: FLEET_ID, messageId: MESSAGE_ID }, aCallReply({ receivedAt: now }));
+/** A question from the ship, kept as the worker keeps it. */
+const aQuestion = () => calls.addReply({ fleetId: FLEET_ID, messageId: MESSAGE_ID }, aCallReply({ contentType: 'application/vnd.aeolus.question+json', payload: '{"title":"Which colour?"}', receivedAt: now }));
+
+const STREAMED_TO_COMPLETION = [
+  { task: { id: TASK_ID, status: { state: 'TASK_STATE_SUBMITTED' } } },
+  { artifactUpdate: { taskId: TASK_ID, artifact: { parts: [{ text: 'Two deals.' }] }, lastChunk: true } },
+  { statusUpdate: { taskId: TASK_ID, status: { state: 'TASK_STATE_COMPLETED' } } },
+];
+
+describe('SendStreamingMessage and SubscribeToTask over JSON-RPC (slice 3)', () => {
+  it('streams the task first, then its changes, and closes once it completes', async () => {
+    steps = [theAnswer];
+
+    const answered = await rpc('SendStreamingMessage', { message: A_MESSAGE });
+
+    expect(answered.headers['content-type']).toBe('text/event-stream');
+    expect(eventsOf(answered.body).map((event) => z.object({ result: z.unknown() }).parse(event).result)).toMatchObject(STREAMED_TO_COMPLETION);
+  });
+
+  it('sends the message once, after the fleet answered OK', async () => {
+    steps = [theAnswer];
+
+    await rpc('SendStreamingMessage', { message: A_MESSAGE });
+
+    expect(sender.sent).toHaveLength(1);
+  });
+
+  it('streams a task subscribed to from the task as it stands, so a dropped stream loses nothing', async () => {
+    await sendingTheMessage();
+    await aQuestion();
+    steps = [theAnswer];
+
+    const answered = await rpc('SubscribeToTask', { id: TASK_ID });
+
+    expect(eventsOf(answered.body).map((event) => z.object({ result: z.unknown() }).parse(event).result)).toMatchObject([
+      { task: { id: TASK_ID, status: { state: 'TASK_STATE_INPUT_REQUIRED' } } },
+      { artifactUpdate: { taskId: TASK_ID } },
+      { statusUpdate: { status: { state: 'TASK_STATE_COMPLETED' } } },
+    ]);
+  });
+
+  it('refuses to subscribe to an ended task as an unsupported operation, and to an unknown one as not found', async () => {
+    await sendingTheMessage();
+    await theAnswer();
+
+    const [ended, unknown] = [await rpc('SubscribeToTask', { id: TASK_ID }), await rpc('SubscribeToTask', { id: 'task-1' })];
+
+    expect([ended.headers['content-type'], unknown.headers['content-type']]).toEqual(['application/json; charset=utf-8', 'application/json; charset=utf-8']);
+    expect([ended.json<unknown>(), unknown.json<unknown>()]).toMatchObject([{ error: { code: -32004 } }, { error: { code: -32001 } }]);
+  });
+});
+
+describe('message:stream and tasks/{id}:subscribe over HTTP+JSON (slice 3)', () => {
+  it('streams the task first, then its changes, and closes once it completes', async () => {
+    steps = [theAnswer];
+
+    const answered = await rest('POST', { path: '/message:stream', payload: { message: A_MESSAGE } });
+
+    expect(answered.headers['content-type']).toBe('text/event-stream');
+    expect(eventsOf(answered.body)).toMatchObject(STREAMED_TO_COMPLETION);
+  });
+
+  it.each(['GET', 'POST'] as const)('subscribes to a task on %s, the task as it stands first', async (method) => {
+    await sendingTheMessage();
+    await aQuestion();
+    steps = [theAnswer];
+
+    const answered = await rest(method, { path: `/tasks/${TASK_ID}:subscribe` });
+
+    expect(eventsOf(answered.body)).toMatchObject([{ task: { status: { state: 'TASK_STATE_INPUT_REQUIRED' } } }, { artifactUpdate: { taskId: TASK_ID } }, { statusUpdate: { status: { state: 'TASK_STATE_COMPLETED' } } }]);
+  });
+
+  it('refuses to subscribe to an ended task with 400, and to an unknown one with 404', async () => {
+    await sendingTheMessage();
+    await theAnswer();
+
+    const [ended, unknown] = [await rest('POST', { path: `/tasks/${TASK_ID}:subscribe` }), await rest('GET', { path: '/tasks/task-1:subscribe' })];
+
+    expect([ended.statusCode, unknown.statusCode]).toEqual([400, 404]);
   });
 });
