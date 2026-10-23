@@ -27,9 +27,9 @@ type InboxAnswer = Result<{ waiting: number }, FleetRefusal>;
  * call is recorded with the crew token and the count it knew.
  */
 function scriptedInbox(answers: (InboxAnswer | (() => InboxAnswer))[]) {
-  const asked: { crewToken: string; knownWaiting: number | null }[] = [];
+  const asked: { crewToken: string; knownWaiting: number | null; atMostMs?: number }[] = [];
   const inbox: PersonShipDoor['inbox'] = (crewToken, wait) => {
-    asked.push({ crewToken, knownWaiting: wait?.knownWaiting ?? null });
+    asked.push({ crewToken, knownWaiting: wait?.knownWaiting ?? null, ...(wait?.atMostMs === undefined ? {} : { atMostMs: wait.atMostMs }) });
     const answer = answers.shift();
     if (answer !== undefined) {
       return Promise.resolve(typeof answer === 'function' ? answer() : answer);
@@ -184,6 +184,15 @@ describe('the waiter of a person ship', () => {
     await runUntilIdle(waiter);
 
     expect(waiter.woken.map(({ at: wokenAt }) => wokenAt.toISOString())).toEqual(['2026-10-23T12:00:00.000Z', '2026-10-23T12:30:00.000Z']);
+  });
+
+  it('waits on the fleet no longer than until a wake held back is due', async () => {
+    clock.at = new Date('2026-10-23T12:00:00.000Z');
+    const waiter = await waiting([ok({ waiting: 1 })], { wakes: [ok({ kind: 'inWindow', until: new Date('2026-10-23T12:00:30.000Z') })] });
+
+    await runUntilIdle(waiter);
+
+    expect(waiter.asked.at(-1)).toEqual({ crewToken: CREW_TOKEN, knownWaiting: 1, atMostMs: 30_000 });
   });
 
   it('tries a wake that failed again, waiting longer each time, up to its longest wait', async () => {
