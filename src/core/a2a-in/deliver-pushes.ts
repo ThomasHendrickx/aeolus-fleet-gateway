@@ -3,7 +3,7 @@
  * config's pushes go in the order kept: a later one waits while an earlier
  * one is tried again. A 2xx delivers it. A 408, a 429, a 5xx or no answer
  * tries it again after the gateway's waits, each longer than the last, and
- * gives it up after the last. Any other answer gives it up at once, as does
+ * gives it up after the last; so does a host that resolves to nothing for now. Any other answer gives it up at once, as does
  * a host that resolves to an inside address now, or an inside address the
  * POST was about to connect to. A push given up leaves the task as it was:
  * GetTask still answers it.
@@ -11,7 +11,7 @@
 import type { Clock } from '../shared/clock.js';
 import type { A2aCaller } from './authenticate-a2a-client.js';
 import type { HostResolver, Push, Pushes, WebhookPoster } from './ports.js';
-import { isReachedOnlyInPublic } from './webhook-address.js';
+import { reachOf } from './webhook-address.js';
 
 export type DeliverPushes = (caller: A2aCaller) => Promise<void>;
 
@@ -37,8 +37,12 @@ interface DeliverPushesDeps {
 export function createDeliverPushes(deps: DeliverPushesDeps): DeliverPushes {
   /** What came of one attempt: delivered, worth another, or given up with why. */
   const attempt = async (push: Push): Promise<{ outcome: 'delivered' | 'again' } | { outcome: 'givenUp'; reason: string }> => {
-    if (!(await isReachedOnlyInPublic(deps.resolver, new URL(push.config.url)))) {
+    const reach = await reachOf(deps.resolver, new URL(push.config.url));
+    if (reach === 'inside') {
       return { outcome: 'givenUp', reason: 'The webhook resolves to an inside address' };
+    }
+    if (reach === 'unresolved') {
+      return { outcome: 'again' };
     }
     const posted = await deps.poster.post(push.config.url, { body: push.body, token: push.config.token, authentication: push.config.authentication });
     if (!posted.isOk) {

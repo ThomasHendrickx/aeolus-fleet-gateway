@@ -14,7 +14,7 @@ import type { A2aCaller } from './authenticate-a2a-client.js';
 import type { HostResolver, PushConfigIds, PushConfigs, WebhookCredentials } from './ports.js';
 import { pushConfigViewOf, type PushConfigView } from './push-config-view.js';
 import { isTerminal, markOf, taskViewOf } from './task-view.js';
-import { isReachedOnlyInPublic } from './webhook-address.js';
+import { reachOf } from './webhook-address.js';
 import { webhookUrlOf } from './webhook.js';
 
 export type SetPushConfig = (input: { caller: A2aCaller; config: { taskId: string; id?: string; url: string } & WebhookCredentials }) => Promise<Result<PushConfigView, DomainError<'TASK_NOT_FOUND' | 'WEBHOOK_REFUSED'>>>;
@@ -29,7 +29,7 @@ export function createSetPushConfig(deps: { calls: Pick<ClientCalls, 'findTask'>
     if (!url.isOk) {
       return url;
     }
-    if (!(await isReachedOnlyInPublic(deps.resolver, url.value))) {
+    if ((await reachOf(deps.resolver, url.value)) !== 'public') {
       return refuse('WEBHOOK_REFUSED', 'The webhook must resolve to public addresses only');
     }
     const now = deps.clock.now();
