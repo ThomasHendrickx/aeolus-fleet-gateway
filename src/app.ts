@@ -104,6 +104,7 @@ import { createIsServed } from './core/installation/served.js';
 import { createSetFleetEnabled } from './core/installation/set-fleet-enabled.js';
 import { createAuthenticateOperator } from './core/operator/authenticate-operator.js';
 import { createApproveClientParty, createApproveParty, type ApproveClientParty, type ApproveParty } from './core/parties/approve-party.js';
+import { createAddClientParty } from './core/parties/add-client-party.js';
 import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
 import { createListOwnerChoices } from './core/parties/list-owner-choices.js';
 import { createListParties, createReadParty } from './core/parties/list-parties.js';
@@ -456,6 +457,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readConnection,
     connect,
     approveParty,
+    addClientParty: createAddClientParty({ parties, approveClientParty, clients: oauthClients, secrets: oauthSecrets }),
     crewParty,
     listParties,
     retireParty,

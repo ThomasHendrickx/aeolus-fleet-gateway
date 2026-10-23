@@ -27,6 +27,7 @@ import type { IsServed } from '../../core/installation/served.js';
 import type { SetFleetEnabled } from '../../core/installation/set-fleet-enabled.js';
 import type { AccountActor, AuthenticateActor } from '../../core/actors/authenticate-actor.js';
 import type { ReadOutsideParties, SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
+import type { AddClientParty, AddClientPartyRefusal } from '../../core/parties/add-client-party.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListOwnerChoices } from '../../core/parties/list-owner-choices.js';
@@ -84,6 +85,7 @@ export interface Context {
   readConnection: ReadConnection;
   connect: Connect;
   approveParty: ApproveParty;
+  addClientParty: AddClientParty;
   crewParty: CrewParty;
   listParties: ListParties;
   listOwnerChoices: ListOwnerChoices;
@@ -230,6 +232,18 @@ const RETIRE_CODES = {
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
   NOT_AN_ACTOR: 'UNAUTHORIZED',
 } as const satisfies Record<RetirePartyRefusal['kind'], TRPCError['code']>;
+
+/** The refusals of adding a client party, as the API states them: a fleet that does not answer is tried again with the same request id. */
+const ADD_CLIENT_CODES = {
+  NOT_AN_APPROVER: 'FORBIDDEN',
+  SCOPE_NOT_HELD: 'FORBIDDEN',
+  CLIENT_HAS_PARTY: 'CONFLICT',
+  PARTY_EXISTS: 'CONFLICT',
+  COMMISSION_REFUSED: 'BAD_REQUEST',
+  OUTSIDE_PARTIES_OFF: 'PRECONDITION_FAILED',
+  NOT_CONNECTED: 'PRECONDITION_FAILED',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+} as const satisfies Record<AddClientPartyRefusal['kind'], TRPCError['code']>;
 
 const CREW_CODES = {
   NO_SUCH_PARTY: 'NOT_FOUND',
@@ -553,6 +567,24 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: APPROVE_CODES[approved.error.kind], message: approved.error.message });
         }
         return approved.value;
+      }),
+    /**
+     * An actor holding gateway:approve adds a client party with no human at
+     * the authorize step, such as a vendor agent (vendor platforms V4): its
+     * name, its owner (a person ship) and its scopes, only ones it holds. Its
+     * client id and secret are answered once, the secret when its proxy ship
+     * is crewed; a party left awaiting crew gets it from parties.crew. A
+     * repeat with the same request id picks up where the last one stopped.
+     */
+    addClient: servedProcedure
+      .input(z.strictObject({ requestId: idempotencyKeySchema, name: shipHandleSchema, ownerShipId: idSchema('ship'), scopes: z.array(z.string()) }))
+      .output(z.object({ party: shownPartySchema, clientId: z.string(), clientSecret: z.string().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        const added = await ctx.addClientParty({ actor: ctx.actor, ...input });
+        if (!added.isOk) {
+          throw new TRPCError({ code: ADD_CLIENT_CODES[added.error.kind], message: added.error.message });
+        }
+        return added.value;
       }),
     /**
      * An actor holding fleet:manage retires a party (decision 0056): its proxy

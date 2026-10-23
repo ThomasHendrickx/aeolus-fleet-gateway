@@ -61,6 +61,7 @@ const ORDERBOT_REQUEST: PendingRequest = {
 function aContext(cookie: string | undefined, crewToken?: string): {
   context: Context;
   approvals: Parameters<ApproveParty>[0][];
+  additions: Parameters<AddClientParty>[0][];
   marks: Parameters<MarkTool>[0][];
   decisions: Parameters<DecideRequest>[0][];
   switched: Parameters<SetOutsideParties>[0][];
