@@ -16,6 +16,9 @@ export const MCP_SERVER_SHIP_TYPE = 'mcp-server';
 /** The type of every outside MCP client's proxy ship. */
 export const MCP_CLIENT_SHIP_TYPE = 'mcp-client';
 
+/** The type of every outside A2A client's proxy ship (decision 0060). */
+export const A2A_CLIENT_SHIP_TYPE = 'a2a-client';
+
 export type ApprovePartyRefusal = DomainError<'OUTSIDE_PARTIES_OFF' | 'NOT_CONNECTED' | 'PARTY_EXISTS' | 'COMMISSION_REFUSED' | 'FLEET_UNAVAILABLE'>;
 
 export type ApproveParty = (input: {
@@ -39,7 +42,7 @@ export type ApproveClientParty = (input: {
   scopes: readonly string[];
 }) => Promise<Result<ShownParty, ApprovePartyRefusal | DomainError<'CLIENT_HAS_PARTY'>>>;
 
-interface ApprovalDeps {
+export interface ApprovalDeps {
   connections: ConnectionStore;
   parties: PartyStore;
   door: ProxyShipDoor;
@@ -50,7 +53,7 @@ interface ApprovalDeps {
 }
 
 /** What one approval asks for: the party it keeps, as it is before its proxy ship is commissioned, under its request's hash. */
-interface Approval<P extends Party> {
+export interface Approval<P extends Party> {
   fleetId: FleetId;
   type: string;
   /** The owner the approver picked: named at the commission, then the fleet's alone (decision 0056). */
@@ -74,7 +77,7 @@ interface Approval<P extends Party> {
  * nothing, so argo may approve again. While the fleet's outside parties are
  * off, nothing is approved (interop I-3).
  */
-async function approved<P extends Party>(deps: ApprovalDeps, approval: Approval<P>): Promise<Result<ShownParty, ApprovePartyRefusal>> {
+export async function approved<P extends Party>(deps: ApprovalDeps, approval: Approval<P>): Promise<Result<ShownParty, ApprovePartyRefusal>> {
   /**
    * The crewed party, once the gateway wrote what it checked about it
    * (decision 0059). A fact the fleet refuses takes nothing from the
@@ -138,7 +141,7 @@ async function approved<P extends Party>(deps: ApprovalDeps, approval: Approval<
 }
 
 /** What a party is before its proxy ship is commissioned. */
-const UNCOMMISSIONED = { state: 'commissioning', proxyShipId: null, secret: null, crewToken: null } as const;
+export const UNCOMMISSIONED = { state: 'commissioning', proxyShipId: null, secret: null, crewToken: null } as const;
 
 /**
  * Use case: argo approves an outside MCP server as a party of its fleet: the

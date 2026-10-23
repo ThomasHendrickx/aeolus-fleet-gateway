@@ -80,6 +80,8 @@ model Party {
   concurrencyLimit Int?     @map("concurrency_limit")
   /// An MCP client's: its OAuth client id.
   clientId         String?  @map("client_id")
+  /// An A2A client's: the hash of the bearer it was shown once, which names it on every call; unique across fleets, as the bearer alone names the party (decision 0060).
+  bearerHash       String?  @unique @map("bearer_hash")
   state            String
   proxyShipId      String?  @map("proxy_ship_id")
   /// Kept only from the proxy ship's commission until the gateway crews it.

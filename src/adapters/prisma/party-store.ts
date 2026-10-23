@@ -21,6 +21,7 @@ interface Row {
   credential: unknown;
   concurrencyLimit: number | null;
   clientId: string | null;
+  bearerHash: string | null;
   state: string;
   proxyShipId: string | null;
   secret: string | null;
@@ -30,7 +31,7 @@ interface Row {
   approvedAt: Date;
 }
 
-const kindSchema = z.enum(['mcpServer', 'mcpClient']);
+const kindSchema = z.enum(['mcpServer', 'mcpClient', 'a2aClient']);
 
 function partyOf(row: Row): Party {
   const base = {
@@ -50,6 +51,8 @@ function partyOf(row: Row): Party {
       return { ...base, kind, url: z.string().parse(row.url), credential: credentialSchema.parse(row.credential), concurrencyLimit: z.int().parse(row.concurrencyLimit) };
     case 'mcpClient':
       return { ...base, kind, clientId: z.string().parse(row.clientId) };
+    case 'a2aClient':
+      return { ...base, kind, bearerHash: row.bearerHash };
   }
 }
 
@@ -57,9 +60,11 @@ function partyOf(row: Row): Party {
 function outsideColumnsOf(party: Party) {
   switch (party.kind) {
     case 'mcpServer':
-      return { url: party.url, credential: { ...party.credential }, concurrencyLimit: party.concurrencyLimit, clientId: null };
+      return { url: party.url, credential: { ...party.credential }, concurrencyLimit: party.concurrencyLimit, clientId: null, bearerHash: null };
     case 'mcpClient':
-      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: party.clientId };
+      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: party.clientId, bearerHash: null };
+    case 'a2aClient':
+      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: null, bearerHash: party.bearerHash };
   }
 }
 

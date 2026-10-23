@@ -1,7 +1,7 @@
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { BUTTONS, CARD } from '../../forms/ui/look';
-import { countsOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty, type Side } from '../party-kinds';
+import { countsOf, outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty, type Side } from '../party-kinds';
 import { ADD_SERVER_PATH, OUTSIDE_PARTIES_PATH, partyPath } from '../paths';
 import { StatusBadge, Tag } from './status-badge';
 import { SwitchCard } from './switch-card';
@@ -12,16 +12,18 @@ const ADDING_SCOPE = 'fleet:manage';
 
 function PartyCard({ party, fleetId }: { party: ListedParty; fleetId: string }) {
   const { protocol, side } = PARTY_KINDS[party.kind];
-  const where = party.kind === 'mcpServer' ? party.url : party.clientId;
+  const where = outsideAddressOf(party);
   const state = PARTY_STATES[party.state];
   return (
     <a href={inFleet(partyPath(party.name), fleetId)} className={`${CARD} grid gap-2 hover:bg-accent`} data-testid="outside-parties-party">
       <span className="flex items-center gap-2">
         <strong>{party.name}</strong> <Tag>{protocol}</Tag> <Tag>{`${protocol} ${SIDES[side].one}`}</Tag>
       </span>
-      <span className="truncate font-mono text-code" title={where}>
-        {where}
-      </span>
+      {where === null ? null : (
+        <span className="truncate font-mono text-code" title={where}>
+          {where}
+        </span>
+      )}
       <span className="flex flex-wrap items-center gap-2">
         <StatusBadge tone={state.tone} label={state.label} />
         {party.ownerName === null ? null : <Tag>{party.ownerName}</Tag>}

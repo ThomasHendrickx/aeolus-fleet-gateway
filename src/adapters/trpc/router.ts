@@ -304,6 +304,7 @@ const shownPartyBase = { name: z.string(), state: z.enum(['commissioning', 'awai
 const shownPartySchema = z.discriminatedUnion('kind', [
   z.object({ ...shownPartyBase, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
   z.object({ ...shownPartyBase, kind: z.literal('mcpClient'), clientId: z.string() }),
+  z.object({ ...shownPartyBase, kind: z.literal('a2aClient') }),
 ]);
 
 /** A party with its proxy ship's name, owner and scopes, read from the fleet (decision 0056): null while unknown. */
@@ -311,6 +312,7 @@ const fromFleet = { proxyShipName: z.string().nullable(), ownerShipId: z.string(
 const listedPartySchema = z.discriminatedUnion('kind', [
   z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
   z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpClient'), clientId: z.string() }),
+  z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('a2aClient') }),
 ]);
 
 /** The connection as the console reads it: whether the gateway serves the fleet, and its connection. */

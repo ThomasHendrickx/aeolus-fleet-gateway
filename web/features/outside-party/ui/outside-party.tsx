@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { BUTTONS, CARD } from '../../forms/ui/look';
-import { PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } from '../../outside-parties/party-kinds';
+import { outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } from '../../outside-parties/party-kinds';
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
 import { scopeWords } from '../../outside-parties/scope-words';
 import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
@@ -74,6 +74,7 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
     );
   }
   const party = read.value;
+  const address = outsideAddressOf(party);
   const tools = party.kind === 'mcpServer' ? await readOf(api.parties.tools.query({ name })) : undefined;
   const change = (
     <a href={inFleet(partyPath(party.name, 'change'), fleetId)} className="text-primary hover:underline" data-testid="outside-party-change">
@@ -96,9 +97,11 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
             : party.scopes.map((scope) => <Tag key={scope}>{scopeWords(scope)}</Tag>)}
           {scopes.includes(GRANTING_SCOPE) ? change : null}
         </Fact>
-        <Fact label={party.kind === 'mcpServer' ? 'Address' : 'Client id'}>
-          <span className="font-mono">{party.kind === 'mcpServer' ? party.url : party.clientId}</span>
-        </Fact>
+        {address === null ? null : (
+          <Fact label={party.kind === 'mcpServer' ? 'Address' : 'Client id'}>
+            <span className="font-mono">{address}</span>
+          </Fact>
+        )}
       </dl>
       {tools === undefined ? null : (
         <section className={`${CARD} grid gap-2`} data-testid="outside-party-tools">

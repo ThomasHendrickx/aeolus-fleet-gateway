@@ -4,7 +4,7 @@ import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { ActionForm } from '../../forms/ui/action-form';
 import { CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
-import { PARTY_STATES, type ListedParty } from '../../outside-parties/party-kinds';
+import { outsideAddressOf, PARTY_STATES, type ListedParty } from '../../outside-parties/party-kinds';
 import { StatusBadge } from '../../outside-parties/ui/status-badge';
 import { approveParty, crewParty, markTool, stateParty } from '../actions';
 
@@ -129,8 +129,8 @@ export async function Parties({ page }: { page: SignedInPage }) {
                 return (
                   <tr key={party.name} className="border-b border-border align-top">
                     <td className="p-2">{party.name}</td>
-                    <td className="p-2 font-mono">{party.kind === 'mcpServer' ? party.url : party.clientId}</td>
-                    <td className="p-2">{party.kind === 'mcpServer' ? party.credentialKind : 'MCP client'}</td>
+                    <td className="p-2 font-mono">{outsideAddressOf(party) ?? ''}</td>
+                    <td className="p-2">{party.kind === 'mcpServer' ? party.credentialKind : party.kind === 'mcpClient' ? 'MCP client' : 'A2A client'}</td>
                     <td className="p-2">
                       <StatusBadge tone={state.tone} label={state.label} />
                     </td>
