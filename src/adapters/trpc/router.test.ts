@@ -29,6 +29,8 @@ function grantOf(caller: PersonCaller): string {
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 const FOCUSED_AT = new Date('2026-10-23T10:00:00.000Z');
+/** The gateway's public push key, which a browser subscribes with. */
+const WEB_PUSH_KEY = 'BGatewayPublicKey';
 const ARGO_COOKIE = 'aeolus_session=argo';
 const VIEWER_COOKIE = 'aeolus_session=viewer';
 /** A person signed in to the gateway's pages, and one whose account token no longer works. */
@@ -121,7 +123,27 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
-      readWakeChannels: (caller) => Promise.resolve(ok({ email: { isOffered: true, isOn: answers.some(({ email }) => email === 'on') && grantOf(caller) === PERSON_TOKEN }, webPush: { publicKey: null, browsers: [] } })),
+      readWakeChannels: (caller) =>
+        Promise.resolve(
+          ok({
+            email: { isOffered: true, isOn: answers.some(({ email }) => email === 'on') && grantOf(caller) === PERSON_TOKEN },
+            webPush: {
+              publicKey: WEB_PUSH_KEY,
+              browsers: answers.flatMap(({ webPushOn, browser }) => (webPushOn === undefined || browser === undefined ? [] : [{ endpoint: webPushOn, browser, addedAt: FOCUSED_AT, isGone: false }])),
+            },
+          }),
+        ),
+      turnOnWebPush: ({ caller, fleetName, endpoint, browser }) => {
+        if (!endpoint.startsWith('https://')) {
+          return Promise.resolve(err({ kind: 'INVALID_SUBSCRIPTION' as const, message: "The push service's endpoint must be an https URL of at most 2048 characters" }));
+        }
+        answers.push({ grantId: grantOf(caller), webPushOn: endpoint, browser, fleetName });
+        return Promise.resolve(ok(undefined));
+      },
+      turnOffWebPush: ({ caller, endpoint }) => {
+        answers.push({ grantId: grantOf(caller), webPushOff: endpoint });
+        return Promise.resolve(ok(undefined));
+      },
       turnEmailChannel: ({ caller, isOn }) => {
         answers.push({ grantId: grantOf(caller), email: isOn ? 'on' : 'off' });
         return Promise.resolve(ok(undefined));
@@ -565,14 +587,51 @@ describe("a person reads and deals with their person ship's deliveries through t
 });
 
 describe('a person turns on the channels that wake them, through the API (wake a person, W8)', () => {
+  const FIREFOX = { endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/firefox-1', keys: { p256dh: `B${'A'.repeat(86)}`, auth: 'A'.repeat(22) }, browser: 'Firefox on Linux' };
+
   it('turns email on as its own account, and reads it on', async () => {
     const { context, answers } = aContext(PERSON_COOKIE);
     const caller = gatewayRouter.createCaller(context);
 
     await caller.people.turnEmail({ isOn: true });
 
-    await expect(caller.people.wakeChannels()).resolves.toEqual({ email: { isOffered: true, isOn: true }, webPush: { publicKey: null, browsers: [] } });
+    await expect(caller.people.wakeChannels()).resolves.toEqual({ email: { isOffered: true, isOn: true }, webPush: { publicKey: WEB_PUSH_KEY, browsers: [] } });
     expect(answers).toEqual([{ grantId: PERSON_TOKEN, email: 'on' }]);
+  });
+
+  it('turns web push on for a browser, with the fleet name their shared sign-in states, and reads it with when it was turned on', async () => {
+    const { context, answers } = aContext(undefined);
+    const signIns = fakeSharedSignIn({});
+    const caller = gatewayRouter.createCaller({ ...context, signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET, accountApps: (signIn) => signIns.apps(signIn) });
+
+    await caller.people.turnOnWebPush(FIREFOX);
+
+    expect(answers).toEqual([{ grantId: SHARED_ACCOUNT_TOKEN, webPushOn: FIREFOX.endpoint, browser: 'Firefox on Linux', fleetName: 'Acme' }]);
+    await expect(caller.people.wakeChannels()).resolves.toMatchObject({ webPush: { publicKey: WEB_PUSH_KEY, browsers: [{ endpoint: FIREFOX.endpoint, browser: 'Firefox on Linux', addedAt: '2026-10-23T10:00:00.000Z', isGone: false }] } });
+  });
+
+  it('refuses a subscription the push service could not have given, saying why', async () => {
+    const { context } = aContext(undefined);
+    const signIns = fakeSharedSignIn({});
+    const caller = gatewayRouter.createCaller({ ...context, signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET, accountApps: (signIn) => signIns.apps(signIn) });
+
+    await expect(caller.people.turnOnWebPush({ ...FIREFOX, endpoint: 'http://push.example/firefox' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: "The push service's endpoint must be an https URL of at most 2048 characters" });
+  });
+
+  it('says pagasae did not answer, turning nothing on, as it names the fleet', async () => {
+    const { context, answers } = aContext(undefined);
+    const caller = gatewayRouter.createCaller({ ...context, signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET, accountApps: (signIn) => fakeSharedSignIn({ isAvailable: false }).apps(signIn) });
+
+    await expect(caller.people.turnOnWebPush(FIREFOX)).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    expect(answers).toEqual([]);
+  });
+
+  it('removes a browser as its own account', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await gatewayRouter.createCaller(context).people.turnOffWebPush({ endpoint: FIREFOX.endpoint });
+
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, webPushOff: FIREFOX.endpoint }]);
   });
 
   it('refuses any other actor: only a person is woken', async () => {
