@@ -78,10 +78,19 @@ export function anAgentParty(change: Partial<A2aAgentParty> = {}): A2aAgentParty
 }
 
 /** An A2A status event as the agent tells it, naming its state in its JSON. */
-export const aStatus = (state: AgentState, taskId = 'task-1'): AgentEvent => ({ kind: 'status', state, json: JSON.stringify({ statusUpdate: { taskId, status: { state } } }) });
+export const aStatus = (state: AgentState, taskId = 'task-1'): AgentEvent => ({ kind: 'status', state, timestamp: null, json: JSON.stringify({ statusUpdate: { taskId, status: { state } } }) });
 
 /** An A2A artifact event of one text part. */
-export const anArtifact = (text: string, taskId = 'task-1'): AgentEvent => ({ kind: 'artifact', parts: [{ kind: 'text', text, mediaType: 'text/plain' }], json: JSON.stringify({ artifactUpdate: { taskId, artifact: { parts: [{ text }] } } }) });
+export const anArtifact = (text: string, taskId = 'task-1'): AgentEvent => anArtifactChunk({ artifactId: `a-${text}`, text, isAppended: false, taskId });
+
+/** One chunk of an artifact as the agent streams it: the first, or one appended to it. */
+export const anArtifactChunk = ({ artifactId, text, isAppended, taskId = 'task-1' }: { artifactId: string; text: string; isAppended: boolean; taskId?: string }): AgentEvent => ({
+  kind: 'artifact',
+  artifactId,
+  isAppended,
+  parts: [{ kind: 'text', text, mediaType: 'text/plain' }],
+  json: JSON.stringify({ artifactUpdate: { taskId, artifact: { artifactId, parts: [{ text }] }, append: isAppended } }),
+});
 
 /** One SubscribeToTask stream as the agent sends it: its events, then how it ends; or a stream that hangs until aborted. */
 export type ScriptedStream = { events: AgentEvent[]; end: SubscriptionEnd } | 'hangs';

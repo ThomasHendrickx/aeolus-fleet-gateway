@@ -6,6 +6,7 @@ import {
   aStatus,
   anAgentParty,
   anArtifact,
+  anArtifactChunk,
   fakeA2aAgents,
   fakeAgentShipCrew,
   memoryAgentCalls,
@@ -116,6 +117,30 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
 
     expect(steps().slice(2)).toEqual([`send application/a2a+json ${aStatus('working').json}`, 'send text/plain 4 EUR', `send application/a2a+json ${aStatus('completed').json}`, 'handled']);
     expect(agents.subscribed).toEqual(['task-1', 'task-1']);
+  });
+
+  it('replies each chunk of an artifact once, and not again inside the whole artifact a resubscribe sends', async () => {
+    const streams: ScriptedStream[] = [
+      { events: [anArtifactChunk({ artifactId: 'a-1', text: '4 ', isAppended: false }), anArtifactChunk({ artifactId: 'a-1', text: 'EUR', isAppended: true })], end: { kind: 'broken', reason: 'socket hang up' } },
+      { events: [anArtifactChunk({ artifactId: 'a-1', text: '4 EUR', isAppended: false }), aStatus('completed')], end: { kind: 'closed' } },
+    ];
+    const agents = fakeA2aAgents({ sends: [taken([])], streams });
+
+    await expect(handWith(agents, STREAMED)()).resolves.toEqual({ kind: 'handled' });
+
+    expect(crew.replies().map(({ payload }) => payload.slice(0, 20))).toEqual(['4 ', 'EUR', aStatus('completed').json.slice(0, 20)]);
+  });
+
+  it('replies a status again on a follow-up of the same task, though the agent tells it as before', async () => {
+    const agents = fakeA2aAgents({ sends: [taken([aStatus('working'), aStatus('inputRequired')]), taken([aStatus('working'), aStatus('completed')])] });
+    const hand = handWith(agents);
+    await hand();
+    const [, asked] = crew.replies();
+    const followUp: MessageId = 'msg_01m3tbfspe96yf1rnr4ank9m02';
+
+    await hand(aQuote({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d02', messageId: followUp, payload: 'Yes, M8', inReplyTo: await replyMessageIdOf(asked?.idempotencyKey) }));
+
+    expect(crew.replies().filter(({ inReplyTo }) => inReplyTo === followUp).map(({ payload }) => payload)).toEqual([aStatus('working').json, aStatus('completed').json]);
   });
 
   it('replies failed and is handled once the deadline passes with no terminal state', async () => {
