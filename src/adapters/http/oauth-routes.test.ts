@@ -38,7 +38,7 @@ let hub: ChangeHub;
 /** The routes over in-memory ports; signing people in through pagasae only where it is set. */
 async function startServer(isSigningPeopleIn: boolean) {
   const clients = memoryOAuthClients();
-  await clients.save({ clientId: CLIENT, fleetId: FLEET, name: 'Cursor <IDE>', redirectUris: [CALLBACK], secretHash: 'hash(cursor-secret)' });
+  await clients.save({ clientId: CLIENT, fleetId: FLEET, name: 'Cursor <IDE>', redirectUris: [CALLBACK], secretHash: 'hash(cursor-secret)', grant: 'authorizationCode' });
   const codes = memoryAuthorizationCodes();
   const secrets = fakeSecrets();
   const clock = { now: () => new Date('2026-10-19T09:00:00.000Z') };
@@ -69,7 +69,7 @@ async function startServer(isSigningPeopleIn: boolean) {
     issuer: ISSUER,
     resource: RESOURCE,
     readAuthorization,
-    exchangeToken: createExchangeToken({ clients, codes, tokens: memoryIssuedTokens(), secrets, clock, resource: RESOURCE }),
+    exchangeToken: createExchangeToken({ clients, codes, tokens: memoryIssuedTokens(), secrets, clock, resource: RESOURCE, parties, servesOutsideParties: () => Promise.resolve(isOn) }),
     ...(isSigningPeopleIn
       ? {
           signIn: {

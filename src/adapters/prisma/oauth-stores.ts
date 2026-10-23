@@ -6,10 +6,11 @@
 import { idSchema } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
-import type { AuthorizationCodes, IssuedTokens, OAuthClients, TokenHolder, TokenPair, TokenState } from '../../core/oauth/ports.js';
+import type { AuthorizationCodes, ClientGrant, IssuedTokens, OAuthClients, TokenHolder, TokenPair, TokenState } from '../../core/oauth/ports.js';
 import type { Db } from './client.js';
 
 const tokenStateSchema: z.ZodType<TokenState> = z.enum(['active', 'rotated', 'revoked']);
+const clientGrantSchema: z.ZodType<ClientGrant> = z.enum(['authorizationCode', 'clientCredentials']);
 
 /** The columns a holder is kept in: its party, or its account grant. */
 function holderColumns(holder: TokenHolder): { party: string | null; grantId: string | null } {
@@ -31,10 +32,10 @@ export function createPrismaOAuthClients(db: Db): OAuthClients {
   return {
     find: async (clientId) => {
       const row = await db.oAuthClient.findUnique({ where: { clientId } });
-      return row ? { ...row, fleetId: idSchema('fleet').parse(row.fleetId) } : undefined;
+      return row ? { ...row, fleetId: idSchema('fleet').parse(row.fleetId), grant: clientGrantSchema.parse(row.grant) } : undefined;
     },
     save: async (client) => {
-      const columns = { fleetId: client.fleetId, name: client.name, redirectUris: [...client.redirectUris], secretHash: client.secretHash };
+      const columns = { fleetId: client.fleetId, name: client.name, redirectUris: [...client.redirectUris], secretHash: client.secretHash, grant: client.grant };
       await db.oAuthClient.upsert({ where: { clientId: client.clientId }, create: { clientId: client.clientId, ...columns }, update: columns });
     },
   };
@@ -60,7 +61,7 @@ export function createPrismaAuthorizationCodes(db: Db): AuthorizationCodes {
 
 interface PairRow {
   familyId: string;
-  codeHash: string;
+  codeHash: string | null;
   fleetId: string;
   clientId: string;
   resource: string;
@@ -69,8 +70,8 @@ interface PairRow {
   grantId: string | null;
   accessHash: string;
   accessExpiresAt: Date;
-  refreshHash: string;
-  refreshExpiresAt: Date;
+  refreshHash: string | null;
+  refreshExpiresAt: Date | null;
   state: string;
 }
 

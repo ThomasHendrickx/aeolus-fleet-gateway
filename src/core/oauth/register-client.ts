@@ -24,7 +24,7 @@ export function createRegisterClient(deps: { clients: OAuthClients; secrets: OAu
     }
     const clientId = `client-${deps.secrets.newSecret()}`;
     const clientSecret = isConfidential ? deps.secrets.newSecret() : null;
-    await deps.clients.save({ clientId, fleetId, name, redirectUris: [...redirectUris], secretHash: clientSecret === null ? null : deps.secrets.hashOf(clientSecret) });
+    await deps.clients.save({ clientId, fleetId, name, redirectUris: [...redirectUris], secretHash: clientSecret === null ? null : deps.secrets.hashOf(clientSecret), grant: 'authorizationCode' });
     return ok({ clientId, clientSecret });
   };
 }

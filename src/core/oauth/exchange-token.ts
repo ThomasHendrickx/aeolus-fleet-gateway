@@ -1,3 +1,6 @@
+import type { FleetId } from '@aeolus-fleet/common';
+
+import type { PartyStore } from '../parties/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
 import { holderOf } from './authenticate-access-token.js';
@@ -7,10 +10,10 @@ import type { AuthorizationCodes, IssuedTokens, OAuthClients, OAuthError, OAuthE
 export const ACCESS_TOKEN_LIFETIME_MS = 60 * 60_000;
 export const REFRESH_TOKEN_LIFETIME_MS = 30 * 24 * 60 * 60_000;
 
-/** The tokens a client gets. */
+/** The tokens a client gets: no refresh token for one signed in by client credentials, which asks again. */
 export interface IssuedPair {
   readonly accessToken: string;
-  readonly refreshToken: string;
+  readonly refreshToken: string | null;
   readonly expiresInSeconds: number;
   readonly scope: string | null;
 }
@@ -26,15 +29,30 @@ function refusal(error: OAuthErrorCode, description: string) {
   return err({ error, description });
 }
 
+interface ExchangeTokenDeps {
+  clients: OAuthClients;
+  codes: AuthorizationCodes;
+  tokens: IssuedTokens;
+  secrets: OAuthSecrets;
+  clock: Clock;
+  resource: string;
+  /** The parties argo's approvers added: a client signed in by client credentials is one. */
+  parties: Pick<PartyStore, 'findByClient'>;
+  /** Whether the fleet's outside parties are on (interop I-3). */
+  servesOutsideParties: (fleetId: FleetId) => Promise<boolean>;
+}
+
 /**
  * Use case: a client takes its code for tokens, or refreshes them (OAuth
  * 2.1). A confidential client proves its secret; a public one, or one known
  * by its metadata document, needs none, as PKCE binds the code to it. A code
  * is taken once: a second try revokes every token it gave. A refresh token
  * is taken once too: the pair rotates, and a rotated one coming again
- * revokes its whole family.
+ * revokes its whole family. A client party with no human at the authorize
+ * step signs in by its client credentials alone (vendor platforms V4): an
+ * access token for its party, and no refresh token, as it asks again.
  */
-export function createExchangeToken(deps: { clients: OAuthClients; codes: AuthorizationCodes; tokens: IssuedTokens; secrets: OAuthSecrets; clock: Clock; resource: string }): ExchangeToken {
+export function createExchangeToken(deps: ExchangeTokenDeps): ExchangeToken {
   /** The client is who it says, as far as it has a secret. */
   const isAuthenticated = async (request: TokenRequest): Promise<boolean> => {
     const clientId = request.client_id;
@@ -60,6 +78,44 @@ export function createExchangeToken(deps: { clients: OAuthClients; codes: Author
       refreshExpiresAt: new Date(now + REFRESH_TOKEN_LIFETIME_MS),
     });
     return { accessToken, refreshToken, expiresInSeconds: ACCESS_TOKEN_LIFETIME_MS / MS_PER_SECOND, scope: from.scope };
+  };
+
+  const fromClientCredentials = async (request: TokenRequest): Promise<Result<IssuedPair, OAuthError>> => {
+    const client = request.client_id === undefined ? undefined : await deps.clients.find(request.client_id);
+    const isAuthentic = client?.secretHash != null && request.client_secret !== undefined && deps.secrets.hashOf(request.client_secret) === client.secretHash;
+    if (client === undefined || !isAuthentic) {
+      return refusal('invalid_client', 'The client could not be authenticated');
+    }
+    if (client.grant !== 'clientCredentials') {
+      return refusal('unauthorized_client', 'This client signs in by authorization code');
+    }
+    const party = await deps.parties.findByClient(client.fleetId, client.clientId);
+    if (party === undefined) {
+      return refusal('invalid_client', 'The client could not be authenticated');
+    }
+    if (!(await deps.servesOutsideParties(client.fleetId))) {
+      return refusal('unauthorized_client', "This fleet's outside parties are off");
+    }
+    if (request.resource !== deps.resource) {
+      return refusal('invalid_target', `The resource must be ${deps.resource}`);
+    }
+    const accessToken = deps.secrets.newSecret();
+    const accessHash = deps.secrets.hashOf(accessToken);
+    await deps.tokens.save({
+      familyId: accessHash,
+      codeHash: null,
+      fleetId: client.fleetId,
+      clientId: client.clientId,
+      resource: deps.resource,
+      scope: null,
+      kind: 'party',
+      party: party.name,
+      accessHash,
+      accessExpiresAt: new Date(deps.clock.now().getTime() + ACCESS_TOKEN_LIFETIME_MS),
+      refreshHash: null,
+      refreshExpiresAt: null,
+    });
+    return ok({ accessToken, refreshToken: null, expiresInSeconds: ACCESS_TOKEN_LIFETIME_MS / MS_PER_SECOND, scope: null });
   };
 
   const fromCode = async (request: TokenRequest): Promise<Result<IssuedPair, OAuthError>> => {
@@ -97,7 +153,7 @@ export function createExchangeToken(deps: { clients: OAuthClients; codes: Author
     }
     const refreshHash = deps.secrets.hashOf(request.refresh_token);
     const pair = await deps.tokens.findByRefresh(refreshHash);
-    if (!pair || pair.clientId !== request.client_id || pair.refreshExpiresAt.getTime() <= deps.clock.now().getTime() || pair.state === 'revoked') {
+    if (!pair || pair.clientId !== request.client_id || pair.refreshExpiresAt === null || pair.refreshExpiresAt.getTime() <= deps.clock.now().getTime() || pair.state === 'revoked') {
       return refusal('invalid_grant', 'No such refresh token for this client, or it expired');
     }
     if (!(await deps.tokens.rotate(refreshHash))) {
@@ -110,8 +166,11 @@ export function createExchangeToken(deps: { clients: OAuthClients; codes: Author
 
   return async (request) => {
     const grantType = request.grant_type;
+    if (grantType === 'client_credentials') {
+      return fromClientCredentials(request);
+    }
     if (grantType !== 'authorization_code' && grantType !== 'refresh_token') {
-      return refusal('unsupported_grant_type', 'Only authorization_code and refresh_token are served');
+      return refusal('unsupported_grant_type', 'Only authorization_code, refresh_token and client_credentials are served');
     }
     if (!(await isAuthenticated(request))) {
       return refusal('invalid_client', 'The client could not be authenticated');

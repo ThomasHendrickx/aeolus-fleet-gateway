@@ -369,7 +369,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     issuer,
     resource,
     readAuthorization,
-    exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
+    exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock, resource, parties, servesOutsideParties }),
   });
   // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
   const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });

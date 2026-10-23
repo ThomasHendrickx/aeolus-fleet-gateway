@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeSecrets, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
+import { memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { createAuthenticateAccessToken } from './authenticate-access-token.js';
 import { createExchangeToken } from './exchange-token.js';
 
@@ -21,13 +22,13 @@ beforeEach(async () => {
   const clock = { now: () => now };
   const secrets = fakeSecrets();
   clients = memoryOAuthClients();
-  await clients.save({ clientId: 'client-cursor', fleetId: FLEET_ID, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: 'hash(cursor-secret)' });
+  await clients.save({ clientId: 'client-cursor', fleetId: FLEET_ID, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: 'hash(cursor-secret)', grant: 'authorizationCode' });
   codes = memoryAuthorizationCodes();
   await codes.save({ codeHash: 'hash(code-1)', fleetId: FLEET_ID, clientId: CIMD_CLIENT, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-1)', resource: RESOURCE, scope: null, kind: 'party', party: 'claude', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
   await codes.save({ codeHash: 'hash(code-2)', fleetId: FLEET_ID, clientId: 'client-cursor', redirectUri: 'https://cursor.example.com/callback', codeChallenge: 'S256(verifier-2)', resource: RESOURCE, scope: null, kind: 'party', party: 'cursor', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
   await codes.save({ codeHash: 'hash(code-3)', fleetId: FLEET_ID, clientId: CIMD_CLIENT, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-3)', resource: RESOURCE, scope: null, kind: 'account', grantId: 'grant-1', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
   tokens = memoryIssuedTokens();
-  exchangeToken = createExchangeToken({ clients, codes, tokens, secrets, clock, resource: RESOURCE });
+  exchangeToken = createExchangeToken({ clients, codes, tokens, secrets, clock, resource: RESOURCE, parties: memoryPartyStore(), servesOutsideParties: () => Promise.resolve(true) });
   authenticate = createAuthenticateAccessToken({ tokens, secrets, clock, resource: RESOURCE });
 });
 

@@ -7,13 +7,21 @@ import type { FleetId } from '@aeolus-fleet/common';
 
 import type { Result } from '../shared/result.js';
 
-/** A client argo pre-registered for its fleet. A confidential one has a secret, kept only as its hash. */
+/**
+ * How a client signs in: by a code a person's approval issued, or, with no
+ * human at the authorize step, by its own client credentials (vendor
+ * platforms V4).
+ */
+export type ClientGrant = 'authorizationCode' | 'clientCredentials';
+
+/** A client registered for its fleet. A confidential one has a secret, kept only as its hash. */
 export interface OAuthClient {
   readonly clientId: string;
   readonly fleetId: FleetId;
   readonly name: string;
   readonly redirectUris: readonly string[];
   readonly secretHash: string | null;
+  readonly grant: ClientGrant;
 }
 
 export interface OAuthClients {
@@ -52,18 +60,22 @@ export interface AuthorizationCodes {
   take(codeHash: string): Promise<{ code: AuthorizationCode; wasUsed: boolean } | undefined>;
 }
 
-/** An access token and its refresh token, issued together; a family is every pair one code led to. */
+/**
+ * An access token and its refresh token, issued together; a family is every
+ * pair one code led to. A client signed in by client credentials gets its
+ * access token alone, from no code.
+ */
 export type TokenPair = {
   readonly familyId: string;
-  readonly codeHash: string;
+  readonly codeHash: string | null;
   readonly fleetId: FleetId;
   readonly clientId: string;
   readonly resource: string;
   readonly scope: string | null;
   readonly accessHash: string;
   readonly accessExpiresAt: Date;
-  readonly refreshHash: string;
-  readonly refreshExpiresAt: Date;
+  readonly refreshHash: string | null;
+  readonly refreshExpiresAt: Date | null;
 } & TokenHolder;
 
 export interface IssuedTokens {
@@ -95,7 +107,7 @@ export interface OAuthSecrets {
 }
 
 /** OAuth's error codes the gateway answers (RFC 6749, RFC 8707). */
-export type OAuthErrorCode = 'invalid_request' | 'invalid_client' | 'invalid_grant' | 'unsupported_grant_type' | 'unsupported_response_type' | 'invalid_target' | 'access_denied';
+export type OAuthErrorCode = 'invalid_request' | 'invalid_client' | 'invalid_grant' | 'unauthorized_client' | 'unsupported_grant_type' | 'unsupported_response_type' | 'invalid_target' | 'access_denied';
 
 export interface OAuthError {
   readonly error: OAuthErrorCode;
