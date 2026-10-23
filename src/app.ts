@@ -285,6 +285,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     deliver: createDeliverPushes({ pushes: pushStore, resolver: systemHostResolver, poster: webhookPoster, clock, againWaitsMs: AGAIN_WAITS_MS }),
     sleep,
     pollMs: POLL_MS,
+    failed: (error) => {
+      server.log.error({ err: error }, 'pushing to webhooks failed: tried again next round');
+    },
   });
   const workers = createPartyWorkers({
     parties,
