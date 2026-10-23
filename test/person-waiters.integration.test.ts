@@ -8,6 +8,7 @@ import { createPostgresWaiterLocks } from '../src/adapters/prisma/waiter-locks.j
 import { sleep } from '../src/adapters/timers/sleep.js';
 import type { InboxChange, PersonShip } from '../src/core/people/ports.js';
 import { createWaitOnPersonShip } from '../src/core/people/wait-on-person-ship.js';
+import { ok } from '../src/core/shared/result.js';
 import { createPersonWaiters, type PersonWaiters } from '../src/person-waiters.js';
 import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
@@ -81,8 +82,11 @@ function anInstance(options: { roundMs?: number } = {}): PersonWaiters {
           return Promise.resolve();
         },
       },
+      wakePerson: () => Promise.resolve(ok({ kind: 'settled' })),
+      clock: { now: () => new Date() },
       sleep,
       againWaitsMs: [ROUND_MS],
+      wakeAgainWaitsMs: [ROUND_MS],
     }),
     sleep,
     roundMs: options.roundMs ?? ROUND_MS,

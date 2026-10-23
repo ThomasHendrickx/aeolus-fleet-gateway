@@ -85,7 +85,7 @@ import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
 import { createAccountTokenOf, type AccountTokenOf } from './core/sign-in/account-token.js';
-import { err } from './core/shared/result.js';
+import { err, ok } from './core/shared/result.js';
 import { createEndSignIns } from './core/sign-in/end-sign-ins.js';
 import { createAnswerDelivery } from './core/people/answer-delivery.js';
 import { createCrewPersonShip } from './core/people/crew-person-ship.js';
@@ -193,6 +193,9 @@ const WAITER_ROUND_MS = 10_000;
 
 /** How long a person ship's waiter waits while the fleet does not answer, each longer than the last. */
 const WAITER_AGAIN_WAITS_MS = [1_000, 5_000, 30_000];
+
+/** How long a wake that no channel sent waits before it is tried again, each longer than the last (wake a person, W3). */
+const WAKE_AGAIN_WAITS_MS = [60_000, 300_000, 900_000];
 
 /** How long a delivery answered again waits before it is handed with the next number, each longer than the last. */
 const AGAIN_WAITS_MS = [1_000, 10_000, 60_000, 300_000];
@@ -400,7 +403,17 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const personWaiters = createPersonWaiters({
     crews: personCrews,
     locks: waiterLocks,
-    waitOnPersonShip: createWaitOnPersonShip({ crews: personCrews, door: door.person, changes: inboxChanges, sleep, againWaitsMs: WAITER_AGAIN_WAITS_MS }),
+    waitOnPersonShip: createWaitOnPersonShip({
+      crews: personCrews,
+      door: door.person,
+      changes: inboxChanges,
+      // No channel wakes a person yet, so every wake is settled.
+      wakePerson: () => Promise.resolve(ok({ kind: 'settled' })),
+      clock,
+      sleep,
+      againWaitsMs: WAITER_AGAIN_WAITS_MS,
+      wakeAgainWaitsMs: WAKE_AGAIN_WAITS_MS,
+    }),
     sleep,
     roundMs: WAITER_ROUND_MS,
     log: server.log,
