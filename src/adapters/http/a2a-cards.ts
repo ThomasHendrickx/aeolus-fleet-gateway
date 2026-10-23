@@ -50,7 +50,7 @@ export function publicCardOf(issuer: string, alias: string): AgentCard {
     ],
     provider: { organization: 'Aeolus gateway', url: issuer },
     version: runningVersion(),
-    capabilities: { streaming: true, pushNotifications: false, extensions: [], extendedAgentCard: true },
+    capabilities: { streaming: true, pushNotifications: true, extensions: [], extendedAgentCard: true },
     securitySchemes: { [BEARER_SCHEME]: { scheme: { $case: 'httpAuthSecurityScheme', value: { description: 'The bearer shown once when your client was added', scheme: 'Bearer', bearerFormat: '' } } } },
     securityRequirements: [{ schemes: { [BEARER_SCHEME]: { list: [] } } }],
     defaultInputModes: DEFAULT_MODES,

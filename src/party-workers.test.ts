@@ -57,6 +57,7 @@ function workers() {
       });
     },
     collectReplies: () => Promise.resolve({ ended: 'stopped' }),
+    pushToWebhooks: () => Promise.resolve(),
     servesOutsideParties: (fleetId) => Promise.resolve(servedFleets.has(fleetId)),
     log: Fastify({ logger: false }).log,
   });
@@ -133,6 +134,7 @@ describe("a client party's worker, its crew released and the same proxy ship cre
         await new Promise((resolve) => { signal.addEventListener('abort', resolve); });
         return { ended: 'stopped' };
       },
+      pushToWebhooks: () => Promise.resolve(),
       servesOutsideParties: () => Promise.resolve(true),
       log: Fastify({ logger: false }).log,
     });
@@ -164,6 +166,7 @@ describe("an A2A client's worker (decision 0060)", () => {
         await new Promise((resolve) => { signal.addEventListener('abort', resolve); });
         return { ended: 'stopped' };
       },
+      pushToWebhooks: () => Promise.resolve(),
       servesOutsideParties: () => Promise.resolve(true),
       log: Fastify({ logger: false }).log,
     });
@@ -173,5 +176,37 @@ describe("an A2A client's worker (decision 0060)", () => {
 
     expect(takenWith).toEqual(['aeolus_ct_v1_supplier']);
     await pool.stop();
+  });
+});
+
+describe("an A2A client's worker pushes its tasks' changes (slice 4)", () => {
+  it('pushes while it takes the replies, and stops pushing once stopped', async () => {
+    const { fleetId, state, proxyShipId, secret, requestHash, approvedAt } = aCrewedServer(FLEET_ID, 'supplier');
+    await parties.save({ fleetId, name: 'supplier', kind: 'a2aClient', bearerHash: 'h(b)', state, proxyShipId, secret, crewToken: 'aeolus_ct_v1_supplier', requestId: 'r-supplier', requestHash, approvedAt });
+    const pushing = new Set<string>();
+    const untilAborted = (signal: AbortSignal) => new Promise((resolve) => { signal.addEventListener('abort', resolve); });
+    const pool = createPartyWorkers({
+      parties,
+      stateParty: () => Promise.resolve(ok({ capabilities: [] })),
+      runParty: () => Promise.resolve({ ended: 'stopped' }),
+      collectReplies: async ({ signal }) => {
+        await untilAborted(signal);
+        return { ended: 'stopped' };
+      },
+      pushToWebhooks: async ({ caller, signal }) => {
+        pushing.add(caller.party);
+        await untilAborted(signal);
+        pushing.delete(caller.party);
+      },
+      servesOutsideParties: () => Promise.resolve(true),
+      log: Fastify({ logger: false }).log,
+    });
+
+    await pool.start({ fleetId: FLEET_ID, name: 'supplier' });
+    await settled();
+    const whileWorking = [...pushing];
+    await pool.stop();
+
+    expect({ whileWorking, after: [...pushing] }).toEqual({ whileWorking: ['supplier'], after: [] });
   });
 });

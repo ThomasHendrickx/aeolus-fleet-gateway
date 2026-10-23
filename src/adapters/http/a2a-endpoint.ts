@@ -7,10 +7,10 @@
  * same for an alias of no ship. While the fleet's outside parties are off,
  * every call with a bearer is refused. The SDK reads the call over
  * JSON-RPC and HTTP+JSON; the gateway answers GetExtendedAgentCard,
- * SendMessage, SendStreamingMessage, GetTask, SubscribeToTask, ListTasks
- * and CancelTask, and no push config method.
+ * SendMessage, SendStreamingMessage, GetTask, SubscribeToTask, ListTasks,
+ * CancelTask and the push config methods.
  */
-import { AgentCard, GetTaskRequest, ListTasksRequest, ListTasksResponse, SendMessageRequest, SendMessageResponse, StreamResponse, Task } from '@a2a-js/sdk';
+import { AgentCard, GetTaskRequest, ListTaskPushNotificationConfigsResponse, ListTasksRequest, ListTasksResponse, SendMessageRequest, SendMessageResponse, StreamResponse, Task, TaskPushNotificationConfig } from '@a2a-js/sdk';
 import { ContentTypeNotSupportedError, RequestMalformedError, TaskNotCancelableError, TaskNotFoundError, UnsupportedOperationError, restStatusFor, toRestErrorBody } from '@a2a-js/sdk/errors';
 import { JsonRpcTransportHandler, ServerCallContext, validateVersion, type A2ARequestHandler } from '@a2a-js/sdk/server';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -20,6 +20,11 @@ import type { A2aCaller, AuthenticateA2aClient } from '../../core/a2a-in/authent
 import { isOfEssence } from '../../core/mcp-in/client-call.js';
 import type { FindReachedShip, FindReachedShipRefusal } from '../../core/a2a-in/find-reached-ship.js';
 import type { FollowA2aTask } from '../../core/a2a-in/follow-a2a-task.js';
+import type { ListPushConfigs } from '../../core/a2a-in/list-push-configs.js';
+import type { PushConfigView } from '../../core/a2a-in/push-config-view.js';
+import type { ReadPushConfig } from '../../core/a2a-in/read-push-config.js';
+import type { RemovePushConfig } from '../../core/a2a-in/remove-push-config.js';
+import type { SetPushConfig } from '../../core/a2a-in/set-push-config.js';
 import type { ListA2aTasks } from '../../core/a2a-in/list-a2a-tasks.js';
 import type { ReachedShip } from '../../core/a2a-in/list-reached-ships.js';
 import type { ReadA2aTask } from '../../core/a2a-in/read-a2a-task.js';
@@ -52,6 +57,10 @@ export interface A2aEndpointDeps {
   listTasks: ListA2aTasks;
   followTask: FollowA2aTask;
   subscribeToTask: SubscribeToA2aTask;
+  setPushConfig: SetPushConfig;
+  readPushConfig: ReadPushConfig;
+  listPushConfigs: ListPushConfigs;
+  removePushConfig: RemovePushConfig;
 }
 
 /** The HTTP status of each refusal of finding the ship, so an unknown and an unreachable alias answer alike. */
@@ -90,6 +99,14 @@ function errorOf(refusal: SendA2aMessageRefusal): Error {
     case 'SEND_REFUSED':
       return new Error(refusal.message);
   }
+}
+
+/** A push config as A2A answers it: its token and authentication stay in the vault. */
+const pushConfigOf = (config: PushConfigView): TaskPushNotificationConfig => ({ tenant: '', ...config, token: '', authentication: undefined });
+
+/** The A2A error of a refused push config call: an unknown task or config is not found, a webhook refused is a malformed request. */
+function pushErrorOf(refusal: { kind: 'TASK_NOT_FOUND' | 'PUSH_CONFIG_NOT_FOUND' | 'WEBHOOK_REFUSED'; message: string }): Error {
+  return refusal.kind === 'WEBHOOK_REFUSED' ? new RequestMalformedError(refusal.message) : new TaskNotFoundError(refusal.message);
 }
 
 /** The A2A methods for one caller's call to one reached ship: its extended card, and its tasks. */
@@ -131,10 +148,33 @@ function requestHandlerFor(deps: A2aEndpointDeps, { caller, ship, signal }: { ca
       await read(id);
       throw new TaskNotCancelableError(`The task ${id} cannot be canceled`);
     },
-    createTaskPushNotificationConfig: unsupported,
-    getTaskPushNotificationConfig: unsupported,
-    listTaskPushNotificationConfigs: unsupported,
-    deleteTaskPushNotificationConfig: unsupported,
+    createTaskPushNotificationConfig: async ({ taskId, id, url, token, authentication }) => {
+      const set = await deps.setPushConfig({ caller, config: { taskId, ...(id === '' ? {} : { id }), url, token: token === '' ? null : token, authentication: authentication ?? null } });
+      if (!set.isOk) {
+        throw pushErrorOf(set.error);
+      }
+      return pushConfigOf(set.value);
+    },
+    getTaskPushNotificationConfig: async ({ taskId, id }) => {
+      const read = await deps.readPushConfig({ caller, taskId, id });
+      if (!read.isOk) {
+        throw pushErrorOf(read.error);
+      }
+      return pushConfigOf(read.value);
+    },
+    listTaskPushNotificationConfigs: async ({ taskId, pageSize, pageToken }) => {
+      const listed = await deps.listPushConfigs({ caller, taskId, pageSize, pageToken });
+      if (!listed.isOk) {
+        throw pushErrorOf(listed.error);
+      }
+      return { configs: listed.value.configs.map(pushConfigOf), nextPageToken: listed.value.next ?? '' };
+    },
+    deleteTaskPushNotificationConfig: async ({ taskId, id }) => {
+      const removed = await deps.removePushConfig({ caller, taskId, id });
+      if (!removed.isOk) {
+        throw pushErrorOf(removed.error);
+      }
+    },
     resubscribe: async function* ({ id }) {
       const subscribed = await deps.subscribeToTask({ caller, taskId: id, signal });
       if (!subscribed.isOk) {
@@ -256,7 +296,8 @@ export function registerA2aEndpoint(server: FastifyInstance, deps: A2aEndpointDe
 /** Whether the call's body is JSON, as both bindings take it: no body counts, as a POST with no body (CancelTask) may say JSON or nothing. */
 function isJsonBody(request: FastifyRequest): boolean {
   const contentType = request.headers['content-type'];
-  return contentType === undefined || REST_MEDIA_TYPES.some((mediaType) => isOfEssence(contentType, mediaType));
+  // An empty body is no body, whatever content type it names (a DELETE).
+  return contentType === undefined || request.body === undefined || request.body === '' || REST_MEDIA_TYPES.some((mediaType) => isOfEssence(contentType, mediaType));
 }
 
 /**
@@ -319,7 +360,7 @@ function registerCalls(server: FastifyInstance, { deps, resolve, stopping }: { d
 
 
   /** One route of the HTTP+JSON binding: its answer as JSON, or its A2A error with the binding's status. */
-  const restRoute = ({ method, path, answer }: { method: 'GET' | 'POST'; path: string; answer: (call: { handler: A2ARequestHandler; request: FastifyRequest; context: ServerCallContext }) => Promise<unknown> }) => {
+  const restRoute = ({ method, path, answer }: { method: 'GET' | 'POST' | 'DELETE'; path: string; answer: (call: { handler: A2ARequestHandler; request: FastifyRequest; context: ServerCallContext }) => Promise<unknown> }) => {
     server.route({
       method,
       url: `${A2A_PATH}/:alias${path}`,
@@ -389,6 +430,41 @@ function registerCalls(server: FastifyInstance, { deps, resolve, stopping }: { d
         return Task.toJSON(await call.handler.cancelTask({ tenant: '', id: called.taskId, metadata: undefined }, call.context));
       }
       return called.method === 'subscribe' ? subscribed(call, called.taskId) : unsupported();
+    },
+  });
+  const pushParamsSchema = z.object({ taskId: z.string(), configId: z.string().optional() });
+  restRoute({
+    method: 'POST',
+    path: '/tasks/:taskId/pushNotificationConfigs',
+    answer: async ({ handler, request, context }) => {
+      const { taskId } = pushParamsSchema.parse(request.params);
+      return TaskPushNotificationConfig.toJSON(await handler.createTaskPushNotificationConfig(TaskPushNotificationConfig.fromJSON({ ...z.record(z.string(), z.unknown()).catch({}).parse(request.body), taskId }), context));
+    },
+  });
+  restRoute({
+    method: 'GET',
+    path: '/tasks/:taskId/pushNotificationConfigs',
+    answer: async ({ handler, request, context }) => {
+      const { taskId } = pushParamsSchema.parse(request.params);
+      const query = z.object({ pageSize: z.coerce.number().int().optional(), pageToken: z.string().optional() }).catch({}).parse(request.query);
+      return ListTaskPushNotificationConfigsResponse.toJSON(await handler.listTaskPushNotificationConfigs({ tenant: '', taskId, pageSize: query.pageSize ?? 0, pageToken: query.pageToken ?? '' }, context));
+    },
+  });
+  restRoute({
+    method: 'GET',
+    path: '/tasks/:taskId/pushNotificationConfigs/:configId',
+    answer: async ({ handler, request, context }) => {
+      const { taskId, configId = '' } = pushParamsSchema.parse(request.params);
+      return TaskPushNotificationConfig.toJSON(await handler.getTaskPushNotificationConfig({ tenant: '', taskId, id: configId }, context));
+    },
+  });
+  restRoute({
+    method: 'DELETE',
+    path: '/tasks/:taskId/pushNotificationConfigs/:configId',
+    answer: async ({ handler, request, context }) => {
+      const { taskId, configId = '' } = pushParamsSchema.parse(request.params);
+      await handler.deleteTaskPushNotificationConfig({ tenant: '', taskId, id: configId }, context);
+      return {};
     },
   });
   restRoute({

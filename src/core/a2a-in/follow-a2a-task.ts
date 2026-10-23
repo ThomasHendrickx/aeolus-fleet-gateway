@@ -11,12 +11,9 @@ import type { ClientCalls } from '../mcp-in/ports.js';
 import type { Sleep } from '../mcp-out/run-party.js';
 import type { Clock } from '../shared/clock.js';
 import type { A2aCaller } from './authenticate-a2a-client.js';
-import { isTerminal, taskViewOf, type TaskView } from './task-view.js';
+import { isTerminal, markOf, taskViewOf, type TaskView } from './task-view.js';
 
 export type FollowA2aTask = (input: { caller: A2aCaller; taskId: string; signal: AbortSignal }) => AsyncGenerator<TaskView, void, undefined>;
-
-/** What tells one view of the task from the next: its state, since when, and how much history it holds. */
-const markOf = (view: TaskView) => `${view.status.state}:${String(view.status.since.getTime())}:${String(view.history.length)}`;
 
 export function createFollowA2aTask(deps: { calls: Pick<ClientCalls, 'findTask'>; clock: Clock; sleep: Sleep; pollMs: number }): FollowA2aTask {
   return async function* follow({ caller, taskId, signal }) {

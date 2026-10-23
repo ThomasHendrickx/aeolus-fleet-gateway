@@ -2,12 +2,14 @@
  * The gateway's workers, one per crewed party, each until the gateway stops
  * or the fleet refuses its crew token: an outside server's states its proxy
  * ship, then takes its calls (interop 5.2); an outside client's takes the
- * replies to its calls (Q9 a). A fleet's workers work only while its outside
+ * replies to its calls (Q9 a), and an A2A client's pushes its tasks' changes
+ * to its webhooks meanwhile (slice 4). A fleet's workers work only while its outside
  * parties are on (interop I-3).
  */
 import type { FleetId } from '@aeolus-fleet/common';
 import type { FastifyBaseLogger } from 'fastify';
 
+import type { PushToWebhooks } from './core/a2a-in/push-to-webhooks.js';
 import type { CollectReplies } from './core/mcp-in/collect-replies.js';
 import type { RunParty } from './core/mcp-out/run-party.js';
 import type { StateParty } from './core/mcp-out/state-party.js';
@@ -27,6 +29,7 @@ export function createPartyWorkers(deps: {
   stateParty: StateParty;
   runParty: RunParty;
   collectReplies: CollectReplies;
+  pushToWebhooks: PushToWebhooks;
   servesOutsideParties: (fleetId: FleetId) => Promise<boolean>;
   log: FastifyBaseLogger;
 }): PartyWorkers {
@@ -44,7 +47,12 @@ export function createPartyWorkers(deps: {
       return { refused: null };
     }
     if (party.kind === 'mcpClient' || party.kind === 'a2aClient') {
+      // Pushing needs no crew token: it ends with the replies, whatever ended them.
+      const isCollected = new AbortController();
+      const pushing = party.kind === 'a2aClient' ? deps.pushToWebhooks({ caller: { fleetId, party: name }, signal: AbortSignal.any([signal, isCollected.signal]) }) : Promise.resolve();
       const { ended } = await deps.collectReplies({ party, signal });
+      isCollected.abort();
+      await pushing;
       if (ended === 'crewRefused') {
         deps.log.warn({ fleetId, party: name }, "the fleet refused the proxy ship's crew token: its calls get no replies");
       }
