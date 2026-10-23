@@ -35,10 +35,10 @@ describe('a delivery to an outside A2A agent, as the A2A message the gateway sen
   });
 
   it.each([
-    ['JSON that does not parse', 'application/json', '{bolts'],
-    ['an A2A message that does not parse', 'application/a2a+json', 'not json'],
-    ['an A2A message that is no JSON object', 'application/a2a+json', '[1,2]'],
-  ])('refuses %s, saying why', (_case, contentType, payload) => {
+    { refused: 'JSON that does not parse', contentType: 'application/json', payload: '{bolts' },
+    { refused: 'an A2A message that does not parse', contentType: 'application/a2a+json', payload: 'not json' },
+    { refused: 'an A2A message that is no JSON object', contentType: 'application/a2a+json', payload: '[1,2]' },
+  ])('refuses $refused, saying why', ({ contentType, payload }) => {
     expect(outboundMessageOf({ contentType, payload }, IDS)).toMatchObject({ isOk: false, error: { kind: 'NOT_A_MESSAGE' } });
   });
 });

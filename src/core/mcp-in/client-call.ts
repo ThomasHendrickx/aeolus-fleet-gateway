@@ -69,7 +69,8 @@ const normalized = (contentType: string) =>
     .map((part) => part.trim().toLowerCase())
     .join(';');
 
-const essenceOf = (contentType: string) => normalized(contentType).split(';')[0] ?? '';
+/** A media type without its parameters, in lower case. */
+export const essenceOf = (contentType: string) => normalized(contentType).split(';')[0] ?? '';
 
 /** Whether two media types are the same: their case and the spaces around their parameters do not matter. */
 export function isSameMediaType(left: string, right: string): boolean {
