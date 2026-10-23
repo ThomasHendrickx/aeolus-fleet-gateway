@@ -41,7 +41,18 @@ describe("the gateway's messages to outside A2A agents in Postgres (slice 6)", (
     await calls.save(aCall());
     await calls.save(aCall({ state: 'following', taskId: 'task-1', contextId: 'ctx-1' }));
 
-    await expect(createPrismaAgentCalls(prisma).find('dlv_01m3tbfspe96yf1rnr4ank9d01')).resolves.toEqual(aCall({ state: 'following', taskId: 'task-1', contextId: 'ctx-1' }));
+    await expect(createPrismaAgentCalls(prisma).find({ fleetId: FLEET, party: 'supplier' }, 'dlv_01m3tbfspe96yf1rnr4ank9d01')).resolves.toEqual(aCall({ state: 'following', taskId: 'task-1', contextId: 'ctx-1' }));
+  });
+
+  it("finds and keeps a call in the party's own fleet only", async () => {
+    const calls = createPrismaAgentCalls(prisma);
+    const deliveryId = 'dlv_01m3tbfspe96yf1rnr4ank9g01';
+    await calls.save(aCall({ deliveryId, state: 'following', taskId: 'task-own', contextId: 'ctx-own' }));
+    await calls.save(aCall({ deliveryId, fleetId: OTHER_FLEET, state: 'done', taskId: 'task-other', contextId: 'ctx-other' }));
+
+    const found = await Promise.all([calls.find({ fleetId: FLEET, party: 'supplier' }, deliveryId), calls.find({ fleetId: OTHER_FLEET, party: 'supplier' }, deliveryId), calls.find({ fleetId: FLEET, party: 'another' }, deliveryId)]);
+
+    expect(found.map((call) => call?.taskId)).toEqual(['task-own', 'task-other', undefined]);
   });
 
   it("lists the party's calls still followed, in its own fleet only", async () => {
@@ -77,6 +88,6 @@ describe("the gateway's messages to outside A2A agents in Postgres (slice 6)", (
 
     await createPrismaFleetForgetter(prisma).forget(OTHER_FLEET);
 
-    await expect(Promise.all([calls.find('dlv_01m3tbfspe96yf1rnr4ank9f01'), calls.taskOfReply({ fleetId: OTHER_FLEET, party: 'supplier' }, 'msg_01m3tbfspe96yf1rnr4ank9r09')])).resolves.toEqual([undefined, undefined]);
+    await expect(Promise.all([calls.find({ fleetId: OTHER_FLEET, party: 'supplier' }, 'dlv_01m3tbfspe96yf1rnr4ank9f01'), calls.taskOfReply({ fleetId: OTHER_FLEET, party: 'supplier' }, 'msg_01m3tbfspe96yf1rnr4ank9r09')])).resolves.toEqual([undefined, undefined]);
   });
 });
