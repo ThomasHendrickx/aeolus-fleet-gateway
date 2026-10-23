@@ -734,13 +734,14 @@ export const gatewayRouter = t.router({
       return listed.value.map(shownRequestOf);
     }),
     /**
-     * Each change to the actor's fleet's requests, carrying nothing of it:
+     * Each change to the actor's fleet's requests, and to its person ship's
+     * inbox when it is a person's (wake a person, #1014), carrying nothing of it:
      * the page that follows reads itself again as its own caller, so it is
      * never sent what its actor may not see. Changes heard while the last
      * was not yet taken come as one.
      */
     changes: actorProcedure.subscription(async function* ({ ctx, signal }) {
-      const { fleetId, changes } = ctx;
+      const { fleetId, changes, actor } = ctx;
       if (changes === undefined) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'This gateway tells no changes' });
       }
@@ -748,6 +749,7 @@ export const gatewayRouter = t.router({
       const heard = { isChanged: false, wake: (): void => undefined };
       const unsubscribe = changes.subscribe({
         fleetId,
+        personShipId: actor.kind === 'account' ? actor.personShipId : null,
         read: () => {
           heard.isChanged = true;
           heard.wake();

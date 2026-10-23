@@ -599,14 +599,14 @@ describe("a page follows its fleet's request changes through the gateway's API, 
     const heard = (await gatewayRouter.createCaller(context, { signal: stop.signal }).requests.changes())[Symbol.asyncIterator]();
     const next = heard.next();
     await expect.poll(() => changes.listeners()).toBe(1);
-    const other: { done: boolean } = { done: false };
+    const other = { isHeard: false };
     void next.then(() => {
-      other.done = true;
+      other.isHeard = true;
     });
 
     changes.publish({ fleetId: FLEET, topic: 'inbox', shipId: 'shp_01m3tbfspe96yf1rnr4ank9dk1' });
     await new Promise((resolve) => setTimeout(resolve, 10));
-    const isHeardOfAnother = other.done;
+    const isHeardOfAnother = other.isHeard;
     changes.publish({ fleetId: FLEET, topic: 'inbox', shipId: OWNER });
 
     await expect(next).resolves.toEqual({ done: false, value: { fleetId: FLEET } });
