@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, OTHER_FLEET_ID } from '../test/support/fleet-fakes.js';
 import { PROXY_SHIP_ID, memoryPartyStore } from '../test/support/party-fakes.js';
-import type { McpServerParty } from './core/parties/party.js';
+import type { McpClientParty, McpServerParty } from './core/parties/party.js';
 import { ok } from './core/shared/result.js';
 import { createPartyWorkers } from './party-workers.js';
 
@@ -98,6 +98,53 @@ describe("the parties' workers", () => {
     await settled();
 
     expect([...running]).toEqual(['crm']);
+    await pool.stop();
+  });
+});
+
+describe("a client party's worker, its crew released and the same proxy ship crewed again (vendor platforms V8)", () => {
+  const OLD_CREW = 'aeolus_ct_v1_old';
+  const NEW_CREW = 'aeolus_ct_v1_new';
+
+  function aCrewedClient(crewToken: string): McpClientParty {
+    const { fleetId, state, proxyShipId, secret, requestHash, approvedAt } = aCrewedServer(FLEET_ID, 'agentcore');
+    return { fleetId, name: 'agentcore', kind: 'mcpClient', clientId: 'client-agentcore', state, proxyShipId, secret, crewToken, requestId: 'r-agentcore', requestHash, approvedAt };
+  }
+
+  it('takes the replies with the new crew token once the fleet refuses the old one', async () => {
+    await parties.save(aCrewedClient(OLD_CREW));
+    /** The crew tokens the worker took replies with, in turn. */
+    const takenWith: (string | null)[] = [];
+    const isCrewedAgain = { resolve: (): void => undefined };
+    const pool = createPartyWorkers({
+      parties,
+      stateParty: () => Promise.resolve(ok({ capabilities: [] })),
+      runParty: () => Promise.resolve({ ended: 'stopped' }),
+      collectReplies: async ({ party, signal }) => {
+        takenWith.push(party.crewToken);
+        if (party.crewToken === OLD_CREW) {
+          // The old crew token is refused only after the party was crewed again, as when no call waited meanwhile.
+          await new Promise<void>((resolve) => {
+            isCrewedAgain.resolve = resolve;
+          });
+          return { ended: 'crewRefused' };
+        }
+        await new Promise((resolve) => signal.addEventListener('abort', resolve));
+        return { ended: 'stopped' };
+      },
+      servesOutsideParties: () => Promise.resolve(true),
+      log: Fastify({ logger: false }).log,
+    });
+    await pool.start({ fleetId: FLEET_ID, name: 'agentcore' });
+    await settled();
+
+    await parties.save(aCrewedClient(NEW_CREW));
+    await pool.start({ fleetId: FLEET_ID, name: 'agentcore' });
+    isCrewedAgain.resolve();
+    await settled();
+    await settled();
+
+    expect(takenWith).toEqual([OLD_CREW, NEW_CREW]);
     await pool.stop();
   });
 });
