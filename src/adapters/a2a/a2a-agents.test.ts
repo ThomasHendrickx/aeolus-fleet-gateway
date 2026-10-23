@@ -17,11 +17,9 @@ let base: string;
 let handle: Handler;
 let received: { path: string; method: string; headers: IncomingHttpHeaders; body: unknown }[];
 
-const rpcResult = (response: ServerResponse, id: unknown, result: unknown) => {
-  response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id, result }));
-};
-const rpcError = (response: ServerResponse, id: unknown, error: { code: number; message: string }) => {
-  response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id, error }));
+/** A JSON-RPC answer: its result, or its error. */
+const rpcAnswer = (response: ServerResponse, answer: { id: unknown; result: unknown } | { id: unknown; error: { code: number; message: string } }) => {
+  response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', ...answer }));
 };
 const idOf = (body: unknown) => z.object({ id: z.unknown() }).parse(body).id;
 
@@ -31,7 +29,7 @@ const QUOTED_TASK = { id: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_S
 beforeEach(async () => {
   received = [];
   handle = (request, response) => {
-    rpcResult(response, idOf(request.body), { task: WORKING_TASK });
+    rpcAnswer(response, { id: idOf(request.body), result: { task: WORKING_TASK } });
   };
   server = createServer((request: IncomingMessage, response) => {
     let text = '';
@@ -39,7 +37,8 @@ beforeEach(async () => {
       text += chunk.toString('utf8');
     });
     request.on('end', () => {
-      const entry = { path: request.url ?? '', method: request.method ?? '', headers: request.headers, body: text === '' ? undefined : (JSON.parse(text) as unknown) };
+      const isJson = request.headers['content-type']?.includes('json') === true;
+      const entry = { path: request.url ?? '', method: request.method ?? '', headers: request.headers, body: text === '' ? undefined : isJson ? z.unknown().parse(JSON.parse(text)) : text };
       received.push(entry);
       handle(entry, response);
     });
@@ -67,7 +66,7 @@ describe('SendMessage to an outside A2A agent (slice 6)', () => {
 
   it('reads each artifact of the task as an event before its status', async () => {
     handle = (request, response) => {
-      rpcResult(response, idOf(request.body), { task: QUOTED_TASK });
+      rpcAnswer(response, { id: idOf(request.body), result: { task: QUOTED_TASK } });
     };
 
     const sent = await agents.send(rpc(), QUOTE);
@@ -77,7 +76,7 @@ describe('SendMessage to an outside A2A agent (slice 6)', () => {
 
   it('reads a message answer with no task', async () => {
     handle = (request, response) => {
-      rpcResult(response, idOf(request.body), { message: { messageId: 'm-1', role: 'ROLE_AGENT', parts: [{ data: { price: 4 } }] } });
+      rpcAnswer(response, { id: idOf(request.body), result: { message: { messageId: 'm-1', role: 'ROLE_AGENT', parts: [{ data: { price: 4 } }] } } });
     };
 
     await expect(agents.send(rpc(), QUOTE)).resolves.toMatchObject({ kind: 'message', event: { kind: 'message', parts: [{ kind: 'data', data: { price: 4 } }] } });
@@ -105,7 +104,7 @@ describe('SendMessage to an outside A2A agent (slice 6)', () => {
 
   it('reads an A2A error answer as a refusal, with its message', async () => {
     handle = (request, response) => {
-      rpcError(response, idOf(request.body), { code: -32602, message: 'No part list given' });
+      rpcAnswer(response, { id: idOf(request.body), error: { code: -32602, message: 'No part list given' } });
     };
 
     const sent = await agents.send(rpc(), QUOTE);
@@ -159,7 +158,7 @@ describe('SendMessage to an outside A2A agent (slice 6)', () => {
       } else if (request.path === '/token') {
         response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ access_token: 'at-1', token_type: 'Bearer', expires_in: 3600 }));
       } else {
-        rpcResult(response, idOf(request.body), { task: WORKING_TASK });
+        rpcAnswer(response, { id: idOf(request.body), result: { task: WORKING_TASK } });
       }
     };
 
@@ -182,7 +181,7 @@ describe('SendMessage to an outside A2A agent (slice 6)', () => {
 describe('GetTask of an outside A2A agent (slice 6)', () => {
   it('reads the task as it stands: each artifact, then its status', async () => {
     handle = (request, response) => {
-      rpcResult(response, idOf(request.body), QUOTED_TASK);
+      rpcAnswer(response, { id: idOf(request.body), result: QUOTED_TASK });
     };
 
     await expect(agents.getTask(rpc(), 'task-1')).resolves.toMatchObject({ kind: 'read', events: [{ kind: 'artifact' }, { kind: 'status', state: 'completed' }] });
@@ -191,7 +190,7 @@ describe('GetTask of an outside A2A agent (slice 6)', () => {
 
   it('reads a task the agent knows no more as gone', async () => {
     handle = (request, response) => {
-      rpcError(response, idOf(request.body), { code: -32001, message: 'Task not found' });
+      rpcAnswer(response, { id: idOf(request.body), error: { code: -32001, message: 'Task not found' } });
     };
 
     await expect(agents.getTask(rpc(), 'task-1')).resolves.toMatchObject({ kind: 'gone' });
@@ -207,13 +206,15 @@ describe('GetTask of an outside A2A agent (slice 6)', () => {
 });
 
 describe('SubscribeToTask of an outside A2A agent (slice 6)', () => {
-  const sse = (response: ServerResponse, id: unknown, results: unknown[], isCut = false) => {
+  const sse = (response: ServerResponse, stream: { id: unknown; results: unknown[]; isCut?: boolean }) => {
+    const { id, results, isCut = false } = stream;
     response.writeHead(200, { 'content-type': 'text/event-stream' });
     for (const result of results) {
       response.write(`data: ${JSON.stringify({ jsonrpc: '2.0', id, result })}\n\n`);
     }
     if (isCut) {
-      response.socket?.destroy();
+      // Once what was written reached the gateway, the connection breaks with no end of stream.
+      setTimeout(() => response.socket?.destroy(), 100);
     } else {
       response.end();
     }
@@ -221,7 +222,7 @@ describe('SubscribeToTask of an outside A2A agent (slice 6)', () => {
 
   it('hands each event the stream sends in turn, and ends closed when the agent closes it', async () => {
     handle = (request, response) => {
-      sse(response, idOf(request.body), [{ statusUpdate: { taskId: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_WORKING' } } }, { artifactUpdate: { taskId: 'task-1', contextId: 'ctx-1', artifact: { artifactId: 'a-1', parts: [{ text: '4 EUR' }] } } }, { statusUpdate: { taskId: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_COMPLETED' } } }]);
+      sse(response, { id: idOf(request.body), results: [{ statusUpdate: { taskId: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_WORKING' } } }, { artifactUpdate: { taskId: 'task-1', contextId: 'ctx-1', artifact: { artifactId: 'a-1', parts: [{ text: '4 EUR' }] } } }, { statusUpdate: { taskId: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_COMPLETED' } } }] });
     };
     const events: unknown[] = [];
 
@@ -234,7 +235,7 @@ describe('SubscribeToTask of an outside A2A agent (slice 6)', () => {
 
   it('ends broken when the stream is cut, after the events it sent', async () => {
     handle = (request, response) => {
-      sse(response, idOf(request.body), [{ statusUpdate: { taskId: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_WORKING' } } }], true);
+      sse(response, { id: idOf(request.body), results: [{ statusUpdate: { taskId: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_WORKING' } } }], isCut: true });
     };
     const events: unknown[] = [];
 
@@ -253,7 +254,7 @@ describe('SubscribeToTask of an outside A2A agent (slice 6)', () => {
 
   it('ends gone for a task the agent knows no more', async () => {
     handle = (request, response) => {
-      rpcError(response, idOf(request.body), { code: -32001, message: 'Task not found' });
+      rpcAnswer(response, { id: idOf(request.body), error: { code: -32001, message: 'Task not found' } });
     };
 
     await expect(agents.subscribe(rpc(undefined, true), { taskId: 'task-1', timeoutMs: 1_000, signal: new AbortController().signal, onEvent: () => Promise.resolve() })).resolves.toMatchObject({ kind: 'gone' });
