@@ -26,7 +26,7 @@ export function memoryPartyStore(): PartyStore & { held: Map<string, Party> } {
       held.set(key(party.fleetId, party.name), party.kind === 'mcpServer' && earlier?.kind === 'mcpServer' ? { ...party, toolSwitches: earlier.toolSwitches } : party);
       return Promise.resolve();
     },
-    switchTools: (fleetId, name, { listed, switched }) => {
+    switchTools: ({ fleetId, name }, { listed, switched }) => {
       const party = held.get(key(fleetId, name));
       if (party?.kind === 'mcpServer') {
         const kept = party.toolSwitches ?? new Map(listed.map((tool) => [tool, true]));

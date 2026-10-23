@@ -158,7 +158,7 @@ export function createApproveParty(deps: ApprovalDeps): ApproveParty {
       scopes,
       requestHash,
       owner: ownerShipId,
-      party: ({ approvedAt }) => ({ fleetId, name, kind: 'mcpServer', url, credential, concurrencyLimit, ...UNCOMMISSIONED, requestId, requestHash, approvedAt }),
+      party: ({ approvedAt }) => ({ fleetId, name, kind: 'mcpServer', url, credential, concurrencyLimit, toolSwitches: null, ...UNCOMMISSIONED, requestId, requestHash, approvedAt }),
       isOwn: (earlier): earlier is McpServerParty => earlier.kind === 'mcpServer',
     });
   };

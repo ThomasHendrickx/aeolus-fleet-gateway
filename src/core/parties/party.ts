@@ -1,6 +1,7 @@
 import type { FleetId, ShipId, VerifiedFact } from '@aeolus-fleet/common';
 
 import type { McpServerCredential } from '../vault/credential.js';
+import type { ToolSwitches } from './tool-switches.js';
 
 /**
  * Where an approved party's proxy ship stands (interop I-5):
@@ -38,6 +39,8 @@ export interface McpServerParty extends PartyBase {
   readonly credential: McpServerCredential;
   /** The most calls the gateway has in flight to the server at once. */
   readonly concurrencyLimit: number;
+  /** Which of its tools the fleet may call; none kept yet means every tool it lists (aeolus-fleet#1151). */
+  readonly toolSwitches: ToolSwitches | null;
 }
 
 /** An outside MCP client argo approved at /authorize: it calls fleet ships as its proxy ship (MCP in). */

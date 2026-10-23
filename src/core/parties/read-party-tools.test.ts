@@ -13,6 +13,7 @@ const LINEAR: McpServerParty = {
   url: 'https://mcp.linear.app/mcp',
   credential: { kind: 'bearer', token: 'linear-token' },
   concurrencyLimit: 4,
+  toolSwitches: null,
   state: 'crewed',
   proxyShipId: PROXY_SHIP_ID,
   secret: null,

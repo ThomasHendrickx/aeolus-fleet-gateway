@@ -254,7 +254,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const callTiming = { waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, deadlineMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS };
   const stateParty = createStateParty({ parties, servers, door, marks, timing: callTiming });
   const markTool = createMarkTool({ parties, marks, stateParty });
-  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
+  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
   const clientCalls = createPrismaClientCalls(prisma);
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);

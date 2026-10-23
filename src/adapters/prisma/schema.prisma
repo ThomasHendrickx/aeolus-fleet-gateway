@@ -78,6 +78,8 @@ model Party {
   url              String?
   credential       Json?
   concurrencyLimit Int?     @map("concurrency_limit")
+  /// An MCP server's tool switches, by tool name (aeolus-fleet#1151); none kept yet means every tool it lists is on.
+  toolSwitches     Json?    @map("tool_switches")
   /// An MCP client's: its OAuth client id.
   clientId         String?  @map("client_id")
   /// An A2A client's: the hash of the bearer it was shown once, which names it on every call; unique across fleets, as the bearer alone names the party (decision 0060).

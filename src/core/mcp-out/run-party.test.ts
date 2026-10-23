@@ -15,6 +15,7 @@ const CRM: McpServerParty = {
   url: 'https://crm.example.com/mcp',
   credential: { kind: 'bearer', token: 'crm-token' },
   concurrencyLimit: 2,
+  toolSwitches: null,
   state: 'crewed',
   proxyShipId: PROXY_SHIP_ID,
   secret: null,

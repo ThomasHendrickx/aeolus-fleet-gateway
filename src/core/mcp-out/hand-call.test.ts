@@ -50,7 +50,7 @@ describe('the gateway refuses a call to a tool not switched on for the party (ae
   const NOT_ENABLED = { content: [{ type: 'text', text: 'tool not enabled for this party' }], isError: true };
 
   it('replies a plain error, reports it handled, and never reaches the server', async () => {
-    await parties.switchTools(FLEET_ID, 'crm', { listed: ['list_deals'], switched: new Map([['list_deals', false]]) });
+    await parties.switchTools({ fleetId: FLEET_ID, name: 'crm' }, { listed: ['list_deals'], switched: new Map([['list_deals', false]]) });
 
     await expect(handCall({ party: CRM, delivery: aPushedDelivery() })).resolves.toEqual({ kind: 'handled' });
 
@@ -60,7 +60,7 @@ describe('the gateway refuses a call to a tool not switched on for the party (ae
   });
 
   it('refuses a tool the server listed after its switches were kept', async () => {
-    await parties.switchTools(FLEET_ID, 'crm', { listed: ['list_contacts'], switched: new Map() });
+    await parties.switchTools({ fleetId: FLEET_ID, name: 'crm' }, { listed: ['list_contacts'], switched: new Map() });
 
     await handCall({ party: CRM, delivery: aPushedDelivery() });
 
@@ -68,7 +68,7 @@ describe('the gateway refuses a call to a tool not switched on for the party (ae
   });
 
   it('calls a tool switched on', async () => {
-    await parties.switchTools(FLEET_ID, 'crm', { listed: ['list_contacts'], switched: new Map([['list_deals', true]]) });
+    await parties.switchTools({ fleetId: FLEET_ID, name: 'crm' }, { listed: ['list_contacts'], switched: new Map([['list_deals', true]]) });
 
     await handCall({ party: CRM, delivery: aPushedDelivery() });
 
