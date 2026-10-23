@@ -64,6 +64,14 @@ export async function doneDelivery(fleet: string, deliveryId: string): Promise<A
   });
 }
 
+/** Turns email on or off, to be woken when something waits for the person's own ship (wake a person, W8). */
+export async function turnEmail(fleet: string, isOn: boolean): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    await api.people.turnEmail.mutate({ isOn });
+    return undefined;
+  });
+}
+
 /** Decides a request; approving names the proxy ship, its owner and its scopes, messages:send and messages:receive always among them. */
 export async function decideRequest({ fleet, requestId, input }: { fleet: string; requestId: string; input: DecisionInput }): Promise<ActionOutcome<undefined>> {
   if (input.kind === 'deny') {

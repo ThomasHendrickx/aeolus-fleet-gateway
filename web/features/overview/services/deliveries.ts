@@ -10,6 +10,9 @@ import type { GatewayRouter } from '../../../../src/adapters/trpc/router.js';
 /** What waits on a person's own ship, as the API shows it. */
 export type Inbox = inferRouterOutputs<GatewayRouter>['people']['inbox'];
 
+/** The channels that wake a person when something waits for their person ship, as the API shows them (wake a person, W8). */
+export type WakeChannels = inferRouterOutputs<GatewayRouter>['people']['wakeChannels'];
+
 /** A delivery as the inbox lists it: by title only. */
 export type InboxEntry = Inbox['deliveries'][number];
 
