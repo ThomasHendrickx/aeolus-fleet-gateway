@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
+import { createPrismaClient } from '../src/adapters/prisma/client.js';
+import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
 import { charlotteIn, PAGASAE_APP_CLIENT, PAGASAE_CLIENT, startFakePagasae, type FakePagasae } from './support/fake-pagasae.js';
 import { aFreePort, aNewDatabaseUrl, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { startGateway, type RunningGateway } from './support/gateway-bin.js';
@@ -41,6 +43,8 @@ let fleet: FleetServer;
 let pagasae: FakePagasae;
 let gateway: RunningGateway | undefined;
 let address: string;
+/** The gateway's own database, where a party is put as the gateway keeps it. */
+let gatewayDatabaseUrl: string;
 
 beforeAll(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
@@ -57,8 +61,9 @@ beforeAll(async () => {
   pagasae.listFor(UNLISTED_SIGN_IN, 'unavailable');
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
+  gatewayDatabaseUrl = aNewDatabaseUrl(inject('postgresUrl'), 'gateway');
   gateway = startGateway({
-    DATABASE_URL: aNewDatabaseUrl(inject('postgresUrl'), 'gateway'),
+    DATABASE_URL: gatewayDatabaseUrl,
     FLEET_URL: fleet.url,
     PORT: String(port),
     LOG_LEVEL: 'silent',
@@ -195,6 +200,36 @@ describe('the parties pages, as the account signed in', () => {
       hasOwner: form.includes('data-testid="owner-field"'),
       hasOwnScopeOnly: form.includes('name="scope:fleet:read"') && !form.includes('name="scope:fleet:manage"'),
     }).toEqual({ hasForm: true, hasCardUrl: true, offersNoCredential: true, hasConcurrency: true, hasOwner: true, hasOwnScopeOnly: true });
+  }, 60_000);
+
+  it("shows an A2A agent's card address, credential and messages at once, and its repeatable mark: a switch to an approver, said to an account that only reads (A9)", async () => {
+    const prisma = createPrismaClient(gatewayDatabaseUrl);
+    await createPrismaPartyStore(prisma).save({
+      fleetId: FLEET,
+      name: 'quotes',
+      kind: 'a2aAgent',
+      cardUrl: 'https://agent.supplier.example/.well-known/agent-card.json',
+      credential: { kind: 'bearer', token: 'tok-1' },
+      concurrencyLimit: 3,
+      isRepeatable: false,
+      state: 'commissioning',
+      proxyShipId: null,
+      secret: null,
+      crewToken: null,
+      requestId: 'r-quotes',
+      requestHash: 'h',
+      approvedAt: new Date('2026-10-23T10:00:00.000Z'),
+    });
+    await prisma.$disconnect();
+
+    const pageAs = async (signIn: string) => (await fetch(`${address}/outside-parties/quotes?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${signIn}` } })).text();
+    const [approving, reading] = await Promise.all([pageAs(APPROVER_SIGN_IN), pageAs(READER_SIGN_IN)]);
+
+    expect(textOf(approving)).toContain('Card addresshttps://agent.supplier.example/.well-known/agent-card.json');
+    expect(textOf(approving)).toContain('CredentialBearer token');
+    expect(textOf(approving)).toContain('Messages at once3');
+    expect(approving).not.toContain('tok-1');
+    expect({ approver: approving.includes('data-testid="outside-party-repeatable-switch"'), reader: reading.includes('data-testid="outside-party-repeatable-switch"'), readerSees: textOf(reading).includes('Not repeatable') }).toEqual({ approver: true, reader: false, readerSees: true });
   }, 60_000);
 
   it('shows the header every Aeolus app shows: the fleet in view and Gateway in the title, and the avatar menu', async () => {
