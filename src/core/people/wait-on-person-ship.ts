@@ -62,7 +62,9 @@ export function createWaitOnPersonShip(deps: {
       if (crew === undefined) {
         return { reason: 'noCrew' };
       }
-      const answered = await deps.door.inbox(crew.crewToken, knownWaiting === undefined ? undefined : { knownWaiting, signal });
+      // A wake held back is asked for again once due, so the wait ends by then.
+      const atMostMs = wakeAgainAt === undefined ? undefined : Math.max(0, wakeAgainAt.getTime() - deps.clock.now().getTime());
+      const answered = await deps.door.inbox(crew.crewToken, knownWaiting === undefined ? undefined : { knownWaiting, signal, ...(atMostMs === undefined ? {} : { atMostMs }) });
       if (isStopped()) {
         break;
       }

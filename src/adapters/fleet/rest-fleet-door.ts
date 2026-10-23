@@ -132,6 +132,13 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
   };
 }
 
+const MS_PER_SECOND = 1_000;
+
+/** The whole seconds an inbox call waits: the fleet's longest wait, or the time told, rounded up, when that is shorter. */
+function waitSecondsOf(atMostMs: number | undefined): number {
+  return atMostMs === undefined ? INBOX_WAIT_MAX_SECONDS : Math.min(INBOX_WAIT_MAX_SECONDS, Math.ceil(atMostMs / MS_PER_SECOND));
+}
+
 /** A question's payload, if it parses as one. */
 function questionOf(payload: string) {
   try {
@@ -250,7 +257,7 @@ export function createRestFleetDoor(
           path: '/ship/inbox',
           method: 'POST',
           crewToken,
-          body: wait === undefined ? { waitSeconds: 0 } : { waitSeconds: INBOX_WAIT_MAX_SECONDS, knownWaiting: wait.knownWaiting },
+          body: wait === undefined ? { waitSeconds: 0 } : { waitSeconds: waitSecondsOf(wait.atMostMs), knownWaiting: wait.knownWaiting },
           answers: inboxOutputSchema,
           ...(wait === undefined ? {} : { signal: wait.signal }),
         });
