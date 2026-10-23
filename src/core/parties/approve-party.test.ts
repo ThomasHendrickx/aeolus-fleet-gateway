@@ -27,7 +27,7 @@ beforeEach(async () => {
 });
 
 function anApproval(overrides: Partial<Parameters<typeof approve>[0]> = {}): Parameters<typeof approve>[0] {
-  return { operatorFleetId: FLEET_ID, requestId: 'a-1', name: 'crm', url: CRM_URL, credential: BEARER, ownerShipId: OWNER_SHIP_ID, scopes: [], concurrencyLimit: 4, ...overrides };
+  return { operatorFleetId: FLEET_ID, requestId: 'a-1', name: 'crm', url: CRM_URL, credential: BEARER, ownerShipId: OWNER_SHIP_ID, scopes: [], concurrencyLimit: 4, toolSwitches: null, ...overrides };
 }
 
 describe('argo approves an outside MCP server as a party (interop I-5)', () => {
@@ -47,6 +47,20 @@ describe('argo approves an outside MCP server as a party (interop I-5)', () => {
   it('crews the proxy ship and keeps its crew token and the credential in the vault', async () => {
     await expect(approve(anApproval())).resolves.toMatchObject({ isOk: true, value: { name: 'crm', state: 'crewed', proxyShipId: PROXY_SHIP_ID } });
     await expect(parties.find(FLEET_ID, 'crm')).resolves.toMatchObject({ state: 'crewed', crewToken: 'aeolus_ct_v1_proxy', credential: BEARER, url: CRM_URL, concurrencyLimit: 4 });
+  });
+
+  it('keeps the tool switches the approver chose (aeolus-fleet#1151)', async () => {
+    const switches = new Map([['list_contacts', true], ['create_deal', false]]);
+
+    await approve(anApproval({ toolSwitches: switches }));
+
+    await expect(parties.find(FLEET_ID, 'crm')).resolves.toMatchObject({ toolSwitches: switches });
+  });
+
+  it('tells the same approval with other tool switches from a repeat, and refuses it', async () => {
+    await approve(anApproval({ toolSwitches: new Map([['create_deal', false]]) }));
+
+    await expect(approve(anApproval({ toolSwitches: new Map([['create_deal', true]]) }))).resolves.toMatchObject({ isOk: false, error: { kind: 'PARTY_EXISTS' } });
   });
 
   it('answers the party without its credential or crew token', async () => {
