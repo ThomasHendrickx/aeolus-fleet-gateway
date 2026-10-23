@@ -47,6 +47,17 @@ beforeEach(async () => {
   await parties.save(aCrewedServer(OTHER_FLEET_ID, 'erp'));
 });
 
+/** Takes the party's calls until stopped. */
+const runUntilStopped = ({ party, signal }: { party: { name: string }; signal: AbortSignal }) => {
+  running.add(party.name);
+  return new Promise<{ ended: 'stopped' }>((resolve) => {
+    signal.addEventListener('abort', () => {
+      running.delete(party.name);
+      resolve({ ended: 'stopped' });
+    });
+  });
+};
+
 function workers() {
   return createPartyWorkers({
     parties,
@@ -55,15 +66,8 @@ function workers() {
       statedAgents.push(agent.name);
       return Promise.resolve(ok({ capabilities: [] }));
     },
-    runParty: ({ party, signal }) => {
-      running.add(party.name);
-      return new Promise((resolve) => {
-        signal.addEventListener('abort', () => {
-          running.delete(party.name);
-          resolve({ ended: 'stopped' });
-        });
-      });
-    },
+    runParty: runUntilStopped,
+    runA2aAgent: runUntilStopped,
     collectReplies: () => Promise.resolve({ ended: 'stopped' }),
     pushToWebhooks: () => Promise.resolve(),
     servesOutsideParties: (fleetId) => Promise.resolve(servedFleets.has(fleetId)),
@@ -131,6 +135,7 @@ describe("a client party's worker, its crew released and the same proxy ship cre
       stateParty: () => Promise.resolve(ok({ capabilities: [] })),
       stateA2aAgent: () => Promise.resolve(ok({ capabilities: [] })),
       runParty: () => Promise.resolve({ ended: 'stopped' }),
+      runA2aAgent: () => Promise.resolve({ ended: 'stopped' }),
       collectReplies: async ({ party, signal }) => {
         takenWith.push(party.crewToken);
         if (party.crewToken === OLD_CREW) {
@@ -171,6 +176,7 @@ describe("an A2A client's worker (decision 0060)", () => {
       stateParty: () => Promise.resolve(ok({ capabilities: [] })),
       stateA2aAgent: () => Promise.resolve(ok({ capabilities: [] })),
       runParty: () => Promise.resolve({ ended: 'stopped' }),
+      runA2aAgent: () => Promise.resolve({ ended: 'stopped' }),
       collectReplies: async ({ party, signal }) => {
         takenWith.push(party.crewToken);
         await new Promise((resolve) => { signal.addEventListener('abort', resolve); });
@@ -200,6 +206,7 @@ describe("an A2A client's worker pushes its tasks' changes (slice 4)", () => {
       stateParty: () => Promise.resolve(ok({ capabilities: [] })),
       stateA2aAgent: () => Promise.resolve(ok({ capabilities: [] })),
       runParty: () => Promise.resolve({ ended: 'stopped' }),
+      runA2aAgent: () => Promise.resolve({ ended: 'stopped' }),
       collectReplies: async ({ signal }) => {
         await untilAborted(signal);
         return { ended: 'stopped' };
@@ -221,14 +228,15 @@ describe("an A2A client's worker pushes its tasks' changes (slice 4)", () => {
     expect({ whileWorking, after: [...pushing] }).toEqual({ whileWorking: ['supplier'], after: [] });
   });
 
-  it("states an outside A2A agent's proxy ship from its card when its worker starts, taking no calls yet", async () => {
+  it("states an outside A2A agent's proxy ship from its card when its worker starts, then takes its messages until stopped", async () => {
     await parties.save(anAgentParty({ name: 'supplier' }));
     const pool = workers();
 
     await pool.start({ fleetId: FLEET_ID, name: 'supplier' });
     await settled();
-
-    expect({ statedAgents, running: [...running] }).toEqual({ statedAgents: ['supplier'], running: [] });
+    const whileWorking = [...running];
     await pool.stop();
+
+    expect({ statedAgents, whileWorking, after: [...running] }).toEqual({ statedAgents: ['supplier'], whileWorking: ['supplier'], after: [] });
   });
 });

@@ -4,13 +4,14 @@
  * ship, then takes its calls (interop 5.2); an outside client's takes the
  * replies to its calls (Q9 a), and an A2A client's pushes its tasks' changes
  * to its webhooks meanwhile (slice 4); an outside A2A agent's states its
- * proxy ship from its card (slice 5). A fleet's workers work only while its outside
+ * proxy ship from its card (slice 5), then takes its messages (slice 6). A fleet's workers work only while its outside
  * parties are on (interop I-3).
  */
 import type { FleetId } from '@aeolus-fleet/common';
 import type { FastifyBaseLogger } from 'fastify';
 
 import type { PushToWebhooks } from './core/a2a-in/push-to-webhooks.js';
+import type { RunA2aAgent } from './core/a2a-out/run-a2a-agent.js';
 import type { StateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import type { CollectReplies } from './core/mcp-in/collect-replies.js';
 import type { RunParty } from './core/mcp-out/run-party.js';
@@ -31,6 +32,7 @@ export function createPartyWorkers(deps: {
   stateParty: StateParty;
   stateA2aAgent: StateA2aAgent;
   runParty: RunParty;
+  runA2aAgent: RunA2aAgent;
   collectReplies: CollectReplies;
   pushToWebhooks: PushToWebhooks;
   servesOutsideParties: (fleetId: FleetId) => Promise<boolean>;
@@ -62,12 +64,15 @@ export function createPartyWorkers(deps: {
       return { refused: ended === 'crewRefused' ? party.crewToken : null };
     }
     if (party.kind === 'a2aAgent') {
-      // Stated from its card as read now; it takes no messages yet (slice 6).
       const statedAgent = await deps.stateA2aAgent({ fleetId, name });
       if (!statedAgent.isOk) {
         deps.log.warn({ fleetId, party: name, reason: statedAgent.error.message }, 'proxy ship not stated: its last statement stays');
       }
-      return { refused: null };
+      const { ended } = await deps.runA2aAgent({ party, signal });
+      if (ended === 'crewRefused') {
+        deps.log.warn({ fleetId, party: name }, "the fleet refused the proxy ship's crew token: its messages are not taken");
+      }
+      return { refused: ended === 'crewRefused' ? party.crewToken : null };
     }
     const stated = await deps.stateParty({ fleetId, name });
     if (!stated.isOk) {

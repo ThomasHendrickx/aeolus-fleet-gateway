@@ -22,7 +22,7 @@ const agentCardSchema = z.object({
   description: z.string(),
   version: z.string().min(1),
   supportedInterfaces: listOf(z.object({ url: z.string(), protocolBinding: z.string(), protocolVersion: z.string() })),
-  capabilities: z.object({}),
+  capabilities: z.object({ streaming: z.boolean().optional() }),
   defaultInputModes: listOf(z.string()),
   defaultOutputModes: listOf(z.string()),
   skills: listOf(
@@ -65,13 +65,14 @@ function cardOf(text: string): Result<AgentCard, CardFailure> {
   if (!parsed.success) {
     return err({ kind: 'NOT_A_CARD', reason: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ') });
   }
-  const { name, description, supportedInterfaces, defaultInputModes, defaultOutputModes, skills } = parsed.data;
+  const { name, description, supportedInterfaces, capabilities, defaultInputModes, defaultOutputModes, skills } = parsed.data;
   return ok({
     name,
     description,
     supportedInterfaces,
     defaultInputModes,
     defaultOutputModes,
+    isStreaming: capabilities.streaming === true,
     skills: skills.map(({ id, name: skillName, description: skillDescription, inputModes, outputModes }) => ({ id, name: skillName, description: skillDescription, inputModes, outputModes })),
   });
 }
