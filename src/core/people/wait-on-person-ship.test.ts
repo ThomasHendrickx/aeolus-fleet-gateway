@@ -90,20 +90,20 @@ describe('the waiter of a person ship', () => {
     ]);
   });
 
-  it("tells the person's pages each time the count changed, up or down, and not when a wait ran out unchanged", async () => {
-    const waiter = await waiting([ok({ waiting: 0 }), ok({ waiting: 2 }), ok({ waiting: 2 }), ok({ waiting: 1 })]);
-
-    await runUntilIdle(waiter);
-
-    expect(waiter.told).toEqual([SHIP, SHIP]);
-  });
-
-  it('tells nothing for its first look: no page waits on a count it never showed changed', async () => {
+  it("tells the person's pages at its first look, as a page may have read the inbox before the waiter started", async () => {
     const waiter = await waiting([ok({ waiting: 3 })]);
 
     await runUntilIdle(waiter);
 
-    expect(waiter.told).toEqual([]);
+    expect(waiter.told).toEqual([SHIP]);
+  });
+
+  it("then tells the person's pages each time the count changed, up or down, and not when a wait ran out unchanged", async () => {
+    const waiter = await waiting([ok({ waiting: 0 }), ok({ waiting: 2 }), ok({ waiting: 2 }), ok({ waiting: 1 })]);
+
+    await runUntilIdle(waiter);
+
+    expect(waiter.told).toEqual([SHIP, SHIP, SHIP]);
   });
 
   it.each(['LEASE_ENDED', 'UNAUTHORIZED'])('stops on %s and drops the crew, so the next sign-in crews again', async (code) => {
@@ -138,7 +138,7 @@ describe('the waiter of a person ship', () => {
 
     await runUntilIdle(waiter);
 
-    expect({ slept: waiter.slept, told: waiter.told }).toEqual({ slept: [100, 200, 200, 100], told: [SHIP] });
+    expect({ slept: waiter.slept, told: waiter.told }).toEqual({ slept: [100, 200, 200, 100], told: [SHIP, SHIP] });
   });
 
   it('ends without a call for a ship whose crew the gateway no longer holds', async () => {
