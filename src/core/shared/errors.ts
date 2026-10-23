@@ -51,7 +51,9 @@ export type DomainErrorKind =
   | 'TASK_TERMINAL'
   | 'WEBHOOK_REFUSED'
   | 'PUSH_CONFIG_NOT_FOUND'
-  | 'CONTEXT_MISMATCH';
+  | 'CONTEXT_MISMATCH'
+  | 'CARD_UNREACHABLE'
+  | 'CARD_INVALID';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {

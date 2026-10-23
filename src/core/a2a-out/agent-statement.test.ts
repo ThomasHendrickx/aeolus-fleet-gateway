@@ -66,17 +66,20 @@ describe("an outside A2A agent's statement, written from its card (slice 5)", ()
   });
 
   it.each([
-    ['no interface', aCard({ supportedInterfaces: [] }), 'no interface the gateway calls'],
-    ['only gRPC', aCard({ supportedInterfaces: [{ url: 'https://a.example', protocolBinding: 'GRPC', protocolVersion: '1.0' }] }), 'no interface the gateway calls'],
-    ['only A2A 0.3', aCard({ supportedInterfaces: [{ url: 'https://a.example', protocolBinding: 'JSONRPC', protocolVersion: '0.3' }] }), 'no interface the gateway calls'],
-    ['no skill', aCard({ skills: [] }), 'no skill'],
-    ['a skill id that is no capability name', aCard({ skills: [{ ...QUOTE, id: 'quote a price' }] }), 'capability name'],
-    ['a skill id over 128 characters', aCard({ skills: [{ ...QUOTE, id: 'q'.repeat(129) }] }), 'capability name'],
-    ['two skills with one id', aCard({ skills: [QUOTE, { ...QUOTE, name: 'Quote again' }] }), 'each capability once'],
-    ['no mode for a skill', aCard({ defaultInputModes: [] }), 'media type'],
-    ['a statement over 64 KB', aCard({ skills: Array.from({ length: 40 }, (_, at) => ({ ...QUOTE, id: `quote-${String(at)}`, description: 'd'.repeat(2_000) })) }), '64 KB'],
-  ])('refuses a card with %s, saying why', (_case, card, reason) => {
-    expect(stated(card)).toMatchObject({ isOk: false, error: { kind: 'CARD_INVALID', message: expect.stringContaining(reason) as unknown } });
+    { refused: 'no interface', card: aCard({ supportedInterfaces: [] }), reason: 'no interface the gateway calls' },
+    { refused: 'only gRPC', card: aCard({ supportedInterfaces: [{ url: 'https://a.example', protocolBinding: 'GRPC', protocolVersion: '1.0' }] }), reason: 'no interface the gateway calls' },
+    { refused: 'only A2A 0.3', card: aCard({ supportedInterfaces: [{ url: 'https://a.example', protocolBinding: 'JSONRPC', protocolVersion: '0.3' }] }), reason: 'no interface the gateway calls' },
+    { refused: 'no skill', card: aCard({ skills: [] }), reason: 'no skill' },
+    { refused: 'a skill id that is no capability name', card: aCard({ skills: [{ ...QUOTE, id: 'quote a price' }] }), reason: 'capability name' },
+    { refused: 'a skill id over 128 characters', card: aCard({ skills: [{ ...QUOTE, id: 'q'.repeat(129) }] }), reason: 'capability name' },
+    { refused: 'two skills with one id', card: aCard({ skills: [QUOTE, { ...QUOTE, name: 'Quote again' }] }), reason: 'each capability once' },
+    { refused: 'no mode for a skill', card: aCard({ defaultInputModes: [] }), reason: 'media type' },
+    { refused: 'a statement over 64 KB', card: aCard({ skills: Array.from({ length: 40 }, (_, at) => ({ ...QUOTE, id: `quote-${String(at)}`, description: 'd'.repeat(2_000) })) }), reason: '64 KB' },
+  ])('refuses a card with $refused, saying why', ({ card, reason }) => {
+    const statement = stated(card);
+
+    expect(statement).toMatchObject({ isOk: false, error: { kind: 'CARD_INVALID' } });
+    expect(statement.isOk ? '' : statement.error.message).toContain(reason);
   });
 
   it('takes a skill id of exactly 128 characters', () => {
