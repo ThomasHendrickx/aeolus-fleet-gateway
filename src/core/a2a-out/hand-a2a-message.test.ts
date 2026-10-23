@@ -273,7 +273,7 @@ describe('the gateway follows on after a restart (slice 6)', () => {
     await expect(call && follow({ party: anAgentParty(), endpoint: POLLED, call, signal: new AbortController().signal })).resolves.toEqual({ kind: 'handled' });
 
     expect(agents.sent).toEqual([]);
-    await expect(calls.find(DELIVERY)).resolves.toMatchObject({ state: 'done' });
+    await expect(calls.find({ fleetId: FLEET_ID, party: 'supplier' }, DELIVERY)).resolves.toMatchObject({ state: 'done' });
   });
 });
 

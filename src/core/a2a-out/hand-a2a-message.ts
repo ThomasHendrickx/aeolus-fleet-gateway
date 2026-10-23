@@ -76,7 +76,7 @@ export function createHandA2aMessage(deps: {
       return deps.follow({ party, endpoint, call, signal, events });
     };
 
-    const kept = await deps.calls.find(delivery.deliveryId);
+    const kept = await deps.calls.find(caller, delivery.deliveryId);
     if (kept?.state === 'mayHaveRun') {
       return mayHaveRun(kept);
     }

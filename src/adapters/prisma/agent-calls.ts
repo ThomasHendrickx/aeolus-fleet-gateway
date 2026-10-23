@@ -1,8 +1,7 @@
 /**
  * The gateway's messages to outside A2A agents (slice 6), by delivery, and
- * which task each reply it sent tells of. Every query but a delivery's own
- * is scoped by fleet and party; a delivery id is the fleet's, unique across
- * fleets, as the MCP out calls are kept.
+ * which task each reply it sent tells of. Every query is scoped by fleet
+ * and party.
  */
 import { idSchema } from '@aeolus-fleet/common';
 import { z } from 'zod';
@@ -40,13 +39,13 @@ function callOf(row: Row): AgentCall {
 
 export function createPrismaAgentCalls(db: PrismaClient): AgentCalls {
   return {
-    find: async (deliveryId) => {
-      const row = await db.a2aAgentCall.findUnique({ where: { deliveryId } });
+    find: async ({ fleetId, party }, deliveryId) => {
+      const row = await db.a2aAgentCall.findFirst({ where: { fleetId, party, deliveryId } });
       return row === null ? undefined : callOf(row);
     },
     save: async (call) => {
-      const { deliveryId, ...rest } = call;
-      await db.a2aAgentCall.upsert({ where: { deliveryId }, create: call, update: rest });
+      const { fleetId, deliveryId, ...rest } = call;
+      await db.a2aAgentCall.upsert({ where: { fleetId_deliveryId: { fleetId, deliveryId } }, create: call, update: rest });
     },
     following: async ({ fleetId, party }) => (await db.a2aAgentCall.findMany({ where: { fleetId, party, state: 'following' }, orderBy: { deliveryId: 'asc' } })).map(callOf),
     saveReply: async ({ fleetId, party }, { messageId, taskId, contextId }) => {

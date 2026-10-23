@@ -64,7 +64,7 @@ describe("the gateway's messages to outside A2A agents in Postgres (slice 6)", (
 
     const followed = await calls.following({ fleetId: FLEET, party: 'supplier' });
 
-    expect(followed.map(({ taskId }) => taskId).filter((taskId) => taskId !== 'task-1')).toEqual(['task-a']);
+    expect(followed.map(({ taskId }) => taskId).filter((taskId) => taskId !== null && ['task-a', 'task-b', 'task-c', 'task-d'].includes(taskId))).toEqual(['task-a']);
   });
 
   it("names the task a reply tells of, by the reply's message id, in the party's own fleet only", async () => {

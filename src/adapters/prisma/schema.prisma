@@ -125,7 +125,7 @@ model Call {
 
 /// The gateway's messages to outside A2A agents, by delivery (slice 6): so a restart sends nothing again that may have run, and follows on each task the agent took.
 model A2aAgentCall {
-  deliveryId   String   @id @map("delivery_id")
+  deliveryId   String   @map("delivery_id")
   fleetId      String   @map("fleet_id")
   party        String
   messageId    String   @map("message_id")
@@ -135,6 +135,7 @@ model A2aAgentCall {
   contextId    String?  @map("context_id")
   deadlineAt   DateTime @map("deadline_at") @db.Timestamptz(3)
 
+  @@id([fleetId, deliveryId])
   @@index([fleetId, party, state])
   @@map("a2a_agent_calls")
 }

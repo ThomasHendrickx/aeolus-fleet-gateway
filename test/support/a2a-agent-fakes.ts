@@ -184,16 +184,17 @@ export function fakeAgentShipCrew() {
 }
 
 /** The gateway's calls to outside agents in memory, and the task each reply tells of. */
-export function memoryAgentCalls(): AgentCalls & { held: Map<DeliveryId, AgentCall>; replies: Map<string, { taskId: string; contextId: string }> } {
-  const held = new Map<DeliveryId, AgentCall>();
+export function memoryAgentCalls(): AgentCalls & { held: Map<string, AgentCall>; replies: Map<string, { taskId: string; contextId: string }> } {
+  const held = new Map<string, AgentCall>();
+  const callKey = (caller: { fleetId: string; party: string }, deliveryId: string) => JSON.stringify([caller.fleetId, caller.party, deliveryId]);
   const replies = new Map<string, { taskId: string; contextId: string }>();
   const replyKey = (caller: { fleetId: string; party: string }, messageId: string) => JSON.stringify([caller.fleetId, caller.party, messageId]);
   return {
     held,
     replies,
-    find: (deliveryId) => Promise.resolve(held.get(deliveryId)),
+    find: (caller, deliveryId) => Promise.resolve(held.get(callKey(caller, deliveryId))),
     save: (call) => {
-      held.set(call.deliveryId, call);
+      held.set(callKey(call, call.deliveryId), call);
       return Promise.resolve();
     },
     following: (caller) => Promise.resolve([...held.values()].filter((call) => call.fleetId === caller.fleetId && call.party === caller.party && call.state === 'following')),

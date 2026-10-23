@@ -125,7 +125,7 @@ interface Caller { fleetId: FleetId; party: string }
 
 /** Outbound port: the gateway's messages to outside agents, by delivery, and which task each reply it sent tells of. */
 export interface AgentCalls {
-  find(deliveryId: DeliveryId): Promise<AgentCall | undefined>;
+  find(caller: Caller, deliveryId: DeliveryId): Promise<AgentCall | undefined>;
   save(call: AgentCall): Promise<void>;
   /** The party's calls whose task is still followed. */
   following(caller: Caller): Promise<AgentCall[]>;
