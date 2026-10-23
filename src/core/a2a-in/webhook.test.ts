@@ -13,7 +13,7 @@ describe("an A2A client's webhook URL (slice 4)", () => {
 });
 
 describe('a public address, which alone a webhook may be reached at (slice 4)', () => {
-  it.each(['93.184.215.14', '8.8.8.8', '172.32.0.1', '2606:2800:21f:cb07:6820:80da:af6b:8b2c'])('takes %s', (address) => {
+  it.each(['93.184.215.14', '8.8.8.8', '172.32.0.1', '2606:2800:21f:cb07:6820:80da:af6b:8b2c', '2001:4860:4860::8888'])('takes %s', (address) => {
     expect(isPublicAddress(address)).toBe(true);
   });
 
@@ -38,6 +38,16 @@ describe('a public address, which alone a webhook may be reached at (slice 4)', 
     ['IPv6 multicast', 'ff02::1'],
     ['IPv4-mapped private', '::ffff:10.0.0.5'],
     ['IPv4-mapped loopback', '::ffff:7f00:1'],
+    ['documentation', '192.0.2.1'],
+    ['documentation', '198.51.100.7'],
+    ['documentation', '203.0.113.9'],
+    ['IPv6 documentation', '2001:db8::1'],
+    ['IPv6 site-local', 'fec0::1'],
+    ['NAT64 of cloud metadata', '64:ff9b::a9fe:a9fe'],
+    ['local-use NAT64 of a private address', '64:ff9b:1::a00:5'],
+    ['IPv4-compatible loopback', '::7f00:1'],
+    ['6to4 of cloud metadata', '2002:a9fe:a9fe::1'],
+    ['Teredo', '2001:0:4136:e378:8000:63bf:3fff:fdd2'],
     ['not an address', 'hooks.supplier.example'],
   ])('refuses %s %s', (_kind, address) => {
     expect(isPublicAddress(address)).toBe(false);
