@@ -51,9 +51,16 @@ describe("the reader of an outside A2A agent's card (slice 5)", () => {
         supportedInterfaces: [{ url: 'https://agent.supplier.example/a2a', protocolBinding: 'JSONRPC', protocolVersion: '1.0' }],
         defaultInputModes: ['text/plain'],
         defaultOutputModes: ['application/json'],
+        isStreaming: true,
         skills: [{ id: 'quote', name: 'Quote a price', description: 'Answers a price for a part list.', inputModes: [], outputModes: [] }],
       },
     });
+  });
+
+  it('reads a card that states no streaming as not streaming', async () => {
+    answer = { status: 200, body: JSON.stringify({ ...SERVED_CARD, capabilities: {} }) };
+
+    await expect(cards.read(base)).resolves.toMatchObject({ isOk: true, value: { isStreaming: false } });
   });
 
   it('reads a list left out, as proto JSON leaves an empty one out, as empty', async () => {

@@ -17,6 +17,7 @@ export function anAgentCard(change: Partial<AgentCard> = {}): AgentCard {
     supportedInterfaces: [{ url: 'https://agent.supplier.example/a2a', protocolBinding: 'JSONRPC', protocolVersion: '1.0' }],
     defaultInputModes: ['text/plain'],
     defaultOutputModes: ['application/json'],
+    isStreaming: false,
     skills: [{ id: 'quote', name: 'Quote a price', description: 'Answers a price for a part list.', inputModes: [], outputModes: [] }],
     ...change,
   };
