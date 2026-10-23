@@ -18,6 +18,7 @@ import {
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { CALLER_SHIP_ID, aPushedDelivery } from '../../../test/support/mcp-out-fakes.js';
 import { memoryPartyStore } from '../../../test/support/party-fakes.js';
+import type { PushedDelivery } from '../mcp-out/hand-call.js';
 import { ok } from '../shared/result.js';
 import { createFollowAgentTask } from './follow-agent-task.js';
 import { createHandA2aMessage } from './hand-a2a-message.js';
@@ -52,7 +53,7 @@ beforeEach(async () => {
 });
 
 /** The agent's worker, its crew taking the deliveries given once, then stopped. */
-function runWith(cards: ReturnType<typeof fakeAgentCards>, agents: ReturnType<typeof fakeA2aAgents>, waiting = [aPushedDelivery({ contentType: 'text/plain', payload: 'Quote 10 bolts' })]) {
+function runWith({ cards, agents, waiting = [aPushedDelivery({ contentType: 'text/plain', payload: 'Quote 10 bolts' })] }: { cards: ReturnType<typeof fakeAgentCards>; agents: ReturnType<typeof fakeA2aAgents>; waiting?: PushedDelivery[] }) {
   let isTaken = false;
   crew.pushReceive = () => {
     if (isTaken) {
@@ -80,7 +81,7 @@ describe("an outside A2A agent's worker (slice 6)", () => {
   it("hands each message to the first interface of the card the gateway calls, followed as the card states", async () => {
     const agents = fakeA2aAgents({ sends: [{ kind: 'task', taskId: 'task-1', contextId: 'ctx-1', events: [aStatus('completed')] }] });
 
-    await runWith(fakeAgentCards({ [CARD_URL]: answeredCard(STREAMING_CARD) }), agents);
+    await runWith({ cards: fakeAgentCards({ [CARD_URL]: answeredCard(STREAMING_CARD) }), agents });
 
     expect(agents.sent.map(({ connection }) => connection.endpoint)).toEqual([{ url: 'https://agent.supplier.example/rest', protocolBinding: 'HTTP+JSON', isStreaming: true }]);
   });
@@ -89,7 +90,7 @@ describe("an outside A2A agent's worker (slice 6)", () => {
     await calls.save({ deliveryId: FOLLOWED, fleetId: FLEET_ID, party: 'supplier', messageId: 'msg_01m3tbfspe96yf1rnr4ank9m09', senderShipId: CALLER_SHIP_ID, state: 'following', taskId: 'task-9', contextId: 'ctx-9', deadlineAt: new Date('2026-10-23T13:00:00.000Z') });
     const agents = fakeA2aAgents({ reads: [{ kind: 'read', events: [aStatus('completed', 'task-9')] }] });
 
-    await runWith(fakeAgentCards({ [CARD_URL]: answeredCard() }), agents, []);
+    await runWith({ cards: fakeAgentCards({ [CARD_URL]: answeredCard() }), agents, waiting: [] });
 
     expect({ read: agents.read, handled: crew.log.filter(([kind]) => kind === 'handled') }).toEqual({ read: ['task-9'], handled: [['handled', FOLLOWED]] });
   });
@@ -98,7 +99,7 @@ describe("an outside A2A agent's worker (slice 6)", () => {
     const cards = fakeAgentCards({ [CARD_URL]: answeredCard(anAgentCard({ supportedInterfaces: [{ url: 'https://agent.supplier.example/grpc', protocolBinding: 'GRPC', protocolVersion: '1.0' }] })) });
     const agents = fakeA2aAgents();
 
-    await runWith(cards, agents);
+    await runWith({ cards, agents });
 
     expect({ sent: agents.sent, reads: cards.reads.length, slept: slept.slice(0, 2) }).toEqual({ sent: [], reads: 4, slept: [CARD_WAIT_MS, CARD_WAIT_MS] });
   });

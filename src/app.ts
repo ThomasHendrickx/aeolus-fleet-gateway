@@ -25,6 +25,12 @@ import { createMarkTool } from './core/mcp-out/mark-tool.js';
 import { createSwitchTool } from './core/parties/switch-tool.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
+import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
+import { createHandA2aMessage } from './core/a2a-out/hand-a2a-message.js';
+import { createRunA2aAgent } from './core/a2a-out/run-a2a-agent.js';
+import { createA2aAgents, gatewayStatuses } from './adapters/a2a/a2a-agents.js';
+import { createAgentKeys } from './adapters/crypto/agent-keys.js';
+import { createPrismaAgentCalls } from './adapters/prisma/agent-calls.js';
 import { createMarkA2aAgent } from './core/a2a-out/mark-a2a-agent.js';
 import { createAddA2aAgent, type AddA2aAgent } from './core/parties/add-a2a-agent.js';
 import { createHttpAgentCards } from './adapters/a2a/agent-cards.js';
@@ -207,6 +213,8 @@ const MCP_WAIT_MAX_MS = 10_000;
 const WEBHOOK_TIMEOUT_MS = 10_000;
 /** The longest the gateway waits to read an outside A2A agent's card (slice 5). */
 const AGENT_CARD_TIMEOUT_MS = 10_000;
+/** How long an outside A2A agent's worker waits to read its card again while it names no interface the gateway calls (slice 6). */
+const AGENT_CARD_WAIT_MS = 60_000;
 
 /** How often a waiting call is read for its answer. */
 const MCP_WAIT_POLL_MS = 200;
@@ -299,11 +307,33 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       server.log.error({ err: error }, 'pushing to webhooks failed: tried again next round');
     },
   });
+  // An outside agent's message is answered within the deadline a caller of its proxy ship waits for (slice 6, flow 4.2).
+  const agentCallDeps = {
+    crew: door,
+    agents: createA2aAgents({ timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS }),
+    calls: createPrismaAgentCalls(prisma),
+    keys: createAgentKeys(options.gatewaySecret),
+    statuses: gatewayStatuses,
+    clock,
+    deadlineMs: callTiming.deadlineMs,
+  };
+  const followAgentTask = createFollowAgentTask({ ...agentCallDeps, sleep, pollMs: POLL_MS });
   const workers = createPartyWorkers({
     parties,
     stateParty,
     stateA2aAgent,
     runParty: createRunParty({ crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
+    runA2aAgent: createRunA2aAgent({
+      cards: agentCards,
+      crew: door,
+      hand: createHandA2aMessage({ ...agentCallDeps, parties, follow: followAgentTask }),
+      follow: followAgentTask,
+      calls: agentCallDeps.calls,
+      sleep,
+      pollMs: POLL_MS,
+      againWaitsMs: AGAIN_WAITS_MS,
+      cardWaitMs: AGENT_CARD_WAIT_MS,
+    }),
     collectReplies: createCollectReplies({ crew: door, replies: door, sent: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
     pushToWebhooks,
     servesOutsideParties,
