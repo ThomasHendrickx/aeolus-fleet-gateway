@@ -134,7 +134,7 @@ export async function Parties({ page }: { page: SignedInPage }) {
                   <tr key={party.name} className="border-b border-border align-top">
                     <td className="p-2">{party.name}</td>
                     <td className="p-2 font-mono">{outsideAddressOf(party) ?? ''}</td>
-                    <td className="p-2">{party.kind === 'mcpServer' ? party.credentialKind : party.kind === 'mcpClient' ? 'MCP client' : 'A2A client'}</td>
+                    <td className="p-2">{party.kind === 'mcpServer' || party.kind === 'a2aAgent' ? party.credentialKind : party.kind === 'mcpClient' ? 'MCP client' : 'A2A client'}</td>
                     <td className="p-2">
                       <StatusBadge tone={state.tone} label={state.label} />
                     </td>
