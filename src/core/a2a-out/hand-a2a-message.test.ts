@@ -157,7 +157,7 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
     await calls.save({ deliveryId: DELIVERY, fleetId: FLEET_ID, party: 'supplier', messageId: MESSAGE, senderShipId: CALLER_SHIP_ID, state: 'following', taskId: 'task-1', contextId: 'ctx-1', deadlineAt: new Date(clock.now().getTime() + DEADLINE_MS), answer: null });
     const agents = fakeA2aAgents({ streams: [{ events: [], end: { kind: 'refused', reason: 'Task task-1 is in a terminal state' } }], reads: [readAs(aStatus('completed'))] });
 
-    await expect(handWith(agents, STREAMED)(aQuote({ state: 'acknowledged', handOverNumber: 1 }))).resolves.toEqual({ kind: 'handled' });
+    await expect(handWith(agents, STREAMED)(aQuote({ state: 'handed', handOverNumber: 1 }))).resolves.toEqual({ kind: 'handled' });
 
     expect(steps().filter((step) => step !== 'ack')).toEqual([`send application/a2a+json ${aStatus('completed').json}`, 'handled']);
     expect(slept).toEqual([]);

@@ -228,7 +228,7 @@ export function createA2aAgents(deps: { timeoutMs: number }): A2aAgents {
         return { kind: 'read', events: eventsOfTask(await made.client.getTask(GetTaskRequest.fromJSON({ id: taskId }), { signal })) };
       } catch (error) {
         const failure = failureOf(error, observed);
-        return failure.kind === 'gone' ? failure : { kind: 'unanswered', reason: failure.reason };
+        return failure.kind === 'gone' || failure.kind === 'refused' ? failure : { kind: 'unanswered', reason: failure.reason };
       }
     },
     subscribe: async (connection, { taskId, timeoutMs, signal, onEvent }): Promise<SubscriptionEnd> => {
@@ -245,7 +245,7 @@ export function createA2aAgents(deps: { timeoutMs: number }): A2aAgents {
         return { kind: 'closed' };
       } catch (error) {
         const failure = failureOf(error, observed);
-        return failure.kind === 'gone' ? failure : { kind: 'broken', reason: failure.reason };
+        return failure.kind === 'gone' || failure.kind === 'refused' ? failure : { kind: 'broken', reason: failure.reason };
       }
     },
   };

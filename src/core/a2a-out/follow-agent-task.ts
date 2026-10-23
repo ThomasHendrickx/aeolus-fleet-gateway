@@ -11,6 +11,9 @@ export type FollowAgentTask = (input: { party: A2aAgentParty; endpoint: AgentEnd
 /** The reason a delivery whose task the agent no longer knows is not handled, as Needs attention shows it. */
 export const TASK_GONE = "The agent's task is gone";
 
+/** What the failed reply says when the agent refuses reading or streaming its task, before the agent's reason. */
+const FOLLOW_REFUSED = 'The agent refused following its task';
+
 const AGAIN = { kind: 'again' } as const;
 
 /**
@@ -40,6 +43,8 @@ export function createFollowAgentTask(deps: { crew: AgentShipCrew; agents: A2aAg
     let endedAt: AgentEvent | undefined;
     /** Whether an event ended following: set as each event comes, so read through a call. */
     const hasEnded = () => endedAt !== undefined;
+    /** Whether the gateway stops: read through a call, as a stream ends when it does. */
+    const isStopped = () => signal.aborted;
 
     /** Sends the event as a reply once, until the fleet takes it or the gateway stops: whether it was sent. */
     const reply = async (event: AgentEvent): Promise<boolean> => {
@@ -78,29 +83,42 @@ export function createFollowAgentTask(deps: { crew: AgentShipCrew; agents: A2aAg
       return { kind: 'notHandled' };
     };
 
+    /** Replies the gateway's failed status with why, then handles the delivery. */
+    const failed = async (reason: string): Promise<HandOutcome> => {
+      const status = deps.statuses.statusOf({ taskId, contextId, state: 'failed', reason, messageId: deps.keys.replyKeyOf(party.fleetId, { taskId, event: reason }) });
+      return (await reply(status)) ? handled() : AGAIN;
+    };
+    /** GetTask once: each event of the task as it stands replied; how the read ended. */
+    const readTask = async () => {
+      const read = await deps.agents.getTask(connection, taskId);
+      for (const event of read.kind === 'read' ? read.events : []) {
+        await onEvent(event);
+      }
+      return read;
+    };
+
     for (const event of events) {
       await onEvent(event);
     }
     while (!hasEnded() && !signal.aborted) {
       const leftMs = call.deadlineAt.getTime() - deps.clock.now().getTime();
       if (leftMs <= 0) {
-        const reason = `The agent did not end its task within ${String(deps.deadlineMs)} ms`;
-        const failed = deps.statuses.statusOf({ taskId, contextId, state: 'failed', reason, messageId: deps.keys.replyKeyOf(party.fleetId, { taskId, event: reason }) });
-        return (await reply(failed)) ? handled() : AGAIN;
+        return failed(`The agent did not end its task within ${String(deps.deadlineMs)} ms`);
       }
-      if (endpoint.isStreaming) {
-        const end = await deps.agents.subscribe(connection, { taskId, timeoutMs: leftMs, signal, onEvent });
-        if (end.kind === 'gone') {
-          return gone(end.reason);
-        }
-      } else {
-        const read = await deps.agents.getTask(connection, taskId);
-        if (read.kind === 'gone') {
-          return gone(read.reason);
-        }
-        for (const event of read.kind === 'read' ? read.events : []) {
-          await onEvent(event);
-        }
+      const end = endpoint.isStreaming ? await deps.agents.subscribe(connection, { taskId, timeoutMs: leftMs, signal, onEvent }) : undefined;
+      if (end?.kind === 'gone') {
+        return gone(end.reason);
+      }
+      // A stream that ended with no end of the task may have missed it, and a task that ended refuses a stream: the task is read once.
+      const read = hasEnded() || isStopped() ? undefined : await readTask();
+      if (read?.kind === 'gone') {
+        return gone(read.reason);
+      }
+      if (read?.kind === 'refused') {
+        return failed(`${FOLLOW_REFUSED}: ${read.reason}`);
+      }
+      if (read?.kind === 'read' && !hasEnded() && end?.kind === 'refused') {
+        return failed(`${FOLLOW_REFUSED}: ${end.reason}`);
       }
       if (!hasEnded()) {
         await deps.sleep(deps.pollMs, signal);

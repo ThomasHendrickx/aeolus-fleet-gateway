@@ -71,11 +71,15 @@ export type SendOutcome =
   | { readonly kind: 'notSent'; readonly reason: string }
   | { readonly kind: 'unanswered'; readonly reason: string };
 
-/** GetTask: the task as it stands, its status and each artifact; gone when the agent knows it no more; or no answer. */
-export type TaskRead = { readonly kind: 'read'; readonly events: readonly AgentEvent[] } | { readonly kind: 'gone'; readonly reason: string } | { readonly kind: 'unanswered'; readonly reason: string };
+/** GetTask: the task as it stands, its status and each artifact; gone when the agent knows it no more; refused (an A2A error or an HTTP 4xx); or no answer. */
+export type TaskRead =
+  | { readonly kind: 'read'; readonly events: readonly AgentEvent[] }
+  | { readonly kind: 'gone'; readonly reason: string }
+  | { readonly kind: 'refused'; readonly reason: string }
+  | { readonly kind: 'unanswered'; readonly reason: string };
 
-/** How a SubscribeToTask stream ended: the agent closed it, the task is gone, or it broke. */
-export type SubscriptionEnd = { readonly kind: 'closed' } | { readonly kind: 'gone'; readonly reason: string } | { readonly kind: 'broken'; readonly reason: string };
+/** How a SubscribeToTask stream ended: the agent closed it, the task is gone, the agent refused it (as it does for a task that ended), or it broke. */
+export type SubscriptionEnd = { readonly kind: 'closed' } | { readonly kind: 'gone'; readonly reason: string } | { readonly kind: 'refused'; readonly reason: string } | { readonly kind: 'broken'; readonly reason: string };
 
 /** Outbound port: the outside A2A agents the gateway calls, through @a2a-js/sdk's client (A11). */
 export interface A2aAgents {
