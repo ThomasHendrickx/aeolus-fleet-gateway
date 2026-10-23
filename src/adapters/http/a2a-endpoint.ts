@@ -179,13 +179,13 @@ async function* jsonEventsOf(events: AsyncIterable<StreamResponse>): AsyncGenera
 
 const eventStreamOf = (events: AsyncIterable<StreamResponse>) => new EventStream(jsonEventsOf(events));
 
-/** A signal aborted once the reply ends or its client drops it, so a stream stops following its task. */
-function signalOf(reply: FastifyReply): AbortSignal {
+/** A signal aborted once the reply ends, its client drops it, or the gateway stops, so a stream stops following its task. */
+function signalOf(reply: FastifyReply, stopping: AbortSignal): AbortSignal {
   const controller = new AbortController();
   reply.raw.once('close', () => {
     controller.abort();
   });
-  return controller.signal;
+  return AbortSignal.any([controller.signal, stopping]);
 }
 
 /** The bearer an Authorization header carries, if it carries one. */
@@ -240,8 +240,15 @@ export function registerA2aEndpoint(server: FastifyInstance, deps: A2aEndpointDe
     return { caller: caller.value, ship: ship.value };
   };
 
+  // A stream stays open until its task ends: a stopping gateway closes it, or the server would wait for it.
+  const stopping = new AbortController();
+  server.addHook('preClose', () => {
+    stopping.abort();
+    return Promise.resolve();
+  });
+
   void server.register((calls) => {
-    registerCalls(calls, { deps, resolve });
+    registerCalls(calls, { deps, resolve, stopping: stopping.signal });
     return Promise.resolve();
   });
 }
@@ -257,7 +264,7 @@ function isJsonBody(request: FastifyRequest): boolean {
  * be empty (CancelTask), and a body of any other content type is kept as
  * text, so the call answers ContentTypeNotSupportedError and sends nothing.
  */
-function registerCalls(server: FastifyInstance, { deps, resolve }: { deps: A2aEndpointDeps; resolve: (request: FastifyRequest, reply: FastifyReply) => Promise<{ caller: A2aCaller; ship: ReachedShip } | undefined> }): void {
+function registerCalls(server: FastifyInstance, { deps, resolve, stopping }: { deps: A2aEndpointDeps; resolve: (request: FastifyRequest, reply: FastifyReply) => Promise<{ caller: A2aCaller; ship: ReachedShip } | undefined>; stopping: AbortSignal }): void {
   const parseJson = server.getDefaultJsonParser('error', 'error');
   server.removeAllContentTypeParsers();
   for (const mediaType of REST_MEDIA_TYPES) {
@@ -296,7 +303,7 @@ function registerCalls(server: FastifyInstance, { deps, resolve }: { deps: A2aEn
     } catch (error) {
       return { jsonrpc: '2.0', id, error: JsonRpcTransportHandler.mapToJSONRPCError(error) };
     }
-    const transport = new JsonRpcTransportHandler(requestHandlerFor(deps, { ...resolved, signal: signalOf(reply) }));
+    const transport = new JsonRpcTransportHandler(requestHandlerFor(deps, { ...resolved, signal: signalOf(reply, stopping) }));
     const answered = await transport.handle(z.record(z.string(), z.unknown()).catch({}).parse(request.body), context);
     if (!(Symbol.asyncIterator in answered)) {
       return answered;
@@ -327,7 +334,7 @@ function registerCalls(server: FastifyInstance, { deps, resolve }: { deps: A2aEn
             throw notSupported();
           }
           validateVersion(context.requestedVersion, publicCardOf(deps.issuer, resolved.ship.alias), 'HTTP+JSON');
-          const body = await answer({ handler: requestHandlerFor(deps, { ...resolved, signal: signalOf(reply) }), request, context });
+          const body = await answer({ handler: requestHandlerFor(deps, { ...resolved, signal: signalOf(reply, stopping) }), request, context });
           if (body instanceof EventStream) {
             // An error before the first event rejects, and is answered below.
             await sendEvents(reply, { events: body.events, errorOf: (error) => toRestErrorBody(error, restStatusOf(error)) });
