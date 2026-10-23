@@ -20,6 +20,8 @@ describe('the gateway configuration from the environment', () => {
       mcpWaitMaxMs: 10_000,
       pagasae: undefined,
       pagasaeApp: undefined,
+      webPush: undefined,
+      wakeWindowMs: { webPush: 600_000 },
     });
   });
 
@@ -37,6 +39,8 @@ describe('the gateway configuration from the environment', () => {
       mcpWaitMaxMs: 10_000,
       pagasae: undefined,
       pagasaeApp: undefined,
+      webPush: undefined,
+      wakeWindowMs: { webPush: 600_000 },
     });
   });
 
@@ -124,5 +128,25 @@ describe('the gateway configuration from the environment', () => {
 
   it('refuses a port above 65535', () => {
     expect(() => loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', PORT: '65536' })).toThrow(/^PORT: /);
+  });
+
+  it('reads the push keys that sign each web push wake, and the subject a push service may contact (wake a person, S3)', () => {
+    expect(
+      loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', WEB_PUSH_PUBLIC_KEY: 'BPublic', WEB_PUSH_PRIVATE_KEY: 'private', WEB_PUSH_SUBJECT: 'mailto:ops@example.com' }).webPush,
+    ).toEqual({ publicKey: 'BPublic', privateKey: 'private', subject: 'mailto:ops@example.com' });
+  });
+
+  it.each([
+    ['no private key', { WEB_PUSH_PUBLIC_KEY: 'BPublic', WEB_PUSH_SUBJECT: 'mailto:ops@example.com' }],
+    ['no public key', { WEB_PUSH_PRIVATE_KEY: 'private', WEB_PUSH_SUBJECT: 'mailto:ops@example.com' }],
+    ['no subject', { WEB_PUSH_PUBLIC_KEY: 'BPublic', WEB_PUSH_PRIVATE_KEY: 'private' }],
+  ])('refuses web push with %s, naming the variables', (_what, webPush) => {
+    expect(() => loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', ...webPush })).toThrow('WEB_PUSH_PUBLIC_KEY, WEB_PUSH_PRIVATE_KEY and WEB_PUSH_SUBJECT: set all three, or none');
+  });
+
+  it("reads web push's window in minutes, and refuses one below a minute (wake a person, W10)", () => {
+    const environment = { DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' };
+    expect([loadConfig({ ...environment, WAKE_WEB_PUSH_WINDOW_MINUTES: '1' }).wakeWindowMs, loadConfig({ ...environment, WAKE_WEB_PUSH_WINDOW_MINUTES: '30' }).wakeWindowMs]).toEqual([{ webPush: 60_000 }, { webPush: 1_800_000 }]);
+    expect(() => loadConfig({ ...environment, WAKE_WEB_PUSH_WINDOW_MINUTES: '0' })).toThrow(/^WAKE_WEB_PUSH_WINDOW_MINUTES: /);
   });
 });
