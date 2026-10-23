@@ -34,7 +34,7 @@ describe('a wake sent to a browser through its push service', () => {
   it('says only the fleet by its name and the overview link, as the browser reads it', async () => {
     const sent = await webPush().send(subscriptionOf('/firefox'), WAKE);
 
-    expect({ sent, read: service.taken.map(({ text }) => JSON.parse(text) as unknown) }).toEqual({ sent: 'sent', read: [WAKE] });
+    expect({ sent, read: service.taken.map(({ text }) => text) }).toEqual({ sent: 'sent', read: ['{"fleetName":"Acme","overviewUrl":"https://gateway.example/overview?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv"}'] });
   });
 
   it("is signed with the gateway's push keys", async () => {

@@ -88,6 +88,11 @@ export async function startPushService() {
       browsers.set(path, browser);
       return browser;
     },
-    stop: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    stop: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => {
+          resolve();
+        });
+      }),
   };
 }
