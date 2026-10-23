@@ -45,7 +45,7 @@ export function createPartyWorkers(deps: {
     }
     // An A2A client's calls are not carried yet, so it has no replies to take.
     if (party.kind === 'a2aClient') {
-      return;
+      return { refused: null };
     }
     if (party.kind === 'mcpClient') {
       const { ended } = await deps.collectReplies({ party, signal });
