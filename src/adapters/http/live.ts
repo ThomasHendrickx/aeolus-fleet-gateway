@@ -1,18 +1,25 @@
 /**
  * What hears each committed change to a fleet's requests on this gateway:
  * the API's requests.changes, which the web app's pages follow, and the
- * waiting page of a client asked for. A change carries no content: each
+ * waiting page of a client asked for. A change to a person ship's inbox
+ * reaches only the pages of its person. A change carries no content: each
  * listener reads what it shows again, as its own caller.
  */
 import websocket from '@fastify/websocket';
-import type { FleetId } from '@aeolus-fleet/common';
+import type { FleetId, ShipId } from '@aeolus-fleet/common';
 import type { FastifyInstance } from 'fastify';
 
 import type { Change } from '../prisma/changes.js';
 
 interface Listener {
   readonly fleetId: FleetId;
+  /** The person ship of the person whose page listens, if a person's. */
+  readonly personShipId?: ShipId | null;
   readonly read: () => void;
+}
+
+function isFor(listener: Listener, change: Change): boolean {
+  return listener.fleetId === change.fleetId && (change.topic === 'requests' || listener.personShipId === change.shipId);
 }
 
 /** Hands each change to the listeners of its fleet, on this gateway. */
@@ -29,7 +36,7 @@ export function createChangeHub(): ChangeHub {
   return {
     publish: (change) => {
       for (const listener of listening) {
-        if (listener.fleetId === change.fleetId) {
+        if (isFor(listener, change)) {
           listener.read();
         }
       }
