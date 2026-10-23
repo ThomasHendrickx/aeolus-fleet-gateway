@@ -338,7 +338,19 @@ describe('the same methods over HTTP+JSON (decision 0060)', () => {
 
     const [task, list, cancel] = [await rest('GET', { path: `/tasks/${TASK_ID}` }), await rest('GET', { path: '/tasks' }), await rest('POST', { path: `/tasks/${TASK_ID}:cancel` })];
 
-    expect({ task: task.json<unknown>(), list: list.json<unknown>(), cancel: cancel.statusCode }).toMatchObject({ task: { id: TASK_ID }, list: { tasks: [{ id: TASK_ID }] }, cancel: 400 });
+    expect({ task: task.json<unknown>(), list: list.json<unknown>(), cancel: cancel.statusCode }).toMatchObject({ task: { id: TASK_ID }, list: { tasks: [{ id: TASK_ID }] }, cancel: 409 });
+  });
+
+  it('refuses to cancel an unknown task as not found, posted with a JSON content type and no body', async () => {
+    const answered = await server.inject({ method: 'POST', url: `/gw/a2a/${CRM_ALIAS}/tasks/task-1:cancel`, headers: { ...BEARER, 'a2a-version': '1.0', 'content-type': 'application/json' } });
+
+    expect(answered.statusCode).toBe(404);
+  });
+
+  it('answers its tasks and its errors as application/json', async () => {
+    const [sent, unknown] = [await rest('POST', { path: '/message:send', payload: { message: A_MESSAGE } }), await rest('GET', { path: '/tasks/task-1' })];
+
+    expect([sent.headers['content-type'], unknown.headers['content-type']]).toEqual(['application/json; charset=utf-8', 'application/json; charset=utf-8']);
   });
 
   it('answers an unknown task as not found', async () => {
