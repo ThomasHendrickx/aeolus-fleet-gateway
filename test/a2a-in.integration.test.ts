@@ -129,7 +129,7 @@ describe('an outside A2A client reads the cards of the ships its proxy ship reac
 
     expect(addresses.every((address) => new RegExp(`^${setting.address}/gw/a2a/[a-z][a-z2-7]{7}/\\.well-known/agent-card\\.json$`).test(address))).toBe(true);
     expect(addresses.length).toBeGreaterThan(0);
-    expect(cards.map((card) => ({ hasSkills: 'skills' in card, capabilities: card.capabilities }))).toEqual(cards.map(() => ({ hasSkills: false, capabilities: { streaming: false, pushNotifications: false, extendedAgentCard: true } })));
+    expect(cards.map((card) => ({ hasSkills: 'skills' in card, capabilities: card.capabilities }))).toEqual(cards.map(() => ({ hasSkills: false, capabilities: { streaming: true, pushNotifications: false, extendedAgentCard: true } })));
     expect(JSON.stringify(cards)).not.toContain('procurement');
   });
 
@@ -292,6 +292,80 @@ describe("an outside A2A client's message is a message its proxy ship sends (dec
     await app.restoreConnections();
 
     await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_COMPLETED');
+  });
+
+  /** A JSON-RPC streaming call as the supplier's client: its events' results as they come, until the stream closes or the signal aborts it. */
+  async function* streamed(call: { method: string; params: Record<string, unknown>; signal?: AbortSignal }): AsyncGenerator<Record<string, unknown>, void, undefined> {
+    const answered = await fetch(interfaceUrl, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${bearer}`, 'a2a-version': '1.0' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: call.method, params: call.params }), ...(call.signal === undefined ? {} : { signal: call.signal }) });
+    expect(answered.headers.get('content-type')).toBe('text/event-stream');
+    const decoder = new TextDecoder();
+    let held = '';
+    const reader = answered.body?.getReader();
+    for (let read = await reader?.read(); read !== undefined && !read.done; read = await reader?.read()) {
+      held += decoder.decode(z.instanceof(Uint8Array).parse(read.value), { stream: true });
+      const events = held.split('\n\n');
+      held = events.pop() ?? '';
+      for (const event of events.filter((each) => each.startsWith('data: '))) {
+        yield z.object({ result: z.record(z.string(), z.unknown()) }).parse(JSON.parse(event.slice('data: '.length))).result;
+      }
+    }
+  }
+
+  const stateOf = (event: Record<string, unknown>) => z.object({ status: z.object({ state: z.string() }) }).parse(event.task ?? event.statusUpdate).status.state;
+
+  it("streams a message's task from submitted to completed by the ship's reply, and closes", async () => {
+    await aSupplierReaching();
+    const replied = (async () => {
+      const delivery = await receiveOne(setting.fleet, procurement.crewToken);
+      await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', payload: '40 chairs: 2000 euros.' });
+    })();
+
+    const events: Record<string, unknown>[] = [];
+    for await (const event of streamed({ method: 'SendStreamingMessage', params: { message: { messageId: 'm-1', role: 'ROLE_USER', parts: [{ text: 'Quote 40 chairs.' }] } } })) {
+      events.push(event);
+    }
+    await replied;
+
+    expect(events[0]).toMatchObject({ task: { status: { state: 'TASK_STATE_SUBMITTED' } } });
+    expect(events.at(-1)).toMatchObject({ statusUpdate: { status: { state: 'TASK_STATE_COMPLETED' } } });
+    expect(events.find((event) => 'artifactUpdate' in event)).toMatchObject({ artifactUpdate: { artifact: { parts: [{ text: '40 chairs: 2000 euros.', mediaType: 'text/plain' }] } } });
+  });
+
+  it('loses nothing while a dropped stream is away: subscribing again streams the task as it stands', async () => {
+    await aSupplierReaching();
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+    const dropped = new AbortController();
+    const first = await streamed({ method: 'SubscribeToTask', params: { id: task.id }, signal: dropped.signal }).next();
+    dropped.abort();
+
+    const delivery = await receiveOne(setting.fleet, procurement.crewToken);
+    await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify({ id: crypto.randomUUID(), title: 'Which colour?', context: 'The chairs come in two colours.', options: [{ key: 1, label: 'Red' }, { key: 2, label: 'Blue' }] }) });
+    await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_INPUT_REQUIRED');
+    const dropping = new AbortController();
+    const resubscribed = await streamed({ method: 'SubscribeToTask', params: { id: task.id }, signal: dropping.signal }).next();
+    dropping.abort();
+
+    expect({ first: first.value === undefined ? undefined : stateOf(first.value), again: resubscribed.value === undefined ? undefined : stateOf(resubscribed.value) }).toEqual({ first: 'TASK_STATE_SUBMITTED', again: 'TASK_STATE_INPUT_REQUIRED' });
+  });
+
+  it('closes the streams still open when the gateway stops', async () => {
+    await aSupplierReaching();
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+    const events = streamed({ method: 'SubscribeToTask', params: { id: task.id } });
+    await events.next();
+
+    await app.close();
+    app = await startedGateway();
+
+    await expect(events.next()).resolves.toMatchObject({ done: true });
+  });
+
+  it('refuses to subscribe to an ended task as an unsupported operation', async () => {
+    await aSupplierReaching({ deadlineMs: 500 });
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+    await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_FAILED');
+
+    expect((await rpc('SubscribeToTask', { id: task.id })).error?.code).toBe(-32004);
   });
 
   it('sends a message and reads its task over HTTP+JSON', async () => {

@@ -55,6 +55,9 @@ function statusOf(call: ClientCall, now: Date): TaskStatus & { since: Date } {
   return own.state === 'submitted' ? { state: 'submitted', since } : { state: 'working', since };
 }
 
+/** Whether the task ended: completed or failed, so it takes no follow-up and a follow of it ends. */
+export const isTerminal = (view: TaskView): boolean => view.status.state === 'completed' || view.status.state === 'failed';
+
 /** The task as its client reads it now; a task with no call kept yet is submitted since now. */
 export function taskViewOf(task: StoredTask, now: Date): TaskView {
   const latest = task.calls.at(-1);

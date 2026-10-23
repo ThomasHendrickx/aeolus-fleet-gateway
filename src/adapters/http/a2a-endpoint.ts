@@ -7,9 +7,10 @@
  * same for an alias of no ship. While the fleet's outside parties are off,
  * every call with a bearer is refused. The SDK reads the call over
  * JSON-RPC and HTTP+JSON; the gateway answers GetExtendedAgentCard,
- * SendMessage, GetTask, ListTasks and CancelTask, and no other method.
+ * SendMessage, SendStreamingMessage, GetTask, SubscribeToTask, ListTasks
+ * and CancelTask, and no push config method.
  */
-import { AgentCard, GetTaskRequest, ListTasksRequest, ListTasksResponse, SendMessageRequest, SendMessageResponse, Task, type StreamResponse } from '@a2a-js/sdk';
+import { AgentCard, GetTaskRequest, ListTasksRequest, ListTasksResponse, SendMessageRequest, SendMessageResponse, StreamResponse, Task } from '@a2a-js/sdk';
 import { ContentTypeNotSupportedError, RequestMalformedError, TaskNotCancelableError, TaskNotFoundError, UnsupportedOperationError, restStatusFor, toRestErrorBody } from '@a2a-js/sdk/errors';
 import { JsonRpcTransportHandler, ServerCallContext, validateVersion, type A2ARequestHandler } from '@a2a-js/sdk/server';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -18,11 +19,14 @@ import { z } from 'zod';
 import type { A2aCaller, AuthenticateA2aClient } from '../../core/a2a-in/authenticate-a2a-client.js';
 import { isOfEssence } from '../../core/mcp-in/client-call.js';
 import type { FindReachedShip, FindReachedShipRefusal } from '../../core/a2a-in/find-reached-ship.js';
+import type { FollowA2aTask } from '../../core/a2a-in/follow-a2a-task.js';
 import type { ListA2aTasks } from '../../core/a2a-in/list-a2a-tasks.js';
 import type { ReachedShip } from '../../core/a2a-in/list-reached-ships.js';
 import type { ReadA2aTask } from '../../core/a2a-in/read-a2a-task.js';
 import type { SendA2aMessage, SendA2aMessageRefusal } from '../../core/a2a-in/send-a2a-message.js';
+import type { SubscribeToA2aTask } from '../../core/a2a-in/subscribe-to-a2a-task.js';
 import { A2A_PATH, ALIAS_PATTERN, extendedCardOf, publicCardOf } from './a2a-cards.js';
+import { isEnded, sendEvents, streamOf } from './a2a-streams.js';
 import { inboundMessageOf, taskOf } from './a2a-tasks.js';
 
 const HTTP_UNAUTHORIZED = 401;
@@ -46,6 +50,8 @@ export interface A2aEndpointDeps {
   sendMessage: SendA2aMessage;
   readTask: ReadA2aTask;
   listTasks: ListA2aTasks;
+  followTask: FollowA2aTask;
+  subscribeToTask: SubscribeToA2aTask;
 }
 
 /** The HTTP status of each refusal of finding the ship, so an unknown and an unreachable alias answer alike. */
@@ -63,11 +69,6 @@ const requestIdSchema = z.object({ id: z.union([z.string(), z.number(), z.null()
 const querySchema = z.record(z.string(), z.unknown()).catch({});
 
 const unsupported = () => Promise.reject(new UnsupportedOperationError('This gateway does not carry this A2A method'));
-
-/** A stream of a method not carried: it ends in its error before any event. */
-async function* unsupportedStream(): AsyncGenerator<StreamResponse, void, undefined> {
-  yield await unsupported();
-}
 
 /**
  * The A2A error of a refused send. The fleet's own refusals are no A2A
@@ -92,7 +93,7 @@ function errorOf(refusal: SendA2aMessageRefusal): Error {
 }
 
 /** The A2A methods for one caller's call to one reached ship: its extended card, and its tasks. */
-function requestHandlerFor(deps: A2aEndpointDeps, { caller, ship }: { caller: A2aCaller; ship: ReachedShip }): A2ARequestHandler {
+function requestHandlerFor(deps: A2aEndpointDeps, { caller, ship, signal }: { caller: A2aCaller; ship: ReachedShip; signal: AbortSignal }): A2ARequestHandler {
   const read = async (taskId: string) => {
     const task = await deps.readTask(caller, taskId);
     if (!task.isOk) {
@@ -113,7 +114,17 @@ function requestHandlerFor(deps: A2aEndpointDeps, { caller, ship }: { caller: A2
       }
       return taskOf(sent.value, configuration?.historyLength === undefined ? {} : { historyLength: configuration.historyLength });
     },
-    sendMessageStream: unsupportedStream,
+    // The message is sent as a SendMessage that returns at once, and its task is followed from there.
+    sendMessageStream: async function* ({ message }) {
+      if (message === undefined) {
+        throw new RequestMalformedError('Send a message');
+      }
+      const sent = await deps.sendMessage({ caller, alias: ship.alias, message: inboundMessageOf(message), isBlocking: false });
+      if (!sent.isOk) {
+        throw errorOf(sent.error);
+      }
+      yield* streamOf(deps.followTask({ caller, taskId: sent.value.taskId, signal }));
+    },
     getTask: async ({ id, historyLength }) => taskOf(await read(id), historyLength === undefined ? {} : { historyLength }),
     // A8: a ship's work is not the gateway's to stop.
     cancelTask: async ({ id }) => {
@@ -124,7 +135,20 @@ function requestHandlerFor(deps: A2aEndpointDeps, { caller, ship }: { caller: A2
     getTaskPushNotificationConfig: unsupported,
     listTaskPushNotificationConfigs: unsupported,
     deleteTaskPushNotificationConfig: unsupported,
-    resubscribe: unsupportedStream,
+    resubscribe: async function* ({ id }) {
+      const subscribed = await deps.subscribeToTask({ caller, taskId: id, signal });
+      if (!subscribed.isOk) {
+        throw subscribed.error.kind === 'TASK_NOT_FOUND' ? new TaskNotFoundError(subscribed.error.message) : new UnsupportedOperationError(subscribed.error.message);
+      }
+      const events = streamOf(subscribed.value);
+      const first = await events.next();
+      // A state an A2A reply carries can end the task where the gateway's own states do not.
+      if (first.done === true || (first.value.payload?.$case === 'task' && isEnded(first.value.payload.value))) {
+        throw new UnsupportedOperationError(`The task ${id} has ended: read it with GetTask`);
+      }
+      yield first.value;
+      yield* events;
+    },
     listTasks: async ({ pageSize, pageToken, contextId, historyLength, includeArtifacts }) => {
       const page = await deps.listTasks(caller, { ...(pageSize === undefined ? {} : { pageSize }), pageToken, contextId });
       const options = { isWithoutArtifacts: includeArtifacts !== true, ...(historyLength === undefined ? {} : { historyLength }) };
@@ -139,6 +163,29 @@ function restStatusOf(error: unknown): number {
     return HTTP_CONFLICT;
   }
   return error instanceof ContentTypeNotSupportedError ? HTTP_UNSUPPORTED_MEDIA_TYPE : restStatusFor(error);
+}
+
+/** A stream answered as server-sent events, its events as the HTTP+JSON binding writes them. */
+class EventStream {
+  constructor(readonly events: AsyncIterator<unknown>) {}
+}
+
+/** The HTTP+JSON stream of A2A events, each written as its JSON. */
+async function* jsonEventsOf(events: AsyncIterable<StreamResponse>): AsyncGenerator<unknown, void, undefined> {
+  for await (const event of events) {
+    yield StreamResponse.toJSON(event);
+  }
+}
+
+const eventStreamOf = (events: AsyncIterable<StreamResponse>) => new EventStream(jsonEventsOf(events));
+
+/** A signal aborted once the reply ends, its client drops it, or the gateway stops, so a stream stops following its task. */
+function signalOf(reply: FastifyReply, stopping: AbortSignal): AbortSignal {
+  const controller = new AbortController();
+  reply.raw.once('close', () => {
+    controller.abort();
+  });
+  return AbortSignal.any([controller.signal, stopping]);
 }
 
 /** The bearer an Authorization header carries, if it carries one. */
@@ -193,8 +240,15 @@ export function registerA2aEndpoint(server: FastifyInstance, deps: A2aEndpointDe
     return { caller: caller.value, ship: ship.value };
   };
 
+  // A stream stays open until its task ends: a stopping gateway closes it, or the server would wait for it.
+  const stopping = new AbortController();
+  server.addHook('preClose', () => {
+    stopping.abort();
+    return Promise.resolve();
+  });
+
   void server.register((calls) => {
-    registerCalls(calls, { deps, resolve });
+    registerCalls(calls, { deps, resolve, stopping: stopping.signal });
     return Promise.resolve();
   });
 }
@@ -210,7 +264,7 @@ function isJsonBody(request: FastifyRequest): boolean {
  * be empty (CancelTask), and a body of any other content type is kept as
  * text, so the call answers ContentTypeNotSupportedError and sends nothing.
  */
-function registerCalls(server: FastifyInstance, { deps, resolve }: { deps: A2aEndpointDeps; resolve: (request: FastifyRequest, reply: FastifyReply) => Promise<{ caller: A2aCaller; ship: ReachedShip } | undefined> }): void {
+function registerCalls(server: FastifyInstance, { deps, resolve, stopping }: { deps: A2aEndpointDeps; resolve: (request: FastifyRequest, reply: FastifyReply) => Promise<{ caller: A2aCaller; ship: ReachedShip } | undefined>; stopping: AbortSignal }): void {
   const parseJson = server.getDefaultJsonParser('error', 'error');
   server.removeAllContentTypeParsers();
   for (const mediaType of REST_MEDIA_TYPES) {
@@ -249,20 +303,18 @@ function registerCalls(server: FastifyInstance, { deps, resolve }: { deps: A2aEn
     } catch (error) {
       return { jsonrpc: '2.0', id, error: JsonRpcTransportHandler.mapToJSONRPCError(error) };
     }
-    const transport = new JsonRpcTransportHandler(requestHandlerFor(deps, resolved));
+    const transport = new JsonRpcTransportHandler(requestHandlerFor(deps, { ...resolved, signal: signalOf(reply, stopping) }));
     const answered = await transport.handle(z.record(z.string(), z.unknown()).catch({}).parse(request.body), context);
     if (!(Symbol.asyncIterator in answered)) {
       return answered;
     }
-    // Every stream ends in its error before any event, as no streaming method is carried.
-    try {
-      for await (const event of answered) {
-        return event;
-      }
-      return await unsupported();
-    } catch (error) {
-      return { jsonrpc: '2.0', id, error: JsonRpcTransportHandler.mapToJSONRPCError(error) };
-    }
+    const errorOf = (error: unknown) => ({ jsonrpc: '2.0', id, error: JsonRpcTransportHandler.mapToJSONRPCError(error) });
+    // An error before the first event answers as the call's plain error.
+    const refused = await sendEvents(reply, { events: answered[Symbol.asyncIterator](), errorOf }).then(
+      () => undefined,
+      (error: unknown) => errorOf(error),
+    );
+    return refused ?? reply;
   });
 
 
@@ -282,7 +334,12 @@ function registerCalls(server: FastifyInstance, { deps, resolve }: { deps: A2aEn
             throw notSupported();
           }
           validateVersion(context.requestedVersion, publicCardOf(deps.issuer, resolved.ship.alias), 'HTTP+JSON');
-          const body = await answer({ handler: requestHandlerFor(deps, resolved), request, context });
+          const body = await answer({ handler: requestHandlerFor(deps, { ...resolved, signal: signalOf(reply, stopping) }), request, context });
+          if (body instanceof EventStream) {
+            // An error before the first event rejects, and is answered below.
+            await sendEvents(reply, { events: body.events, errorOf: (error) => toRestErrorBody(error, restStatusOf(error)) });
+            return undefined;
+          }
           return await reply.send(body);
         } catch (error) {
           const status = restStatusOf(error);
@@ -303,19 +360,35 @@ function registerCalls(server: FastifyInstance, { deps, resolve }: { deps: A2aEn
     },
   });
   restRoute({
+    method: 'POST',
+    path: '/message::stream',
+    answer: ({ handler, request, context }) => Promise.resolve(eventStreamOf(handler.sendMessageStream(SendMessageRequest.fromJSON(request.body ?? {}), context))),
+  });
+  /** SubscribeToTask's stream: on GET and on POST, as the specification has not settled its verb. */
+  const subscribed = ({ handler, context }: { handler: A2ARequestHandler; context: ServerCallContext }, taskId: string) => eventStreamOf(handler.resubscribe({ tenant: '', id: taskId }, context));
+  restRoute({
     method: 'GET',
     path: '/tasks/:taskId',
-    answer: async ({ handler, request, context }) => Task.toJSON(await handler.getTask(GetTaskRequest.fromJSON({ ...querySchema.parse(request.query), id: taskIdOf(request) }), context)),
+    answer: async (call) => {
+      const called = TASK_METHOD.exec(taskIdOf(call.request))?.groups;
+      if (called?.method === 'subscribe' && called.taskId !== undefined) {
+        return subscribed(call, called.taskId);
+      }
+      return Task.toJSON(await call.handler.getTask(GetTaskRequest.fromJSON({ ...querySchema.parse(call.request.query), id: taskIdOf(call.request) }), call.context));
+    },
   });
   restRoute({
     method: 'POST',
     path: '/tasks/:taskId',
-    answer: async ({ handler, request, context }) => {
-      const called = TASK_METHOD.exec(taskIdOf(request))?.groups;
-      if (called?.method !== 'cancel' || called.taskId === undefined) {
+    answer: async (call) => {
+      const called = TASK_METHOD.exec(taskIdOf(call.request))?.groups;
+      if (called?.taskId === undefined) {
         return unsupported();
       }
-      return Task.toJSON(await handler.cancelTask({ tenant: '', id: called.taskId, metadata: undefined }, context));
+      if (called.method === 'cancel') {
+        return Task.toJSON(await call.handler.cancelTask({ tenant: '', id: called.taskId, metadata: undefined }, call.context));
+      }
+      return called.method === 'subscribe' ? subscribed(call, called.taskId) : unsupported();
     },
   });
   restRoute({
