@@ -13,6 +13,37 @@ function aHubHeard() {
   return { hub, heard, stop };
 }
 
+describe("what hears each change to a person ship's inbox on this gateway (wake a person, #1014)", () => {
+  const CHARLOTTE = 'shp_01m3tb1zgr5h2ffee12xnch8pp';
+  const MATHILDE = 'shp_01m3tbfspe96yf1rnr4ank9dk1';
+
+  function pagesOfPeople() {
+    const hub = createChangeHub();
+    const heard: string[] = [];
+    hub.subscribe({ fleetId: FLEET, personShipId: CHARLOTTE, read: () => heard.push('charlotte') });
+    hub.subscribe({ fleetId: FLEET, personShipId: MATHILDE, read: () => heard.push('mathilde') });
+    hub.subscribe({ fleetId: FLEET, read: () => heard.push('argo') });
+    hub.subscribe({ fleetId: OTHER_FLEET_ID, personShipId: CHARLOTTE, read: () => heard.push('charlotte elsewhere') });
+    return { hub, heard };
+  }
+
+  it("tells the pages of that ship's person in its fleet alone", () => {
+    const { hub, heard } = pagesOfPeople();
+
+    hub.publish({ fleetId: FLEET, topic: 'inbox', shipId: CHARLOTTE });
+
+    expect(heard).toEqual(['charlotte']);
+  });
+
+  it("tells every page of the fleet a change to its requests, a person's too", () => {
+    const { hub, heard } = pagesOfPeople();
+
+    hub.publish({ fleetId: FLEET, topic: 'requests' });
+
+    expect(heard).toEqual(['charlotte', 'mathilde', 'argo']);
+  });
+});
+
 describe("what hears each change to a fleet's requests on this gateway", () => {
   it("tells the listeners of the change's fleet alone", () => {
     const { hub, heard } = aHubHeard();
