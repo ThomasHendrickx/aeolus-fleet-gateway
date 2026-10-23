@@ -51,6 +51,8 @@ import type { DoneDelivery } from '../../core/people/done-delivery.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
+import type { ReadWakeChannels } from '../../core/people/read-wake-channels.js';
+import type { TurnEmailChannel } from '../../core/people/turn-email-channel.js';
 import type { ReadAuthorization } from '../../core/oauth/read-authorization.js';
 import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
 import type { Result } from '../../core/shared/result.js';
@@ -115,7 +117,7 @@ export interface Context {
   listMine: ListMine;
   decideRequest: DecideRequest;
   /** A person's own person ship's deliveries; unset where no pagasae signs anyone in. */
-  person?: { readInbox: ReadInbox; openDelivery: OpenDelivery; answerDelivery: AnswerDelivery; doneDelivery: DoneDelivery };
+  person?: { readInbox: ReadInbox; openDelivery: OpenDelivery; answerDelivery: AnswerDelivery; doneDelivery: DoneDelivery; readWakeChannels: ReadWakeChannels; turnEmailChannel: TurnEmailChannel };
   readOutsideParties: ReadOutsideParties;
   setOutsideParties: SetOutsideParties;
 }
@@ -404,6 +406,7 @@ const PERSON_CODES = {
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
   NO_SUCH_DELIVERY: 'NOT_FOUND',
   SEND_REFUSED: 'BAD_REQUEST',
+  CHANNEL_NOT_OFFERED: 'PRECONDITION_FAILED',
 } as const satisfies Record<string, TRPCError['code']>;
 
 function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES; message: string }>): T {
@@ -723,6 +726,10 @@ export const gatewayRouter = t.router({
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.answerDelivery({ caller: ctx.caller, ...input }))),
     /** Is done with a delivery they opened, with no answer. */
     done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, ...input }))),
+    /** The channels that wake them when something waits for their person ship, each offered or not and on or not (wake a person, W8). */
+    wakeChannels: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readWakeChannels(ctx.caller))),
+    /** Turns email on or off, to be woken when something waits for their person ship. */
+    turnEmail: personProcedure.input(z.strictObject({ isOn: z.boolean() })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.turnEmailChannel({ caller: ctx.caller, ...input }))),
   }),
   requests: t.router({
     /** The requests the account asked, in any state, the newest first (decision 0056: Your requests). */

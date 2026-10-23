@@ -93,6 +93,8 @@ import { createDoneDelivery } from './core/people/done-delivery.js';
 import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadInbox } from './core/people/read-inbox.js';
+import { createReadWakeChannels } from './core/people/read-wake-channels.js';
+import { createTurnEmailChannel } from './core/people/turn-email-channel.js';
 import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
@@ -458,6 +460,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes }),
+      readWakeChannels: createReadWakeChannels({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email') }),
+      turnEmailChannel: createTurnEmailChannel({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), clock }),
       listShips: createListShips(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
