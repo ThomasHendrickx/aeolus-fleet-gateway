@@ -30,10 +30,36 @@ describe("an A2A client's pushes, round after round (slice 4)", () => {
       },
       sleep,
       pollMs: POLL_MS,
+      failed: () => undefined,
     });
 
     await push({ caller: SUPPLIER, signal: stop.signal });
 
     expect({ rounds, slept }).toEqual({ rounds: ['notice supplier', 'deliver supplier', 'notice supplier', 'deliver supplier'], slept: [POLL_MS, POLL_MS] });
+  });
+
+  it('reports a failure of its own database and goes on the next round, never ending the loop', async () => {
+    const stop = new AbortController();
+    const failures: unknown[] = [];
+    const delivered: number[] = [];
+    let noticed = 0;
+    const push = createPushToWebhooks({
+      notice: () => {
+        noticed += 1;
+        return noticed === 1 ? Promise.reject(new Error('the database is gone')) : Promise.resolve();
+      },
+      deliver: () => {
+        delivered.push(noticed);
+        stop.abort();
+        return Promise.resolve();
+      },
+      sleep: () => Promise.resolve(),
+      pollMs: POLL_MS,
+      failed: (error) => failures.push(error),
+    });
+
+    await push({ caller: SUPPLIER, signal: stop.signal });
+
+    expect({ failures, delivered }).toEqual({ failures: [new Error('the database is gone')], delivered: [2] });
   });
 });
