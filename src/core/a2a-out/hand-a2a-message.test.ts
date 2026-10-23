@@ -176,6 +176,22 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
     expect(JSON.parse(crew.replies()[0]?.payload ?? '{}')).toMatchObject({ statusUpdate: { status: { state: 'rejected', reason: 'The agent answered 401: bad token' } } });
   });
 
+  it.each<[string, SendOutcome]>([
+    ['a message answer', { kind: 'message', event: { kind: 'message', parts: [{ kind: 'text', text: 'We sell no bolts', mediaType: 'text/plain' }], json: '{}' } }],
+    ['a refusal', { kind: 'refused', reason: 'The agent answered 400: no part list' }],
+  ])('keeps %s of an agent marked not repeatable before acknowledging, so it is handled when it comes again after a lost acknowledgement, replied once', async (_kind, answer) => {
+    await parties.save(anAgentParty({ isRepeatable: false }));
+    const agents = fakeA2aAgents({ sends: [answer] });
+    const hand = handWith(agents);
+    crew.state.isAckAnswering = false;
+    await expect(hand()).resolves.toEqual({ kind: 'again' });
+    crew.state.isAckAnswering = true;
+
+    await expect(hand(aQuote({ state: 'handed', handOverNumber: 1 }))).resolves.toEqual({ kind: 'handled' });
+
+    expect({ sent: agents.sent.length, replies: crew.replies().length, steps: steps().map((step) => step.split(' ')[0]) }).toEqual({ sent: 1, replies: 1, steps: ['handed', 'send', 'ack', 'handled'] });
+  });
+
   it('hands a message with no answer again when the agent is repeatable, the same messageId the next time', async () => {
     const agents = fakeA2aAgents({ sends: [{ kind: 'unanswered', reason: 'The agent answered 503' }, taken([aStatus('completed')])] });
     const hand = handWith(agents);
