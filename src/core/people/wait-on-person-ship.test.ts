@@ -7,6 +7,7 @@ import type { FleetRefusal } from '../connection/ports.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { InboxChange, PersonShipDoor } from './ports.js';
 import { createWaitOnPersonShip } from './wait-on-person-ship.js';
+import type { WakeOutcome } from './wake-person.js';
 
 // The gateway waits on every person ship it crews (wake a person, W5, W7):
 // it asks the fleet's inbox to wait while the count is the one it knows,
@@ -15,6 +16,8 @@ import { createWaitOnPersonShip } from './wait-on-person-ship.js';
 const SHIP = { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID };
 const CREW_TOKEN = 'aeolus_ct_v1_charlotte';
 const AGAIN_WAITS_MS = [100, 200] as const;
+const WAKE_AGAIN_WAITS_MS = [30_000, 60_000] as const;
+const START = new Date('2026-10-23T10:00:00.000Z');
 const UNAVAILABLE: FleetRefusal = { code: 'UNAVAILABLE', message: 'The fleet did not answer' };
 
 type InboxAnswer = Result<{ waiting: number }, FleetRefusal>;
@@ -44,11 +47,14 @@ function scriptedInbox(answers: (InboxAnswer | (() => InboxAnswer))[]) {
   return { inbox, asked };
 }
 
-async function waiting(answers: (InboxAnswer | (() => InboxAnswer))[], crews = memoryPersonCrews()) {
+async function waiting(answers: (InboxAnswer | (() => InboxAnswer))[], crews = memoryPersonCrews(), wakeOutcomes: WakeOutcome[] = []) {
   await crews.save({ ...SHIP, crewToken: CREW_TOKEN, crewedAt: new Date('2026-10-23T09:00:00.000Z') });
   const { inbox, asked } = scriptedInbox(answers);
   const told: InboxChange[] = [];
   const slept: number[] = [];
+  /** Each wake, with the crew token and the time it ran at. */
+  const woken: { crewToken: string; at: Date }[] = [];
+  const clock = { at: START, now: () => clock.at };
   const stop = new AbortController();
   const waitOnPersonShip = createWaitOnPersonShip({
     crews,
@@ -64,8 +70,14 @@ async function waiting(answers: (InboxAnswer | (() => InboxAnswer))[], crews = m
       return Promise.resolve();
     },
     againWaitsMs: AGAIN_WAITS_MS,
+    wake: (ship, crewToken) => {
+      woken.push({ crewToken, at: clock.now() });
+      return Promise.resolve(wakeOutcomes.shift() ?? { kind: 'settled' });
+    },
+    clock,
+    wakeAgainWaitsMs: WAKE_AGAIN_WAITS_MS,
   });
-  return { crews, asked, told, slept, stop, waitOnPersonShip };
+  return { crews, asked, told, slept, woken, clock, stop, waitOnPersonShip };
 }
 
 /** Lets the waiter run until it waits on the fleet with nothing scripted left, then stops it. */
@@ -156,5 +168,71 @@ describe('the waiter of a person ship', () => {
     const ended = await runUntilIdle(waiter);
 
     expect({ ended, held: waiter.crews.held.length }).toEqual({ ended: { reason: 'stopped' }, held: 1 });
+  });
+});
+
+/** An inbox answer given once the clock moved on to then. */
+function answeredAt(waiter: { clock: { at: Date } }, at: Date, answer: InboxAnswer) {
+  return () => {
+    waiter.clock.at = at;
+    return answer;
+  };
+}
+
+const after = (ms: number) => new Date(START.getTime() + ms);
+
+describe('the waiter of a person ship wakes its person (wake a person, W3)', () => {
+  it('wakes them with the crew it holds each time the count rose', async () => {
+    const waiter = await waiting([ok({ waiting: 0 }), ok({ waiting: 1 }), ok({ waiting: 1 }), ok({ waiting: 3 })]);
+
+    await runUntilIdle(waiter);
+
+    expect(waiter.woken).toEqual([
+      { crewToken: CREW_TOKEN, at: START },
+      { crewToken: CREW_TOKEN, at: START },
+    ]);
+  });
+
+  it('wakes them at its first look while something waits, as after a restart between a wake and its hand-over', async () => {
+    const waiter = await waiting([ok({ waiting: 2 })]);
+
+    await runUntilIdle(waiter);
+
+    expect(waiter.woken).toHaveLength(1);
+  });
+
+  it('wakes no one when the count went down, as when they opened one elsewhere', async () => {
+    const waiter = await waiting([ok({ waiting: 0 }), ok({ waiting: 2 }), ok({ waiting: 1 }), ok({ waiting: 0 })]);
+
+    await runUntilIdle(waiter);
+
+    expect(waiter.woken).toHaveLength(1);
+  });
+
+  it("looks again once the channel's window ended, though the count did not change", async () => {
+    const answers: (InboxAnswer | (() => InboxAnswer))[] = [ok({ waiting: 1 })];
+    const waiter = await waiting(answers, memoryPersonCrews(), [{ kind: 'windowOpen', endsAt: after(600_000) }]);
+    answers.push(answeredAt(waiter, after(599_999), ok({ waiting: 1 })), answeredAt(waiter, after(600_000), ok({ waiting: 1 })), answeredAt(waiter, after(625_000), ok({ waiting: 1 })));
+
+    await runUntilIdle(waiter);
+
+    expect(waiter.woken.map(({ at }) => at)).toEqual([START, after(600_000)]);
+  });
+
+  it('tries a failed wake again, waiting longer each time, up to its longest wait', async () => {
+    const answers: (InboxAnswer | (() => InboxAnswer))[] = [ok({ waiting: 1 })];
+    const waiter = await waiting(answers, memoryPersonCrews(), [{ kind: 'failed' }, { kind: 'failed' }, { kind: 'failed' }]);
+    answers.push(
+      answeredAt(waiter, after(29_999), ok({ waiting: 1 })),
+      answeredAt(waiter, after(30_000), ok({ waiting: 1 })),
+      answeredAt(waiter, after(89_999), ok({ waiting: 1 })),
+      answeredAt(waiter, after(90_000), ok({ waiting: 1 })),
+      answeredAt(waiter, after(150_000), ok({ waiting: 1 })),
+      answeredAt(waiter, after(200_000), ok({ waiting: 1 })),
+    );
+
+    await runUntilIdle(waiter);
+
+    expect(waiter.woken.map(({ at }) => at)).toEqual([START, after(30_000), after(90_000), after(150_000)]);
   });
 });
