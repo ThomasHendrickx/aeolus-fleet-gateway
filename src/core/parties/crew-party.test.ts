@@ -105,3 +105,26 @@ describe('an actor holding fleet:manage gives a client party a new secret (vendo
     expect(clients.held.get('client-secret-1')?.secretHash).toBe('hash(secret-2)');
   });
 });
+
+describe("a client party whose commission's answer was lost gets its secret from parties.crew (vendor platforms V4)", () => {
+  it('crews the ship awaiting crew with the secret of its new starting prompt, and answers the first client secret', async () => {
+    const connections = memoryConnectionStore();
+    await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: AT });
+    fleet = fakeProxyShipFleet();
+    parties = memoryPartyStore();
+    const approveClientParty = createApproveClientParty({ connections, parties, door: fleet.door, hasher: plainHasher, servesOutsideParties: isServing, clock: { now: () => AT } });
+    fleet.state.isLosingNextAnswer = true;
+    const add = createAddClientParty({ parties, approveClientParty, clients, secrets });
+    const addition = { actor: { fleetId: FLEET_ID, kind: 'ship' as const, shipId: SHIP_ID, scopes: ['gateway:approve'] }, requestId: 'r-1', name: 'agentcore', ownerShipId: OWNER_SHIP_ID, scopes: [] };
+    await add(addition);
+    // The approver adds it again, as after a fleet that did not answer: the ship is commissioned, its secret lost.
+    await add(addition);
+    fleet.state.secrets.set(PROXY_SHIP_ID, 'aeolus_sk_v1_new');
+
+    await expect(createCrewParty({ parties, door: fleet.door, clients, secrets, tokens })({ operatorFleetId: FLEET_ID, name: 'agentcore', secret: 'aeolus_sk_v1_new' })).resolves.toMatchObject({
+      isOk: true,
+      value: { party: { state: 'crewed' }, clientSecret: 'secret-2' },
+    });
+    expect(clients.held.get('client-secret-1')?.secretHash).toBe('hash(secret-2)');
+  });
+});
