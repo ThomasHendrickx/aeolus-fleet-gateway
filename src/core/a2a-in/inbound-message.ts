@@ -5,7 +5,7 @@
  * plain text or JSON, so one text or one data part travels as itself; any
  * other message travels whole, as `application/a2a+json`.
  */
-import { isSameMediaType } from '../mcp-in/client-call.js';
+import { A2A_CONTENT_TYPE, isSameMediaType } from '../mcp-in/client-call.js';
 import type { Capability } from '../mcp-in/ports.js';
 
 /** A part, as the content rule tells them apart: text, data, or another kind (a file, raw bytes). */
@@ -21,9 +21,6 @@ export interface InboundMessage {
   /** The whole message as A2A JSON, as the client sent it. */
   asJson: string;
 }
-
-/** The A2A media type of a whole A2A message. */
-export const A2A_CONTENT_TYPE = 'application/a2a+json';
 
 const PLAIN_TEXT = 'text/plain';
 const JSON_CONTENT_TYPE = 'application/json';

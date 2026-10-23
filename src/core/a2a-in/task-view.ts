@@ -7,12 +7,8 @@
  * working once the ship took it, submitted before. Its history is the
  * client's messages and the ship's replies in the order they came.
  */
-import { answerOf, isOfEssence, repliesBeforeFailure, stateOf, stateSince, type CallReply, type ClientCall } from '../mcp-in/client-call.js';
+import { A2A_CONTENT_TYPE, QUESTION_CONTENT_TYPE, answerOf, isOfEssence, repliesBeforeFailure, stateOf, stateSince, type CallReply, type ClientCall } from '../mcp-in/client-call.js';
 import type { StoredTask } from '../mcp-in/ports.js';
-import { A2A_CONTENT_TYPE } from './inbound-message.js';
-
-/** The content type of a question to the asker (decision 0038): the ship needs the client's input. */
-export const QUESTION_CONTENT_TYPE = 'application/vnd.aeolus.question+json';
 
 export type TaskStatus =
   | { state: 'submitted' }

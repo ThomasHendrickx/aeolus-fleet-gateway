@@ -53,6 +53,12 @@ export interface ClientCall {
 
 export type CallState = { state: 'submitted' } | { state: 'working' } | { state: 'completed'; answer: { contentType: string; payload: string } } | { state: 'failed' };
 
+/** The content type of a question to the asker (decision 0038): the ship needs the client's input. */
+export const QUESTION_CONTENT_TYPE = 'application/vnd.aeolus.question+json';
+
+/** The A2A media type of a whole A2A message or status, which carries its own state. */
+export const A2A_CONTENT_TYPE = 'application/a2a+json';
+
 /** The type a plain text answer comes in, which completes a call to a ship that stated no output type. */
 const PLAIN_TEXT = 'text/plain';
 
@@ -91,7 +97,8 @@ function isAnswer(call: ClientCall & { failed: Date | undefined }, reply: CallRe
     return false;
   }
   if (call.capability === null) {
-    return true;
+    // Interop 3.4: a question asks for input, and an A2A reply drives the state it carries.
+    return !isOfEssence(reply.contentType, QUESTION_CONTENT_TYPE) && !isOfEssence(reply.contentType, A2A_CONTENT_TYPE);
   }
   return call.outputContentType === null ? essenceOf(reply.contentType) === PLAIN_TEXT : isSameMediaType(reply.contentType, call.outputContentType);
 }
