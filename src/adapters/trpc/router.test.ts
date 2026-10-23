@@ -10,6 +10,7 @@ import { createAccountInView } from '../../core/account-sign-in/account-in-view.
 import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
+import type { AddClientParty } from '../../core/parties/add-client-party.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
 import type { DecideRequest } from '../../core/requests/decide-request.js';
@@ -67,6 +68,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   changes: ChangeHub;
 } {
   const approvals: Parameters<ApproveParty>[0][] = [];
+  const additions: Parameters<AddClientParty>[0][] = [];
   const switched: Parameters<SetOutsideParties>[0][] = [];
   const decisions: Parameters<DecideRequest>[0][] = [];
   const marks: Parameters<MarkTool>[0][] = [];
@@ -129,7 +131,19 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       approvals.push(input);
       return Promise.resolve(ok({ name: input.name, kind: 'mcpServer' as const, url: input.url, credentialKind: input.credential.kind, ownerShipId: input.ownerShipId, concurrencyLimit: input.concurrencyLimit, state: 'crewed' as const, proxyShipId: null }));
     },
-    crewParty: unused,
+    crewParty: ({ name }) =>
+      Promise.resolve(
+        name === 'agentcore'
+          ? ok({ party: { name, kind: 'mcpClient' as const, clientId: 'client-agentcore', state: 'crewed' as const, proxyShipId: null }, clientSecret: 'new-client-secret' })
+          : err({ kind: 'NOT_AWAITING_CREW' as const, message: `The proxy ship of ${name} does not await crew` }),
+      ),
+    addClientParty: (input) => {
+      additions.push(input);
+      if (!input.actor.scopes.includes('gateway:approve')) {
+        return Promise.resolve(err({ kind: 'NOT_AN_APPROVER' as const, message: 'Adding a client party needs gateway:approve' }));
+      }
+      return Promise.resolve(ok({ party: { name: input.name, kind: 'mcpClient' as const, clientId: 'client-agentcore', state: 'crewed' as const, proxyShipId: null }, clientId: 'client-agentcore', clientSecret: 'client-secret' }));
+    },
     listParties: () => Promise.resolve([]),
     listOwnerChoices: () => Promise.resolve(ok([])),
     retireParty: unused,
@@ -179,7 +193,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, decisions, switched, answers, changes };
+  return { context, approvals, marks, decisions, switched, answers, changes, additions };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -331,6 +345,43 @@ describe('argo pre-registers MCP clients through the gateway\'s API', () => {
 });
 
 type DecideInput = Parameters<ReturnType<typeof gatewayRouter.createCaller>['requests']['decide']>[0];
+
+describe("an approver adds a client party that signs in with client credentials through the gateway's API (vendor platforms V4)", () => {
+  const ADDITION = { requestId: 'a-1', name: 'agentcore', ownerShipId: OWNER, scopes: ['fleet:read'] };
+
+  it('adds it as the actor, and answers its client id and secret', async () => {
+    const { context, additions } = aContext(undefined, APPROVER_CREW);
+
+    await expect(gatewayRouter.createCaller(context).parties.addClient(ADDITION)).resolves.toEqual({
+      party: { name: 'agentcore', kind: 'mcpClient', clientId: 'client-agentcore', state: 'crewed', proxyShipId: null },
+      clientId: 'client-agentcore',
+      clientSecret: 'client-secret',
+    });
+    expect(additions).toEqual([{ actor: { fleetId: FLEET, kind: 'ship', shipId: MANAGER, scopes: ['fleet:read', 'gateway:approve'] }, ...ADDITION }]);
+  });
+
+  it('answers FORBIDDEN to an actor without gateway:approve', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined, READER_CREW).context).parties.addClient(ADDITION)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('refuses a name that is no ship handle, adding nothing', async () => {
+    const { context, additions } = aContext(undefined, APPROVER_CREW);
+
+    await expect(gatewayRouter.createCaller(context).parties.addClient({ ...ADDITION, name: 'Agent Core' })).rejects.toBeInstanceOf(TRPCError);
+    expect(additions).toEqual([]);
+  });
+
+  it("answers a client party crewed again with its new client secret, this once (V8)", async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined, MANAGER_CREW).context).parties.crew({ name: 'agentcore', secret: 'aeolus_sk_v1_new' })).resolves.toEqual({
+      name: 'agentcore',
+      kind: 'mcpClient',
+      clientId: 'client-agentcore',
+      state: 'crewed',
+      proxyShipId: null,
+      clientSecret: 'new-client-secret',
+    });
+  });
+});
 
 describe("an approver decides pending requests through the gateway's API (decision 0056)", () => {
   it('lists the requests to decide, their times as ISO text', async () => {
