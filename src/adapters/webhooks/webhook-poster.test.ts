@@ -80,4 +80,46 @@ describe('the webhook poster (slice 4)', () => {
 
     await expect(poster.post(`http://hooks.supplier.test:${String(port)}/a2a`, { body: '{}', token: null, authentication: null })).resolves.toEqual({ isOk: true, value: { status: 404 } });
   });
+
+  it('answers unreachable when the whole answer does not come within the timeout, however steadily it trickles', async () => {
+    const trickling = createServer((_request, response) => {
+      response.writeHead(200);
+      const drip = setInterval(() => response.write('.'), 20);
+      response.on('close', () => {
+        clearInterval(drip);
+      });
+    });
+    await new Promise<void>((resolve) => trickling.listen(0, '127.0.0.1', resolve));
+    const { port: tricklingPort } = z.object({ port: z.number() }).parse(trickling.address());
+    const poster = createWebhookPoster({ addressesOf: lookupTo('127.0.0.1'), isAllowedAddress: allowingLocal, timeoutMs: 300 });
+
+    const posted = await poster.post(`http://hooks.supplier.test:${String(tricklingPort)}/a2a`, { body: '{}', token: null, authentication: null });
+
+    trickling.closeAllConnections();
+    await new Promise((resolve) => trickling.close(resolve));
+    expect(posted).toEqual({ isOk: false, error: { kind: 'UNREACHABLE', message: 'No answer within 300 ms' } });
+  });
+
+  it('answers the status without reading an answer body past its cap', async () => {
+    const flooding = createServer((_request, response) => {
+      response.writeHead(200);
+      const chunk = Buffer.alloc(16_384, 'x');
+      const flood = () => {
+        while (response.write(chunk)) {
+          // Writes until the socket pushes back, then again once it drained.
+        }
+      };
+      response.on('drain', flood);
+      flood();
+    });
+    await new Promise<void>((resolve) => flooding.listen(0, '127.0.0.1', resolve));
+    const { port: floodingPort } = z.object({ port: z.number() }).parse(flooding.address());
+    const poster = createWebhookPoster({ addressesOf: lookupTo('127.0.0.1'), isAllowedAddress: allowingLocal, timeoutMs: 5_000 });
+
+    const posted = await poster.post(`http://hooks.supplier.test:${String(floodingPort)}/a2a`, { body: '{}', token: null, authentication: null });
+
+    flooding.closeAllConnections();
+    await new Promise((resolve) => flooding.close(resolve));
+    expect(posted).toEqual({ isOk: true, value: { status: 200 } });
+  });
 });
