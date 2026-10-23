@@ -49,6 +49,12 @@ describe("the gateway's address as a person opens it (#1030)", () => {
     expect(file.body).toBe('<p>the web app answered /_next/static/chunks/app.js</p>');
   });
 
+  it("hands the service worker that shows a wake to the web app, as the browser asks for its script (wake a person, W4)", async () => {
+    const worker = await server.inject({ url: '/wake-worker.js', headers: { accept: '*/*' } });
+
+    expect(worker.body).toBe('<p>the web app answered /wake-worker.js</p>');
+  });
+
   it("hands a page's own calls to the web app: a refresh of its server components, and its live updates", async () => {
     const refresh = await server.inject({ url: '/overview?fleet=f', headers: { accept: '*/*', rsc: '1' } });
     const live = await server.inject({ url: '/overview/changes?fleet=f', headers: { accept: 'text/event-stream' } });
