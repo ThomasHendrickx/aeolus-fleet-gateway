@@ -31,6 +31,8 @@ function aCall(overrides: Partial<ClientCall> = {}): ClientCall {
     outputContentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals',
     sentAt: new Date('2026-10-19T12:00:00.000Z'),
     deadlineAt: new Date('2026-10-19T12:10:00.000Z'),
+    delivery: null,
+    task: null,
     replies: [],
     ...overrides,
   };
@@ -95,5 +97,51 @@ describe("outside clients' calls in Postgres", () => {
     await createPrismaFleetForgetter(prisma).forget(OTHER_FLEET);
 
     await expect(calls.findByHandle({ fleetId: OTHER_FLEET, party: 'claude' }, 'handle-o')).resolves.toBeUndefined();
+  });
+});
+
+describe("outside A2A clients' tasks in Postgres (decision 0060)", () => {
+  const SUPPLIER = { fleetId: FLEET, party: 'supplier' };
+  const aTaskCall = (n: number, taskId: string, overrides: Partial<ClientCall> = {}) =>
+    aCall({ party: 'supplier', messageId: `msg_01m3tbfspe96yf1rnr4ank9t${String(n).padStart(2, '0')}`, handle: `t-${String(n)}`, capability: null, outputContentType: null, deadlineAt: null, task: { taskId, message: `{"messageId":"m-${String(n)}"}` }, ...overrides });
+
+  it("keeps where a call's delivery stands, read back with the call", async () => {
+    const calls = createPrismaClientCalls(prisma);
+    await calls.save(aCall({ messageId: 'msg_01m3tbfspe96yf1rnr4ank9d01', handle: 'd-1' }));
+    await calls.setDelivery({ fleetId: FLEET, messageId: 'msg_01m3tbfspe96yf1rnr4ank9d01' }, { state: 'acknowledged', since: new Date('2026-10-19T12:00:30.000Z') });
+
+    await expect(calls.findByMessage(FLEET, 'msg_01m3tbfspe96yf1rnr4ank9d01')).resolves.toMatchObject({ delivery: { state: 'acknowledged', since: new Date('2026-10-19T12:00:30.000Z') } });
+  });
+
+  it('reads a task with its context and its calls in the order sent; none of another party', async () => {
+    const calls = createPrismaClientCalls(prisma);
+    await calls.saveTask({ ...SUPPLIER, taskId: 'task-a', contextId: 'ctx-a', createdAt: new Date('2026-10-19T12:00:00.000Z') });
+    await calls.save(aTaskCall(1, 'task-a'));
+    await calls.save(aTaskCall(2, 'task-a', { sentAt: new Date('2026-10-19T12:02:00.000Z') }));
+
+    const [own, other] = await Promise.all([calls.findTask(SUPPLIER, 'task-a'), calls.findTask({ fleetId: FLEET, party: 'claude' }, 'task-a')]);
+
+    expect({ contextId: own?.contextId, messages: own?.calls.map((call) => call.task?.message), other }).toEqual({ contextId: 'ctx-a', messages: ['{"messageId":"m-1"}', '{"messageId":"m-2"}'], other: undefined });
+  });
+
+  it("lists the party's tasks newest first, a page at a time, in one context or all", async () => {
+    const calls = createPrismaClientCalls(prisma);
+    const lister = { fleetId: FLEET, party: 'lister' };
+    for (const [n, context] of [[11, 'ctx-1'], [12, 'ctx-2'], [13, 'ctx-1']] as const) {
+      await calls.saveTask({ ...lister, taskId: `task-${String(n)}`, contextId: context, createdAt: new Date(`2026-10-19T12:${String(n)}:00.000Z`) });
+      await calls.save(aTaskCall(n, `task-${String(n)}`, { party: 'lister' }));
+    }
+
+    const first = await calls.listTasks(lister, { limit: 2 });
+    const second = await calls.listTasks(lister, { limit: 2, after: first.next ?? '' });
+    const inContext = await calls.listTasks(lister, { limit: 10, contextId: 'ctx-1' });
+
+    expect({
+      first: first.tasks.map((task) => task.taskId),
+      second: second.tasks.map((task) => task.taskId),
+      end: second.next,
+      inContext: inContext.tasks.map((task) => task.taskId),
+      callsKept: first.tasks[0]?.calls.length,
+    }).toEqual({ first: ['task-13', 'task-12'], second: ['task-11'], end: null, inContext: ['task-13', 'task-11'], callsKept: 1 });
   });
 });
