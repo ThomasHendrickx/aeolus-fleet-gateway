@@ -45,7 +45,11 @@ export type DomainErrorKind =
   | 'NOT_AN_ACCOUNT'
   | 'PARTY_NOT_COMMISSIONED'
   | 'CHANGE_REFUSED'
-  | 'UNKNOWN_ALIAS';
+  | 'UNKNOWN_ALIAS'
+  | 'PAYLOAD_TOO_LARGE'
+  | 'TASK_NOT_FOUND'
+  | 'TASK_TERMINAL'
+  | 'CONTEXT_MISMATCH';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {

@@ -65,6 +65,7 @@ export function fakeCallKeys(): CallKeys & { drawn: number } {
       return `new-${String(keys.drawn)}`;
     },
     handleOf: (fleetId: FleetId, messageId: MessageId) => `handle(${fleetId}:${messageId})`,
+    contextIdOf: (fleetId: FleetId, messageId: MessageId) => `context(${fleetId}:${messageId})`,
   };
   return keys;
 }
@@ -72,7 +73,7 @@ export function fakeCallKeys(): CallKeys & { drawn: number } {
 /** The fleet's send, as a proxy ship's crew calls it: the same key answers the same message, as core does. */
 export function fakeCallSender() {
   const state: { refusal: FleetRefusal | undefined } = { refusal: undefined };
-  const sent: { crewToken: string; to: ShipId; contentType: string; payload: string; idempotencyKey: string }[] = [];
+  const sent: { crewToken: string; to: ShipId; contentType: string; payload: string; idempotencyKey: string; inReplyTo?: MessageId }[] = [];
   const sender: CallSender & { state: typeof state; sent: typeof sent } = {
     state,
     sent,

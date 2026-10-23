@@ -47,7 +47,7 @@ export interface ShipAliases {
 
 /** Outbound port: the fleet's send, as a proxy ship's crew calls it. The same idempotency key answers the same message. */
 export interface CallSender {
-  send(crewToken: string, message: { to: ShipId; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<{ messageId: MessageId }, FleetRefusal>>;
+  send(crewToken: string, message: { to: ShipId; contentType: string; payload: string; idempotencyKey: string; inReplyTo?: MessageId }): Promise<Result<{ messageId: MessageId }, FleetRefusal>>;
 }
 
 /**
@@ -59,8 +59,10 @@ export interface CallKeys {
   idempotencyKeyOf(given: { fleetId: FleetId; party: string; key: string }): string;
   /** A new send key, for a call the client gave none. */
   newIdempotencyKey(): string;
-  /** The handle the client reads its call by. */
+  /** The handle the client reads its call by; an A2A task's id, for the task's first message. */
   handleOf(fleetId: FleetId, messageId: MessageId): string;
+  /** The context of an A2A task its client named none for, from the task's first message. */
+  contextIdOf(fleetId: FleetId, messageId: MessageId): string;
 }
 
 /** An outside A2A client's task (decision 0060): its id and context, and its calls in the order sent. */

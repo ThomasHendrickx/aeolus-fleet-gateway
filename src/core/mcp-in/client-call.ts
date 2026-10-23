@@ -65,6 +65,16 @@ const normalized = (contentType: string) =>
 
 const essenceOf = (contentType: string) => normalized(contentType).split(';')[0] ?? '';
 
+/** Whether two media types are the same: their case and the spaces around their parameters do not matter. */
+export function isSameMediaType(left: string, right: string): boolean {
+  return normalized(left) === normalized(right);
+}
+
+/** Whether a reply's media type is of this essence, whatever its parameters. */
+export function isOfEssence(contentType: string, essence: string): boolean {
+  return essenceOf(contentType) === essence;
+}
+
 /** When the call failed without its answer: at its deadline, or once the fleet gave its delivery up; none while neither. */
 function failedAt(call: ClientCall, now: Date): Date | undefined {
   const times = [
@@ -83,13 +93,25 @@ function isAnswer(call: ClientCall & { failed: Date | undefined }, reply: CallRe
   if (call.capability === null) {
     return true;
   }
-  return call.outputContentType === null ? essenceOf(reply.contentType) === PLAIN_TEXT : normalized(reply.contentType) === normalized(call.outputContentType);
+  return call.outputContentType === null ? essenceOf(reply.contentType) === PLAIN_TEXT : isSameMediaType(reply.contentType, call.outputContentType);
+}
+
+/** The reply that answers the call, if one came before it failed. */
+export function answerOf(call: ClientCall, now: Date): CallReply | undefined {
+  const failed = failedAt(call, now);
+  return call.replies.find((reply) => isAnswer({ ...call, failed }, reply));
+}
+
+/** The replies kept before the call failed: what moves its state; a later reply is kept, and changes nothing. */
+export function repliesBeforeFailure(call: ClientCall, now: Date): CallReply[] {
+  const failed = failedAt(call, now);
+  return call.replies.filter((reply) => failed === undefined || reply.receivedAt.getTime() < failed.getTime());
 }
 
 /** The call's state with since when it holds, by the one rule below. */
 function standing(call: ClientCall, now: Date): { state: CallState; since: Date } {
   const failed = failedAt(call, now);
-  const answer = call.replies.find((reply) => isAnswer({ ...call, failed }, reply));
+  const answer = answerOf(call, now);
   if (answer) {
     return { state: { state: 'completed', answer: { contentType: answer.contentType, payload: answer.payload } }, since: answer.receivedAt };
   }

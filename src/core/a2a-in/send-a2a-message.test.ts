@@ -62,7 +62,7 @@ beforeEach(async () => {
   });
 });
 
-const sending = (message: InboundMessage = aMessage(), returnImmediately = false) => send({ caller: CALLER, alias: CRM_ALIAS, message, returnImmediately });
+const sending = (message: InboundMessage = aMessage(), isBlocking = true) => send({ caller: CALLER, alias: CRM_ALIAS, message, isBlocking });
 
 describe("an outside A2A client's message is a message its proxy ship sends (decision 0060)", () => {
   it("sends the message's content to the alias's ship as the proxy ship, keyed by the client's messageId", async () => {
@@ -107,7 +107,7 @@ describe("an outside A2A client's message is a message its proxy ship sends (dec
   });
 
   it('refuses an alias of no ship it reaches, sending nothing', async () => {
-    await expect(send({ caller: CALLER, alias: 'azzzzzzz', message: aMessage(), returnImmediately: false })).resolves.toMatchObject({ isOk: false, error: { kind: 'UNKNOWN_ALIAS' } });
+    await expect(send({ caller: CALLER, alias: 'azzzzzzz', message: aMessage(), isBlocking: true })).resolves.toMatchObject({ isOk: false, error: { kind: 'UNKNOWN_ALIAS' } });
     expect(sender.sent).toEqual([]);
   });
 
@@ -139,7 +139,7 @@ describe('a blocking SendMessage waits as the capability states (interop 5.3)', 
   it("answers at once when the client set return_immediately, whatever the capability's wait", async () => {
     discovery.state.ships = [aCrmStating({ waitMs: 10_000 })];
 
-    await expect(sending(aMessage(), true)).resolves.toMatchObject({ isOk: true, value: { status: { state: 'submitted' } } });
+    await expect(sending(aMessage(), false)).resolves.toMatchObject({ isOk: true, value: { status: { state: 'submitted' } } });
     expect(now).toEqual(NOW);
   });
 
@@ -198,6 +198,6 @@ describe('a message with a taskId continues the task (decision 0060)', () => {
     await sending();
     discovery.state.ships = [aCrmStating(), aDiscoveredShip({ shipId: 'shp_01m3tbfspe96yf1rnr4ank9led' })];
 
-    await expect(send({ caller: CALLER, alias: 'a9led', message: aMessage({ messageId: 'm-2', taskId: TASK_ID }), returnImmediately: false })).resolves.toMatchObject({ isOk: false, error: { kind: 'TASK_NOT_FOUND' } });
+    await expect(send({ caller: CALLER, alias: 'a9led', message: aMessage({ messageId: 'm-2', taskId: TASK_ID }), isBlocking: true })).resolves.toMatchObject({ isOk: false, error: { kind: 'TASK_NOT_FOUND' } });
   });
 });

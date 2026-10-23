@@ -281,8 +281,8 @@ export function createRestFleetDoor(
     ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
     handled: (crewToken, deliveryId) => done(crewToken, { path: '/ship/handled', body: { deliveryId } }),
     notHandled: (crewToken, report) => done(crewToken, { path: '/ship/notHandled', body: report }),
-    send: async (crewToken, { to, contentType, payload, idempotencyKey }) =>
-      call({ path: '/ship/send', method: 'POST', crewToken, body: { selector: { kind: 'ship', shipId: to }, contentType, payload, idempotencyKey }, answers: sendOutputSchema }),
+    send: async (crewToken, { to, contentType, payload, idempotencyKey, inReplyTo }) =>
+      call({ path: '/ship/send', method: 'POST', crewToken, body: { selector: { kind: 'ship', shipId: to }, contentType, payload, idempotencyKey, ...(inReplyTo === undefined ? {} : { inReplyTo }) }, answers: sendOutputSchema }),
     discover: async (crewToken) => {
       const found = await call({ path: '/ship/discover', method: 'GET', crewToken, answers: discoverOutputSchema });
       return found.isOk ? ok(found.value.ships.map(({ id, kind, statement }) => ({ shipId: id, kind, statement }))) : found;

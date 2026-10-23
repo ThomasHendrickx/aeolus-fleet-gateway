@@ -5,6 +5,7 @@ import type { CallKeys } from '../../core/mcp-in/ports.js';
 /** Each derivation under its own label, so a key is never also a handle. */
 const IDEMPOTENCY_LABEL = 'idempotency-key';
 const HANDLE_LABEL = 'handle';
+const CONTEXT_LABEL = 'context';
 
 /**
  * Keys as an HMAC under the gateway's secret, of the parts as a JSON array so
@@ -17,5 +18,6 @@ export function createCallKeys(secret: string): CallKeys {
     idempotencyKeyOf: ({ fleetId, party, key }) => derived([IDEMPOTENCY_LABEL, fleetId, party, key]),
     newIdempotencyKey: () => randomUUID(),
     handleOf: (fleetId, messageId) => derived([HANDLE_LABEL, fleetId, messageId]),
+    contextIdOf: (fleetId, messageId) => derived([CONTEXT_LABEL, fleetId, messageId]),
   };
 }

@@ -175,7 +175,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
           : err({ kind: 'NOT_AN_APPROVER' as const, message: 'Adding an outside A2A client needs gateway:approve' }),
       ),
     listReachedShips: ({ party }) =>
-      Promise.resolve(party === 'supplier' ? ok([{ alias: 'acrm2345', statement: null }]) : err({ kind: 'PARTY_NOT_CREWED' as const, message: `The party ${party} is not crewed` })),
+      Promise.resolve(party === 'supplier' ? ok([{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9cr2' as const, alias: 'acrm2345', statement: null }]) : err({ kind: 'PARTY_NOT_CREWED' as const, message: `The party ${party} is not crewed` })),
     cardAddressOf: (alias) => `https://gateway.example.com/gw/a2a/${alias}/.well-known/agent-card.json`,
     readPartyTools: ({ name }) => Promise.resolve(name === 'linear' ? ok({ tools: [{ name: 'list_issues', description: 'List issues' }] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `There is no outside MCP server ${name}` })),
     stateParty: ({ name }) => Promise.resolve(name === 'crm' ? ok({ capabilities: ['list_deals'] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `No party named ${name}` })),
