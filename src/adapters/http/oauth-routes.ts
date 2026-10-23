@@ -267,7 +267,7 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
     authorization_endpoint: `${deps.issuer}/authorize`,
     token_endpoint: `${deps.issuer}/token`,
     response_types_supported: ['code'],
-    grant_types_supported: ['authorization_code', 'refresh_token'],
+    grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none', 'client_secret_basic', 'client_secret_post'],
     client_id_metadata_document_supported: true,
@@ -299,6 +299,6 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
       return reply.code(status).send({ error: exchanged.error.error, error_description: exchanged.error.description });
     }
     const { accessToken, refreshToken, expiresInSeconds, scope } = exchanged.value;
-    return { access_token: accessToken, token_type: 'Bearer', expires_in: expiresInSeconds, refresh_token: refreshToken, ...(scope === null ? {} : { scope }) };
+    return { access_token: accessToken, token_type: 'Bearer', expires_in: expiresInSeconds, ...(refreshToken === null ? {} : { refresh_token: refreshToken }), ...(scope === null ? {} : { scope }) };
   });
 }

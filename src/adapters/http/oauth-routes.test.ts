@@ -446,7 +446,7 @@ describe('a client party signs in with client credentials at /token (vendor plat
     expect({ status: answer.statusCode, cache: answer.headers['cache-control'], body: answer.json<unknown>() }).toEqual({
       status: 200,
       cache: 'no-store',
-      body: { access_token: expect.any(String), token_type: 'Bearer', expires_in: 3600 },
+      body: { access_token: 'secret-1', token_type: 'Bearer', expires_in: 3600 },
     });
   });
 
