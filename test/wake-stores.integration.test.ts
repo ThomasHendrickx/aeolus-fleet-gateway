@@ -45,12 +45,12 @@ describe("a person's email channel in Postgres (W8)", () => {
     const ship = { fleetId: FLEET, shipId: 'shp_01m3tb1zgr5h2ffee12xnch8p3' } as const;
     await channels.turn(ship, { isOn: true, at: AT });
     await channels.turn(ship, { isOn: true, at: AT });
-    const twice = await channels.isOn(ship);
+    const isOnAfterTwice = await channels.isOn(ship);
 
     await channels.turn(ship, { isOn: false, at: AT });
 
     await expect(channels.isOn(ship)).resolves.toBe(false);
-    expect(twice).toBe(true);
+    expect(isOnAfterTwice).toBe(true);
   });
 });
 

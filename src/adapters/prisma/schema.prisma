@@ -238,6 +238,27 @@ model PersonCrew {
   @@map("person_crews")
 }
 
+/// A person who turned email on to be woken for their person ship (wake a person, W8): a row while it is on; nothing is on by default.
+model EmailChannel {
+  fleetId    String   @map("fleet_id")
+  shipId     String   @map("ship_id")
+  turnedOnAt DateTime @map("turned_on_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId])
+  @@map("email_channels")
+}
+
+/// When a channel last woke a person ship, so it sends at most one wake per its window (wake a person, W3).
+model WakeSent {
+  fleetId String   @map("fleet_id")
+  shipId  String   @map("ship_id")
+  channel String
+  sentAt  DateTime @map("sent_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId, channel])
+  @@map("wakes_sent")
+}
+
 /// A delivery a person opened, kept until they deal with it, so their answer finds its message and sender and their inbox lists it (Q28 (a)).
 model OpenedDelivery {
   fleetId      String   @map("fleet_id")

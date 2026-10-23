@@ -178,3 +178,9 @@ export interface WakesSent {
   lastSentAt(ship: PersonShip, channel: WakeChannelName): Promise<Date | undefined>;
   record(wake: { ship: PersonShip; channel: WakeChannelName; sentAt: Date }): Promise<void>;
 }
+
+/** Outbound port: whether each person turned email on to be woken for their person ship (W8), by fleet and person ship. */
+export interface EmailChannels {
+  isOn(ship: PersonShip): Promise<boolean>;
+  turn(ship: PersonShip, switched: { isOn: boolean; at: Date }): Promise<void>;
+}
