@@ -22,6 +22,7 @@ import {
   pushReceiveOutputSchema,
   deliveryOutputSchema,
   receiveOutputSchema,
+  sentMessageOutputSchema,
   QUESTION_CONTENT_TYPE,
   questionSchema,
   sendOutputSchema,
@@ -33,7 +34,7 @@ import {
 import { z } from 'zod';
 
 import type { FleetDoor, FleetRefusal, GatewayInbox } from '../../core/connection/ports.js';
-import type { CallSender, Discovery, ReplyReceiver } from '../../core/mcp-in/ports.js';
+import type { CallSender, Discovery, ReplyReceiver, SentMessages } from '../../core/mcp-in/ports.js';
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
@@ -143,7 +144,7 @@ function questionOf(payload: string) {
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & ReplyReceiver & AccountDoor & Owners & { person: PersonShipDoor; gatewayInbox: GatewayInbox } {
+): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & ReplyReceiver & SentMessages & AccountDoor & Owners & { person: PersonShipDoor; gatewayInbox: GatewayInbox } {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   const done = async (crewToken: string, request: { path: string; body: unknown }) => {
@@ -215,6 +216,10 @@ export function createRestFleetDoor(
       }
       const [reply] = taken.value.deliveries;
       return ok(reply === undefined ? undefined : { deliveryId: reply.deliveryId, messageId: reply.messageId, contentType: reply.contentType, payload: reply.payload });
+    },
+    sentMessage: async (crewToken, messageId) => {
+      const sent = await call({ path: '/ship/sentMessage', method: 'POST', crewToken, body: { messageId }, answers: sentMessageOutputSchema });
+      return sent.isOk ? ok({ state: sent.value.delivery.state, since: new Date(sent.value.delivery.since) }) : sent;
     },
     pushReceive: async (crewToken, { max, signal }) => {
       const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max }, answers: pushReceiveOutputSchema, signal });

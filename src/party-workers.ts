@@ -43,11 +43,7 @@ export function createPartyWorkers(deps: {
     if (party?.state !== 'crewed' || signal.aborted) {
       return { refused: null };
     }
-    // An A2A client's calls are not carried yet, so it has no replies to take.
-    if (party.kind === 'a2aClient') {
-      return { refused: null };
-    }
-    if (party.kind === 'mcpClient') {
+    if (party.kind === 'mcpClient' || party.kind === 'a2aClient') {
       const { ended } = await deps.collectReplies({ party, signal });
       if (ended === 'crewRefused') {
         deps.log.warn({ fleetId, party: name }, "the fleet refused the proxy ship's crew token: its calls get no replies");
