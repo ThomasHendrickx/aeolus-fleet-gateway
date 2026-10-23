@@ -19,6 +19,7 @@ export function memoryPartyStore(): PartyStore & { held: Map<string, Party> } {
     find: (fleetId, name) => Promise.resolve(held.get(key(fleetId, name))),
     list: (fleetId) => Promise.resolve([...held.values()].filter((party) => party.fleetId === fleetId)),
     findByClient: (fleetId, clientId) => Promise.resolve([...held.values()].find((party) => party.fleetId === fleetId && party.kind === 'mcpClient' && party.clientId === clientId)),
+    findByBearer: (bearerHash) => Promise.resolve([...held.values()].find((party) => party.kind === 'a2aClient' && party.bearerHash === bearerHash)),
     save: (party) => {
       held.set(key(party.fleetId, party.name), party);
       return Promise.resolve();
