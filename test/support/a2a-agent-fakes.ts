@@ -3,7 +3,10 @@
  * the gateway reads, by address, as told.
  */
 import type { AgentCard, AgentCards, CardFailure } from '../../src/core/a2a-out/ports.js';
+import type { A2aAgentParty } from '../../src/core/parties/party.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
+import { FLEET_ID } from './fleet-fakes.js';
+import { PROXY_SHIP_ID } from './party-fakes.js';
 
 export const CARD_URL = 'https://agent.supplier.example/.well-known/agent-card.json';
 
@@ -33,3 +36,24 @@ export function fakeAgentCards(cards: Record<string, Result<AgentCard, CardFailu
 }
 
 export const answeredCard = (card: AgentCard = anAgentCard()) => ok(card);
+
+/** A crewed outside A2A agent party, repeatable, as an approver added it. */
+export function anAgentParty(change: Partial<A2aAgentParty> = {}): A2aAgentParty {
+  return {
+    fleetId: FLEET_ID,
+    name: 'supplier',
+    kind: 'a2aAgent',
+    cardUrl: CARD_URL,
+    credential: { kind: 'bearer', token: 'tok-1' },
+    concurrencyLimit: 4,
+    isRepeatable: true,
+    state: 'crewed',
+    proxyShipId: PROXY_SHIP_ID,
+    secret: null,
+    crewToken: 'aeolus_ct_v1_proxy',
+    requestId: 'r-1',
+    requestHash: 'h',
+    approvedAt: new Date('2026-10-23T10:00:00.000Z'),
+    ...change,
+  };
+}
