@@ -102,6 +102,7 @@ import { createWakePerson } from './core/people/wake-person.js';
 import { createEmailChannel } from './adapters/pagasae/email-channel.js';
 import { createPrismaEmailChannels } from './adapters/prisma/email-channels.js';
 import { createPrismaWakesSent } from './adapters/prisma/wakes-sent.js';
+import { createPrismaFocusedPages } from './adapters/prisma/focused-pages.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
@@ -204,6 +205,12 @@ const WAITER_ROUND_MS = 10_000;
 
 /** How long a person ship's waiter waits while the fleet does not answer, each longer than the last. */
 const WAITER_AGAIN_WAITS_MS = [1_000, 5_000, 30_000];
+
+/** How often a page in focus is seen again, so one whose gateway instance stopped stops counting soon after (wake a person, W6). */
+const FOCUS_SEEN_EVERY_MS = 20_000;
+
+/** How long a page counts in focus since it was last seen so: three times as long as it is seen again. */
+const FOCUS_FRESH_MS = 3 * FOCUS_SEEN_EVERY_MS;
 
 /** How long a wake that no channel sent waits before it is tried again, each longer than the last (wake a person, W3). */
 const WAKE_AGAIN_WAITS_MS = [60_000, 300_000, 900_000];
@@ -423,6 +430,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
         ];
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
   const personCrews = createPrismaPersonCrews(prisma);
+  // A person's pages in focus, on every instance: while one is, what arrives is handed through it (wake a person, W6).
+  const focusedPages = createPrismaFocusedPages(prisma);
   const inboxChanges = createPrismaInboxChanges(prisma);
   const waiterLocks = createPostgresWaiterLocks(options.databaseUrl);
   const personWaiters = createPersonWaiters({
@@ -432,7 +441,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: door.person,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: door.person, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), clock }),
+      wakePerson: createWakePerson({ door: door.person, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,

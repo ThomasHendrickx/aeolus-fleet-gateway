@@ -338,3 +338,15 @@ model OwnerQuestion {
   @@id([fleetId, requestId])
   @@map("owner_questions")
 }
+
+/// A page of a person in focus, on any gateway instance, with when it was last seen so (wake a person, W6).
+model FocusedPage {
+  fleetId String   @map("fleet_id")
+  pageId  String   @map("page_id")
+  shipId  String   @map("ship_id")
+  seenAt  DateTime @map("seen_at") @db.Timestamptz(3)
+
+  @@id([fleetId, pageId])
+  @@index([fleetId, shipId, seenAt])
+  @@map("focused_pages")
+}
