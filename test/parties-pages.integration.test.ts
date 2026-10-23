@@ -13,6 +13,7 @@ import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 const FLEET = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const SIGN_IN = 'charlotte-shared-sign-in';
 const READER_SIGN_IN = 'charlotte-reads-shared-sign-in';
+const APPROVER_SIGN_IN = 'charlotte-approves-shared-sign-in';
 const LABS = 'flt_01m4ajt7abh4rypkmdnjene67g';
 const SECOND_FLEET_SIGN_IN = 'charlotte-in-labs-first-shared-sign-in';
 const UNLISTED_SIGN_IN = 'charlotte-pagasae-lists-nothing-shared-sign-in';
@@ -46,6 +47,7 @@ beforeAll(async () => {
   pagasae = await startFakePagasae();
   pagasae.sharedSignIn(SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read fleet:network fleet:manage' });
   pagasae.sharedSignIn(READER_SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read' });
+  pagasae.sharedSignIn(APPROVER_SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read gateway:approve' });
   pagasae.sharedSignIn(SECOND_FLEET_SIGN_IN, charlotteIn(pagasae, FLEET));
   pagasae.listFor(SECOND_FLEET_SIGN_IN, [
     { id: LABS, name: 'Labs' },
@@ -145,6 +147,26 @@ describe('the parties pages, as the account signed in', () => {
 
     const approve = body.slice(body.indexOf('data-testid="parties-approve"'));
     expect({ isPicked: approve.includes('data-testid="owner-field"'), isTyped: /<input[^>]*name="ownerShipId"/.test(approve) }).toEqual({ isPicked: true, isTyped: false });
+  }, 60_000);
+
+  it('shows Add A2A client to an account holding gateway:approve, and not to one that only reads (decision 0060)', async () => {
+    const bodies = await Promise.all(
+      [APPROVER_SIGN_IN, READER_SIGN_IN].map(async (signIn) => (await fetch(`${address}/outside-parties?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${signIn}` } })).text()),
+    );
+
+    expect(bodies.map((body) => body.includes('data-testid="outside-parties-add-a2a-client"'))).toEqual([true, false]);
+  }, 60_000);
+
+  it("adds an A2A client from its page: its name, its owner picked from the fleet's owner choices, and the approver's own scopes to tick", async () => {
+    const body = await (await fetch(`${address}/outside-parties/add-a2a-client?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${APPROVER_SIGN_IN}` } })).text();
+
+    const form = body.slice(body.indexOf('data-testid="add-a2a-client-form"'));
+    expect({ hasForm: body.includes('data-testid="add-a2a-client-form"'), hasOwner: form.includes('data-testid="owner-field"'), hasScope: form.includes('name="scope:fleet:read"'), hasOwnScopeOnly: !form.includes('name="scope:fleet:manage"') }).toEqual({
+      hasForm: true,
+      hasOwner: true,
+      hasScope: true,
+      hasOwnScopeOnly: true,
+    });
   }, 60_000);
 
   it('shows the header every Aeolus app shows: the fleet in view and Gateway in the title, and the avatar menu', async () => {
