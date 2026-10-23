@@ -188,7 +188,7 @@ function startProxy(gateway: { address: string; interfaceUrl: string; bearer: st
         }
       }
       headers.set('authorization', `Bearer ${gateway.bearer}`);
-      const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+      const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && body !== '';
       // The kit dropping its side drops the gateway's, so a stream stops following its task.
       const dropped = new AbortController();
       response.once('close', () => {
