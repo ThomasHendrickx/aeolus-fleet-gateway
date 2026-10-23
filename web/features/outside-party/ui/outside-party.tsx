@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
+import { CREDENTIAL_KINDS } from '../../forms/server-credential';
 import { BUTTONS, CARD } from '../../forms/ui/look';
 import { outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } from '../../outside-parties/party-kinds';
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
@@ -100,6 +101,7 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
             : party.scopes.map((scope) => <Tag key={scope}>{scopeWords(scope)}</Tag>)}
           {scopes.includes(GRANTING_SCOPE) ? change : null}
         </Fact>
+        {party.kind === 'mcpServer' ? <Fact label="Credential">{CREDENTIAL_KINDS.find(({ kind }) => kind === party.credentialKind)?.label}</Fact> : null}
         {address === null ? null : (
           <Fact label={party.kind === 'mcpServer' ? 'Address' : 'Client id'}>
             <span className="font-mono">{address}</span>

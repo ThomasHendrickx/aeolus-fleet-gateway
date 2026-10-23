@@ -14,6 +14,7 @@ import { redirect } from 'next/navigation';
 import { inFleet } from '../../lib/gateway-api/page-account';
 import { refusalMessageOf, requestApi } from '../../lib/gateway-api/page-api';
 import { FLEET_FIELD, fieldOf, fieldsOf } from '../forms/form-state';
+import { serverCredentialOf } from '../forms/server-credential';
 import type { OwnerChoice } from '../forms/ui/owner-field';
 import { partyPath } from '../outside-parties/paths';
 
@@ -34,11 +35,14 @@ export type AddServerState =
   | { step: 'owner'; fields: Record<string, string>; tools: CheckedTool[]; owners: OwnerChoice[]; requestId: string };
 
 function credentialOf(form: FormData) {
-  if (fieldOf(form, 'credentialKind') === 'clientCredentials') {
-    const scope = fieldOf(form, 'scope');
-    return { kind: 'clientCredentials' as const, clientId: fieldOf(form, 'clientId'), clientSecret: fieldOf(form, 'clientSecret'), issuer: fieldOf(form, 'issuer'), ...(scope === '' ? {} : { scope }) };
-  }
-  return { kind: 'bearer' as const, token: fieldOf(form, 'token') };
+  return serverCredentialOf({
+    credentialKind: fieldOf(form, 'credentialKind'),
+    token: fieldOf(form, 'token'),
+    clientId: fieldOf(form, 'clientId'),
+    clientSecret: fieldOf(form, 'clientSecret'),
+    issuer: fieldOf(form, 'issuer'),
+    scope: fieldOf(form, 'scope'),
+  });
 }
 
 export async function checkServer(_previous: AddServerState, form: FormData): Promise<AddServerState> {

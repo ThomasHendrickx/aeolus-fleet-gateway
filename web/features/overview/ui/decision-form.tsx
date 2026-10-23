@@ -2,6 +2,7 @@
 
 import { useState, type SyntheticEvent } from 'react';
 
+import { CREDENTIAL_KINDS, credentialKindOf } from '../../forms/server-credential';
 import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
 import { EVERY_APP_SHIP_SCOPES, scopeLabel, subjectName, suggestedName, type DecisionInput, type ServerCredentialInput, type ShownRequest } from '../services/requests';
 import { ActionButton } from './action-button';
@@ -29,7 +30,7 @@ function text(form: FormData, name: string): string {
 
 function serverOf(form: FormData): ServerCredentialInput {
   return {
-    credentialKind: text(form, 'credentialKind') === 'clientCredentials' ? 'clientCredentials' : 'bearer',
+    credentialKind: credentialKindOf(text(form, 'credentialKind')),
     token: text(form, 'token'),
     clientId: text(form, 'clientId'),
     clientSecret: text(form, 'clientSecret'),
@@ -94,12 +95,15 @@ export function DecisionForm({
             <legend>The server&apos;s credential</legend>
             <label className="grid gap-1">
               <span>Credential</span>
-              <select name="credentialKind" value={credentialKind} onChange={(event) => { setCredentialKind(event.target.value === 'clientCredentials' ? 'clientCredentials' : 'bearer'); }} className={FIELD}>
-                <option value="bearer">Bearer token</option>
-                <option value="clientCredentials">OAuth client credentials</option>
+              <select name="credentialKind" value={credentialKind} onChange={(event) => { setCredentialKind(credentialKindOf(event.target.value)); }} className={FIELD}>
+                {CREDENTIAL_KINDS.map(({ kind, label }) => (
+                  <option key={kind} value={kind}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
-            {credentialKind === 'bearer' ? (
+            {credentialKind === 'none' ? null : credentialKind === 'bearer' ? (
               <label className="grid gap-1">
                 <span>Bearer token</span>
                 <input type="password" name="token" className={FIELD} />

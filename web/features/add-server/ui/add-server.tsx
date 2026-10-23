@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import { FLEET_FIELD } from '../../forms/form-state';
+import { CREDENTIAL_KINDS, credentialKindOf } from '../../forms/server-credential';
 import { BUTTONS, CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { Outcome } from '../../forms/ui/outcome';
 import { OwnerField } from '../../forms/ui/owner-field';
@@ -35,7 +36,7 @@ function Refused({ refusal }: { refusal: string | undefined }) {
 }
 
 function AddressStep({ state, action, fleetId }: { state: Extract<AddServerState, { step: 'address' }> | { fields: Record<string, string>; refusal?: string }; action: (form: FormData) => void; fleetId: string }) {
-  const [credentialKind, setCredentialKind] = useState(state.fields.credentialKind ?? 'bearer');
+  const [credentialKind, setCredentialKind] = useState(credentialKindOf(state.fields.credentialKind ?? ''));
   return (
     <form action={action} className={`${CARD} grid gap-3`} data-testid="add-server-address">
       <input type="hidden" name={FLEET_FIELD} value={fleetId} />
@@ -48,9 +49,12 @@ function AddressStep({ state, action, fleetId }: { state: Extract<AddServerState
         <legend className="font-medium">The server&apos;s credential</legend>
         <label className={LABEL}>
           <span>Credential</span>
-          <select className={INPUT} name="credentialKind" value={credentialKind} onChange={(event) => { setCredentialKind(event.target.value); }}>
-            <option value="bearer">Bearer token</option>
-            <option value="clientCredentials">OAuth client credentials</option>
+          <select className={INPUT} name="credentialKind" value={credentialKind} onChange={(event) => { setCredentialKind(credentialKindOf(event.target.value)); }}>
+            {CREDENTIAL_KINDS.map(({ kind, label }) => (
+              <option key={kind} value={kind}>
+                {label}
+              </option>
+            ))}
           </select>
         </label>
         {credentialKind === 'clientCredentials' ? (
@@ -72,11 +76,13 @@ function AddressStep({ state, action, fleetId }: { state: Extract<AddServerState
               <input className={INPUT} type="text" name="scope" defaultValue={state.fields.scope ?? ''} />
             </label>
           </>
-        ) : (
+        ) : credentialKind === 'bearer' ? (
           <label className={LABEL}>
             <span>Bearer token</span>
             <input className={INPUT} type="password" name="token" />
           </label>
+        ) : (
+          <p className="text-muted-foreground">The gateway sends no credential: for a server reached only on a private network.</p>
         )}
       </fieldset>
       <div>
