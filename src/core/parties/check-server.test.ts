@@ -12,7 +12,7 @@ let checkServer: ReturnType<typeof createCheckServer>;
 
 beforeEach(() => {
   servers = fakeMcpServers([
-    { name: 'list_issues', description: 'List issues by team, state or assignee', inputSchema: { type: 'object' } },
+    { name: 'list_issues', description: 'List issues by team, state or assignee', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
     { name: 'get_issue', inputSchema: { type: 'object' } },
   ]);
   isOn = true;
@@ -20,12 +20,12 @@ beforeEach(() => {
 });
 
 describe('checking an outside MCP server before it is added (F10)', () => {
-  it('answers the tools the server lists, each with its name and short description, keeping nothing', async () => {
+  it('answers the tools the server lists, each with its name, short description and whether the server says it reads only, keeping nothing', async () => {
     const checked = await checkServer({ fleetId: FLEET_ID, ...SERVER });
 
     expect(checked).toEqual({
       isOk: true,
-      value: { tools: [{ name: 'list_issues', description: 'List issues by team, state or assignee' }, { name: 'get_issue' }] },
+      value: { tools: [{ name: 'list_issues', description: 'List issues by team, state or assignee', isReadOnly: true }, { name: 'get_issue', isReadOnly: false }] },
     });
     expect(servers.listedWith).toEqual([SERVER]);
   });
