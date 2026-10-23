@@ -54,7 +54,7 @@ describe('the public card per alias (decision 0060)', () => {
       provider: { organization: 'Aeolus gateway', url: ISSUER },
       capabilities: { extendedAgentCard: true },
       securitySchemes: { bearer: { httpAuthSecurityScheme: { scheme: 'Bearer' } } },
-      securityRequirements: [{ schemes: { bearer: { list: [] } } }],
+      securityRequirements: [{ schemes: { bearer: {} } }],
     });
     expect(answered.json()).not.toHaveProperty('skills');
     expect(JSON.stringify(answered.json())).not.toContain('The CRM');
@@ -154,5 +154,12 @@ describe('GetExtendedAgentCard (decision 0060)', () => {
     const answered = await server.inject({ method: 'POST', url: `/gw/a2a/${CRM_ALIAS}`, headers: { ...BEARER, 'a2a-version': '1.0' }, payload: { jsonrpc: '2.0', id: 2, method: 'GetTask', params: { id: 'task-1' } } });
 
     expect(answered.json()).toMatchObject({ jsonrpc: '2.0', id: 2, error: { code: -32004 } });
+  });
+
+  it('answers a streaming A2A method this gateway does not carry yet as an unsupported operation', async () => {
+    const message = { messageId: 'm-1', role: 'ROLE_USER', parts: [{ text: 'hello' }] };
+    const answered = await server.inject({ method: 'POST', url: `/gw/a2a/${CRM_ALIAS}`, headers: { ...BEARER, 'a2a-version': '1.0' }, payload: { jsonrpc: '2.0', id: 3, method: 'SendStreamingMessage', params: { message } } });
+
+    expect(answered.json()).toMatchObject({ jsonrpc: '2.0', id: 3, error: { code: -32004 } });
   });
 });

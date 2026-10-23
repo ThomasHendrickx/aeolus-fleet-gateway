@@ -36,6 +36,10 @@ import { createChangeHub } from './adapters/http/live.js';
 import { listenToChanges } from './adapters/prisma/changes.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
+import { registerA2aEndpoint } from './adapters/http/a2a-endpoint.js';
+import { createAuthenticateA2aClient } from './core/a2a-in/authenticate-a2a-client.js';
+import { createFindReachedShip } from './core/a2a-in/find-reached-ship.js';
+import { createListReachedShips } from './core/a2a-in/list-reached-ships.js';
 import { createShipAliases } from './adapters/crypto/ship-aliases.js';
 import { createListTools } from './core/mcp-in/list-tools.js';
 import { createCallTool } from './core/mcp-in/call-tool.js';
@@ -391,7 +395,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     };
   };
   const person = pagasae === undefined ? undefined : personToolsOf();
-  const listTools = createListTools({ parties, discovery: door, aliases: createShipAliases(options.gatewaySecret) });
+  const aliases = createShipAliases(options.gatewaySecret);
+  const listTools = createListTools({ parties, discovery: door, aliases });
   registerMcpEndpoint(server, {
     resource,
     authenticateAccessToken: createAuthenticateAccessToken({ tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
@@ -400,6 +405,13 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readClientCall: createReadClientCall({ calls: clientCalls, clock }),
     servesOutsideParties,
     ...(person === undefined ? {} : { person }),
+  });
+  // Outside A2A clients call the ships their proxy ship reaches, by alias, with the bearer they were shown (decision 0060).
+  const listReachedShips = createListReachedShips({ parties, discovery: door, aliases });
+  registerA2aEndpoint(server, {
+    issuer,
+    authenticate: createAuthenticateA2aClient({ parties, secrets: oauthSecrets, servesOutsideParties }),
+    findReachedShip: createFindReachedShip({ listReachedShips }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.
