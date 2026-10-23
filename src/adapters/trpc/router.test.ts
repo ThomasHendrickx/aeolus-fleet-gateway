@@ -263,6 +263,14 @@ describe("argo approves parties through the gateway's API", () => {
     expect(approvals).toEqual([]);
   });
 
+  it('approves a server that asks for no credential (aeolus-fleet#1153)', async () => {
+    const { context, approvals } = aContext(ARGO_COOKIE);
+
+    await gatewayRouter.createCaller(context).parties.approve(asSent({ ...APPROVAL, credential: { kind: 'none' } }));
+
+    expect(approvals[0]?.credential).toEqual({ kind: 'none' });
+  });
+
   it('takes a concurrency limit of 10', async () => {
     const { context, approvals } = aContext(ARGO_COOKIE);
 
@@ -281,6 +289,10 @@ describe("an actor holding fleet:manage checks an outside MCP server through the
 
   it('answers BAD_GATEWAY when the server cannot be listed', async () => {
     await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.check({ ...CHECK, url: 'https://down.example.com/mcp' })).rejects.toMatchObject({ code: 'BAD_GATEWAY', message: 'The MCP server could not be listed: connect ECONNREFUSED' });
+  });
+
+  it('checks a server that asks for no credential (aeolus-fleet#1153)', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.check(z.custom<typeof CHECK>(() => true).parse({ ...CHECK, credential: { kind: 'none' } }))).resolves.toEqual({ tools: [{ name: 'list_issues', description: 'List issues' }] });
   });
 
   it('refuses an actor without fleet:manage', async () => {
@@ -438,6 +450,15 @@ describe("an approver decides pending requests through the gateway's API (decisi
     await gatewayRouter.createCaller(context).requests.decide({ requestId: REQUEST_ID, decision });
 
     expect(decisions).toEqual([{ actor: { fleetId: FLEET, kind: 'ship', shipId: MANAGER, scopes: ['fleet:read', 'gateway:approve'] }, requestId: REQUEST_ID, decision }]);
+  });
+
+  it('approves a server that asks for no credential (aeolus-fleet#1153)', async () => {
+    const { context, decisions } = aContext(undefined, APPROVER_CREW);
+    const decision = { kind: 'approve', party: { name: 'vault', ownerShipId: OWNER, scopes: [] }, server: { credential: { kind: 'none' }, concurrencyLimit: 4 } };
+
+    await gatewayRouter.createCaller(context).requests.decide(z.custom<DecideInput>(() => true).parse({ requestId: REQUEST_ID, decision }));
+
+    expect(decisions[0]?.decision).toEqual(decision);
   });
 
   it('answers CONFLICT to a request decided already', async () => {
