@@ -129,7 +129,7 @@ describe("a client party's worker, its crew released and the same proxy ship cre
           });
           return { ended: 'crewRefused' };
         }
-        await new Promise((resolve) => signal.addEventListener('abort', resolve));
+        await new Promise((resolve) => { signal.addEventListener('abort', resolve); });
         return { ended: 'stopped' };
       },
       servesOutsideParties: () => Promise.resolve(true),
