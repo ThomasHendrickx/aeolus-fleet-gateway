@@ -3,7 +3,7 @@ import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
-import type { AccountDoor, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../src/core/people/ports.js';
+import type { AccountDoor, EmailChannels, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -244,6 +244,24 @@ export function memoryInboxChanges(): InboxChanges & { told: InboxChange[] } {
     told,
     tell: (change) => {
       told.push(change);
+      return Promise.resolve();
+    },
+  };
+}
+
+/** The email channels people turned on, in memory, by fleet and person ship. */
+export function memoryEmailChannels(): EmailChannels & { turnedOn: Map<string, Date> } {
+  const turnedOn = new Map<string, Date>();
+  const key = ({ fleetId, shipId }: { fleetId: string; shipId: string }) => `${fleetId}/${shipId}`;
+  return {
+    turnedOn,
+    isOn: (ship) => Promise.resolve(turnedOn.has(key(ship))),
+    turn: (ship, { isOn, at }) => {
+      if (isOn) {
+        turnedOn.set(key(ship), turnedOn.get(key(ship)) ?? at);
+      } else {
+        turnedOn.delete(key(ship));
+      }
       return Promise.resolve();
     },
   };
