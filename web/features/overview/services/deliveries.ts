@@ -13,6 +13,9 @@ export type Inbox = inferRouterOutputs<GatewayRouter>['people']['inbox'];
 /** A delivery as the inbox lists it: by title only. */
 export type InboxEntry = Inbox['deliveries'][number];
 
+/** The overview's section of wakes (wake a person, W8): the gateway's push key, none where it offers no web push, and the browsers turned on. */
+export type Wakes = inferRouterOutputs<GatewayRouter>['people']['wakes'];
+
 /**
  * A delivery in focus: whole once, as the person opened it, with its
  * question when it is one; or, opened before, by its title alone, as the

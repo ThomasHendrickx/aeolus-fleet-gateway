@@ -27,6 +27,7 @@
     "!web/.next/cache",
     "!web/.next/dev",
     "web/next.config.ts",
+    "web/public",
     "prisma.config.ts",
     "src/adapters/prisma/schema.prisma",
     "src/adapters/prisma/migrations"

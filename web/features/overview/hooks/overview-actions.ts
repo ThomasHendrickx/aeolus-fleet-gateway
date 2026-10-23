@@ -2,7 +2,8 @@
 /**
  * The Overview's actions, each one call of the gateway's API as the
  * signed-in account, on the server (0033): opening, answering and being done
- * with a delivery, and deciding a request. The API checks everything; a
+ * with a delivery, deciding a request, and turning web push on and off for
+ * a browser. The API checks everything; a
  * refusal comes back in its own words for the page to say by the control. A
  * sign-in that ended sends the person to sign in again.
  */
@@ -15,6 +16,7 @@ import { FLEET_PARAMETER } from '../../../lib/gateway-api/page-account';
 import { refusalCodeOf, refusalMessageOf, requestApi } from '../../../lib/gateway-api/page-api';
 import { serverCredentialOf } from '../../forms/server-credential';
 import { answerOf, questionOf, type AnswerInput, type FocusedDelivery } from '../services/deliveries';
+import type { SubscriptionInput } from '../services/web-push';
 import { EVERY_APP_SHIP_SCOPES, type DecisionInput } from '../services/requests';
 import { OVERVIEW_PATH } from './read-overview';
 
@@ -82,6 +84,22 @@ export async function decideRequest({ fleet, requestId, input }: { fleet: string
   const credential = server === undefined ? undefined : serverCredentialOf(server);
   return attempt(fleet, async (api) => {
     await api.requests.decide.mutate({ requestId, decision: { kind: 'approve', party, ...(server === undefined || credential === undefined ? {} : { server: { credential, concurrencyLimit: server.concurrencyLimit } }) } });
+    return undefined;
+  });
+}
+
+/** Turns web push on for the browser that subscribed (wake a person, W8). */
+export async function turnOnWebPush(fleet: string, subscription: SubscriptionInput): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    await api.people.turnOnWebPush.mutate({ endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth }, browser: subscription.browser });
+    return undefined;
+  });
+}
+
+/** Removes a browser the person turned web push on in. */
+export async function turnOffWebPush(fleet: string, endpoint: string): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    await api.people.turnOffWebPush.mutate({ endpoint });
     return undefined;
   });
 }
