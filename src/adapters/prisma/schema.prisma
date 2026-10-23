@@ -123,6 +123,34 @@ model Call {
   @@map("calls")
 }
 
+/// The gateway's messages to outside A2A agents, by delivery (slice 6): so a restart sends nothing again that may have run, and follows on each task the agent took.
+model A2aAgentCall {
+  deliveryId   String   @id @map("delivery_id")
+  fleetId      String   @map("fleet_id")
+  party        String
+  messageId    String   @map("message_id")
+  senderShipId String   @map("sender_ship_id")
+  state        String
+  taskId       String?  @map("task_id")
+  contextId    String?  @map("context_id")
+  deadlineAt   DateTime @map("deadline_at") @db.Timestamptz(3)
+
+  @@index([fleetId, party, state])
+  @@map("a2a_agent_calls")
+}
+
+/// Which task each reply the gateway sent for an outside A2A agent tells of, by the reply's message id: an answer to it continues the task (slice 6).
+model A2aAgentReply {
+  fleetId   String @map("fleet_id")
+  party     String
+  messageId String @map("message_id")
+  taskId    String @map("task_id")
+  contextId String @map("context_id")
+
+  @@id([fleetId, party, messageId])
+  @@map("a2a_agent_replies")
+}
+
 /// MCP clients argo pre-registered; a confidential one's secret kept only as its hash.
 model OAuthClient {
   clientId     String   @id @map("client_id")
