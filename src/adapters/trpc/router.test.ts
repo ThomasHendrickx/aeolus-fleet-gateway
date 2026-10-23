@@ -168,6 +168,15 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     registerClient: (input) => Promise.resolve(input.redirectUris.length === 0 ? err({ kind: 'INVALID_REDIRECT_URIS' as const, message: 'A client registers 1 to 10 redirect URIs' }) : ok({ clientId: 'client-1', clientSecret: input.isConfidential ? 's' : null })),
     checkServer: ({ url }) =>
       Promise.resolve(url === 'https://down.example.com/mcp' ? err({ kind: 'SERVER_UNREACHABLE' as const, message: 'The MCP server could not be listed: connect ECONNREFUSED' }) : ok({ tools: [{ name: 'list_issues', description: 'List issues' }] })),
+    addA2aClient: ({ actor, name }) =>
+      Promise.resolve(
+        actor.scopes.includes('gateway:approve')
+          ? ok({ party: { name, kind: 'a2aClient' as const, state: 'crewed' as const, proxyShipId: null }, bearer: 'bearer-1' })
+          : err({ kind: 'NOT_AN_APPROVER' as const, message: 'Adding an outside A2A client needs gateway:approve' }),
+      ),
+    listReachedShips: ({ party }) =>
+      Promise.resolve(party === 'supplier' ? ok([{ alias: 'acrm2345', statement: null }]) : err({ kind: 'PARTY_NOT_CREWED' as const, message: `The party ${party} is not crewed` })),
+    cardAddressOf: (alias) => `https://gateway.example.com/gw/a2a/${alias}/.well-known/agent-card.json`,
     readPartyTools: ({ name }) => Promise.resolve(name === 'linear' ? ok({ tools: [{ name: 'list_issues', description: 'List issues' }] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `There is no outside MCP server ${name}` })),
     stateParty: ({ name }) => Promise.resolve(name === 'crm' ? ok({ capabilities: ['list_deals'] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `No party named ${name}` })),
     markTool: (input) => {
@@ -286,6 +295,33 @@ describe("an actor reads an outside MCP server's tools through the gateway's API
 
   it('answers NOT_FOUND for a server it does not know', async () => {
     await expect(gatewayRouter.createCaller(aContext(VIEWER_COOKIE).context).parties.tools({ name: 'notion' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe("an approver adds an outside A2A client through the gateway's API (decision 0060)", () => {
+  const ADDITION = { requestId: 'a-2', name: 'supplier', ownerShipId: OWNER, scopes: ['fleet:read'] };
+
+  it('answers the party and its bearer, shown once', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context).parties.addA2aClient(ADDITION)).resolves.toEqual({
+      party: { name: 'supplier', kind: 'a2aClient', state: 'crewed', proxyShipId: null },
+      bearer: 'bearer-1',
+    });
+  });
+
+  it('refuses an actor not holding gateway:approve as FORBIDDEN', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.addA2aClient(ADDITION)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("an actor reads an A2A client's card addresses through the gateway's API (decision 0060)", () => {
+  it('answers the card address of each ship its proxy ship reaches now', async () => {
+    await expect(gatewayRouter.createCaller(aContext(VIEWER_COOKIE).context).parties.cardAddresses({ name: 'supplier' })).resolves.toEqual({
+      addresses: ['https://gateway.example.com/gw/a2a/acrm2345/.well-known/agent-card.json'],
+    });
+  });
+
+  it('refuses a party that is not a crewed A2A client', async () => {
+    await expect(gatewayRouter.createCaller(aContext(VIEWER_COOKIE).context).parties.cardAddresses({ name: 'claude' })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
   });
 });
 
