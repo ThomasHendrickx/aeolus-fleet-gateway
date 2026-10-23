@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { fakeConfigIds, fakeResolver, memoryPushStore } from '../../../test/support/a2a-push-fakes.js';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { CRM_SHIP_ID, MESSAGE_ID, aCallReply, aDiscoveredShip, fakeCallKeys, fakeCallSender, fakeDiscovery, memoryClientCalls } from '../../../test/support/mcp-in-fakes.js';
 import { ISSUER, fakeSecrets } from '../../../test/support/oauth-fakes.js';
@@ -9,6 +10,10 @@ import { PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fak
 import { createAuthenticateA2aClient } from '../../core/a2a-in/authenticate-a2a-client.js';
 import { createFindReachedShip } from '../../core/a2a-in/find-reached-ship.js';
 import { createFollowA2aTask } from '../../core/a2a-in/follow-a2a-task.js';
+import { createListPushConfigs } from '../../core/a2a-in/list-push-configs.js';
+import { createReadPushConfig } from '../../core/a2a-in/read-push-config.js';
+import { createRemovePushConfig } from '../../core/a2a-in/remove-push-config.js';
+import { createSetPushConfig } from '../../core/a2a-in/set-push-config.js';
 import { createListA2aTasks } from '../../core/a2a-in/list-a2a-tasks.js';
 import { createListReachedShips } from '../../core/a2a-in/list-reached-ships.js';
 import { createReadA2aTask } from '../../core/a2a-in/read-a2a-task.js';
@@ -31,6 +36,7 @@ let isOn: boolean;
 let discovery: ReturnType<typeof fakeDiscovery>;
 let sender: ReturnType<typeof fakeCallSender>;
 let calls: ReturnType<typeof memoryClientCalls>;
+let pushStore: ReturnType<typeof memoryPushStore>;
 let now: Date;
 /** What happens in the fleet while a stream follows its task, one step per poll; a poll with no step left fails the stream. */
 let steps: (() => Promise<void>)[];
@@ -55,6 +61,8 @@ beforeEach(async () => {
   steps = [];
   const clock = { now: () => now };
   const followTask = createFollowA2aTask({ calls, clock, sleep, pollMs: 250 });
+  pushStore = memoryPushStore();
+  const resolver = fakeResolver({ 'hooks.supplier.example': ['93.184.215.14'], 'inside.supplier.example': ['10.0.0.5'] });
   const findReachedShip = createFindReachedShip({ listReachedShips: createListReachedShips({ parties, discovery, aliases }) });
   server = Fastify();
   registerA2aEndpoint(server, {
@@ -66,6 +74,10 @@ beforeEach(async () => {
     listTasks: createListA2aTasks({ calls, clock }),
     followTask,
     subscribeToTask: createSubscribeToA2aTask({ calls, clock, follow: followTask }),
+    setPushConfig: createSetPushConfig({ calls, configs: pushStore, resolver, ids: fakeConfigIds(), clock }),
+    readPushConfig: createReadPushConfig({ calls, configs: pushStore }),
+    listPushConfigs: createListPushConfigs({ calls, configs: pushStore }),
+    removePushConfig: createRemovePushConfig({ calls, configs: pushStore }),
   });
   await server.ready();
 });
@@ -85,7 +97,7 @@ describe('the public card per alias (decision 0060)', () => {
       name: CRM_ALIAS,
       supportedInterfaces: [{ url: `${ISSUER}/gw/a2a/${CRM_ALIAS}`, protocolBinding: 'JSONRPC', protocolVersion: '1.0' }, { protocolBinding: 'HTTP+JSON' }],
       provider: { organization: 'Aeolus gateway', url: ISSUER },
-      capabilities: { streaming: true, pushNotifications: false, extendedAgentCard: true },
+      capabilities: { streaming: true, pushNotifications: true, extendedAgentCard: true },
       securitySchemes: { bearer: { httpAuthSecurityScheme: { scheme: 'Bearer' } } },
       securityRequirements: [{ schemes: { bearer: {} } }],
     });
@@ -184,11 +196,6 @@ describe('GetExtendedAgentCard (decision 0060)', () => {
     expect(answered.json()).not.toHaveProperty('result.skills');
   });
 
-  it('answers an A2A method this gateway does not carry yet as an unsupported operation', async () => {
-    const answered = await server.inject({ method: 'POST', url: `/gw/a2a/${CRM_ALIAS}`, headers: { ...BEARER, 'a2a-version': '1.0' }, payload: { jsonrpc: '2.0', id: 2, method: 'GetTaskPushNotificationConfig', params: { taskId: 'task-1', id: 'c-1' } } });
-
-    expect(answered.json()).toMatchObject({ jsonrpc: '2.0', id: 2, error: { code: -32004 } });
-  });
 
 });
 
@@ -488,5 +495,73 @@ describe('message:stream and tasks/{id}:subscribe over HTTP+JSON (slice 3)', () 
     const [ended, unknown] = [await rest('POST', { path: `/tasks/${TASK_ID}:subscribe` }), await rest('GET', { path: '/tasks/task-1:subscribe' })];
 
     expect([ended.statusCode, unknown.statusCode]).toEqual([400, 404]);
+  });
+});
+
+const WEBHOOK = 'https://hooks.supplier.example/a2a';
+const A_PUSH_CONFIG = { taskId: TASK_ID, id: 'hook-1', url: WEBHOOK, token: 'tok-1', authentication: { scheme: 'Bearer', credentials: 'secret-1' } };
+
+describe('the push config methods over JSON-RPC (slice 4)', () => {
+  it("keeps a push config on the caller's own task, and answers it without its token or authentication", async () => {
+    await sendingTheMessage();
+
+    const answered = await rpc('CreateTaskPushNotificationConfig', A_PUSH_CONFIG);
+
+    expect(answered.json()).toEqual({ jsonrpc: '2.0', id: 7, result: { taskId: TASK_ID, id: 'hook-1', url: WEBHOOK } });
+    expect(pushStore.configs).toMatchObject([{ token: 'tok-1', authentication: { scheme: 'Bearer', credentials: 'secret-1' } }]);
+  });
+
+  it('refuses a webhook that is not https, or resolves inside, as invalid params, keeping nothing', async () => {
+    await sendingTheMessage();
+
+    const [plain, inside] = [await rpc('CreateTaskPushNotificationConfig', { ...A_PUSH_CONFIG, url: 'http://hooks.supplier.example/a2a' }), await rpc('CreateTaskPushNotificationConfig', { ...A_PUSH_CONFIG, url: 'https://inside.supplier.example/a2a' })];
+
+    expect([plain.json<unknown>(), inside.json<unknown>()]).toMatchObject([{ error: { code: -32602 } }, { error: { code: -32602 } }]);
+    expect(pushStore.configs).toEqual([]);
+  });
+
+  it('refuses a config on a task of no call of this client as not found', async () => {
+    await expect(rpc('CreateTaskPushNotificationConfig', A_PUSH_CONFIG).then((answered) => answered.json<unknown>())).resolves.toMatchObject({ error: { code: -32001 } });
+  });
+
+  it('reads, lists and deletes it', async () => {
+    await sendingTheMessage();
+    await rpc('CreateTaskPushNotificationConfig', A_PUSH_CONFIG);
+
+    const read = await rpc('GetTaskPushNotificationConfig', { taskId: TASK_ID, id: 'hook-1' });
+    const listed = await rpc('ListTaskPushNotificationConfigs', { taskId: TASK_ID });
+    const deleted = await rpc('DeleteTaskPushNotificationConfig', { taskId: TASK_ID, id: 'hook-1' });
+    const readAgain = await rpc('GetTaskPushNotificationConfig', { taskId: TASK_ID, id: 'hook-1' });
+
+    expect([read.json<unknown>(), listed.json<unknown>(), deleted.json<unknown>(), readAgain.json<unknown>()]).toMatchObject([
+      { result: { taskId: TASK_ID, id: 'hook-1', url: WEBHOOK } },
+      { result: { configs: [{ id: 'hook-1', url: WEBHOOK }] } },
+      { result: {} },
+      { error: { code: -32001 } },
+    ]);
+    expect(JSON.stringify(listed.json())).not.toContain('secret-1');
+  });
+});
+
+describe('the push config methods over HTTP+JSON (slice 4)', () => {
+  it('keeps, reads, lists and deletes a push config on its own task', async () => {
+    await sendingTheMessage();
+
+    const created = await rest('POST', { path: `/tasks/${TASK_ID}/pushNotificationConfigs`, payload: A_PUSH_CONFIG });
+    const read = await rest('GET', { path: `/tasks/${TASK_ID}/pushNotificationConfigs/hook-1` });
+    const listed = await rest('GET', { path: `/tasks/${TASK_ID}/pushNotificationConfigs` });
+    const deleted = await server.inject({ method: 'DELETE', url: `/gw/a2a/${CRM_ALIAS}/tasks/${TASK_ID}/pushNotificationConfigs/hook-1`, headers: { ...BEARER, 'a2a-version': '1.0' } });
+
+    expect([created.statusCode, read.statusCode, listed.statusCode, deleted.statusCode]).toEqual([200, 200, 200, 200]);
+    expect([created.json<unknown>(), read.json<unknown>(), listed.json<unknown>()]).toMatchObject([{ id: 'hook-1', url: WEBHOOK }, { id: 'hook-1' }, { configs: [{ id: 'hook-1' }] }]);
+    expect(pushStore.configs).toEqual([]);
+  });
+
+  it('refuses a webhook that resolves inside with 400, and a task of no call of this client with 404', async () => {
+    await sendingTheMessage();
+
+    const [inside, unknown] = [await rest('POST', { path: `/tasks/${TASK_ID}/pushNotificationConfigs`, payload: { ...A_PUSH_CONFIG, url: 'https://10.0.0.5/a2a' } }), await rest('GET', { path: '/tasks/task-1/pushNotificationConfigs' })];
+
+    expect([inside.statusCode, unknown.statusCode]).toEqual([400, 404]);
   });
 });
