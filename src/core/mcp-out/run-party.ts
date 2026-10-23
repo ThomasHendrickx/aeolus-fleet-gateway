@@ -27,10 +27,14 @@ export type RunParty = RunPartyOf<McpServerParty>;
  * before it is handed with the next number; the fleet counts each an
  * attempt and stops at the fifth. While the fleet answers only what the
  * gateway already holds, or does not answer, it looks again after a while.
+ * What the party took up before it stopped is taken up first, in flight as
+ * any delivery.
  */
 export function createRunParty<P extends TakingParty = McpServerParty>(deps: {
   crew: Pick<ProxyShipCrew, 'pushReceive'>;
   handCall: (input: { party: P; delivery: PushedDelivery; signal: AbortSignal }) => Promise<HandOutcome>;
+  /** What the party took up before it stopped and takes up first now, by delivery, as an outside agent's task it followed. */
+  resume?: (input: { party: P; signal: AbortSignal }) => Promise<{ deliveryId: DeliveryId; hand: () => Promise<HandOutcome> }[]>;
   sleep: Sleep;
   pollMs: number;
   againWaitsMs: readonly number[];
@@ -44,28 +48,35 @@ export function createRunParty<P extends TakingParty = McpServerParty>(deps: {
     const inFlight = new Map<DeliveryId, Promise<void>>();
     const agains = new Map<DeliveryId, number>();
 
-    const hand = async (delivery: PushedDelivery): Promise<void> => {
+    const hand = async (deliveryId: DeliveryId, handOnce: () => Promise<HandOutcome>): Promise<void> => {
       let outcome: HandOutcome;
       try {
-        outcome = await deps.handCall({ party, delivery, signal });
+        outcome = await handOnce();
       } catch {
         // A failure of the gateway's own (its database): nothing was decided, so the delivery comes again.
         outcome = { kind: 'again' };
       }
       if (outcome.kind === 'again') {
-        const count = (agains.get(delivery.deliveryId) ?? 0) + 1;
-        agains.set(delivery.deliveryId, count);
+        const count = (agains.get(deliveryId) ?? 0) + 1;
+        agains.set(deliveryId, count);
         await deps.sleep(deps.againWaitsMs[Math.min(count, deps.againWaitsMs.length) - 1] ?? deps.pollMs, signal);
       } else {
-        agains.delete(delivery.deliveryId);
+        agains.delete(deliveryId);
       }
     };
-    const start = (delivery: PushedDelivery) => {
+    const startOne = (deliveryId: DeliveryId, handOnce: () => Promise<HandOutcome>) => {
       inFlight.set(
-        delivery.deliveryId,
-        hand(delivery).finally(() => inFlight.delete(delivery.deliveryId)),
+        deliveryId,
+        hand(deliveryId, handOnce).finally(() => inFlight.delete(deliveryId)),
       );
     };
+    const start = (delivery: PushedDelivery) => {
+      startOne(delivery.deliveryId, () => deps.handCall({ party, delivery, signal }));
+    };
+
+    for (const resumed of (await deps.resume?.({ party, signal })) ?? []) {
+      startOne(resumed.deliveryId, resumed.hand);
+    }
 
     while (!signal.aborted) {
       if (inFlight.size >= max) {
