@@ -64,15 +64,27 @@ export function memoryAccountGrants(): AccountGrants & { held: AccountGrant[] } 
 
 /**
  * pagasae as a test sees it: its authorize address with the state and the
- * challenge in its query, and one code it redeems, for the verifier given.
+ * challenge in its query, one code it redeems, for the verifier given, the
+ * refresh tokens it renews and the ID-JAGs it takes, by their text.
  */
 export function fakePagasae(
   redeemed: { code: string; verifier: string; tokens: PagasaeTokens } | { refusal: string },
   refreshes: Readonly<Record<string, PagasaeTokens | 'refused' | 'unavailable'>> = {},
-): Pagasae & { refreshed: string[] } {
+  idJags: Readonly<Record<string, PagasaeTokens | 'refused' | 'unavailable'>> = {},
+): Pagasae & { refreshed: string[]; handedOver: { idJag: string; clientId: string }[] } {
   const refreshed: string[] = [];
+  const handedOver: { idJag: string; clientId: string }[] = [];
   return {
     refreshed,
+    handedOver,
+    exchangeIdJag: (handed) => {
+      handedOver.push(handed);
+      const answer = idJags[handed.idJag] ?? 'refused';
+      if (answer === 'refused' || answer === 'unavailable') {
+        return Promise.resolve(err({ kind: answer, reason: answer === 'refused' ? 'invalid_grant' : 'pagasae did not answer' }));
+      }
+      return Promise.resolve(ok(answer));
+    },
     refresh: async (refreshToken) => {
       refreshed.push(refreshToken);
       // A turn of the event loop, as a call over the network takes, so calls made together overlap.
