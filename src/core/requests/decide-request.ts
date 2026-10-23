@@ -2,6 +2,7 @@ import type { ShipId } from '@aeolus-fleet/common';
 
 import type { Actor } from '../actors/authenticate-actor.js';
 import type { ApproveClientParty, ApproveParty, ApprovePartyRefusal } from '../parties/approve-party.js';
+import { APPROVING_SCOPE, EVERY_APP_SHIP_SCOPES, scopeNotHeld } from '../parties/approver.js';
 import type { ShownParty } from '../parties/shown-party.js';
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
@@ -9,12 +10,6 @@ import { ok, type Result } from '../shared/result.js';
 import type { McpServerCredential } from '../vault/credential.js';
 import { noticesOf } from './outcome-notice.js';
 import type { DecidedBy, PendingRequest, PendingRequests } from './ports.js';
-
-/** The scope the gateway declares for approving outside parties (decision 0056). */
-export const APPROVING_SCOPE = 'gateway:approve';
-
-/** The scopes every app ship gets (decision 0046), so an approver need not hold them to grant them. */
-const EVERY_APP_SHIP_SCOPES = new Set(['messages:send', 'messages:receive']);
 
 /** An approval: the proxy ship's name, its owner (a person ship) and its scopes; for a server, its credential and how many calls it takes at once. */
 export interface Approval {
@@ -87,7 +82,7 @@ export function createDecideRequest(deps: { requests: PendingRequests; approvePa
       const isDenied = await deps.requests.decide(actor.fleetId, { requestId, from: ['pending'], decision: decided, notices: noticesOf(request, { outcome: 'denied', partyName: null }) });
       return isDenied ? ok({ state: 'denied', party: null }) : refuse('ALREADY_DECIDED', 'This request is decided already');
     }
-    const notHeld = decision.party.scopes.find((scope) => !EVERY_APP_SHIP_SCOPES.has(scope) && !actor.scopes.includes(scope));
+    const notHeld = scopeNotHeld(actor, decision.party.scopes);
     if (notHeld !== undefined) {
       return refuse('SCOPE_NOT_HELD', `You may grant only scopes you hold: not ${notHeld}`);
     }
