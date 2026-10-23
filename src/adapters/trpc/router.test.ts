@@ -19,6 +19,11 @@ import type { SetOutsideParties } from '../../core/outside-parties/set-outside-p
 import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
+import { createFocusPage } from '../../core/people/focus-page.js';
+import { createListWebPushBrowsers } from '../../core/people/list-web-push-browsers.js';
+import { createTurnOffWebPush } from '../../core/people/turn-off-web-push.js';
+import { createTurnOnWebPush } from '../../core/people/turn-on-web-push.js';
+import { memoryFocusedPages, memoryWebPushSubscriptions } from '../../../test/support/people-fakes.js';
 import { createChangeHub, type ChangeHub } from '../http/live.js';
 import { gatewayRouter, type Context } from './router.js';
 
@@ -29,6 +34,9 @@ function grantOf(caller: PersonCaller): string {
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
+/** The gateway's public push key, which a browser subscribes with. */
+const WEB_PUSH_KEY = 'BGatewayPublicKey';
+const TURNED_ON_AT = new Date('2026-10-23T10:00:00.000Z');
 const ARGO_COOKIE = 'aeolus_session=argo';
 const VIEWER_COOKIE = 'aeolus_session=viewer';
 /** A person signed in to the gateway's pages, and one whose account token no longer works. */
@@ -75,7 +83,11 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   switched: Parameters<SetOutsideParties>[0][];
   answers: Record<string, string>[];
   changes: ChangeHub;
+  subscriptions: ReturnType<typeof memoryWebPushSubscriptions>;
+  focused: ReturnType<typeof memoryFocusedPages>;
 } {
+  const subscriptions = memoryWebPushSubscriptions();
+  const focused = memoryFocusedPages();
   const approvals: Parameters<ApproveParty>[0][] = [];
   const additions: Parameters<AddClientParty>[0][] = [];
   const switched: Parameters<SetOutsideParties>[0][] = [];
@@ -127,6 +139,12 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
+      webPushKey: WEB_PUSH_KEY,
+      listWebPushBrowsers: createListWebPushBrowsers({ subscriptions }),
+      turnOnWebPush: createTurnOnWebPush({ subscriptions, clock: { now: () => TURNED_ON_AT } }),
+      turnOffWebPush: createTurnOffWebPush({ subscriptions }),
+      // Seen again only once the page lets go, as the test reads what it held meanwhile.
+      focusPage: createFocusPage({ focused, clock: { now: () => TURNED_ON_AT }, seenEveryMs: 20_000, sleep: (_ms, signal) => new Promise((resolve) => signal.addEventListener('abort', () => resolve(), { once: true })) }),
     },
     changes,
     isServed: () => Promise.resolve(true),
@@ -244,7 +262,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, toolSwitches, agentAdditions, agentMarks, decisions, switched, answers, changes, additions };
+  return { context, approvals, marks, toolSwitches, agentAdditions, agentMarks, decisions, switched, answers, changes, additions, subscriptions, focused };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -883,5 +901,76 @@ describe('a call whose input is wrong is told so in a sentence', () => {
     const body: unknown = await answer.json();
 
     expect(body).toMatchObject({ error: { message: 'Check what you filled in: client_id is missing or wrong.' } });
+  });
+});
+
+describe("a person turns web push on and off for their browsers through the gateway's API, signed in to its pages (wake a person, W8)", () => {
+  const KEYS = { p256dh: `B${'A'.repeat(86)}`, auth: 'A'.repeat(22) };
+  const FIREFOX = { endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/firefox-1', keys: KEYS, browser: 'Firefox on Linux' };
+
+  function signedIn(overrides: Partial<Context> = {}) {
+    const made = aContext(undefined);
+    const signIns = fakeSharedSignIn({});
+    return { ...made, caller: gatewayRouter.createCaller({ ...made.context, signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET, accountApps: (signIn) => signIns.apps(signIn), ...overrides }) };
+  }
+
+  it('turns it on for a browser of their person ship, with the fleet name their shared sign-in states', async () => {
+    const { caller, subscriptions } = signedIn();
+
+    await caller.people.turnOnWebPush(FIREFOX);
+
+    expect(subscriptions.held).toEqual([{ fleetId: FLEET, shipId: OWNER, ...FIREFOX, fleetName: 'Acme', addedAt: TURNED_ON_AT, goneAt: null }]);
+  });
+
+  it("reads the gateway's push key and their browsers, never a browser's keys", async () => {
+    const { caller } = signedIn();
+    await caller.people.turnOnWebPush(FIREFOX);
+
+    await expect(caller.people.wakes()).resolves.toEqual({
+      webPushKey: WEB_PUSH_KEY,
+      browsers: [{ endpoint: FIREFOX.endpoint, browser: 'Firefox on Linux', addedAt: '2026-10-23T10:00:00.000Z', isGone: false }],
+    });
+  });
+
+  it('removes a browser', async () => {
+    const { caller, subscriptions } = signedIn();
+    await caller.people.turnOnWebPush(FIREFOX);
+
+    await caller.people.turnOffWebPush({ endpoint: FIREFOX.endpoint });
+
+    expect(subscriptions.held).toEqual([]);
+  });
+
+  it('refuses a subscription the push service could not have given, saying why', async () => {
+    const { caller } = signedIn();
+
+    await expect(caller.people.turnOnWebPush({ ...FIREFOX, endpoint: 'http://push.example/firefox' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringContaining('https') });
+  });
+
+  it('says pagasae did not answer, turning nothing on, as it names the fleet', async () => {
+    const { caller, subscriptions } = signedIn({ accountApps: (signIn) => fakeSharedSignIn({ isAvailable: false }).apps(signIn) });
+
+    await expect(caller.people.turnOnWebPush(FIREFOX)).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    expect(subscriptions.held).toEqual([]);
+  });
+
+  it('refuses any other actor: only a person has a person ship', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).people.wakes()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("a person's page tells the gateway's API while it is in focus (wake a person, W6)", () => {
+  it('counts in focus for their person ship while it follows, and no longer once it stops', async () => {
+    const { context, focused } = aContext(PERSON_COOKIE);
+    const stop = new AbortController();
+    const following = await gatewayRouter.createCaller(context, { signal: stop.signal }).people.focus();
+    const iterator = following[Symbol.asyncIterator]();
+
+    await iterator.next();
+    const isInFocus = await focused.isAnyInFocus({ fleetId: FLEET, shipId: OWNER }, TURNED_ON_AT);
+    stop.abort();
+    await iterator.return?.();
+
+    expect({ isInFocus, held: focused.held }).toEqual({ isInFocus: true, held: [] });
   });
 });
