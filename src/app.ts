@@ -42,6 +42,18 @@ import { createAddA2aClient, type AddA2aClient } from './core/parties/add-a2a-cl
 import { createAuthenticateA2aClient } from './core/a2a-in/authenticate-a2a-client.js';
 import { createFindReachedShip } from './core/a2a-in/find-reached-ship.js';
 import { createFollowA2aTask } from './core/a2a-in/follow-a2a-task.js';
+import { createDeliverPushes } from './core/a2a-in/deliver-pushes.js';
+import { createListPushConfigs } from './core/a2a-in/list-push-configs.js';
+import { createNoticeTaskChanges } from './core/a2a-in/notice-task-changes.js';
+import { createPushToWebhooks } from './core/a2a-in/push-to-webhooks.js';
+import { createReadPushConfig } from './core/a2a-in/read-push-config.js';
+import { createRemovePushConfig } from './core/a2a-in/remove-push-config.js';
+import { createSetPushConfig } from './core/a2a-in/set-push-config.js';
+import { isPublicAddress } from './core/a2a-in/webhook.js';
+import { a2aPushEvents } from './adapters/http/a2a-streams.js';
+import { createPrismaPushStore } from './adapters/prisma/push-store.js';
+import { systemHostResolver } from './adapters/webhooks/host-resolver.js';
+import { createWebhookPoster } from './adapters/webhooks/webhook-poster.js';
 import { createListA2aTasks } from './core/a2a-in/list-a2a-tasks.js';
 import { createReadA2aTask } from './core/a2a-in/read-a2a-task.js';
 import { createSendA2aMessage } from './core/a2a-in/send-a2a-message.js';
@@ -186,6 +198,9 @@ const OUTCOME_ROUND_MS = 60_000;
 /** The most an outside MCP client's call waits for its answer, whatever its capability states (interop 5.3). */
 const MCP_WAIT_MAX_MS = 10_000;
 
+/** How long an outside A2A client's webhook may take to answer a push. */
+const WEBHOOK_TIMEOUT_MS = 10_000;
+
 /** How often a waiting call is read for its answer. */
 const MCP_WAIT_POLL_MS = 200;
 
@@ -262,11 +277,21 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
   const checkServer = createCheckServer({ servers, servesOutsideParties });
   const readPartyTools = createReadPartyTools({ parties, servers });
+  const pushStore = createPrismaPushStore(prisma);
+  // A webhook is reached only at a public address, as its name resolves at the moment of connecting (slice 4).
+  const webhookPoster = createWebhookPoster({ addressesOf: (host) => systemHostResolver.addressesOf(host), isAllowedAddress: isPublicAddress, timeoutMs: WEBHOOK_TIMEOUT_MS });
+  const pushToWebhooks = createPushToWebhooks({
+    notice: createNoticeTaskChanges({ calls: clientCalls, configs: pushStore, events: a2aPushEvents, clock }),
+    deliver: createDeliverPushes({ pushes: pushStore, resolver: systemHostResolver, poster: webhookPoster, clock, againWaitsMs: AGAIN_WAITS_MS }),
+    sleep,
+    pollMs: POLL_MS,
+  });
   const workers = createPartyWorkers({
     parties,
     stateParty,
     runParty: createRunParty({ crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
     collectReplies: createCollectReplies({ crew: door, replies: door, sent: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
+    pushToWebhooks,
     servesOutsideParties,
     log: server.log,
   });
@@ -436,6 +461,10 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     listTasks: createListA2aTasks({ calls: clientCalls, clock }),
     followTask: followA2aTask,
     subscribeToTask: createSubscribeToA2aTask({ calls: clientCalls, clock, follow: followA2aTask }),
+    setPushConfig: createSetPushConfig({ calls: clientCalls, configs: pushStore, resolver: systemHostResolver, ids: { newId: () => crypto.randomUUID() }, clock }),
+    readPushConfig: createReadPushConfig({ calls: clientCalls, configs: pushStore }),
+    listPushConfigs: createListPushConfigs({ calls: clientCalls, configs: pushStore }),
+    removePushConfig: createRemovePushConfig({ calls: clientCalls, configs: pushStore }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.

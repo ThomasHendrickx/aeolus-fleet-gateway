@@ -1,14 +1,16 @@
 /**
  * A2A streams (slice 3): a followed task as A2A's stream events, and the
- * events as server-sent events on a Fastify reply. A stream begins with the
+ * events as server-sent events on a Fastify reply; a task's events as its
+ * webhook gets them (slice 4). A stream begins with the
  * task, then a status update for each change, each new artifact first, and
  * closes at a terminal state, the state an `application/a2a+json` reply
  * carries included. An error before the first event answers as the call's
  * plain error; after it, as an `error` event that ends the stream.
  */
-import { TaskState, type StreamResponse, type Task } from '@a2a-js/sdk';
+import { StreamResponse, TaskState, type Task } from '@a2a-js/sdk';
 import type { FastifyReply } from 'fastify';
 
+import type { PushEvents } from '../../core/a2a-in/ports.js';
 import type { TaskView } from '../../core/a2a-in/task-view.js';
 import { taskOf } from './a2a-tasks.js';
 
@@ -37,6 +39,19 @@ export async function* streamOf(views: AsyncIterable<TaskView>): AsyncGenerator<
     }
   }
 }
+
+/** The events a webhook gets for a task as it stands (slice 4): each of its artifacts, then its status, as a stream sends them. */
+export const a2aPushEvents: PushEvents = {
+  eventsOf: (view) => {
+    const task = taskOf(view);
+    const ids = { taskId: task.id, contextId: task.contextId, metadata: undefined };
+    const events: StreamResponse[] = [
+      ...task.artifacts.map((artifact): StreamResponse => ({ payload: { $case: 'artifactUpdate', value: { ...ids, artifact, append: false, lastChunk: true } } })),
+      { payload: { $case: 'statusUpdate', value: { ...ids, status: task.status } } },
+    ];
+    return events.map((event) => JSON.stringify(StreamResponse.toJSON(event)));
+  },
+};
 
 const SSE_HEADERS = { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'x-accel-buffering': 'no' };
 
