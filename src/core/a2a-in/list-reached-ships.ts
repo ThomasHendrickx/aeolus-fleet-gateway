@@ -1,11 +1,14 @@
+import type { ShipId } from '@aeolus-fleet/common';
+
 import type { DiscoveredStatement, Discovery, ShipAliases } from '../mcp-in/ports.js';
 import type { PartyStore } from '../parties/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { A2aCaller } from './authenticate-a2a-client.js';
 
-/** A ship an A2A client may send to now, as it knows it: by its alias, with its statement. */
+/** A ship an A2A client may send to now, as it knows it: by its alias, with its statement; its id stays inside the gateway. */
 export interface ReachedShip {
+  shipId: ShipId;
   alias: string;
   statement: DiscoveredStatement;
 }
@@ -30,6 +33,6 @@ export function createListReachedShips(deps: { parties: Pick<PartyStore, 'find'>
     if (!discovered.isOk) {
       return refuse('FLEET_UNAVAILABLE', `The fleet did not answer which ships the party reaches: ${discovered.error.message}`);
     }
-    return ok(discovered.value.filter((ship) => ship.kind !== 'operator').map((ship) => ({ alias: deps.aliases.aliasOf(fleetId, ship.shipId), statement: ship.statement })));
+    return ok(discovered.value.filter((ship) => ship.kind !== 'operator').map((ship) => ({ shipId: ship.shipId, alias: deps.aliases.aliasOf(fleetId, ship.shipId), statement: ship.statement })));
   };
 }

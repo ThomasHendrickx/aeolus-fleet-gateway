@@ -38,9 +38,12 @@ import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
 import { registerA2aEndpoint } from './adapters/http/a2a-endpoint.js';
 import { a2aCardAddressOf } from './adapters/http/a2a-cards.js';
-import { createAddA2aClient } from './core/parties/add-a2a-client.js';
+import { createAddA2aClient, type AddA2aClient } from './core/parties/add-a2a-client.js';
 import { createAuthenticateA2aClient } from './core/a2a-in/authenticate-a2a-client.js';
 import { createFindReachedShip } from './core/a2a-in/find-reached-ship.js';
+import { createListA2aTasks } from './core/a2a-in/list-a2a-tasks.js';
+import { createReadA2aTask } from './core/a2a-in/read-a2a-task.js';
+import { createSendA2aMessage } from './core/a2a-in/send-a2a-message.js';
 import { createListReachedShips } from './core/a2a-in/list-reached-ships.js';
 import { createShipAliases } from './adapters/crypto/ship-aliases.js';
 import { createListTools } from './core/mcp-in/list-tools.js';
@@ -261,7 +264,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     parties,
     stateParty,
     runParty: createRunParty({ crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
-    collectReplies: createCollectReplies({ crew: door, replies: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
+    collectReplies: createCollectReplies({ crew: door, replies: door, sent: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
     servesOutsideParties,
     log: server.log,
   });
@@ -293,8 +296,15 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     }
     return approved;
   };
-  // An A2A client's calls are not carried yet, so no worker starts for it.
-  const addA2aClient = createAddA2aClient({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock, secrets: oauthSecrets });
+  const addA2aClientOnly = createAddA2aClient({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock, secrets: oauthSecrets });
+  // An A2A client crewed once it is added has the replies to its calls taken at once.
+  const addA2aClient: AddA2aClient = async (input) => {
+    const added = await addA2aClientOnly(input);
+    if (added.isOk) {
+      await workers.start({ fleetId: input.actor.fleetId, name: added.value.party.name });
+    }
+    return added;
+  };
   const proxyShipsAsActor = createProxyShipsAsActor(options.fleetUrl);
   // Calls as an account need its account token, set up with the sign-in below.
   const asActor = { parties, fleet: proxyShipsAsActor, credentialOf: (actor: Actor, sent: ActorCredential) => credentialOf(actor, sent) };
@@ -411,11 +421,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     ...(person === undefined ? {} : { person }),
   });
   // Outside A2A clients call the ships their proxy ship reaches, by alias, with the bearer they were shown (decision 0060).
+  // A blocking send waits as its capability states, at most the gateway's own most, as an MCP call does (I-9).
   const listReachedShips = createListReachedShips({ parties, discovery: door, aliases });
+  const findReachedShip = createFindReachedShip({ listReachedShips });
   registerA2aEndpoint(server, {
     issuer,
     authenticate: createAuthenticateA2aClient({ parties, secrets: oauthSecrets, servesOutsideParties }),
-    findReachedShip: createFindReachedShip({ listReachedShips }),
+    findReachedShip,
+    sendMessage: createSendA2aMessage({ parties, findReachedShip, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, sleep, waitMaxMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS }),
+    readTask: createReadA2aTask({ calls: clientCalls, clock }),
+    listTasks: createListA2aTasks({ calls: clientCalls, clock }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.

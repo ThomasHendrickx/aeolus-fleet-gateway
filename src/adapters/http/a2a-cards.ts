@@ -44,7 +44,10 @@ export function publicCardOf(issuer: string, alias: string): AgentCard {
   return {
     name: alias,
     description: PUBLIC_DESCRIPTION,
-    supportedInterfaces: [{ url: a2aInterfaceUrlOf(issuer, alias), protocolBinding: 'JSONRPC', tenant: '', protocolVersion: A2A_VERSION }],
+    supportedInterfaces: [
+      { url: a2aInterfaceUrlOf(issuer, alias), protocolBinding: 'JSONRPC', tenant: '', protocolVersion: A2A_VERSION },
+      { url: a2aInterfaceUrlOf(issuer, alias), protocolBinding: 'HTTP+JSON', tenant: '', protocolVersion: A2A_VERSION },
+    ],
     provider: { organization: 'Aeolus gateway', url: issuer },
     version: runningVersion(),
     capabilities: { streaming: false, pushNotifications: false, extensions: [], extendedAgentCard: true },

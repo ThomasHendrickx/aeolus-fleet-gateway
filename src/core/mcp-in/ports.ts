@@ -2,7 +2,7 @@ import type { DeliveryId, FleetId, MessageId, ShipId, ShipKind } from '@aeolus-f
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
-import type { CallReply, ClientCall } from './client-call.js';
+import type { CallReply, ClientCall, DeliveryState } from './client-call.js';
 
 /** One thing a ship offers, as its statement says it (decision 0047): MCP's tool fields and A2A's modes. */
 export interface Capability {
@@ -47,7 +47,7 @@ export interface ShipAliases {
 
 /** Outbound port: the fleet's send, as a proxy ship's crew calls it. The same idempotency key answers the same message. */
 export interface CallSender {
-  send(crewToken: string, message: { to: ShipId; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<{ messageId: MessageId }, FleetRefusal>>;
+  send(crewToken: string, message: { to: ShipId; contentType: string; payload: string; idempotencyKey: string; inReplyTo?: MessageId }): Promise<Result<{ messageId: MessageId }, FleetRefusal>>;
 }
 
 /**
@@ -59,11 +59,20 @@ export interface CallKeys {
   idempotencyKeyOf(given: { fleetId: FleetId; party: string; key: string }): string;
   /** A new send key, for a call the client gave none. */
   newIdempotencyKey(): string;
-  /** The handle the client reads its call by. */
+  /** The handle the client reads its call by; an A2A task's id, for the task's first message. */
   handleOf(fleetId: FleetId, messageId: MessageId): string;
+  /** The context of an A2A task its client named none for, from the task's first message. */
+  contextIdOf(fleetId: FleetId, messageId: MessageId): string;
 }
 
-/** Outbound port: outside clients' calls, one per message, each with the replies naming it. */
+/** An outside A2A client's task (decision 0060): its id and context, and its calls in the order sent. */
+export interface StoredTask {
+  taskId: string;
+  contextId: string;
+  calls: ClientCall[];
+}
+
+/** Outbound port: outside clients' calls, one per message, each with the replies naming it; and A2A clients' tasks, each of its calls. */
 export interface ClientCalls {
   /** Keeps a call with no replies; a call kept for its message already stays as it was. */
   save(call: Omit<ClientCall, 'replies'>): Promise<void>;
@@ -74,6 +83,14 @@ export interface ClientCalls {
   waitedOn(caller: { fleetId: FleetId; party: string }, now: Date): Promise<ClientCall[]>;
   /** The party's call by its handle; none of another party's. */
   findByHandle(caller: { fleetId: FleetId; party: string }, handle: string): Promise<ClientCall | undefined>;
+  /** Keeps where the call's delivery stands now. */
+  setDelivery(call: { fleetId: FleetId; messageId: MessageId }, delivery: { state: DeliveryState; since: Date }): Promise<void>;
+  /** Keeps an A2A task; a task kept already stays as it was. */
+  saveTask(task: { fleetId: FleetId; party: string; taskId: string; contextId: string; createdAt: Date }): Promise<void>;
+  /** The party's task; none of another party's. */
+  findTask(caller: { fleetId: FleetId; party: string }, taskId: string): Promise<StoredTask | undefined>;
+  /** The party's tasks, newest first, at most the limit after the cursor, in one context or all; the cursor of the next page, none at the end. */
+  listTasks(caller: { fleetId: FleetId; party: string }, page: { limit: number; after?: string; contextId?: string }): Promise<{ tasks: StoredTask[]; next: string | null }>;
 }
 
 /** A reply the fleet hands a proxy ship's crew: its delivery and its message. */
@@ -82,6 +99,11 @@ export interface ReceivedReply {
   messageId: MessageId;
   contentType: string;
   payload: string;
+}
+
+/** Outbound port: the fleet's sentMessage, as a proxy ship's crew calls it: where the delivery of a message it sent stands, and since when. */
+export interface SentMessages {
+  sentMessage(crewToken: string, messageId: MessageId): Promise<Result<{ state: DeliveryState; since: Date }, FleetRefusal>>;
 }
 
 /** Outbound port: the fleet's receiveReply, as a proxy ship's crew calls it: the reply to one message, if one came within the fleet's wait. */
