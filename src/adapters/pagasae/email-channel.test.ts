@@ -57,8 +57,8 @@ describe('the email channel, through pagasae (wake a person, W2)', () => {
     const woken = await channel().wake(SHIP);
 
     expect(woken).toEqual(ok(undefined));
-    expect(received).toEqual([
-      expect.objectContaining({ method: 'POST', url: '/api/wakes', body: { fleetId: SHIP.fleetId, shipId: SHIP.shipId }, headers: expect.objectContaining({ authorization: `Bearer ${INSTALLATION_TOKEN}` }) }),
+    expect(received.map(({ method, url, headers, body }) => ({ method, url, authorization: headers.authorization, body }))).toEqual([
+      { method: 'POST', url: '/api/wakes', authorization: `Bearer ${INSTALLATION_TOKEN}`, body: { fleetId: SHIP.fleetId, shipId: SHIP.shipId } },
     ]);
   });
 
