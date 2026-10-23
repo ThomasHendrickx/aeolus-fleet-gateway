@@ -89,6 +89,15 @@ describe('a push is POSTed to its webhook, with retries and backoff, then given 
     expect({ posted: poster.posted, state: store.pushes[0]?.state }).toEqual({ posted: [], state: 'givenUp' });
   });
 
+  it('is tried again while its host resolves to nothing', async () => {
+    resolver = fakeResolver({});
+    const { poster, deliver } = delivering([answered(200)]);
+
+    await deliver();
+
+    expect({ posted: poster.posted, push: store.pushes[0] }).toMatchObject({ posted: [], push: { state: 'pending', attempts: 1, nextAt: new Date(START.getTime() + 1_000) } });
+  });
+
   it('is given up when the address it connected to was not public', async () => {
     const { deliver } = delivering([err({ kind: 'ADDRESS_REFUSED' as const })]);
 
