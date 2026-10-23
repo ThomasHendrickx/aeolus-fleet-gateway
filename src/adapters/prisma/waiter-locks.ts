@@ -4,7 +4,7 @@
  * every lock the instance took, so when it ends, Postgres frees them all and
  * another instance can take them. The next take connects again. A lock is
  * keyed by the hashes of the fleet and the ship: two ships sharing both
- * would share one waiter's lock, and the second would wait on no instance.
+ * share one lock, so their waiters run on the same instance.
  */
 import pg from 'pg';
 
