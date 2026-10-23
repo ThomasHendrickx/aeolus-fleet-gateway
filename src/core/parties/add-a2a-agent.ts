@@ -1,8 +1,8 @@
 import type { ShipId } from '@aeolus-fleet/common';
 
 import type { Actor } from '../actors/authenticate-actor.js';
-import { agentStatementOf } from '../a2a-out/agent-statement.js';
 import type { AgentCards } from '../a2a-out/ports.js';
+import { readAgentStatement } from '../a2a-out/read-agent-statement.js';
 import type { CallTiming } from '../mcp-out/statement.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import type { Result } from '../shared/result.js';
@@ -48,13 +48,7 @@ export function createAddA2aAgent(deps: ApprovalDeps & { cards: AgentCards; timi
     if (!(await deps.servesOutsideParties(fleetId))) {
       return refuse('OUTSIDE_PARTIES_OFF', "This fleet's outside parties are off: turn them on first");
     }
-    const card = await deps.cards.read(cardUrl);
-    if (!card.isOk) {
-      return card.error.kind === 'UNREACHABLE'
-        ? refuse('CARD_UNREACHABLE', `The agent's card could not be read: ${card.error.reason}`)
-        : refuse('CARD_INVALID', `The address answers no agent card: ${card.error.reason}`);
-    }
-    const statement = agentStatementOf({ partyName: name, card: card.value, isRepeatable: true, timing: deps.timing });
+    const statement = await readAgentStatement(deps, { name, cardUrl, isRepeatable: true });
     if (!statement.isOk) {
       return statement;
     }
