@@ -199,6 +199,12 @@ describe("an outside A2A client's message is a message its proxy ship sends (dec
 
   const taskNow = async (taskId: string) => taskSchema.parse((await rpc('GetTask', { id: taskId })).result);
 
+  /** The interface of another ship the supplier reaches: its tasks are read at any alias it reaches. */
+  async function anotherInterface(): Promise<string> {
+    const other = (await cardAddresses()).find((address) => !address.startsWith(`${interfaceUrl}/`));
+    return (other ?? '').replace('/.well-known/agent-card.json', '');
+  }
+
   it("sends the message to the alias's ship as the proxy ship, once for the same messageId, and answers the same task", async () => {
     await aSupplierReaching();
 
@@ -214,7 +220,7 @@ describe("an outside A2A client's message is a message its proxy ship sends (dec
 
     const answered = await rpc('SendMessage', { message: { messageId: 'm-1', role: 'ROLE_USER', parts: [{ text: 'Quote 40 chairs.', mediaType: 'not a media type' }] } });
 
-    expect({ error: answered.error, tasks: (await rpc('ListTasks', {})).result?.['tasks'] }).toEqual({ error: expect.objectContaining({ code: -32603 }), tasks: [] });
+    expect({ code: answered.error?.code, tasks: (await rpc('ListTasks', {})).result?.tasks }).toEqual({ code: -32603, tasks: [] });
   });
 
   it('answers no task while the fleet does not answer', async () => {
@@ -253,7 +259,9 @@ describe("an outside A2A client's message is a message its proxy ship sends (dec
     await aSupplierReaching();
     const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
 
-    // Retiring the ship abandons its deliveries.
+    interfaceUrl = await anotherInterface();
+    expect(interfaceUrl).not.toBe('');
+    // Retiring the ship abandons its deliveries; it is reached no more, so the task is read at another alias.
     const retired = await fetch(`${setting.fleet.url}/trpc/fleet.retire`, { method: 'POST', headers: { 'content-type': 'application/json', origin: setting.fleet.url, cookie: setting.cookie }, body: JSON.stringify({ shipId: procurement.shipId }) });
     expect(retired.status, await retired.clone().text()).toBe(200);
 
@@ -281,6 +289,7 @@ describe("an outside A2A client's message is a message its proxy ship sends (dec
 
     await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', payload: '40 chairs: 2000 euros.' });
     app = await startedGateway();
+    await app.restoreConnections();
 
     await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_COMPLETED');
   });
