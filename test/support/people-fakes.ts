@@ -3,7 +3,7 @@ import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
-import type { AccountDoor, EmailChannels, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../src/core/people/ports.js';
+import type { AccountDoor, EmailChannels, FocusedPage, FocusedPages, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -264,5 +264,26 @@ export function memoryEmailChannels(): EmailChannels & { turnedOn: Map<string, D
       }
       return Promise.resolve();
     },
+  };
+}
+
+/** The person's pages in focus, in memory: each by its id, with when it was last seen in focus. */
+export function memoryFocusedPages(): FocusedPages & { held: FocusedPage[] } {
+  const held: FocusedPage[] = [];
+  return {
+    held,
+    save: (page) => {
+      const index = held.findIndex(({ pageId }) => pageId === page.pageId);
+      held.splice(index < 0 ? held.length : index, index < 0 ? 0 : 1, page);
+      return Promise.resolve();
+    },
+    remove: (fleetId, pageId) => {
+      const index = held.findIndex((page) => page.fleetId === fleetId && page.pageId === pageId);
+      if (index >= 0) {
+        held.splice(index, 1);
+      }
+      return Promise.resolve();
+    },
+    isAnyInFocus: ({ fleetId, shipId }, since) => Promise.resolve(held.some((page) => page.fleetId === fleetId && page.shipId === shipId && page.seenAt >= since)),
   };
 }
