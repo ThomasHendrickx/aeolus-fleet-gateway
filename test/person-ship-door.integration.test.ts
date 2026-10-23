@@ -1,4 +1,5 @@
 import { receiveOutputSchema } from '@aeolus-fleet/common';
+import pg from 'pg';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
@@ -138,5 +139,61 @@ describe('a person ship reads again a delivery the person opened (aeolus-fleet #
 
     expect(again.isOk).toBe(false);
     expect(!again.isOk && again.error.message).not.toBe('');
+  });
+});
+
+describe("a person ship's inbox, as the gateway's waiter asks it (wake a person, W5)", () => {
+  /** The tracker sends charlotte a note. */
+  async function trackerSendsCharlotte(key: string) {
+    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
+      body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType: 'text/plain', payload: 'Issue 7 is closed', idempotencyKey: key }),
+    });
+    expect(sent.status).toBe(200);
+  }
+
+  it('waits while the count is the one the crew knows, and answers the new count once a delivery comes', async () => {
+    const stop = new AbortController();
+    const progress = { isAnswered: false };
+    const asked = door.inbox(charlotte, { knownWaiting: 0, signal: stop.signal }).then((answered) => {
+      progress.isAnswered = true;
+      return answered;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const isAnsweredBeforeTheSend = progress.isAnswered;
+
+    await trackerSendsCharlotte('tracker-wait-1');
+
+    await expect(asked).resolves.toEqual({ isOk: true, value: { waiting: 1 } });
+    expect(isAnsweredBeforeTheSend).toBe(false);
+  });
+
+  it('answers at once when the count already differs from the one the crew knows', async () => {
+    await trackerSendsCharlotte('tracker-wait-2');
+
+    await expect(door.inbox(charlotte, { knownWaiting: 0, signal: new AbortController().signal })).resolves.toEqual({ isOk: true, value: { waiting: 1 } });
+  });
+
+  it('ends the wait once stopped', async () => {
+    const stop = new AbortController();
+    const asked = door.inbox(charlotte, { knownWaiting: 0, signal: stop.signal });
+
+    stop.abort();
+
+    await expect(asked).resolves.toMatchObject({ isOk: false });
+  });
+
+  it("states the gateway as the waker of the person ship's lease at its push receive", async () => {
+    await door.pushReceive(charlotte, { max: 1 });
+
+    const core = new pg.Client({ connectionString: fleet.databaseUrl });
+    await core.connect();
+    try {
+      const leases = await core.query('SELECT "waker" FROM "leases" l JOIN "ships" s ON s."id" = l."ship_id" AND s."fleet_id" = l."fleet_id" WHERE s."name" = $1 AND l."ended_at" IS NULL', ['charlotte']);
+      expect(leases.rows).toEqual([{ waker: 'gateway' }]);
+    } finally {
+      await core.end();
+    }
   });
 });
