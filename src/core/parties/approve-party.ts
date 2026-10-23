@@ -20,6 +20,9 @@ export const MCP_CLIENT_SHIP_TYPE = 'mcp-client';
 /** The type of every outside A2A client's proxy ship (decision 0060). */
 export const A2A_CLIENT_SHIP_TYPE = 'a2a-client';
 
+/** The type of every outside A2A agent's proxy ship (slice 5). */
+export const A2A_AGENT_SHIP_TYPE = 'a2a-agent';
+
 export type ApprovePartyRefusal = DomainError<'OUTSIDE_PARTIES_OFF' | 'NOT_CONNECTED' | 'PARTY_EXISTS' | 'COMMISSION_REFUSED' | 'FLEET_UNAVAILABLE'>;
 
 export type ApproveParty = (input: {

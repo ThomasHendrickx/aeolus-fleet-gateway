@@ -2,6 +2,7 @@ import type { FleetId } from '@aeolus-fleet/common';
 import Fastify from 'fastify';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { anAgentParty } from '../test/support/a2a-agent-fakes.js';
 import { FLEET_ID, OTHER_FLEET_ID } from '../test/support/fleet-fakes.js';
 import { PROXY_SHIP_ID, memoryPartyStore } from '../test/support/party-fakes.js';
 import type { McpClientParty, McpServerParty } from './core/parties/party.js';
@@ -34,10 +35,13 @@ let parties: ReturnType<typeof memoryPartyStore>;
 /** The parties whose worker takes calls now. */
 let running: Set<string>;
 let servedFleets: Set<FleetId>;
+/** The A2A agents whose proxy ship was stated. */
+let statedAgents: string[];
 
 beforeEach(async () => {
   parties = memoryPartyStore();
   running = new Set();
+  statedAgents = [];
   servedFleets = new Set([FLEET_ID, OTHER_FLEET_ID]);
   await parties.save(aCrewedServer(FLEET_ID, 'crm'));
   await parties.save(aCrewedServer(OTHER_FLEET_ID, 'erp'));
@@ -47,6 +51,10 @@ function workers() {
   return createPartyWorkers({
     parties,
     stateParty: () => Promise.resolve(ok({ capabilities: [] })),
+    stateA2aAgent: (agent) => {
+      statedAgents.push(agent.name);
+      return Promise.resolve(ok({ capabilities: [] }));
+    },
     runParty: ({ party, signal }) => {
       running.add(party.name);
       return new Promise((resolve) => {
@@ -121,6 +129,7 @@ describe("a client party's worker, its crew released and the same proxy ship cre
     const pool = createPartyWorkers({
       parties,
       stateParty: () => Promise.resolve(ok({ capabilities: [] })),
+      stateA2aAgent: () => Promise.resolve(ok({ capabilities: [] })),
       runParty: () => Promise.resolve({ ended: 'stopped' }),
       collectReplies: async ({ party, signal }) => {
         takenWith.push(party.crewToken);
@@ -160,6 +169,7 @@ describe("an A2A client's worker (decision 0060)", () => {
     const pool = createPartyWorkers({
       parties,
       stateParty: () => Promise.resolve(ok({ capabilities: [] })),
+      stateA2aAgent: () => Promise.resolve(ok({ capabilities: [] })),
       runParty: () => Promise.resolve({ ended: 'stopped' }),
       collectReplies: async ({ party, signal }) => {
         takenWith.push(party.crewToken);
@@ -188,6 +198,7 @@ describe("an A2A client's worker pushes its tasks' changes (slice 4)", () => {
     const pool = createPartyWorkers({
       parties,
       stateParty: () => Promise.resolve(ok({ capabilities: [] })),
+      stateA2aAgent: () => Promise.resolve(ok({ capabilities: [] })),
       runParty: () => Promise.resolve({ ended: 'stopped' }),
       collectReplies: async ({ signal }) => {
         await untilAborted(signal);
@@ -208,5 +219,16 @@ describe("an A2A client's worker pushes its tasks' changes (slice 4)", () => {
     await pool.stop();
 
     expect({ whileWorking, after: [...pushing] }).toEqual({ whileWorking: ['supplier'], after: [] });
+  });
+
+  it("states an outside A2A agent's proxy ship from its card when its worker starts, taking no calls yet", async () => {
+    await parties.save(anAgentParty({ name: 'supplier' }));
+    const pool = workers();
+
+    await pool.start({ fleetId: FLEET_ID, name: 'supplier' });
+    await settled();
+
+    expect({ statedAgents, running: [...running] }).toEqual({ statedAgents: ['supplier'], running: [] });
+    await pool.stop();
   });
 });

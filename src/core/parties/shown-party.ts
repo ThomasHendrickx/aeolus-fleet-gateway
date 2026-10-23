@@ -13,7 +13,8 @@ interface ShownPartyBase {
 export type ShownParty =
   | (ShownPartyBase & { kind: 'mcpServer'; url: string; credentialKind: McpServerCredential['kind']; concurrencyLimit: number })
   | (ShownPartyBase & { kind: 'mcpClient'; clientId: string })
-  | (ShownPartyBase & { kind: 'a2aClient' });
+  | (ShownPartyBase & { kind: 'a2aClient' })
+  | (ShownPartyBase & { kind: 'a2aAgent'; cardUrl: string; credentialKind: McpServerCredential['kind']; concurrencyLimit: number; isRepeatable: boolean });
 
 /**
  * What the fleet holds for a party's proxy ship (decision 0056): its name,
@@ -39,5 +40,7 @@ export function shownPartyOf(party: Party): ShownParty {
       return { name, kind: party.kind, clientId: party.clientId, state, proxyShipId };
     case 'a2aClient':
       return { name, kind: party.kind, state, proxyShipId };
+    case 'a2aAgent':
+      return { name, kind: party.kind, cardUrl: party.cardUrl, credentialKind: party.credential.kind, concurrencyLimit: party.concurrencyLimit, isRepeatable: party.isRepeatable, state, proxyShipId };
   }
 }

@@ -1,5 +1,5 @@
 /**
- * The credential the gateway calls an outside MCP server with, kept in the
+ * The credential the gateway calls an outside MCP server or A2A agent with, kept in the
  * vault, the gateway's own database (as squadrons keeps crew tokens). The
  * server sees the gateway's credential, never the asker's: no rights travel
  * with a message.

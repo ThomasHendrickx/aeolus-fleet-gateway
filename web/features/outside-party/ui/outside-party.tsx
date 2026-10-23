@@ -9,6 +9,7 @@ import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
 import { scopeWords } from '../../outside-parties/scope-words';
 import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
 import { ToolRow } from '../../outside-parties/ui/tool-row';
+import { RepeatableSwitch } from './repeatable-switch';
 import { ToolSwitch } from './tool-switch';
 
 /** The scopes that change a party's owner, its scopes, and retire it (0056). */
@@ -16,7 +17,7 @@ export const OWNING_SCOPE = 'fleet:owner';
 export const GRANTING_SCOPE = 'scopes:grant';
 export const RETIRING_SCOPE = 'fleet:manage';
 
-/** The scope that switches a server's tools (aeolus-fleet#1151). */
+/** The scope that switches a server's tools (aeolus-fleet#1151) and marks an A2A agent (A9). */
 export const APPROVING_SCOPE = 'gateway:approve';
 
 /** The way back to the list, in the page's fleet. */
@@ -36,6 +37,9 @@ export function Refusal({ children }: { children: ReactNode }) {
     </p>
   );
 }
+
+/** What a party's outside address is called on its page. */
+const ADDRESS_LABELS: Record<ListedParty['kind'], string> = { mcpServer: 'Address', mcpClient: 'Client id', a2aClient: 'Address', a2aAgent: 'Card address' };
 
 const UNKNOWN = <span className="text-muted-foreground">Not known</span>;
 
@@ -65,7 +69,8 @@ export function PartyHead({ party }: { party: ListedParty }) {
 /**
  * One outside party (design B, screens 12 and 14): its proxy ship's state,
  * then its facts as the fleet holds them, and for an MCP server the tools
- * it lists now, each with its switch for an approver (aeolus-fleet#1151). Each control shows only to an account holding
+ * it lists now, each with its switch for an approver (aeolus-fleet#1151);
+ * for an A2A agent its repeatable mark, a switch for an approver (A9). Each control shows only to an account holding
  * its scope; the API checks it again.
  */
 export async function OutsideParty({ page, name }: { page: SignedInPage; name: string }) {
@@ -106,12 +111,20 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
             : party.scopes.map((scope) => <Tag key={scope}>{scopeWords(scope)}</Tag>)}
           {scopes.includes(GRANTING_SCOPE) ? change : null}
         </Fact>
-        {party.kind === 'mcpServer' ? <Fact label="Credential">{CREDENTIAL_KINDS.find(({ kind }) => kind === party.credentialKind)?.label}</Fact> : null}
+        {party.kind === 'mcpServer' || party.kind === 'a2aAgent' ? <Fact label="Credential">{CREDENTIAL_KINDS.find(({ kind }) => kind === party.credentialKind)?.label}</Fact> : null}
         {address === null ? null : (
-          <Fact label={party.kind === 'mcpServer' ? 'Address' : 'Client id'}>
+          <Fact label={ADDRESS_LABELS[party.kind]}>
             <span className="font-mono">{address}</span>
           </Fact>
         )}
+        {party.kind === 'a2aAgent' ? (
+          <>
+            <Fact label="Messages at once">{party.concurrencyLimit}</Fact>
+            <Fact label="Repeatable">
+              {scopes.includes(APPROVING_SCOPE) ? <RepeatableSwitch fleetId={fleetId} party={party.name} isRepeatable={party.isRepeatable} /> : <Tag>{party.isRepeatable ? 'Repeatable' : 'Not repeatable'}</Tag>}
+            </Fact>
+          </>
+        ) : null}
       </dl>
       {tools === undefined ? null : (
         <section className={`${CARD} grid gap-2`} data-testid="outside-party-tools">

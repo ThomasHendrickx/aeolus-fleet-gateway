@@ -37,6 +37,7 @@ interface Row {
   toolSwitches: unknown;
   clientId: string | null;
   bearerHash: string | null;
+  isRepeatable: boolean | null;
   state: string;
   proxyShipId: string | null;
   secret: string | null;
@@ -46,7 +47,7 @@ interface Row {
   approvedAt: Date;
 }
 
-const kindSchema = z.enum(['mcpServer', 'mcpClient', 'a2aClient']);
+const kindSchema = z.enum(['mcpServer', 'mcpClient', 'a2aClient', 'a2aAgent']);
 
 function partyOf(row: Row): Party {
   const base = {
@@ -68,18 +69,22 @@ function partyOf(row: Row): Party {
       return { ...base, kind, clientId: z.string().parse(row.clientId) };
     case 'a2aClient':
       return { ...base, kind, bearerHash: row.bearerHash };
+    case 'a2aAgent':
+      return { ...base, kind, cardUrl: z.string().parse(row.url), credential: credentialSchema.parse(row.credential), concurrencyLimit: z.int().parse(row.concurrencyLimit), isRepeatable: z.boolean().parse(row.isRepeatable) };
   }
 }
 
-/** The columns only one kind of party fills; the other kind leaves them empty. */
+/** The columns only some kinds of party fill; the others leave them empty. An A2A agent's card address is its url. */
 function outsideColumnsOf(party: Party) {
   switch (party.kind) {
     case 'mcpServer':
-      return { url: party.url, credential: { ...party.credential }, concurrencyLimit: party.concurrencyLimit, clientId: null, bearerHash: null };
+      return { url: party.url, credential: { ...party.credential }, concurrencyLimit: party.concurrencyLimit, clientId: null, bearerHash: null, isRepeatable: null };
     case 'mcpClient':
-      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: party.clientId, bearerHash: null };
+      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: party.clientId, bearerHash: null, isRepeatable: null };
     case 'a2aClient':
-      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: null, bearerHash: party.bearerHash };
+      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: null, bearerHash: party.bearerHash, isRepeatable: null };
+    case 'a2aAgent':
+      return { url: party.cardUrl, credential: { ...party.credential }, concurrencyLimit: party.concurrencyLimit, clientId: null, bearerHash: null, isRepeatable: party.isRepeatable };
   }
 }
 

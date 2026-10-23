@@ -130,6 +130,16 @@ describe("the gateway's parties and their vault in Postgres", () => {
     await expect(Promise.all([store.findByBearer('hash-of-bearer'), store.findByBearer('hash-of-another')])).resolves.toEqual([party, undefined]);
   });
 
+  it('keeps an A2A agent party with its card address, credential, calls at once and repeatable mark (slice 5)', async () => {
+    const store = createPrismaPartyStore(prisma);
+    const { state, proxyShipId, secret, crewToken, requestId, requestHash, approvedAt } = aParty();
+    const agent = { fleetId: SWITCHED_FLEET, name: 'quotes', kind: 'a2aAgent' as const, cardUrl: 'https://agent.supplier.example/.well-known/agent-card.json', credential: { kind: 'bearer' as const, token: 'tok-1' }, concurrencyLimit: 3, isRepeatable: true, state, proxyShipId, secret, crewToken, requestId, requestHash, approvedAt };
+    await store.save(agent);
+    await store.save({ ...agent, isRepeatable: false });
+
+    await expect(store.find(SWITCHED_FLEET, 'quotes')).resolves.toEqual({ ...agent, isRepeatable: false });
+  });
+
   it('forgets a fleet with its parties and their credentials (decision 0021)', async () => {
     const store = createPrismaPartyStore(prisma);
     await store.save(aParty({ fleetId: OTHER_FLEET, name: 'ledger' }));
