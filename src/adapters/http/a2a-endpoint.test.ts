@@ -65,7 +65,7 @@ describe('the public card per alias (decision 0060)', () => {
     expect(answered.statusCode).toBe(200);
     expect(answered.json()).toMatchObject({
       name: CRM_ALIAS,
-      supportedInterfaces: [{ url: `${ISSUER}/gw/a2a/${CRM_ALIAS}`, protocolBinding: 'JSONRPC', protocolVersion: '1.0' }],
+      supportedInterfaces: [{ url: `${ISSUER}/gw/a2a/${CRM_ALIAS}`, protocolBinding: 'JSONRPC', protocolVersion: '1.0' }, { protocolBinding: 'HTTP+JSON' }],
       provider: { organization: 'Aeolus gateway', url: ISSUER },
       capabilities: { extendedAgentCard: true },
       securitySchemes: { bearer: { httpAuthSecurityScheme: { scheme: 'Bearer' } } },
@@ -78,7 +78,8 @@ describe('the public card per alias (decision 0060)', () => {
   it('is served the same for an alias of no ship, so it tells nothing', async () => {
     const [crm, none] = await Promise.all([CRM_ALIAS, NO_SHIP_ALIAS].map((alias) => server.inject({ method: 'GET', url: `/gw/a2a/${alias}/.well-known/agent-card.json` })));
 
-    expect(none?.json()).toEqual({ ...crm?.json(), name: NO_SHIP_ALIAS, supportedInterfaces: [{ url: `${ISSUER}/gw/a2a/${NO_SHIP_ALIAS}`, protocolBinding: 'JSONRPC', protocolVersion: '1.0' }] });
+    const interfaceOf = (protocolBinding: string) => ({ url: `${ISSUER}/gw/a2a/${NO_SHIP_ALIAS}`, protocolBinding, protocolVersion: '1.0' });
+    expect(none?.json()).toEqual({ ...crm?.json(), name: NO_SHIP_ALIAS, supportedInterfaces: [interfaceOf('JSONRPC'), interfaceOf('HTTP+JSON')] });
   });
 
   it('is not found for a path that is no alias', async () => {
@@ -183,12 +184,13 @@ const TASK_ID = `handle(${FLEET_ID}:${MESSAGE_ID})`;
 const A_MESSAGE = { messageId: 'm-1', role: 'ROLE_USER', parts: [{ text: 'Quote 40 chairs.' }] };
 
 /** A JSON-RPC call to the alias's interface, as the bearer's client, at A2A 1.0 unless the headers say otherwise. */
-const rpc = (method: string, params: Record<string, unknown>, headers: Record<string, string> = { ...BEARER, 'a2a-version': '1.0' }) =>
+const rpcAs = (headers: Record<string, string>) => (method: string, params: Record<string, unknown>) =>
   server.inject({ method: 'POST', url: `/gw/a2a/${CRM_ALIAS}`, headers, payload: { jsonrpc: '2.0', id: 7, method, params } });
+const rpc = rpcAs({ ...BEARER, 'a2a-version': '1.0' });
 
 /** An HTTP+JSON call to the alias's interface, as the bearer's client, at A2A 1.0. */
-const rest = (method: 'GET' | 'POST', path: string, payload?: Record<string, unknown>, headers: Record<string, string> = BEARER) =>
-  server.inject({ method, url: `/gw/a2a/${CRM_ALIAS}${path}`, headers: { ...headers, 'a2a-version': '1.0' }, ...(payload === undefined ? {} : { payload }) });
+const rest = (method: 'GET' | 'POST', { path, payload }: { path: string; payload?: Record<string, unknown> }) =>
+  server.inject({ method, url: `/gw/a2a/${CRM_ALIAS}${path}`, headers: { ...BEARER, 'a2a-version': '1.0' }, ...(payload === undefined ? {} : { payload }) });
 
 const sendingTheMessage = () => rpc('SendMessage', { message: A_MESSAGE });
 
@@ -230,9 +232,9 @@ describe('SendMessage over JSON-RPC (decision 0060)', () => {
   });
 
   it('refuses a call with no A2A-Version, or one it does not speak, sending nothing', async () => {
-    const [missing, unsupported] = [await rpc('SendMessage', { message: A_MESSAGE }, BEARER), await rpc('SendMessage', { message: A_MESSAGE }, { ...BEARER, 'a2a-version': '0.3' })];
+    const [missing, unsupported] = [await rpcAs(BEARER)('SendMessage', { message: A_MESSAGE }), await rpcAs({ ...BEARER, 'a2a-version': '0.3' })('SendMessage', { message: A_MESSAGE })];
 
-    expect([missing.json(), unsupported.json()]).toMatchObject([{ error: { code: -32009 } }, { error: { code: -32009 } }]);
+    expect([missing.json<unknown>(), unsupported.json<unknown>()]).toMatchObject([{ error: { code: -32009 } }, { error: { code: -32009 } }]);
     expect(sender.sent).toEqual([]);
   });
 
@@ -300,7 +302,7 @@ describe('GetTask over JSON-RPC (decision 0060, interop 3.4)', () => {
   it("answers another client's task as not found", async () => {
     await sendingTheMessage();
 
-    const answered = await rpc('GetTask', { id: TASK_ID }, { authorization: 'Bearer bearer-2', 'a2a-version': '1.0' });
+    const answered = await rpcAs({ authorization: 'Bearer bearer-2', 'a2a-version': '1.0' })('GetTask', { id: TASK_ID });
 
     expect(answered.json()).toMatchObject({ error: { code: -32001 } });
   });
@@ -310,10 +312,9 @@ describe('ListTasks and CancelTask over JSON-RPC (decision 0060, A8)', () => {
   it("lists only the caller's own tasks", async () => {
     await sendingTheMessage();
 
-    const [own, other] = [await rpc('ListTasks', {}), await rpc('ListTasks', {}, { authorization: 'Bearer bearer-2', 'a2a-version': '1.0' })];
+    const [own, other] = [await rpc('ListTasks', {}), await rpcAs({ authorization: 'Bearer bearer-2', 'a2a-version': '1.0' })('ListTasks', {})];
 
-    expect({ own: own.json(), other: other.json() }).toMatchObject({ own: { result: { tasks: [{ id: TASK_ID }] } }, other: { result: {} } });
-    expect(other.json()).not.toHaveProperty('result.tasks');
+    expect({ own: own.json<unknown>(), other: other.json<unknown>() }).toMatchObject({ own: { result: { tasks: [{ id: TASK_ID }] } }, other: { result: { tasks: [] } } });
   });
 
   it('refuses to cancel a task as not cancelable, and an unknown task as not found', async () => {
@@ -321,27 +322,27 @@ describe('ListTasks and CancelTask over JSON-RPC (decision 0060, A8)', () => {
 
     const [own, unknown] = [await rpc('CancelTask', { id: TASK_ID }), await rpc('CancelTask', { id: 'task-1' })];
 
-    expect([own.json(), unknown.json()]).toMatchObject([{ error: { code: -32002 } }, { error: { code: -32001 } }]);
+    expect([own.json<unknown>(), unknown.json<unknown>()]).toMatchObject([{ error: { code: -32002 } }, { error: { code: -32001 } }]);
   });
 });
 
 describe('the same methods over HTTP+JSON (decision 0060)', () => {
   it('sends a message and answers its task', async () => {
-    const answered = await rest('POST', '/message:send', { message: A_MESSAGE });
+    const answered = await rest('POST', { path: '/message:send', payload: { message: A_MESSAGE } });
 
-    expect({ status: answered.statusCode, body: answered.json() }).toMatchObject({ status: 200, body: { task: { id: TASK_ID, status: { state: 'TASK_STATE_SUBMITTED' } } } });
+    expect({ status: answered.statusCode, body: answered.json<unknown>() }).toMatchObject({ status: 200, body: { task: { id: TASK_ID, status: { state: 'TASK_STATE_SUBMITTED' } } } });
   });
 
   it('reads a task, lists the tasks and refuses to cancel', async () => {
-    await rest('POST', '/message:send', { message: A_MESSAGE });
+    await rest('POST', { path: '/message:send', payload: { message: A_MESSAGE } });
 
-    const [task, list, cancel] = [await rest('GET', `/tasks/${TASK_ID}`), await rest('GET', '/tasks'), await rest('POST', `/tasks/${TASK_ID}:cancel`)];
+    const [task, list, cancel] = [await rest('GET', { path: `/tasks/${TASK_ID}` }), await rest('GET', { path: '/tasks' }), await rest('POST', { path: `/tasks/${TASK_ID}:cancel` })];
 
-    expect({ task: task.json(), list: list.json(), cancel: cancel.statusCode }).toMatchObject({ task: { id: TASK_ID }, list: { tasks: [{ id: TASK_ID }] }, cancel: 409 });
+    expect({ task: task.json<unknown>(), list: list.json<unknown>(), cancel: cancel.statusCode }).toMatchObject({ task: { id: TASK_ID }, list: { tasks: [{ id: TASK_ID }] }, cancel: 400 });
   });
 
   it('answers an unknown task as not found', async () => {
-    const answered = await rest('GET', '/tasks/task-1');
+    const answered = await rest('GET', { path: '/tasks/task-1' });
 
     expect(answered.statusCode).toBe(404);
   });
