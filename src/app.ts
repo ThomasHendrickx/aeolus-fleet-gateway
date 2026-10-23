@@ -121,6 +121,10 @@ import type { PersonCrews } from './core/people/ports.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
 import { createWakePerson } from './core/people/wake-person.js';
+import { createFocusPage } from './core/people/focus-page.js';
+import { createListWebPushBrowsers } from './core/people/list-web-push-browsers.js';
+import { createTurnOffWebPush } from './core/people/turn-off-web-push.js';
+import { createTurnOnWebPush } from './core/people/turn-on-web-push.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
@@ -234,8 +238,11 @@ const WAKE_AGAIN_WAITS_MS = [30_000, 60_000, 300_000];
 /** Web push's window unless set: at most one wake within it (W10). */
 const WAKE_WEB_PUSH_WINDOW_MS = 10 * 60_000;
 
-/** How long a page counts in focus since it was last seen so: three times as long as it is seen again while in focus. */
-const FOCUS_FRESH_MS = 60_000;
+/** How often a page in focus is seen again, so one whose gateway instance stopped stops counting soon after. */
+const FOCUS_SEEN_EVERY_MS = 20_000;
+
+/** How long a page counts in focus since it was last seen so: three times as long as it is seen again. */
+const FOCUS_FRESH_MS = 3 * FOCUS_SEEN_EVERY_MS;
 
 /** How long a push service may take to take a wake. */
 const WEB_PUSH_TIMEOUT_MS = 10_000;
@@ -528,6 +535,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       listShips: createListShips(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
+      // The overview's section of wakes, and the pages in focus (wake a person, W6, W8).
+      webPushKey: options.webPush?.publicKey ?? null,
+      listWebPushBrowsers: createListWebPushBrowsers({ subscriptions: webPushSubscriptions }),
+      turnOnWebPush: createTurnOnWebPush({ subscriptions: webPushSubscriptions, clock }),
+      turnOffWebPush: createTurnOffWebPush({ subscriptions: webPushSubscriptions }),
+      focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
     };
   };
   const person = pagasae === undefined ? undefined : personToolsOf();

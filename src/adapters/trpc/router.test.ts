@@ -144,7 +144,13 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       turnOnWebPush: createTurnOnWebPush({ subscriptions, clock: { now: () => TURNED_ON_AT } }),
       turnOffWebPush: createTurnOffWebPush({ subscriptions }),
       // Seen again only once the page lets go, as the test reads what it held meanwhile.
-      focusPage: createFocusPage({ focused, clock: { now: () => TURNED_ON_AT }, seenEveryMs: 20_000, sleep: (_ms, signal) => new Promise((resolve) => signal.addEventListener('abort', () => resolve(), { once: true })) }),
+      focusPage: createFocusPage({ focused, clock: { now: () => TURNED_ON_AT }, seenEveryMs: 20_000, sleep: (_ms, signal) =>
+          new Promise((resolve) => {
+            signal.addEventListener('abort', () => {
+              resolve();
+            }, { once: true });
+          }),
+      }),
     },
     changes,
     isServed: () => Promise.resolve(true),
@@ -944,7 +950,7 @@ describe("a person turns web push on and off for their browsers through the gate
   it('refuses a subscription the push service could not have given, saying why', async () => {
     const { caller } = signedIn();
 
-    await expect(caller.people.turnOnWebPush({ ...FIREFOX, endpoint: 'http://push.example/firefox' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringContaining('https') });
+    await expect(caller.people.turnOnWebPush({ ...FIREFOX, endpoint: 'http://push.example/firefox' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: "The push service's endpoint must be an https URL of at most 2048 characters" });
   });
 
   it('says pagasae did not answer, turning nothing on, as it names the fleet', async () => {

@@ -9,7 +9,7 @@
  * does not serve (switched off) gets only `connection.status`. The
  * installation procedures take the installation token instead (decision 0021).
  */
-import { timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 
 import { idempotencyKeySchema, idSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
 import { initTRPC, TRPCError } from '@trpc/server';
@@ -52,9 +52,14 @@ import type { EndSignIns } from '../../core/sign-in/end-sign-ins.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import type { AnswerDelivery } from '../../core/people/answer-delivery.js';
 import type { DoneDelivery } from '../../core/people/done-delivery.js';
+import type { FocusPage } from '../../core/people/focus-page.js';
+import type { ListWebPushBrowsers } from '../../core/people/list-web-push-browsers.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
+import type { PersonShip } from '../../core/people/ports.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
+import type { TurnOffWebPush } from '../../core/people/turn-off-web-push.js';
+import type { TurnOnWebPush } from '../../core/people/turn-on-web-push.js';
 import type { ReadAuthorization } from '../../core/oauth/read-authorization.js';
 import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
 import type { Result } from '../../core/shared/result.js';
@@ -122,7 +127,18 @@ export interface Context {
   listMine: ListMine;
   decideRequest: DecideRequest;
   /** A person's own person ship's deliveries; unset where no pagasae signs anyone in. */
-  person?: { readInbox: ReadInbox; openDelivery: OpenDelivery; answerDelivery: AnswerDelivery; doneDelivery: DoneDelivery };
+  person?: {
+    readInbox: ReadInbox;
+    openDelivery: OpenDelivery;
+    answerDelivery: AnswerDelivery;
+    doneDelivery: DoneDelivery;
+    /** The gateway's public push key a browser subscribes with; none where it holds no push keys, so it offers no web push (wake a person, S3). */
+    webPushKey: string | null;
+    listWebPushBrowsers: ListWebPushBrowsers;
+    turnOnWebPush: TurnOnWebPush;
+    turnOffWebPush: TurnOffWebPush;
+    focusPage: FocusPage;
+  };
   readOutsideParties: ReadOutsideParties;
   setOutsideParties: SetOutsideParties;
 }
@@ -464,6 +480,22 @@ const personProcedure = actorProcedure.use(({ ctx, next }) => {
     throw new TRPCError({ code: 'FORBIDDEN', message: "Open the gateway's pages, signed in with your account, to read your person ship's deliveries" });
   }
   return next({ ctx: { person: ctx.person, caller: personCallerOf(ctx.actor, ctx.actor.accountToken) } });
+});
+
+/** The person ship of a person signed in to the pages, whose wakes they turn on and whose pages are in focus (wake a person, W6, W8). */
+function personShipOf(caller: PersonCaller): PersonShip {
+  const shipId = 'signedIn' in caller ? caller.signedIn.personShipId : null;
+  if (shipId === null) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'You have no person ship in this fleet: your rights there do not let you message' });
+  }
+  return { fleetId: caller.fleetId, shipId };
+}
+
+/** A browser's push subscription as the page sends it, with the browser's name: the use case checks each part. */
+const webPushSubscriptionInputSchema = z.strictObject({
+  endpoint: z.string().min(1),
+  keys: z.strictObject({ p256dh: z.string().min(1), auth: z.string().min(1) }),
+  browser: z.string(),
 });
 
 const accountInViewOutputSchema = z.discriminatedUnion('kind', [
@@ -813,6 +845,56 @@ export const gatewayRouter = t.router({
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.answerDelivery({ caller: ctx.caller, ...input }))),
     /** Is done with a delivery they opened, with no answer. */
     done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, ...input }))),
+    /** The overview's section of wakes (wake a person, W8): the gateway's push key, none where it offers no web push, and the browsers the person turned it on in. */
+    wakes: personProcedure
+      .output(z.object({ webPushKey: z.string().nullable(), browsers: z.array(z.object({ endpoint: z.string(), browser: z.string(), addedAt: z.string(), isGone: z.boolean() })) }))
+      .query(async ({ ctx }) => ({
+        webPushKey: ctx.person.webPushKey,
+        browsers: (await ctx.person.listWebPushBrowsers(personShipOf(ctx.caller))).map(({ addedAt, ...browser }) => ({ ...browser, addedAt: addedAt.toISOString() })),
+      })),
+    /** Turns web push on for the browser that sent its subscription; its wakes name the fleet as the person's shared sign-in states it. */
+    turnOnWebPush: personProcedure.input(webPushSubscriptionInputSchema).mutation(async ({ ctx, input }) => {
+      const ship = personShipOf(ctx.caller);
+      if (ctx.accountApps === undefined || ctx.signIn === undefined) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: "Open the gateway's pages, signed in with your account, to turn web push on" });
+      }
+      const apps = await ctx.accountApps(ctx.signIn);
+      if (!apps.isOk) {
+        throw apps.error.kind === 'signedOut' ? new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in with your account' }) : new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'The sign-in service did not answer: try again' });
+      }
+      const fleet = apps.value.fleets.find(({ fleetId }) => fleetId === ship.fleetId);
+      if (fleet === undefined) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Your account may not open this fleet' });
+      }
+      const turned = await ctx.person.turnOnWebPush({ ship, fleetName: fleet.name, ...input });
+      if (!turned.isOk) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: turned.error.message });
+      }
+    }),
+    /** Removes a browser the person turned web push on in. */
+    turnOffWebPush: personProcedure.input(z.strictObject({ endpoint: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+      await ctx.person.turnOffWebPush({ ship: personShipOf(ctx.caller), ...input });
+    }),
+    /**
+     * Held open by a page of the person while it is in focus (wake a person,
+     * W6): the gateway hands what arrives through the page and sends no
+     * wake. It tells once that it holds; it ends when the page lets go or
+     * loses its connection.
+     */
+    focus: personProcedure.subscription(async function* ({ ctx, signal }) {
+      const stop = new AbortController();
+      signal?.addEventListener('abort', () => {
+        stop.abort();
+      }, { once: true });
+      const held = ctx.person.focusPage({ ...personShipOf(ctx.caller), pageId: randomUUID() }, stop.signal);
+      try {
+        yield { isInFocus: true };
+        await held;
+      } finally {
+        stop.abort();
+        await held;
+      }
+    }),
   }),
   requests: t.router({
     /** The requests the account asked, in any state, the newest first (decision 0056: Your requests). */
