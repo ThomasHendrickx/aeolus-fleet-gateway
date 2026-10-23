@@ -296,7 +296,8 @@ export function registerA2aEndpoint(server: FastifyInstance, deps: A2aEndpointDe
 /** Whether the call's body is JSON, as both bindings take it: no body counts, as a POST with no body (CancelTask) may say JSON or nothing. */
 function isJsonBody(request: FastifyRequest): boolean {
   const contentType = request.headers['content-type'];
-  return contentType === undefined || REST_MEDIA_TYPES.some((mediaType) => isOfEssence(contentType, mediaType));
+  // An empty body is no body, whatever content type it names (a DELETE).
+  return contentType === undefined || request.body === undefined || request.body === '' || REST_MEDIA_TYPES.some((mediaType) => isOfEssence(contentType, mediaType));
 }
 
 /**
