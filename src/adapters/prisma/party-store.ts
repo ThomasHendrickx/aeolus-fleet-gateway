@@ -9,6 +9,7 @@ import { Prisma } from './generated/client.js';
 
 /** A credential as the vault keeps it, read back. */
 const credentialSchema: z.ZodType<McpServerCredential> = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('none') }),
   z.object({ kind: z.literal('bearer'), token: z.string() }),
   z.object({ kind: z.literal('clientCredentials'), clientId: z.string(), clientSecret: z.string(), issuer: z.string(), scope: z.string().optional() }),
 ]);

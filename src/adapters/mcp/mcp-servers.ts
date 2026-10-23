@@ -56,6 +56,8 @@ function transportFor(connection: McpServerConnection): StreamableHTTPClientTran
   const url = new URL(connection.url);
   const { credential } = connection;
   switch (credential.kind) {
+    case 'none':
+      return new StreamableHTTPClientTransport(url);
     case 'bearer':
       return new StreamableHTTPClientTransport(url, { requestInit: { headers: { authorization: `Bearer ${credential.token}` } } });
     case 'clientCredentials':
