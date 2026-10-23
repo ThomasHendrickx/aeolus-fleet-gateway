@@ -10,6 +10,8 @@ CREATE TABLE "a2a_agent_calls" (
     "context_id" TEXT,
     "deadline_at" TIMESTAMPTZ(3) NOT NULL,
     "answer" JSONB,
+    "replied" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "chunk_places" JSONB NOT NULL DEFAULT '{}',
 
     CONSTRAINT "a2a_agent_calls_pkey" PRIMARY KEY ("fleet_id", "delivery_id")
 );

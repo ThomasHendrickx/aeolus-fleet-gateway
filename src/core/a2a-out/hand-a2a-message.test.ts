@@ -201,7 +201,7 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
   });
 
   it('reads the task once when the agent refuses a stream of a task that ended, as after a restart, and adds no failed to its end', async () => {
-    await calls.save({ deliveryId: DELIVERY, fleetId: FLEET_ID, party: 'supplier', messageId: MESSAGE, senderShipId: CALLER_SHIP_ID, state: 'following', taskId: 'task-1', contextId: 'ctx-1', deadlineAt: new Date(clock.now().getTime() + DEADLINE_MS), answer: null });
+    await calls.save({ deliveryId: DELIVERY, fleetId: FLEET_ID, party: 'supplier', messageId: MESSAGE, senderShipId: CALLER_SHIP_ID, state: 'following', taskId: 'task-1', contextId: 'ctx-1', deadlineAt: new Date(clock.now().getTime() + DEADLINE_MS), answer: null, replied: [], chunkPlaces: {} });
     const agents = fakeA2aAgents({ streams: [{ events: [], end: { kind: 'refused', reason: 'Task task-1 is in a terminal state' } }], reads: [readAs(aStatus('completed'))] });
 
     await expect(handWith(agents, STREAMED)(aQuote({ state: 'handed', handOverNumber: 1 }))).resolves.toEqual({ kind: 'handled' });
@@ -387,7 +387,7 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
 describe('the gateway follows on after a restart (slice 6)', () => {
   it('follows a task it acknowledged before, sending nothing to the agent, until it is handled', async () => {
     const agents = fakeA2aAgents({ reads: [readAs(aStatus('working'), aStatus('completed'))] });
-    await calls.save({ deliveryId: DELIVERY, fleetId: FLEET_ID, party: 'supplier', messageId: MESSAGE, senderShipId: CALLER_SHIP_ID, state: 'following', taskId: 'task-1', contextId: 'ctx-1', deadlineAt: new Date(clock.now().getTime() + DEADLINE_MS), answer: null });
+    await calls.save({ deliveryId: DELIVERY, fleetId: FLEET_ID, party: 'supplier', messageId: MESSAGE, senderShipId: CALLER_SHIP_ID, state: 'following', taskId: 'task-1', contextId: 'ctx-1', deadlineAt: new Date(clock.now().getTime() + DEADLINE_MS), answer: null, replied: [], chunkPlaces: {} });
     const sleep = (ms: number) => {
       clock.advance(ms);
       return Promise.resolve();

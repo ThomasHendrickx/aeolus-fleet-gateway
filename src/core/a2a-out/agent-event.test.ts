@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createEventIdentities, endsFollowing, replyContentOf, type AgentEvent } from './agent-event.js';
+import { eventIdentityOf, endsFollowing, replyContentOf, type AgentEvent } from './agent-event.js';
 
 const status = (state: Extract<AgentEvent, { kind: 'status' }>['state']): AgentEvent => ({ kind: 'status', state, timestamp: null, json: `{"statusUpdate":{"status":{"state":"${state}"}}}` });
 
@@ -49,18 +49,21 @@ describe("an event's identity, what makes it one reply (slice 6)", () => {
   const working = (timestamp: string | null): AgentEvent => ({ kind: 'status', state: 'working', timestamp, json: '{}' });
   const chunk = (isAppended: boolean): AgentEvent => ({ kind: 'artifact', artifactId: 'a-1', isAppended, parts: [], json: String(isAppended) });
 
+  const fresh = { answering: 'msg-1', chunkPlaces: {} };
+
   it('tells a status apart by its time, and by the message it answers', () => {
-    const identityOf = createEventIdentities('msg-1');
-    const identities = [identityOf(working('2026-10-23T12:00:00Z')), identityOf(working('2026-10-23T12:00:00Z')), identityOf(working('2026-10-23T12:00:05Z')), createEventIdentities('msg-2')(working('2026-10-23T12:00:00Z'))];
+    const identityOf = (event: AgentEvent, answering = 'msg-1') => eventIdentityOf(event, { answering, chunkPlaces: {} }).identity;
+    const identities = [identityOf(working('2026-10-23T12:00:00Z')), identityOf(working('2026-10-23T12:00:00Z')), identityOf(working('2026-10-23T12:00:05Z')), identityOf(working('2026-10-23T12:00:00Z'), 'msg-2')];
 
     expect(new Set(identities).size).toBe(3);
   });
 
   it('gives each appended chunk its own place, and a whole artifact the place of its first chunk', () => {
-    const identityOf = createEventIdentities('msg-1');
+    const first = eventIdentityOf(chunk(false), fresh);
+    const second = eventIdentityOf(chunk(true), { ...fresh, chunkPlaces: first.chunkPlaces });
+    const third = eventIdentityOf(chunk(true), { ...fresh, chunkPlaces: second.chunkPlaces });
+    const whole = eventIdentityOf(chunk(false), { ...fresh, chunkPlaces: third.chunkPlaces });
 
-    const [first, second, third, whole] = [identityOf(chunk(false)), identityOf(chunk(true)), identityOf(chunk(true)), identityOf(chunk(false))];
-
-    expect({ distinct: new Set([first, second, third]).size, isWholeTheFirst: whole === first }).toEqual({ distinct: 3, isWholeTheFirst: true });
+    expect({ distinct: new Set([first.identity, second.identity, third.identity]).size, isWholeTheFirst: whole.identity === first.identity, places: whole.chunkPlaces }).toEqual({ distinct: 3, isWholeTheFirst: true, places: { 'a-1': 3 } });
   });
 });

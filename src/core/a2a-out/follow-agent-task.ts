@@ -3,13 +3,16 @@ import type { Sleep } from '../mcp-out/run-party.js';
 import type { A2aAgentParty } from '../parties/party.js';
 import type { Clock } from '../shared/clock.js';
 import type { AgentEndpoint } from './agent-endpoint.js';
-import { createEventIdentities, endsFollowing, replyContentOf, type AgentEvent } from './agent-event.js';
+import { endsFollowing, eventIdentityOf, replyContentOf, type AgentEvent } from './agent-event.js';
 import type { A2aAgents, AgentCall, AgentCalls, AgentKeys, AgentShipCrew, GatewayStatuses } from './ports.js';
 
 export type FollowAgentTask = (input: { party: A2aAgentParty; endpoint: AgentEndpoint; call: AgentCall; signal: AbortSignal; events?: readonly AgentEvent[] }) => Promise<HandOutcome>;
 
 /** The reason a delivery whose task the agent no longer knows is not handled, as Needs attention shows it. */
 export const TASK_GONE = "The agent's task is gone";
+
+/** The fleet's code for a key already used for another message: under a key this follow derived, that reply went before. */
+const KEY_REUSED = 'IDEMPOTENCY_KEY_REUSED';
 
 /** What the failed reply says when the agent refuses reading or streaming its task, before the agent's reason. */
 const FOLLOW_REFUSED = 'The agent refused following its task';
@@ -38,28 +41,36 @@ export function createFollowAgentTask(deps: { crew: AgentShipCrew; agents: A2aAg
     const { taskId, contextId } = call;
     const caller = { fleetId: party.fleetId, party: party.name };
     const connection = { endpoint, credential: party.credential };
-    const replied = new Set<string>();
-    const identityOf = createEventIdentities(call.messageId);
+    /** The call as kept now: each reply's identity and the chunk places after it are kept with it, so a restart sends none again. */
+    let kept = call;
     let endedAt: AgentEvent | undefined;
     /** Whether an event ended following: set as each event comes, so read through a call. */
     const hasEnded = () => endedAt !== undefined;
     /** Whether the gateway stops: read through a call, as a stream ends when it does. */
     const isStopped = () => signal.aborted;
 
-    /** Sends the event as a reply once, until the fleet takes it or the gateway stops: whether it was sent. */
+    /**
+     * Sends the event as a reply once, tried again after a poll until the fleet takes it, the gateway stops or
+     * the deadline passes: whether it went. A key this follow derived that the fleet holds for another message
+     * went before, as the same event told otherwise (a whole artifact after its chunks): it counts as replied.
+     */
     const reply = async (event: AgentEvent): Promise<boolean> => {
-      const idempotencyKey = deps.keys.replyKeyOf(party.fleetId, { taskId, event: identityOf(event) });
-      if (replied.has(idempotencyKey)) {
+      const { identity, chunkPlaces } = eventIdentityOf(event, { answering: call.messageId, chunkPlaces: kept.chunkPlaces });
+      if (kept.replied.includes(identity)) {
         return true;
       }
+      const idempotencyKey = deps.keys.replyKeyOf(party.fleetId, { taskId, event: identity });
       for (;;) {
         const sent = await deps.crew.send(crewToken, { to: call.senderShipId, inReplyTo: call.messageId, ...replyContentOf(event), idempotencyKey });
-        if (sent.isOk) {
-          await deps.calls.saveReply(caller, { messageId: sent.value.messageId, taskId, contextId });
-          replied.add(idempotencyKey);
+        if (sent.isOk || sent.error.code === KEY_REUSED) {
+          if (sent.isOk) {
+            await deps.calls.saveReply(caller, { messageId: sent.value.messageId, taskId, contextId });
+          }
+          kept = { ...kept, replied: [...kept.replied, identity], chunkPlaces };
+          await deps.calls.save(kept);
           return true;
         }
-        if (signal.aborted) {
+        if (isStopped() || deps.clock.now().getTime() >= call.deadlineAt.getTime()) {
           return false;
         }
         await deps.sleep(deps.pollMs, signal);
@@ -74,11 +85,11 @@ export function createFollowAgentTask(deps: { crew: AgentShipCrew; agents: A2aAg
       if (!(await deps.crew.handled(crewToken, call.deliveryId)).isOk) {
         return AGAIN;
       }
-      await deps.calls.save({ ...call, state: 'done' });
+      await deps.calls.save({ ...kept, state: 'done' });
       return { kind: 'handled' };
     };
     const gone = async (reason: string): Promise<HandOutcome> => {
-      await deps.calls.save({ ...call, state: 'done' });
+      await deps.calls.save({ ...kept, state: 'done' });
       await deps.crew.notHandled(crewToken, { deliveryId: call.deliveryId, reason: `${TASK_GONE}: ${reason}` });
       return { kind: 'notHandled' };
     };

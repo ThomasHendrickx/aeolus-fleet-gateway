@@ -34,28 +34,28 @@ export function endsFollowing(event: AgentEvent): boolean {
   }
 }
 
+/** Per artifact, the place its next appended chunk takes, as the replies so far leave it. */
+export type ChunkPlaces = Readonly<Record<string, number>>;
+
 /**
- * What makes an event of a task one reply, as a follow of one fleet message sees them in turn:
+ * What makes an event of a task one reply, as a follow of one fleet message sees them in turn, and the chunk places after it:
  * - a status: the message it answers, its state and its time, so a status told again is one reply and the same state on a follow-up is another;
  * - an artifact: its id and the place of its chunk, so the whole artifact a task read or a new stream starts with is its first chunk again, never its chunks once more;
  * - a message: its id.
  */
-export function createEventIdentities(answering: string): (event: AgentEvent) => string {
-  /** Per artifact, the place its next appended chunk takes. */
-  const nextChunk = new Map<string, number>();
-  return (event) => {
-    switch (event.kind) {
-      case 'status':
-        return JSON.stringify(['status', answering, event.state, event.timestamp]);
-      case 'artifact': {
-        const chunk = event.isAppended ? Math.max(nextChunk.get(event.artifactId) ?? 1, 1) : 0;
-        nextChunk.set(event.artifactId, Math.max(nextChunk.get(event.artifactId) ?? 1, chunk + 1));
-        return JSON.stringify(['artifact', event.artifactId, chunk]);
-      }
-      case 'message':
-        return JSON.stringify(['message', event.messageId]);
+export function eventIdentityOf(event: AgentEvent, seen: { answering: string; chunkPlaces: ChunkPlaces }): { identity: string; chunkPlaces: ChunkPlaces } {
+  const { answering, chunkPlaces } = seen;
+  switch (event.kind) {
+    case 'status':
+      return { identity: JSON.stringify(['status', answering, event.state, event.timestamp]), chunkPlaces };
+    case 'artifact': {
+      const next = chunkPlaces[event.artifactId] ?? 1;
+      const chunk = event.isAppended ? next : 0;
+      return { identity: JSON.stringify(['artifact', event.artifactId, chunk]), chunkPlaces: { ...chunkPlaces, [event.artifactId]: Math.max(next, chunk + 1) } };
     }
-  };
+    case 'message':
+      return { identity: JSON.stringify(['message', event.messageId]), chunkPlaces };
+  }
 }
 
 const PLAIN_TEXT = 'text/plain';

@@ -136,6 +136,10 @@ model A2aAgentCall {
   deadlineAt   DateTime @map("deadline_at") @db.Timestamptz(3)
   /// The reply to the agent's message answer or refusal, kept before the ack.
   answer       Json?
+  /// The identity of each event the follow replied, so a restart replies none again.
+  replied      String[] @default([])
+  /// Where the next chunk of each artifact goes, as the replies so far leave it.
+  chunkPlaces  Json     @default("{}") @map("chunk_places")
 
   @@id([fleetId, deliveryId])
   @@index([fleetId, party, state])

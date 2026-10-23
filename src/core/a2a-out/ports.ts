@@ -11,7 +11,7 @@ import type { ProxyShipCrew } from '../mcp-out/hand-call.js';
 import type { Result } from '../shared/result.js';
 import type { McpServerCredential } from '../vault/credential.js';
 import type { AgentEndpoint } from './agent-endpoint.js';
-import type { AgentEvent } from './agent-event.js';
+import type { AgentEvent, ChunkPlaces } from './agent-event.js';
 import type { OutboundMessage } from './agent-message.js';
 
 /** An address the agent answers at, in one binding and one version of A2A. */
@@ -126,6 +126,10 @@ export interface AgentCall {
   readonly deadlineAt: Date;
   /** The reply to the agent's answer, once it answered with a message or refused: sent again as the same reply when the delivery comes again. */
   readonly answer: AgentAnswer | null;
+  /** What each reply of the follow was, by the event's identity: kept, so a restart sends none again. */
+  readonly replied: readonly string[];
+  /** Where the next chunk of each artifact goes, as the replies so far leave it. */
+  readonly chunkPlaces: ChunkPlaces;
 }
 
 /** A reply as the gateway sends it: its content, and what its idempotency key derives from. */

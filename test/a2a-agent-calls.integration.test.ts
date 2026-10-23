@@ -32,17 +32,20 @@ function aCall(overrides: Partial<AgentCall> = {}): AgentCall {
     contextId: null,
     deadlineAt: new Date('2026-10-23T13:00:00.000Z'),
     answer: null,
+    replied: [],
+    chunkPlaces: {},
     ...overrides,
   };
 }
 
 describe("the gateway's messages to outside A2A agents in Postgres (slice 6)", () => {
-  it('keeps a call, and each step after it, read back by a new client as after a restart', async () => {
+  it('keeps a call, and each step after it with what it replied, read back by a new client as after a restart', async () => {
     const calls = createPrismaAgentCalls(prisma);
     await calls.save(aCall());
-    await calls.save(aCall({ state: 'following', taskId: 'task-1', contextId: 'ctx-1' }));
+    const followed = aCall({ state: 'following', taskId: 'task-1', contextId: 'ctx-1', replied: ['["artifact","a-1",0]', '["artifact","a-1",1]'], chunkPlaces: { 'a-1': 2 } });
+    await calls.save(followed);
 
-    await expect(createPrismaAgentCalls(prisma).find({ fleetId: FLEET, party: 'supplier' }, 'dlv_01m3tbfspe96yf1rnr4ank9d01')).resolves.toEqual(aCall({ state: 'following', taskId: 'task-1', contextId: 'ctx-1' }));
+    await expect(createPrismaAgentCalls(prisma).find({ fleetId: FLEET, party: 'supplier' }, 'dlv_01m3tbfspe96yf1rnr4ank9d01')).resolves.toEqual(followed);
   });
 
   it("keeps the reply to an agent's answer with its call", async () => {

@@ -11,6 +11,7 @@ import type { PrismaClient } from './client.js';
 import { Prisma } from './generated/client.js';
 
 const stateSchema = z.enum(['sending', 'notSent', 'answered', 'following', 'mayHaveRun', 'done']);
+const chunkPlacesSchema = z.record(z.string(), z.number());
 const answerSchema = z.object({ contentType: z.string(), payload: z.string(), key: z.string() }).nullable();
 
 interface Row {
@@ -24,6 +25,8 @@ interface Row {
   contextId: string | null;
   deadlineAt: Date;
   answer: unknown;
+  replied: string[];
+  chunkPlaces: unknown;
 }
 
 function callOf(row: Row): AgentCall {
@@ -38,6 +41,8 @@ function callOf(row: Row): AgentCall {
     contextId: row.contextId,
     deadlineAt: row.deadlineAt,
     answer: answerSchema.parse(row.answer ?? null),
+    replied: row.replied,
+    chunkPlaces: chunkPlacesSchema.parse(row.chunkPlaces),
   };
 }
 
@@ -48,8 +53,8 @@ export function createPrismaAgentCalls(db: PrismaClient): AgentCalls {
       return row === null ? undefined : callOf(row);
     },
     save: async (call) => {
-      const { fleetId, deliveryId, answer, ...rest } = call;
-      const data = { ...rest, answer: answer === null ? Prisma.DbNull : { ...answer } };
+      const { fleetId, deliveryId, answer, replied, chunkPlaces, ...rest } = call;
+      const data = { ...rest, answer: answer === null ? Prisma.DbNull : { ...answer }, replied: [...replied], chunkPlaces: { ...chunkPlaces } };
       await db.a2aAgentCall.upsert({ where: { fleetId_deliveryId: { fleetId, deliveryId } }, create: { fleetId, deliveryId, ...data }, update: data });
     },
     following: async ({ fleetId, party }) => (await db.a2aAgentCall.findMany({ where: { fleetId, party, state: 'following' }, orderBy: { deliveryId: 'asc' } })).map(callOf),

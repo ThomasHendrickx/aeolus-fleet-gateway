@@ -108,6 +108,8 @@ export function createHandA2aMessage(deps: {
       contextId: continued?.contextId ?? null,
       deadlineAt: new Date(deps.clock.now().getTime() + deps.deadlineMs),
       answer: null,
+      replied: [],
+      chunkPlaces: {},
     };
     const message = outboundMessageOf(delivery, { messageId: deps.keys.messageIdOf(fleetId, delivery.messageId), taskId: call.taskId, contextId: call.contextId });
     if (!message.isOk) {
