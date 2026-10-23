@@ -12,6 +12,9 @@ export const MCP_WAIT_MAX_MS_DEFAULT = 10_000;
 /** The email channel's window unless set: at most one wake per hour (wake a person, W10). */
 const EMAIL_WAKE_WINDOW_MINUTES_DEFAULT = 60;
 
+/** Web push's window unless set: at most one wake per 10 minutes (wake a person, W10). */
+const WEB_PUSH_WAKE_WINDOW_MINUTES_DEFAULT = 10;
+
 const MINUTE_MS = 60_000;
 
 const environmentSchema = z.object({
@@ -24,6 +27,10 @@ const environmentSchema = z.object({
   GATEWAY_PUBLIC_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).optional(),
   MCP_WAIT_MAX_MS: z.coerce.number().int().min(0).default(MCP_WAIT_MAX_MS_DEFAULT),
   EMAIL_WAKE_WINDOW_MINUTES: z.coerce.number().int().min(1).default(EMAIL_WAKE_WINDOW_MINUTES_DEFAULT),
+  WEB_PUSH_WAKE_WINDOW_MINUTES: z.coerce.number().int().min(1).default(WEB_PUSH_WAKE_WINDOW_MINUTES_DEFAULT),
+  WEB_PUSH_PUBLIC_KEY: z.string().min(1).optional(),
+  WEB_PUSH_PRIVATE_KEY: z.string().min(1).optional(),
+  WEB_PUSH_SUBJECT: z.string().min(1).optional(),
   INSTALLATION_TOKEN: z.string().min(INSTALLATION_TOKEN_MIN_LENGTH, { error: `must hold at least ${String(INSTALLATION_TOKEN_MIN_LENGTH)} characters` }).optional(),
   PAGASAE_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).optional(),
   PAGASAE_CLIENT_ID: z.string().min(1).optional(),
@@ -67,6 +74,14 @@ export interface Config {
   /** The least time between two wakes the email channel sends one person ship (wake a person, W3, W10). */
   emailWakeWindowMs: number;
   /**
+   * The gateway's push keys (VAPID), which sign each web push wake, and the
+   * subject a push service may contact about them, a mailto: or https: URL.
+   * Unset, the overview offers no web push (wake a person, S3).
+   */
+  webPush: { publicKey: string; privateKey: string; subject: string } | undefined;
+  /** The least time between two wakes web push sends one person ship (wake a person, W3, W10). */
+  webPushWakeWindowMs: number;
+  /**
    * pagasae, where people sign in (decision 0054), and the gateway's client
    * there, registered with the redirect URI `<public URL>/pagasae/callback`.
    * Unset, people do not sign in, and argo alone approves clients.
@@ -108,6 +123,8 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     gatewaySecret: variables.GATEWAY_SECRET,
     mcpWaitMaxMs: variables.MCP_WAIT_MAX_MS,
     emailWakeWindowMs: variables.EMAIL_WAKE_WINDOW_MINUTES * MINUTE_MS,
+    webPush: webPushOf(variables),
+    webPushWakeWindowMs: variables.WEB_PUSH_WAKE_WINDOW_MINUTES * MINUTE_MS,
     pagasae: pagasaeOf(variables),
     pagasaeApp: pagasaeAppOf(variables),
   };
@@ -135,6 +152,18 @@ function pagasaeAppOf(variables: { PAGASAE_URL?: string | undefined; PAGASAE_APP
     throw new ConfigError('PAGASAE_APP_CLIENT_ID and PAGASAE_APP_CLIENT_SECRET: set both beside PAGASAE_URL, or neither');
   }
   return { clientId, clientSecret };
+}
+
+/** Web push's three settings: all of them, or none. */
+function webPushOf(variables: { WEB_PUSH_PUBLIC_KEY?: string | undefined; WEB_PUSH_PRIVATE_KEY?: string | undefined; WEB_PUSH_SUBJECT?: string | undefined }): Config['webPush'] {
+  const { WEB_PUSH_PUBLIC_KEY: publicKey, WEB_PUSH_PRIVATE_KEY: privateKey, WEB_PUSH_SUBJECT: subject } = variables;
+  if (publicKey === undefined && privateKey === undefined && subject === undefined) {
+    return undefined;
+  }
+  if (publicKey === undefined || privateKey === undefined || subject === undefined) {
+    throw new ConfigError('WEB_PUSH_PUBLIC_KEY, WEB_PUSH_PRIVATE_KEY and WEB_PUSH_SUBJECT: set all three, or none');
+  }
+  return { publicKey, privateKey, subject };
 }
 
 /** The database URL alone, for `aeolus-gateway migrate`. */
