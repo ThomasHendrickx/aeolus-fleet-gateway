@@ -12,7 +12,8 @@ export interface Capability {
   readonly name: string;
   readonly title?: string;
   readonly description?: string;
-  readonly inputSchema: Readonly<Record<string, unknown>>;
+  /** The JSON Schema of its input: an MCP tool states one, an A2A skill none. */
+  readonly inputSchema?: Readonly<Record<string, unknown>>;
   readonly outputSchema?: Readonly<Record<string, unknown>>;
   readonly inputModes: readonly string[];
   readonly outputModes: readonly string[];

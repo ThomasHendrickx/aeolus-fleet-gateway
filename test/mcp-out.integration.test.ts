@@ -239,3 +239,119 @@ describe("the CRM's proxy ship states its tools as the server lists them (aeolus
     ]);
   });
 });
+
+describe('an approver picks which tools of an outside MCP server the fleet may call (aeolus-fleet#1151, #1153)', () => {
+  const NOT_ENABLED = { content: [{ type: 'text', text: 'tool not enabled for this party' }], isError: true };
+  let vault: MockCrm;
+  let approver: string;
+
+  beforeEach(async () => {
+    vault = await startMockCrm({ slowToolMs: 50, isOpen: true });
+  });
+
+  afterEach(async () => {
+    await vault.close();
+  });
+
+  /** The gateway connected, and an approver holding fleet:manage and gateway:approve, the scope the gateway declares as it connects. */
+  async function connectedWithApprover(): Promise<string> {
+    const address = await started();
+    expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
+    approver = await register(fleet, await commission(fleet, { cookie, ship: { name: 'approver', type: 'agent', scopes: ['fleet:read', 'fleet:manage', 'gateway:approve'] } }));
+    return address;
+  }
+
+  /** The approver adds the vault, which asks for no credential, with each tool switched as given. */
+  async function vaultAdded(address: string, tools: { name: string; isOn: boolean }[]): Promise<void> {
+    const response = await mutate(address, {
+      procedure: 'parties.approve',
+      crewToken: approver,
+      body: { requestId: 'approve-vault', name: 'vault', url: vault.url, credential: { kind: 'none' }, ownerShipId: owner, concurrencyLimit: 4, tools },
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    proxyShipId = z.object({ result: z.object({ data: z.object({ proxyShipId: idSchema('ship') }) }) }).parse(await response.json()).result.data.proxyShipId;
+  }
+
+  /** The capabilities the fleet shows of the proxy ship, as a ship of the fleet discovers it, once the gateway stated it anew. */
+  async function statedTools(address: string, party: string): Promise<string[]> {
+    const restated = await mutate(address, { procedure: 'parties.state', crewToken: approver, body: { name: party } });
+    expect(restated.status, await restated.clone().text()).toBe(200);
+    const found = await fetch(`${fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${caller.crewToken}` } });
+    const statement = discoverOutputSchema.parse(await found.json()).ships.find(({ id }) => id === proxyShipId)?.statement;
+    return (statement?.by === 'crew' ? statement.capabilities : []).map(({ name }) => name).sort();
+  }
+
+  async function partyTools(address: string, party: string) {
+    const read = await query(address, { procedure: 'parties.tools', crewToken: approver, input: { name: party } });
+    return z.object({ result: z.object({ data: z.object({ tools: z.array(z.object({ name: z.string(), isOn: z.boolean(), isNew: z.boolean() })) }) }) }).parse(await read.json()).result.data.tools;
+  }
+
+  const EVERY_TOOL = ['create_contact', 'create_deal', 'forecast_revenue', 'get_contact', 'list_contacts', 'list_deals', 'sync_ledger'];
+
+  it('adds a server that asks for no credential: the gateway sends it no Authorization header', async () => {
+    await vaultAdded(await connectedWithApprover(), EVERY_TOOL.map((name) => ({ name, isOn: true })));
+
+    await callTool('list_deals', {});
+
+    expect(await receiveOne(fleet, caller.crewToken)).toMatchObject({ contentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals' });
+    expect(vault.authorizations.length).toBeGreaterThan(0);
+    expect(vault.authorizations.every((authorization) => authorization === undefined)).toBe(true);
+  });
+
+  it('leaves a tool switched off out of what the fleet sees of the party', async () => {
+    const address = await connectedWithApprover();
+    await vaultAdded(address, EVERY_TOOL.map((name) => ({ name, isOn: name !== 'create_deal' })));
+
+    expect(await statedTools(address, 'vault')).toEqual(EVERY_TOOL.filter((name) => name !== 'create_deal'));
+  });
+
+  it('refuses a call to a tool switched off with a plain error, and the call never reaches the server', async () => {
+    await vaultAdded(await connectedWithApprover(), EVERY_TOOL.map((name) => ({ name, isOn: name !== 'create_deal' })));
+
+    const request = await callTool('create_deal', { contactId: 'c1', title: 'Difference engine', amount: 900 });
+
+    const reply = await receiveOne(fleet, caller.crewToken);
+    expect(reply && { inReplyTo: reply.inReplyTo, result: parsed(reply.payload) }).toEqual({ inReplyTo: request, result: NOT_ENABLED });
+    expect({ calls: vault.calls.get('create_deal'), deals: vault.deals.length }).toEqual({ calls: undefined, deals: 1 });
+  });
+
+  it('starts a tool the server adds after it was added off and new, until an approver switches it on', async () => {
+    const address = await connectedWithApprover();
+    await vaultAdded(address, EVERY_TOOL.map((name) => ({ name, isOn: true })));
+    vault.addedTools.push('archive_contact');
+
+    expect({ stated: await statedTools(address, 'vault'), tool: (await partyTools(address, 'vault')).find(({ name }) => name === 'archive_contact') }).toEqual({
+      stated: EVERY_TOOL,
+      tool: { name: 'archive_contact', isOn: false, isNew: true },
+    });
+
+    const switched = await mutate(address, { procedure: 'parties.switchTool', crewToken: approver, body: { name: 'vault', tool: 'archive_contact', isOn: true } });
+    expect(switched.status, await switched.clone().text()).toBe(200);
+    await callTool('archive_contact', {});
+    expect(await receiveOne(fleet, caller.crewToken).then((reply) => reply && parsed(reply.payload))).toEqual({ content: [{ type: 'text', text: 'archive_contact' }], isError: false });
+  });
+
+  it('switches a tool off on the party later: the fleet sees it no more, and a call to it reaches no server', async () => {
+    const address = await connectedWithApprover();
+    await vaultAdded(address, EVERY_TOOL.map((name) => ({ name, isOn: true })));
+
+    const switched = await mutate(address, { procedure: 'parties.switchTool', crewToken: approver, body: { name: 'vault', tool: 'create_contact', isOn: false } });
+
+    expect(switched.status, await switched.clone().text()).toBe(200);
+    expect(await statedTools(address, 'vault')).toEqual(EVERY_TOOL.filter((name) => name !== 'create_contact'));
+    await callTool('create_contact', { name: 'Grace Hopper', email: 'grace@example.com' });
+    expect(await receiveOne(fleet, caller.crewToken).then((reply) => reply && parsed(reply.payload))).toEqual(NOT_ENABLED);
+    expect(vault.calls.get('create_contact')).toBeUndefined();
+  });
+
+  it('keeps every tool on of a party added before tools were switched, and starts a tool added after that off', async () => {
+    const address = await connectedWithApprover();
+    // Added with no tool choice, as every party before this and every party approved through a request.
+    const added = await mutate(address, { procedure: 'parties.approve', crewToken: approver, body: { requestId: 'approve-old', name: 'old', url: vault.url, credential: { kind: 'none' }, ownerShipId: owner, concurrencyLimit: 4 } });
+    proxyShipId = z.object({ result: z.object({ data: z.object({ proxyShipId: idSchema('ship') }) }) }).parse(await added.json()).result.data.proxyShipId;
+
+    expect(await statedTools(address, 'old')).toEqual(EVERY_TOOL);
+    vault.addedTools.push('archive_contact');
+    expect(await statedTools(address, 'old')).toEqual(EVERY_TOOL);
+  });
+});

@@ -22,7 +22,7 @@ beforeEach(async () => {
 
 describe('an alias names a ship the A2A client reaches now (decision 0060)', () => {
   it('answers the ship whose alias matches, with its statement', async () => {
-    await expect(find({ ...CALLER, alias: CRM_ALIAS })).resolves.toEqual({ isOk: true, value: { alias: CRM_ALIAS, statement: aDiscoveredShip().statement } });
+    await expect(find({ ...CALLER, alias: CRM_ALIAS })).resolves.toEqual({ isOk: true, value: { shipId: CRM_SHIP_ID, alias: CRM_ALIAS, statement: aDiscoveredShip().statement } });
   });
 
   it('refuses an alias of no ship with the unknown-alias error', async () => {

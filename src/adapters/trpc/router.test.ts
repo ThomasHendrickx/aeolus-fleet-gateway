@@ -10,6 +10,9 @@ import { createAccountInView } from '../../core/account-sign-in/account-in-view.
 import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
+import type { SwitchTool } from '../../core/parties/switch-tool.js';
+import type { AddA2aAgent } from '../../core/parties/add-a2a-agent.js';
+import type { MarkA2aAgent } from '../../core/a2a-out/mark-a2a-agent.js';
 import type { AddClientParty } from '../../core/parties/add-client-party.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
@@ -46,6 +49,8 @@ const MANAGER_CREW = 'aeolus_ct_v1_manager';
 const READER_CREW = 'aeolus_ct_v1_reader';
 /** A ship's own crew token holding gateway:approve. */
 const APPROVER_CREW = 'aeolus_ct_v1_approver';
+/** A ship's own crew token holding fleet:manage and gateway:approve, so it adds a server with its tools switched. */
+const MANAGING_APPROVER_CREW = 'aeolus_ct_v1_managing_approver';
 const REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0001';
 const CURSOR_CLIENT = 'https://cursor.example.com/client.json';
 const DELIVERY = 'dlv_01m3tbfspe96yf1rnr4ank9dlv';
@@ -68,6 +73,9 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   approvals: Parameters<ApproveParty>[0][];
   additions: Parameters<AddClientParty>[0][];
   marks: Parameters<MarkTool>[0][];
+  toolSwitches: Parameters<SwitchTool>[0][];
+  agentAdditions: Parameters<AddA2aAgent>[0][];
+  agentMarks: Parameters<MarkA2aAgent>[0][];
   decisions: Parameters<DecideRequest>[0][];
   switched: Parameters<SetOutsideParties>[0][];
   answers: Record<string, string>[];
@@ -80,6 +88,9 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   const switched: Parameters<SetOutsideParties>[0][] = [];
   const decisions: Parameters<DecideRequest>[0][] = [];
   const marks: Parameters<MarkTool>[0][] = [];
+  const toolSwitches: Parameters<SwitchTool>[0][] = [];
+  const agentAdditions: Parameters<AddA2aAgent>[0][] = [];
+  const agentMarks: Parameters<MarkA2aAgent>[0][] = [];
   const answers: Record<string, string>[] = [];
   const unused = () => Promise.reject(new Error('not used by the parties procedures'));
   const changes = createChangeHub();
@@ -88,7 +99,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     crewToken,
     authenticateActor: (sent) => {
       if (sent.crewToken !== undefined) {
-        const scopes = { [MANAGER_CREW]: ['fleet:read', 'fleet:manage'], [APPROVER_CREW]: ['fleet:read', 'gateway:approve'] }[sent.crewToken] ?? ['fleet:read'];
+        const scopes = { [MANAGER_CREW]: ['fleet:read', 'fleet:manage'], [APPROVER_CREW]: ['fleet:read', 'gateway:approve'], [MANAGING_APPROVER_CREW]: ['fleet:read', 'fleet:manage', 'gateway:approve'] }[sent.crewToken] ?? ['fleet:read'];
         return Promise.resolve(ok({ fleetId: FLEET, kind: 'ship' as const, shipId: MANAGER, scopes }));
       }
       if (sent.signIn === CHARLOTTE_SIGN_IN && sent.fleetId === FLEET) {
@@ -211,21 +222,51 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       ),
     registerClient: (input) => Promise.resolve(input.redirectUris.length === 0 ? err({ kind: 'INVALID_REDIRECT_URIS' as const, message: 'A client registers 1 to 10 redirect URIs' }) : ok({ clientId: 'client-1', clientSecret: input.isConfidential ? 's' : null })),
     checkServer: ({ url }) =>
-      Promise.resolve(url === 'https://down.example.com/mcp' ? err({ kind: 'SERVER_UNREACHABLE' as const, message: 'The MCP server could not be listed: connect ECONNREFUSED' }) : ok({ tools: [{ name: 'list_issues', description: 'List issues' }] })),
+      Promise.resolve(url === 'https://down.example.com/mcp' ? err({ kind: 'SERVER_UNREACHABLE' as const, message: 'The MCP server could not be listed: connect ECONNREFUSED' }) : ok({ tools: [{ name: 'list_issues', description: 'List issues', isReadOnly: true }] })),
     addA2aClient: ({ actor, name }) =>
       Promise.resolve(
         actor.scopes.includes('gateway:approve')
           ? ok({ party: { name, kind: 'a2aClient' as const, state: 'crewed' as const, proxyShipId: null }, bearer: 'bearer-1' })
           : err({ kind: 'NOT_AN_APPROVER' as const, message: 'Adding an outside A2A client needs gateway:approve' }),
       ),
+    addA2aAgent: (input) => {
+      agentAdditions.push(input);
+      if (!input.actor.scopes.includes('gateway:approve')) {
+        return Promise.resolve(err({ kind: 'NOT_AN_APPROVER' as const, message: 'Adding an outside A2A agent needs gateway:approve' }));
+      }
+      if (input.cardUrl.includes('down')) {
+        return Promise.resolve(err({ kind: 'CARD_UNREACHABLE' as const, message: "The card of quotes could not be read: connection refused" }));
+      }
+      if (input.cardUrl.includes('broken')) {
+        return Promise.resolve(err({ kind: 'CARD_INVALID' as const, message: 'The card has no skill to state' }));
+      }
+      return Promise.resolve(ok({ name: input.name, kind: 'a2aAgent' as const, cardUrl: input.cardUrl, credentialKind: input.credential.kind, concurrencyLimit: input.concurrencyLimit, isRepeatable: true, state: 'crewed' as const, proxyShipId: null }));
+    },
+    markA2aAgent: (input) => {
+      agentMarks.push(input);
+      if (!input.actor.scopes.includes('gateway:approve')) {
+        return Promise.resolve(err({ kind: 'NOT_AN_APPROVER' as const, message: 'Marking an outside A2A agent needs gateway:approve' }));
+      }
+      return Promise.resolve(input.name === 'quotes' ? ok({ isRepeatable: input.isRepeatable, statementRefusal: null }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `There is no outside A2A agent ${input.name}` }));
+    },
     listReachedShips: ({ party }) =>
-      Promise.resolve(party === 'supplier' ? ok([{ alias: 'acrm2345', statement: null }]) : err({ kind: 'PARTY_NOT_CREWED' as const, message: `The party ${party} is not crewed` })),
+      Promise.resolve(party === 'supplier' ? ok([{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9cr2' as const, alias: 'acrm2345', statement: null }]) : err({ kind: 'PARTY_NOT_CREWED' as const, message: `The party ${party} is not crewed` })),
     cardAddressOf: (alias) => `https://gateway.example.com/gw/a2a/${alias}/.well-known/agent-card.json`,
-    readPartyTools: ({ name }) => Promise.resolve(name === 'linear' ? ok({ tools: [{ name: 'list_issues', description: 'List issues' }] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `There is no outside MCP server ${name}` })),
+    readPartyTools: ({ name }) => Promise.resolve(name === 'linear' ? ok({ tools: [{ name: 'list_issues', description: 'List issues', isReadOnly: true, isOn: true, isNew: false }] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `There is no outside MCP server ${name}` })),
     stateParty: ({ name }) => Promise.resolve(name === 'crm' ? ok({ capabilities: ['list_deals'] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `No party named ${name}` })),
     markTool: (input) => {
       marks.push(input);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));
+    },
+    switchTool: (input) => {
+      toolSwitches.push(input);
+      if (!input.actor.scopes.includes('gateway:approve')) {
+        return Promise.resolve(err({ kind: 'NOT_AN_APPROVER' as const, message: "Switching an outside party's tools needs gateway:approve" }));
+      }
+      if (input.tool === 'delete_project') {
+        return Promise.resolve(err({ kind: 'NO_SUCH_TOOL' as const, message: 'The MCP server of crm lists no tool delete_project now' }));
+      }
+      return Promise.resolve(ok({ tool: input.tool, isOn: input.isOn, statementRefusal: null }));
     },
     readOutsideParties: () => Promise.resolve({ isOn: false }),
     setOutsideParties: (input) => {
@@ -247,7 +288,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, decisions, switched, answers, changes, additions, focused };
+  return { context, approvals, marks, toolSwitches, agentAdditions, agentMarks, decisions, switched, answers, changes, additions, focused };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -263,7 +304,7 @@ describe("argo approves parties through the gateway's API", () => {
 
     await gatewayRouter.createCaller(context).parties.approve(APPROVAL);
 
-    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [] }]);
+    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [], toolSwitches: null }]);
   });
 
   it('refuses a viewer, who only reads', async () => {
@@ -278,7 +319,7 @@ describe("argo approves parties through the gateway's API", () => {
 
     await gatewayRouter.createCaller(context).parties.approve(APPROVAL);
 
-    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [] }]);
+    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [], toolSwitches: null }]);
   });
 
   it('refuses a ship that only reads, and lets it read the parties', async () => {
@@ -307,6 +348,29 @@ describe("argo approves parties through the gateway's API", () => {
     expect(approvals).toEqual([]);
   });
 
+  it('approves a server that asks for no credential (aeolus-fleet#1153)', async () => {
+    const { context, approvals } = aContext(ARGO_COOKIE);
+
+    await gatewayRouter.createCaller(context).parties.approve(asSent({ ...APPROVAL, credential: { kind: 'none' } }));
+
+    expect(approvals[0]?.credential).toEqual({ kind: 'none' });
+  });
+
+  it('keeps the tools an approver switched on and off when adding a server (aeolus-fleet#1151)', async () => {
+    const { context, approvals } = aContext(undefined, MANAGING_APPROVER_CREW);
+
+    await gatewayRouter.createCaller(context).parties.approve({ ...APPROVAL, tools: [{ name: 'list_contacts', isOn: true }, { name: 'delete_project', isOn: false }] });
+
+    expect(approvals[0]?.toolSwitches).toEqual(new Map([['list_contacts', true], ['delete_project', false]]));
+  });
+
+  it('refuses tools switched by an actor without gateway:approve, adding nothing', async () => {
+    const { context, approvals } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).parties.approve({ ...APPROVAL, tools: [{ name: 'list_contacts', isOn: true }] })).rejects.toMatchObject({ code: 'FORBIDDEN', message: "Switching an outside party's tools needs gateway:approve" });
+    expect(approvals).toEqual([]);
+  });
+
   it('takes a concurrency limit of 10', async () => {
     const { context, approvals } = aContext(ARGO_COOKIE);
 
@@ -320,11 +384,15 @@ describe("an actor holding fleet:manage checks an outside MCP server through the
   const CHECK = { url: 'https://mcp.linear.app/mcp', credential: { kind: 'bearer' as const, token: 'linear-token' } };
 
   it('answers the tools the server lists', async () => {
-    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.check(CHECK)).resolves.toEqual({ tools: [{ name: 'list_issues', description: 'List issues' }] });
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.check(CHECK)).resolves.toEqual({ tools: [{ name: 'list_issues', description: 'List issues', isReadOnly: true }] });
   });
 
   it('answers BAD_GATEWAY when the server cannot be listed', async () => {
     await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.check({ ...CHECK, url: 'https://down.example.com/mcp' })).rejects.toMatchObject({ code: 'BAD_GATEWAY', message: 'The MCP server could not be listed: connect ECONNREFUSED' });
+  });
+
+  it('checks a server that asks for no credential (aeolus-fleet#1153)', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.check(z.custom<typeof CHECK>(() => true).parse({ ...CHECK, credential: { kind: 'none' } }))).resolves.toEqual({ tools: [{ name: 'list_issues', description: 'List issues', isReadOnly: true }] });
   });
 
   it('refuses an actor without fleet:manage', async () => {
@@ -334,7 +402,7 @@ describe("an actor holding fleet:manage checks an outside MCP server through the
 
 describe("an actor reads an outside MCP server's tools through the gateway's API", () => {
   it('answers the tools the server lists now', async () => {
-    await expect(gatewayRouter.createCaller(aContext(VIEWER_COOKIE).context).parties.tools({ name: 'linear' })).resolves.toEqual({ tools: [{ name: 'list_issues', description: 'List issues' }] });
+    await expect(gatewayRouter.createCaller(aContext(VIEWER_COOKIE).context).parties.tools({ name: 'linear' })).resolves.toEqual({ tools: [{ name: 'list_issues', description: 'List issues', isReadOnly: true, isOn: true, isNew: false }] });
   });
 
   it('answers NOT_FOUND for a server it does not know', async () => {
@@ -354,6 +422,65 @@ describe("an approver adds an outside A2A client through the gateway's API (deci
 
   it('refuses an actor not holding gateway:approve as FORBIDDEN', async () => {
     await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.addA2aClient(ADDITION)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("an approver adds an outside A2A agent by its card address through the gateway's API (slice 5)", () => {
+  const ADDITION = { requestId: 'a-3', name: 'quotes', cardUrl: 'https://agent.supplier.example/.well-known/agent-card.json', credential: { kind: 'bearer' as const, token: 'tok-1' }, ownerShipId: OWNER, scopes: ['fleet:read'] };
+
+  it('adds it as the actor, at 4 messages at once unless told, answering the party without its credential', async () => {
+    const { context, agentAdditions } = aContext(undefined, APPROVER_CREW);
+
+    await expect(gatewayRouter.createCaller(context).parties.addA2aAgent(ADDITION)).resolves.toEqual({
+      name: 'quotes',
+      kind: 'a2aAgent',
+      cardUrl: 'https://agent.supplier.example/.well-known/agent-card.json',
+      credentialKind: 'bearer',
+      concurrencyLimit: 4,
+      isRepeatable: true,
+      state: 'crewed',
+      proxyShipId: null,
+    });
+    expect(agentAdditions).toMatchObject([{ name: 'quotes', credential: { kind: 'bearer', token: 'tok-1' }, concurrencyLimit: 4, actor: { scopes: ['fleet:read', 'gateway:approve'] } }]);
+  });
+
+  it('takes an agent that asks for no credential, and a card read without TLS', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context).parties.addA2aAgent({ ...ADDITION, cardUrl: 'http://agent.internal:8080/.well-known/agent-card.json', credential: { kind: 'none' } })).resolves.toMatchObject({ credentialKind: 'none' });
+  });
+
+  it('refuses an actor not holding gateway:approve as FORBIDDEN', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.addA2aAgent(ADDITION)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('answers a card that cannot be read as BAD_GATEWAY, and an invalid one as BAD_REQUEST, saying why', async () => {
+    const caller = gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context);
+
+    await expect(caller.parties.addA2aAgent({ ...ADDITION, cardUrl: 'https://down.example/card.json' })).rejects.toMatchObject({ code: 'BAD_GATEWAY', message: 'The card of quotes could not be read: connection refused' });
+    await expect(caller.parties.addA2aAgent({ ...ADDITION, cardUrl: 'https://broken.example/card.json' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: 'The card has no skill to state' });
+  });
+
+  it.each([
+    ['a card address that is no http or https URL', { cardUrl: 'ftp://agent.supplier.example/card.json' }],
+    ['more than 10 messages at once', { concurrencyLimit: 11 }],
+  ])('refuses %s, adding nothing', async (_what, change) => {
+    const { context, agentAdditions } = aContext(undefined, APPROVER_CREW);
+
+    await expect(gatewayRouter.createCaller(context).parties.addA2aAgent({ ...ADDITION, ...change })).rejects.toBeInstanceOf(TRPCError);
+    expect(agentAdditions).toEqual([]);
+  });
+});
+
+describe("an approver marks an outside A2A agent not repeatable through the gateway's API (A9)", () => {
+  it('marks it as the actor, answering the mark', async () => {
+    const { context, agentMarks } = aContext(undefined, APPROVER_CREW);
+
+    await expect(gatewayRouter.createCaller(context).parties.markA2aAgent({ name: 'quotes', isRepeatable: false })).resolves.toEqual({ isRepeatable: false, statementRefusal: null });
+    expect(agentMarks).toMatchObject([{ name: 'quotes', isRepeatable: false }]);
+  });
+
+  it('answers FORBIDDEN to an actor without gateway:approve, and NOT_FOUND for an agent it does not know', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.markA2aAgent({ name: 'quotes', isRepeatable: false })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context).parties.markA2aAgent({ name: 'ledger', isRepeatable: false })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
 
@@ -405,6 +532,23 @@ describe("argo states a party's tools and marks them repeatable through the gate
 
     await expect(gatewayRouter.createCaller(context).parties.markTool(z.custom<MarkInput>(() => true).parse({ name: 'crm', tool, isRepeatable: true }))).rejects.toBeInstanceOf(TRPCError);
     expect(marks).toEqual([]);
+  });
+});
+
+describe("an approver switches an outside MCP server's tools through the gateway's API (aeolus-fleet#1151)", () => {
+  it('switches a tool as the actor, answering the switch', async () => {
+    const { context, toolSwitches } = aContext(undefined, APPROVER_CREW);
+
+    await expect(gatewayRouter.createCaller(context).parties.switchTool({ name: 'crm', tool: 'create_deal', isOn: false })).resolves.toEqual({ tool: 'create_deal', isOn: false, statementRefusal: null });
+    expect(toolSwitches.map(({ name, tool, isOn }) => ({ name, tool, isOn }))).toEqual([{ name: 'crm', tool: 'create_deal', isOn: false }]);
+  });
+
+  it('answers FORBIDDEN to an actor without gateway:approve', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.switchTool({ name: 'crm', tool: 'create_deal', isOn: false })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('answers NOT_FOUND for a tool the server does not list now', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context).parties.switchTool({ name: 'crm', tool: 'delete_project', isOn: true })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
 
@@ -482,6 +626,15 @@ describe("an approver decides pending requests through the gateway's API (decisi
     await gatewayRouter.createCaller(context).requests.decide({ requestId: REQUEST_ID, decision });
 
     expect(decisions).toEqual([{ actor: { fleetId: FLEET, kind: 'ship', shipId: MANAGER, scopes: ['fleet:read', 'gateway:approve'] }, requestId: REQUEST_ID, decision }]);
+  });
+
+  it('approves a server that asks for no credential (aeolus-fleet#1153)', async () => {
+    const { context, decisions } = aContext(undefined, APPROVER_CREW);
+    const decision = { kind: 'approve', party: { name: 'vault', ownerShipId: OWNER, scopes: [] }, server: { credential: { kind: 'none' }, concurrencyLimit: 4 } };
+
+    await gatewayRouter.createCaller(context).requests.decide(z.custom<DecideInput>(() => true).parse({ requestId: REQUEST_ID, decision }));
+
+    expect(decisions[0]?.decision).toEqual(decision);
   });
 
   it('answers CONFLICT to a request decided already', async () => {

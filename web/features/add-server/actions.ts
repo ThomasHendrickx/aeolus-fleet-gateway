@@ -14,13 +14,16 @@ import { redirect } from 'next/navigation';
 import { inFleet } from '../../lib/gateway-api/page-account';
 import { refusalMessageOf, requestApi } from '../../lib/gateway-api/page-api';
 import { FLEET_FIELD, fieldOf, fieldsOf } from '../forms/form-state';
+import { serverCredentialOf } from '../forms/server-credential';
 import type { OwnerChoice } from '../forms/ui/owner-field';
 import { partyPath } from '../outside-parties/paths';
+import { toolChoiceOf } from './tool-choice';
 
 /** The tools a server answered the check with. */
 export interface CheckedTool {
   name: string;
   description?: string | undefined;
+  isReadOnly: boolean;
 }
 
 /**
@@ -34,11 +37,14 @@ export type AddServerState =
   | { step: 'owner'; fields: Record<string, string>; tools: CheckedTool[]; owners: OwnerChoice[]; requestId: string };
 
 function credentialOf(form: FormData) {
-  if (fieldOf(form, 'credentialKind') === 'clientCredentials') {
-    const scope = fieldOf(form, 'scope');
-    return { kind: 'clientCredentials' as const, clientId: fieldOf(form, 'clientId'), clientSecret: fieldOf(form, 'clientSecret'), issuer: fieldOf(form, 'issuer'), ...(scope === '' ? {} : { scope }) };
-  }
-  return { kind: 'bearer' as const, token: fieldOf(form, 'token') };
+  return serverCredentialOf({
+    credentialKind: fieldOf(form, 'credentialKind'),
+    token: fieldOf(form, 'token'),
+    clientId: fieldOf(form, 'clientId'),
+    clientSecret: fieldOf(form, 'clientSecret'),
+    issuer: fieldOf(form, 'issuer'),
+    scope: fieldOf(form, 'scope'),
+  });
 }
 
 export async function checkServer(_previous: AddServerState, form: FormData): Promise<AddServerState> {
@@ -74,6 +80,7 @@ export async function approveServer(_previous: ApproveState, form: FormData): Pr
       credential: credentialOf(form),
       ownerShipId: ownerShipId.data,
       concurrencyLimit: Number(fieldOf(form, 'concurrencyLimit')),
+      tools: toolChoiceOf(form),
     });
     name = approved.name;
   } catch (error) {

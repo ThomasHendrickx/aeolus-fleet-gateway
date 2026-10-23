@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { aPushedDelivery, CALLER_SHIP_ID, fakeMcpServers, fakeProxyShipCrew, memoryCalls, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
-import { PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
+import { memoryPartyStore, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
 import type { McpServerParty } from '../parties/party.js';
 import { createHandCall } from './hand-call.js';
 
@@ -20,6 +20,7 @@ const CRM: McpServerParty = {
   requestId: 'a-1',
   requestHash: 'h',
   approvedAt: new Date('2026-10-18T14:00:00.000Z'),
+  toolSwitches: null,
 };
 
 const DEALS = { content: [{ type: 'text', text: '[]' }], structuredContent: { deals: [] }, isError: false };
@@ -31,15 +32,48 @@ let crew: ReturnType<typeof fakeProxyShipCrew>;
 let servers: ReturnType<typeof fakeMcpServers>;
 let calls: ReturnType<typeof memoryCalls>;
 let marks: ReturnType<typeof memoryToolMarks>;
+let parties: ReturnType<typeof memoryPartyStore>;
 let handCall: ReturnType<typeof createHandCall>;
 
-beforeEach(() => {
+beforeEach(async () => {
+  parties = memoryPartyStore();
+  await parties.save(CRM);
   crew = fakeProxyShipCrew();
   servers = fakeMcpServers();
   servers.state.outcome = { kind: 'answered', result: DEALS };
   calls = memoryCalls();
   marks = memoryToolMarks();
-  handCall = createHandCall({ crew, servers, calls, marks, timeoutMs: 60_000 });
+  handCall = createHandCall({ crew, servers, calls, marks, parties, timeoutMs: 60_000 });
+});
+
+describe('the gateway refuses a call to a tool not switched on for the party (aeolus-fleet#1151)', () => {
+  const NOT_ENABLED = { content: [{ type: 'text', text: 'tool not enabled for this party' }], isError: true };
+
+  it('replies a plain error, reports it handled, and never reaches the server', async () => {
+    await parties.switchTools({ fleetId: FLEET_ID, name: 'crm' }, { listed: ['list_deals'], switched: new Map([['list_deals', false]]) });
+
+    await expect(handCall({ party: CRM, delivery: aPushedDelivery() })).resolves.toEqual({ kind: 'handled' });
+
+    expect(servers.called).toEqual([]);
+    expect(crew.sent().map((sent) => parsed(sent.payload))).toEqual([NOT_ENABLED]);
+    expect(crew.log.map(([call]) => call)).toEqual(['send', 'ack', 'handled']);
+  });
+
+  it('refuses a tool the server listed after its switches were kept', async () => {
+    await parties.switchTools({ fleetId: FLEET_ID, name: 'crm' }, { listed: ['list_contacts'], switched: new Map() });
+
+    await handCall({ party: CRM, delivery: aPushedDelivery() });
+
+    expect(servers.called).toEqual([]);
+  });
+
+  it('calls a tool switched on', async () => {
+    await parties.switchTools({ fleetId: FLEET_ID, name: 'crm' }, { listed: ['list_contacts'], switched: new Map([['list_deals', true]]) });
+
+    await handCall({ party: CRM, delivery: aPushedDelivery() });
+
+    expect(servers.called.map(({ call }) => call.name)).toEqual(['list_deals']);
+  });
 });
 
 describe('the gateway hands a call to its outside MCP server (interop 5.2)', () => {

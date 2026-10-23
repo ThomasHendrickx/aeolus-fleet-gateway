@@ -22,7 +22,18 @@ import { createPrismaPartyStore } from './adapters/prisma/party-store.js';
 import { createPrismaToolMarks } from './adapters/prisma/tool-marks.js';
 import { createMcpServers } from './adapters/mcp/mcp-servers.js';
 import { createMarkTool } from './core/mcp-out/mark-tool.js';
+import { createSwitchTool } from './core/parties/switch-tool.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
+import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
+import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
+import { createHandA2aMessage } from './core/a2a-out/hand-a2a-message.js';
+import { createRunA2aAgent } from './core/a2a-out/run-a2a-agent.js';
+import { createA2aAgents, gatewayStatuses } from './adapters/a2a/a2a-agents.js';
+import { createAgentKeys } from './adapters/crypto/agent-keys.js';
+import { createPrismaAgentCalls } from './adapters/prisma/agent-calls.js';
+import { createMarkA2aAgent } from './core/a2a-out/mark-a2a-agent.js';
+import { createAddA2aAgent, type AddA2aAgent } from './core/parties/add-a2a-agent.js';
+import { createHttpAgentCards } from './adapters/a2a/agent-cards.js';
 import { createCheckServer } from './core/parties/check-server.js';
 import { createReadPartyTools } from './core/parties/read-party-tools.js';
 import { createHandCall } from './core/mcp-out/hand-call.js';
@@ -38,9 +49,26 @@ import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
 import { registerA2aEndpoint } from './adapters/http/a2a-endpoint.js';
 import { a2aCardAddressOf } from './adapters/http/a2a-cards.js';
-import { createAddA2aClient } from './core/parties/add-a2a-client.js';
+import { createAddA2aClient, type AddA2aClient } from './core/parties/add-a2a-client.js';
 import { createAuthenticateA2aClient } from './core/a2a-in/authenticate-a2a-client.js';
 import { createFindReachedShip } from './core/a2a-in/find-reached-ship.js';
+import { createFollowA2aTask } from './core/a2a-in/follow-a2a-task.js';
+import { createDeliverPushes } from './core/a2a-in/deliver-pushes.js';
+import { createListPushConfigs } from './core/a2a-in/list-push-configs.js';
+import { createNoticeTaskChanges } from './core/a2a-in/notice-task-changes.js';
+import { createPushToWebhooks } from './core/a2a-in/push-to-webhooks.js';
+import { createReadPushConfig } from './core/a2a-in/read-push-config.js';
+import { createRemovePushConfig } from './core/a2a-in/remove-push-config.js';
+import { createSetPushConfig } from './core/a2a-in/set-push-config.js';
+import { isPublicAddress } from './core/a2a-in/webhook.js';
+import { a2aPushEvents } from './adapters/http/a2a-streams.js';
+import { createPrismaPushStore } from './adapters/prisma/push-store.js';
+import { systemHostResolver } from './adapters/webhooks/host-resolver.js';
+import { createWebhookPoster } from './adapters/webhooks/webhook-poster.js';
+import { createListA2aTasks } from './core/a2a-in/list-a2a-tasks.js';
+import { createReadA2aTask } from './core/a2a-in/read-a2a-task.js';
+import { createSendA2aMessage } from './core/a2a-in/send-a2a-message.js';
+import { createSubscribeToA2aTask } from './core/a2a-in/subscribe-to-a2a-task.js';
 import { createListReachedShips } from './core/a2a-in/list-reached-ships.js';
 import { createShipAliases } from './adapters/crypto/ship-aliases.js';
 import { createListTools } from './core/mcp-in/list-tools.js';
@@ -213,6 +241,13 @@ const OUTCOME_ROUND_MS = 60_000;
 /** The most an outside MCP client's call waits for its answer, whatever its capability states (interop 5.3). */
 const MCP_WAIT_MAX_MS = 10_000;
 
+/** How long an outside A2A client's webhook may take to answer a push. */
+const WEBHOOK_TIMEOUT_MS = 10_000;
+/** The longest the gateway waits to read an outside A2A agent's card (slice 5). */
+const AGENT_CARD_TIMEOUT_MS = 10_000;
+/** How long an outside A2A agent's worker waits to read its card again while it names no interface the gateway calls (slice 6). */
+const AGENT_CARD_WAIT_MS = 60_000;
+
 /** How often a waiting call is read for its answer. */
 const MCP_WAIT_POLL_MS = 200;
 
@@ -298,17 +333,56 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const callTiming = { waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, deadlineMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS };
   const stateParty = createStateParty({ parties, servers, door, marks, timing: callTiming });
   const markTool = createMarkTool({ parties, marks, stateParty });
-  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
+  const switchTool = createSwitchTool({ parties, servers, stateParty });
+  const agentCards = createHttpAgentCards({ timeoutMs: AGENT_CARD_TIMEOUT_MS });
+  const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, timing: callTiming });
+  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
   const clientCalls = createPrismaClientCalls(prisma);
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
   const checkServer = createCheckServer({ servers, servesOutsideParties });
   const readPartyTools = createReadPartyTools({ parties, servers });
+  const pushStore = createPrismaPushStore(prisma);
+  // A webhook is reached only at a public address, as its name resolves at the moment of connecting (slice 4).
+  const webhookPoster = createWebhookPoster({ addressesOf: (host) => systemHostResolver.addressesOf(host), isAllowedAddress: isPublicAddress, timeoutMs: WEBHOOK_TIMEOUT_MS });
+  const pushToWebhooks = createPushToWebhooks({
+    notice: createNoticeTaskChanges({ calls: clientCalls, configs: pushStore, events: a2aPushEvents, clock }),
+    deliver: createDeliverPushes({ pushes: pushStore, resolver: systemHostResolver, poster: webhookPoster, clock, againWaitsMs: AGAIN_WAITS_MS }),
+    sleep,
+    pollMs: POLL_MS,
+    failed: (error) => {
+      server.log.error({ err: error }, 'pushing to webhooks failed: tried again next round');
+    },
+  });
+  // An outside agent's message is answered within the deadline a caller of its proxy ship waits for (slice 6, flow 4.2).
+  const agentCallDeps = {
+    crew: door,
+    agents: createA2aAgents({ timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS }),
+    calls: createPrismaAgentCalls(prisma),
+    keys: createAgentKeys(options.gatewaySecret),
+    statuses: gatewayStatuses,
+    clock,
+    deadlineMs: callTiming.deadlineMs,
+  };
+  const followAgentTask = createFollowAgentTask({ ...agentCallDeps, sleep, pollMs: POLL_MS });
   const workers = createPartyWorkers({
     parties,
     stateParty,
+    stateA2aAgent,
     runParty: createRunParty({ crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
-    collectReplies: createCollectReplies({ crew: door, replies: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
+    runA2aAgent: createRunA2aAgent({
+      cards: agentCards,
+      crew: door,
+      hand: createHandA2aMessage({ ...agentCallDeps, parties, follow: followAgentTask }),
+      follow: followAgentTask,
+      calls: agentCallDeps.calls,
+      sleep,
+      pollMs: POLL_MS,
+      againWaitsMs: AGAIN_WAITS_MS,
+      cardWaitMs: AGENT_CARD_WAIT_MS,
+    }),
+    collectReplies: createCollectReplies({ crew: door, replies: door, sent: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
+    pushToWebhooks,
     servesOutsideParties,
     log: server.log,
   });
@@ -340,8 +414,25 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     }
     return approved;
   };
-  // An A2A client's calls are not carried yet, so no worker starts for it.
-  const addA2aClient = createAddA2aClient({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock, secrets: oauthSecrets });
+  const addA2aClientOnly = createAddA2aClient({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock, secrets: oauthSecrets });
+  // An A2A client crewed once it is added has the replies to its calls taken at once.
+  const addA2aClient: AddA2aClient = async (input) => {
+    const added = await addA2aClientOnly(input);
+    if (added.isOk) {
+      await workers.start({ fleetId: input.actor.fleetId, name: added.value.party.name });
+    }
+    return added;
+  };
+  const addA2aAgentOnly = createAddA2aAgent({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock, cards: agentCards, timing: callTiming });
+  // An A2A agent crewed once it is added has its proxy ship stated at once.
+  const addA2aAgent: AddA2aAgent = async (input) => {
+    const added = await addA2aAgentOnly(input);
+    if (added.isOk) {
+      await workers.start({ fleetId: input.actor.fleetId, name: added.value.name });
+    }
+    return added;
+  };
+  const markA2aAgent = createMarkA2aAgent({ parties, stateA2aAgent });
   const proxyShipsAsActor = createProxyShipsAsActor(options.fleetUrl);
   // Calls as an account need its account token, set up with the sign-in below.
   const asActor = { parties, fleet: proxyShipsAsActor, credentialOf: (actor: Actor, sent: ActorCredential) => credentialOf(actor, sent) };
@@ -529,11 +620,23 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     ...(person === undefined ? {} : { person }),
   });
   // Outside A2A clients call the ships their proxy ship reaches, by alias, with the bearer they were shown (decision 0060).
+  // A blocking send waits as its capability states, at most the gateway's own most, as an MCP call does (I-9).
   const listReachedShips = createListReachedShips({ parties, discovery: door, aliases });
+  const findReachedShip = createFindReachedShip({ listReachedShips });
+  const followA2aTask = createFollowA2aTask({ calls: clientCalls, clock, sleep, pollMs: MCP_WAIT_POLL_MS });
   registerA2aEndpoint(server, {
     issuer,
     authenticate: createAuthenticateA2aClient({ parties, secrets: oauthSecrets, servesOutsideParties }),
-    findReachedShip: createFindReachedShip({ listReachedShips }),
+    findReachedShip,
+    sendMessage: createSendA2aMessage({ parties, findReachedShip, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, sleep, waitMaxMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS }),
+    readTask: createReadA2aTask({ calls: clientCalls, clock }),
+    listTasks: createListA2aTasks({ calls: clientCalls, clock }),
+    followTask: followA2aTask,
+    subscribeToTask: createSubscribeToA2aTask({ calls: clientCalls, clock, follow: followA2aTask }),
+    setPushConfig: createSetPushConfig({ calls: clientCalls, configs: pushStore, resolver: systemHostResolver, ids: { newId: () => crypto.randomUUID() }, clock }),
+    readPushConfig: createReadPushConfig({ calls: clientCalls, configs: pushStore }),
+    listPushConfigs: createListPushConfigs({ calls: clientCalls, configs: pushStore }),
+    removePushConfig: createRemovePushConfig({ calls: clientCalls, configs: pushStore }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.
@@ -593,6 +696,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     approveParty,
     addClientParty: createAddClientParty({ parties, approveClientParty, clients: oauthClients, secrets: oauthSecrets }),
     addA2aClient,
+    addA2aAgent,
+    markA2aAgent,
     listReachedShips,
     cardAddressOf: (alias) => a2aCardAddressOf(issuer, alias),
     crewParty,
@@ -606,6 +711,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readPartyTools,
     stateParty,
     markTool,
+    switchTool,
     readOutsideParties: createReadOutsideParties({ switches: outsidePartySwitches }),
     setOutsideParties,
     registerClient,

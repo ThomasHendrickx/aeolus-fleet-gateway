@@ -23,6 +23,10 @@ const CRM: McpServerParty = {
   requestId: 'a-1',
   requestHash: 'h',
   approvedAt: AT,
+  toolSwitches: new Map([
+    ['list_contacts', true],
+    ['create_deal', true],
+  ]),
 };
 
 let parties: ReturnType<typeof memoryPartyStore>;
@@ -73,6 +77,35 @@ describe('the gateway states what a proxy ship offers, as its crew (decision 004
 
   it('refuses a party it does not know', async () => {
     await expect(stateParty({ fleetId: FLEET_ID, name: 'erp' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_PARTY' } });
+  });
+});
+
+describe("the fleet sees only the tools an approver switched on (aeolus-fleet#1151)", () => {
+  const stated = () => door.stated.at(-1)?.statement.capabilities.map((capability) => capability.name);
+
+  it('leaves a tool switched off out of the statement', async () => {
+    await parties.save({ ...CRM, name: 'erp', toolSwitches: new Map([['list_contacts', true], ['create_deal', false]]) });
+
+    await expect(stateParty({ fleetId: FLEET_ID, name: 'erp' })).resolves.toEqual({ isOk: true, value: { capabilities: ['list_contacts'] } });
+    expect(stated()).toEqual(['list_contacts']);
+  });
+
+  it('leaves out a tool the server listed after its switches were kept: it starts off', async () => {
+    await parties.save({ ...CRM, name: 'erp', toolSwitches: new Map([['list_contacts', true]]) });
+
+    await stateParty({ fleetId: FLEET_ID, name: 'erp' });
+
+    expect(stated()).toEqual(['list_contacts']);
+  });
+
+  it('keeps every tool it lists on for a party whose switches are not kept yet, so nothing it stated before goes', async () => {
+    await parties.save({ ...CRM, name: 'erp', toolSwitches: null });
+
+    await stateParty({ fleetId: FLEET_ID, name: 'erp' });
+
+    expect(stated()).toEqual(['list_contacts', 'create_deal']);
+    const kept = await parties.find(FLEET_ID, 'erp');
+    expect(kept?.kind === 'mcpServer' && kept.toolSwitches).toEqual(new Map([['list_contacts', true], ['create_deal', true]]));
   });
 });
 

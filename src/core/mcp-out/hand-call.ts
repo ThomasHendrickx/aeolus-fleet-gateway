@@ -2,6 +2,8 @@ import { PAYLOAD_MAX_BYTES, payloadBytes, type DeliveryId, type FleetId, type Me
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { McpServerParty } from '../parties/party.js';
+import type { PartyStore } from '../parties/ports.js';
+import { isToolOn, TOOL_NOT_ENABLED } from '../parties/tool-switches.js';
 import type { Result } from '../shared/result.js';
 import { toolCalledBy, toolInputType, toolResultType } from './content-types.js';
 import type { McpServers, ToolResult } from './ports.js';
@@ -129,9 +131,11 @@ function notACallReply(party: McpServerParty, delivery: PushedDelivery): Reply {
  * so it is replied, acknowledged and handled at once. The answer is kept
  * before the reply, so a restart replies again under the same key and calls
  * nothing. A call that died unanswered is handed again only where argo
- * marked its tool repeatable; otherwise it is reported not handled.
+ * marked its tool repeatable; otherwise it is reported not handled. A call
+ * to a tool not switched on is answered an error and reaches no server
+ * (aeolus-fleet#1151).
  */
-export function createHandCall(deps: { crew: ProxyShipCrew; servers: McpServers; calls: CallStore; marks: ToolMarks; timeoutMs: number }): HandCall {
+export function createHandCall(deps: { crew: ProxyShipCrew; servers: McpServers; calls: CallStore; marks: ToolMarks; parties: PartyStore; timeoutMs: number }): HandCall {
   return async ({ party, delivery }) => {
     const crewToken = party.crewToken;
     if (crewToken === null) {
@@ -174,6 +178,12 @@ export function createHandCall(deps: { crew: ProxyShipCrew; servers: McpServers;
     // Handed before with no answer kept and not judged unsent: the gateway stopped mid call, so it may have run.
     if (delivery.state === 'handed' && call?.state !== 'notSent' && !isRepeatable) {
       return mayHaveRun();
+    }
+
+    // The switches as they are now, not as the worker found the party: an approver may switch a tool off while it runs.
+    const now = await deps.parties.find(party.fleetId, party.name);
+    if (!isToolOn(now?.kind === 'mcpServer' ? now.toolSwitches : party.toolSwitches, tool)) {
+      return finish(resultReply(delivery, { tool, result: errorResult(TOOL_NOT_ENABLED) }));
     }
 
     const handed = await deps.crew.handed(crewToken, { deliveryId: delivery.deliveryId, handOverNumber: (delivery.handOverNumber ?? 0) + 1, channel: MCP_CHANNEL });
