@@ -21,6 +21,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 | `INSTALLATION_TOKEN` | unset | The token a hosting service presents to the installation procedures (at least 32 characters, decision 0021). Unset: they are off and every fleet is served, as a self-hosted gateway needs; set: a fleet is served once switched on |
 | `PAGASAE_URL`, `PAGASAE_CLIENT_ID`, `PAGASAE_CLIENT_SECRET` | unset | pagasae, where people sign in (decision 0054), and the gateway's client there, registered with the redirect URI `<GATEWAY_PUBLIC_URL>/pagasae/callback`. All three or none; unset, nobody signs in, so no MCP client connects (only an account asks for one) |
 | `PAGASAE_APP_CLIENT_ID`, `PAGASAE_APP_CLIENT_SECRET` | unset | The gateway's pages as an app at pagasae (its `APP_CLIENTS`, redirect URI `<GATEWAY_PUBLIC_URL>/sign-in/done`), apart from the client for outside MCP clients: people sign in to the pages with the account sign-in every Aeolus app shares (aeolus-fleet's header design, H5). Both or neither, beside `PAGASAE_URL`; unset, nobody signs in to the web app's pages |
+| `EMAIL_WAKE_WINDOW_MINUTES` | `60` | At least 1. The email channel sends one person ship at most one wake per this many minutes; what waits meanwhile goes in the next wake (aeolus-fleet's wake a person design, W3, W10). Email wakes need `PAGASAE_URL` and `INSTALLATION_TOKEN`, which the gateway presents to pagasae's `/api/wakes` |
 | `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
 | Command | Does |

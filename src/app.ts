@@ -85,7 +85,7 @@ import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
 import { createAccountTokenOf, type AccountTokenOf } from './core/sign-in/account-token.js';
-import { err, ok } from './core/shared/result.js';
+import { err } from './core/shared/result.js';
 import { createEndSignIns } from './core/sign-in/end-sign-ins.js';
 import { createAnswerDelivery } from './core/people/answer-delivery.js';
 import { createCrewPersonShip } from './core/people/crew-person-ship.js';
@@ -93,9 +93,13 @@ import { createDoneDelivery } from './core/people/done-delivery.js';
 import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadInbox } from './core/people/read-inbox.js';
-import type { PersonCrews } from './core/people/ports.js';
+import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
+import { createWakePerson } from './core/people/wake-person.js';
+import { createEmailChannel } from './adapters/pagasae/email-channel.js';
+import { createPrismaEmailChannels } from './adapters/prisma/email-channels.js';
+import { createPrismaWakesSent } from './adapters/prisma/wakes-sent.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
@@ -156,6 +160,8 @@ export interface GatewayAppOptions {
   pagasae?: { url: string; clientId: string; clientSecret: string };
   /** The gateway's pages as an app at pagasae, for the shared account sign-in (header design H5): unset, nobody signs in to the pages that way. */
   pagasaeApp?: { clientId: string; clientSecret: string };
+  /** The least time between two wakes the email channel sends one person ship (wake a person, W10): 60 minutes unless set. */
+  emailWakeWindowMs?: number;
   /** The gateway's web app, answering the pages the server has none of: unset, an unknown page is answered as any unknown address. */
   web?: WebApp;
 }
@@ -171,6 +177,9 @@ const CLIENT_METADATA_TIMEOUT_MS = 5_000;
 
 /** How long pagasae's token endpoint may take to answer. */
 const PAGASAE_TIMEOUT_MS = 10_000;
+
+/** The email channel's window unless told (wake a person, W10). */
+const EMAIL_WAKE_WINDOW_MS = 60 * 60_000;
 
 /** How a ship sends its own crew token to the gateway's API: as a bearer token (decision 0057). */
 const BEARER = 'Bearer ';
@@ -396,6 +405,20 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
   // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
   const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });
+  // pagasae sends the email, asked with the gateway's installation token (wake a person, W2); without either, email wakes no one.
+  const emailChannels = createPrismaEmailChannels(prisma);
+  const wakeChannels: WakeChannel[] =
+    options.pagasae === undefined || options.installationToken === undefined
+      ? []
+      : [
+          createEmailChannel({
+            url: options.pagasae.url,
+            installationToken: options.installationToken,
+            timeoutMs: PAGASAE_TIMEOUT_MS,
+            windowMs: options.emailWakeWindowMs ?? EMAIL_WAKE_WINDOW_MS,
+            emailChannels,
+          }),
+        ];
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
   const personCrews = createPrismaPersonCrews(prisma);
   const inboxChanges = createPrismaInboxChanges(prisma);
@@ -407,8 +430,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: door.person,
       changes: inboxChanges,
-      // No channel wakes a person yet, so every wake is settled.
-      wakePerson: () => Promise.resolve(ok({ kind: 'settled' })),
+      wakePerson: createWakePerson({ door: door.person, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), clock }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,
