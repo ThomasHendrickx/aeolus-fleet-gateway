@@ -585,7 +585,7 @@ export const gatewayRouter = t.router({
       )
       .output(shownPartySchema)
       .mutation(async ({ ctx, input }) => {
-        const approved = await ctx.approveParty({ operatorFleetId: ctx.fleetId, ...input, scopes: [] });
+        const approved = await ctx.approveParty({ operatorFleetId: ctx.fleetId, ...input, scopes: [], toolSwitches: null });
         if (!approved.isOk) {
           throw new TRPCError({ code: APPROVE_CODES[approved.error.kind], message: approved.error.message });
         }

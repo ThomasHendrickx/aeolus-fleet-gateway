@@ -177,7 +177,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     listReachedShips: ({ party }) =>
       Promise.resolve(party === 'supplier' ? ok([{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9cr2' as const, alias: 'acrm2345', statement: null }]) : err({ kind: 'PARTY_NOT_CREWED' as const, message: `The party ${party} is not crewed` })),
     cardAddressOf: (alias) => `https://gateway.example.com/gw/a2a/${alias}/.well-known/agent-card.json`,
-    readPartyTools: ({ name }) => Promise.resolve(name === 'linear' ? ok({ tools: [{ name: 'list_issues', description: 'List issues' }] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `There is no outside MCP server ${name}` })),
+    readPartyTools: ({ name }) => Promise.resolve(name === 'linear' ? ok({ tools: [{ name: 'list_issues', description: 'List issues', isReadOnly: true, isOn: true, isNew: false }] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `There is no outside MCP server ${name}` })),
     stateParty: ({ name }) => Promise.resolve(name === 'crm' ? ok({ capabilities: ['list_deals'] }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `No party named ${name}` })),
     markTool: (input) => {
       marks.push(input);
@@ -219,7 +219,7 @@ describe("argo approves parties through the gateway's API", () => {
 
     await gatewayRouter.createCaller(context).parties.approve(APPROVAL);
 
-    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [] }]);
+    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [], toolSwitches: null }]);
   });
 
   it('refuses a viewer, who only reads', async () => {
@@ -234,7 +234,7 @@ describe("argo approves parties through the gateway's API", () => {
 
     await gatewayRouter.createCaller(context).parties.approve(APPROVAL);
 
-    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [] }]);
+    expect(approvals).toEqual([{ operatorFleetId: FLEET, ...APPROVAL, concurrencyLimit: 4, scopes: [], toolSwitches: null }]);
   });
 
   it('refuses a ship that only reads, and lets it read the parties', async () => {
