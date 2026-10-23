@@ -729,7 +729,7 @@ export const gatewayRouter = t.router({
     /** The channels that wake them when something waits for their person ship, each offered or not and on or not (wake a person, W8). */
     wakeChannels: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readWakeChannels(ctx.caller))),
     /** Turns email on or off, to be woken when something waits for their person ship. */
-    turnEmail: personProcedure.input(z.strictObject({ isOn: z.boolean() })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.turnEmailChannel({ caller: ctx.caller, ...input }))),
+    turnEmail: personProcedure.input(z.strictObject({ isOn: z.boolean() })).mutation(async ({ ctx, input }) => { personAnswerOf(await ctx.person.turnEmailChannel({ caller: ctx.caller, ...input })); }),
   }),
   requests: t.router({
     /** The requests the account asked, in any state, the newest first (decision 0056: Your requests). */
