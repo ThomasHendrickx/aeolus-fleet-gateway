@@ -235,6 +235,7 @@ const CREW_CODES = {
   NO_SUCH_PARTY: 'NOT_FOUND',
   NOT_AWAITING_CREW: 'CONFLICT',
   SECRET_REFUSED: 'BAD_REQUEST',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
 } as const satisfies Record<string, TRPCError['code']>;
 
 /** The refusals of reading an outside MCP server's tools, as the API states them. */
@@ -590,16 +591,21 @@ export const gatewayRouter = t.router({
         }
         return {};
       }),
-    /** argo hands over a new secret, from a new starting prompt in the console, for a proxy ship that awaits crew. */
+    /**
+     * argo hands over a new secret, from a new starting prompt in the console,
+     * for a proxy ship that awaits crew, its crew released or never taken. A
+     * client party that signs in by client credentials is answered its new
+     * client secret, this once (vendor platforms V8).
+     */
     crew: managing(servedProcedure)
       .input(z.strictObject({ name: shipHandleSchema, secret: z.string().min(1) }))
-      .output(shownPartySchema)
+      .output(z.intersection(shownPartySchema, z.object({ clientSecret: z.string().nullable() })))
       .mutation(async ({ ctx, input }) => {
         const crewed = await ctx.crewParty({ operatorFleetId: ctx.fleetId, ...input });
         if (!crewed.isOk) {
           throw new TRPCError({ code: CREW_CODES[crewed.error.kind], message: crewed.error.message });
         }
-        return crewed.value;
+        return { ...crewed.value.party, clientSecret: crewed.value.clientSecret };
       }),
     /** The gateway states the party's proxy ship anew, from what its server lists now, with argo's marks. */
     state: managing(servedProcedure)

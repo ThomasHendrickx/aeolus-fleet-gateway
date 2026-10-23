@@ -235,6 +235,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const connect = createConnect({ door, store: connections, clock });
   const authenticateOperator = createAuthenticateOperator({ sessions: createFleetConsoleSessions(options.fleetUrl) });
   const parties = createPrismaPartyStore(prisma);
+  // The OAuth server's clients and tokens: a client party's secret and tokens change as its proxy ship's crew does.
+  const oauthClients = createPrismaOAuthClients(prisma);
+  const issuedTokens = createPrismaIssuedTokens(prisma);
   const marks = createPrismaToolMarks(prisma);
   const servers = createMcpServers();
   // A caller of a proxy ship waits and gives up as the gateway does with its server (interop 3.4, 5.3).
@@ -258,7 +261,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // The approval goes on without facts the fleet refuses; the log shows them (decision 0059).
   const approvalDoor = { ...door, ...logRefusedFacts(door, server.log) };
   const approvePartyOnly = createApproveParty({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock });
-  const crewPartyOnly = createCrewParty({ parties, door });
+  const crewPartyOnly = createCrewParty({ parties, door, clients: oauthClients, secrets: oauthSecrets, tokens: issuedTokens });
   // A party crewed by approving it, or by a new secret, has its calls taken at once.
   const approveParty: ApproveParty = async (input) => {
     const approved = await approvePartyOnly(input);
@@ -270,7 +273,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const crewParty: CrewParty = async (input) => {
     const crewed = await crewPartyOnly(input);
     if (crewed.isOk) {
-      await workers.start({ fleetId: input.operatorFleetId, name: crewed.value.name });
+      await workers.start({ fleetId: input.operatorFleetId, name: crewed.value.party.name });
     }
     return crewed;
   };
@@ -286,7 +289,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const proxyShipsAsActor = createProxyShipsAsActor(options.fleetUrl);
   // Calls as an account need its account token, set up with the sign-in below.
   const asActor = { parties, fleet: proxyShipsAsActor, credentialOf: (actor: Actor, sent: ActorCredential) => credentialOf(actor, sent) };
-  const retireParty = createRetireParty({ ...asActor, tokens: createPrismaIssuedTokens(prisma) });
+  const retireParty = createRetireParty({ ...asActor, tokens: issuedTokens });
   const changePartyOwner = createChangePartyOwner(asActor);
   const changePartyScopes = createChangePartyScopes(asActor);
   const proxyShipReads = createProxyShipReads(options.fleetUrl);
@@ -314,11 +317,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // The OAuth server for outside MCP clients: the issuer is the public URL, and every token is bound to its MCP endpoint (RFC 8707).
   const issuer = options.publicUrl ?? DEFAULT_PUBLIC_URL;
   const resource = `${issuer}/mcp`;
-  const oauthClients = createPrismaOAuthClients(prisma);
   const authorizationCodes = createPrismaAuthorizationCodes(prisma);
   const readAuthorization = createReadAuthorization({ clients: oauthClients, documents: createClientMetadataDocuments({ timeoutMs: CLIENT_METADATA_TIMEOUT_MS }), resource });
   const registerClient = createRegisterClient({ clients: oauthClients, secrets: oauthSecrets });
-  const issuedTokens = createPrismaIssuedTokens(prisma);
   const seals = createSignInSeals(options.gatewaySecret);
   // People sign in through pagasae where it is set (decision 0054); else no client connects, as only an account asks for one (A a).
   const pagasae = options.pagasae === undefined ? undefined : createPagasae({ ...options.pagasae, redirectUri: `${issuer}/pagasae/callback`, timeoutMs: PAGASAE_TIMEOUT_MS });
