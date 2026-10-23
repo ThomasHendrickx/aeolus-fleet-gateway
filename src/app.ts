@@ -104,6 +104,7 @@ import { createEmailChannel } from './adapters/pagasae/email-channel.js';
 import { createPrismaEmailChannels } from './adapters/prisma/email-channels.js';
 import { createPrismaWakesSent } from './adapters/prisma/wakes-sent.js';
 import { createPrismaFocusedPages } from './adapters/prisma/focused-pages.js';
+import { createPrismaWebPushSubscriptions } from './adapters/prisma/web-push-subscriptions.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
@@ -164,6 +165,8 @@ export interface GatewayAppOptions {
   pagasae?: { url: string; clientId: string; clientSecret: string };
   /** The gateway's pages as an app at pagasae, for the shared account sign-in (header design H5): unset, nobody signs in to the pages that way. */
   pagasaeApp?: { clientId: string; clientSecret: string };
+  /** The gateway's push keys, which sign each web push wake, and the subject a push service may contact (wake a person, S3): unset, no one is offered web push. */
+  webPush?: { publicKey: string; privateKey: string; subject: string };
   /** The least time between two wakes the email channel sends one person ship (wake a person, W10): 60 minutes unless set. */
   emailWakeWindowMs?: number;
   /** The gateway's web app, answering the pages the server has none of: unset, an unknown page is answered as any unknown address. */
@@ -417,6 +420,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });
   // pagasae sends the email, asked with the gateway's installation token (wake a person, W2); without either, email wakes no one.
   const emailChannels = createPrismaEmailChannels(prisma);
+  // The browsers people turned web push on in (wake a person, W8).
+  const webPushSubscriptions = createPrismaWebPushSubscriptions(prisma);
   const wakeChannels: WakeChannel[] =
     options.pagasae === undefined || options.installationToken === undefined
       ? []
@@ -470,7 +475,13 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes }),
-      readWakeChannels: createReadWakeChannels({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email') }),
+      readWakeChannels: createReadWakeChannels({
+        crewPersonShip: asCrew.crewPersonShip,
+        emailChannels,
+        isEmailOffered: wakeChannels.some(({ name }) => name === 'email'),
+        subscriptions: webPushSubscriptions,
+        webPushKey: options.webPush?.publicKey ?? null,
+      }),
       turnEmailChannel: createTurnEmailChannel({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), clock }),
       focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
       listShips: createListShips(asCrew),

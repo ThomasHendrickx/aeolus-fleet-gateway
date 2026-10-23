@@ -121,7 +121,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
-      readWakeChannels: (caller) => Promise.resolve(ok({ email: { isOffered: true, isOn: answers.some(({ email }) => email === 'on') && grantOf(caller) === PERSON_TOKEN } })),
+      readWakeChannels: (caller) => Promise.resolve(ok({ email: { isOffered: true, isOn: answers.some(({ email }) => email === 'on') && grantOf(caller) === PERSON_TOKEN }, webPush: { publicKey: null, browsers: [] } })),
       turnEmailChannel: ({ caller, isOn }) => {
         answers.push({ grantId: grantOf(caller), email: isOn ? 'on' : 'off' });
         return Promise.resolve(ok(undefined));
@@ -571,7 +571,7 @@ describe('a person turns on the channels that wake them, through the API (wake a
 
     await caller.people.turnEmail({ isOn: true });
 
-    await expect(caller.people.wakeChannels()).resolves.toEqual({ email: { isOffered: true, isOn: true } });
+    await expect(caller.people.wakeChannels()).resolves.toEqual({ email: { isOffered: true, isOn: true }, webPush: { publicKey: null, browsers: [] } });
     expect(answers).toEqual([{ grantId: PERSON_TOKEN, email: 'on' }]);
   });
 

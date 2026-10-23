@@ -46,7 +46,8 @@ export type DomainErrorKind =
   | 'PARTY_NOT_COMMISSIONED'
   | 'CHANGE_REFUSED'
   | 'UNKNOWN_ALIAS'
-  | 'CHANNEL_NOT_OFFERED';
+  | 'CHANNEL_NOT_OFFERED'
+  | 'INVALID_SUBSCRIPTION';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {
