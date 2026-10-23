@@ -105,6 +105,10 @@ import { createPrismaEmailChannels } from './adapters/prisma/email-channels.js';
 import { createPrismaWakesSent } from './adapters/prisma/wakes-sent.js';
 import { createPrismaFocusedPages } from './adapters/prisma/focused-pages.js';
 import { createPrismaWebPushSubscriptions } from './adapters/prisma/web-push-subscriptions.js';
+import { createWebPush } from './adapters/web-push/web-push.js';
+import { createWebPushChannel } from './core/people/web-push-channel.js';
+import { createTurnOffWebPush } from './core/people/turn-off-web-push.js';
+import { createTurnOnWebPush } from './core/people/turn-on-web-push.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
@@ -167,6 +171,8 @@ export interface GatewayAppOptions {
   pagasaeApp?: { clientId: string; clientSecret: string };
   /** The gateway's push keys, which sign each web push wake, and the subject a push service may contact (wake a person, S3): unset, no one is offered web push. */
   webPush?: { publicKey: string; privateKey: string; subject: string };
+  /** The least time between two wakes web push sends one person ship (wake a person, W10): 10 minutes unless set. */
+  webPushWakeWindowMs?: number;
   /** The least time between two wakes the email channel sends one person ship (wake a person, W10): 60 minutes unless set. */
   emailWakeWindowMs?: number;
   /** The gateway's web app, answering the pages the server has none of: unset, an unknown page is answered as any unknown address. */
@@ -184,6 +190,12 @@ const CLIENT_METADATA_TIMEOUT_MS = 5_000;
 
 /** How long pagasae's token endpoint may take to answer. */
 const PAGASAE_TIMEOUT_MS = 10_000;
+
+/** Web push's window unless told (wake a person, W10). */
+const WEB_PUSH_WAKE_WINDOW_MS = 10 * 60_000;
+
+/** How long a push service may take to take a wake. */
+const WEB_PUSH_TIMEOUT_MS = 10_000;
 
 /** The email channel's window unless told (wake a person, W10). */
 const EMAIL_WAKE_WINDOW_MS = 60 * 60_000;
@@ -422,8 +434,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const emailChannels = createPrismaEmailChannels(prisma);
   // The browsers people turned web push on in (wake a person, W8).
   const webPushSubscriptions = createPrismaWebPushSubscriptions(prisma);
-  const wakeChannels: WakeChannel[] =
-    options.pagasae === undefined || options.installationToken === undefined
+  const wakeChannels: WakeChannel[] = [
+    ...(options.pagasae === undefined || options.installationToken === undefined
       ? []
       : [
           createEmailChannel({
@@ -433,7 +445,20 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             windowMs: options.emailWakeWindowMs ?? EMAIL_WAKE_WINDOW_MS,
             emailChannels,
           }),
-        ];
+        ]),
+    // Web push, where the gateway holds push keys: a wake to each browser the person turned it on in (wake a person, S3).
+    ...(options.webPush === undefined
+      ? []
+      : [
+          createWebPushChannel({
+            subscriptions: webPushSubscriptions,
+            webPush: createWebPush({ ...options.webPush, timeoutMs: WEB_PUSH_TIMEOUT_MS }),
+            clock,
+            windowMs: options.webPushWakeWindowMs ?? WEB_PUSH_WAKE_WINDOW_MS,
+            overviewUrlOf: (fleetId) => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`,
+          }),
+        ]),
+  ];
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
   const personCrews = createPrismaPersonCrews(prisma);
   // A person's pages in focus, on every instance: while one is, what arrives is handed through it (wake a person, W6).
@@ -483,6 +508,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
         webPushKey: options.webPush?.publicKey ?? null,
       }),
       turnEmailChannel: createTurnEmailChannel({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), clock }),
+      turnOnWebPush: createTurnOnWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions, isWebPushOffered: options.webPush !== undefined, clock }),
+      turnOffWebPush: createTurnOffWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions }),
       focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
       listShips: createListShips(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
