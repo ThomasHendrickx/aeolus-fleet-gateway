@@ -15,18 +15,38 @@ export interface CallReply {
   receivedAt: Date;
 }
 
+/** Where the call's delivery stands, as the fleet's sentMessage answers its sender (decision 0040). */
+export type DeliveryState = 'pending' | 'received' | 'handed' | 'acknowledged' | 'handled' | 'notHandled' | 'undeliverable' | 'dismissed' | 'abandoned';
+
+/** The delivery states in which the fleet gave the call up: it fails (interop 3.4). */
+const FAILED_DELIVERY: ReadonlySet<DeliveryState> = new Set(['notHandled', 'undeliverable', 'dismissed', 'abandoned']);
+
+/** The delivery states in which the ship took the call: it works on it. */
+const TAKEN_DELIVERY: ReadonlySet<DeliveryState> = new Set(['acknowledged', 'handled']);
+
+/** An A2A call's part of its task (decision 0060): the task it belongs to, and the client's message as A2A JSON. */
+export interface CallTask {
+  taskId: string;
+  message: string;
+}
+
 export interface ClientCall {
   fleetId: FleetId;
   party: string;
   messageId: MessageId;
   handle: string;
   shipId: ShipId;
-  capability: string;
+  /** The capability called; none when an A2A message matched none, and then its first reply answers it (decision 0060). */
+  capability: string | null;
   /** The capability's stated output type, its first output mode; none when it states none. */
   outputContentType: string | null;
   sentAt: Date;
   /** When the call fails without its answer, from its capability's deadline; none never fails by time. */
   deadlineAt: Date | null;
+  /** Where its delivery stands, as the gateway last read it; none while not read. */
+  delivery: { state: DeliveryState; since: Date } | null;
+  /** Its A2A task; none for an MCP call. */
+  task: CallTask | null;
   /** In the order the gateway kept them. */
   replies: CallReply[];
 }
@@ -45,30 +65,50 @@ const normalized = (contentType: string) =>
 
 const essenceOf = (contentType: string) => normalized(contentType).split(';')[0] ?? '';
 
-function isAnswer(call: ClientCall, reply: CallReply): boolean {
-  if (call.deadlineAt !== null && reply.receivedAt.getTime() >= call.deadlineAt.getTime()) {
+/** When the call failed without its answer: at its deadline, or once the fleet gave its delivery up; none while neither. */
+function failedAt(call: ClientCall, now: Date): Date | undefined {
+  const times = [
+    ...(call.deadlineAt !== null && now.getTime() >= call.deadlineAt.getTime() ? [call.deadlineAt] : []),
+    ...(call.delivery !== null && FAILED_DELIVERY.has(call.delivery.state) ? [call.delivery.since] : []),
+  ];
+  return times.sort((left, right) => left.getTime() - right.getTime())[0];
+}
+
+/** Whether the reply answers the call: kept before the call failed, if it did. */
+function isAnswer(call: ClientCall & { failed: Date | undefined }, reply: CallReply): boolean {
+  const { failed } = call;
+  if (failed !== undefined && reply.receivedAt.getTime() >= failed.getTime()) {
     return false;
+  }
+  if (call.capability === null) {
+    return true;
   }
   return call.outputContentType === null ? essenceOf(reply.contentType) === PLAIN_TEXT : normalized(reply.contentType) === normalized(call.outputContentType);
 }
 
 /** The call's state with since when it holds, by the one rule below. */
 function standing(call: ClientCall, now: Date): { state: CallState; since: Date } {
-  const answer = call.replies.find((reply) => isAnswer(call, reply));
+  const failed = failedAt(call, now);
+  const answer = call.replies.find((reply) => isAnswer({ ...call, failed }, reply));
   if (answer) {
     return { state: { state: 'completed', answer: { contentType: answer.contentType, payload: answer.payload } }, since: answer.receivedAt };
   }
-  if (call.deadlineAt !== null && now.getTime() >= call.deadlineAt.getTime()) {
-    return { state: { state: 'failed' }, since: call.deadlineAt };
+  if (failed !== undefined) {
+    return { state: { state: 'failed' }, since: failed };
   }
   const [first] = call.replies;
-  return first ? { state: { state: 'working' }, since: first.receivedAt } : { state: { state: 'submitted' }, since: call.sentAt };
+  if (first) {
+    return { state: { state: 'working' }, since: first.receivedAt };
+  }
+  return call.delivery !== null && TAKEN_DELIVERY.has(call.delivery.state) ? { state: { state: 'working' }, since: call.delivery.since } : { state: { state: 'submitted' }, since: call.sentAt };
 }
 
 /**
- * Completed by the first reply of the stated output type, kept before the
- * deadline; failed at the deadline without one, and a later reply changes
- * nothing; working once any other reply came; submitted before that.
+ * Completed by the first reply of the stated output type, or by the first
+ * reply of any type for a call of no capability, kept before it failed;
+ * failed at the deadline or once the fleet gave its delivery up, and a later
+ * reply changes nothing; working once any other reply came or the ship took
+ * its delivery; submitted before that.
  */
 export function stateOf(call: ClientCall, now: Date): CallState {
   return standing(call, now).state;

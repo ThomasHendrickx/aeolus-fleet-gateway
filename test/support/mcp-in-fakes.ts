@@ -1,6 +1,6 @@
 import { idSchema, type FleetId, type MessageId, type ShipId } from '@aeolus-fleet/common';
 
-import type { CallReply, ClientCall } from '../../src/core/mcp-in/client-call.js';
+import type { CallReply, ClientCall, DeliveryState } from '../../src/core/mcp-in/client-call.js';
 import type { CallKeys, CallSender, ClientCalls, DiscoveredShip, Discovery, ReceivedReply, ReplyReceiver, ShipAliases } from '../../src/core/mcp-in/ports.js';
 import { err, ok } from '../../src/core/shared/result.js';
 import { FLEET_ID } from './fleet-fakes.js';
@@ -102,6 +102,8 @@ export function aClientCall(overrides: Partial<ClientCall> = {}): ClientCall {
     outputContentType: null,
     sentAt: new Date('2026-10-19T12:00:00.000Z'),
     deadlineAt: new Date('2026-10-19T12:10:00.000Z'),
+    delivery: null,
+    task: null,
     replies: [],
     ...overrides,
   };
@@ -120,9 +122,10 @@ export function aCallReply(overrides: Partial<CallReply> = {}): CallReply {
 }
 
 /** The calls of outside clients in memory, by fleet and message, with their replies in the order kept. */
-export function memoryClientCalls(): ClientCalls & { held: ClientCall[]; isFailing: boolean } {
+export function memoryClientCalls(): ClientCalls & { held: ClientCall[]; tasks: { fleetId: FleetId; party: string; taskId: string; contextId: string; createdAt: Date }[]; isFailing: boolean } {
   const store = {
     held: new Array<ClientCall>(),
+    tasks: new Array<{ fleetId: FleetId; party: string; taskId: string; contextId: string; createdAt: Date }>(),
     /** Whether keeping a reply fails, as a database that does not answer. */
     isFailing: false,
   };
@@ -149,6 +152,33 @@ export function memoryClientCalls(): ClientCalls & { held: ClientCall[]; isFaili
       Promise.resolve(store.held.filter((call) => call.fleetId === fleetId && call.party === party && (call.deadlineAt === null || call.deadlineAt.getTime() > now.getTime()))),
     findByHandle: ({ fleetId, party }: { fleetId: FleetId; party: string }, handle: string) =>
       Promise.resolve(store.held.find((call) => call.fleetId === fleetId && call.party === party && call.handle === handle)),
+    setDelivery: ({ fleetId, messageId }: { fleetId: FleetId; messageId: MessageId }, delivery: { state: DeliveryState; since: Date }) => {
+      const call = find(fleetId, messageId);
+      if (call) {
+        call.delivery = delivery;
+      }
+      return Promise.resolve();
+    },
+    saveTask: (task: { fleetId: FleetId; party: string; taskId: string; contextId: string; createdAt: Date }) => {
+      if (!store.tasks.some((kept) => kept.fleetId === task.fleetId && kept.taskId === task.taskId)) {
+        store.tasks.push(task);
+      }
+      return Promise.resolve();
+    },
+    findTask: ({ fleetId, party }: { fleetId: FleetId; party: string }, taskId: string) => {
+      const task = store.tasks.find((kept) => kept.fleetId === fleetId && kept.party === party && kept.taskId === taskId);
+      return Promise.resolve(task && { taskId, contextId: task.contextId, calls: store.held.filter((call) => call.fleetId === fleetId && call.task?.taskId === taskId) });
+    },
+    listTasks: ({ fleetId, party }: { fleetId: FleetId; party: string }, page: { limit: number; after?: string; contextId?: string }) => {
+      const own = store.tasks.filter((task) => task.fleetId === fleetId && task.party === party && (page.contextId === undefined || task.contextId === page.contextId)).reverse();
+      const start = page.after === undefined ? 0 : own.findIndex((task) => task.taskId === page.after) + 1;
+      const shown = own.slice(start, start + page.limit);
+      const last = shown.at(-1);
+      return Promise.resolve({
+        tasks: shown.map((task) => ({ taskId: task.taskId, contextId: task.contextId, calls: store.held.filter((call) => call.fleetId === fleetId && call.task?.taskId === task.taskId) })),
+        next: start + page.limit < own.length && last !== undefined ? last.taskId : null,
+      });
+    },
   });
 }
 

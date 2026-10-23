@@ -184,14 +184,35 @@ model ClientCall {
   party      String
   handle     String
   shipId     String   @map("ship_id")
-  capability        String
+  /// None when an A2A message matched no capability, and then its first reply answers it (decision 0060).
+  capability        String?
   outputContentType String?  @map("output_content_type")
   sentAt            DateTime @map("sent_at")
   deadlineAt        DateTime? @map("deadline_at")
+  /// Where its delivery stands, as the gateway last read it from the fleet's sentMessage.
+  deliveryState     String?   @map("delivery_state")
+  deliverySince     DateTime? @map("delivery_since")
+  /// An A2A call's task, and the client's message as A2A JSON; none for an MCP call.
+  taskId            String?   @map("task_id")
+  taskMessage       String?   @map("task_message")
 
   @@id([fleetId, messageId])
   @@unique([fleetId, handle])
+  @@index([fleetId, taskId])
   @@map("client_calls")
+}
+
+/// An outside A2A client's task (decision 0060): its id, the HMAC of its first message, its party and its context.
+model A2aTask {
+  fleetId   String   @map("fleet_id")
+  taskId    String   @map("task_id")
+  party     String
+  contextId String   @map("context_id")
+  createdAt DateTime @map("created_at")
+
+  @@id([fleetId, taskId])
+  @@index([fleetId, party, createdAt(sort: Desc), taskId(sort: Desc)])
+  @@map("a2a_tasks")
 }
 
 /// The replies naming an outside client's call, each kept once per delivery before it is acknowledged.
