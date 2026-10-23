@@ -129,6 +129,7 @@ describe("a client party's worker, its crew released and the same proxy ship cre
     const pool = createPartyWorkers({
       parties,
       stateParty: () => Promise.resolve(ok({ capabilities: [] })),
+      stateA2aAgent: () => Promise.resolve(ok({ capabilities: [] })),
       runParty: () => Promise.resolve({ ended: 'stopped' }),
       collectReplies: async ({ party, signal }) => {
         takenWith.push(party.crewToken);
@@ -168,6 +169,7 @@ describe("an A2A client's worker (decision 0060)", () => {
     const pool = createPartyWorkers({
       parties,
       stateParty: () => Promise.resolve(ok({ capabilities: [] })),
+      stateA2aAgent: () => Promise.resolve(ok({ capabilities: [] })),
       runParty: () => Promise.resolve({ ended: 'stopped' }),
       collectReplies: async ({ party, signal }) => {
         takenWith.push(party.crewToken);
@@ -196,6 +198,7 @@ describe("an A2A client's worker pushes its tasks' changes (slice 4)", () => {
     const pool = createPartyWorkers({
       parties,
       stateParty: () => Promise.resolve(ok({ capabilities: [] })),
+      stateA2aAgent: () => Promise.resolve(ok({ capabilities: [] })),
       runParty: () => Promise.resolve({ ended: 'stopped' }),
       collectReplies: async ({ signal }) => {
         await untilAborted(signal);

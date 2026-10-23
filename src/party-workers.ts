@@ -3,13 +3,15 @@
  * or the fleet refuses its crew token: an outside server's states its proxy
  * ship, then takes its calls (interop 5.2); an outside client's takes the
  * replies to its calls (Q9 a), and an A2A client's pushes its tasks' changes
- * to its webhooks meanwhile (slice 4). A fleet's workers work only while its outside
+ * to its webhooks meanwhile (slice 4); an outside A2A agent's states its
+ * proxy ship from its card (slice 5). A fleet's workers work only while its outside
  * parties are on (interop I-3).
  */
 import type { FleetId } from '@aeolus-fleet/common';
 import type { FastifyBaseLogger } from 'fastify';
 
 import type { PushToWebhooks } from './core/a2a-in/push-to-webhooks.js';
+import type { StateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import type { CollectReplies } from './core/mcp-in/collect-replies.js';
 import type { RunParty } from './core/mcp-out/run-party.js';
 import type { StateParty } from './core/mcp-out/state-party.js';
@@ -27,6 +29,7 @@ export interface PartyWorkers {
 export function createPartyWorkers(deps: {
   parties: PartyStore;
   stateParty: StateParty;
+  stateA2aAgent: StateA2aAgent;
   runParty: RunParty;
   collectReplies: CollectReplies;
   pushToWebhooks: PushToWebhooks;
@@ -59,7 +62,11 @@ export function createPartyWorkers(deps: {
       return { refused: ended === 'crewRefused' ? party.crewToken : null };
     }
     if (party.kind === 'a2aAgent') {
-      // An A2A agent takes no messages yet (slice 6).
+      // Stated from its card as read now; it takes no messages yet (slice 6).
+      const statedAgent = await deps.stateA2aAgent({ fleetId, name });
+      if (!statedAgent.isOk) {
+        deps.log.warn({ fleetId, party: name, reason: statedAgent.error.message }, 'proxy ship not stated: its last statement stays');
+      }
       return { refused: null };
     }
     const stated = await deps.stateParty({ fleetId, name });

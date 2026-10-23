@@ -57,18 +57,17 @@ describe("the reader of an outside A2A agent's card (slice 5)", () => {
   });
 
   it('reads a list left out, as proto JSON leaves an empty one out, as empty', async () => {
-    const { skills: _skills, defaultOutputModes: _modes, ...card } = SERVED_CARD;
-    answer = { status: 200, body: JSON.stringify(card) };
+    answer = { status: 200, body: JSON.stringify({ ...SERVED_CARD, skills: undefined, defaultOutputModes: undefined }) };
 
     await expect(cards.read(base)).resolves.toMatchObject({ isOk: true, value: { skills: [], defaultOutputModes: [] } });
   });
 
   it.each([
-    ['no name', { ...SERVED_CARD, name: undefined }, 'name'],
-    ['no version', { ...SERVED_CARD, version: undefined }, 'version'],
-    ['no capabilities', { ...SERVED_CARD, capabilities: undefined }, 'capabilities'],
-    ['a skill with no id', { ...SERVED_CARD, skills: [{ name: 'Quote', description: 'd' }] }, 'skills.0.id'],
-  ])('answers no card for an AgentCard with %s, naming the field', async (_case, card, field) => {
+    { lacking: 'no name', card: { ...SERVED_CARD, name: undefined }, field: 'name' },
+    { lacking: 'no version', card: { ...SERVED_CARD, version: undefined }, field: 'version' },
+    { lacking: 'no capabilities', card: { ...SERVED_CARD, capabilities: undefined }, field: 'capabilities' },
+    { lacking: 'a skill with no id', card: { ...SERVED_CARD, skills: [{ name: 'Quote', description: 'd' }] }, field: 'skills.0.id' },
+  ])('answers no card for an AgentCard with $lacking, naming the field', async ({ card, field }) => {
     answer = { status: 200, body: JSON.stringify(card) };
 
     const read = await cards.read(base);
@@ -86,13 +85,19 @@ describe("the reader of an outside A2A agent's card (slice 5)", () => {
   it('answers no card for an answer over 1 MB, reading no further', async () => {
     answer = { status: 200, body: JSON.stringify({ ...SERVED_CARD, description: 'x'.repeat(1_100_000) }) };
 
-    await expect(cards.read(base)).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_A_CARD', reason: expect.stringContaining('1 MB') } });
+    const read = await cards.read(base);
+
+    expect(read).toMatchObject({ isOk: false, error: { kind: 'NOT_A_CARD' } });
+    expect(read.isOk ? '' : read.error.reason).toContain('1 MB');
   });
 
   it('answers unreachable for a status other than 2xx, naming it', async () => {
     answer = { status: 404, body: 'not found' };
 
-    await expect(cards.read(base)).resolves.toMatchObject({ isOk: false, error: { kind: 'UNREACHABLE', reason: expect.stringContaining('404') } });
+    const read = await cards.read(base);
+
+    expect(read).toMatchObject({ isOk: false, error: { kind: 'UNREACHABLE' } });
+    expect(read.isOk ? '' : read.error.reason).toContain('404');
   });
 
   it('follows no redirect: the card is read where the approver said, as its domain is the fact written', async () => {
