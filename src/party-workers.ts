@@ -58,6 +58,10 @@ export function createPartyWorkers(deps: {
       }
       return { refused: ended === 'crewRefused' ? party.crewToken : null };
     }
+    if (party.kind === 'a2aAgent') {
+      // An A2A agent takes no messages yet (slice 6).
+      return { refused: null };
+    }
     const stated = await deps.stateParty({ fleetId, name });
     if (!stated.isOk) {
       // Its calls are taken all the same; the next statement states it.

@@ -17,9 +17,10 @@ export const PARTY_KINDS: Record<ListedParty['kind'], { protocol: string; side: 
   mcpServer: { protocol: 'MCP', side: 'server' },
   mcpClient: { protocol: 'MCP', side: 'client' },
   a2aClient: { protocol: 'A2A', side: 'client' },
+  a2aAgent: { protocol: 'A2A', side: 'server' },
 };
 
-/** Where a party is reached or named outside: an MCP server's URL, an MCP client's id; an A2A client has none. */
+/** Where a party is reached or named outside: an MCP server's URL, an MCP client's id, an A2A agent's card address; an A2A client has none. */
 export function outsideAddressOf(party: ListedParty): string | null {
   switch (party.kind) {
     case 'mcpServer':
@@ -28,6 +29,8 @@ export function outsideAddressOf(party: ListedParty): string | null {
       return party.clientId;
     case 'a2aClient':
       return null;
+    case 'a2aAgent':
+      return party.cardUrl;
   }
 }
 

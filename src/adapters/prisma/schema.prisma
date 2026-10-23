@@ -74,7 +74,7 @@ model Party {
   fleetId          String   @map("fleet_id")
   name             String
   kind             String
-  /// An MCP server's: its URL, its credential as JSON (a static bearer, or OAuth client credentials), and its calls at once.
+  /// An MCP server's: its URL, its credential as JSON (none, a static bearer, or OAuth client credentials), and its calls at once. An A2A agent's too, its card address as the URL.
   url              String?
   credential       Json?
   concurrencyLimit Int?     @map("concurrency_limit")
@@ -84,6 +84,8 @@ model Party {
   clientId         String?  @map("client_id")
   /// An A2A client's: the hash of the bearer it was shown once, which names it on every call; unique across fleets, as the bearer alone names the party (decision 0060).
   bearerHash       String?  @unique @map("bearer_hash")
+  /// An A2A agent's: whether a message that died unconfirmed may be handed again, until an approver marks it not (A9).
+  isRepeatable     Boolean? @map("is_repeatable")
   state            String
   proxyShipId      String?  @map("proxy_ship_id")
   /// Kept only from the proxy ship's commission until the gateway crews it.

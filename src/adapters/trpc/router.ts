@@ -333,10 +333,13 @@ const credentialInputSchema = z.discriminatedUnion('kind', [
 
 /** A party as any actor reads it: never its credential or its crew token. */
 const shownPartyBase = { name: z.string(), state: z.enum(['commissioning', 'awaitingCrew', 'crewed']), proxyShipId: z.string().nullable() };
+/** An outside A2A agent's own fields: its card address, its credential's kind, its calls at once and its repeatable mark (A9). */
+const agentFields = { cardUrl: z.string(), credentialKind: z.enum(['none', 'bearer', 'clientCredentials']), concurrencyLimit: z.int(), isRepeatable: z.boolean() };
 const shownPartySchema = z.discriminatedUnion('kind', [
   z.object({ ...shownPartyBase, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['none', 'bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
   z.object({ ...shownPartyBase, kind: z.literal('mcpClient'), clientId: z.string() }),
   z.object({ ...shownPartyBase, kind: z.literal('a2aClient') }),
+  z.object({ ...shownPartyBase, kind: z.literal('a2aAgent'), ...agentFields }),
 ]);
 
 /** A party with its proxy ship's name, owner and scopes, read from the fleet (decision 0056): null while unknown. */
@@ -345,6 +348,7 @@ const listedPartySchema = z.discriminatedUnion('kind', [
   z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['none', 'bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
   z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpClient'), clientId: z.string() }),
   z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('a2aClient') }),
+  z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('a2aAgent'), ...agentFields }),
 ]);
 
 /** The connection as the console reads it: whether the gateway serves the fleet, and its connection. */
