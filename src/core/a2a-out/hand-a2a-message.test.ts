@@ -143,6 +143,44 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
     expect(crew.replies().filter(({ inReplyTo }) => inReplyTo === followUp).map(({ payload }) => payload)).toEqual([aStatus('working').json, aStatus('completed').json]);
   });
 
+  it('reads the task once when the stream breaks, so a task that ended meanwhile replies its artifact and end, nothing failed', async () => {
+    const streams: ScriptedStream[] = [{ events: [aStatus('working')], end: { kind: 'broken', reason: 'socket hang up' } }];
+    const agents = fakeA2aAgents({ sends: [taken([])], streams, reads: [readAs(anArtifact('4 EUR'), aStatus('completed'))] });
+
+    await expect(handWith(agents, STREAMED)()).resolves.toEqual({ kind: 'handled' });
+
+    expect(steps().slice(2)).toEqual([`send application/a2a+json ${aStatus('working').json}`, 'send text/plain 4 EUR', `send application/a2a+json ${aStatus('completed').json}`, 'handled']);
+    expect({ subscribed: agents.subscribed, read: agents.read }).toEqual({ subscribed: ['task-1'], read: ['task-1'] });
+  });
+
+  it('reads the task once when the agent refuses a stream of a task that ended, as after a restart, and adds no failed to its end', async () => {
+    await calls.save({ deliveryId: DELIVERY, fleetId: FLEET_ID, party: 'supplier', messageId: MESSAGE, senderShipId: CALLER_SHIP_ID, state: 'following', taskId: 'task-1', contextId: 'ctx-1', deadlineAt: new Date(clock.now().getTime() + DEADLINE_MS), answer: null });
+    const agents = fakeA2aAgents({ streams: [{ events: [], end: { kind: 'refused', reason: 'Task task-1 is in a terminal state' } }], reads: [readAs(aStatus('completed'))] });
+
+    await expect(handWith(agents, STREAMED)(aQuote({ state: 'acknowledged', handOverNumber: 1 }))).resolves.toEqual({ kind: 'handled' });
+
+    expect(steps().filter((step) => step !== 'ack')).toEqual([`send application/a2a+json ${aStatus('completed').json}`, 'handled']);
+    expect(slept).toEqual([]);
+  });
+
+  it("ends the follow at once with failed and the agent's reason when it refuses reading the task", async () => {
+    const agents = fakeA2aAgents({ sends: [taken([aStatus('working')])], reads: [{ kind: 'refused', reason: 'The agent answered 403: forbidden' }] });
+
+    await expect(handWith(agents)()).resolves.toEqual({ kind: 'handled' });
+
+    expect(JSON.parse(crew.replies().at(-1)?.payload ?? '{}')).toMatchObject({ statusUpdate: { status: { state: 'failed', reason: "The agent refused following its task: The agent answered 403: forbidden" } } });
+    expect(slept).toEqual([]);
+  });
+
+  it("ends the follow at once with failed and the agent's reason when it refuses a stream of a task still going", async () => {
+    const agents = fakeA2aAgents({ sends: [taken([])], streams: [{ events: [], end: { kind: 'refused', reason: 'The agent answered 401: bad token' } }], reads: [readAs(aStatus('working'))] });
+
+    await expect(handWith(agents, STREAMED)()).resolves.toEqual({ kind: 'handled' });
+
+    expect(JSON.parse(crew.replies().at(-1)?.payload ?? '{}')).toMatchObject({ statusUpdate: { status: { state: 'failed', reason: 'The agent refused following its task: The agent answered 401: bad token' } } });
+    expect({ subscribed: agents.subscribed, slept }).toEqual({ subscribed: ['task-1'], slept: [] });
+  });
+
   it('replies failed and is handled once the deadline passes with no terminal state', async () => {
     const agents = fakeA2aAgents({ sends: [taken([aStatus('working')])], reads: [readAs(aStatus('working'))] });
 

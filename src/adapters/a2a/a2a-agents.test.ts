@@ -196,6 +196,15 @@ describe('GetTask of an outside A2A agent (slice 6)', () => {
     await expect(agents.getTask(rpc(), 'task-1')).resolves.toMatchObject({ kind: 'gone' });
   });
 
+  it.each([
+    ['an A2A error', (request: { body: unknown }, response: ServerResponse) => { rpcAnswer(response, { id: idOf(request.body), error: { code: -32004, message: 'Not supported' } }); }],
+    ['an HTTP 403', (_request: { body: unknown }, response: ServerResponse) => { response.writeHead(403).end('no'); }],
+  ])('reads %s as a refusal', async (_kind, refusal) => {
+    handle = refusal;
+
+    await expect(agents.getTask(rpc(), 'task-1')).resolves.toMatchObject({ kind: 'refused' });
+  });
+
   it('reads a 503 as no answer', async () => {
     handle = (_request, response) => {
       response.writeHead(503).end();
@@ -250,6 +259,16 @@ describe('SubscribeToTask of an outside A2A agent (slice 6)', () => {
     };
 
     await expect(agents.subscribe(rpc(undefined, true), { taskId: 'task-1', timeoutMs: 200, signal: new AbortController().signal, onEvent: () => Promise.resolve() })).resolves.toMatchObject({ kind: 'broken' });
+  });
+
+  it('ends refused when the agent refuses the stream, as it does for a task that ended', async () => {
+    handle = (request, response) => {
+      rpcAnswer(response, { id: idOf(request.body), error: { code: -32004, message: 'Task task-1 is in a terminal state' } });
+    };
+
+    const end = await agents.subscribe(rpc(undefined, true), { taskId: 'task-1', timeoutMs: 1_000, signal: new AbortController().signal, onEvent: () => Promise.resolve() });
+
+    expect({ kind: end.kind, isWhy: 'reason' in end && end.reason.includes('terminal state') }).toEqual({ kind: 'refused', isWhy: true });
   });
 
   it('ends gone for a task the agent knows no more', async () => {
