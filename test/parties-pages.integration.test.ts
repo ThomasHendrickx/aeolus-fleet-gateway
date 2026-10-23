@@ -175,6 +175,28 @@ describe('the parties pages, as the account signed in', () => {
     });
   }, 60_000);
 
+  it('shows Add A2A agent to an account holding gateway:approve, and not to one that only reads (slice 5)', async () => {
+    const bodies = await Promise.all(
+      [APPROVER_SIGN_IN, READER_SIGN_IN].map(async (signIn) => (await fetch(`${address}/outside-parties?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${signIn}` } })).text()),
+    );
+
+    expect(bodies.map((body) => body.includes('data-testid="outside-parties-add-a2a-agent"'))).toEqual([true, false]);
+  }, 60_000);
+
+  it("adds an A2A agent from its page: its name, card address, credential, calls at once, its owner picked from the fleet's owner choices, and the approver's own scopes", async () => {
+    const body = await (await fetch(`${address}/outside-parties/add-a2a-agent?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${APPROVER_SIGN_IN}` } })).text();
+
+    const form = body.slice(body.indexOf('data-testid="add-a2a-agent-form"'));
+    expect({
+      hasForm: body.includes('data-testid="add-a2a-agent-form"'),
+      hasCardUrl: form.includes('name="cardUrl"'),
+      offersNoCredential: textOf(form).includes('No credential'),
+      hasConcurrency: form.includes('name="concurrencyLimit"'),
+      hasOwner: form.includes('data-testid="owner-field"'),
+      hasOwnScopeOnly: form.includes('name="scope:fleet:read"') && !form.includes('name="scope:fleet:manage"'),
+    }).toEqual({ hasForm: true, hasCardUrl: true, offersNoCredential: true, hasConcurrency: true, hasOwner: true, hasOwnScopeOnly: true });
+  }, 60_000);
+
   it('shows the header every Aeolus app shows: the fleet in view and Gateway in the title, and the avatar menu', async () => {
     const body = await (await fetch(`${address}/parties?fleet=${FLEET}`, { headers: PAGE })).text();
 
