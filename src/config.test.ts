@@ -19,6 +19,8 @@ describe('the gateway configuration from the environment', () => {
       gatewaySecret: GATEWAY_SECRET,
       mcpWaitMaxMs: 10_000,
       emailWakeWindowMs: 3_600_000,
+      webPush: undefined,
+      webPushWakeWindowMs: 600_000,
       pagasae: undefined,
       pagasaeApp: undefined,
     });
@@ -37,6 +39,8 @@ describe('the gateway configuration from the environment', () => {
       gatewaySecret: GATEWAY_SECRET,
       mcpWaitMaxMs: 10_000,
       emailWakeWindowMs: 3_600_000,
+      webPush: undefined,
+      webPushWakeWindowMs: 600_000,
       pagasae: undefined,
       pagasaeApp: undefined,
     });
@@ -132,5 +136,25 @@ describe('the gateway configuration from the environment', () => {
 
   it('refuses a port above 65535', () => {
     expect(() => loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', PORT: '65536' })).toThrow(/^PORT: /);
+  });
+
+  it('reads the push keys that sign each web push wake, and the subject a push service may contact (wake a person, S3)', () => {
+    expect(
+      loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', WEB_PUSH_PUBLIC_KEY: 'BPublic', WEB_PUSH_PRIVATE_KEY: 'private', WEB_PUSH_SUBJECT: 'mailto:ops@example.com' }).webPush,
+    ).toEqual({ publicKey: 'BPublic', privateKey: 'private', subject: 'mailto:ops@example.com' });
+  });
+
+  it.each([
+    ['no private key', { WEB_PUSH_PUBLIC_KEY: 'BPublic', WEB_PUSH_SUBJECT: 'mailto:ops@example.com' }],
+    ['no public key', { WEB_PUSH_PRIVATE_KEY: 'private', WEB_PUSH_SUBJECT: 'mailto:ops@example.com' }],
+    ['no subject', { WEB_PUSH_PUBLIC_KEY: 'BPublic', WEB_PUSH_PRIVATE_KEY: 'private' }],
+  ])('refuses web push with %s, naming the variables', (_what, webPush) => {
+    expect(() => loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', ...webPush })).toThrow('WEB_PUSH_PUBLIC_KEY, WEB_PUSH_PRIVATE_KEY and WEB_PUSH_SUBJECT: set all three, or none');
+  });
+
+  it("reads web push's window in minutes, 10 unless set, and refuses one below a minute (wake a person, W10)", () => {
+    const environment = { DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' };
+    expect([loadConfig({ ...environment, WEB_PUSH_WAKE_WINDOW_MINUTES: '1' }).webPushWakeWindowMs, loadConfig({ ...environment, WEB_PUSH_WAKE_WINDOW_MINUTES: '30' }).webPushWakeWindowMs]).toEqual([60_000, 1_800_000]);
+    expect(() => loadConfig({ ...environment, WEB_PUSH_WAKE_WINDOW_MINUTES: '0' })).toThrow(/^WEB_PUSH_WAKE_WINDOW_MINUTES: /);
   });
 });
