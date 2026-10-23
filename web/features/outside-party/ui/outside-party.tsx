@@ -8,11 +8,16 @@ import { outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } 
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
 import { scopeWords } from '../../outside-parties/scope-words';
 import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
+import { ToolRow } from '../../outside-parties/ui/tool-row';
+import { ToolSwitch } from './tool-switch';
 
 /** The scopes that change a party's owner, its scopes, and retire it (0056). */
 export const OWNING_SCOPE = 'fleet:owner';
 export const GRANTING_SCOPE = 'scopes:grant';
 export const RETIRING_SCOPE = 'fleet:manage';
+
+/** The scope that switches a server's tools (aeolus-fleet#1151). */
+export const APPROVING_SCOPE = 'gateway:approve';
 
 /** The way back to the list, in the page's fleet. */
 export function Back({ fleetId }: { fleetId: string }) {
@@ -60,7 +65,7 @@ export function PartyHead({ party }: { party: ListedParty }) {
 /**
  * One outside party (design B, screens 12 and 14): its proxy ship's state,
  * then its facts as the fleet holds them, and for an MCP server the tools
- * it lists now, read-only. Each control shows only to an account holding
+ * it lists now, each with its switch for an approver (aeolus-fleet#1151). Each control shows only to an account holding
  * its scope; the API checks it again.
  */
 export async function OutsideParty({ page, name }: { page: SignedInPage; name: string }) {
@@ -112,17 +117,28 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
         <section className={`${CARD} grid gap-2`} data-testid="outside-party-tools">
           <h2 className="flex justify-between text-section font-semibold">
             <span>Tools</span>
-            {tools.isOk ? <span>{tools.value.tools.length}</span> : null}
+            {tools.isOk ? (
+              <span>
+                {tools.value.tools.filter((tool) => tool.isOn).length} of {tools.value.tools.length} on
+              </span>
+            ) : null}
           </h2>
           {tools.isOk ? (
-            <ul className="grid gap-1">
-              {tools.value.tools.map((tool) => (
-                <li key={tool.name} className="grid">
-                  <span className="font-mono">{tool.name}</span>
-                  {tool.description === undefined ? null : <span className="text-muted-foreground">{tool.description}</span>}
-                </li>
-              ))}
-            </ul>
+            <>
+              <p className="text-muted-foreground">
+                The fleet may call only the tools switched on; every ship that may reach {party.name} reaches the same. {scopes.includes(APPROVING_SCOPE) ? null : 'Switching them needs gateway:approve.'}
+              </p>
+              <ul className="grid">
+                {tools.value.tools.map((tool) => (
+                  <ToolRow
+                    key={tool.name}
+                    tool={tool}
+                    testId="outside-party-tool"
+                    control={scopes.includes(APPROVING_SCOPE) ? <ToolSwitch fleetId={fleetId} party={party.name} tool={tool.name} isOn={tool.isOn} /> : <Tag>{tool.isOn ? 'On' : 'Off'}</Tag>}
+                  />
+                ))}
+              </ul>
+            </>
           ) : (
             <p className="text-muted-foreground">{tools.refusal}</p>
           )}

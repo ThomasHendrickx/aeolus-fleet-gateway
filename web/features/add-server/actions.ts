@@ -17,11 +17,13 @@ import { FLEET_FIELD, fieldOf, fieldsOf } from '../forms/form-state';
 import { serverCredentialOf } from '../forms/server-credential';
 import type { OwnerChoice } from '../forms/ui/owner-field';
 import { partyPath } from '../outside-parties/paths';
+import { toolChoiceOf } from './tool-choice';
 
 /** The tools a server answered the check with. */
 export interface CheckedTool {
   name: string;
   description?: string | undefined;
+  isReadOnly: boolean;
 }
 
 /**
@@ -78,6 +80,7 @@ export async function approveServer(_previous: ApproveState, form: FormData): Pr
       credential: credentialOf(form),
       ownerShipId: ownerShipId.data,
       concurrencyLimit: Number(fieldOf(form, 'concurrencyLimit')),
+      tools: toolChoiceOf(form),
     });
     name = approved.name;
   } catch (error) {

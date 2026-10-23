@@ -8,8 +8,11 @@ import { BUTTONS, CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { Outcome } from '../../forms/ui/outcome';
 import { OwnerField } from '../../forms/ui/owner-field';
 import { SubmitButton } from '../../forms/ui/submit-button';
-import { approveServer, checkServer, type AddServerState, type ApproveState } from '../actions';
-import { suggestedName } from '../suggested-name';
+import { Switch } from '../../forms/ui/switch';
+import { ToolRow } from '../../outside-parties/ui/tool-row';
+import { approveServer, checkServer, type AddServerState, type ApproveState, type CheckedTool } from '../actions';
+import { addButtonLabel, suggestedName } from '../suggested-name';
+import { TOOL_ON_FIELD, TOOL_SHOWN_FIELD } from '../tool-choice';
 
 /** The steps of adding a server, as the design numbers them. */
 const STEPS = ['Address', 'Check', 'Owner'] as const;
@@ -94,29 +97,71 @@ function AddressStep({ state, action, fleetId }: { state: Extract<AddServerState
   );
 }
 
-function OwnerStep({ state, refused, action, onBack, fleetId }: { state: Extract<AddServerState, { step: 'owner' }>; refused: ApproveState; action: (form: FormData) => void; onBack: () => void; fleetId: string }) {
+/**
+ * The tools the check answered, one row each. An approver switches each on
+ * or off, all on to start; the fleet may call only those on (aeolus-fleet#1151).
+ * Without gateway:approve they show without switches, and every tool starts on.
+ */
+function ToolsSection({ tools, canSwitch }: { tools: CheckedTool[]; canSwitch: boolean }) {
+  const [off, setOff] = useState<ReadonlySet<string>>(new Set());
+  const onCount = tools.length - off.size;
+  const flip = (name: string) => {
+    setOff((current) => {
+      const next = new Set(current);
+      if (!next.delete(name)) {
+        next.add(name);
+      }
+      return next;
+    });
+  };
+  return (
+    <section className="grid gap-2" data-testid="add-server-tools">
+      <h2 className="flex flex-wrap justify-between gap-2 text-section font-semibold">
+        <span>
+          The server answers: {tools.length} {tools.length === 1 ? 'tool' : 'tools'}
+        </span>
+        {canSwitch ? (
+          <span role="status" className="font-normal text-muted-foreground" data-testid="add-server-tools-on">
+            {onCount} of {tools.length} on
+          </span>
+        ) : null}
+      </h2>
+      <p className="text-muted-foreground">{canSwitch ? 'The fleet may call only the tools switched on. A tool the server adds later starts off.' : 'Switching tools needs gateway:approve: every tool starts on, and an approver switches them on its page.'}</p>
+      <ul className="grid">
+        {tools.map((tool) => {
+          const isOn = !off.has(tool.name);
+          return (
+            <ToolRow
+              key={tool.name}
+              tool={tool}
+              testId="add-server-tool"
+              control={
+                canSwitch ? (
+                  <>
+                    <input type="hidden" name={TOOL_SHOWN_FIELD} value={tool.name} />
+                    {isOn ? <input type="hidden" name={TOOL_ON_FIELD} value={tool.name} /> : null}
+                    <Switch isOn={isOn} label={tool.name} onClick={() => { flip(tool.name); }} />
+                  </>
+                ) : null
+              }
+            />
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function OwnerStep({ state, refused, action, onBack, fleetId, canSwitchTools }: { state: Extract<AddServerState, { step: 'owner' }>; refused: ApproveState; action: (form: FormData) => void; onBack: () => void; fleetId: string; canSwitchTools: boolean }) {
   // A refused approval of this check shows what the browser sent, and why.
   const isRefused = refused.kind === 'refused' && refused.requestId === state.requestId;
   const fields = isRefused ? refused.fields : state.fields;
-  const { tools } = state;
   const url = fields.url ?? '';
-  const name = fields.name ?? suggestedName(url);
+  const [name, setName] = useState(fields.name ?? suggestedName(url));
   return (
     <>
-      <section className={`${CARD} grid gap-2`} data-testid="add-server-tools">
-        <h2 className="text-section font-semibold">
-          The server answers: {tools.length} {tools.length === 1 ? 'tool' : 'tools'}
-        </h2>
-        <ul className="grid gap-1">
-          {tools.map((tool) => (
-            <li key={tool.name} className="grid">
-              <span className="font-mono">{tool.name}</span>
-              {tool.description === undefined ? null : <span className="text-muted-foreground">{tool.description}</span>}
-            </li>
-          ))}
-        </ul>
-      </section>
       <form action={action} className={`${CARD} grid gap-3`} data-testid="add-server-owner">
+        <ToolsSection tools={state.tools} canSwitch={canSwitchTools} />
         <h2 className="text-section font-semibold">Its owner</h2>
         <Refused refusal={isRefused ? refused.message : undefined} />
         <input type="hidden" name={FLEET_FIELD} value={fleetId} />
@@ -127,7 +172,7 @@ function OwnerStep({ state, refused, action, onBack, fleetId }: { state: Extract
         <p className="font-mono text-muted-foreground">{url}</p>
         <label className={LABEL}>
           <span>Proxy ship&apos;s name</span>
-          <input className={INPUT} type="text" name="name" defaultValue={name} required />
+          <input className={INPUT} type="text" name="name" value={name} onChange={(event) => { setName(event.target.value); }} required />
         </label>
         <OwnerField choices={state.owners} current={state.owners.find((owner) => owner.shipId === fields.ownerShipId) ?? null} help="A person ship or argo. It answers for this server." />
         <label className={LABEL}>
@@ -136,7 +181,7 @@ function OwnerStep({ state, refused, action, onBack, fleetId }: { state: Extract
         </label>
         <div className="flex gap-2">
           <SubmitButton pending="Adding…" testId="add-server-approve">
-            Add {name === '' ? 'server' : name}
+            {addButtonLabel(name)}
           </SubmitButton>
           <button type="button" className={BUTTONS.secondary} onClick={onBack}>
             Back to the address
@@ -152,7 +197,7 @@ function OwnerStep({ state, refused, action, onBack, fleetId }: { state: Extract
  * the gateway's check of the tools it answers with, then its owner. Each
  * button says at once that its step is on its way.
  */
-export function AddServer({ fleetId }: { fleetId: string }) {
+export function AddServer({ fleetId, canSwitchTools }: { fleetId: string; canSwitchTools: boolean }) {
   const [checked, check] = useActionState(checkServer, { step: 'address', fields: {} });
   const [refused, approve] = useActionState(approveServer, { kind: 'idle' });
   // Going back shows the address step again, with what was sent, until the next check answers.
@@ -165,7 +210,7 @@ export function AddServer({ fleetId }: { fleetId: string }) {
       {owner === undefined ? (
         <AddressStep state={checked} action={check} fleetId={fleetId} />
       ) : (
-        <OwnerStep state={owner} refused={refused} action={approve} onBack={() => { setBackFrom(owner.requestId); }} fleetId={fleetId} />
+        <OwnerStep state={owner} refused={refused} action={approve} onBack={() => { setBackFrom(owner.requestId); }} fleetId={fleetId} canSwitchTools={canSwitchTools} />
       )}
     </div>
   );
