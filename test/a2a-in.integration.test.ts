@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
 import { createShipAliases } from '../src/adapters/crypto/ship-aliases.js';
+import { createPrismaClient } from '../src/adapters/prisma/client.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
@@ -366,6 +367,41 @@ describe("an outside A2A client's message is a message its proxy ship sends (dec
     await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_FAILED');
 
     expect((await rpc('SubscribeToTask', { id: task.id })).error?.code).toBe(-32004);
+  });
+
+  it.each([
+    ['an http webhook', 'http://hooks.supplier.example/a2a'],
+    ['a name that resolves to a loopback address', 'https://localhost/a2a'],
+    ['a loopback address', 'https://127.0.0.1/a2a'],
+    ['a private address', 'https://10.0.0.5/a2a'],
+    ['cloud metadata', 'https://169.254.169.254/latest/meta-data'],
+  ])('refuses a push config at %s as invalid params', async (_kind, url) => {
+    await aSupplierReaching();
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+
+    const answered = await rpc('CreateTaskPushNotificationConfig', { taskId: task.id, id: 'hook-1', url });
+
+    // An empty list is left out of the answer, as proto JSON leaves it out.
+    expect({ code: answered.error?.code, configs: (await rpc('ListTaskPushNotificationConfigs', { taskId: task.id })).result?.configs ?? [] }).toEqual({ code: -32602, configs: [] });
+  });
+
+  it("pushes the ship's reply, gives the push up at an inside address, and GetTask still answers", { timeout: 60_000 }, async () => {
+    await aSupplierReaching();
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+    // A config whose name came to resolve inside after it was set: kept here as the set would have kept it.
+    const prisma = createPrismaClient(setting.databaseUrl);
+    await prisma.a2aPushConfig.create({ data: { fleetId: await fleetIdOf(setting), taskId: task.id, id: 'hook-1', party: 'supplier', url: 'https://localhost/a2a', token: 'tok-1', createdAt: new Date(), noticedMark: 'before', isFollowing: true } });
+
+    const delivery = await receiveOne(setting.fleet, procurement.crewToken);
+    await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', payload: '40 chairs: 2000 euros.' });
+
+    await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_COMPLETED');
+    const pushed = async () => ({ pushes: (await prisma.a2aPush.findMany({ orderBy: { pushId: 'asc' } })).map((push) => ({ state: push.state, reason: push.reason, body: push.body })), isFollowing: (await prisma.a2aPushConfig.findFirst())?.isFollowing });
+    await expect.poll(async () => (await pushed()).pushes.some((push) => push.body.includes('TASK_STATE_COMPLETED') && push.state === 'givenUp'), { timeout: 30_000 }).toBe(true);
+    const { pushes, isFollowing } = await pushed();
+    await prisma.$disconnect();
+
+    expect({ reasons: [...new Set(pushes.map((push) => push.reason))], isFollowing, state: (await taskNow(task.id)).status.state }).toEqual({ reasons: ['The webhook resolves to an inside address'], isFollowing: false, state: 'TASK_STATE_COMPLETED' });
   });
 
   it('sends a message and reads its task over HTTP+JSON', async () => {
