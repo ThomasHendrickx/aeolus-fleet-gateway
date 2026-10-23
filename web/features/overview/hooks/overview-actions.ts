@@ -14,6 +14,7 @@ import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { FLEET_PARAMETER } from '../../../lib/gateway-api/page-account';
 import { refusalCodeOf, refusalMessageOf, requestApi } from '../../../lib/gateway-api/page-api';
 import { answerOf, questionOf, type AnswerInput, type FocusedDelivery } from '../services/deliveries';
+import type { SubscriptionInput } from '../services/web-push';
 import { EVERY_APP_SHIP_SCOPES, type DecisionInput } from '../services/requests';
 import { OVERVIEW_PATH } from './read-overview';
 
@@ -68,6 +69,22 @@ export async function doneDelivery(fleet: string, deliveryId: string): Promise<A
 export async function turnEmail(fleet: string, isOn: boolean): Promise<ActionOutcome<undefined>> {
   return attempt(fleet, async (api) => {
     await api.people.turnEmail.mutate({ isOn });
+    return undefined;
+  });
+}
+
+/** Turns web push on for the browser that subscribed (wake a person, W8). */
+export async function turnOnWebPush(fleet: string, subscription: SubscriptionInput): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    await api.people.turnOnWebPush.mutate({ endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth }, browser: subscription.browser });
+    return undefined;
+  });
+}
+
+/** Removes a browser the person turned web push on in. */
+export async function turnOffWebPush(fleet: string, endpoint: string): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    await api.people.turnOffWebPush.mutate({ endpoint });
     return undefined;
   });
 }
