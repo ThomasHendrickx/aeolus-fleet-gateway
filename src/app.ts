@@ -44,7 +44,7 @@ import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, WAITING_SECRET_HEADER, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerFrontDoor, type WebApp } from './adapters/http/front-door.js';
 import { createChangeHub } from './adapters/http/live.js';
-import { listenToChanges } from './adapters/prisma/changes.js';
+import { createPrismaInboxChanges, listenToChanges } from './adapters/prisma/changes.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
 import { registerA2aEndpoint } from './adapters/http/a2a-endpoint.js';
@@ -503,12 +503,13 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const personToolsOf = () => {
     const crews = createPrismaPersonCrews(prisma);
     const opened = createPrismaOpenedDeliveries(prisma);
+    const changes = createPrismaInboxChanges(prisma);
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
       readInbox: createReadInbox({ ...asCrew, opened }),
-      openDelivery: createOpenDelivery({ ...asCrew, opened, clock }),
-      answerDelivery: createAnswerDelivery({ ...asCrew, opened }),
-      doneDelivery: createDoneDelivery({ ...asCrew, opened }),
+      openDelivery: createOpenDelivery({ ...asCrew, opened, changes, clock }),
+      answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes }),
+      doneDelivery: createDoneDelivery({ ...asCrew, opened, changes }),
       listShips: createListShips(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),

@@ -3,7 +3,7 @@ import type { Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import { handledOf, openedOf, type Dealt, type DealtError } from './opened-of.js';
 import { asPersonCrew, withOwnRefusal, type PersonCaller } from './person-crew.js';
-import type { OpenedDeliveries, PersonCrews, PersonShipDoor } from './ports.js';
+import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from './ports.js';
 
 export type AnswerDelivery = (input: { caller: PersonCaller; deliveryId: string; contentType: string; payload: string }) => Promise<Result<Dealt, DealtError | DomainError<'SEND_REFUSED'>>>;
 
@@ -13,7 +13,7 @@ export type AnswerDelivery = (input: { caller: PersonCaller; deliveryId: string;
  * the delivery's, so an answer tried again after the fleet did not take
  * handled is sent once.
  */
-export function createAnswerDelivery(deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; opened: OpenedDeliveries }): AnswerDelivery {
+export function createAnswerDelivery(deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; opened: OpenedDeliveries; changes: InboxChanges }): AnswerDelivery {
   return async ({ caller, deliveryId, contentType, payload }) => {
     const opened = await openedOf(deps, { caller, deliveryId });
     if (!opened.isOk) {

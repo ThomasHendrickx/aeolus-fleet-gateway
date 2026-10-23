@@ -2,7 +2,7 @@ import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import { asPersonCrew, personCrewOf, withOwnRefusal, type PersonCaller, type PersonCrewError } from './person-crew.js';
-import type { OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
+import type { InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
 
 /** What a person dealt with a delivery as: answered, or done with it. */
 export interface Dealt {
@@ -29,9 +29,13 @@ export async function openedOf(
   return ok(delivery);
 }
 
-/** Reports the delivery handled, then forgets it; kept while the fleet does not take it, so the person can go on again. */
+/**
+ * Reports the delivery handled, then forgets it and tells the person's pages
+ * their inbox changed; kept while the fleet does not take it, so the person
+ * can go on again.
+ */
 export async function handledOf(
-  deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; opened: OpenedDeliveries },
+  deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; opened: OpenedDeliveries; changes: InboxChanges },
   dealt: { caller: PersonCaller; delivery: OpenedDelivery },
 ): Promise<Result<Dealt, DealtError>> {
   const { caller, delivery } = dealt;
@@ -43,5 +47,6 @@ export async function handledOf(
     return refuse('FLEET_UNAVAILABLE', `The fleet did not take that you dealt with it: ${handled.value.value.error.message}. Try again`);
   }
   await deps.opened.remove(delivery.fleetId, { shipId: delivery.shipId, deliveryId: delivery.deliveryId });
+  await deps.changes.tell({ fleetId: delivery.fleetId, shipId: delivery.shipId });
   return ok({ deliveryId: delivery.deliveryId, isHandled: true });
 }
