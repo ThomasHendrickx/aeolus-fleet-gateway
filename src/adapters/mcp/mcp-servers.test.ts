@@ -60,6 +60,15 @@ describe('listing an outside MCP server\'s tools', () => {
     expect(listed.isOk && listed.value.length).toBe(7);
   });
 
+  it('sends no Authorization header to a server that asks for no credential', async () => {
+    await crm.close();
+    crm = await startMockCrm({ isOpen: true });
+    const listed = await servers.listTools({ url: crm.url, credential: { kind: 'none' } });
+    expect(listed.isOk && listed.value.length).toBe(7);
+    expect(crm.authorizations.length).toBeGreaterThan(0);
+    expect(crm.authorizations.every((authorization) => authorization === undefined)).toBe(true);
+  });
+
   it('answers unreachable when the server refuses the credential', async () => {
     const listed = await servers.listTools(withBearer('not-the-token'));
     expect(!listed.isOk && listed.error.kind).toBe('unreachable');
@@ -127,6 +136,14 @@ describe('calling a tool of an outside MCP server (interop 5.2)', () => {
   it('answers notSent when the client credentials are refused', async () => {
     const outcome = await servers.callTool(withClientCredentials('wrong-secret'), { name: 'list_contacts', arguments: {}, timeoutMs: TIMEOUT_MS });
     expect(outcome.kind).toBe('notSent');
+  });
+
+  it('calls a server that asks for no credential with no Authorization header', async () => {
+    await crm.close();
+    crm = await startMockCrm({ isOpen: true });
+    const outcome = await servers.callTool({ url: crm.url, credential: { kind: 'none' } }, { name: 'get_contact', arguments: { id: 'c1' }, timeoutMs: TIMEOUT_MS });
+    expect(outcome.kind).toBe('answered');
+    expect(crm.authorizations.every((authorization) => authorization === undefined)).toBe(true);
   });
 
   it('answers notSent when nothing listens', async () => {

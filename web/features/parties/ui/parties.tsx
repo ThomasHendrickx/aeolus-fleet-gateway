@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
+import { CREDENTIAL_KINDS } from '../../forms/server-credential';
 import { ActionForm } from '../../forms/ui/action-form';
 import { CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
@@ -54,9 +55,12 @@ function ApproveForm({ fleetId, owners }: { fleetId: string; owners: OwnerChoice
         </label>
         <label className={LABEL}>
           <span>Credential</span>
-          <select className={INPUT} name="credentialKind">
-            <option value="bearer">Bearer token</option>
-            <option value="clientCredentials">OAuth client credentials</option>
+          <select className={INPUT} name="credentialKind" defaultValue="bearer">
+            {CREDENTIAL_KINDS.map(({ kind, label }) => (
+              <option key={kind} value={kind}>
+                {label}
+              </option>
+            ))}
           </select>
         </label>
         <label className={LABEL}>
@@ -130,7 +134,7 @@ export async function Parties({ page }: { page: SignedInPage }) {
                   <tr key={party.name} className="border-b border-border align-top">
                     <td className="p-2">{party.name}</td>
                     <td className="p-2 font-mono">{outsideAddressOf(party) ?? ''}</td>
-                    <td className="p-2">{party.kind === 'mcpServer' ? party.credentialKind : party.kind === 'mcpClient' ? 'MCP client' : 'A2A client'}</td>
+                    <td className="p-2">{party.kind === 'mcpServer' || party.kind === 'a2aAgent' ? party.credentialKind : party.kind === 'mcpClient' ? 'MCP client' : 'A2A client'}</td>
                     <td className="p-2">
                       <StatusBadge tone={state.tone} label={state.label} />
                     </td>

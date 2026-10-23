@@ -2,7 +2,7 @@ import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { BUTTONS, CARD } from '../../forms/ui/look';
 import { countsOf, outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty, type Side } from '../party-kinds';
-import { ADD_A2A_CLIENT_PATH, ADD_SERVER_PATH, OUTSIDE_PARTIES_PATH, partyPath } from '../paths';
+import { ADD_A2A_AGENT_PATH, ADD_A2A_CLIENT_PATH, ADD_SERVER_PATH, OUTSIDE_PARTIES_PATH, partyPath } from '../paths';
 import { StatusBadge, Tag } from './status-badge';
 import { SwitchCard } from './switch-card';
 
@@ -66,6 +66,11 @@ export async function OutsideParties({ page, side }: { page: SignedInPage; side:
           {scopes.includes(APPROVING_SCOPE) ? (
             <a className={BUTTONS.secondary} href={inFleet(ADD_A2A_CLIENT_PATH, fleetId)} data-testid="outside-parties-add-a2a-client">
               Add A2A client
+            </a>
+          ) : null}
+          {scopes.includes(APPROVING_SCOPE) ? (
+            <a className={BUTTONS.secondary} href={inFleet(ADD_A2A_AGENT_PATH, fleetId)} data-testid="outside-parties-add-a2a-agent">
+              Add A2A agent
             </a>
           ) : null}
           {scopes.includes(ADDING_SCOPE) ? (

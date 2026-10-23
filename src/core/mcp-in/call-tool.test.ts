@@ -102,6 +102,8 @@ describe("an outside MCP client's tool call is a message its proxy ship sends (i
         outputContentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals',
         sentAt: NOW,
         deadlineAt: new Date('2026-10-19T12:10:00.000Z'),
+        delivery: null,
+        task: null,
         replies: [],
       },
     ]);

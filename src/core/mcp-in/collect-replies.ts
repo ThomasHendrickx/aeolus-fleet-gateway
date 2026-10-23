@@ -8,16 +8,20 @@
  * fleet hands nothing to receiveReply on a pushed lease, so this never
  * pushReceives. A reply is kept on its call, then acknowledged and handled:
  * the gateway's store is the confirmation, so nothing is acknowledged before
- * it is kept. At most a few calls wait at once, each in its turn.
+ * it is kept. After each wait it reads where the call's delivery stands
+ * with sentMessage and keeps it, so the call's state follows interop 3.4: a
+ * delivery the fleet gave up fails the call, and it is waited on no more.
+ * At most a few calls wait at once, each in its turn. An A2A client's calls
+ * are taken the same way (decision 0060).
  */
 import type { MessageId } from '@aeolus-fleet/common';
 
 import type { ProxyShipCrew } from '../mcp-out/hand-call.js';
 import type { Sleep } from '../mcp-out/run-party.js';
-import type { McpClientParty } from '../parties/party.js';
+import type { A2aClientParty, McpClientParty } from '../parties/party.js';
 import type { Clock } from '../shared/clock.js';
 import { stateOf, type ClientCall } from './client-call.js';
-import type { ClientCalls, ReplyReceiver } from './ports.js';
+import type { ClientCalls, ReplyReceiver, SentMessages } from './ports.js';
 
 /** The fleet's codes for a crew token it no longer takes. */
 const CREW_REFUSED = new Set(['UNAUTHORIZED', 'LEASE_ENDED']);
@@ -25,11 +29,12 @@ const CREW_REFUSED = new Set(['UNAUTHORIZED', 'LEASE_ENDED']);
 /** The most calls whose reply the gateway waits on at once, for one party. */
 const WAITING_MAX = 10;
 
-export type CollectReplies = (input: { party: McpClientParty; signal: AbortSignal }) => Promise<{ ended: 'stopped' | 'crewRefused' }>;
+export type CollectReplies = (input: { party: McpClientParty | A2aClientParty; signal: AbortSignal }) => Promise<{ ended: 'stopped' | 'crewRefused' }>;
 
 interface CollectRepliesDeps {
   crew: Pick<ProxyShipCrew, 'ack' | 'handled'>;
   replies: ReplyReceiver;
+  sent: SentMessages;
   calls: ClientCalls;
   clock: Clock;
   sleep: Sleep;
@@ -62,6 +67,10 @@ export function createCollectReplies(deps: CollectRepliesDeps): CollectReplies {
       asks += 1;
       askedAt.set(call.messageId, asks);
       const received = await deps.replies.receiveReply(crewToken, { messageId: call.messageId, signal });
+      const delivery = await deps.sent.sentMessage(crewToken, call.messageId);
+      if (delivery.isOk) {
+        await deps.calls.setDelivery({ fleetId: call.fleetId, messageId: call.messageId }, delivery.value);
+      }
       if (!received.isOk) {
         if (CREW_REFUSED.has(received.error.code)) {
           run.isCrewRefused = true;

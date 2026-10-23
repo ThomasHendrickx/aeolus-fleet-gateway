@@ -1,7 +1,9 @@
-import type { ShipId } from '@aeolus-fleet/common';
+import type { FleetId, ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
+import { createShipAliases } from '../src/adapters/crypto/ship-aliases.js';
+import { createPrismaClient } from '../src/adapters/prisma/client.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
@@ -10,6 +12,7 @@ import { aFreePort, startFleetServer } from './support/fleet-server.js';
 import { mutate, query } from './support/gateway-api.js';
 import { aConnectedGateway, fleetIdOf, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
 import { outsidePartiesOn } from './support/outside-parties.js';
+import { receiveOne } from './support/ship.js';
 
 // A2A in (decision 0060): an approver adds an outside A2A client, and the
 // client reads the cards of the ships its proxy ship reaches, by alias. The
@@ -20,14 +23,24 @@ let app: GatewayApp;
 /** The crew token of a ship holding gateway:approve and fleet:read. */
 let approver: string;
 let owner: ShipId;
+let port: number;
+
+/** A blocking send waits at most this long in these tests: long enough for a reply to travel, short for the sends nobody answers. */
+const WAIT_MAX_MS = 3000;
+
+/** The gateway, started on the test's port against its database and fleet. */
+async function startedGateway(): Promise<GatewayApp> {
+  const started = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: setting.fleet.url, logger: false, publicUrl: setting.address, gatewaySecret: TEST_GATEWAY_SECRET, mcpWaitMaxMs: WAIT_MAX_MS });
+  await started.server.listen({ host: '127.0.0.1', port });
+  return started;
+}
 
 beforeEach(async () => {
   const fleet = await startFleetServer(inject('postgresUrl'));
-  const port = await aFreePort();
+  port = await aFreePort();
   const address = `http://127.0.0.1:${String(port)}`;
   setting = { fleet, address, cookie: await signIn(fleet), databaseUrl: await migratedDatabase(inject('postgresUrl')), pagasae: await startFakePagasae() };
-  app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: address, gatewaySecret: TEST_GATEWAY_SECRET });
-  await app.server.listen({ host: '127.0.0.1', port });
+  app = await startedGateway();
   await aConnectedGateway(setting);
   owner = (await commission(fleet, { cookie: setting.cookie, ship: { name: 'person-owner', type: 'person', kind: 'person' } })).shipId;
   approver = await register(fleet, await commission(fleet, { cookie: setting.cookie, ship: { name: 'approver', type: 'agent', scopes: ['fleet:read', 'gateway:approve'] } }));
@@ -47,15 +60,17 @@ function addSupplier(requestId = crypto.randomUUID()): Promise<Response> {
   return mutate(setting.address, { procedure: 'parties.addA2aClient', crewToken: approver, body: { requestId, name: 'supplier', ownerShipId: owner, scopes: ['fleet:read'] } });
 }
 
-/** A ship of the fleet that states one capability, as its crew. */
-async function aStatingShip(): Promise<void> {
-  const crewToken = await register(setting.fleet, await commission(setting.fleet, { cookie: setting.cookie, ship: { name: 'procurement', type: 'procurement', kind: 'app' } }));
+/** A ship of the fleet that states one capability taking plain text, with the timing given, as its crew: its id and crew token. */
+async function aStatingShip(timing: { waitMs?: number; deadlineMs?: number } = {}): Promise<{ shipId: ShipId; crewToken: string }> {
+  const ship = await commission(setting.fleet, { cookie: setting.cookie, ship: { name: 'procurement', type: 'procurement', kind: 'app' } });
+  const crewToken = await register(setting.fleet, ship);
   const stated = await fetch(`${setting.fleet.url}/api/v1/ship/setStatement`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${crewToken}` },
-    body: JSON.stringify({ summary: 'Procurement: purchase orders.', capabilities: [{ name: 'quote', description: 'Takes a quote for an order.', inputModes: ['text/plain'] }] }),
+    body: JSON.stringify({ summary: 'Procurement: purchase orders.', capabilities: [{ name: 'quote', description: 'Takes a quote for an order.', inputModes: ['text/plain'], ...timing }] }),
   });
   expect(stated.status).toBe(200);
+  return { shipId: ship.shipId, crewToken };
 }
 
 /** The card addresses the supplier's detail lists. */
@@ -115,7 +130,7 @@ describe('an outside A2A client reads the cards of the ships its proxy ship reac
 
     expect(addresses.every((address) => new RegExp(`^${setting.address}/gw/a2a/[a-z][a-z2-7]{7}/\\.well-known/agent-card\\.json$`).test(address))).toBe(true);
     expect(addresses.length).toBeGreaterThan(0);
-    expect(cards.map((card) => ({ hasSkills: 'skills' in card, capabilities: card.capabilities }))).toEqual(cards.map(() => ({ hasSkills: false, capabilities: { streaming: false, pushNotifications: false, extendedAgentCard: true } })));
+    expect(cards.map((card) => ({ hasSkills: 'skills' in card, capabilities: card.capabilities }))).toEqual(cards.map(() => ({ hasSkills: false, capabilities: { streaming: true, pushNotifications: true, extendedAgentCard: true } })));
     expect(JSON.stringify(cards)).not.toContain('procurement');
   });
 
@@ -135,5 +150,268 @@ describe('an outside A2A client reads the cards of the ships its proxy ship reac
     const called = await extendedCard(`${setting.address}/gw/a2a/azzzzzzz`, bearer);
 
     expect(called.status).toBe(404);
+  });
+});
+
+/** A call of the ship's crew to the fleet: its answer. */
+async function asShip(crewToken: string, call: { path: string; body: unknown }): Promise<unknown> {
+  const response = await fetch(`${setting.fleet.url}/api/v1${call.path}`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${crewToken}` }, body: JSON.stringify(call.body) });
+  expect(response.status, await response.clone().text()).toBe(200);
+  return response.json();
+}
+
+/** The ship replies to a message, as its crew. */
+async function replyTo(crewToken: string, reply: { to: string; inReplyTo: string; contentType?: string; payload: string }): Promise<void> {
+  const body = { selector: { kind: 'ship', shipId: reply.to }, inReplyTo: reply.inReplyTo, contentType: reply.contentType ?? 'text/plain', payload: reply.payload, idempotencyKey: crypto.randomUUID() };
+  await asShip(crewToken, { path: '/ship/send', body });
+}
+
+const rpcAnswerSchema = z.object({ result: z.record(z.string(), z.unknown()).optional(), error: z.object({ code: z.number() }).optional() });
+const taskSchema = z.object({ id: z.string(), contextId: z.string(), status: z.object({ state: z.string() }), artifacts: z.array(z.object({ parts: z.array(z.record(z.string(), z.unknown())) })).optional() });
+
+describe("an outside A2A client's message is a message its proxy ship sends (decision 0060)", () => {
+  let bearer: string;
+  let supplierShipId: string;
+  let procurement: { shipId: ShipId; crewToken: string };
+  let interfaceUrl: string;
+
+  /** The supplier's client and the procurement ship it reaches, its capability with the timing given. */
+  async function aSupplierReaching(timing: { waitMs?: number; deadlineMs?: number } = {}): Promise<void> {
+    const added = addedSchema.parse(await (await addSupplier()).json()).result.data;
+    bearer = added.bearer;
+    supplierShipId = added.party.proxyShipId;
+    procurement = await aStatingShip(timing);
+    const fleetId: FleetId = await fleetIdOf(setting);
+    interfaceUrl = `${setting.address}/gw/a2a/${createShipAliases(TEST_GATEWAY_SECRET).aliasOf(fleetId, procurement.shipId)}`;
+  }
+
+  /** A JSON-RPC call at the procurement alias's interface, as the supplier's client. */
+  async function rpc(method: string, params: Record<string, unknown>): Promise<z.infer<typeof rpcAnswerSchema>> {
+    const answered = await fetch(interfaceUrl, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${bearer}`, 'a2a-version': '1.0' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+    return rpcAnswerSchema.parse(await answered.json());
+  }
+
+  /** SendMessage of one text part, at once unless blocking: the task answered. */
+  async function sent(message: { messageId: string; text: string; taskId?: string; mediaType?: string }, isBlocking = false): Promise<z.infer<typeof taskSchema>> {
+    const { text, mediaType, ...ids } = message;
+    const answered = await rpc('SendMessage', { message: { ...ids, role: 'ROLE_USER', parts: [{ text, ...(mediaType === undefined ? {} : { mediaType }) }] }, configuration: { returnImmediately: !isBlocking } });
+    return taskSchema.parse(z.object({ task: z.unknown() }).parse(answered.result).task);
+  }
+
+  const taskNow = async (taskId: string) => taskSchema.parse((await rpc('GetTask', { id: taskId })).result);
+
+  /** The interface of another ship the supplier reaches: its tasks are read at any alias it reaches. */
+  async function anotherInterface(): Promise<string> {
+    const other = (await cardAddresses()).find((address) => !address.startsWith(`${interfaceUrl}/`));
+    return (other ?? '').replace('/.well-known/agent-card.json', '');
+  }
+
+  it("sends the message to the alias's ship as the proxy ship, once for the same messageId, and answers the same task", async () => {
+    await aSupplierReaching();
+
+    const [first, again] = [await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' }), await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' })];
+    const deliveries = z.object({ deliveries: z.array(z.object({ senderShipId: z.string(), payload: z.string() })) }).parse(await asShip(procurement.crewToken, { path: '/ship/receive', body: { max: 10 } })).deliveries;
+
+    expect({ again: again.id, deliveries }).toEqual({ again: first.id, deliveries: [expect.objectContaining({ senderShipId: supplierShipId, payload: 'Quote 40 chairs.' })] });
+    expect(first.status.state).toBe('TASK_STATE_SUBMITTED');
+  });
+
+  it('answers an A2A error and keeps no task when the fleet refuses the send', async () => {
+    await aSupplierReaching();
+
+    const answered = await rpc('SendMessage', { message: { messageId: 'm-1', role: 'ROLE_USER', parts: [{ text: 'Quote 40 chairs.', mediaType: 'not a media type' }] } });
+
+    expect({ code: answered.error?.code, tasks: (await rpc('ListTasks', {})).result?.tasks }).toEqual({ code: -32603, tasks: [] });
+  });
+
+  it('answers no task while the fleet does not answer', async () => {
+    await aSupplierReaching();
+    await setting.fleet.stop();
+
+    const answered = await fetch(interfaceUrl, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${bearer}`, 'a2a-version': '1.0' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'SendMessage', params: { message: { messageId: 'm-1', role: 'ROLE_USER', parts: [{ text: 'Quote 40 chairs.' }] } } }) });
+
+    expect(answered.status).toBe(502);
+    expect(await answered.text()).not.toContain('"task"');
+  });
+
+  it("completes the task with the ship's reply, which a blocking send waits for", async () => {
+    await aSupplierReaching({ waitMs: WAIT_MAX_MS });
+    const replied = (async () => {
+      const delivery = await receiveOne(setting.fleet, procurement.crewToken);
+      await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', payload: '40 chairs: 2000 euros.' });
+    })();
+
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' }, true);
+    await replied;
+
+    const completed = task.status.state === 'TASK_STATE_COMPLETED' ? task : await taskNow(task.id);
+    expect({ state: completed.status.state, parts: completed.artifacts?.[0]?.parts }).toEqual({ state: 'TASK_STATE_COMPLETED', parts: [{ text: '40 chairs: 2000 euros.', mediaType: 'text/plain' }] });
+  });
+
+  it("fails the task at its capability's deadline", async () => {
+    await aSupplierReaching({ deadlineMs: 1000 });
+
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+
+    await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_FAILED');
+  });
+
+  it('fails the task once the fleet gave its delivery up, as sentMessage says', { timeout: 60_000 }, async () => {
+    await aSupplierReaching();
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+
+    interfaceUrl = await anotherInterface();
+    expect(interfaceUrl).not.toBe('');
+    // Retiring the ship abandons its deliveries; it is reached no more, so the task is read at another alias.
+    const retired = await fetch(`${setting.fleet.url}/trpc/fleet.retire`, { method: 'POST', headers: { 'content-type': 'application/json', origin: setting.fleet.url, cookie: setting.cookie }, body: JSON.stringify({ shipId: procurement.shipId }) });
+    expect(retired.status, await retired.clone().text()).toBe(200);
+
+    await expect.poll(async () => (await taskNow(task.id)).status.state, { timeout: 50_000, interval: 1000 }).toBe('TASK_STATE_FAILED');
+  });
+
+  it("continues a task the ship asked a question in, in reply to the question", async () => {
+    await aSupplierReaching();
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+    const delivery = await receiveOne(setting.fleet, procurement.crewToken);
+    await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify({ id: crypto.randomUUID(), title: 'Which colour?', context: 'The chairs come in two colours.', options: [{ key: 1, label: 'Red' }, { key: 2, label: 'Blue' }] }) });
+    await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_INPUT_REQUIRED');
+
+    const continued = await sent({ messageId: 'm-2', text: 'Blue.', taskId: task.id });
+    const followUp = await receiveOne(setting.fleet, procurement.crewToken);
+
+    expect({ taskId: continued.id, contextId: continued.contextId, payload: followUp?.payload, isInReplyToQuestion: followUp?.inReplyTo !== delivery?.messageId && followUp?.inReplyTo !== undefined }).toEqual({ taskId: task.id, contextId: task.contextId, payload: 'Blue.', isInReplyToQuestion: true });
+  });
+
+  it('loses no reply that came while the gateway was down', async () => {
+    await aSupplierReaching();
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+    const delivery = await receiveOne(setting.fleet, procurement.crewToken);
+    await app.close();
+
+    await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', payload: '40 chairs: 2000 euros.' });
+    app = await startedGateway();
+    await app.restoreConnections();
+
+    await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_COMPLETED');
+  });
+
+  /** A JSON-RPC streaming call as the supplier's client: its events' results as they come, until the stream closes or the signal aborts it. */
+  async function* streamed(call: { method: string; params: Record<string, unknown>; signal?: AbortSignal }): AsyncGenerator<Record<string, unknown>, void, undefined> {
+    const answered = await fetch(interfaceUrl, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${bearer}`, 'a2a-version': '1.0' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: call.method, params: call.params }), ...(call.signal === undefined ? {} : { signal: call.signal }) });
+    expect(answered.headers.get('content-type')).toBe('text/event-stream');
+    const decoder = new TextDecoder();
+    let held = '';
+    const reader = answered.body?.getReader();
+    for (let read = await reader?.read(); read !== undefined && !read.done; read = await reader?.read()) {
+      held += decoder.decode(z.instanceof(Uint8Array).parse(read.value), { stream: true });
+      const events = held.split('\n\n');
+      held = events.pop() ?? '';
+      for (const event of events.filter((each) => each.startsWith('data: '))) {
+        yield z.object({ result: z.record(z.string(), z.unknown()) }).parse(JSON.parse(event.slice('data: '.length))).result;
+      }
+    }
+  }
+
+  const stateOf = (event: Record<string, unknown>) => z.object({ status: z.object({ state: z.string() }) }).parse(event.task ?? event.statusUpdate).status.state;
+
+  it("streams a message's task from submitted to completed by the ship's reply, and closes", async () => {
+    await aSupplierReaching();
+    const replied = (async () => {
+      const delivery = await receiveOne(setting.fleet, procurement.crewToken);
+      await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', payload: '40 chairs: 2000 euros.' });
+    })();
+
+    const events: Record<string, unknown>[] = [];
+    for await (const event of streamed({ method: 'SendStreamingMessage', params: { message: { messageId: 'm-1', role: 'ROLE_USER', parts: [{ text: 'Quote 40 chairs.' }] } } })) {
+      events.push(event);
+    }
+    await replied;
+
+    expect(events[0]).toMatchObject({ task: { status: { state: 'TASK_STATE_SUBMITTED' } } });
+    expect(events.at(-1)).toMatchObject({ statusUpdate: { status: { state: 'TASK_STATE_COMPLETED' } } });
+    expect(events.find((event) => 'artifactUpdate' in event)).toMatchObject({ artifactUpdate: { artifact: { parts: [{ text: '40 chairs: 2000 euros.', mediaType: 'text/plain' }] } } });
+  });
+
+  it('loses nothing while a dropped stream is away: subscribing again streams the task as it stands', async () => {
+    await aSupplierReaching();
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+    const dropped = new AbortController();
+    const first = await streamed({ method: 'SubscribeToTask', params: { id: task.id }, signal: dropped.signal }).next();
+    dropped.abort();
+
+    const delivery = await receiveOne(setting.fleet, procurement.crewToken);
+    await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify({ id: crypto.randomUUID(), title: 'Which colour?', context: 'The chairs come in two colours.', options: [{ key: 1, label: 'Red' }, { key: 2, label: 'Blue' }] }) });
+    await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_INPUT_REQUIRED');
+    const dropping = new AbortController();
+    const resubscribed = await streamed({ method: 'SubscribeToTask', params: { id: task.id }, signal: dropping.signal }).next();
+    dropping.abort();
+
+    expect({ first: first.value === undefined ? undefined : stateOf(first.value), again: resubscribed.value === undefined ? undefined : stateOf(resubscribed.value) }).toEqual({ first: 'TASK_STATE_SUBMITTED', again: 'TASK_STATE_INPUT_REQUIRED' });
+  });
+
+  it('closes the streams still open when the gateway stops', async () => {
+    await aSupplierReaching();
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+    const events = streamed({ method: 'SubscribeToTask', params: { id: task.id } });
+    await events.next();
+
+    await app.close();
+    app = await startedGateway();
+
+    await expect(events.next()).resolves.toMatchObject({ done: true });
+  });
+
+  it('refuses to subscribe to an ended task as an unsupported operation', async () => {
+    await aSupplierReaching({ deadlineMs: 500 });
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+    await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_FAILED');
+
+    expect((await rpc('SubscribeToTask', { id: task.id })).error?.code).toBe(-32004);
+  });
+
+  it.each([
+    ['an http webhook', 'http://hooks.supplier.example/a2a'],
+    ['a name that resolves to a loopback address', 'https://localhost/a2a'],
+    ['a loopback address', 'https://127.0.0.1/a2a'],
+    ['a private address', 'https://10.0.0.5/a2a'],
+    ['cloud metadata', 'https://169.254.169.254/latest/meta-data'],
+  ])('refuses a push config at %s as invalid params', async (_kind, url) => {
+    await aSupplierReaching();
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+
+    const answered = await rpc('CreateTaskPushNotificationConfig', { taskId: task.id, id: 'hook-1', url });
+
+    // An empty list is left out of the answer, as proto JSON leaves it out.
+    expect({ code: answered.error?.code, configs: (await rpc('ListTaskPushNotificationConfigs', { taskId: task.id })).result?.configs ?? [] }).toEqual({ code: -32602, configs: [] });
+  });
+
+  it("pushes the ship's reply, gives the push up at an inside address, and GetTask still answers", { timeout: 60_000 }, async () => {
+    await aSupplierReaching();
+    const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
+    // A config whose name came to resolve inside after it was set: kept here as the set would have kept it.
+    const prisma = createPrismaClient(setting.databaseUrl);
+    await prisma.a2aPushConfig.create({ data: { fleetId: await fleetIdOf(setting), taskId: task.id, id: 'hook-1', party: 'supplier', url: 'https://localhost/a2a', token: 'tok-1', createdAt: new Date(), noticedMark: 'before', isFollowing: true } });
+
+    const delivery = await receiveOne(setting.fleet, procurement.crewToken);
+    await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', payload: '40 chairs: 2000 euros.' });
+
+    await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_COMPLETED');
+    const pushed = async () => ({ pushes: (await prisma.a2aPush.findMany({ orderBy: { pushId: 'asc' } })).map((push) => ({ state: push.state, reason: push.reason, body: push.body })), isFollowing: (await prisma.a2aPushConfig.findFirst())?.isFollowing });
+    await expect.poll(async () => (await pushed()).pushes.some((push) => push.body.includes('TASK_STATE_COMPLETED') && push.state === 'givenUp'), { timeout: 30_000 }).toBe(true);
+    const { pushes, isFollowing } = await pushed();
+    await prisma.$disconnect();
+
+    expect({ reasons: [...new Set(pushes.map((push) => push.reason))], isFollowing, state: (await taskNow(task.id)).status.state }).toEqual({ reasons: ['The webhook resolves to an inside address'], isFollowing: false, state: 'TASK_STATE_COMPLETED' });
+  });
+
+  it('sends a message and reads its task over HTTP+JSON', async () => {
+    await aSupplierReaching();
+    const headers = { 'content-type': 'application/json', authorization: `Bearer ${bearer}`, 'a2a-version': '1.0' };
+
+    const answered = await fetch(`${interfaceUrl}/message:send`, { method: 'POST', headers, body: JSON.stringify({ message: { messageId: 'm-1', role: 'ROLE_USER', parts: [{ text: 'Quote 40 chairs.' }] }, configuration: { returnImmediately: true } }) });
+    const { task } = z.object({ task: taskSchema }).parse(await answered.json());
+    const read = await fetch(`${interfaceUrl}/tasks/${task.id}`, { headers });
+
+    expect({ status: read.status, task: taskSchema.parse(await read.json()).id }).toEqual({ status: 200, task: task.id });
   });
 });

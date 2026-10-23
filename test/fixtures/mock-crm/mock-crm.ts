@@ -34,6 +34,8 @@ const SLOW_TOOL_PAST_WAIT_MS = 1_000;
 export interface MockCrmOptions {
   /** How long `forecast_revenue` takes; by default past the gateway's default MCP_WAIT_MAX_MS. */
   slowToolMs?: number;
+  /** Whether it asks for no credential, as a server reached only on a private network. */
+  isOpen?: boolean;
 }
 
 export interface Contact {
@@ -58,6 +60,10 @@ export interface MockCrm {
   calls: Map<string, number>;
   /** While true, `forecast_revenue` never answers: a call the gateway sent and gets no answer to. */
   isSlowToolHeld: boolean;
+  /** The Authorization header of each request to its MCP endpoint, none when it carried none. */
+  authorizations: (string | undefined)[];
+  /** Tools it lists beyond its own, by name, as a server adds tools after it was added: each answers its own name. */
+  addedTools: string[];
   close(): Promise<void>;
 }
 
@@ -182,6 +188,13 @@ function crmServer(crm: MockCrm, options: MockCrmOptions): McpServer {
     },
   );
 
+  for (const name of crm.addedTools) {
+    mcp.registerTool(name, { description: `The added tool ${name}.`, inputSchema: z.object({}) }, () => {
+      counted(name);
+      return { content: [{ type: 'text' as const, text: name }] };
+    });
+  }
+
   return mcp;
 }
 
@@ -239,6 +252,8 @@ export async function startMockCrm(options: MockCrmOptions = {}): Promise<MockCr
     deals: [{ id: 'd1', contactId: 'c1', title: 'Analytical engine', amount: 1200 }],
     calls: new Map(),
     isSlowToolHeld: false,
+    authorizations: [],
+    addedTools: [],
     close: async () => {
       crm.isSlowToolHeld = false;
       await server.close();
@@ -259,7 +274,8 @@ export async function startMockCrm(options: MockCrmOptions = {}): Promise<MockCr
   }));
   server.post('/token', tokenEndpointOf(crm));
   server.all('/mcp', async (request, reply) => {
-    if (!isSignedIn(request)) {
+    crm.authorizations.push(request.headers.authorization);
+    if (options.isOpen !== true && !isSignedIn(request)) {
       return reply
         .code(HTTP_UNAUTHORIZED)
         .header('www-authenticate', `Bearer resource_metadata="${origin()}/.well-known/oauth-protected-resource/mcp"`)

@@ -5,6 +5,7 @@
 import type { inferRouterOutputs } from '@trpc/server';
 
 import type { GatewayRouter } from '../../../../src/adapters/trpc/router.js';
+import type { CredentialKind } from '../../forms/server-credential';
 
 /** A request as the API shows it. */
 export type ShownRequest = inferRouterOutputs<GatewayRouter>['requests']['toDecide'][number];
@@ -84,7 +85,7 @@ export function scopeLabel(scope: string): string {
 
 /** The server's credential as the decision form takes it. */
 export interface ServerCredentialInput {
-  readonly credentialKind: 'bearer' | 'clientCredentials';
+  readonly credentialKind: CredentialKind;
   readonly token: string;
   readonly clientId: string;
   readonly clientSecret: string;

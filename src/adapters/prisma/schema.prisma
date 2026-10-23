@@ -74,14 +74,18 @@ model Party {
   fleetId          String   @map("fleet_id")
   name             String
   kind             String
-  /// An MCP server's: its URL, its credential as JSON (a static bearer, or OAuth client credentials), and its calls at once.
+  /// An MCP server's: its URL, its credential as JSON (none, a static bearer, or OAuth client credentials), and its calls at once. An A2A agent's too, its card address as the URL.
   url              String?
   credential       Json?
   concurrencyLimit Int?     @map("concurrency_limit")
+  /// An MCP server's tool switches, by tool name (aeolus-fleet#1151); none kept yet means every tool it lists is on.
+  toolSwitches     Json?    @map("tool_switches")
   /// An MCP client's: its OAuth client id.
   clientId         String?  @map("client_id")
   /// An A2A client's: the hash of the bearer it was shown once, which names it on every call; unique across fleets, as the bearer alone names the party (decision 0060).
   bearerHash       String?  @unique @map("bearer_hash")
+  /// An A2A agent's: whether a message that died unconfirmed may be handed again, until an approver marks it not (A9).
+  isRepeatable     Boolean? @map("is_repeatable")
   state            String
   proxyShipId      String?  @map("proxy_ship_id")
   /// Kept only from the proxy ship's commission until the gateway crews it.
@@ -184,14 +188,74 @@ model ClientCall {
   party      String
   handle     String
   shipId     String   @map("ship_id")
-  capability        String
+  /// None when an A2A message matched no capability, and then its first reply answers it (decision 0060).
+  capability        String?
   outputContentType String?  @map("output_content_type")
   sentAt            DateTime @map("sent_at")
   deadlineAt        DateTime? @map("deadline_at")
+  /// Where its delivery stands, as the gateway last read it from the fleet's sentMessage.
+  deliveryState     String?   @map("delivery_state")
+  deliverySince     DateTime? @map("delivery_since")
+  /// An A2A call's task, and the client's message as A2A JSON; none for an MCP call.
+  taskId            String?   @map("task_id")
+  taskMessage       String?   @map("task_message")
 
   @@id([fleetId, messageId])
   @@unique([fleetId, handle])
+  @@index([fleetId, taskId])
   @@map("client_calls")
+}
+
+/// An outside A2A client's task (decision 0060): its id, the HMAC of its first message, its party and its context.
+model A2aTask {
+  fleetId   String   @map("fleet_id")
+  taskId    String   @map("task_id")
+  party     String
+  contextId String   @map("context_id")
+  createdAt DateTime @map("created_at")
+
+  @@id([fleetId, taskId])
+  @@index([fleetId, party, createdAt(sort: Desc), taskId(sort: Desc)])
+  @@map("a2a_tasks")
+}
+
+/// A push config of an outside A2A client's task (slice 4): its webhook, and the vault of its token and authentication, never answered back; with the task as last noticed.
+model A2aPushConfig {
+  fleetId        String   @map("fleet_id")
+  taskId         String   @map("task_id")
+  id             String
+  party          String
+  url            String
+  token          String?
+  /// The scheme and credentials the webhook is called with, as JSON.
+  authentication Json?
+  createdAt      DateTime @map("created_at")
+  noticedMark    String   @map("noticed_mark")
+  isFollowing    Boolean  @map("is_following")
+  pushes         A2aPush[]
+
+  @@id([fleetId, taskId, id])
+  @@index([fleetId, party, isFollowing])
+  @@map("a2a_push_configs")
+}
+
+/// A push of one event of a config's task to its webhook (slice 4): pending until delivered or given up, kept over a restart; its id is its order.
+model A2aPush {
+  pushId    Int           @id @default(autoincrement()) @map("push_id")
+  fleetId   String        @map("fleet_id")
+  taskId    String        @map("task_id")
+  configId  String        @map("config_id")
+  party     String
+  body      String
+  attempts  Int
+  nextAt    DateTime      @map("next_at")
+  state     String
+  reason    String?
+  settledAt DateTime?     @map("settled_at")
+  config    A2aPushConfig @relation(fields: [fleetId, taskId, configId], references: [fleetId, taskId, id], onDelete: Cascade)
+
+  @@index([fleetId, party, state, taskId, configId, pushId])
+  @@map("a2a_pushes")
 }
 
 /// The replies naming an outside client's call, each kept once per delivery before it is acknowledged.

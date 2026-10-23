@@ -117,6 +117,8 @@ export function createCallTool(deps: CallToolDeps): CallTool {
       outputContentType: tool.target.outputContentType,
       sentAt,
       deadlineAt: tool.target.deadlineMs === null ? null : new Date(sentAt.getTime() + tool.target.deadlineMs),
+      delivery: null,
+      task: null,
     });
     return ok(await answerWithin(deps, { fleetId: caller.fleetId, messageId, handle, since: sentAt, waitMs: tool.target.waitMs }));
   };
