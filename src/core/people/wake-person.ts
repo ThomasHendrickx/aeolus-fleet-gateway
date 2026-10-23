@@ -3,7 +3,7 @@ import { RECEIVE_MAX_UPPER_BOUND } from '@aeolus-fleet/common';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { ok, type Result } from '../shared/result.js';
-import type { PersonShip, PersonShipDoor, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
+import type { FocusedPages, HandOverChannel, PersonShip, PersonShipDoor, PushedPersonDelivery, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
 
 /**
  * What a wake came to: nothing left to wake (settled), a wake held back
@@ -21,14 +21,29 @@ export type WakePerson = (ship: PersonShip, crewToken: string) => Promise<Result
  * whose window has passed sends one wake for all of them; each fresh
  * delivery is then handed no. 1, naming the first channel that went out, so
  * a delivery is woken once. A wake held back by a window, or that no
- * channel sent, hands nothing.
+ * channel sent, hands nothing. While a page of the person is in focus, the
+ * page shows what arrives (W6): each fresh delivery is handed through it
+ * and no wake goes out.
  */
 export function createWakePerson(deps: {
   door: Pick<PersonShipDoor, 'pushReceive' | 'handed'>;
   channels: readonly WakeChannel[];
   wakesSent: WakesSent;
+  focused: FocusedPages;
+  /** How long a page counts in focus since it was last seen so. */
+  focusFreshMs: number;
   clock: Clock;
 }): WakePerson {
+  const handAll = async (crewToken: string, handed: { fresh: readonly PushedPersonDelivery[]; channel: HandOverChannel }): Promise<Result<WakeOutcome, FleetRefusal>> => {
+    for (const { deliveryId } of handed.fresh) {
+      const answered = await deps.door.handed(crewToken, { deliveryId, handOverNumber: 1, channel: handed.channel });
+      if (!answered.isOk) {
+        return answered;
+      }
+    }
+    return ok({ kind: 'settled' });
+  };
+
   return async (ship, crewToken) => {
     const taken = await deps.door.pushReceive(crewToken, { max: RECEIVE_MAX_UPPER_BOUND });
     if (!taken.isOk) {
@@ -37,6 +52,9 @@ export function createWakePerson(deps: {
     const fresh = taken.value.filter(({ handOverNumber }) => handOverNumber === null);
     if (fresh.length === 0) {
       return ok({ kind: 'settled' });
+    }
+    if (await deps.focused.isAnyInFocus(ship, new Date(deps.clock.now().getTime() - deps.focusFreshMs))) {
+      return handAll(crewToken, { fresh, channel: 'page' });
     }
     const turnedOn = (await Promise.all(deps.channels.map(async (channel) => ((await channel.isOn(ship)) ? [channel] : [])))).flat();
     if (turnedOn.length === 0) {
@@ -64,12 +82,6 @@ export function createWakePerson(deps: {
     if (firstOut === undefined) {
       return ok({ kind: 'failed' });
     }
-    for (const { deliveryId } of fresh) {
-      const handed = await deps.door.handed(crewToken, { deliveryId, handOverNumber: 1, channel: firstOut });
-      if (!handed.isOk) {
-        return handed;
-      }
-    }
-    return ok({ kind: 'settled' });
+    return handAll(crewToken, { fresh, channel: firstOut });
   };
 }
