@@ -59,6 +59,11 @@ export function memoryPersonCrews(): PersonCrews & { held: PersonCrew[] } {
   const held: PersonCrew[] = [];
   return {
     held,
+    crewed: ({ after, limit }) => {
+      const key = ({ fleetId, shipId }: { fleetId: string; shipId: string }) => `${fleetId}/${shipId}`;
+      const listed = held.map(({ fleetId, shipId }) => ({ fleetId, shipId })).sort((a, b) => key(a).localeCompare(key(b)));
+      return Promise.resolve(listed.filter((ship) => after === null || key(ship) > key(after)).slice(0, limit));
+    },
     find: (fleetId, shipId) => Promise.resolve(held.find((crew) => crew.fleetId === fleetId && crew.shipId === shipId)),
     save: (crew) => {
       held.push(crew);

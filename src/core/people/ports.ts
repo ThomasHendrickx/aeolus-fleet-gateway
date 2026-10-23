@@ -32,7 +32,15 @@ export interface PersonCrew {
   readonly crewedAt: Date;
 }
 
+/** A person ship, by its fleet and id. */
+export interface PersonShip {
+  readonly fleetId: FleetId;
+  readonly shipId: ShipId;
+}
+
 export interface PersonCrews {
+  /** The person ships it holds a crew for, of every fleet, by fleet and ship, after the one given (wake a person, W7). */
+  crewed(page: { after: PersonShip | null; limit: number }): Promise<PersonShip[]>;
   find(fleetId: FleetId, shipId: ShipId): Promise<PersonCrew | undefined>;
   save(crew: PersonCrew): Promise<void>;
   /** Forgets a crew that no longer works, as when its lease ended, so the ship is crewed again. */
