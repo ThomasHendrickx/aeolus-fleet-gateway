@@ -63,6 +63,13 @@ export interface Pagasae {
    * token used twice), unavailable when it did not answer.
    */
   refresh(refreshToken: string): Promise<Result<PagasaeTokens, { kind: 'refused' | 'unavailable'; reason: string }>>;
+  /**
+   * The account's grant for an ID-JAG a client of the gateway brought
+   * (aeolus-fleet company sign-in design, slice 6): pagasae checks it against
+   * the organisation's identity provider, for the gateway and that client,
+   * once; refused as for any refusal there, unavailable when it did not answer.
+   */
+  exchangeIdJag(handed: { idJag: string; clientId: string }): Promise<Result<PagasaeTokens, { kind: 'refused' | 'unavailable'; reason: string }>>;
 }
 
 /** A person's sign-in kept for their MCP client or the gateway's pages: the account in the fleet, and pagasae's tokens to act as it. */

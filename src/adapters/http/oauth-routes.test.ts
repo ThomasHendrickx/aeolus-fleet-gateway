@@ -177,7 +177,7 @@ describe("the gateway's OAuth metadata", () => {
     expect(answer.json()).toEqual({ resource: RESOURCE, authorization_servers: [ISSUER], bearer_methods_supported: ['header'] });
   });
 
-  it('states what the authorization server serves (RFC 8414)', async () => {
+  it('states what the authorization server serves (RFC 8414), the ID-JAG grant among them where people sign in through pagasae', async () => {
     const answer = await server.inject({ url: '/.well-known/oauth-authorization-server' });
 
     expect(answer.json()).toEqual({
@@ -185,7 +185,8 @@ describe("the gateway's OAuth metadata", () => {
       authorization_endpoint: `${ISSUER}/authorize`,
       token_endpoint: `${ISSUER}/token`,
       response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
+      grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+      authorization_grant_profiles_supported: ['urn:ietf:params:oauth:grant-profile:id-jag'],
       code_challenge_methods_supported: ['S256'],
       token_endpoint_auth_methods_supported: ['none', 'client_secret_basic', 'client_secret_post'],
       client_id_metadata_document_supported: true,

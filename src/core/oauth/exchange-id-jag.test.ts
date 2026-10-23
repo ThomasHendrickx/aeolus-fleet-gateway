@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeSecrets, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { memoryPartyStore } from '../../../test/support/party-fakes.js';
-import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants } from '../../../test/support/sign-in-fakes.js';
+import { CHARLOTTE_TOKENS, fakeIdJagPagasae, memoryAccountGrants } from '../../../test/support/sign-in-fakes.js';
 import { createAuthenticateAccessToken } from './authenticate-access-token.js';
 import { createExchangeIdJag } from './exchange-id-jag.js';
 import { createExchangeToken } from './exchange-token.js';
@@ -23,7 +23,7 @@ const ISSUED_AT = new Date('2026-10-23T09:00:00.000Z');
 let clients: ReturnType<typeof memoryOAuthClients>;
 let tokens: ReturnType<typeof memoryIssuedTokens>;
 let grants: ReturnType<typeof memoryAccountGrants>;
-let pagasae: ReturnType<typeof fakePagasae>;
+let pagasae: ReturnType<typeof fakeIdJagPagasae>;
 let servedFleets: Set<string>;
 let exchangeToken: ReturnType<typeof createExchangeToken>;
 let authenticate: ReturnType<typeof createAuthenticateAccessToken>;
@@ -37,7 +37,7 @@ beforeEach(async () => {
   await clients.save({ clientId: 'client-machine', fleetId: FLEET_ID, name: 'Machine', redirectUris: [], secretHash: 'hash(machine-secret)', grant: 'clientCredentials' });
   tokens = memoryIssuedTokens();
   grants = memoryAccountGrants();
-  pagasae = fakePagasae({ refusal: 'unused' }, {}, { 'id-jag-charlotte': CHARLOTTE_TOKENS, 'id-jag-elsewhere': { ...CHARLOTTE_TOKENS, fleetId: OTHER_FLEET_ID }, 'id-jag-down': 'unavailable' });
+  pagasae = fakeIdJagPagasae({ 'id-jag-charlotte': CHARLOTTE_TOKENS, 'id-jag-elsewhere': { ...CHARLOTTE_TOKENS, fleetId: OTHER_FLEET_ID }, 'id-jag-down': 'unavailable' });
   servedFleets = new Set([FLEET_ID, OTHER_FLEET_ID]);
   const exchangeIdJag = createExchangeIdJag({ clients, tokens, secrets, clock, resource: RESOURCE, pagasae, grants, servesFleet: (fleetId) => Promise.resolve(servedFleets.has(fleetId)) });
   exchangeToken = createExchangeToken({ clients, codes: memoryAuthorizationCodes(), tokens, secrets, clock, resource: RESOURCE, parties: memoryPartyStore(), servesOutsideParties: () => Promise.resolve(true), exchangeIdJag });
@@ -56,7 +56,7 @@ describe('a registered client posts an ID-JAG (JWT bearer grant)', () => {
     expect(answer).toEqual({ isOk: true, value: { accessToken: 'secret-2', refreshToken: null, expiresInSeconds: 3600, scope: null } });
     expect(pagasae.handedOver).toEqual([{ idJag: 'id-jag-charlotte', clientId: 'client-claude' }]);
     expect(grants.held).toMatchObject([{ grantId: 'secret-1', fleetId: FLEET_ID, accountId: 'acc-charlotte', refreshToken: 'pagasae-refresh-1', accountToken: 'account-token-1' }]);
-    await expect(authenticate('secret-2')).resolves.toMatchObject({ isOk: true, value: { fleetId: FLEET_ID, clientId: 'client-claude', holder: { kind: 'account', grantId: 'secret-1' } } });
+    await expect(authenticate('secret-2')).resolves.toMatchObject({ isOk: true, value: { fleetId: FLEET_ID, clientId: 'client-claude', kind: 'account', grantId: 'secret-1' } });
     expect(tokens.held).toMatchObject([{ refreshHash: null, refreshExpiresAt: null, accessExpiresAt: new Date('2026-10-23T10:00:00.000Z') }]);
   });
 
@@ -86,10 +86,9 @@ describe('a registered client posts an ID-JAG (JWT bearer grant)', () => {
   });
 
   it('says to sign in at the gateway’s address when pagasae refuses, as for an account in several fleets', async () => {
-    await expect(exchangeToken(anIdJagGrant({ assertion: 'id-jag-forged' }))).resolves.toMatchObject({
-      isOk: false,
-      error: { error: 'invalid_grant', description: expect.stringContaining('one fleet') as unknown },
-    });
+    const answer = await exchangeToken(anIdJagGrant({ assertion: 'id-jag-forged' }));
+
+    expect(answer.isOk ? '' : answer.error.description).toContain('ID-JAG is only available for accounts in one fleet');
   });
 
   it('answers temporarily unavailable while pagasae does not answer', async () => {
