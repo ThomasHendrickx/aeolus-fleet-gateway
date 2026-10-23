@@ -66,14 +66,14 @@ function partsOf(parts: readonly Part[]): AgentPart[] {
 const jsonOf = (event: StreamResponse) => JSON.stringify(StreamResponse.toJSON(event));
 
 function statusEvent(update: { taskId: string; contextId: string; status: TaskStatus | undefined }): AgentEvent {
-  return { kind: 'status', state: STATES[update.status?.state ?? TaskState.TASK_STATE_UNSPECIFIED], json: jsonOf({ payload: { $case: 'statusUpdate', value: { ...update, metadata: undefined } } }) };
+  return { kind: 'status', state: STATES[update.status?.state ?? TaskState.TASK_STATE_UNSPECIFIED], timestamp: update.status?.timestamp ?? null, json: jsonOf({ payload: { $case: 'statusUpdate', value: { ...update, metadata: undefined } } }) };
 }
 
 function artifactEvent(update: TaskArtifactUpdateEvent): AgentEvent {
-  return { kind: 'artifact', parts: partsOf(update.artifact?.parts ?? []), json: jsonOf({ payload: { $case: 'artifactUpdate', value: update } }) };
+  return { kind: 'artifact', artifactId: update.artifact?.artifactId ?? '', isAppended: update.append, parts: partsOf(update.artifact?.parts ?? []), json: jsonOf({ payload: { $case: 'artifactUpdate', value: update } }) };
 }
 
-const messageEvent = (message: Message): AgentEvent => ({ kind: 'message', parts: partsOf(message.parts), json: jsonOf({ payload: { $case: 'message', value: message } }) });
+const messageEvent = (message: Message): AgentEvent => ({ kind: 'message', messageId: message.messageId, parts: partsOf(message.parts), json: jsonOf({ payload: { $case: 'message', value: message } }) });
 
 /** A task as it stands: each artifact, then its status. */
 function eventsOfTask(task: Task): AgentEvent[] {

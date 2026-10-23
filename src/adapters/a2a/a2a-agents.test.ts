@@ -60,7 +60,7 @@ describe('SendMessage to an outside A2A agent (slice 6)', () => {
   it('sends the message over JSON-RPC with the bearer and A2A-Version 1.0, returning at once, and reads the task it took', async () => {
     const sent = await agents.send(rpc(), QUOTE);
 
-    expect(sent).toEqual({ kind: 'task', taskId: 'task-1', contextId: 'ctx-1', events: [{ kind: 'status', state: 'working', json: JSON.stringify({ statusUpdate: { taskId: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_WORKING' } } }) }] });
+    expect(sent).toEqual({ kind: 'task', taskId: 'task-1', contextId: 'ctx-1', events: [{ kind: 'status', state: 'working', timestamp: null, json: JSON.stringify({ statusUpdate: { taskId: 'task-1', contextId: 'ctx-1', status: { state: 'TASK_STATE_WORKING' } } }) }] });
     expect(received[0]).toMatchObject({ path: '/a2a', headers: { authorization: 'Bearer tok-1', 'a2a-version': '1.0' }, body: { method: 'SendMessage', params: { message: { messageId: 'out-1', role: 'ROLE_USER', parts: [{ text: 'Quote 10 bolts', mediaType: 'text/plain' }] }, configuration: { returnImmediately: true } } } });
   });
 

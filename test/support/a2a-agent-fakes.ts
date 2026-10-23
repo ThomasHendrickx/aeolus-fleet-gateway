@@ -223,5 +223,5 @@ export const plainAgentKeys: AgentKeys = {
 
 /** The gateway's own statuses, naming their state and reason. */
 export const plainGatewayStatuses: GatewayStatuses = {
-  statusOf: ({ taskId, state, reason }) => ({ kind: 'status', state, json: JSON.stringify({ statusUpdate: { taskId, status: { state, reason } } }) }),
+  statusOf: ({ taskId, state, reason }) => ({ kind: 'status', state, timestamp: null, json: JSON.stringify({ statusUpdate: { taskId, status: { state, reason } } }) }),
 };

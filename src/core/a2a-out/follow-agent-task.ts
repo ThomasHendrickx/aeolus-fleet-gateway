@@ -3,7 +3,7 @@ import type { Sleep } from '../mcp-out/run-party.js';
 import type { A2aAgentParty } from '../parties/party.js';
 import type { Clock } from '../shared/clock.js';
 import type { AgentEndpoint } from './agent-endpoint.js';
-import { endsFollowing, replyContentOf, type AgentEvent } from './agent-event.js';
+import { createEventIdentities, endsFollowing, replyContentOf, type AgentEvent } from './agent-event.js';
 import type { A2aAgents, AgentCall, AgentCalls, AgentKeys, AgentShipCrew, GatewayStatuses } from './ports.js';
 
 export type FollowAgentTask = (input: { party: A2aAgentParty; endpoint: AgentEndpoint; call: AgentCall; signal: AbortSignal; events?: readonly AgentEvent[] }) => Promise<HandOutcome>;
@@ -36,13 +36,14 @@ export function createFollowAgentTask(deps: { crew: AgentShipCrew; agents: A2aAg
     const caller = { fleetId: party.fleetId, party: party.name };
     const connection = { endpoint, credential: party.credential };
     const replied = new Set<string>();
+    const identityOf = createEventIdentities(call.messageId);
     let endedAt: AgentEvent | undefined;
     /** Whether an event ended following: set as each event comes, so read through a call. */
     const hasEnded = () => endedAt !== undefined;
 
     /** Sends the event as a reply once, until the fleet takes it or the gateway stops: whether it was sent. */
     const reply = async (event: AgentEvent): Promise<boolean> => {
-      const idempotencyKey = deps.keys.replyKeyOf(party.fleetId, { taskId, event: event.json });
+      const idempotencyKey = deps.keys.replyKeyOf(party.fleetId, { taskId, event: identityOf(event) });
       if (replied.has(idempotencyKey)) {
         return true;
       }

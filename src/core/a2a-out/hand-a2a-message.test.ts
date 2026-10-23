@@ -184,7 +184,7 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
   });
 
   it('replies a message answer with no task once, before acknowledging, so a lost acknowledgement sends no second reply, and follows nothing', async () => {
-    const agents = fakeA2aAgents({ sends: [{ kind: 'message', event: { kind: 'message', parts: [{ kind: 'text', text: 'We sell no bolts', mediaType: 'text/plain' }], json: '{}' } }] });
+    const agents = fakeA2aAgents({ sends: [{ kind: 'message', event: { kind: 'message', messageId: 'm-1', parts: [{ kind: 'text', text: 'We sell no bolts', mediaType: 'text/plain' }], json: '{}' } }] });
 
     await expect(handWith(agents)()).resolves.toEqual({ kind: 'handled' });
 
@@ -202,7 +202,7 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
   });
 
   it.each<[string, SendOutcome]>([
-    ['a message answer', { kind: 'message', event: { kind: 'message', parts: [{ kind: 'text', text: 'We sell no bolts', mediaType: 'text/plain' }], json: '{}' } }],
+    ['a message answer', { kind: 'message', event: { kind: 'message', messageId: 'm-1', parts: [{ kind: 'text', text: 'We sell no bolts', mediaType: 'text/plain' }], json: '{}' } }],
     ['a refusal', { kind: 'refused', reason: 'The agent answered 400: no part list' }],
   ])('keeps %s of an agent marked not repeatable before acknowledging, so it is handled when it comes again after a lost acknowledgement, replied once', async (_kind, answer) => {
     await parties.save(anAgentParty({ isRepeatable: false }));
