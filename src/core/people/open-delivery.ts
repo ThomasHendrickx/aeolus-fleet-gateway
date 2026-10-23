@@ -4,7 +4,7 @@ import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import { inboxEntryOf, titleOf, type InboxEntry } from './inbox-entry.js';
 import { asPersonCrew, withOwnRefusal, type PersonCaller, type PersonCrewError, type PersonCrewToken } from './person-crew.js';
-import type { OpenedDeliveries, PersonCrews, PersonDelivery, PersonShipDoor } from './ports.js';
+import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonDelivery, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
 
 /** A delivery as a person opens it: whole. */
@@ -22,6 +22,7 @@ interface OpenDeps {
   crews: PersonCrews;
   door: PersonShipDoor;
   opened: OpenedDeliveries;
+  changes: InboxChanges;
   clock: Clock;
 }
 
@@ -33,6 +34,7 @@ interface OpenDeps {
  * delivery then still waits, and opening it again keeps it once. One they
  * opened, from any client, opens again whole as the fleet reads it again,
  * never from a copy, until they answer it or are done (aeolus-fleet #1046).
+ * Once acknowledged, the person's pages are told their inbox changed.
  */
 export function createOpenDelivery(deps: OpenDeps): OpenDelivery {
   return async ({ caller, deliveryId }) => {
@@ -59,6 +61,7 @@ export function createOpenDelivery(deps: OpenDeps): OpenDelivery {
     if (!acknowledged.isOk) {
       return acknowledged;
     }
+    await deps.changes.tell({ fleetId: caller.fleetId, shipId: waiting.value.crew.shipId });
     return ok(viewOf(delivery));
   };
 }

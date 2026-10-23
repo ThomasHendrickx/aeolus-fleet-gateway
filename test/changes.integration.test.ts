@@ -1,7 +1,7 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 
-import { listenToChanges, type Change } from '../src/adapters/prisma/changes.js';
+import { createPrismaInboxChanges, listenToChanges, type Change } from '../src/adapters/prisma/changes.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaPendingRequests } from '../src/adapters/prisma/pending-requests.js';
 import type { PendingRequest } from '../src/core/requests/ports.js';
@@ -107,6 +107,13 @@ describe("the changes to a fleet's pending requests, heard by the pages", () => 
 
     await new Promise((resolve) => setTimeout(resolve, SILENCE_MS));
     expect(heard).toEqual([]);
+  });
+
+  it("hears a person ship's inbox changed, naming its fleet and ship (wake a person, #1014)", async () => {
+    await createPrismaInboxChanges(prisma).tell({ fleetId: FLEET, shipId: OWNER });
+
+    await until(() => heard.length > 0);
+    expect(heard).toEqual([{ fleetId: FLEET, topic: 'inbox', shipId: OWNER }]);
   });
 
   it('asks to read everything anew once the lost connection is back, and hears changes again', async () => {
