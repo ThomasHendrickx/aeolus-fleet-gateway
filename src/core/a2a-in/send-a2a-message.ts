@@ -23,7 +23,7 @@ import { ok, type Result } from '../shared/result.js';
 import type { A2aCaller } from './authenticate-a2a-client.js';
 import type { FindReachedShip, FindReachedShipRefusal } from './find-reached-ship.js';
 import { capabilityFor, contentOf, type InboundMessage } from './inbound-message.js';
-import { taskViewOf, type TaskView } from './task-view.js';
+import { isTerminal, taskViewOf, type TaskView } from './task-view.js';
 
 /** The most a payload holds (decision 0006). */
 export const PAYLOAD_MAX_BYTES = 65_536;
@@ -68,8 +68,6 @@ function inReplyToOf(task: StoredTask): MessageId | undefined {
   const replies = task.calls.flatMap((call) => call.replies).sort((left, right) => left.receivedAt.getTime() - right.receivedAt.getTime());
   return replies.at(-1)?.messageId ?? task.calls.at(-1)?.messageId;
 }
-
-const isTerminal = (view: TaskView) => view.status.state === 'completed' || view.status.state === 'failed';
 
 export function createSendA2aMessage(deps: SendA2aMessageDeps): SendA2aMessage {
   /** The task as it stands once its answer came or the wait passed, read after each poll; it never sleeps past the wait's end. */

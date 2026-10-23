@@ -65,7 +65,7 @@ describe('following an A2A task (slice 3, interop 3.4)', () => {
   });
 
   it('yields a question as input required and goes on following', async () => {
-    steps = [() => aReply({ contentType: 'application/vnd.aeolus.question+json', payload: '{}' }), () => aReply({ messageId: 'msg_01m3tbfspe96yf1rnr4ank9r02' })];
+    steps = [() => aReply({ contentType: 'application/vnd.aeolus.question+json', payload: '{}' }), () => aReply({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9r02', messageId: 'msg_01m3tbfspe96yf1rnr4ank9r02' })];
 
     await expect(followed()).resolves.toEqual(['submitted', 'inputRequired', 'completed']);
   });
