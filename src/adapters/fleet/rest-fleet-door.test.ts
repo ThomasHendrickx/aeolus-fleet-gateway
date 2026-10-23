@@ -154,6 +154,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         questionTitle: 'Go for release 1.4?',
         sentAt: new Date('2026-10-19T08:00:00.000Z'),
         inReplyTo: null,
+        handOverNumber: null,
       },
     });
     expect(sent()).toEqual([{ url: '/api/v1/ship/delivery', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' } }]);
