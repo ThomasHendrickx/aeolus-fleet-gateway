@@ -94,6 +94,7 @@ import { createPrismaOwnerQuestions } from './adapters/prisma/owner-questions.js
 import type { DecideRequest } from './core/requests/decide-request.js';
 import { createPrismaOutcomeNotices } from './adapters/prisma/outcome-notices.js';
 import { createOutcomeWorker } from './outcome-worker.js';
+import { createPersonWaiters } from './person-waiters.js';
 import { createPingWorker } from './ping-worker.js';
 import { createOpenRequest, type OpenRequest } from './core/requests/open-request.js';
 import { createReadWaiting } from './core/requests/read-waiting.js';
@@ -121,9 +122,12 @@ import { createDoneDelivery } from './core/people/done-delivery.js';
 import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadInbox } from './core/people/read-inbox.js';
+import type { PersonCrews } from './core/people/ports.js';
 import { createSendMessage } from './core/people/send-message.js';
+import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
+import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
 import { createReadAuthorization } from './core/oauth/read-authorization.js';
 import { createRegisterClient } from './core/oauth/register-client.js';
 import { createFleetNetwork } from './adapters/fleet/fleet-network.js';
@@ -219,6 +223,12 @@ const AGENT_CARD_WAIT_MS = 60_000;
 
 /** How often a waiting call is read for its answer. */
 const MCP_WAIT_POLL_MS = 200;
+
+/** How often an instance looks for person ships whose waiter no instance runs, as when the instance waiting on them stopped (wake a person, W9). */
+const WAITER_ROUND_MS = 10_000;
+
+/** How long a person ship's waiter waits while the fleet does not answer, each longer than the last. */
+const WAITER_AGAIN_WAITS_MS = [1_000, 5_000, 30_000];
 
 /** How long a delivery answered again waits before it is handed with the next number, each longer than the last. */
 const AGAIN_WAITS_MS = [1_000, 10_000, 60_000, 300_000];
@@ -499,11 +509,30 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
   // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
   const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });
+  // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
+  const personCrews = createPrismaPersonCrews(prisma);
+  const inboxChanges = createPrismaInboxChanges(prisma);
+  const waiterLocks = createPostgresWaiterLocks(options.databaseUrl);
+  const personWaiters = createPersonWaiters({
+    crews: personCrews,
+    locks: waiterLocks,
+    waitOnPersonShip: createWaitOnPersonShip({ crews: personCrews, door: door.person, changes: inboxChanges, sleep, againWaitsMs: WAITER_AGAIN_WAITS_MS }),
+    sleep,
+    roundMs: WAITER_ROUND_MS,
+    log: server.log,
+  });
   // A signed-in person's messaging, as the crew of their person ship (decision 0057).
   const personToolsOf = () => {
-    const crews = createPrismaPersonCrews(prisma);
+    // A ship crewed has its waiter at once, not at the next round.
+    const crews: PersonCrews = {
+      ...personCrews,
+      save: async (crew) => {
+        await personCrews.save(crew);
+        personWaiters.wake(crew);
+      },
+    };
     const opened = createPrismaOpenedDeliveries(prisma);
-    const changes = createPrismaInboxChanges(prisma);
+    const changes = inboxChanges;
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
       readInbox: createReadInbox({ ...asCrew, opened }),
@@ -660,6 +689,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
 
   server.addHook('onClose', async () => {
     await changes?.close();
+    await waiterLocks.close();
     await prisma.$disconnect();
   });
 
@@ -681,11 +711,13 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       }
       outcomes.start();
       pings.start();
+      personWaiters.start();
       return restored;
     },
     close: async () => {
       await outcomes.stop();
       await pings.stop();
+      await personWaiters.stop();
       await workers.stop();
       await server.close();
     },

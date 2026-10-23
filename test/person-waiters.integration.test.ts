@@ -115,8 +115,10 @@ describe('the waiters of the person ships the gateway crews', () => {
     const instance = anInstance();
     instance.start();
     await expect.poll(() => instance.waitingOn()).toEqual([charlotte]);
-    // The waiter's first look comes before the delivery.
+    // The waiter's first look, which tells too, comes before the delivery.
+    await expect.poll(() => told).toEqual([charlotte]);
     await new Promise((resolve) => setTimeout(resolve, SETTLED_MS));
+    told = [];
 
     await trackerSendsCharlotte();
 
