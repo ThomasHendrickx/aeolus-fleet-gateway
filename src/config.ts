@@ -6,6 +6,11 @@ const INSTALLATION_TOKEN_MIN_LENGTH = 32;
 /** The shortest gateway secret: 32 characters, as long as the HMAC keys it makes. */
 const GATEWAY_SECRET_MIN_LENGTH = 32;
 
+/** How long web push waits after a wake before it sends the next, unless set (wake a person, W10). */
+const WAKE_WEB_PUSH_WINDOW_MINUTES_DEFAULT = 10;
+
+const MS_PER_MINUTE = 60_000;
+
 /** How long an MCP client's call waits for its answer unless set (Q13). */
 export const MCP_WAIT_MAX_MS_DEFAULT = 10_000;
 
@@ -24,6 +29,10 @@ const environmentSchema = z.object({
   PAGASAE_CLIENT_SECRET: z.string().min(1).optional(),
   PAGASAE_APP_CLIENT_ID: z.string().min(1).optional(),
   PAGASAE_APP_CLIENT_SECRET: z.string().min(1).optional(),
+  WEB_PUSH_PUBLIC_KEY: z.string().min(1).optional(),
+  WEB_PUSH_PRIVATE_KEY: z.string().min(1).optional(),
+  WEB_PUSH_SUBJECT: z.string().min(1).optional(),
+  WAKE_WEB_PUSH_WINDOW_MINUTES: z.coerce.number().int().min(1).default(WAKE_WEB_PUSH_WINDOW_MINUTES_DEFAULT),
 });
 
 /** What `aeolus-gateway migrate` reads: the database alone. */
@@ -71,6 +80,14 @@ export interface Config {
    * Unset, nobody signs in to them that way.
    */
   pagasaeApp: { clientId: string; clientSecret: string } | undefined;
+  /**
+   * The gateway's push keys (VAPID), which sign each web push wake, and the
+   * subject a push service may contact about them, a mailto: or https: URL.
+   * Unset, the overview offers no web push (wake a person, S3).
+   */
+  webPush: { publicKey: string; privateKey: string; subject: string } | undefined;
+  /** Each wake channel's window: it sends at most one wake within it (wake a person, W10). */
+  wakeWindowMs: { webPush: number };
 }
 
 export class ConfigError extends Error {
@@ -101,7 +118,21 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     mcpWaitMaxMs: variables.MCP_WAIT_MAX_MS,
     pagasae: pagasaeOf(variables),
     pagasaeApp: pagasaeAppOf(variables),
+    webPush: webPushOf(variables),
+    wakeWindowMs: { webPush: variables.WAKE_WEB_PUSH_WINDOW_MINUTES * MS_PER_MINUTE },
   };
+}
+
+/** Web push's three settings: all of them, or none. */
+function webPushOf(variables: { WEB_PUSH_PUBLIC_KEY?: string | undefined; WEB_PUSH_PRIVATE_KEY?: string | undefined; WEB_PUSH_SUBJECT?: string | undefined }): Config['webPush'] {
+  const { WEB_PUSH_PUBLIC_KEY: publicKey, WEB_PUSH_PRIVATE_KEY: privateKey, WEB_PUSH_SUBJECT: subject } = variables;
+  if (publicKey === undefined && privateKey === undefined && subject === undefined) {
+    return undefined;
+  }
+  if (publicKey === undefined || privateKey === undefined || subject === undefined) {
+    throw new ConfigError('WEB_PUSH_PUBLIC_KEY, WEB_PUSH_PRIVATE_KEY and WEB_PUSH_SUBJECT: set all three, or none');
+  }
+  return { publicKey, privateKey, subject };
 }
 
 /** pagasae's three settings: all of them, or none. */

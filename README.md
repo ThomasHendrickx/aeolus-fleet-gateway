@@ -21,6 +21,8 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 | `INSTALLATION_TOKEN` | unset | The token a hosting service presents to the installation procedures (at least 32 characters, decision 0021). Unset: they are off and every fleet is served, as a self-hosted gateway needs; set: a fleet is served once switched on |
 | `PAGASAE_URL`, `PAGASAE_CLIENT_ID`, `PAGASAE_CLIENT_SECRET` | unset | pagasae, where people sign in (decision 0054), and the gateway's client there, registered with the redirect URI `<GATEWAY_PUBLIC_URL>/pagasae/callback`. All three or none; unset, nobody signs in, so no MCP client connects (only an account asks for one) |
 | `PAGASAE_APP_CLIENT_ID`, `PAGASAE_APP_CLIENT_SECRET` | unset | The gateway's pages as an app at pagasae (its `APP_CLIENTS`, redirect URI `<GATEWAY_PUBLIC_URL>/sign-in/done`), apart from the client for outside MCP clients: people sign in to the pages with the account sign-in every Aeolus app shares (aeolus-fleet's header design, H5). Both or neither, beside `PAGASAE_URL`; unset, nobody signs in to the web app's pages |
+| `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, `WEB_PUSH_SUBJECT` | unset | The gateway's push keys (VAPID, as `npx web-push generate-vapid-keys` makes them), which sign each web push wake, and the `mailto:` or `https:` URL a push service may contact about them. All three or none; unset, the overview offers no web push |
+| `WAKE_WEB_PUSH_WINDOW_MINUTES` | `10` | Web push sends a person at most one wake within this many minutes; what arrives meanwhile goes in the next wake (wake a person, W10) |
 | `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
 | Command | Does |
