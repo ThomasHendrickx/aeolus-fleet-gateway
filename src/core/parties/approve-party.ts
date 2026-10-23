@@ -9,6 +9,7 @@ import type { McpServerCredential } from '../vault/credential.js';
 import { verifiedFactsOf, type McpClientParty, type McpServerParty, type Party } from './party.js';
 import type { PartyStore, ProxyShipDoor } from './ports.js';
 import { shownPartyOf, type ShownParty } from './shown-party.js';
+import type { ToolSwitches } from './tool-switches.js';
 
 /** The type of every outside MCP server's proxy ship. */
 export const MCP_SERVER_SHIP_TYPE = 'mcp-server';
@@ -31,6 +32,8 @@ export type ApproveParty = (input: {
   /** The scopes granted its proxy ship beside the ones every app ship gets (decision 0046). */
   scopes: readonly string[];
   concurrencyLimit: number;
+  /** The tools the approver switched on and off; none chosen means every tool the server lists at its first statement is on. */
+  toolSwitches: ToolSwitches | null;
 }) => Promise<Result<ShownParty, ApprovePartyRefusal>>;
 
 export type ApproveClientParty = (input: {
@@ -150,15 +153,15 @@ export const UNCOMMISSIONED = { state: 'commissioning', proxyShipId: null, secre
  */
 export function createApproveParty(deps: ApprovalDeps): ApproveParty {
   return (input) => {
-    const { operatorFleetId: fleetId, requestId, name, url, credential, ownerShipId, scopes, concurrencyLimit } = input;
-    const requestHash = deps.hasher.hash(JSON.stringify([requestId, name, url, credential, ownerShipId, scopes, concurrencyLimit]));
+    const { operatorFleetId: fleetId, requestId, name, url, credential, ownerShipId, scopes, concurrencyLimit, toolSwitches } = input;
+    const requestHash = deps.hasher.hash(JSON.stringify([requestId, name, url, credential, ownerShipId, scopes, concurrencyLimit, toolSwitches === null ? null : [...toolSwitches]]));
     return approved<McpServerParty>(deps, {
       fleetId,
       type: MCP_SERVER_SHIP_TYPE,
       scopes,
       requestHash,
       owner: ownerShipId,
-      party: ({ approvedAt }) => ({ fleetId, name, kind: 'mcpServer', url, credential, concurrencyLimit, ...UNCOMMISSIONED, requestId, requestHash, approvedAt }),
+      party: ({ approvedAt }) => ({ fleetId, name, kind: 'mcpServer', url, credential, concurrencyLimit, toolSwitches, ...UNCOMMISSIONED, requestId, requestHash, approvedAt }),
       isOwn: (earlier): earlier is McpServerParty => earlier.kind === 'mcpServer',
     });
   };

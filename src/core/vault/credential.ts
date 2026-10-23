@@ -5,6 +5,8 @@
  * with a message.
  */
 export type McpServerCredential =
+  /** A server that asks for none, as one reached only on a private network: the gateway sends no Authorization header. */
+  | { readonly kind: 'none' }
   | { readonly kind: 'bearer'; readonly token: string }
   | {
       readonly kind: 'clientCredentials';

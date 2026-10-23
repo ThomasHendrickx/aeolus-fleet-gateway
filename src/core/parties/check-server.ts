@@ -4,10 +4,11 @@ import type { McpServerConnection, McpServers } from '../mcp-out/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 
-/** A tool as the check shows it: its name, and its short description when the server gives one. */
+/** A tool as the check shows it: its name, its short description when the server gives one, and whether the server says it reads only. */
 export interface CheckedTool {
   name: string;
   description?: string;
+  isReadOnly: boolean;
 }
 
 export type CheckServer = (input: { fleetId: FleetId } & McpServerConnection) => Promise<Result<{ tools: CheckedTool[] }, DomainError<'OUTSIDE_PARTIES_OFF' | 'SERVER_UNREACHABLE'>>>;
@@ -27,6 +28,6 @@ export function createCheckServer(deps: { servers: McpServers; servesOutsidePart
     if (!listed.isOk) {
       return refuse('SERVER_UNREACHABLE', `The MCP server could not be listed: ${listed.error.reason}`);
     }
-    return ok({ tools: listed.value.map(({ name, description }) => ({ name, ...(description === undefined ? {} : { description }) })) });
+    return ok({ tools: listed.value.map(({ name, description, annotations }) => ({ name, ...(description === undefined ? {} : { description }), isReadOnly: annotations?.readOnlyHint === true })) });
   };
 }

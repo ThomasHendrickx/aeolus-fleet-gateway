@@ -2,6 +2,7 @@ import type { FleetId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { PartyStore } from '../parties/ports.js';
+import { isToolOn } from '../parties/tool-switches.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { McpServers } from './ports.js';
@@ -25,8 +26,10 @@ export type StateParty = (input: { fleetId: FleetId; name: string }) => Promise<
 
 /**
  * Use case: the gateway states what a party's proxy ship offers, as its
- * crew: the tools its server lists now, with argo's marks. The whole
- * statement replaces the one before, so a tool the server dropped is gone.
+ * crew: the tools its server lists now that are switched on, with argo's
+ * marks. The whole statement replaces the one before, so a tool the server
+ * dropped or an approver switched off is gone. A party with no switches kept
+ * keeps every tool it lists on first (aeolus-fleet#1151).
  */
 export function createStateParty(deps: { parties: PartyStore; servers: McpServers; door: StatementDoor; marks: ToolMarks; timing: CallTiming }): StateParty {
   return async ({ fleetId, name }) => {
@@ -41,7 +44,11 @@ export function createStateParty(deps: { parties: PartyStore; servers: McpServer
     if (!listed.isOk) {
       return refuse('SERVER_UNREACHABLE', `The MCP server of ${name} could not be listed: ${listed.error.reason}`);
     }
-    const statement = statementOf({ partyName: name, tools: listed.value, repeatable: await deps.marks.repeatable(fleetId, name), timing: deps.timing });
+    if (party.toolSwitches === null) {
+      await deps.parties.switchTools({ fleetId, name }, { listed: listed.value.map((tool) => tool.name), switched: new Map() });
+    }
+    const tools = listed.value.filter((tool) => isToolOn(party.toolSwitches, tool.name));
+    const statement = statementOf({ partyName: name, tools, repeatable: await deps.marks.repeatable(fleetId, name), timing: deps.timing });
     const stated = await deps.door.setStatement(party.crewToken, statement);
     if (!stated.isOk) {
       return refuse('STATEMENT_REFUSED', `The fleet refused the statement: ${stated.error.message}`);

@@ -29,6 +29,7 @@ function aParty(overrides: Partial<McpServerParty>): McpServerParty {
     url: 'https://crm.example.com/mcp',
     credential: { kind: 'bearer', token: 'crm-token' },
     concurrencyLimit: 4,
+    toolSwitches: null,
     state: 'crewed',
     proxyShipId: PROXY_SHIP_ID,
     secret: null,

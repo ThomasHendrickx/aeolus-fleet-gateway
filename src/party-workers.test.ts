@@ -19,6 +19,7 @@ function aCrewedServer(fleetId: FleetId, name: string): McpServerParty {
     url: `https://${name}.example.com/mcp`,
     credential: { kind: 'bearer', token: 't' },
     concurrencyLimit: 4,
+  toolSwitches: null,
     state: 'crewed',
     proxyShipId: PROXY_SHIP_ID,
     secret: null,

@@ -59,7 +59,7 @@ export function createDecideRequest(deps: { requests: PendingRequests; approvePa
     }
     return approval.server === undefined
       ? Promise.resolve(refuse('SERVER_DETAILS_MISSING', 'Adding an outside MCP server needs its credential and how many calls it takes at once'))
-      : deps.approveParty({ ...party, url: request.subject.url, ...approval.server });
+      : deps.approveParty({ ...party, url: request.subject.url, ...approval.server, toolSwitches: null });
   };
 
   return async ({ actor, requestId, decision }) => {

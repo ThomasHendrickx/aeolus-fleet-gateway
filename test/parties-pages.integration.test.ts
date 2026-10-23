@@ -131,6 +131,12 @@ describe('the parties pages, as the account signed in', () => {
     expect({ isRefused: answer.includes('role="alert"'), isAddressKept: answer.includes('value="http://127.0.0.1:9/mcp"') }).toEqual({ isRefused: true, isAddressKept: true });
   }, 60_000);
 
+  it('offers No credential for a server on the add page and the Parties page (aeolus-fleet#1153)', async () => {
+    const bodies = await Promise.all(['/outside-parties/add', '/parties'].map(async (path) => (await fetch(`${address}${path}?fleet=${FLEET}`, { headers: PAGE })).text()));
+
+    expect(bodies.map((body) => /<option value="none"[^>]*>No credential<\/option>/.test(body))).toEqual([true, true]);
+  }, 60_000);
+
   it('shows the Parties page with the form that approves a server to an account holding fleet:manage, and not to one that only reads', async () => {
     const bodies = await Promise.all(
       [SIGN_IN, READER_SIGN_IN].map(async (signIn) => (await fetch(`${address}/parties?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${signIn}` } })).text()),

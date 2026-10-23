@@ -31,7 +31,7 @@ beforeEach(async () => {
   await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: AT });
   const approve = createApproveParty({ connections, parties, door: fleet.door, hasher: plainHasher, servesOutsideParties: isServing, clock: { now: () => AT } });
   fleet.state.isLosingNextAnswer = true;
-  const approval = { operatorFleetId: FLEET_ID, requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 't' }, ownerShipId: OWNER_SHIP_ID, scopes: [], concurrencyLimit: 4 };
+  const approval = { operatorFleetId: FLEET_ID, requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 't' }, ownerShipId: OWNER_SHIP_ID, scopes: [], concurrencyLimit: 4, toolSwitches: null };
   await approve(approval);
   await approve(approval);
   crewParty = createCrewParty({ parties, door: fleet.door, clients, secrets, tokens });
