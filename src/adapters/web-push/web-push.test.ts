@@ -76,6 +76,12 @@ describe('a wake sent to a browser through its push service', () => {
     expect({ sent, taken: service.taken }).toEqual({ sent: 'failed', taken: [] });
   });
 
+  it('never connects to an address written in the endpoint that the policy refuses', async () => {
+    const sent = await webPush({ isAllowedAddress: () => false }).send(subscriptionOf('/literal'), WAKE);
+
+    expect({ sent, taken: service.taken }).toEqual({ sent: 'failed', taken: [] });
+  });
+
   it('reaches a name at the address it resolves to, once allowed', async () => {
     const subscription = subscriptionOf('/named');
     const named = { ...subscription, endpoint: subscription.endpoint.replace('127.0.0.1', 'push.localhost') };

@@ -199,6 +199,8 @@ export interface GatewayAppOptions {
   pagasaeApp?: { clientId: string; clientSecret: string };
   /** The gateway's push keys, which sign each web push wake, and the subject a push service may contact (wake a person, S3): unset, no one is offered web push. */
   webPush?: { publicKey: string; privateKey: string; subject: string };
+  /** Which addresses web push may connect to: public ones unless set. Tests set it to reach their push service on this machine. */
+  isAllowedPushAddress?: (address: string) => boolean;
   /** The least time between two wakes web push sends one person ship (wake a person, W10): 10 minutes unless set. */
   webPushWakeWindowMs?: number;
   /** The least time between two wakes the email channel sends one person ship (wake a person, W10): 60 minutes unless set. */
@@ -543,7 +545,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       : [
           createWebPushChannel({
             subscriptions: webPushSubscriptions,
-            webPush: createWebPush({ ...options.webPush, timeoutMs: WEB_PUSH_TIMEOUT_MS }),
+            // A push service is reached at public addresses only, checked as its host resolves at each send.
+            webPush: createWebPush({ ...options.webPush, timeoutMs: WEB_PUSH_TIMEOUT_MS, addressesOf: (host) => systemHostResolver.addressesOf(host), isAllowedAddress: options.isAllowedPushAddress ?? isPublicAddress }),
             clock,
             windowMs: options.webPushWakeWindowMs ?? WEB_PUSH_WAKE_WINDOW_MS,
             overviewUrlOf: (fleetId) => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`,
@@ -599,7 +602,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
         webPushKey: options.webPush?.publicKey ?? null,
       }),
       turnEmailChannel: createTurnEmailChannel({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), clock }),
-      turnOnWebPush: createTurnOnWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions, isWebPushOffered: options.webPush !== undefined, clock }),
+      turnOnWebPush: createTurnOnWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions, resolver: systemHostResolver, isWebPushOffered: options.webPush !== undefined, clock }),
       turnOffWebPush: createTurnOffWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions }),
       focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
       listShips: createListShips(asCrew),

@@ -1,3 +1,5 @@
+import type { HostResolver } from '../a2a-in/ports.js';
+import { reachOf } from '../a2a-in/webhook-address.js';
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
@@ -34,9 +36,12 @@ function isHttpsUrl(text: string): boolean {
  * Use case: a person turns web push on for a browser (wake a person, W8),
  * with the subscription the browser's push service gave it: kept for their
  * person ship, a browser turned on again kept anew. A push service is
- * reached over https only. Refused where the gateway holds no push keys.
+ * reached over https at public addresses only, as A2A webhooks are: an
+ * endpoint whose host is, or resolves to, any private, loopback or
+ * link-local address is refused. Refused where the gateway holds no push
+ * keys.
  */
-export function createTurnOnWebPush(deps: { crewPersonShip: CrewPersonShip; subscriptions: WebPushSubscriptions; isWebPushOffered: boolean; clock: Clock }): TurnOnWebPush {
+export function createTurnOnWebPush(deps: { crewPersonShip: CrewPersonShip; subscriptions: WebPushSubscriptions; resolver: HostResolver; isWebPushOffered: boolean; clock: Clock }): TurnOnWebPush {
   return async ({ caller, fleetName, endpoint, keys, browser }) => {
     if (!deps.isWebPushOffered) {
       return refuse('CHANNEL_NOT_OFFERED', 'This gateway sends no web push');
@@ -49,6 +54,9 @@ export function createTurnOnWebPush(deps: { crewPersonShip: CrewPersonShip; subs
     }
     if (browser.length === 0 || browser.length > BROWSER_MAX_LENGTH) {
       return refuse('INVALID_SUBSCRIPTION', `The browser's name must hold 1 to ${String(BROWSER_MAX_LENGTH)} characters`);
+    }
+    if ((await reachOf(deps.resolver, new URL(endpoint))) !== 'public') {
+      return refuse('INVALID_SUBSCRIPTION', "The push service's endpoint must resolve to public addresses only");
     }
     const crew = await personCrewOf(deps.crewPersonShip, caller);
     if (!crew.isOk) {

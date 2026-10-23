@@ -72,6 +72,8 @@ beforeEach(async () => {
     pagasaeApp: PAGASAE_APP_CLIENT,
     webPush: { publicKey: keys.publicKey, privateKey: keys.privateKey, subject: 'mailto:ops@example.com' },
     webPushWakeWindowMs: WINDOW_MS,
+    // The tests' push service listens on this machine, which no real push service does.
+    isAllowedPushAddress: (pushAddress) => pushAddress === '127.0.0.1',
   });
   await app.server.listen({ host: '127.0.0.1', port });
   await app.restoreConnections();
