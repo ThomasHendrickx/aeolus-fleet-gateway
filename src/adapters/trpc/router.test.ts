@@ -411,7 +411,7 @@ describe("an approver adds an outside A2A agent by its card address through the 
   it('answers a card that cannot be read as BAD_GATEWAY, and an invalid one as BAD_REQUEST, saying why', async () => {
     const caller = gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context);
 
-    await expect(caller.parties.addA2aAgent({ ...ADDITION, cardUrl: 'https://down.example/card.json' })).rejects.toMatchObject({ code: 'BAD_GATEWAY', message: expect.stringContaining('connection refused') });
+    await expect(caller.parties.addA2aAgent({ ...ADDITION, cardUrl: 'https://down.example/card.json' })).rejects.toMatchObject({ code: 'BAD_GATEWAY', message: 'The card of quotes could not be read: connection refused' });
     await expect(caller.parties.addA2aAgent({ ...ADDITION, cardUrl: 'https://broken.example/card.json' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: 'The card has no skill to state' });
   });
 

@@ -25,6 +25,8 @@ import { createMarkTool } from './core/mcp-out/mark-tool.js';
 import { createSwitchTool } from './core/parties/switch-tool.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
+import { createMarkA2aAgent } from './core/a2a-out/mark-a2a-agent.js';
+import { createAddA2aAgent, type AddA2aAgent } from './core/parties/add-a2a-agent.js';
 import { createHttpAgentCards } from './adapters/a2a/agent-cards.js';
 import { createCheckServer } from './core/parties/check-server.js';
 import { createReadPartyTools } from './core/parties/read-party-tools.js';
@@ -344,6 +346,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     }
     return added;
   };
+  const addA2aAgentOnly = createAddA2aAgent({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock, cards: agentCards, timing: callTiming });
+  // An A2A agent crewed once it is added has its proxy ship stated at once.
+  const addA2aAgent: AddA2aAgent = async (input) => {
+    const added = await addA2aAgentOnly(input);
+    if (added.isOk) {
+      await workers.start({ fleetId: input.actor.fleetId, name: added.value.name });
+    }
+    return added;
+  };
+  const markA2aAgent = createMarkA2aAgent({ parties, stateA2aAgent });
   const proxyShipsAsActor = createProxyShipsAsActor(options.fleetUrl);
   // Calls as an account need its account token, set up with the sign-in below.
   const asActor = { parties, fleet: proxyShipsAsActor, credentialOf: (actor: Actor, sent: ActorCredential) => credentialOf(actor, sent) };
@@ -536,6 +548,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     approveParty,
     addClientParty: createAddClientParty({ parties, approveClientParty, clients: oauthClients, secrets: oauthSecrets }),
     addA2aClient,
+    addA2aAgent,
+    markA2aAgent,
     listReachedShips,
     cardAddressOf: (alias) => a2aCardAddressOf(issuer, alias),
     crewParty,

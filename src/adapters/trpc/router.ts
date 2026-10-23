@@ -30,6 +30,8 @@ import type { ReadOutsideParties, SetOutsideParties } from '../../core/outside-p
 import type { AddClientParty, AddClientPartyRefusal } from '../../core/parties/add-client-party.js';
 import type { ListReachedShips, ListReachedShipsRefusal } from '../../core/a2a-in/list-reached-ships.js';
 import type { AddA2aClient, AddA2aClientRefusal } from '../../core/parties/add-a2a-client.js';
+import type { AddA2aAgent, AddA2aAgentRefusal } from '../../core/parties/add-a2a-agent.js';
+import type { MarkA2aAgent, MarkA2aAgentRefusal } from '../../core/a2a-out/mark-a2a-agent.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListOwnerChoices } from '../../core/parties/list-owner-choices.js';
@@ -100,6 +102,8 @@ export interface Context {
   checkServer: CheckServer;
   readPartyTools: ReadPartyTools;
   addA2aClient: AddA2aClient;
+  addA2aAgent: AddA2aAgent;
+  markA2aAgent: MarkA2aAgent;
   /** The ships an A2A client reaches now, by alias (decision 0060). */
   listReachedShips: ListReachedShips;
   /** The address of an alias's public card, under the gateway's public URL. */
@@ -229,6 +233,19 @@ const ADD_A2A_CLIENT_CODES = {
   NOT_AN_APPROVER: 'FORBIDDEN',
   SCOPE_NOT_HELD: 'FORBIDDEN',
 } as const satisfies Record<AddA2aClientRefusal['kind'], TRPCError['code']>;
+
+/** The refusals of adding an outside A2A agent, as the API states them: a card that cannot be read now, or a fleet that does not answer, is tried again with the same request id. */
+const ADD_A2A_AGENT_CODES = {
+  ...ADD_A2A_CLIENT_CODES,
+  CARD_UNREACHABLE: 'BAD_GATEWAY',
+  CARD_INVALID: 'BAD_REQUEST',
+} as const satisfies Record<AddA2aAgentRefusal['kind'], TRPCError['code']>;
+
+/** The refusals of marking an outside A2A agent, as the API states them. */
+const MARK_A2A_AGENT_CODES = {
+  NOT_AN_APPROVER: 'FORBIDDEN',
+  NO_SUCH_PARTY: 'NOT_FOUND',
+} as const satisfies Record<MarkA2aAgentRefusal['kind'], TRPCError['code']>;
 
 /** The refusals of reading an A2A client's card addresses, as the API states them. */
 const CARD_ADDRESSES_CODES = {
@@ -648,6 +665,44 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: ADD_A2A_CLIENT_CODES[added.error.kind], message: added.error.message });
         }
         return added.value;
+      }),
+    /**
+     * An actor holding gateway:approve adds an outside A2A agent by its card
+     * address (slice 5): the gateway reads the card first, then commissions
+     * and crews its proxy ship with the owner and scopes chosen, and keeps the
+     * credential in its vault. A repeat with the same request id picks up
+     * where the last one stopped.
+     */
+    addA2aAgent: servedProcedure
+      .input(
+        z.strictObject({
+          requestId: idempotencyKeySchema,
+          name: shipHandleSchema,
+          cardUrl: z.url({ protocol: /^https?$/ }),
+          credential: credentialInputSchema,
+          concurrencyLimit: z.int().min(CONCURRENCY_LIMIT_MIN).max(CONCURRENCY_LIMIT_MAX).default(CONCURRENCY_LIMIT_DEFAULT),
+          ownerShipId: idSchema('ship'),
+          scopes: z.array(z.string()),
+        }),
+      )
+      .output(shownPartySchema)
+      .mutation(async ({ ctx, input }) => {
+        const added = await ctx.addA2aAgent({ actor: ctx.actor, ...input });
+        if (!added.isOk) {
+          throw new TRPCError({ code: ADD_A2A_AGENT_CODES[added.error.kind], message: added.error.message });
+        }
+        return added.value;
+      }),
+    /** An actor holding gateway:approve marks an outside A2A agent not repeatable, or repeatable again (A9): kept, then stated at once. */
+    markA2aAgent: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema, isRepeatable: z.boolean() }))
+      .output(z.object({ isRepeatable: z.boolean(), statementRefusal: z.string().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        const marked = await ctx.markA2aAgent({ actor: ctx.actor, ...input });
+        if (!marked.isOk) {
+          throw new TRPCError({ code: MARK_A2A_AGENT_CODES[marked.error.kind], message: marked.error.message });
+        }
+        return marked.value;
       }),
     /** The card address of each ship an A2A client's proxy ship reaches now (decision 0060), for its owner to hand over. Any actor reads them. */
     cardAddresses: servedProcedure
