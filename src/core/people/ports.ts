@@ -204,3 +204,45 @@ export interface FocusedPages {
   /** Whether any page of the person ship's person was seen in focus since then. */
   isAnyInFocus(ship: PersonShip, since: Date): Promise<boolean>;
 }
+
+/**
+ * A browser a person turned web push on in (wake a person, W8): its push
+ * service's endpoint and keys, and the fleet's name its wakes say, as the
+ * person's sign-in named it when they turned it on. A subscription its push
+ * service said is gone takes no wake again, and the overview says so.
+ */
+export interface WebPushSubscription {
+  readonly fleetId: FleetId;
+  readonly shipId: ShipId;
+  readonly endpoint: string;
+  readonly keys: { readonly p256dh: string; readonly auth: string };
+  /** The browser, as its person sees it named, such as Firefox on Linux. */
+  readonly browser: string;
+  readonly fleetName: string;
+  readonly addedAt: Date;
+  readonly goneAt: Date | null;
+}
+
+/** Outbound port: the browsers each person turned web push on in, by fleet, person ship and endpoint. */
+export interface WebPushSubscriptions {
+  /** The person ship's, oldest added first. */
+  list(fleetId: FleetId, shipId: ShipId): Promise<WebPushSubscription[]>;
+  /** Keeps it, or keeps it anew when its endpoint was kept before. */
+  save(subscription: WebPushSubscription): Promise<void>;
+  markGone(fleetId: FleetId, gone: { shipId: ShipId; endpoint: string; goneAt: Date }): Promise<void>;
+  remove(fleetId: FleetId, removed: { shipId: ShipId; endpoint: string }): Promise<void>;
+}
+
+/** What a wake says (W4): something waits in the fleet, by its name, and the link to the gateway's overview. Nothing else. */
+export interface Wake {
+  readonly fleetName: string;
+  readonly overviewUrl: string;
+}
+
+/** How a push service took a wake: sent, gone (it answered 404 or 410: the subscription ended), or failed otherwise. */
+export type WebPushSent = 'sent' | 'gone' | 'failed';
+
+/** Outbound port: sends a wake to one browser through its push service. */
+export interface WebPush {
+  send(subscription: WebPushSubscription, wake: Wake): Promise<WebPushSent>;
+}
