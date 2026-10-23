@@ -49,6 +49,8 @@ export type DomainErrorKind =
   | 'PAYLOAD_TOO_LARGE'
   | 'TASK_NOT_FOUND'
   | 'TASK_TERMINAL'
+  | 'WEBHOOK_REFUSED'
+  | 'PUSH_CONFIG_NOT_FOUND'
   | 'CONTEXT_MISMATCH';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
