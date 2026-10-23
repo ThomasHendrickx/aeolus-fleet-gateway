@@ -44,10 +44,13 @@ export function publicCardOf(issuer: string, alias: string): AgentCard {
   return {
     name: alias,
     description: PUBLIC_DESCRIPTION,
-    supportedInterfaces: [{ url: a2aInterfaceUrlOf(issuer, alias), protocolBinding: 'JSONRPC', tenant: '', protocolVersion: A2A_VERSION }],
+    supportedInterfaces: [
+      { url: a2aInterfaceUrlOf(issuer, alias), protocolBinding: 'JSONRPC', tenant: '', protocolVersion: A2A_VERSION },
+      { url: a2aInterfaceUrlOf(issuer, alias), protocolBinding: 'HTTP+JSON', tenant: '', protocolVersion: A2A_VERSION },
+    ],
     provider: { organization: 'Aeolus gateway', url: issuer },
     version: runningVersion(),
-    capabilities: { streaming: false, pushNotifications: false, extensions: [], extendedAgentCard: true },
+    capabilities: { streaming: true, pushNotifications: true, extensions: [], extendedAgentCard: true },
     securitySchemes: { [BEARER_SCHEME]: { scheme: { $case: 'httpAuthSecurityScheme', value: { description: 'The bearer shown once when your client was added', scheme: 'Bearer', bearerFormat: '' } } } },
     securityRequirements: [{ schemes: { [BEARER_SCHEME]: { list: [] } } }],
     defaultInputModes: DEFAULT_MODES,

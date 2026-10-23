@@ -13,6 +13,7 @@ import { redirect } from 'next/navigation';
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { FLEET_PARAMETER } from '../../../lib/gateway-api/page-account';
 import { refusalCodeOf, refusalMessageOf, requestApi } from '../../../lib/gateway-api/page-api';
+import { serverCredentialOf } from '../../forms/server-credential';
 import { answerOf, questionOf, type AnswerInput, type FocusedDelivery } from '../services/deliveries';
 import { EVERY_APP_SHIP_SCOPES, type DecisionInput } from '../services/requests';
 import { OVERVIEW_PATH } from './read-overview';
@@ -86,12 +87,7 @@ export async function decideRequest({ fleet, requestId, input }: { fleet: string
   }
   const party = { name: input.name, ownerShipId: ownerShipId.data, scopes: [...new Set([...EVERY_APP_SHIP_SCOPES, ...input.scopes])] };
   const { server } = input;
-  const credential =
-    server === undefined
-      ? undefined
-      : server.credentialKind === 'clientCredentials'
-        ? { kind: 'clientCredentials' as const, clientId: server.clientId, clientSecret: server.clientSecret, issuer: server.issuer, ...(server.scope === '' ? {} : { scope: server.scope }) }
-        : { kind: 'bearer' as const, token: server.token };
+  const credential = server === undefined ? undefined : serverCredentialOf(server);
   return attempt(fleet, async (api) => {
     await api.requests.decide.mutate({ requestId, decision: { kind: 'approve', party, ...(server === undefined || credential === undefined ? {} : { server: { credential, concurrencyLimit: server.concurrencyLimit } }) } });
     return undefined;

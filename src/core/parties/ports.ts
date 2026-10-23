@@ -5,6 +5,7 @@ import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
 import type { Party } from './party.js';
 import type { FromFleet } from './shown-party.js';
+import type { ToolSwitches } from './tool-switches.js';
 
 /** Outbound port: the parties argo approved, one per proxy ship name in a fleet. */
 export interface PartyStore {
@@ -14,7 +15,14 @@ export interface PartyStore {
   findByClient(fleetId: FleetId, clientId: string): Promise<Party | undefined>;
   /** The party whose bearer has this hash, in whichever fleet: the bearer alone names an A2A client (decision 0060), as a token hash is looked up unscoped (0007). */
   findByBearer(bearerHash: string): Promise<Party | undefined>;
+  /** Keeps the party; a server's tool switches only when it is new, as only switchTools changes them after. */
   save(party: Party): Promise<void>;
+  /**
+   * Keeps the server's switches given beside the ones kept, at once. A party
+   * with none kept first keeps every tool listed on, so switching one tool
+   * leaves every other as it was.
+   */
+  switchTools(party: { fleetId: FleetId; name: string }, change: { listed: readonly string[]; switched: ToolSwitches }): Promise<void>;
   remove(fleetId: FleetId, name: string): Promise<void>;
 }
 

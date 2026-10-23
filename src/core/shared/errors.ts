@@ -46,6 +46,15 @@ export type DomainErrorKind =
   | 'PARTY_NOT_COMMISSIONED'
   | 'CHANGE_REFUSED'
   | 'UNKNOWN_ALIAS'
+  | 'PAYLOAD_TOO_LARGE'
+  | 'TASK_NOT_FOUND'
+  | 'TASK_TERMINAL'
+  | 'WEBHOOK_REFUSED'
+  | 'PUSH_CONFIG_NOT_FOUND'
+  | 'CONTEXT_MISMATCH'
+  | 'CARD_UNREACHABLE'
+  | 'CARD_INVALID'
+  | 'NOT_A_MESSAGE'
   | 'CHANNEL_NOT_OFFERED';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */

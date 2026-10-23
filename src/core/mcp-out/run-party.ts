@@ -1,7 +1,7 @@
 import type { DeliveryId } from '@aeolus-fleet/common';
 
 import type { McpServerParty } from '../parties/party.js';
-import type { HandCall, HandOutcome, ProxyShipCrew, PushedDelivery } from './hand-call.js';
+import type { HandOutcome, ProxyShipCrew, PushedDelivery } from './hand-call.js';
 
 /** Outbound port: waits the given time, or less once the signal aborts. */
 export type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
@@ -9,7 +9,15 @@ export type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
 /** The fleet's codes for a crew token it no longer takes: the gateway does not crew the proxy ship any more. */
 const CREW_REFUSED = new Set(['UNAUTHORIZED', 'LEASE_ENDED']);
 
-export type RunParty = (input: { party: McpServerParty; signal: AbortSignal }) => Promise<{ ended: 'stopped' | 'crewRefused' }>;
+/** A party whose proxy ship's deliveries the gateway takes: its crew token, and the most it takes at once. */
+interface TakingParty {
+  readonly crewToken: string | null;
+  readonly concurrencyLimit: number;
+}
+
+export type RunPartyOf<P extends TakingParty> = (input: { party: P; signal: AbortSignal }) => Promise<{ ended: 'stopped' | 'crewRefused' }>;
+
+export type RunParty = RunPartyOf<McpServerParty>;
 
 /**
  * Use case: the gateway takes the calls of a party's proxy ship, as its
@@ -19,8 +27,18 @@ export type RunParty = (input: { party: McpServerParty; signal: AbortSignal }) =
  * before it is handed with the next number; the fleet counts each an
  * attempt and stops at the fifth. While the fleet answers only what the
  * gateway already holds, or does not answer, it looks again after a while.
+ * What the party took up before it stopped is taken up first, in flight as
+ * any delivery.
  */
-export function createRunParty(deps: { crew: ProxyShipCrew; handCall: HandCall; sleep: Sleep; pollMs: number; againWaitsMs: readonly number[] }): RunParty {
+export function createRunParty<P extends TakingParty = McpServerParty>(deps: {
+  crew: Pick<ProxyShipCrew, 'pushReceive'>;
+  handCall: (input: { party: P; delivery: PushedDelivery; signal: AbortSignal }) => Promise<HandOutcome>;
+  /** What the party took up before it stopped and takes up first now, by delivery, as an outside agent's task it followed. */
+  resume?: (input: { party: P; signal: AbortSignal }) => Promise<{ deliveryId: DeliveryId; hand: () => Promise<HandOutcome> }[]>;
+  sleep: Sleep;
+  pollMs: number;
+  againWaitsMs: readonly number[];
+}): RunPartyOf<P> {
   return async ({ party, signal }) => {
     const crewToken = party.crewToken;
     if (crewToken === null) {
@@ -30,28 +48,35 @@ export function createRunParty(deps: { crew: ProxyShipCrew; handCall: HandCall; 
     const inFlight = new Map<DeliveryId, Promise<void>>();
     const agains = new Map<DeliveryId, number>();
 
-    const hand = async (delivery: PushedDelivery): Promise<void> => {
+    const hand = async (deliveryId: DeliveryId, handOnce: () => Promise<HandOutcome>): Promise<void> => {
       let outcome: HandOutcome;
       try {
-        outcome = await deps.handCall({ party, delivery });
+        outcome = await handOnce();
       } catch {
         // A failure of the gateway's own (its database): nothing was decided, so the delivery comes again.
         outcome = { kind: 'again' };
       }
       if (outcome.kind === 'again') {
-        const count = (agains.get(delivery.deliveryId) ?? 0) + 1;
-        agains.set(delivery.deliveryId, count);
+        const count = (agains.get(deliveryId) ?? 0) + 1;
+        agains.set(deliveryId, count);
         await deps.sleep(deps.againWaitsMs[Math.min(count, deps.againWaitsMs.length) - 1] ?? deps.pollMs, signal);
       } else {
-        agains.delete(delivery.deliveryId);
+        agains.delete(deliveryId);
       }
     };
-    const start = (delivery: PushedDelivery) => {
+    const startOne = (deliveryId: DeliveryId, handOnce: () => Promise<HandOutcome>) => {
       inFlight.set(
-        delivery.deliveryId,
-        hand(delivery).finally(() => inFlight.delete(delivery.deliveryId)),
+        deliveryId,
+        hand(deliveryId, handOnce).finally(() => inFlight.delete(deliveryId)),
       );
     };
+    const start = (delivery: PushedDelivery) => {
+      startOne(delivery.deliveryId, () => deps.handCall({ party, delivery, signal }));
+    };
+
+    for (const resumed of (await deps.resume?.({ party, signal })) ?? []) {
+      startOne(resumed.deliveryId, resumed.hand);
+    }
 
     while (!signal.aborted) {
       if (inFlight.size >= max) {

@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache';
 import { refusalMessageOf, requestApi } from '../../lib/gateway-api/page-api';
 import type { GatewayApi } from '../../lib/gateway-api/gateway-api';
 import { FLEET_FIELD, fieldOf, type FormState } from '../forms/form-state';
+import { serverCredentialOf } from '../forms/server-credential';
 import { PARTIES_PATH } from './paths';
 
 /** Calls the API as the account in the form's fleet: done says what changed, a refusal why. */
@@ -37,10 +38,7 @@ export async function approveParty(_previous: FormState, form: FormData): Promis
       requestId: fieldOf(form, 'requestId'),
       name: fieldOf(form, 'name'),
       url: fieldOf(form, 'url'),
-      credential:
-        fieldOf(form, 'credentialKind') === 'clientCredentials'
-          ? { kind: 'clientCredentials', clientId: fieldOf(form, 'clientId'), clientSecret: fieldOf(form, 'clientSecret'), issuer: fieldOf(form, 'issuer'), ...(scope === '' ? {} : { scope }) }
-          : { kind: 'bearer', token: fieldOf(form, 'token') },
+      credential: serverCredentialOf({ credentialKind: fieldOf(form, 'credentialKind'), token: fieldOf(form, 'token'), clientId: fieldOf(form, 'clientId'), clientSecret: fieldOf(form, 'clientSecret'), issuer: fieldOf(form, 'issuer'), scope }),
       ownerShipId: ownerShipId.data,
       concurrencyLimit: Number(fieldOf(form, 'concurrencyLimit')),
     });

@@ -30,6 +30,8 @@ import type { ReadOutsideParties, SetOutsideParties } from '../../core/outside-p
 import type { AddClientParty, AddClientPartyRefusal } from '../../core/parties/add-client-party.js';
 import type { ListReachedShips, ListReachedShipsRefusal } from '../../core/a2a-in/list-reached-ships.js';
 import type { AddA2aClient, AddA2aClientRefusal } from '../../core/parties/add-a2a-client.js';
+import type { AddA2aAgent, AddA2aAgentRefusal } from '../../core/parties/add-a2a-agent.js';
+import type { MarkA2aAgent, MarkA2aAgentRefusal } from '../../core/a2a-out/mark-a2a-agent.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListOwnerChoices } from '../../core/parties/list-owner-choices.js';
@@ -40,6 +42,8 @@ import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { StateParty } from '../../core/mcp-out/state-party.js';
 import type { CheckServer } from '../../core/parties/check-server.js';
 import type { ReadPartyTools } from '../../core/parties/read-party-tools.js';
+import { APPROVING_SCOPE } from '../../core/parties/approver.js';
+import type { SwitchTool, SwitchToolRefusal } from '../../core/parties/switch-tool.js';
 import type { RegisterClient } from '../../core/oauth/register-client.js';
 import type { DecideRequest, DecideRefusal } from '../../core/requests/decide-request.js';
 import type { ListMine } from '../../core/requests/list-mine.js';
@@ -100,12 +104,15 @@ export interface Context {
   checkServer: CheckServer;
   readPartyTools: ReadPartyTools;
   addA2aClient: AddA2aClient;
+  addA2aAgent: AddA2aAgent;
+  markA2aAgent: MarkA2aAgent;
   /** The ships an A2A client reaches now, by alias (decision 0060). */
   listReachedShips: ListReachedShips;
   /** The address of an alias's public card, under the gateway's public URL. */
   cardAddressOf: (alias: string) => string;
   stateParty: StateParty;
   markTool: MarkTool;
+  switchTool: SwitchTool;
   registerClient: RegisterClient;
   /** An MCP client's authorization request, as the gateway reads it before it signs the person in. */
   readAuthorization?: ReadAuthorization;
@@ -229,6 +236,19 @@ const ADD_A2A_CLIENT_CODES = {
   SCOPE_NOT_HELD: 'FORBIDDEN',
 } as const satisfies Record<AddA2aClientRefusal['kind'], TRPCError['code']>;
 
+/** The refusals of adding an outside A2A agent, as the API states them: a card that cannot be read now, or a fleet that does not answer, is tried again with the same request id. */
+const ADD_A2A_AGENT_CODES = {
+  ...ADD_A2A_CLIENT_CODES,
+  CARD_UNREACHABLE: 'BAD_GATEWAY',
+  CARD_INVALID: 'BAD_REQUEST',
+} as const satisfies Record<AddA2aAgentRefusal['kind'], TRPCError['code']>;
+
+/** The refusals of marking an outside A2A agent, as the API states them. */
+const MARK_A2A_AGENT_CODES = {
+  NOT_AN_APPROVER: 'FORBIDDEN',
+  NO_SUCH_PARTY: 'NOT_FOUND',
+} as const satisfies Record<MarkA2aAgentRefusal['kind'], TRPCError['code']>;
+
 /** The refusals of reading an A2A client's card addresses, as the API states them. */
 const CARD_ADDRESSES_CODES = {
   PARTY_NOT_CREWED: 'PRECONDITION_FAILED',
@@ -280,6 +300,14 @@ const TOOLS_CODES = {
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
 } as const satisfies Record<'NO_SUCH_PARTY' | 'SERVER_UNREACHABLE', TRPCError['code']>;
 
+/** The refusals of switching an outside MCP server's tool, as the API states them. */
+const SWITCH_TOOL_CODES = {
+  NOT_AN_APPROVER: 'FORBIDDEN',
+  NO_SUCH_PARTY: 'NOT_FOUND',
+  SERVER_UNREACHABLE: 'BAD_GATEWAY',
+  NO_SUCH_TOOL: 'NOT_FOUND',
+} as const satisfies Record<SwitchToolRefusal['kind'], TRPCError['code']>;
+
 /** The refusals of checking an outside MCP server, as the API states them. */
 const CHECK_CODES = {
   OUTSIDE_PARTIES_OFF: 'PRECONDITION_FAILED',
@@ -309,8 +337,9 @@ const CONCURRENCY_LIMIT_MIN = 1;
 const CONCURRENCY_LIMIT_MAX = 10;
 const CONCURRENCY_LIMIT_DEFAULT = 4;
 
-/** The credential argo gives the vault for a party: a static bearer, or OAuth client credentials. */
+/** The credential argo gives the vault for a party: none, a static bearer, or OAuth client credentials. */
 const credentialInputSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('none') }),
   z.strictObject({ kind: z.literal('bearer'), token: z.string().min(1) }),
   z.strictObject({
     kind: z.literal('clientCredentials'),
@@ -323,18 +352,22 @@ const credentialInputSchema = z.discriminatedUnion('kind', [
 
 /** A party as any actor reads it: never its credential or its crew token. */
 const shownPartyBase = { name: z.string(), state: z.enum(['commissioning', 'awaitingCrew', 'crewed']), proxyShipId: z.string().nullable() };
+/** An outside A2A agent's own fields: its card address, its credential's kind, its calls at once and its repeatable mark (A9). */
+const agentFields = { cardUrl: z.string(), credentialKind: z.enum(['none', 'bearer', 'clientCredentials']), concurrencyLimit: z.int(), isRepeatable: z.boolean() };
 const shownPartySchema = z.discriminatedUnion('kind', [
-  z.object({ ...shownPartyBase, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
+  z.object({ ...shownPartyBase, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['none', 'bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
   z.object({ ...shownPartyBase, kind: z.literal('mcpClient'), clientId: z.string() }),
   z.object({ ...shownPartyBase, kind: z.literal('a2aClient') }),
+  z.object({ ...shownPartyBase, kind: z.literal('a2aAgent'), ...agentFields }),
 ]);
 
 /** A party with its proxy ship's name, owner and scopes, read from the fleet (decision 0056): null while unknown. */
 const fromFleet = { proxyShipName: z.string().nullable(), ownerShipId: z.string().nullable(), ownerName: z.string().nullable(), scopes: z.array(z.string()).nullable() };
 const listedPartySchema = z.discriminatedUnion('kind', [
-  z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
+  z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['none', 'bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
   z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpClient'), clientId: z.string() }),
   z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('a2aClient') }),
+  z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('a2aAgent'), ...agentFields }),
 ]);
 
 /** The connection as the console reads it: whether the gateway serves the fleet, and its connection. */
@@ -541,10 +574,10 @@ export const gatewayRouter = t.router({
         }
         return read.value;
       }),
-    /** An outside MCP server's tools, as the server lists them now, asked with the credential the gateway keeps. Any actor reads them. */
+    /** An outside MCP server's tools, as the server lists them now, asked with the credential the gateway keeps, each with its switch. Any actor reads them. */
     tools: servedProcedure
       .input(z.strictObject({ name: shipHandleSchema }))
-      .output(z.object({ tools: z.array(z.object({ name: z.string(), description: z.string().optional() })) }))
+      .output(z.object({ tools: z.array(z.object({ name: z.string(), description: z.string().optional(), isReadOnly: z.boolean(), isOn: z.boolean(), isNew: z.boolean() })) }))
       .query(async ({ ctx, input }) => {
         const read = await ctx.readPartyTools({ fleetId: ctx.fleetId, ...input });
         if (!read.isOk) {
@@ -560,7 +593,7 @@ export const gatewayRouter = t.router({
      */
     check: managing(servedProcedure)
       .input(z.strictObject({ url: z.url({ protocol: /^https?$/ }), credential: credentialInputSchema }))
-      .output(z.object({ tools: z.array(z.object({ name: z.string(), description: z.string().optional() })) }))
+      .output(z.object({ tools: z.array(z.object({ name: z.string(), description: z.string().optional(), isReadOnly: z.boolean() })) }))
       .mutation(async ({ ctx, input }) => {
         const checked = await ctx.checkServer({ fleetId: ctx.fleetId, ...input });
         if (!checked.isOk) {
@@ -583,11 +616,19 @@ export const gatewayRouter = t.router({
           credential: credentialInputSchema,
           ownerShipId: idSchema('ship'),
           concurrencyLimit: z.int().min(CONCURRENCY_LIMIT_MIN).max(CONCURRENCY_LIMIT_MAX).default(CONCURRENCY_LIMIT_DEFAULT),
+          /** Each tool the check answered, switched on or off; none sent means every tool the server lists at its first statement is on. */
+          tools: z.array(z.strictObject({ name: z.string().min(1).max(TOOL_NAME_MAX_LENGTH), isOn: z.boolean() })).optional(),
         }),
       )
       .output(shownPartySchema)
       .mutation(async ({ ctx, input }) => {
-        const approved = await ctx.approveParty({ operatorFleetId: ctx.fleetId, ...input, scopes: [] });
+        const { tools, ...approval } = input;
+        // Adding needs fleet:manage; switching tools needs gateway:approve, as on the party's page (aeolus-fleet#1151).
+        if (tools !== undefined && !ctx.scopes.includes(APPROVING_SCOPE)) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: `Switching an outside party's tools needs ${APPROVING_SCOPE}` });
+        }
+        const toolSwitches = tools === undefined ? null : new Map(tools.map(({ name, isOn }) => [name, isOn]));
+        const approved = await ctx.approveParty({ operatorFleetId: ctx.fleetId, ...approval, scopes: [], toolSwitches });
         if (!approved.isOk) {
           throw new TRPCError({ code: APPROVE_CODES[approved.error.kind], message: approved.error.message });
         }
@@ -627,6 +668,44 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: ADD_A2A_CLIENT_CODES[added.error.kind], message: added.error.message });
         }
         return added.value;
+      }),
+    /**
+     * An actor holding gateway:approve adds an outside A2A agent by its card
+     * address (slice 5): the gateway reads the card first, then commissions
+     * and crews its proxy ship with the owner and scopes chosen, and keeps the
+     * credential in its vault. A repeat with the same request id picks up
+     * where the last one stopped.
+     */
+    addA2aAgent: servedProcedure
+      .input(
+        z.strictObject({
+          requestId: idempotencyKeySchema,
+          name: shipHandleSchema,
+          cardUrl: z.url({ protocol: /^https?$/ }),
+          credential: credentialInputSchema,
+          concurrencyLimit: z.int().min(CONCURRENCY_LIMIT_MIN).max(CONCURRENCY_LIMIT_MAX).default(CONCURRENCY_LIMIT_DEFAULT),
+          ownerShipId: idSchema('ship'),
+          scopes: z.array(z.string()),
+        }),
+      )
+      .output(shownPartySchema)
+      .mutation(async ({ ctx, input }) => {
+        const added = await ctx.addA2aAgent({ actor: ctx.actor, ...input });
+        if (!added.isOk) {
+          throw new TRPCError({ code: ADD_A2A_AGENT_CODES[added.error.kind], message: added.error.message });
+        }
+        return added.value;
+      }),
+    /** An actor holding gateway:approve marks an outside A2A agent not repeatable, or repeatable again (A9): kept, then stated at once. */
+    markA2aAgent: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema, isRepeatable: z.boolean() }))
+      .output(z.object({ isRepeatable: z.boolean(), statementRefusal: z.string().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        const marked = await ctx.markA2aAgent({ actor: ctx.actor, ...input });
+        if (!marked.isOk) {
+          throw new TRPCError({ code: MARK_A2A_AGENT_CODES[marked.error.kind], message: marked.error.message });
+        }
+        return marked.value;
       }),
     /** The card address of each ship an A2A client's proxy ship reaches now (decision 0060), for its owner to hand over. Any actor reads them. */
     cardAddresses: servedProcedure
@@ -702,6 +781,17 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: STATE_CODES[stated.error.kind], message: stated.error.message });
         }
         return stated.value;
+      }),
+    /** An actor holding gateway:approve switches one tool of an outside MCP server on or off for the party (aeolus-fleet#1151): kept, then stated at once. */
+    switchTool: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema, tool: z.string().min(1).max(TOOL_NAME_MAX_LENGTH), isOn: z.boolean() }))
+      .output(z.object({ tool: z.string(), isOn: z.boolean(), statementRefusal: z.string().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        const switched = await ctx.switchTool({ actor: ctx.actor, ...input });
+        if (!switched.isOk) {
+          throw new TRPCError({ code: SWITCH_TOOL_CODES[switched.error.kind], message: switched.error.message });
+        }
+        return switched.value;
       }),
     /** argo marks a party's tool repeatable, or takes the mark off (interop 5.2): kept, then stated at once. */
     markTool: managing(servedProcedure)

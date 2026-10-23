@@ -13,6 +13,7 @@ const LINEAR: McpServerParty = {
   url: 'https://mcp.linear.app/mcp',
   credential: { kind: 'bearer', token: 'linear-token' },
   concurrencyLimit: 4,
+  toolSwitches: null,
   state: 'crewed',
   proxyShipId: PROXY_SHIP_ID,
   secret: null,
@@ -30,7 +31,7 @@ beforeEach(async () => {
   parties = memoryPartyStore();
   await parties.save(LINEAR);
   servers = fakeMcpServers([
-    { name: 'list_issues', description: 'List issues by team, state or assignee', inputSchema: { type: 'object' } },
+    { name: 'list_issues', description: 'List issues by team, state or assignee', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
     { name: 'get_issue', inputSchema: { type: 'object' } },
   ]);
   readPartyTools = createReadPartyTools({ parties, servers });
@@ -40,8 +41,27 @@ describe("an outside MCP server's tools, as it lists them now", () => {
   it('answers each tool by name and short description, asking the server with the credential the gateway keeps', async () => {
     const read = await readPartyTools({ fleetId: FLEET_ID, name: 'linear' });
 
-    expect(read).toEqual({ isOk: true, value: { tools: [{ name: 'list_issues', description: 'List issues by team, state or assignee' }, { name: 'get_issue' }] } });
+    expect(read).toEqual({
+      isOk: true,
+      value: {
+        tools: [
+          { name: 'list_issues', description: 'List issues by team, state or assignee', isReadOnly: true, isOn: true, isNew: false },
+          { name: 'get_issue', isReadOnly: false, isOn: true, isNew: false },
+        ],
+      },
+    });
     expect(servers.listedWith).toEqual([{ url: LINEAR.url, credential: LINEAR.credential }]);
+  });
+
+  it("answers each tool's switch, a tool the server listed after the switches were kept off and new (aeolus-fleet#1151)", async () => {
+    await parties.save({ ...LINEAR, name: 'issues', toolSwitches: new Map([['list_issues', false]]) });
+
+    const read = await readPartyTools({ fleetId: FLEET_ID, name: 'issues' });
+
+    expect(read.isOk && read.value.tools.map(({ name, isOn, isNew }) => ({ name, isOn, isNew }))).toEqual([
+      { name: 'list_issues', isOn: false, isNew: false },
+      { name: 'get_issue', isOn: false, isNew: true },
+    ]);
   });
 
   it('says the server could not be listed, and why', async () => {
