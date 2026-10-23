@@ -13,13 +13,8 @@ import { STATEMENT_SUMMARY_MAX_LENGTH, statementSchema } from '@aeolus-fleet/com
 import type { CallTiming, Capability, Statement } from '../mcp-out/statement.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import type { AgentCard, AgentInterface, AgentSkill } from './ports.js';
-
-/** The bindings the gateway calls an agent over, at A2A 1.0 (A11). */
-const CALLED_BINDINGS: ReadonlySet<string> = new Set(['JSONRPC', 'HTTP+JSON']);
-const CALLED_VERSION = /^1\.0(\.\d+)?$/;
-
-const isCalled = (each: AgentInterface) => CALLED_BINDINGS.has(each.protocolBinding) && CALLED_VERSION.test(each.protocolVersion);
+import { agentEndpointOf } from './agent-endpoint.js';
+import type { AgentCard, AgentSkill } from './ports.js';
 
 function capabilityOf(skill: AgentSkill, of: { card: AgentCard; isRepeatable: boolean; timing: CallTiming }): Capability {
   return {
@@ -36,7 +31,7 @@ function capabilityOf(skill: AgentSkill, of: { card: AgentCard; isRepeatable: bo
 
 export function agentStatementOf(input: { partyName: string; card: AgentCard; isRepeatable: boolean; timing: CallTiming }): Result<Statement, DomainError<'CARD_INVALID'>> {
   const { card } = input;
-  if (!card.supportedInterfaces.some(isCalled)) {
+  if (agentEndpointOf(card) === undefined) {
     return refuse('CARD_INVALID', 'The card has no interface the gateway calls: JSONRPC or HTTP+JSON at A2A 1.0');
   }
   if (card.skills.length === 0) {

@@ -29,6 +29,8 @@ export interface AgentCard {
   readonly supportedInterfaces: readonly AgentInterface[];
   readonly defaultInputModes: readonly string[];
   readonly defaultOutputModes: readonly string[];
+  /** Whether the card states streaming, so the gateway follows a task by SubscribeToTask. */
+  readonly isStreaming: boolean;
   readonly skills: readonly AgentSkill[];
 }
 
