@@ -41,9 +41,11 @@ import { a2aCardAddressOf } from './adapters/http/a2a-cards.js';
 import { createAddA2aClient, type AddA2aClient } from './core/parties/add-a2a-client.js';
 import { createAuthenticateA2aClient } from './core/a2a-in/authenticate-a2a-client.js';
 import { createFindReachedShip } from './core/a2a-in/find-reached-ship.js';
+import { createFollowA2aTask } from './core/a2a-in/follow-a2a-task.js';
 import { createListA2aTasks } from './core/a2a-in/list-a2a-tasks.js';
 import { createReadA2aTask } from './core/a2a-in/read-a2a-task.js';
 import { createSendA2aMessage } from './core/a2a-in/send-a2a-message.js';
+import { createSubscribeToA2aTask } from './core/a2a-in/subscribe-to-a2a-task.js';
 import { createListReachedShips } from './core/a2a-in/list-reached-ships.js';
 import { createShipAliases } from './adapters/crypto/ship-aliases.js';
 import { createListTools } from './core/mcp-in/list-tools.js';
@@ -424,6 +426,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // A blocking send waits as its capability states, at most the gateway's own most, as an MCP call does (I-9).
   const listReachedShips = createListReachedShips({ parties, discovery: door, aliases });
   const findReachedShip = createFindReachedShip({ listReachedShips });
+  const followA2aTask = createFollowA2aTask({ calls: clientCalls, clock, sleep, pollMs: MCP_WAIT_POLL_MS });
   registerA2aEndpoint(server, {
     issuer,
     authenticate: createAuthenticateA2aClient({ parties, secrets: oauthSecrets, servesOutsideParties }),
@@ -431,6 +434,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     sendMessage: createSendA2aMessage({ parties, findReachedShip, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, sleep, waitMaxMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS }),
     readTask: createReadA2aTask({ calls: clientCalls, clock }),
     listTasks: createListA2aTasks({ calls: clientCalls, clock }),
+    followTask: followA2aTask,
+    subscribeToTask: createSubscribeToA2aTask({ calls: clientCalls, clock, follow: followA2aTask }),
   });
 
   // What every call of the API reads, from the request's console session and installation token.

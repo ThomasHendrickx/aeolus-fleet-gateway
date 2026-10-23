@@ -410,7 +410,7 @@ function eventsOf(body: string): unknown[] {
 /** The ship's answer to the message, kept as the worker keeps it. */
 const theAnswer = () => calls.addReply({ fleetId: FLEET_ID, messageId: MESSAGE_ID }, aCallReply({ receivedAt: now }));
 /** A question from the ship, kept as the worker keeps it. */
-const aQuestion = () => calls.addReply({ fleetId: FLEET_ID, messageId: MESSAGE_ID }, aCallReply({ contentType: 'application/vnd.aeolus.question+json', payload: '{"title":"Which colour?"}', receivedAt: now }));
+const aQuestion = () => calls.addReply({ fleetId: FLEET_ID, messageId: MESSAGE_ID }, aCallReply({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9q01', messageId: 'msg_01m3tbfspe96yf1rnr4ank9q01', contentType: 'application/vnd.aeolus.question+json', payload: '{"title":"Which colour?"}', receivedAt: now }));
 
 const STREAMED_TO_COMPLETION = [
   { task: { id: TASK_ID, status: { state: 'TASK_STATE_SUBMITTED' } } },

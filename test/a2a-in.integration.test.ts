@@ -129,7 +129,7 @@ describe('an outside A2A client reads the cards of the ships its proxy ship reac
 
     expect(addresses.every((address) => new RegExp(`^${setting.address}/gw/a2a/[a-z][a-z2-7]{7}/\\.well-known/agent-card\\.json$`).test(address))).toBe(true);
     expect(addresses.length).toBeGreaterThan(0);
-    expect(cards.map((card) => ({ hasSkills: 'skills' in card, capabilities: card.capabilities }))).toEqual(cards.map(() => ({ hasSkills: false, capabilities: { streaming: false, pushNotifications: false, extendedAgentCard: true } })));
+    expect(cards.map((card) => ({ hasSkills: 'skills' in card, capabilities: card.capabilities }))).toEqual(cards.map(() => ({ hasSkills: false, capabilities: { streaming: true, pushNotifications: false, extendedAgentCard: true } })));
     expect(JSON.stringify(cards)).not.toContain('procurement');
   });
 
