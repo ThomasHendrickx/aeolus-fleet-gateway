@@ -27,11 +27,14 @@ import { inboundMessageOf, taskOf } from './a2a-tasks.js';
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
+const HTTP_CONFLICT = 409;
 const HTTP_BAD_GATEWAY = 502;
 const HTTP_SERVICE_UNAVAILABLE = 503;
 
 /** The media type of A2A's HTTP+JSON binding, which a client may send its body as. */
 const A2A_MEDIA_TYPE = 'application/a2a+json';
+/** The media types an HTTP+JSON body comes as: answered as JSON, the first. */
+const REST_MEDIA_TYPES = ['application/json', A2A_MEDIA_TYPE];
 
 export interface A2aEndpointDeps {
   /** The gateway's public URL, which each card's interface is under. */
@@ -208,7 +211,36 @@ export function registerA2aEndpoint(server: FastifyInstance, deps: A2aEndpointDe
     }
   });
 
-  /** One route of the HTTP+JSON binding: its answer as A2A JSON, or its A2A error with the binding's status. */
+  void server.register((rest) => {
+    registerRestRoutes(rest, { deps, resolve });
+    return Promise.resolve();
+  });
+}
+
+/** The HTTP+JSON binding's routes, in a scope of their own, where a POST of JSON may come with no body (CancelTask). */
+function registerRestRoutes(server: FastifyInstance, { deps, resolve }: { deps: A2aEndpointDeps; resolve: (request: FastifyRequest, reply: FastifyReply) => Promise<{ caller: A2aCaller; ship: ReachedShip } | undefined> }): void {
+  const parseJson = server.getDefaultJsonParser('error', 'error');
+  for (const mediaType of REST_MEDIA_TYPES) {
+    server.removeContentTypeParser(mediaType);
+    server.addContentTypeParser(mediaType, { parseAs: 'string' }, (request: FastifyRequest, body: string | Buffer) => {
+      const text = typeof body === 'string' ? body : body.toString('utf8');
+      return new Promise((resolve, reject) => {
+        if (text === '') {
+          resolve(undefined);
+          return;
+        }
+        void parseJson(request, text, (error, parsed) => {
+          if (error === null) {
+            resolve(parsed);
+          } else {
+            reject(error);
+          }
+        });
+      });
+    });
+  }
+
+  /** One route of the HTTP+JSON binding: its answer as JSON, or its A2A error with the binding's status. */
   const restRoute = ({ method, path, answer }: { method: 'GET' | 'POST'; path: string; answer: (call: { handler: A2ARequestHandler; request: FastifyRequest; context: ServerCallContext }) => Promise<unknown> }) => {
     server.route({
       method,
@@ -222,10 +254,11 @@ export function registerA2aEndpoint(server: FastifyInstance, deps: A2aEndpointDe
         try {
           validateVersion(context.requestedVersion, publicCardOf(deps.issuer, resolved.ship.alias), 'HTTP+JSON');
           const body = await answer({ handler: requestHandlerFor(deps, resolved), request, context });
-          return await reply.header('content-type', A2A_MEDIA_TYPE).send(body);
+          return await reply.send(body);
         } catch (error) {
-          const status = restStatusFor(error);
-          return reply.code(status).header('content-type', A2A_MEDIA_TYPE).send(toRestErrorBody(error, status));
+          // A2A 1.0 maps TaskNotCancelableError to 409, where the SDK answers 400.
+          const status = error instanceof TaskNotCancelableError ? HTTP_CONFLICT : restStatusFor(error);
+          return reply.code(status).send(toRestErrorBody(error, status));
         }
       },
     });
