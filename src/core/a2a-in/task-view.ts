@@ -58,6 +58,9 @@ function statusOf(call: ClientCall, now: Date): TaskStatus & { since: Date } {
 /** Whether the task ended: completed or failed, so it takes no follow-up and a follow of it ends. */
 export const isTerminal = (view: TaskView): boolean => view.status.state === 'completed' || view.status.state === 'failed';
 
+/** What tells one view of a task from the next: its state, since when, and how much history it holds. */
+export const markOf = (view: TaskView): string => `${view.status.state}:${String(view.status.since.getTime())}:${String(view.history.length)}`;
+
 /** The task as its client reads it now; a task with no call kept yet is submitted since now. */
 export function taskViewOf(task: StoredTask, now: Date): TaskView {
   const latest = task.calls.at(-1);
