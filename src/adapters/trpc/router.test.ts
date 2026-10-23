@@ -16,6 +16,8 @@ import type { SetOutsideParties } from '../../core/outside-parties/set-outside-p
 import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
+import { createFocusPage } from '../../core/people/focus-page.js';
+import { memoryFocusedPages } from '../../../test/support/people-fakes.js';
 import { createChangeHub, type ChangeHub } from '../http/live.js';
 import { gatewayRouter, type Context } from './router.js';
 
@@ -26,6 +28,7 @@ function grantOf(caller: PersonCaller): string {
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
+const FOCUSED_AT = new Date('2026-10-23T10:00:00.000Z');
 const ARGO_COOKIE = 'aeolus_session=argo';
 const VIEWER_COOKIE = 'aeolus_session=viewer';
 /** A person signed in to the gateway's pages, and one whose account token no longer works. */
@@ -67,7 +70,9 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   switched: Parameters<SetOutsideParties>[0][];
   answers: Record<string, string>[];
   changes: ChangeHub;
+  focused: ReturnType<typeof memoryFocusedPages>;
 } {
+  const focused = memoryFocusedPages();
   const approvals: Parameters<ApproveParty>[0][] = [];
   const additions: Parameters<AddClientParty>[0][] = [];
   const switched: Parameters<SetOutsideParties>[0][] = [];
@@ -121,6 +126,18 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         answers.push({ grantId: grantOf(caller), email: isOn ? 'on' : 'off' });
         return Promise.resolve(ok(undefined));
       },
+      // Seen again only once the page lets go, as the test reads what it held meanwhile.
+      focusPage: createFocusPage({
+        focused,
+        clock: { now: () => FOCUSED_AT },
+        seenEveryMs: 20_000,
+        sleep: (_ms, signal) =>
+          new Promise((resolve) => {
+            signal.addEventListener('abort', () => {
+              resolve();
+            }, { once: true });
+          }),
+      }),
     },
     changes,
     isServed: () => Promise.resolve(true),
@@ -208,7 +225,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, decisions, switched, answers, changes, additions };
+  return { context, approvals, marks, decisions, switched, answers, changes, additions, focused };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -753,5 +770,25 @@ describe('a call whose input is wrong is told so in a sentence', () => {
     const body: unknown = await answer.json();
 
     expect(body).toMatchObject({ error: { message: 'Check what you filled in: client_id is missing or wrong.' } });
+  });
+});
+
+describe("a person's page tells the gateway's API while it is in focus (wake a person, W6)", () => {
+  it('counts in focus for their person ship while it follows, and no longer once it stops', async () => {
+    const { context, focused } = aContext(PERSON_COOKIE);
+    const stop = new AbortController();
+    const following = await gatewayRouter.createCaller(context, { signal: stop.signal }).people.focus();
+    const iterator = following[Symbol.asyncIterator]();
+
+    await iterator.next();
+    const isInFocus = await focused.isAnyInFocus({ fleetId: FLEET, shipId: OWNER }, FOCUSED_AT);
+    stop.abort();
+    await iterator.return?.();
+
+    expect({ isInFocus, held: focused.held }).toEqual({ isInFocus: true, held: [] });
+  });
+
+  it('refuses any other actor: only a person has a person ship', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).people.focus()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
