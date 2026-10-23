@@ -231,6 +231,14 @@ describe('SendMessage over JSON-RPC (decision 0060)', () => {
     expect(sender.sent).toEqual([]);
   });
 
+  it('refuses a body of a content type other than JSON as not supported, sending nothing', async () => {
+    const payload = JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'SendMessage', params: { message: A_MESSAGE } });
+    const answered = await server.inject({ method: 'POST', url: `/gw/a2a/${CRM_ALIAS}`, headers: { ...BEARER, 'a2a-version': '1.0', 'content-type': 'text/plain' }, payload });
+
+    expect(answered.json()).toMatchObject({ error: { code: -32005 } });
+    expect(sender.sent).toEqual([]);
+  });
+
   it('refuses a call with no A2A-Version, or one it does not speak, sending nothing', async () => {
     const [missing, unsupported] = [await rpcAs(BEARER)('SendMessage', { message: A_MESSAGE }), await rpcAs({ ...BEARER, 'a2a-version': '0.3' })('SendMessage', { message: A_MESSAGE })];
 
@@ -357,6 +365,13 @@ describe('the same methods over HTTP+JSON (decision 0060)', () => {
     const answered = await rest('GET', { path: '/tasks/task-1' });
 
     expect(answered.statusCode).toBe(404);
+  });
+
+  it('refuses a body of a content type other than JSON with 415, sending nothing', async () => {
+    const payload = JSON.stringify({ message: A_MESSAGE });
+    const answered = await server.inject({ method: 'POST', url: `/gw/a2a/${CRM_ALIAS}/message:send`, headers: { ...BEARER, 'a2a-version': '1.0', 'content-type': 'text/plain' }, payload });
+
+    expect({ status: answered.statusCode, sent: sender.sent }).toEqual({ status: 415, sent: [] });
   });
 
   it('refuses a call with no A2A-Version', async () => {
