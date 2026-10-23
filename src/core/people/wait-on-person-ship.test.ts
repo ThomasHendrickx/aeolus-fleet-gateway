@@ -47,7 +47,8 @@ function scriptedInbox(answers: (InboxAnswer | (() => InboxAnswer))[]) {
   return { inbox, asked };
 }
 
-async function waiting(answers: (InboxAnswer | (() => InboxAnswer))[], crews = memoryPersonCrews(), wakeOutcomes: WakeOutcome[] = []) {
+async function waiting(answers: (InboxAnswer | (() => InboxAnswer))[], options: { crews?: ReturnType<typeof memoryPersonCrews>; wakeOutcomes?: WakeOutcome[] } = {}) {
+  const { crews = memoryPersonCrews(), wakeOutcomes = [] } = options;
   await crews.save({ ...SHIP, crewToken: CREW_TOKEN, crewedAt: new Date('2026-10-23T09:00:00.000Z') });
   const { inbox, asked } = scriptedInbox(answers);
   const told: InboxChange[] = [];
@@ -137,7 +138,7 @@ describe('the waiter of a person ship', () => {
           return err({ code: 'LEASE_ENDED', message: 'The lease ended' });
         },
       ],
-      crews,
+      { crews },
     );
 
     await runUntilIdle(waiter);
@@ -172,7 +173,7 @@ describe('the waiter of a person ship', () => {
 });
 
 /** An inbox answer given once the clock moved on to then. */
-function answeredAt(waiter: { clock: { at: Date } }, at: Date, answer: InboxAnswer) {
+function answeredAt(waiter: { clock: { at: Date } }, { at, answer }: { at: Date; answer: InboxAnswer }) {
   return () => {
     waiter.clock.at = at;
     return answer;
@@ -211,8 +212,8 @@ describe('the waiter of a person ship wakes its person (wake a person, W3)', () 
 
   it("looks again once the channel's window ended, though the count did not change", async () => {
     const answers: (InboxAnswer | (() => InboxAnswer))[] = [ok({ waiting: 1 })];
-    const waiter = await waiting(answers, memoryPersonCrews(), [{ kind: 'windowOpen', endsAt: after(600_000) }]);
-    answers.push(answeredAt(waiter, after(599_999), ok({ waiting: 1 })), answeredAt(waiter, after(600_000), ok({ waiting: 1 })), answeredAt(waiter, after(625_000), ok({ waiting: 1 })));
+    const waiter = await waiting(answers, { wakeOutcomes: [{ kind: 'windowOpen', endsAt: after(600_000) }] });
+    answers.push(answeredAt(waiter, { at: after(599_999), answer: ok({ waiting: 1 }) }), answeredAt(waiter, { at: after(600_000), answer: ok({ waiting: 1 }) }), answeredAt(waiter, { at: after(625_000), answer: ok({ waiting: 1 }) }));
 
     await runUntilIdle(waiter);
 
@@ -221,14 +222,14 @@ describe('the waiter of a person ship wakes its person (wake a person, W3)', () 
 
   it('tries a failed wake again, waiting longer each time, up to its longest wait', async () => {
     const answers: (InboxAnswer | (() => InboxAnswer))[] = [ok({ waiting: 1 })];
-    const waiter = await waiting(answers, memoryPersonCrews(), [{ kind: 'failed' }, { kind: 'failed' }, { kind: 'failed' }]);
+    const waiter = await waiting(answers, { wakeOutcomes: [{ kind: 'failed' }, { kind: 'failed' }, { kind: 'failed' }] });
     answers.push(
-      answeredAt(waiter, after(29_999), ok({ waiting: 1 })),
-      answeredAt(waiter, after(30_000), ok({ waiting: 1 })),
-      answeredAt(waiter, after(89_999), ok({ waiting: 1 })),
-      answeredAt(waiter, after(90_000), ok({ waiting: 1 })),
-      answeredAt(waiter, after(150_000), ok({ waiting: 1 })),
-      answeredAt(waiter, after(200_000), ok({ waiting: 1 })),
+      answeredAt(waiter, { at: after(29_999), answer: ok({ waiting: 1 }) }),
+      answeredAt(waiter, { at: after(30_000), answer: ok({ waiting: 1 }) }),
+      answeredAt(waiter, { at: after(89_999), answer: ok({ waiting: 1 }) }),
+      answeredAt(waiter, { at: after(90_000), answer: ok({ waiting: 1 }) }),
+      answeredAt(waiter, { at: after(150_000), answer: ok({ waiting: 1 }) }),
+      answeredAt(waiter, { at: after(200_000), answer: ok({ waiting: 1 }) }),
     );
 
     await runUntilIdle(waiter);

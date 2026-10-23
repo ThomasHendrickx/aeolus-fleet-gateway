@@ -34,6 +34,8 @@ import { gatewayRouter, WAITING_SECRET_HEADER, type Context, type GatewayRouter 
 import { registerFrontDoor, type WebApp } from './adapters/http/front-door.js';
 import { createChangeHub } from './adapters/http/live.js';
 import { createPrismaInboxChanges, listenToChanges } from './adapters/prisma/changes.js';
+import { createPrismaFocusedPages, createPrismaPersonWakes, createPrismaWebPushSubscriptions } from './adapters/prisma/wake-stores.js';
+import { createWebPush } from './adapters/web-push/web-push.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
 import { registerA2aEndpoint } from './adapters/http/a2a-endpoint.js';
@@ -96,6 +98,7 @@ import { createReadInbox } from './core/people/read-inbox.js';
 import type { PersonCrews } from './core/people/ports.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
+import { createWakePerson } from './core/people/wake-person.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
@@ -158,6 +161,10 @@ export interface GatewayAppOptions {
   pagasaeApp?: { clientId: string; clientSecret: string };
   /** The gateway's web app, answering the pages the server has none of: unset, an unknown page is answered as any unknown address. */
   web?: WebApp;
+  /** The gateway's push keys, which sign each web push wake (wake a person, S3): unset, no one is offered web push. */
+  webPush?: { publicKey: string; privateKey: string; subject: string };
+  /** Each wake channel's window (W10): 10 minutes for web push unless set. */
+  wakeWindowMs?: { webPush: number };
 }
 
 /** Within the fleet's 10 minutes a handed delivery may wait for its confirmation (decision 0040). */
@@ -193,6 +200,18 @@ const WAITER_ROUND_MS = 10_000;
 
 /** How long a person ship's waiter waits while the fleet does not answer, each longer than the last. */
 const WAITER_AGAIN_WAITS_MS = [1_000, 5_000, 30_000];
+
+/** How long a wake that failed waits before it is tried again, each longer than the last (wake a person, S3). */
+const WAKE_AGAIN_WAITS_MS = [30_000, 60_000, 300_000];
+
+/** Web push's window unless set: at most one wake within it (W10). */
+const WAKE_WEB_PUSH_WINDOW_MS = 10 * 60_000;
+
+/** How long a page counts in focus since it was last seen so: three times as long as it is seen again while in focus. */
+const FOCUS_FRESH_MS = 60_000;
+
+/** How long a push service may take to take a wake. */
+const WEB_PUSH_TIMEOUT_MS = 10_000;
 
 /** How long a delivery answered again waits before it is handed with the next number, each longer than the last. */
 const AGAIN_WAITS_MS = [1_000, 10_000, 60_000, 300_000];
@@ -396,11 +415,33 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
   const personCrews = createPrismaPersonCrews(prisma);
   const inboxChanges = createPrismaInboxChanges(prisma);
+  const webPushSubscriptions = createPrismaWebPushSubscriptions(prisma);
+  const focusedPages = createPrismaFocusedPages(prisma);
   const waiterLocks = createPostgresWaiterLocks(options.databaseUrl);
   const personWaiters = createPersonWaiters({
     crews: personCrews,
     locks: waiterLocks,
-    waitOnPersonShip: createWaitOnPersonShip({ crews: personCrews, door: door.person, changes: inboxChanges, sleep, againWaitsMs: WAITER_AGAIN_WAITS_MS }),
+    waitOnPersonShip: createWaitOnPersonShip({
+      crews: personCrews,
+      door: door.person,
+      changes: inboxChanges,
+      sleep,
+      againWaitsMs: WAITER_AGAIN_WAITS_MS,
+      // The waiter wakes the person through the channels they turned on, unless a page of theirs is in focus (W3, W6, W8).
+      wake: createWakePerson({
+        door: door.person,
+        subscriptions: webPushSubscriptions,
+        wakes: createPrismaPersonWakes(prisma),
+        focused: focusedPages,
+        ...(options.webPush === undefined ? {} : { webPush: createWebPush({ ...options.webPush, timeoutMs: WEB_PUSH_TIMEOUT_MS }) }),
+        clock,
+        windowMs: options.wakeWindowMs ?? { webPush: WAKE_WEB_PUSH_WINDOW_MS },
+        focusFreshMs: FOCUS_FRESH_MS,
+        overviewUrlOf: (fleetId) => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`,
+      }),
+      clock,
+      wakeAgainWaitsMs: WAKE_AGAIN_WAITS_MS,
+    }),
     sleep,
     roundMs: WAITER_ROUND_MS,
     log: server.log,

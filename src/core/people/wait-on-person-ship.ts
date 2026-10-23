@@ -1,8 +1,10 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import type { Sleep } from '../mcp-out/run-party.js';
+import type { Clock } from '../shared/clock.js';
 import { isEndedCrew } from './person-crew.js';
 import type { InboxChanges, PersonCrews, PersonShipDoor } from './ports.js';
+import type { WakePerson } from './wake-person.js';
 
 /**
  * Why a waiter ended: the ship's crew no longer works and was dropped, the
@@ -20,6 +22,12 @@ export type WaitOnPersonShip = (ship: { fleetId: FleetId; shipId: ShipId }, sign
  * a ship crewed again goes on with its new crew; a crew that no longer works
  * is dropped, so the next sign-in crews again, and the waiter ends. While
  * the fleet does not answer, it waits longer each time.
+ *
+ * Each time the count rose, and at its first look while anything waits, it
+ * wakes the person (W3): a wake whose channel's window is still open is
+ * looked at again once it ended, and one that failed is tried again, later
+ * each time. The fleet's wait is short, so it looks then at the first answer
+ * after that time.
  */
 export function createWaitOnPersonShip(deps: {
   crews: PersonCrews;
@@ -28,11 +36,18 @@ export function createWaitOnPersonShip(deps: {
   sleep: Sleep;
   /** How long to wait after each refusal in a row; the last repeats. */
   againWaitsMs: readonly number[];
+  wake: WakePerson;
+  clock: Clock;
+  /** When to try a wake again after each failure in a row; the last repeats. */
+  wakeAgainWaitsMs: readonly number[];
 }): WaitOnPersonShip {
   return async (ship, signal) => {
     const { fleetId, shipId } = ship;
     let knownWaiting: number | undefined;
     let refusedInARow = 0;
+    let wakesFailedInARow = 0;
+    /** When to wake again though the count did not rise: a window ended, or a failed wake is tried again. */
+    let wakeAgainAt: Date | null = null;
     // Read as a call, as the signal aborts between awaits.
     const isStopped = (): boolean => signal.aborted;
     while (!isStopped()) {
@@ -63,7 +78,27 @@ export function createWaitOnPersonShip(deps: {
       if (waiting !== knownWaiting) {
         await deps.changes.tell(ship);
       }
+      const hasRisen = waiting > (knownWaiting ?? 0);
       knownWaiting = waiting;
+      const now = deps.clock.now();
+      if (!hasRisen && (wakeAgainAt === null || now < wakeAgainAt)) {
+        continue;
+      }
+      const woken = await deps.wake(ship, crew.crewToken);
+      switch (woken.kind) {
+        case 'settled':
+          wakeAgainAt = null;
+          wakesFailedInARow = 0;
+          break;
+        case 'windowOpen':
+          wakeAgainAt = woken.endsAt;
+          wakesFailedInARow = 0;
+          break;
+        case 'failed':
+          wakeAgainAt = new Date(now.getTime() + (deps.wakeAgainWaitsMs[Math.min(wakesFailedInARow, deps.wakeAgainWaitsMs.length - 1)] ?? 0));
+          wakesFailedInARow += 1;
+          break;
+      }
     }
     return { reason: 'stopped' };
   };

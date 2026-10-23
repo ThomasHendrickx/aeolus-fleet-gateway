@@ -83,6 +83,10 @@ function anInstance(options: { roundMs?: number } = {}): PersonWaiters {
       },
       sleep,
       againWaitsMs: [ROUND_MS],
+      // No channel is on: these tests hear the pages alone.
+      wake: () => Promise.resolve({ kind: 'settled' }),
+      clock: { now: () => new Date() },
+      wakeAgainWaitsMs: [ROUND_MS],
     }),
     sleep,
     roundMs: options.roundMs ?? ROUND_MS,

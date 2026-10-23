@@ -33,7 +33,8 @@ export function createWakePerson(deps: {
   subscriptions: WebPushSubscriptions;
   wakes: PersonWakes;
   focused: FocusedPages;
-  webPush: WebPush;
+  /** Web push, while the gateway holds push keys: without them it offers none. */
+  webPush?: WebPush;
   clock: Clock;
   /** Each channel's window: it sends at most one wake within it (W10). */
   windowMs: { readonly webPush: number };
@@ -64,8 +65,9 @@ export function createWakePerson(deps: {
     if (await deps.focused.isAnyInFocus(ship, new Date(now.getTime() - deps.focusFreshMs))) {
       return handAll(crewToken, { deliveries: fresh, channel: 'page' });
     }
-    const browsers = (await deps.subscriptions.list(ship.fleetId, ship.shipId)).filter(({ goneAt }) => goneAt === null);
-    if (browsers.length === 0) {
+    const { webPush } = deps;
+    const browsers = webPush === undefined ? [] : (await deps.subscriptions.list(ship.fleetId, ship.shipId)).filter(({ goneAt }) => goneAt === null);
+    if (webPush === undefined || browsers.length === 0) {
       return SETTLED;
     }
     const lastWokenAt = await deps.wakes.lastWokenAt(ship, 'web-push');
@@ -76,7 +78,7 @@ export function createWakePerson(deps: {
     let isSentToAny = false;
     let hasFailed = false;
     for (const subscription of browsers) {
-      const sent = await deps.webPush.send(subscription, { fleetName: subscription.fleetName, overviewUrl });
+      const sent = await webPush.send(subscription, { fleetName: subscription.fleetName, overviewUrl });
       switch (sent) {
         case 'sent':
           isSentToAny = true;
