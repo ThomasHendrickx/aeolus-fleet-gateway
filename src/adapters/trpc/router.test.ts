@@ -116,6 +116,11 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
+      readWakeChannels: (caller) => Promise.resolve(ok({ email: { isOffered: true, isOn: answers.some(({ email }) => email === 'on') && grantOf(caller) === PERSON_TOKEN } })),
+      turnEmailChannel: ({ caller, isOn }) => {
+        answers.push({ grantId: grantOf(caller), email: isOn ? 'on' : 'off' });
+        return Promise.resolve(ok(undefined));
+      },
     },
     changes,
     isServed: () => Promise.resolve(true),
@@ -539,6 +544,24 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe('a person turns on the channels that wake them, through the API (wake a person, W8)', () => {
+  it('turns email on as its own account, and reads it on', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+    const caller = gatewayRouter.createCaller(context);
+
+    await caller.people.turnEmail({ isOn: true });
+
+    await expect(caller.people.wakeChannels()).resolves.toEqual({ email: { isOffered: true, isOn: true } });
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, email: 'on' }]);
+  });
+
+  it('refuses any other actor: only a person is woken', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.turnEmail({ isOn: true })).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 
