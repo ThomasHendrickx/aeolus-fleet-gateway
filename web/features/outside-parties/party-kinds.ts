@@ -16,7 +16,20 @@ export type Side = 'server' | 'client';
 export const PARTY_KINDS: Record<ListedParty['kind'], { protocol: string; side: Side }> = {
   mcpServer: { protocol: 'MCP', side: 'server' },
   mcpClient: { protocol: 'MCP', side: 'client' },
+  a2aClient: { protocol: 'A2A', side: 'client' },
 };
+
+/** Where a party is reached or named outside: an MCP server's URL, an MCP client's id; an A2A client has none. */
+export function outsideAddressOf(party: ListedParty): string | null {
+  switch (party.kind) {
+    case 'mcpServer':
+      return party.url;
+    case 'mcpClient':
+      return party.clientId;
+    case 'a2aClient':
+      return null;
+  }
+}
 
 export const SIDES: Record<Side, { one: string; many: string }> = {
   server: { one: 'server', many: 'servers' },

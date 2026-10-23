@@ -28,6 +28,8 @@ import type { SetFleetEnabled } from '../../core/installation/set-fleet-enabled.
 import type { AccountActor, AuthenticateActor } from '../../core/actors/authenticate-actor.js';
 import type { ReadOutsideParties, SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
 import type { AddClientParty, AddClientPartyRefusal } from '../../core/parties/add-client-party.js';
+import type { ListReachedShips, ListReachedShipsRefusal } from '../../core/a2a-in/list-reached-ships.js';
+import type { AddA2aClient, AddA2aClientRefusal } from '../../core/parties/add-a2a-client.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListOwnerChoices } from '../../core/parties/list-owner-choices.js';
@@ -95,6 +97,11 @@ export interface Context {
   readParty: ReadParty;
   checkServer: CheckServer;
   readPartyTools: ReadPartyTools;
+  addA2aClient: AddA2aClient;
+  /** The ships an A2A client reaches now, by alias (decision 0060). */
+  listReachedShips: ListReachedShips;
+  /** The address of an alias's public card, under the gateway's public URL. */
+  cardAddressOf: (alias: string) => string;
   stateParty: StateParty;
   markTool: MarkTool;
   registerClient: RegisterClient;
@@ -213,6 +220,19 @@ const APPROVE_CODES = {
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
 } as const satisfies Record<string, TRPCError['code']>;
 
+/** The refusals of adding an outside A2A client, as the API states them: a fleet that does not answer is tried again with the same request id. */
+const ADD_A2A_CLIENT_CODES = {
+  ...APPROVE_CODES,
+  NOT_AN_APPROVER: 'FORBIDDEN',
+  SCOPE_NOT_HELD: 'FORBIDDEN',
+} as const satisfies Record<AddA2aClientRefusal['kind'], TRPCError['code']>;
+
+/** The refusals of reading an A2A client's card addresses, as the API states them. */
+const CARD_ADDRESSES_CODES = {
+  PARTY_NOT_CREWED: 'PRECONDITION_FAILED',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+} as const satisfies Record<ListReachedShipsRefusal['kind'], TRPCError['code']>;
+
 /** The refusals of crewing a party's proxy ship with a new secret, as the API states them. */
 /** The refusals of retiring a party, as the API states them. */
 /** The refusals of changing a party's owner or scopes, as the API states them. */
@@ -304,6 +324,7 @@ const shownPartyBase = { name: z.string(), state: z.enum(['commissioning', 'awai
 const shownPartySchema = z.discriminatedUnion('kind', [
   z.object({ ...shownPartyBase, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
   z.object({ ...shownPartyBase, kind: z.literal('mcpClient'), clientId: z.string() }),
+  z.object({ ...shownPartyBase, kind: z.literal('a2aClient') }),
 ]);
 
 /** A party with its proxy ship's name, owner and scopes, read from the fleet (decision 0056): null while unknown. */
@@ -311,6 +332,7 @@ const fromFleet = { proxyShipName: z.string().nullable(), ownerShipId: z.string(
 const listedPartySchema = z.discriminatedUnion('kind', [
   z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpServer'), url: z.string(), credentialKind: z.enum(['bearer', 'clientCredentials']), concurrencyLimit: z.int() }),
   z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('mcpClient'), clientId: z.string() }),
+  z.object({ ...shownPartyBase, ...fromFleet, kind: z.literal('a2aClient') }),
 ]);
 
 /** The connection as the console reads it: whether the gateway serves the fleet, and its connection. */
@@ -585,6 +607,34 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: ADD_CLIENT_CODES[added.error.kind], message: added.error.message });
         }
         return added.value;
+      }),
+    /**
+     * An actor holding gateway:approve adds an outside A2A client (decision
+     * 0060): the gateway commissions and crews its proxy ship with the owner
+     * and scopes chosen, and answers its bearer, shown only here. A repeat
+     * with the same request id commissions nothing again and answers a new
+     * bearer in place of the first.
+     */
+    addA2aClient: servedProcedure
+      .input(z.strictObject({ requestId: idempotencyKeySchema, name: shipHandleSchema, ownerShipId: idSchema('ship'), scopes: z.array(z.string()) }))
+      .output(z.object({ party: shownPartySchema, bearer: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const added = await ctx.addA2aClient({ actor: ctx.actor, ...input });
+        if (!added.isOk) {
+          throw new TRPCError({ code: ADD_A2A_CLIENT_CODES[added.error.kind], message: added.error.message });
+        }
+        return added.value;
+      }),
+    /** The card address of each ship an A2A client's proxy ship reaches now (decision 0060), for its owner to hand over. Any actor reads them. */
+    cardAddresses: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema }))
+      .output(z.object({ addresses: z.array(z.string()) }))
+      .query(async ({ ctx, input }) => {
+        const reached = await ctx.listReachedShips({ fleetId: ctx.fleetId, party: input.name });
+        if (!reached.isOk) {
+          throw new TRPCError({ code: CARD_ADDRESSES_CODES[reached.error.kind], message: reached.error.message });
+        }
+        return { addresses: reached.value.map((ship) => ctx.cardAddressOf(ship.alias)) };
       }),
     /**
      * An actor holding fleet:manage retires a party (decision 0056): its proxy

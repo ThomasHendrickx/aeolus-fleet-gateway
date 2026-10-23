@@ -1,27 +1,30 @@
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { BUTTONS, CARD } from '../../forms/ui/look';
-import { countsOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty, type Side } from '../party-kinds';
-import { ADD_SERVER_PATH, OUTSIDE_PARTIES_PATH, partyPath } from '../paths';
+import { countsOf, outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty, type Side } from '../party-kinds';
+import { ADD_A2A_CLIENT_PATH, ADD_SERVER_PATH, OUTSIDE_PARTIES_PATH, partyPath } from '../paths';
 import { StatusBadge, Tag } from './status-badge';
 import { SwitchCard } from './switch-card';
 
-/** The scopes that turn outside parties on or off, and that add an outside MCP server (0056). */
+/** The scopes that turn outside parties on or off, that add an outside MCP server (0056), and that add an outside A2A client (0060). */
 const SWITCHING_SCOPE = 'fleet:network';
 const ADDING_SCOPE = 'fleet:manage';
+const APPROVING_SCOPE = 'gateway:approve';
 
 function PartyCard({ party, fleetId }: { party: ListedParty; fleetId: string }) {
   const { protocol, side } = PARTY_KINDS[party.kind];
-  const where = party.kind === 'mcpServer' ? party.url : party.clientId;
+  const where = outsideAddressOf(party);
   const state = PARTY_STATES[party.state];
   return (
     <a href={inFleet(partyPath(party.name), fleetId)} className={`${CARD} grid gap-2 hover:bg-accent`} data-testid="outside-parties-party">
       <span className="flex items-center gap-2">
         <strong>{party.name}</strong> <Tag>{protocol}</Tag> <Tag>{`${protocol} ${SIDES[side].one}`}</Tag>
       </span>
-      <span className="truncate font-mono text-code" title={where}>
-        {where}
-      </span>
+      {where === null ? null : (
+        <span className="truncate font-mono text-code" title={where}>
+          {where}
+        </span>
+      )}
       <span className="flex flex-wrap items-center gap-2">
         <StatusBadge tone={state.tone} label={state.label} />
         {party.ownerName === null ? null : <Tag>{party.ownerName}</Tag>}
@@ -59,11 +62,18 @@ export async function OutsideParties({ page, side }: { page: SignedInPage; side:
             ].join(' · ')}
           </p>
         </div>
-        {scopes.includes(ADDING_SCOPE) ? (
-          <a className={BUTTONS.primary} href={inFleet(ADD_SERVER_PATH, fleetId)} data-testid="outside-parties-add">
-            Add server
-          </a>
-        ) : null}
+        <div className="flex gap-2">
+          {scopes.includes(APPROVING_SCOPE) ? (
+            <a className={BUTTONS.secondary} href={inFleet(ADD_A2A_CLIENT_PATH, fleetId)} data-testid="outside-parties-add-a2a-client">
+              Add A2A client
+            </a>
+          ) : null}
+          {scopes.includes(ADDING_SCOPE) ? (
+            <a className={BUTTONS.primary} href={inFleet(ADD_SERVER_PATH, fleetId)} data-testid="outside-parties-add">
+              Add server
+            </a>
+          ) : null}
+        </div>
       </div>
       {status.isOk ? (
         <SwitchCard isOn={status.value.isOn} canSwitch={scopes.includes(SWITCHING_SCOPE)} fleetId={fleetId} />

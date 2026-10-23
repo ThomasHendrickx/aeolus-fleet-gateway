@@ -12,7 +12,8 @@ interface ShownPartyBase {
 /** A party as the gateway keeps it, for any actor to read: never its credential, secret or crew token. */
 export type ShownParty =
   | (ShownPartyBase & { kind: 'mcpServer'; url: string; credentialKind: McpServerCredential['kind']; concurrencyLimit: number })
-  | (ShownPartyBase & { kind: 'mcpClient'; clientId: string });
+  | (ShownPartyBase & { kind: 'mcpClient'; clientId: string })
+  | (ShownPartyBase & { kind: 'a2aClient' });
 
 /**
  * What the fleet holds for a party's proxy ship (decision 0056): its name,
@@ -36,5 +37,7 @@ export function shownPartyOf(party: Party): ShownParty {
       return { name, kind: party.kind, url: party.url, credentialKind: party.credential.kind, concurrencyLimit: party.concurrencyLimit, state, proxyShipId };
     case 'mcpClient':
       return { name, kind: party.kind, clientId: party.clientId, state, proxyShipId };
+    case 'a2aClient':
+      return { name, kind: party.kind, state, proxyShipId };
   }
 }

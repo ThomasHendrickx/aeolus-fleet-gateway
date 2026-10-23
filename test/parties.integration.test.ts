@@ -69,6 +69,15 @@ describe("the gateway's parties and their vault in Postgres", () => {
     await expect(Promise.all([store.findByClient(FLEET, 'https://claude.example.com/client.json'), store.findByClient(OTHER_FLEET, 'https://claude.example.com/client.json')])).resolves.toEqual([party, undefined]);
   });
 
+  it("keeps an A2A client party, found from any fleet by its bearer's hash alone (decision 0060)", async () => {
+    const store = createPrismaPartyStore(prisma);
+    const { fleetId, state, proxyShipId, secret, crewToken, requestId, requestHash, approvedAt } = aParty();
+    const party = { fleetId, name: 'supplier', kind: 'a2aClient' as const, bearerHash: 'hash-of-bearer', state, proxyShipId, secret, crewToken, requestId, requestHash, approvedAt };
+    await store.save(party);
+
+    await expect(Promise.all([store.findByBearer('hash-of-bearer'), store.findByBearer('hash-of-another')])).resolves.toEqual([party, undefined]);
+  });
+
   it('forgets a fleet with its parties and their credentials (decision 0021)', async () => {
     const store = createPrismaPartyStore(prisma);
     await store.save(aParty({ fleetId: OTHER_FLEET, name: 'ledger' }));

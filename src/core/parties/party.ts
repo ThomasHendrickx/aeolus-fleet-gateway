@@ -47,7 +47,14 @@ export interface McpClientParty extends PartyBase {
   readonly clientId: string;
 }
 
-export type Party = McpServerParty | McpClientParty;
+/** An outside A2A client an approver added (decision 0060): it calls fleet ships as its proxy ship, with the bearer it was shown once (A2A in). */
+export interface A2aClientParty extends PartyBase {
+  readonly kind: 'a2aClient';
+  /** The hash of the bearer it was shown, which names it on every call; none until one is shown. */
+  readonly bearerHash: string | null;
+}
+
+export type Party = McpServerParty | McpClientParty | A2aClientParty;
 
 /** The host of an https address, or none: only an address reached over TLS shows who answers it. */
 function tlsHostOf(address: string): string | undefined {
@@ -64,11 +71,19 @@ function tlsHostOf(address: string): string | undefined {
  * 0059): the host it reached an MCP server at over TLS, and the domain of the
  * metadata document it read an MCP client's id from over TLS. A client argo
  * registered has no document, and an address without TLS proves no host.
+ * The gateway checks nothing about an A2A client: an approver names it.
  */
 export function verifiedFactsOf(party: Party): VerifiedFact[] {
-  const host = tlsHostOf(party.kind === 'mcpServer' ? party.url : party.clientId);
-  if (host === undefined) {
-    return [];
+  switch (party.kind) {
+    case 'mcpServer': {
+      const host = tlsHostOf(party.url);
+      return host === undefined ? [] : [{ checked: 'tlsHost', value: host }];
+    }
+    case 'mcpClient': {
+      const host = tlsHostOf(party.clientId);
+      return host === undefined ? [] : [{ checked: 'clientIdDocumentDomain', value: host }];
+    }
+    case 'a2aClient':
+      return [];
   }
-  return [party.kind === 'mcpServer' ? { checked: 'tlsHost', value: host } : { checked: 'clientIdDocumentDomain', value: host }];
 }

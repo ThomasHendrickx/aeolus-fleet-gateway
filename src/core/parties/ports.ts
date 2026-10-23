@@ -12,6 +12,8 @@ export interface PartyStore {
   list(fleetId: FleetId): Promise<Party[]>;
   /** The party an MCP client is in the fleet, if argo approved it. */
   findByClient(fleetId: FleetId, clientId: string): Promise<Party | undefined>;
+  /** The party whose bearer has this hash, in whichever fleet: the bearer alone names an A2A client (decision 0060), as a token hash is looked up unscoped (0007). */
+  findByBearer(bearerHash: string): Promise<Party | undefined>;
   save(party: Party): Promise<void>;
   remove(fleetId: FleetId, name: string): Promise<void>;
 }

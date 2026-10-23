@@ -44,7 +44,8 @@ export type DomainErrorKind =
   | 'RETIRE_REFUSED'
   | 'NOT_AN_ACCOUNT'
   | 'PARTY_NOT_COMMISSIONED'
-  | 'CHANGE_REFUSED';
+  | 'CHANGE_REFUSED'
+  | 'UNKNOWN_ALIAS';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {
