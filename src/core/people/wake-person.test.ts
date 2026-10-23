@@ -46,14 +46,14 @@ beforeEach(() => {
   now = NOW;
 });
 
-function waking(deliveries: PersonDelivery[]) {
+function waking(deliveries: PersonDelivery[], options: { hasPushKeys?: boolean } = {}) {
   const ship = fakePersonShipDoor({ crewToken: CREW_TOKEN, deliveries });
   const wakePerson = createWakePerson({
     door: ship.door,
     subscriptions,
     wakes,
     focused,
-    webPush: push.webPush,
+    ...(options.hasPushKeys === false ? {} : { webPush: push.webPush }),
     clock: { now: () => now },
     windowMs: { webPush: WINDOW_MS },
     focusFreshMs: FOCUS_FRESH_MS,
@@ -67,6 +67,16 @@ const handedCalls = (calls: string[]) => calls.filter((call) => call.startsWith(
 describe('a person is woken when something waits for their person ship', () => {
   it('is not woken while they turned no channel on, and nothing is handed: it stays received for their next look', async () => {
     const { wake, calls } = waking([delivery(1)]);
+
+    await expect(wake()).resolves.toEqual({ kind: 'settled' });
+
+    expect(push.sent).toEqual([]);
+    expect(handedCalls(calls)).toEqual([]);
+  });
+
+  it('is not woken through web push while the gateway holds no push keys, and nothing is handed', async () => {
+    await subscriptions.save(aWebPushSubscription());
+    const { wake, calls } = waking([delivery(1)], { hasPushKeys: false });
 
     await expect(wake()).resolves.toEqual({ kind: 'settled' });
 
