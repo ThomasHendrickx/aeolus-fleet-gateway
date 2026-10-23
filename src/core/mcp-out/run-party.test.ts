@@ -145,4 +145,31 @@ describe('the gateway takes the calls of a proxy ship, as its crew (interop 5.2)
     await expect(running).resolves.toEqual({ ended: 'stopped' });
     expect(handed).toEqual([ONE]);
   });
+
+  it('takes up first what it resumes at its start, in flight as any delivery, and hands no delivery it resumed', async () => {
+    const resumed: DeliveryId[] = [];
+    crew.state.waiting = [aPushedDelivery({ deliveryId: ONE }), aPushedDelivery({ deliveryId: TWO })];
+    const resuming = createRunParty({
+      crew,
+      handCall,
+      resume: () =>
+        Promise.resolve([
+          {
+            deliveryId: ONE,
+            hand: () => {
+              resumed.push(ONE);
+              crew.state.waiting = crew.state.waiting.filter((waiting) => waiting.deliveryId !== ONE);
+              return Promise.resolve({ kind: 'handled' as const });
+            },
+          },
+        ]),
+      sleep,
+      pollMs: 2_000,
+      againWaitsMs: [1_000],
+    });
+
+    await resuming({ party: CRM, signal: stop.signal });
+
+    expect({ resumed, handed }).toEqual({ resumed: [ONE], handed: [TWO] });
+  });
 });
