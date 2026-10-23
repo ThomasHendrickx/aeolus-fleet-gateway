@@ -1,7 +1,7 @@
 import type { DeliveryId } from '@aeolus-fleet/common';
 
 import type { McpServerParty } from '../parties/party.js';
-import type { HandCall, HandOutcome, ProxyShipCrew, PushedDelivery } from './hand-call.js';
+import type { HandOutcome, ProxyShipCrew, PushedDelivery } from './hand-call.js';
 
 /** Outbound port: waits the given time, or less once the signal aborts. */
 export type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
@@ -9,7 +9,15 @@ export type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
 /** The fleet's codes for a crew token it no longer takes: the gateway does not crew the proxy ship any more. */
 const CREW_REFUSED = new Set(['UNAUTHORIZED', 'LEASE_ENDED']);
 
-export type RunParty = (input: { party: McpServerParty; signal: AbortSignal }) => Promise<{ ended: 'stopped' | 'crewRefused' }>;
+/** A party whose proxy ship's deliveries the gateway takes: its crew token, and the most it takes at once. */
+interface TakingParty {
+  readonly crewToken: string | null;
+  readonly concurrencyLimit: number;
+}
+
+export type RunPartyOf<P extends TakingParty> = (input: { party: P; signal: AbortSignal }) => Promise<{ ended: 'stopped' | 'crewRefused' }>;
+
+export type RunParty = RunPartyOf<McpServerParty>;
 
 /**
  * Use case: the gateway takes the calls of a party's proxy ship, as its
@@ -20,7 +28,13 @@ export type RunParty = (input: { party: McpServerParty; signal: AbortSignal }) =
  * attempt and stops at the fifth. While the fleet answers only what the
  * gateway already holds, or does not answer, it looks again after a while.
  */
-export function createRunParty(deps: { crew: ProxyShipCrew; handCall: HandCall; sleep: Sleep; pollMs: number; againWaitsMs: readonly number[] }): RunParty {
+export function createRunParty<P extends TakingParty = McpServerParty>(deps: {
+  crew: Pick<ProxyShipCrew, 'pushReceive'>;
+  handCall: (input: { party: P; delivery: PushedDelivery; signal: AbortSignal }) => Promise<HandOutcome>;
+  sleep: Sleep;
+  pollMs: number;
+  againWaitsMs: readonly number[];
+}): RunPartyOf<P> {
   return async ({ party, signal }) => {
     const crewToken = party.crewToken;
     if (crewToken === null) {
@@ -33,7 +47,7 @@ export function createRunParty(deps: { crew: ProxyShipCrew; handCall: HandCall; 
     const hand = async (delivery: PushedDelivery): Promise<void> => {
       let outcome: HandOutcome;
       try {
-        outcome = await deps.handCall({ party, delivery });
+        outcome = await deps.handCall({ party, delivery, signal });
       } catch {
         // A failure of the gateway's own (its database): nothing was decided, so the delivery comes again.
         outcome = { kind: 'again' };
