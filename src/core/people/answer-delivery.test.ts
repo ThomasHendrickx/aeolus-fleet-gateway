@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
-import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { createAnswerDelivery } from './answer-delivery.js';
 import { createDoneDelivery } from './done-delivery.js';
 import { createOpenDelivery } from './open-delivery.js';
@@ -36,14 +36,16 @@ let opened: ReturnType<typeof memoryOpenedDeliveries>;
 let ship: ReturnType<typeof fakePersonShipDoor>;
 let answerDelivery: ReturnType<typeof createAnswerDelivery>;
 let doneDelivery: ReturnType<typeof createDoneDelivery>;
+let changes: ReturnType<typeof memoryInboxChanges>;
 
 beforeEach(async () => {
   crews = memoryPersonCrews();
   opened = memoryOpenedDeliveries();
   await opened.save(OPENED);
+  changes = memoryInboxChanges();
   ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [] });
-  answerDelivery = createAnswerDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened });
-  doneDelivery = createDoneDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened });
+  answerDelivery = createAnswerDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, changes });
+  doneDelivery = createDoneDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, changes });
 });
 
 describe('a person answers a delivery they opened', () => {
@@ -121,6 +123,28 @@ describe('a person is done with a delivery they opened, with no answer', () => {
   });
 });
 
+describe("the person's pages, once they dealt with a delivery (wake a person, #1014)", () => {
+  it('are told their inbox changed once it is answered', async () => {
+    await answerDelivery({ caller: CALLER, deliveryId: OPENED.deliveryId, ...ANSWER });
+
+    expect(changes.told).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }]);
+  });
+
+  it('are told their inbox changed once they are done with it', async () => {
+    await doneDelivery({ caller: CALLER, deliveryId: OPENED.deliveryId });
+
+    expect(changes.told).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }]);
+  });
+
+  it('are told nothing while the fleet did not take handled', async () => {
+    ship.refusals.handled.push({ code: 'UNAVAILABLE', message: 'The fleet did not answer' });
+
+    await doneDelivery({ caller: CALLER, deliveryId: OPENED.deliveryId });
+
+    expect(changes.told).toEqual([]);
+  });
+});
+
 describe('a delivery the person dealt with', () => {
   it.each([
     { what: 'answered', deal: () => answerDelivery({ caller: CALLER, deliveryId: OPENED.deliveryId, ...ANSWER }) },
@@ -130,7 +154,7 @@ describe('a delivery the person dealt with', () => {
     await deal();
 
     const read = await createReadInbox(asCrew)(CALLER);
-    const reopened = await createOpenDelivery({ ...asCrew, clock: { now: () => AT } })({ caller: CALLER, deliveryId: OPENED.deliveryId });
+    const reopened = await createOpenDelivery({ ...asCrew, changes, clock: { now: () => AT } })({ caller: CALLER, deliveryId: OPENED.deliveryId });
 
     expect({ listed: read.isOk && read.value.opened, reopened }).toMatchObject({ listed: [], reopened: { isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } } });
   });
