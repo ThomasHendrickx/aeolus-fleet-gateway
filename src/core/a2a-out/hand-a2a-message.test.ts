@@ -18,6 +18,7 @@ import { CALLER_SHIP_ID, aPushedDelivery } from '../../../test/support/mcp-out-f
 import { memoryPartyStore } from '../../../test/support/party-fakes.js';
 import type { PushedDelivery } from '../mcp-out/hand-call.js';
 import type { AgentEndpoint } from './agent-endpoint.js';
+import type { AgentEvent } from './agent-event.js';
 import { createFollowAgentTask } from './follow-agent-task.js';
 import { createHandA2aMessage } from './hand-a2a-message.js';
 import type { SendOutcome, TaskRead } from './ports.js';
@@ -30,7 +31,7 @@ const MESSAGE: MessageId = 'msg_01m3tbfspe96yf1rnr4ank9m01';
 const DELIVERY: DeliveryId = 'dlv_01m3tbfspe96yf1rnr4ank9d01';
 
 const aQuote = (overrides: Partial<PushedDelivery> = {}) => aPushedDelivery({ contentType: 'text/plain', payload: 'Quote 10 bolts', ...overrides });
-const taken = (events: SendOutcome extends infer O ? (O extends { kind: 'task' } ? O['events'] : never) : never): SendOutcome => ({ kind: 'task', taskId: 'task-1', contextId: 'ctx-1', events });
+const taken = (events: AgentEvent[]): SendOutcome => ({ kind: 'task', taskId: 'task-1', contextId: 'ctx-1', events });
 const readAs = (...events: ReturnType<typeof aStatus>[]): TaskRead => ({ kind: 'read', events });
 
 let crew: ReturnType<typeof fakeAgentShipCrew>;
@@ -54,8 +55,8 @@ function handWith(agents: ReturnType<typeof fakeA2aAgents>, endpoint = POLLED) {
     clock.advance(ms);
     return Promise.resolve();
   };
-  const follow = createFollowAgentTask({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, clock, sleep, pollMs: POLL_MS });
-  const hand = createHandA2aMessage({ crew, agents, calls, keys: plainAgentKeys, parties, follow, clock, deadlineMs: DEADLINE_MS });
+  const follow = createFollowAgentTask({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, clock, sleep, pollMs: POLL_MS, deadlineMs: DEADLINE_MS });
+  const hand = createHandA2aMessage({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, parties, follow, clock, deadlineMs: DEADLINE_MS });
   return (delivery: PushedDelivery = aQuote()) => hand({ party: anAgentParty(), endpoint, delivery, signal: new AbortController().signal });
 }
 
@@ -157,21 +158,21 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
     expect(agents.sent[1]?.message).toMatchObject({ messageId: 'out:msg_01m3tbfspe96yf1rnr4ank9m02', taskId: 'task-1', contextId: 'ctx-1' });
   });
 
-  it('replies a message answer with no task once, and is handled with nothing followed', async () => {
+  it('replies a message answer with no task once, before acknowledging, so a lost acknowledgement sends no second reply, and follows nothing', async () => {
     const agents = fakeA2aAgents({ sends: [{ kind: 'message', event: { kind: 'message', parts: [{ kind: 'text', text: 'We sell no bolts', mediaType: 'text/plain' }], json: '{}' } }] });
 
     await expect(handWith(agents)()).resolves.toEqual({ kind: 'handled' });
 
-    expect(steps()).toEqual(['handed', 'ack', 'send text/plain We sell no bolts', 'handled']);
+    expect(steps()).toEqual(['handed', 'send text/plain We sell no bolts', 'ack', 'handled']);
     expect(agents.read).toEqual([]);
   });
 
-  it("acknowledges a message the agent refused, replies rejected with the agent's reason, and is handled", async () => {
+  it("replies rejected with the agent's reason to a message the agent refused, then acknowledges and handles it", async () => {
     const agents = fakeA2aAgents({ sends: [{ kind: 'refused', reason: 'The agent answered 401: bad token' }] });
 
     await expect(handWith(agents)()).resolves.toEqual({ kind: 'handled' });
 
-    expect(steps()).toEqual(['handed', 'ack', expect.stringContaining('send application/a2a+json') as string, 'handled']);
+    expect(steps().map((step) => step.split(' {')[0])).toEqual(['handed', 'send application/a2a+json', 'ack', 'handled']);
     expect(JSON.parse(crew.replies()[0]?.payload ?? '{}')).toMatchObject({ statusUpdate: { status: { state: 'rejected', reason: 'The agent answered 401: bad token' } } });
   });
 
@@ -246,14 +247,14 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
 
   it('hands a delivery whose acknowledgement was lost again, following its task with nothing sent twice', async () => {
     crew.state.isAckAnswering = false;
-    const agents = fakeA2aAgents({ sends: [taken([aStatus('completed')])] });
+    const agents = fakeA2aAgents({ sends: [taken([aStatus('working')])], reads: [readAs(aStatus('completed'))] });
     const hand = handWith(agents);
     await expect(hand()).resolves.toEqual({ kind: 'again' });
     crew.state.isAckAnswering = true;
 
     await expect(hand(aQuote({ state: 'handed', handOverNumber: 1 }))).resolves.toEqual({ kind: 'handled' });
 
-    expect({ sent: agents.sent.length, replies: crew.replies().length }).toEqual({ sent: 1, replies: 1 });
+    expect({ sent: agents.sent.length, replies: crew.replies().map(({ payload }) => payload) }).toEqual({ sent: 1, replies: [aStatus('completed').json] });
   });
 });
 
@@ -265,13 +266,11 @@ describe('the gateway follows on after a restart (slice 6)', () => {
       clock.advance(ms);
       return Promise.resolve();
     };
-    const follow = createFollowAgentTask({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, clock, sleep, pollMs: POLL_MS });
+    const follow = createFollowAgentTask({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, clock, sleep, pollMs: POLL_MS, deadlineMs: DEADLINE_MS });
 
-    const call = await calls.find(DELIVERY);
-    if (call === undefined) {
-      throw new Error('no call kept');
-    }
-    await expect(follow({ party: anAgentParty(), endpoint: POLLED, call, signal: new AbortController().signal })).resolves.toEqual({ kind: 'handled' });
+    const [call] = await calls.following({ fleetId: FLEET_ID, party: 'supplier' });
+
+    await expect(call && follow({ party: anAgentParty(), endpoint: POLLED, call, signal: new AbortController().signal })).resolves.toEqual({ kind: 'handled' });
 
     expect(agents.sent).toEqual([]);
     await expect(calls.find(DELIVERY)).resolves.toMatchObject({ state: 'done' });
@@ -279,10 +278,7 @@ describe('the gateway follows on after a restart (slice 6)', () => {
 });
 
 /** The message id the fleet gave the reply sent under this key, as the sender's answer names it. */
-async function replyMessageIdOf(idempotencyKey: string | undefined): Promise<MessageId> {
+async function replyMessageIdOf(idempotencyKey: string | undefined): Promise<MessageId | null> {
   const sent = await crew.send('aeolus_ct_v1_proxy', { to: CALLER_SHIP_ID, contentType: 'text/plain', payload: '', idempotencyKey: idempotencyKey ?? '' });
-  if (!sent.isOk) {
-    throw new Error('the fake fleet did not answer');
-  }
-  return sent.value.messageId;
+  return sent.isOk ? sent.value.messageId : null;
 }
