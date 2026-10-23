@@ -185,6 +185,28 @@ describe('waking a person', () => {
     expect(ship.handOvers).toEqual([{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', handOverNumber: 1, channel: 'email' }]);
   });
 
+  it('wakes again after the gateway stopped between the wake and its hand-over, as nothing was handed (one wake more, nothing lost)', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email');
+    const wakesSent = memoryWakesSent();
+    const crashing = { ...ship.door, handed: () => Promise.reject(new Error('the gateway stopped')) };
+    await expect(createWakePerson({ door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
+
+    await waking({ ship, channels: [email.channel], wakesSent })(SHIP, CREW_TOKEN);
+
+    expect({ woken: email.woken.length, handOvers: ship.handOvers.map(({ channel }) => channel) }).toEqual({ woken: 2, handOvers: ['email'] });
+  });
+
+  it('keeps the window of a wake that went out though the fleet refused a hand-over, so no second email follows at once', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const refusing = { ...ship.door, handed: () => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) };
+    const wakesSent = memoryWakesSent();
+
+    const woken = await createWakePerson({ door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
+
+    expect({ woken, sent: wakesSent.sent }).toEqual({ woken: err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }), sent: [{ channel: 'email', at: NOW }] });
+  });
+
   it('says what the fleet refused, waking no one', async () => {
     const ship = aShip([aDelivery(1)], { pushReceive: { code: 'LEASE_ENDED', message: 'The lease ended' } });
     const email = aChannel('email');
