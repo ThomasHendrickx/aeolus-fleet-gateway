@@ -1,4 +1,4 @@
-import { generateVAPIDKeys } from 'web-push';
+import webPushLibrary from 'web-push';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { aWebPushSubscription } from '../../../test/support/people-fakes.js';
@@ -9,7 +9,7 @@ import { createWebPush } from './web-push.js';
 // encrypted for that browser and signed with the gateway's push keys (VAPID).
 
 const WAKE = { fleetName: 'Acme', overviewUrl: 'https://gateway.example/overview?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv' };
-const keys = generateVAPIDKeys();
+const keys = webPushLibrary.generateVAPIDKeys();
 
 let service: Awaited<ReturnType<typeof startPushService>>;
 

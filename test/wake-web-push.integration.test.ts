@@ -1,5 +1,5 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
-import { generateVAPIDKeys } from 'web-push';
+import webPush from 'web-push';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
@@ -61,7 +61,7 @@ beforeEach(async () => {
   pagasae.sharedSignIn(SIGN_IN, { ...charlotteIn(pagasae, fleetId), person_ship: charlotte.shipId });
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
-  const keys = generateVAPIDKeys();
+  const keys = webPush.generateVAPIDKeys();
   app = createGatewayApp({
     databaseUrl,
     fleetUrl: fleet.url,

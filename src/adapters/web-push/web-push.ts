@@ -4,7 +4,8 @@
  * gateway's push keys (VAPID). The push service answers 404 or 410 once the
  * subscription ended: it is gone. Any other refusal, or no answer, failed.
  */
-import { generateRequestDetails } from 'web-push';
+// web-push is CommonJS: Node's ESM loader finds no named exports on it, only the module itself.
+import webPush from 'web-push';
 
 import type { WebPush } from '../../core/people/ports.js';
 
@@ -17,7 +18,7 @@ export function createWebPush(keys: { publicKey: string; privateKey: string; sub
   return {
     send: async ({ endpoint, keys: browserKeys }, wake) => {
       try {
-        const request = generateRequestDetails({ endpoint, keys: browserKeys }, JSON.stringify({ fleetName: wake.fleetName, overviewUrl: wake.overviewUrl }), {
+        const request = webPush.generateRequestDetails({ endpoint, keys: browserKeys }, JSON.stringify({ fleetName: wake.fleetName, overviewUrl: wake.overviewUrl }), {
           vapidDetails: { subject: keys.subject, publicKey: keys.publicKey, privateKey: keys.privateKey },
           TTL: TIME_TO_LIVE_SECONDS,
         });
