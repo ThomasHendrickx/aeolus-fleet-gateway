@@ -1,8 +1,8 @@
 import { receiveOutputSchema } from '@aeolus-fleet/common';
-import pg from 'pg';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
+import { createPrismaClient } from '../src/adapters/prisma/client.js';
 import type { PersonShipDoor } from '../src/core/people/ports.js';
 import { applyEmptyOwnRules, commission, register, signIn } from './support/argo.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
@@ -185,15 +185,16 @@ describe("a person ship's inbox, as the gateway's waiter asks it (wake a person,
   });
 
   it("states the gateway as the waker of the person ship's lease at its push receive", async () => {
+    await trackerSendsCharlotte('tracker-wait-3');
     await door.pushReceive(charlotte, { max: 1 });
 
-    const core = new pg.Client({ connectionString: fleet.databaseUrl });
-    await core.connect();
+    // Core's own database, read as is: its ship contract says no lease's waker.
+    const core = createPrismaClient(fleet.databaseUrl);
     try {
-      const leases = await core.query('SELECT "waker" FROM "leases" l JOIN "ships" s ON s."id" = l."ship_id" AND s."fleet_id" = l."fleet_id" WHERE s."name" = $1 AND l."ended_at" IS NULL', ['charlotte']);
-      expect(leases.rows).toEqual([{ waker: 'gateway' }]);
+      const leases = await core.$queryRaw`SELECT "waker"::text FROM "leases" l JOIN "ships" s ON s."id" = l."ship_id" AND s."fleet_id" = l."fleet_id" WHERE s."name" = 'charlotte' AND l."ended_at" IS NULL`;
+      expect(leases).toEqual([{ waker: 'gateway' }]);
     } finally {
-      await core.end();
+      await core.$disconnect();
     }
   });
 });

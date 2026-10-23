@@ -18,6 +18,7 @@ import {
   FLEET_BUSY_WAITS_MS,
   handedOutputSchema,
   idSchema,
+  INBOX_WAIT_MAX_SECONDS,
   inboxOutputSchema,
   pushReceiveOutputSchema,
   deliveryOutputSchema,
@@ -244,9 +245,20 @@ export function createRestFleetDoor(
     },
     // A person ship's crew calls, as the gateway makes them for the person (decision 0057).
     person: {
-      inbox: (crewToken) => call({ path: '/ship/inbox', method: 'POST', crewToken, body: { waitSeconds: 0 }, answers: inboxOutputSchema }),
+      inbox: async (crewToken, wait) => {
+        const counted = await call({
+          path: '/ship/inbox',
+          method: 'POST',
+          crewToken,
+          body: wait === undefined ? { waitSeconds: 0 } : { waitSeconds: INBOX_WAIT_MAX_SECONDS, knownWaiting: wait.knownWaiting },
+          answers: inboxOutputSchema,
+          ...(wait === undefined ? {} : { signal: wait.signal }),
+        });
+        return counted.isOk ? ok({ waiting: counted.value.waiting }) : counted;
+      },
+      // The gateway wakes the person for their person ship, so its lease states the gateway as its waker (interop 5.1).
       pushReceive: async (crewToken, { max }) => {
-        const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max }, answers: pushReceiveOutputSchema });
+        const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max, waker: 'gateway' }, answers: pushReceiveOutputSchema });
         return taken.isOk ? ok(taken.value.deliveries.map(personDeliveryOf)) : taken;
       },
       ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
