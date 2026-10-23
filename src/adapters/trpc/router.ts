@@ -53,6 +53,8 @@ import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { ReadWakeChannels } from '../../core/people/read-wake-channels.js';
 import type { FocusPage } from '../../core/people/focus-page.js';
+import type { TurnOffWebPush } from '../../core/people/turn-off-web-push.js';
+import type { TurnOnWebPush } from '../../core/people/turn-on-web-push.js';
 import type { PersonShip } from '../../core/people/ports.js';
 import type { TurnEmailChannel } from '../../core/people/turn-email-channel.js';
 import type { ReadAuthorization } from '../../core/oauth/read-authorization.js';
@@ -126,6 +128,8 @@ export interface Context {
     doneDelivery: DoneDelivery;
     readWakeChannels: ReadWakeChannels;
     turnEmailChannel: TurnEmailChannel;
+    turnOnWebPush: TurnOnWebPush;
+    turnOffWebPush: TurnOffWebPush;
     focusPage: FocusPage;
   };
   readOutsideParties: ReadOutsideParties;
@@ -417,6 +421,7 @@ const PERSON_CODES = {
   NO_SUCH_DELIVERY: 'NOT_FOUND',
   SEND_REFUSED: 'BAD_REQUEST',
   CHANNEL_NOT_OFFERED: 'PRECONDITION_FAILED',
+  INVALID_SUBSCRIPTION: 'BAD_REQUEST',
 } as const satisfies Record<string, TRPCError['code']>;
 
 function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES; message: string }>): T {
@@ -453,6 +458,29 @@ function personShipOf(caller: PersonCaller): PersonShip {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'You have no person ship in this fleet: your rights there do not let you message' });
   }
   return { fleetId: caller.fleetId, shipId };
+}
+
+/** A browser's push subscription as the page sends it, with the browser's name: the use case checks each part. */
+const webPushSubscriptionInputSchema = z.strictObject({
+  endpoint: z.string().min(1),
+  keys: z.strictObject({ p256dh: z.string().min(1), auth: z.string().min(1) }),
+  browser: z.string(),
+});
+
+/** The fleet's name as the person's shared sign-in states it, which their web push wakes say (wake a person, W4). */
+async function fleetNameOf(ctx: Pick<Context, 'accountApps' | 'signIn'> & { caller: PersonCaller }): Promise<string> {
+  if (ctx.accountApps === undefined || ctx.signIn === undefined) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: "Open the gateway's pages, signed in with your account, to turn web push on" });
+  }
+  const apps = await ctx.accountApps(ctx.signIn);
+  if (!apps.isOk) {
+    throw apps.error.kind === 'signedOut' ? new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in with your account' }) : new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'The sign-in service did not answer: try again' });
+  }
+  const fleet = apps.value.fleets.find(({ fleetId }) => fleetId === ctx.caller.fleetId);
+  if (fleet === undefined) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Your account may not open this fleet' });
+  }
+  return fleet.name;
 }
 
 const accountInViewOutputSchema = z.discriminatedUnion('kind', [
@@ -746,9 +774,20 @@ export const gatewayRouter = t.router({
     /** Is done with a delivery they opened, with no answer. */
     done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, ...input }))),
     /** The channels that wake them when something waits for their person ship, each offered or not and on or not (wake a person, W8). */
-    wakeChannels: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readWakeChannels(ctx.caller))),
+    wakeChannels: personProcedure.query(async ({ ctx }) => {
+      const { email, webPush } = personAnswerOf(await ctx.person.readWakeChannels(ctx.caller));
+      return { email, webPush: { publicKey: webPush.publicKey, browsers: webPush.browsers.map(({ addedAt, ...browser }) => ({ ...browser, addedAt: addedAt.toISOString() })) } };
+    }),
     /** Turns email on or off, to be woken when something waits for their person ship. */
     turnEmail: personProcedure.input(z.strictObject({ isOn: z.boolean() })).mutation(async ({ ctx, input }) => { personAnswerOf(await ctx.person.turnEmailChannel({ caller: ctx.caller, ...input })); }),
+    /** Turns web push on for the browser that sent its subscription; its wakes name the fleet as the person's shared sign-in states it. */
+    turnOnWebPush: personProcedure.input(webPushSubscriptionInputSchema).mutation(async ({ ctx, input }) => {
+      personAnswerOf(await ctx.person.turnOnWebPush({ caller: ctx.caller, fleetName: await fleetNameOf(ctx), ...input }));
+    }),
+    /** Removes a browser the person turned web push on in. */
+    turnOffWebPush: personProcedure.input(z.strictObject({ endpoint: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+      personAnswerOf(await ctx.person.turnOffWebPush({ caller: ctx.caller, ...input }));
+    }),
     /**
      * Held open by a page of the person while it is in focus (wake a person,
      * W6): what arrives is handed through the page, and no wake goes out. It
