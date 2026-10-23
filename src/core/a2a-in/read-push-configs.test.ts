@@ -70,13 +70,14 @@ describe("DeleteTaskPushNotificationConfig removes one of the caller's own (slic
     expect({ configs: store.configs.map((config) => config.id), pushes: store.pushes }).toEqual({ configs: ['hook-1', 'hook-3'], pushes: [] });
   });
 
-  it("refuses another party's task as not found, and an unknown config", async () => {
-    const [others, unknown] = [await remove()({ caller: OTHER, taskId: TASK_ID, id: 'hook-2' }), await remove()({ caller: SUPPLIER, taskId: TASK_ID, id: 'hook-9' })];
-
-    expect([others, unknown]).toMatchObject([
-      { isOk: false, error: { kind: 'TASK_NOT_FOUND' } },
-      { isOk: false, error: { kind: 'PUSH_CONFIG_NOT_FOUND' } },
-    ]);
+  it("refuses another party's task as not found, removing nothing", async () => {
+    await expect(remove()({ caller: OTHER, taskId: TASK_ID, id: 'hook-2' })).resolves.toMatchObject({ isOk: false, error: { kind: 'TASK_NOT_FOUND' } });
     expect(store.configs).toHaveLength(3);
+  });
+
+  it('removes a config no longer there without error, as a delete again does', async () => {
+    await remove()({ caller: SUPPLIER, taskId: TASK_ID, id: 'hook-2' });
+
+    await expect(remove()({ caller: SUPPLIER, taskId: TASK_ID, id: 'hook-2' })).resolves.toEqual({ isOk: true, value: undefined });
   });
 });

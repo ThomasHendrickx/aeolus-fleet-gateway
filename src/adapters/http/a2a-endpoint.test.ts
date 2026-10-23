@@ -557,6 +557,16 @@ describe('the push config methods over HTTP+JSON (slice 4)', () => {
     expect(pushStore.configs).toEqual([]);
   });
 
+  it('deletes a config again without error, whatever content type an empty body names', async () => {
+    await sendingTheMessage();
+    await rest('POST', { path: `/tasks/${TASK_ID}/pushNotificationConfigs`, payload: A_PUSH_CONFIG });
+    const deleting = () => server.inject({ method: 'DELETE', url: `/gw/a2a/${CRM_ALIAS}/tasks/${TASK_ID}/pushNotificationConfigs/hook-1`, headers: { ...BEARER, 'a2a-version': '1.0', 'content-type': 'text/plain;charset=UTF-8' } });
+
+    const [first, again] = [await deleting(), await deleting()];
+
+    expect([first.statusCode, again.statusCode]).toEqual([200, 200]);
+  });
+
   it('refuses a webhook that resolves inside with 400, and a task of no call of this client with 404', async () => {
     await sendingTheMessage();
 
