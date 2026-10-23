@@ -149,6 +149,19 @@ describe('the waiters of the person ships the gateway crews', () => {
     await expect.poll(() => second.waitingOn()).toEqual([charlotte]);
   });
 
+  it("are taken over by the other instance once the waiting one's connection to the database ends, freeing its locks", async () => {
+    // The first instance looks again only after a minute, so the second is the one to take the lock.
+    const first = anInstance({ roundMs: 60_000 });
+    first.start();
+    await expect.poll(() => first.waitingOn()).toEqual([charlotte]);
+    const second = anInstance();
+    second.start();
+
+    await prisma.$executeRaw`SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`;
+
+    await expect.poll(() => ({ first: first.waitingOn(), second: second.waitingOn() })).toEqual({ first: [], second: [charlotte] });
+  });
+
   it('start at once for a ship the gateway crews while it runs, not at its next round', async () => {
     const instance = anInstance({ roundMs: 60_000 });
     await prisma.personCrew.deleteMany({});
