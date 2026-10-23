@@ -3,7 +3,9 @@
  * change of its task. The gateway calls it from inside the fleet's network
  * at a URL the outside chose, so it is an https URL that carries no
  * credentials, reached only at a public address: never loopback, private,
- * shared, link-local (cloud metadata), unique-local, multicast or reserved.
+ * shared, link-local (cloud metadata), unique-local, site-local,
+ * documentation, multicast or reserved, nor an IPv6 address that carries an
+ * IPv4 one inside (IPv4-mapped, IPv4-compatible, NAT64, 6to4, Teredo).
  * The address is checked once the host resolves, when the config is set and
  * again at each push, so a name that resolves to an inside address is
  * refused like the address itself.
@@ -23,19 +25,29 @@ for (const [network, prefix] of [
   ['169.254.0.0', 16],
   ['172.16.0.0', 12],
   ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
   ['192.168.0.0', 16],
   ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
   ['224.0.0.0', 4],
   ['240.0.0.0', 4],
 ] as const) {
   INSIDE.addSubnet(network, prefix, 'ipv4');
 }
 for (const [network, prefix] of [
-  ['::', 128],
-  ['::1', 128],
+  // IPv4-compatible (::a.b.c.d), unspecified and loopback.
+  ['::', 96],
+  // NAT64, Teredo and 6to4 carry an IPv4 address inside, which could be any inside one: refused whole, as ::ffff: is.
+  ['64:ff9b::', 96],
+  ['64:ff9b:1::', 48],
+  ['2001::', 32],
+  ['2002::', 16],
   ['100::', 64],
+  ['2001:db8::', 32],
   ['fc00::', 7],
   ['fe80::', 10],
+  ['fec0::', 10],
   ['ff00::', 8],
 ] as const) {
   INSIDE.addSubnet(network, prefix, 'ipv6');
