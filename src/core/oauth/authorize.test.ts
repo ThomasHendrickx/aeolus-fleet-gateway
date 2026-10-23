@@ -15,7 +15,7 @@ let readAuthorization: ReturnType<typeof createReadAuthorization>;
 
 beforeEach(async () => {
   clients = memoryOAuthClients();
-  await clients.save({ clientId: 'client-cursor', fleetId: FLEET_ID, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: 'hash(cursor-secret)' });
+  await clients.save({ clientId: 'client-cursor', fleetId: FLEET_ID, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: 'hash(cursor-secret)', grant: 'authorizationCode' });
   documents = fakeClientMetadataDocuments({
     [CIMD_CLIENT]: { client_id: CIMD_CLIENT, client_name: 'Claude', redirect_uris: [CALLBACK], token_endpoint_auth_method: 'none' },
     [NATIVE_CLIENT]: { client_id: NATIVE_CLIENT, client_name: 'Codex', redirect_uris: ['http://127.0.0.1/callback', 'http://localhost/callback', 'http://[::1]/callback'], token_endpoint_auth_method: 'none' },

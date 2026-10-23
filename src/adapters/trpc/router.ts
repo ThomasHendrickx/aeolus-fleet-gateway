@@ -27,6 +27,7 @@ import type { IsServed } from '../../core/installation/served.js';
 import type { SetFleetEnabled } from '../../core/installation/set-fleet-enabled.js';
 import type { AccountActor, AuthenticateActor } from '../../core/actors/authenticate-actor.js';
 import type { ReadOutsideParties, SetOutsideParties } from '../../core/outside-parties/set-outside-parties.js';
+import type { AddClientParty, AddClientPartyRefusal } from '../../core/parties/add-client-party.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListOwnerChoices } from '../../core/parties/list-owner-choices.js';
@@ -84,6 +85,7 @@ export interface Context {
   readConnection: ReadConnection;
   connect: Connect;
   approveParty: ApproveParty;
+  addClientParty: AddClientParty;
   crewParty: CrewParty;
   listParties: ListParties;
   listOwnerChoices: ListOwnerChoices;
@@ -231,10 +233,23 @@ const RETIRE_CODES = {
   NOT_AN_ACTOR: 'UNAUTHORIZED',
 } as const satisfies Record<RetirePartyRefusal['kind'], TRPCError['code']>;
 
+/** The refusals of adding a client party, as the API states them: a fleet that does not answer is tried again with the same request id. */
+const ADD_CLIENT_CODES = {
+  NOT_AN_APPROVER: 'FORBIDDEN',
+  SCOPE_NOT_HELD: 'FORBIDDEN',
+  CLIENT_HAS_PARTY: 'CONFLICT',
+  PARTY_EXISTS: 'CONFLICT',
+  COMMISSION_REFUSED: 'BAD_REQUEST',
+  OUTSIDE_PARTIES_OFF: 'PRECONDITION_FAILED',
+  NOT_CONNECTED: 'PRECONDITION_FAILED',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+} as const satisfies Record<AddClientPartyRefusal['kind'], TRPCError['code']>;
+
 const CREW_CODES = {
   NO_SUCH_PARTY: 'NOT_FOUND',
   NOT_AWAITING_CREW: 'CONFLICT',
   SECRET_REFUSED: 'BAD_REQUEST',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
 } as const satisfies Record<string, TRPCError['code']>;
 
 /** The refusals of reading an outside MCP server's tools, as the API states them. */
@@ -554,6 +569,24 @@ export const gatewayRouter = t.router({
         return approved.value;
       }),
     /**
+     * An actor holding gateway:approve adds a client party with no human at
+     * the authorize step, such as a vendor agent (vendor platforms V4): its
+     * name, its owner (a person ship) and its scopes, only ones it holds. Its
+     * client id and secret are answered once, the secret when its proxy ship
+     * is crewed; a party left awaiting crew gets it from parties.crew. A
+     * repeat with the same request id picks up where the last one stopped.
+     */
+    addClient: servedProcedure
+      .input(z.strictObject({ requestId: idempotencyKeySchema, name: shipHandleSchema, ownerShipId: idSchema('ship'), scopes: z.array(z.string()) }))
+      .output(z.object({ party: shownPartySchema, clientId: z.string(), clientSecret: z.string().nullable() }))
+      .mutation(async ({ ctx, input }) => {
+        const added = await ctx.addClientParty({ actor: ctx.actor, ...input });
+        if (!added.isOk) {
+          throw new TRPCError({ code: ADD_CLIENT_CODES[added.error.kind], message: added.error.message });
+        }
+        return added.value;
+      }),
+    /**
      * An actor holding fleet:manage retires a party (decision 0056): its proxy
      * ship is retired in the fleet as the actor, within its manage reach, and
      * the gateway forgets the party. Adding it again is a new request.
@@ -590,16 +623,21 @@ export const gatewayRouter = t.router({
         }
         return {};
       }),
-    /** argo hands over a new secret, from a new starting prompt in the console, for a proxy ship that awaits crew. */
+    /**
+     * argo hands over a new secret, from a new starting prompt in the console,
+     * for a proxy ship that awaits crew, its crew released or never taken. A
+     * client party that signs in by client credentials is answered its new
+     * client secret, this once (vendor platforms V8).
+     */
     crew: managing(servedProcedure)
       .input(z.strictObject({ name: shipHandleSchema, secret: z.string().min(1) }))
-      .output(shownPartySchema)
+      .output(z.intersection(shownPartySchema, z.object({ clientSecret: z.string().nullable() })))
       .mutation(async ({ ctx, input }) => {
         const crewed = await ctx.crewParty({ operatorFleetId: ctx.fleetId, ...input });
         if (!crewed.isOk) {
           throw new TRPCError({ code: CREW_CODES[crewed.error.kind], message: crewed.error.message });
         }
-        return crewed.value;
+        return { ...crewed.value.party, clientSecret: crewed.value.clientSecret };
       }),
     /** The gateway states the party's proxy ship anew, from what its server lists now, with argo's marks. */
     state: managing(servedProcedure)

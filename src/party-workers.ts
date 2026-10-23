@@ -34,20 +34,21 @@ export function createPartyWorkers(deps: {
   /** Each running worker, by fleet and party, with what stops it. */
   const running = new Map<string, { fleetId: FleetId; done: Promise<void>; stopFleet: AbortController }>();
 
-  const work = async ({ fleetId, name }: { fleetId: FleetId; name: string }, signal: AbortSignal): Promise<void> => {
+  /** One run of the party's worker, as its crew token stands now: whether the fleet refused its crew token, and which. */
+  const workOnce = async ({ fleetId, name }: { fleetId: FleetId; name: string }, signal: AbortSignal): Promise<{ refused: string | null }> => {
     if (!(await deps.servesOutsideParties(fleetId))) {
-      return;
+      return { refused: null };
     }
     const party = await deps.parties.find(fleetId, name);
     if (party?.state !== 'crewed' || signal.aborted) {
-      return;
+      return { refused: null };
     }
     if (party.kind === 'mcpClient') {
       const { ended } = await deps.collectReplies({ party, signal });
       if (ended === 'crewRefused') {
         deps.log.warn({ fleetId, party: name }, "the fleet refused the proxy ship's crew token: its calls get no replies");
       }
-      return;
+      return { refused: ended === 'crewRefused' ? party.crewToken : null };
     }
     const stated = await deps.stateParty({ fleetId, name });
     if (!stated.isOk) {
@@ -57,6 +58,22 @@ export function createPartyWorkers(deps: {
     const { ended } = await deps.runParty({ party, signal });
     if (ended === 'crewRefused') {
       deps.log.warn({ fleetId, party: name }, 'the fleet refused the proxy ship\'s crew token: its calls are not taken');
+    }
+    return { refused: ended === 'crewRefused' ? party.crewToken : null };
+  };
+
+  /**
+   * The party's worker until it is stopped. A crew token the fleet refused
+   * ends it, unless the party was crewed again meanwhile with another, as
+   * when its crew was released and a new secret crewed the same proxy ship
+   * (vendor platforms V8): then it works on with the new one.
+   */
+  const work = async (party: { fleetId: FleetId; name: string }, signal: AbortSignal): Promise<void> => {
+    for (let run = await workOnce(party, signal); run.refused !== null && !signal.aborted; run = await workOnce(party, signal)) {
+      const kept = await deps.parties.find(party.fleetId, party.name);
+      if (kept?.state !== 'crewed' || kept.crewToken === run.refused) {
+        return;
+      }
     }
   };
 

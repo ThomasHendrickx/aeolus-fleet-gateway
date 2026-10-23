@@ -17,7 +17,7 @@ describe('argo pre-registers an MCP client (no dynamic registration, MCP 2026-07
       isOk: true,
       value: { clientId: 'client-secret-1', clientSecret: 'secret-2' },
     });
-    expect(clients.held.get('client-secret-1')).toEqual({ clientId: 'client-secret-1', fleetId: FLEET_ID, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: 'hash(secret-2)' });
+    expect(clients.held.get('client-secret-1')).toEqual({ clientId: 'client-secret-1', fleetId: FLEET_ID, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: 'hash(secret-2)', grant: 'authorizationCode' });
   });
 
   it('registers a public client with no secret', async () => {

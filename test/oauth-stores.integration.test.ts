@@ -22,17 +22,34 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-function aPair(overrides: Partial<Pick<TokenPair, 'familyId' | 'codeHash' | 'fleetId' | 'accessHash' | 'refreshHash'>> = {}, holder: TokenHolder = { kind: 'party', party: 'claude' }): TokenPair {
+function aPair(overrides: Partial<Pick<TokenPair, 'familyId' | 'codeHash' | 'fleetId' | 'accessHash' | 'refreshHash' | 'refreshExpiresAt'>> = {}, holder: TokenHolder = { kind: 'party', party: 'claude' }): TokenPair {
   return { familyId: 'family-1', codeHash: 'code-1', fleetId: FLEET, clientId: 'client-1', resource: 'http://gateway.example.com/mcp', scope: null, ...holder, accessHash: 'access-1', accessExpiresAt: AT, refreshHash: 'refresh-1', refreshExpiresAt: LATER, ...overrides };
 }
 
 describe("the gateway's OAuth records in Postgres", () => {
   it('keeps a pre-registered client', async () => {
     const clients = createPrismaOAuthClients(prisma);
-    const client = { clientId: 'client-cursor', fleetId: FLEET, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: 'hash' };
+    const client = { clientId: 'client-cursor', fleetId: FLEET, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: 'hash', grant: 'authorizationCode' } as const;
     await clients.save(client);
 
     await expect(clients.find('client-cursor')).resolves.toEqual(client);
+  });
+
+  it('keeps a client that signs in by client credentials, with no redirect URI, and its new secret (vendor platforms V4, V8)', async () => {
+    const clients = createPrismaOAuthClients(prisma);
+    const client = { clientId: 'client-agentcore', fleetId: FLEET, name: 'agentcore', redirectUris: [], secretHash: 'hash-1', grant: 'clientCredentials' } as const;
+    await clients.save(client);
+    await clients.save({ ...client, secretHash: 'hash-2' });
+
+    await expect(clients.find('client-agentcore')).resolves.toEqual({ ...client, secretHash: 'hash-2' });
+  });
+
+  it('keeps an access token issued from no code and with no refresh token', async () => {
+    const tokens = createPrismaIssuedTokens(prisma);
+    const token = aPair({ familyId: 'access-cc', codeHash: null, accessHash: 'access-cc', refreshHash: null, refreshExpiresAt: null });
+    await tokens.save(token);
+
+    await expect(tokens.findByAccess('access-cc')).resolves.toEqual({ ...token, state: 'active' });
   });
 
   it('hands a code to one of two racing takes; the other reads it used', async () => {
@@ -100,7 +117,7 @@ describe("the gateway's OAuth records in Postgres", () => {
   it("forgets a fleet with its clients, codes and tokens (decision 0021)", async () => {
     const clients = createPrismaOAuthClients(prisma);
     const tokens = createPrismaIssuedTokens(prisma);
-    await clients.save({ clientId: 'client-other', fleetId: OTHER_FLEET, name: 'Other', redirectUris: ['https://o.example/cb'], secretHash: null });
+    await clients.save({ clientId: 'client-other', fleetId: OTHER_FLEET, name: 'Other', redirectUris: ['https://o.example/cb'], secretHash: null, grant: 'authorizationCode' });
     await tokens.save(aPair({ fleetId: OTHER_FLEET, familyId: 'family-o', accessHash: 'access-o', refreshHash: 'refresh-o' }));
 
     await createPrismaFleetForgetter(prisma).forget(OTHER_FLEET);

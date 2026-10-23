@@ -124,6 +124,8 @@ model OAuthClient {
   name         String
   redirectUris String[] @map("redirect_uris")
   secretHash   String?  @map("secret_hash")
+  /// How it signs in: authorizationCode, or clientCredentials with no redirect URI (vendor platforms V4).
+  grant        String   @default("authorizationCode")
 
   @@index([fleetId])
   @@map("oauth_clients")
@@ -151,9 +153,11 @@ model AuthorizationCode {
 /// The access and refresh tokens the gateway issued, kept only as hashes, a pair per row.
 model IssuedToken {
   accessHash       String   @id @map("access_hash")
-  refreshHash      String   @unique @map("refresh_hash")
+  /// None for a client signed in by client credentials, which asks again.
+  refreshHash      String?  @unique @map("refresh_hash")
   familyId         String   @map("family_id")
-  codeHash         String   @map("code_hash")
+  /// None for a token issued from client credentials.
+  codeHash         String?  @map("code_hash")
   fleetId          String   @map("fleet_id")
   clientId         String   @map("client_id")
   resource         String
@@ -162,7 +166,7 @@ model IssuedToken {
   party            String?
   grantId          String?  @map("grant_id")
   accessExpiresAt  DateTime @map("access_expires_at") @db.Timestamptz(3)
-  refreshExpiresAt DateTime @map("refresh_expires_at") @db.Timestamptz(3)
+  refreshExpiresAt DateTime? @map("refresh_expires_at") @db.Timestamptz(3)
   state            String
 
   @@index([fleetId])

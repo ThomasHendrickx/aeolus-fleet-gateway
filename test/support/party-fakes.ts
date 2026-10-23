@@ -1,10 +1,11 @@
 import type { FleetId, ShipId, VerifiedFact } from '@aeolus-fleet/common';
 
-import type { FleetRefusal } from '../../src/core/connection/ports.js';
+import type { FleetDoor, FleetRefusal } from '../../src/core/connection/ports.js';
 import type { Party } from '../../src/core/parties/party.js';
 import type { ActorCredential } from '../../src/core/actors/credential-of.js';
 import type { PartyStore, ProxyShipDoor, ProxyShipReads, ProxyShipsAsActor } from '../../src/core/parties/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
+import { FLEET_ID } from './fleet-fakes.js';
 
 export const OWNER_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 export const PROXY_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9crm';
@@ -54,7 +55,7 @@ export function fakeProxyShipFleet() {
     isVerifyRefused: false,
   };
   const unavailable = (): Promise<Result<never, FleetRefusal>> => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
-  const door: ProxyShipDoor = {
+  const door: ProxyShipDoor & Pick<FleetDoor, 'whoami'> = {
     commissionAppShip: (_crewToken, ship) => {
       if (!state.isAnswering) {
         return unavailable();
@@ -89,6 +90,16 @@ export function fakeProxyShipFleet() {
       state.crewed.add(shipId);
       return Promise.resolve(ok({ crewToken: 'aeolus_ct_v1_proxy' }));
     },
+    // Every proxy ship's crew token is the same here, so it is taken while that ship is crewed.
+    whoami: (crewToken) => {
+      if (!state.isAnswering) {
+        return unavailable();
+      }
+      if (crewToken !== 'aeolus_ct_v1_proxy' || !state.crewed.has(PROXY_SHIP_ID)) {
+        return Promise.resolve(err({ code: 'LEASE_ENDED', message: 'The crew was released' }));
+      }
+      return Promise.resolve(ok({ shipId: PROXY_SHIP_ID, fleetId: FLEET_ID, name: 'proxy', type: 'mcp-client' }));
+    },
     setVerifiedFacts: (crewToken, { shipId, facts }) => {
       if (state.isVerifyRefused) {
         return Promise.resolve(err({ code: 'FORBIDDEN', message: 'The ship is outside your manage reach' }));
@@ -97,7 +108,12 @@ export function fakeProxyShipFleet() {
       return Promise.resolve(ok(undefined));
     },
   };
-  return { state, door };
+  /** Releases the ship's crew (fleet.release), and gives it a new secret, as its new starting prompt does. */
+  const release = (shipId: ShipId, secret: string) => {
+    state.crewed.delete(shipId);
+    state.secrets.set(shipId, secret);
+  };
+  return { state, door, release };
 }
 
 /** The fleet's calls on proxy ships as the actor, as a test sees them: each call with its credential, answered as given. */

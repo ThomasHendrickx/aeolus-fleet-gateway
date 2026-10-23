@@ -2,7 +2,7 @@ import type { Actor } from '../actors/authenticate-actor.js';
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import { APPROVING_SCOPE } from './decide-request.js';
+import { APPROVING_SCOPE } from '../parties/approver.js';
 import type { PendingRequest, PendingRequests } from './ports.js';
 
 export type ListToDecide = (actor: Actor) => Promise<Result<PendingRequest[], DomainError<'NOT_AN_APPROVER'>>>;

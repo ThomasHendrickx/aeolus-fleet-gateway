@@ -35,7 +35,7 @@ beforeEach(async () => {
   now = STARTED_AT;
   secrets = fakeSecrets();
   clients = memoryOAuthClients();
-  await clients.save({ clientId: 'client-cursor', fleetId: OTHER_FLEET_ID, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: null });
+  await clients.save({ clientId: 'client-cursor', fleetId: OTHER_FLEET_ID, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: null, grant: 'authorizationCode' });
   seals = fakeSignInSeals();
   grants = memoryAccountGrants();
   codes = memoryAuthorizationCodes();
