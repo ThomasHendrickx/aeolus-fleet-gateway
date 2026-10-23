@@ -3,7 +3,27 @@ import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
-import type { AccountDoor, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../src/core/people/ports.js';
+import type {
+  AccountDoor,
+  FocusedPage,
+  FocusedPages,
+  InboxChange,
+  InboxChanges,
+  OpenedDeliveries,
+  OpenedDelivery,
+  PersonCrew,
+  PersonCrews,
+  PersonDelivery,
+  PersonDiscovery,
+  PersonShip,
+  PersonShipDoor,
+  PersonWakes,
+  Wake,
+  WebPush,
+  WebPushSent,
+  WebPushSubscription,
+  WebPushSubscriptions,
+} from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -119,6 +139,7 @@ export function aPersonDelivery(overrides: Partial<PersonDelivery> = {}): Person
     questionTitle: 'Go for release 1.4?',
     sentAt: new Date('2026-10-19T08:00:00.000Z'),
     inReplyTo: null,
+    handOverNumber: null,
     ...overrides,
   };
 }
@@ -139,7 +160,15 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
   /** The messages the fleet took, as sent. */
   const sent: Parameters<PersonShipDoor['send']>[1][] = [];
   /** The fleet's answers to come for each call, before it takes them. */
-  const refusals: { reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[] } = { reply: [], handled: [], discover: [], send: [], delivery: [] };
+  const refusals: { reply: FleetRefusal[]; handled: FleetRefusal[]; handed: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[]; pushReceive: FleetRefusal[] } = {
+    reply: [],
+    handled: [],
+    handed: [],
+    discover: [],
+    send: [],
+    delivery: [],
+    pushReceive: [],
+  };
   /** The deliveries the ship acknowledged and has not handled yet. */
   let acknowledged: PersonDelivery[] = [];
   const refusal: FleetRefusal = { code: 'UNAUTHORIZED', message: 'The crew token is not valid' };
@@ -151,7 +180,20 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
     },
     pushReceive: (crewToken, { max }) => {
       calls.push(`pushReceive(${String(max)})`);
-      return crewed(crewToken, () => ship.deliveries.slice(0, max));
+      const refused = refusals.pushReceive.shift();
+      return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => ship.deliveries.slice(0, max));
+    },
+    handed: (crewToken, { deliveryId, handOverNumber, channel }) => {
+      calls.push(`handed(${deliveryId}, ${String(handOverNumber)}, ${channel})`);
+      const refused = refusals.handed.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
+      return crewed(crewToken, () => {
+        const isWaiting = ship.deliveries.some((delivery) => delivery.deliveryId === deliveryId);
+        ship.deliveries = ship.deliveries.map((delivery) => (delivery.deliveryId === deliveryId ? { ...delivery, handOverNumber } : delivery));
+        return isWaiting ? ('handed' as const) : ('acknowledged' as const);
+      });
     },
     ack: (crewToken, deliveryId) => {
       calls.push(`ack(${deliveryId})`);
@@ -237,4 +279,101 @@ export function memoryInboxChanges(): InboxChanges & { told: InboxChange[] } {
       return Promise.resolve();
     },
   };
+}
+
+/** The browsers a person turned web push on in, in memory, by fleet, person ship and endpoint. */
+export function memoryWebPushSubscriptions(): WebPushSubscriptions & { held: WebPushSubscription[] } {
+  const held: WebPushSubscription[] = [];
+  const isSame = (fleetId: FleetId, { shipId, endpoint }: { shipId: ShipId; endpoint: string }) => (subscription: WebPushSubscription) =>
+    subscription.fleetId === fleetId && subscription.shipId === shipId && subscription.endpoint === endpoint;
+  return {
+    held,
+    list: (fleetId, shipId) => Promise.resolve(held.filter((subscription) => subscription.fleetId === fleetId && subscription.shipId === shipId)),
+    save: (subscription) => {
+      const index = held.findIndex(isSame(subscription.fleetId, subscription));
+      held.splice(index < 0 ? held.length : index, index < 0 ? 0 : 1, subscription);
+      return Promise.resolve();
+    },
+    markGone: (fleetId, gone) => {
+      const index = held.findIndex(isSame(fleetId, gone));
+      const subscription = held[index];
+      if (subscription !== undefined) {
+        held[index] = { ...subscription, goneAt: gone.goneAt };
+      }
+      return Promise.resolve();
+    },
+    remove: (fleetId, removed) => {
+      const index = held.findIndex(isSame(fleetId, removed));
+      if (index >= 0) {
+        held.splice(index, 1);
+      }
+      return Promise.resolve();
+    },
+  };
+}
+
+/** A browser of Charlotte's that took web push on, with its push service's endpoint. */
+export function aWebPushSubscription(overrides: Partial<WebPushSubscription> = {}): WebPushSubscription {
+  return {
+    fleetId: FLEET_ID,
+    shipId: PERSON_SHIP_ID,
+    endpoint: 'https://push.example/send/firefox-1',
+    keys: { p256dh: 'BPublicKeyOfTheBrowser', auth: 'AuthSecret' },
+    browser: 'Firefox on Linux',
+    fleetName: 'Acme',
+    addedAt: new Date('2026-10-22T09:00:00.000Z'),
+    goneAt: null,
+    ...overrides,
+  };
+}
+
+/** When each person ship was last woken through each channel, in memory. */
+export function memoryPersonWakes(): PersonWakes & { held: Map<string, Date> } {
+  const held = new Map<string, Date>();
+  const key = ({ fleetId, shipId }: PersonShip, channel: string) => `${fleetId}/${shipId}/${channel}`;
+  return {
+    held,
+    lastWokenAt: (ship, channel) => Promise.resolve(held.get(key(ship, channel))),
+    record: (ship, woken) => {
+      held.set(key(ship, woken.channel), woken.at);
+      return Promise.resolve();
+    },
+  };
+}
+
+/** The person's pages in focus, in memory: each by its id, with when it was last seen in focus. */
+export function memoryFocusedPages(): FocusedPages & { held: FocusedPage[] } {
+  const held: FocusedPage[] = [];
+  return {
+    held,
+    save: (page) => {
+      const index = held.findIndex(({ pageId }) => pageId === page.pageId);
+      held.splice(index < 0 ? held.length : index, index < 0 ? 0 : 1, page);
+      return Promise.resolve();
+    },
+    remove: (fleetId, pageId) => {
+      const index = held.findIndex((page) => page.fleetId === fleetId && page.pageId === pageId);
+      if (index >= 0) {
+        held.splice(index, 1);
+      }
+      return Promise.resolve();
+    },
+    isAnyInFocus: ({ fleetId, shipId }, since) => Promise.resolve(held.some((page) => page.fleetId === fleetId && page.shipId === shipId && page.seenAt >= since)),
+  };
+}
+
+/** The browsers' push services, as the gateway's web push reaches them: each answers as the test sets it, sent by default. Every wake sent is kept. */
+export function fakeWebPush() {
+  const answers = new Map<string, WebPushSent[]>();
+  const sent: { endpoint: string; wake: Wake }[] = [];
+  const webPush: WebPush = {
+    send: (subscription, wake) => {
+      const answer = answers.get(subscription.endpoint)?.shift() ?? 'sent';
+      if (answer === 'sent') {
+        sent.push({ endpoint: subscription.endpoint, wake });
+      }
+      return Promise.resolve(answer);
+    },
+  };
+  return { webPush, sent, answers };
 }
