@@ -307,8 +307,9 @@ const CONCURRENCY_LIMIT_MIN = 1;
 const CONCURRENCY_LIMIT_MAX = 10;
 const CONCURRENCY_LIMIT_DEFAULT = 4;
 
-/** The credential argo gives the vault for a party: a static bearer, or OAuth client credentials. */
+/** The credential argo gives the vault for a party: none, a static bearer, or OAuth client credentials. */
 const credentialInputSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('none') }),
   z.strictObject({ kind: z.literal('bearer'), token: z.string().min(1) }),
   z.strictObject({
     kind: z.literal('clientCredentials'),
