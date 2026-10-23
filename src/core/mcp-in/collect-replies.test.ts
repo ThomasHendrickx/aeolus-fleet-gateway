@@ -6,7 +6,7 @@ import { aCallReply, aClientCall, fakeReplyReceiver, MESSAGE_ID, memoryClientCal
 import { fakeProxyShipCrew } from '../../../test/support/mcp-out-fakes.js';
 import { PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
 import type { Sleep } from '../mcp-out/run-party.js';
-import type { McpClientParty } from '../parties/party.js';
+import type { A2aClientParty, McpClientParty } from '../parties/party.js';
 import type { Clock } from '../shared/clock.js';
 import { createCollectReplies } from './collect-replies.js';
 
@@ -66,7 +66,7 @@ beforeEach(async () => {
   };
 });
 
-const collect = () => createCollectReplies({ crew, replies: fleet.receiver, calls, clock, sleep, pollMs: 2000 })({ party: CLAUDE, signal: stop.signal });
+const collect = (party: McpClientParty | A2aClientParty = CLAUDE) => createCollectReplies({ crew, replies: fleet.receiver, sent: fleet.sent, calls, clock, sleep, pollMs: 2000 })({ party, signal: stop.signal });
 
 /** A call of the party's, sent under its own message. */
 const aCallOf = (messageId: MessageId, overrides: Parameters<typeof aClientCall>[0] = {}) => aClientCall({ messageId, handle: `handle-${messageId}`, ...overrides });
@@ -144,5 +144,35 @@ describe("the gateway takes the replies to an outside client's calls with receiv
     fleet.state.refusal = { code: 'LEASE_ENDED', message: 'The lease ended' };
 
     await expect(collect()).resolves.toEqual({ ended: 'crewRefused' });
+  });
+});
+
+describe("the gateway reads where each waited call's delivery stands with sentMessage (interop 3.4)", () => {
+  const ACKNOWLEDGED = { state: 'acknowledged', since: new Date('2026-10-19T12:00:30.000Z') } as const;
+
+  it("keeps the delivery's state on the call", async () => {
+    fleet.state.deliveries.set(MESSAGE_ID, ACKNOWLEDGED);
+
+    await collect();
+
+    expect((await calls.findByMessage(FLEET_ID, MESSAGE_ID))?.delivery).toEqual(ACKNOWLEDGED);
+  });
+
+  it('waits no more on a call once the fleet gave its delivery up', async () => {
+    fleet.state.deliveries.set(MESSAGE_ID, { state: 'undeliverable', since: new Date('2026-10-19T12:00:40.000Z') });
+
+    await collect();
+
+    expect(fleet.state.asked.length).toBe(1);
+  });
+
+  it("takes the replies to an A2A client's calls the same way (decision 0060)", async () => {
+    const supplier: A2aClientParty = { ...CLAUDE, name: 'supplier', kind: 'a2aClient', bearerHash: 'h(b)', crewToken: 'aeolus_ct_v1_supplier' };
+    await calls.save(aCallOf('msg_01m3tbfspe96yf1rnr4ank9s01', { party: 'supplier' }));
+    fleet.state.replies.set('msg_01m3tbfspe96yf1rnr4ank9s01', [REPLY]);
+
+    await collect(supplier);
+
+    expect((await calls.findByMessage(FLEET_ID, 'msg_01m3tbfspe96yf1rnr4ank9s01'))?.replies).toEqual([{ ...REPLY, receivedAt: NOW }]);
   });
 });

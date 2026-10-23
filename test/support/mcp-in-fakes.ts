@@ -1,7 +1,7 @@
 import { idSchema, type FleetId, type MessageId, type ShipId } from '@aeolus-fleet/common';
 
 import type { CallReply, ClientCall, DeliveryState } from '../../src/core/mcp-in/client-call.js';
-import type { CallKeys, CallSender, ClientCalls, DiscoveredShip, Discovery, ReceivedReply, ReplyReceiver, ShipAliases } from '../../src/core/mcp-in/ports.js';
+import type { CallKeys, CallSender, ClientCalls, DiscoveredShip, Discovery, ReceivedReply, ReplyReceiver, SentMessages, ShipAliases } from '../../src/core/mcp-in/ports.js';
 import { err, ok } from '../../src/core/shared/result.js';
 import { FLEET_ID } from './fleet-fakes.js';
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
@@ -190,6 +190,8 @@ export function memoryClientCalls(): ClientCalls & { held: ClientCall[]; tasks: 
  */
 interface ReplyFleet {
   replies: Map<MessageId, ReceivedReply[]>;
+  /** Where each message's delivery stands, as sentMessage answers it: pending when none is set. */
+  deliveries: Map<MessageId, { state: DeliveryState; since: Date }>;
   refusal: FleetRefusal | undefined;
   asked: { crewToken: string; messageId: MessageId }[];
   inFlight: number;
@@ -199,6 +201,7 @@ interface ReplyFleet {
 export function fakeReplyReceiver() {
   const state: ReplyFleet = {
     replies: new Map<MessageId, ReceivedReply[]>(),
+    deliveries: new Map<MessageId, { state: DeliveryState; since: Date }>(),
     refusal: undefined,
     asked: [],
     inFlight: 0,
@@ -223,5 +226,9 @@ export function fakeReplyReceiver() {
       state.replies.set(messageId, replies.filter((reply) => reply.deliveryId !== deliveryId));
     }
   };
-  return { state, receiver, acknowledged };
+  const sent: SentMessages = {
+    sentMessage: (_crewToken, messageId) =>
+      Promise.resolve(state.refusal === undefined ? ok(state.deliveries.get(messageId) ?? { state: 'pending', since: new Date('2026-10-19T12:00:00.000Z') }) : err(state.refusal)),
+  };
+  return { state, receiver, sent, acknowledged };
 }
