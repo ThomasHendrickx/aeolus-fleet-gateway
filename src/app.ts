@@ -99,6 +99,7 @@ import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
 import { createWakePerson } from './core/people/wake-person.js';
+import { createFocusPage } from './core/people/focus-page.js';
 import { createEmailChannel } from './adapters/pagasae/email-channel.js';
 import { createPrismaEmailChannels } from './adapters/prisma/email-channels.js';
 import { createPrismaWakesSent } from './adapters/prisma/wakes-sent.js';
@@ -471,6 +472,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes }),
       readWakeChannels: createReadWakeChannels({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email') }),
       turnEmailChannel: createTurnEmailChannel({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), clock }),
+      focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
       listShips: createListShips(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),

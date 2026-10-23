@@ -9,7 +9,7 @@
  * does not serve (switched off) gets only `connection.status`. The
  * installation procedures take the installation token instead (decision 0021).
  */
-import { timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 
 import { idempotencyKeySchema, idSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
 import { initTRPC, TRPCError } from '@trpc/server';
@@ -52,6 +52,8 @@ import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { ReadWakeChannels } from '../../core/people/read-wake-channels.js';
+import type { FocusPage } from '../../core/people/focus-page.js';
+import type { PersonShip } from '../../core/people/ports.js';
 import type { TurnEmailChannel } from '../../core/people/turn-email-channel.js';
 import type { ReadAuthorization } from '../../core/oauth/read-authorization.js';
 import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
@@ -117,7 +119,15 @@ export interface Context {
   listMine: ListMine;
   decideRequest: DecideRequest;
   /** A person's own person ship's deliveries; unset where no pagasae signs anyone in. */
-  person?: { readInbox: ReadInbox; openDelivery: OpenDelivery; answerDelivery: AnswerDelivery; doneDelivery: DoneDelivery; readWakeChannels: ReadWakeChannels; turnEmailChannel: TurnEmailChannel };
+  person?: {
+    readInbox: ReadInbox;
+    openDelivery: OpenDelivery;
+    answerDelivery: AnswerDelivery;
+    doneDelivery: DoneDelivery;
+    readWakeChannels: ReadWakeChannels;
+    turnEmailChannel: TurnEmailChannel;
+    focusPage: FocusPage;
+  };
   readOutsideParties: ReadOutsideParties;
   setOutsideParties: SetOutsideParties;
 }
@@ -436,6 +446,15 @@ const personProcedure = actorProcedure.use(({ ctx, next }) => {
   return next({ ctx: { person: ctx.person, caller: personCallerOf(ctx.actor, ctx.actor.accountToken) } });
 });
 
+/** The person ship of a person signed in to the pages, as their sign-in names it (wake a person, W6). */
+function personShipOf(caller: PersonCaller): PersonShip {
+  const shipId = 'signedIn' in caller ? caller.signedIn.personShipId : null;
+  if (shipId === null) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'You have no person ship in this fleet: your rights there do not let you message' });
+  }
+  return { fleetId: caller.fleetId, shipId };
+}
+
 const accountInViewOutputSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('signedIn'), fleetId: z.string(), accountId: z.string(), scopes: z.array(z.string()) }),
   z.object({ kind: z.literal('goTo'), fleetId: z.string() }),
@@ -730,6 +749,26 @@ export const gatewayRouter = t.router({
     wakeChannels: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readWakeChannels(ctx.caller))),
     /** Turns email on or off, to be woken when something waits for their person ship. */
     turnEmail: personProcedure.input(z.strictObject({ isOn: z.boolean() })).mutation(async ({ ctx, input }) => { personAnswerOf(await ctx.person.turnEmailChannel({ caller: ctx.caller, ...input })); }),
+    /**
+     * Held open by a page of the person while it is in focus (wake a person,
+     * W6): what arrives is handed through the page, and no wake goes out. It
+     * tells once that it holds; it ends when the page lets go or loses its
+     * connection.
+     */
+    focus: personProcedure.subscription(async function* ({ ctx, signal }) {
+      const stop = new AbortController();
+      signal?.addEventListener('abort', () => {
+        stop.abort();
+      }, { once: true });
+      const held = ctx.person.focusPage({ ...personShipOf(ctx.caller), pageId: randomUUID() }, stop.signal);
+      try {
+        yield { isInFocus: true };
+        await held;
+      } finally {
+        stop.abort();
+        await held;
+      }
+    }),
   }),
   requests: t.router({
     /** The requests the account asked, in any state, the newest first (decision 0056: Your requests). */
