@@ -189,11 +189,25 @@ function startProxy(gateway: { address: string; interfaceUrl: string; bearer: st
       }
       headers.set('authorization', `Bearer ${gateway.bearer}`);
       const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
-      const answered = await fetch(`${gateway.address}${path}`, { method: request.method, headers, ...(hasBody ? { body } : {}) });
+      // The kit dropping its side drops the gateway's, so a stream stops following its task.
+      const dropped = new AbortController();
+      response.once('close', () => {
+        dropped.abort();
+      });
+      const answered = await fetch(`${gateway.address}${path}`, { method: request.method, headers, signal: dropped.signal, ...(hasBody ? { body } : {}) });
       response.writeHead(answered.status, Object.fromEntries([...answered.headers].filter(([name]) => name !== 'content-length' && name !== 'content-encoding' && name !== 'transfer-encoding')));
-      response.end(Buffer.from(await answered.arrayBuffer()));
+      // Passed on as it comes, so a stream's events reach the kit one by one.
+      const reader = answered.body?.getReader();
+      for (let read = await reader?.read(); read !== undefined && !read.done; read = await reader?.read()) {
+        response.write(z.instanceof(Uint8Array).parse(read.value));
+      }
+      response.end();
     })().catch((error: unknown) => {
-      response.writeHead(500).end(String(error));
+      if (response.headersSent) {
+        response.end();
+      } else {
+        response.writeHead(500).end(String(error));
+      }
     });
   });
   return new Promise((resolve) => {
