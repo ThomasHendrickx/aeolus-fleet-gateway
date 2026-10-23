@@ -196,8 +196,9 @@ describe("a ship of the fleet sends to an outside A2A agent's proxy ship (slice 
     isStreaming = true;
     let subscriptions = 0;
     answer = (method, response) => {
-      if (method === 'SendMessage') {
-        rpcResult(response, { task: WORKING_TASK });
+      if (method !== 'SubscribeToTask') {
+        // The task read while the stream is down still works.
+        rpcResult(response, method === 'SendMessage' ? { task: WORKING_TASK } : WORKING_TASK);
         return;
       }
       subscriptions += 1;
@@ -210,7 +211,31 @@ describe("a ship of the fleet sends to an outside A2A agent's proxy ship (slice 
     const replies = await repliesUntilCompleted();
 
     expect(told(replies)).toEqual(['TASK_STATE_WORKING', 'text/plain: 4 EUR', 'TASK_STATE_COMPLETED']);
-    expect(taken.map(({ method }) => method)).toEqual(['SendMessage', 'SubscribeToTask', 'SubscribeToTask']);
+    expect(taken.map(({ method }) => method)).toEqual(['SendMessage', 'SubscribeToTask', 'GetTask', 'SubscribeToTask']);
+  });
+
+  it('replies the end of a task that ended while its stream was down, read once, and nothing failed after it', async () => {
+    isStreaming = true;
+    answer = (method, response) => {
+      if (method === 'SendMessage') {
+        rpcResult(response, { task: WORKING_TASK });
+      } else if (method === 'GetTask') {
+        rpcResult(response, QUOTED_TASK);
+      } else if (taken.filter((call) => call.method === 'SubscribeToTask').length === 1) {
+        stream(response, { events: [{ statusUpdate: WORKING }], end: 'cut' });
+      } else {
+        // A2A 1.0 refuses a stream of a task that ended.
+        response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -32004, message: 'Task task-1 is in a terminal state' } }));
+      }
+    };
+    await started();
+
+    await askForAQuote();
+    const replies = await repliesUntilCompleted();
+    const after = await receiveOne(setting.fleet, caller.crewToken);
+
+    expect({ told: told(replies), after }).toEqual({ told: ['TASK_STATE_WORKING', 'text/plain: 4 EUR', 'TASK_STATE_COMPLETED'], after: undefined });
+    expect(taken.map(({ method }) => method)).toEqual(['SendMessage', 'SubscribeToTask', 'GetTask']);
   });
 
   it('follows the task again after a restart, and replies no change twice', async () => {
