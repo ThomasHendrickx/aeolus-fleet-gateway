@@ -5,17 +5,18 @@
  * the bearer it was shown. The bearer names the party; the alias names a
  * ship the party's proxy ship reaches now, or the call is not found, the
  * same for an alias of no ship. While the fleet's outside parties are off,
- * every call with a bearer is refused. The SDK's JSON-RPC transport reads
- * the call; so far the gateway answers GetExtendedAgentCard and no other
- * method.
+ * every call with a bearer is refused. The SDK reads the call over
+ * JSON-RPC and HTTP+JSON; the gateway answers GetExtendedAgentCard,
+ * SendMessage, GetTask, ListTasks and CancelTask, and no other method.
  */
 import { AgentCard, GetTaskRequest, ListTasksRequest, ListTasksResponse, SendMessageRequest, SendMessageResponse, Task, type StreamResponse } from '@a2a-js/sdk';
-import { RequestMalformedError, TaskNotCancelableError, TaskNotFoundError, UnsupportedOperationError, restStatusFor, toRestErrorBody } from '@a2a-js/sdk/errors';
+import { ContentTypeNotSupportedError, RequestMalformedError, TaskNotCancelableError, TaskNotFoundError, UnsupportedOperationError, restStatusFor, toRestErrorBody } from '@a2a-js/sdk/errors';
 import { JsonRpcTransportHandler, ServerCallContext, validateVersion, type A2ARequestHandler } from '@a2a-js/sdk/server';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import type { A2aCaller, AuthenticateA2aClient } from '../../core/a2a-in/authenticate-a2a-client.js';
+import { isOfEssence } from '../../core/mcp-in/client-call.js';
 import type { FindReachedShip, FindReachedShipRefusal } from '../../core/a2a-in/find-reached-ship.js';
 import type { ListA2aTasks } from '../../core/a2a-in/list-a2a-tasks.js';
 import type { ReachedShip } from '../../core/a2a-in/list-reached-ships.js';
@@ -28,12 +29,13 @@ const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
 const HTTP_CONFLICT = 409;
+const HTTP_UNSUPPORTED_MEDIA_TYPE = 415;
 const HTTP_BAD_GATEWAY = 502;
 const HTTP_SERVICE_UNAVAILABLE = 503;
 
 /** The media type of A2A's HTTP+JSON binding, which a client may send its body as. */
 const A2A_MEDIA_TYPE = 'application/a2a+json';
-/** The media types an HTTP+JSON body comes as: answered as JSON, the first. */
+/** The media types a call's body comes as: JSON, or A2A's own for HTTP+JSON. */
 const REST_MEDIA_TYPES = ['application/json', A2A_MEDIA_TYPE];
 
 export interface A2aEndpointDeps {
@@ -131,6 +133,14 @@ function requestHandlerFor(deps: A2aEndpointDeps, { caller, ship }: { caller: A2
   };
 }
 
+/** The HTTP status of an A2A error: A2A 1.0's 409 and 415 where the SDK answers 400. */
+function restStatusOf(error: unknown): number {
+  if (error instanceof TaskNotCancelableError) {
+    return HTTP_CONFLICT;
+  }
+  return error instanceof ContentTypeNotSupportedError ? HTTP_UNSUPPORTED_MEDIA_TYPE : restStatusFor(error);
+}
+
 /** The bearer an Authorization header carries, if it carries one. */
 function bearerOf(authorization: string | undefined): string | undefined {
   return /^Bearer (\S+)$/i.exec(authorization ?? '')?.[1];
@@ -183,12 +193,56 @@ export function registerA2aEndpoint(server: FastifyInstance, deps: A2aEndpointDe
     return { caller: caller.value, ship: ship.value };
   };
 
+  void server.register((calls) => {
+    registerCalls(calls, { deps, resolve });
+    return Promise.resolve();
+  });
+}
+
+/** Whether the call's body is JSON, as both bindings take it: no body counts, as a POST with no body (CancelTask) may say JSON or nothing. */
+function isJsonBody(request: FastifyRequest): boolean {
+  const contentType = request.headers['content-type'];
+  return contentType === undefined || REST_MEDIA_TYPES.some((mediaType) => isOfEssence(contentType, mediaType));
+}
+
+/**
+ * The calls of both bindings, in a scope of their own: there a JSON body may
+ * be empty (CancelTask), and a body of any other content type is kept as
+ * text, so the call answers ContentTypeNotSupportedError and sends nothing.
+ */
+function registerCalls(server: FastifyInstance, { deps, resolve }: { deps: A2aEndpointDeps; resolve: (request: FastifyRequest, reply: FastifyReply) => Promise<{ caller: A2aCaller; ship: ReachedShip } | undefined> }): void {
+  const parseJson = server.getDefaultJsonParser('error', 'error');
+  server.removeAllContentTypeParsers();
+  for (const mediaType of REST_MEDIA_TYPES) {
+    server.addContentTypeParser(mediaType, { parseAs: 'string' }, (request: FastifyRequest, body: string | Buffer) => {
+      const text = typeof body === 'string' ? body : body.toString('utf8');
+      return new Promise((resolve, reject) => {
+        if (text === '') {
+          resolve(undefined);
+          return;
+        }
+        void parseJson(request, text, (error, parsed) => {
+          if (error === null) {
+            resolve(parsed);
+          } else {
+            reject(error);
+          }
+        });
+      });
+    });
+  }
+  server.addContentTypeParser('*', { parseAs: 'string' }, (_request: FastifyRequest, body: string | Buffer) => Promise.resolve(typeof body === 'string' ? body : body.toString('utf8')));
+  const notSupported = () => new ContentTypeNotSupportedError('Send the body as application/json');
+
   server.post(`${A2A_PATH}/:alias`, async (request, reply) => {
     const resolved = await resolve(request, reply);
     if (resolved === undefined) {
       return reply;
     }
     const id = requestIdSchema.safeParse(request.body).data?.id ?? null;
+    if (!isJsonBody(request)) {
+      return { jsonrpc: '2.0', id, error: JsonRpcTransportHandler.mapToJSONRPCError(notSupported()) };
+    }
     const context = contextOf(request);
     try {
       validateVersion(context.requestedVersion, publicCardOf(deps.issuer, resolved.ship.alias), 'JSONRPC');
@@ -211,34 +265,6 @@ export function registerA2aEndpoint(server: FastifyInstance, deps: A2aEndpointDe
     }
   });
 
-  void server.register((rest) => {
-    registerRestRoutes(rest, { deps, resolve });
-    return Promise.resolve();
-  });
-}
-
-/** The HTTP+JSON binding's routes, in a scope of their own, where a POST of JSON may come with no body (CancelTask). */
-function registerRestRoutes(server: FastifyInstance, { deps, resolve }: { deps: A2aEndpointDeps; resolve: (request: FastifyRequest, reply: FastifyReply) => Promise<{ caller: A2aCaller; ship: ReachedShip } | undefined> }): void {
-  const parseJson = server.getDefaultJsonParser('error', 'error');
-  for (const mediaType of REST_MEDIA_TYPES) {
-    server.removeContentTypeParser(mediaType);
-    server.addContentTypeParser(mediaType, { parseAs: 'string' }, (request: FastifyRequest, body: string | Buffer) => {
-      const text = typeof body === 'string' ? body : body.toString('utf8');
-      return new Promise((resolve, reject) => {
-        if (text === '') {
-          resolve(undefined);
-          return;
-        }
-        void parseJson(request, text, (error, parsed) => {
-          if (error === null) {
-            resolve(parsed);
-          } else {
-            reject(error);
-          }
-        });
-      });
-    });
-  }
 
   /** One route of the HTTP+JSON binding: its answer as JSON, or its A2A error with the binding's status. */
   const restRoute = ({ method, path, answer }: { method: 'GET' | 'POST'; path: string; answer: (call: { handler: A2ARequestHandler; request: FastifyRequest; context: ServerCallContext }) => Promise<unknown> }) => {
@@ -252,12 +278,14 @@ function registerRestRoutes(server: FastifyInstance, { deps, resolve }: { deps: 
         }
         const context = contextOf(request);
         try {
+          if (!isJsonBody(request)) {
+            throw notSupported();
+          }
           validateVersion(context.requestedVersion, publicCardOf(deps.issuer, resolved.ship.alias), 'HTTP+JSON');
           const body = await answer({ handler: requestHandlerFor(deps, resolved), request, context });
           return await reply.send(body);
         } catch (error) {
-          // A2A 1.0 maps TaskNotCancelableError to 409, where the SDK answers 400.
-          const status = error instanceof TaskNotCancelableError ? HTTP_CONFLICT : restStatusFor(error);
+          const status = restStatusOf(error);
           return reply.code(status).send(toRestErrorBody(error, status));
         }
       },
