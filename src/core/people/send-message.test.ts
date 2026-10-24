@@ -45,6 +45,14 @@ describe('a person sends a message as their person ship', () => {
     expect(sent.map(({ to }) => to)).toEqual([{ kind: 'type', type: 'issue-tracker' }]);
   });
 
+  it('contributes it to every other participant of a meeting the person takes part in', async () => {
+    const { sendMessage, sent } = sending();
+
+    await sendMessage({ caller: CHARLOTTE_GRANT, to: { kind: 'meeting', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' }, contentType: 'text/plain', payload: 'Marketing is on track', idempotencyKey: 'charlotte-3' });
+
+    expect(sent.map(({ to }) => to)).toEqual([{ kind: 'meeting', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' }]);
+  });
+
   it('sends it under a new key when the person gives none', async () => {
     const { sendMessage, sent } = sending();
 
