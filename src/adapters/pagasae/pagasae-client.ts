@@ -1,8 +1,8 @@
 /**
  * pagasae, the one identity provider (decision 0054), as the gateway's
  * OpenID Connect provider: its authorize address, and its token endpoint,
- * where the gateway redeems a code and refreshes tokens with its own secret
- * (client_secret_post).
+ * where the gateway redeems a code, refreshes tokens and hands over a
+ * client's ID-JAG with its own secret (client_secret_post).
  * The access token pagasae answers is the account token for the fleet the
  * person picked; the gateway reads what it names, and core checks its
  * signature on every call it is presented to.
@@ -14,6 +14,10 @@ import { err, ok, type Result } from '../../core/shared/result.js';
 import type { Pagasae, PagasaeTokens } from '../../core/sign-in/ports.js';
 
 const HTTP_SERVER_ERROR = 500;
+
+/** A token exchange (RFC 8693) whose subject is an ID-JAG (aeolus-fleet company sign-in design, slice 6). */
+const TOKEN_EXCHANGE_GRANT = 'urn:ietf:params:oauth:grant-type:token-exchange';
+const ID_JAG_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:id-jag';
 
 const tokenAnswerSchema = z.object({ access_token: z.string(), refresh_token: z.string() });
 const errorAnswerSchema = z.object({ error: z.string() });
@@ -88,5 +92,7 @@ export function createPagasae(options: { url: string; clientId: string; clientSe
       return answered.isOk ? answered : err({ reason: answered.error.reason });
     },
     refresh: (refreshToken) => tokenEndpoint({ grant_type: 'refresh_token', refresh_token: refreshToken }),
+    exchangeIdJag: ({ idJag, clientId }) =>
+      tokenEndpoint({ grant_type: TOKEN_EXCHANGE_GRANT, subject_token_type: ID_JAG_TOKEN_TYPE, subject_token: idJag, id_jag_client_id: clientId }),
   };
 }
