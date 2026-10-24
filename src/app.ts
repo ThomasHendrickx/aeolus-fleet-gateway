@@ -111,6 +111,7 @@ import { createSignOutAccount } from './core/account-sign-in/sign-out-account.js
 import { createStartAccountSignIn } from './core/account-sign-in/start-account-sign-in.js';
 import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
+import { createExchangeIdJag } from './core/oauth/exchange-id-jag.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
 import { createAccountTokenOf, type AccountTokenOf } from './core/sign-in/account-token.js';
 import { err } from './core/shared/result.js';
@@ -494,7 +495,31 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     issuer,
     resource,
     readAuthorization,
-    exchangeToken: createExchangeToken({ clients: oauthClients, codes: authorizationCodes, tokens: issuedTokens, secrets: oauthSecrets, clock, resource, parties, servesOutsideParties }),
+    exchangeToken: createExchangeToken({
+      clients: oauthClients,
+      codes: authorizationCodes,
+      tokens: issuedTokens,
+      secrets: oauthSecrets,
+      clock,
+      resource,
+      parties,
+      servesOutsideParties,
+      // A client's ID-JAG, handed to pagasae, where people sign in there (company sign-in design, slice 6).
+      ...(pagasae === undefined
+        ? {}
+        : {
+            exchangeIdJag: createExchangeIdJag({
+              clients: oauthClients,
+              tokens: issuedTokens,
+              secrets: oauthSecrets,
+              clock,
+              resource,
+              pagasae,
+              grants,
+              servesFleet: async (fleetId) => (await connections.find(fleetId)) !== undefined && (await isServed(fleetId)),
+            }),
+          }),
+    }),
   });
   // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
   const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });
