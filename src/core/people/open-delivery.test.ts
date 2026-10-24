@@ -135,6 +135,14 @@ describe('a person opens again a delivery they opened, from any client (aeolus-f
     expect(calls.filter((call) => call.startsWith('ack'))).toEqual([`ack(${QUESTION.deliveryId})`]);
   });
 
+  it('says again the meeting a contribution was made to, so the person can go back to it', async () => {
+    const contribution = aPersonDelivery({ ...NOTE, payload: 'Marketing is on track', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
+    const { openDelivery } = opening([contribution]);
+    await openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId });
+
+    await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
+  });
+
   it('keeps no payload of it: the second open reads it from the fleet', async () => {
     const { openDelivery, calls } = opening([QUESTION]);
     await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
