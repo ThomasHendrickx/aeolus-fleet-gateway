@@ -53,7 +53,11 @@ import type { PendingRequest } from '../../core/requests/ports.js';
 import type { AnswerDelivery } from '../../core/people/answer-delivery.js';
 import type { DoneDelivery } from '../../core/people/done-delivery.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
+import type { ChangeOwnMic } from '../../core/meetings/change-own-mic.js';
+import type { MeetingRead } from '../../core/meetings/ports.js';
+import type { PersonMeeting, ReadMeeting } from '../../core/meetings/read-meeting.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
+import type { SendMessage } from '../../core/people/send-message.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { ReadAuthorization } from '../../core/oauth/read-authorization.js';
 import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
@@ -122,7 +126,15 @@ export interface Context {
   listMine: ListMine;
   decideRequest: DecideRequest;
   /** A person's own person ship's deliveries; unset where no pagasae signs anyone in. */
-  person?: { readInbox: ReadInbox; openDelivery: OpenDelivery; answerDelivery: AnswerDelivery; doneDelivery: DoneDelivery };
+  person?: {
+    readInbox: ReadInbox;
+    openDelivery: OpenDelivery;
+    answerDelivery: AnswerDelivery;
+    doneDelivery: DoneDelivery;
+    sendMessage: SendMessage;
+    readMeeting: ReadMeeting;
+    changeOwnMic: ChangeOwnMic;
+  };
   readOutsideParties: ReadOutsideParties;
   setOutsideParties: SetOutsideParties;
 }
@@ -437,7 +449,26 @@ const PERSON_CODES = {
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
   NO_SUCH_DELIVERY: 'NOT_FOUND',
   SEND_REFUSED: 'BAD_REQUEST',
+  NO_SUCH_MEETING: 'NOT_FOUND',
+  MIC_REFUSED: 'CONFLICT',
 } as const satisfies Record<string, TRPCError['code']>;
+
+/** A contribution a person writes on the pages: plain text. */
+const CONTRIBUTION_CONTENT_TYPE = 'text/plain';
+
+/** A meeting as the pages read it, its times in ISO 8601 as every answer of the API states them. */
+function meetingViewOf({ meeting, mic }: PersonMeeting) {
+  const at = (time: Date) => time.toISOString();
+  const { openedAt, endedAt, contributions, ...rest }: MeetingRead = meeting;
+  return {
+    ...rest,
+    openedAt: at(openedAt),
+    endedAt: endedAt === null ? null : at(endedAt),
+    mic: { ...meeting.mic, requests: meeting.mic.requests.map(({ ship, requestedAt }) => ({ ship, requestedAt: at(requestedAt) })) },
+    contributions: { items: contributions.items.map(({ sentAt, ...contribution }) => ({ ...contribution, sentAt: at(sentAt) })), nextCursor: contributions.nextCursor },
+    yourMic: mic,
+  };
+}
 
 function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES; message: string }>): T {
   if (!answered.isOk) {
@@ -813,6 +844,23 @@ export const gatewayRouter = t.router({
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.answerDelivery({ caller: ctx.caller, ...input }))),
     /** Is done with a delivery they opened, with no answer. */
     done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, ...input }))),
+    /** A meeting they take part in, with a page of its contributions, newest first, and where they stand on its mic (decision 0061). */
+    meeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), cursor: idSchema('message').optional() }))
+      .query(async ({ ctx, input: { meetingId, cursor } }) => meetingViewOf(personAnswerOf(await ctx.person.readMeeting({ caller: ctx.caller, meetingId, ...(cursor === undefined ? {} : { cursor }) })))),
+    /** Contributes to a meeting, once under the page's key; the fleet takes it while they hold the mic or moderate. */
+    contribute: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), payload: z.string().min(1).max(PAYLOAD_MAX_BYTES), idempotencyKey: z.string().min(1) }))
+      .mutation(async ({ ctx, input: { meetingId, payload, idempotencyKey } }) =>
+        personAnswerOf(await ctx.person.sendMessage({ caller: ctx.caller, to: { kind: 'meeting', meetingId }, contentType: CONTRIBUTION_CONTENT_TYPE, payload, idempotencyKey })),
+      ),
+    /** Their own mic call: request it, withdraw the request, or release the mic they hold. */
+    mic: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), change: z.enum(['request', 'withdraw', 'release']) }))
+      .mutation(async ({ ctx, input }) => {
+        personAnswerOf(await ctx.person.changeOwnMic({ caller: ctx.caller, ...input }));
+        return {};
+      }),
   }),
   requests: t.router({
     /** The requests the account asked, in any state, the newest first (decision 0056: Your requests). */
