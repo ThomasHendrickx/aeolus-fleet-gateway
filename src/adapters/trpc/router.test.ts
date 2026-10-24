@@ -123,7 +123,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       openDelivery: ({ caller, deliveryId }) =>
         Promise.resolve(
           deliveryId === DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
-            ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?' })
+            ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} waits for you: read your inbox again` }),
         ),
       answerDelivery: (input) => {
@@ -688,7 +688,7 @@ describe("a person reads and deals with their person ship's deliveries through t
   it('opens one, whole', async () => {
     const { context } = aContext(PERSON_COOKIE);
 
-    await expect(gatewayRouter.createCaller(context).people.open({ deliveryId: DELIVERY })).resolves.toMatchObject({ contentType: 'text/plain', payload: 'Publish it?' });
+    await expect(gatewayRouter.createCaller(context).people.open({ deliveryId: DELIVERY })).resolves.toMatchObject({ contentType: 'text/plain', payload: 'Publish it?', meetingId: null });
   });
 
   it('answers one it opened, and is done with another, as its own account', async () => {

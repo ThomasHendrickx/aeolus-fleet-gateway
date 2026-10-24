@@ -1,3 +1,5 @@
+import type { MeetingId } from '@aeolus-fleet/common';
+
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
@@ -7,10 +9,11 @@ import { asPersonCrew, withOwnRefusal, type PersonCaller, type PersonCrewError, 
 import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonDelivery, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
 
-/** A delivery as a person opens it: whole. */
+/** A delivery as a person opens it: whole, with the meeting it belongs to, none outside a meeting. */
 export interface OpenedView extends InboxEntry {
   readonly contentType: string;
   readonly payload: string;
+  readonly meetingId: MeetingId | null;
 }
 
 type OpenError = PersonCrewError | DomainError<'NO_SUCH_DELIVERY'>;
@@ -82,5 +85,5 @@ async function openedAgain(deps: OpenDeps, asked: { caller: PersonCaller; crew: 
 }
 
 function viewOf(delivery: PersonDelivery): OpenedView {
-  return { ...inboxEntryOf(delivery), contentType: delivery.contentType, payload: delivery.payload };
+  return { ...inboxEntryOf(delivery), contentType: delivery.contentType, payload: delivery.payload, meetingId: delivery.meetingId };
 }

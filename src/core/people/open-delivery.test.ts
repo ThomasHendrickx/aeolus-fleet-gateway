@@ -128,7 +128,7 @@ describe('a person opens again a delivery they opened, from any client (aeolus-f
     expect({ again, isSame: JSON.stringify(again) === JSON.stringify(first) }).toEqual({
       again: {
         isOk: true,
-        value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload },
+        value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null },
       },
       isSame: true,
     });
