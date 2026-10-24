@@ -169,7 +169,7 @@ const told = (replies: { contentType: string; payload: string }[]) =>
 async function needsAttention() {
   for (let tries = 0; tries < 10; tries += 1) {
     const response = await fetch(`${setting.fleet.url}/trpc/fleet.needsAttention`, { headers: { cookie: setting.cookie } });
-    const listed = needsAttentionOutputSchema.parse(z.object({ result: z.object({ data: z.unknown() }) }).parse(await response.json()).result.data);
+    const listed = needsAttentionOutputSchema.parse(z.object({ result: z.object({ data: z.unknown() }) }).parse(await response.json()).result.data).items;
     if (listed.length > 0) {
       return listed;
     }

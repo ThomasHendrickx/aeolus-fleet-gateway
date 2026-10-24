@@ -77,7 +77,7 @@ async function approved(address: string): Promise<void> {
 async function needsAttention() {
   for (let tries = 0; tries < NEEDS_ATTENTION_TRIES; tries += 1) {
     const response = await fetch(`${fleet.url}/trpc/fleet.needsAttention`, { headers: { cookie } });
-    const listed = needsAttentionOutputSchema.parse(z.object({ result: z.object({ data: z.unknown() }) }).parse(await response.json()).result.data);
+    const listed = needsAttentionOutputSchema.parse(z.object({ result: z.object({ data: z.unknown() }) }).parse(await response.json()).result.data).items;
     if (listed.length > 0) {
       return listed;
     }
