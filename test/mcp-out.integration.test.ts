@@ -76,7 +76,7 @@ async function approved(address: string): Promise<void> {
 /** Needs attention as argo reads it, once it lists a delivery: the gateway reports a call it judged may have run after its timeout. */
 async function needsAttention() {
   for (let tries = 0; tries < NEEDS_ATTENTION_TRIES; tries += 1) {
-    const response = await fetch(`${fleet.url}/trpc/fleet.needsAttention`, { headers: { cookie } });
+    const response = await fetch(`${fleet.url}/trpc/fleet.needsAttention?input=${encodeURIComponent(JSON.stringify({}))}`, { headers: { cookie } });
     const listed = needsAttentionOutputSchema.parse(z.object({ result: z.object({ data: z.unknown() }) }).parse(await response.json()).result.data).items;
     if (listed.length > 0) {
       return listed;
