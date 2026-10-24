@@ -22,5 +22,6 @@ Tests:
 Fleet:
 - Every call to core goes through the fleet port, as the ship it crews, never with argo's session.
 - Core's minimum version is `MINIMUM_CORE_VERSION` in `src/adapters/fleet/core-version.ts`; raise it in the same PR as a call that needs a newer core, and in aeolus-fleet's docs/compatibility.md.
+- When core has a release candidate with a breaking change, run the fleet contract tests against it before core is released.
 
 Enforced by lint (`eslint.config.js`): core imports and purity, Prisma in its adapter, `any`, casts, `!`, exhaustive switches, parameter count, boolean names, default exports, file names, no `throw` in core.
