@@ -13,7 +13,8 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 
-import type { ExchangeToken } from '../../core/oauth/exchange-token.js';
+import { JWT_BEARER_GRANT, type ExchangeToken } from '../../core/oauth/exchange-token.js';
+import type { OAuthErrorCode } from '../../core/oauth/ports.js';
 import type { AuthorizationRefusal, ReadAuthorization } from '../../core/oauth/read-authorization.js';
 import { REQUEST_LIFETIME_MS } from '../../core/requests/open-request.js';
 import type { ReadWaiting } from '../../core/requests/read-waiting.js';
@@ -27,6 +28,10 @@ import { acceptWebsockets, type ChangeHub } from './live.js';
 const HTTP_FOUND = 302;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
+const HTTP_UNAVAILABLE = 503;
+
+/** The ID-JAG profile of the JWT bearer grant, as an authorization server states it serves one (MCP enterprise-managed authorization). */
+const ID_JAG_GRANT_PROFILE = 'urn:ietf:params:oauth:grant-profile:id-jag';
 const MS_PER_SECOND = 1000;
 
 /** Why the waiting page's live channel was closed: it does not open again. */
@@ -256,6 +261,14 @@ function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn:
   });
 }
 
+/** The HTTP status of a token request's refusal: 401 for the client, 503 while pagasae does not answer, else 400. */
+function statusOf(error: OAuthErrorCode): number {
+  if (error === 'invalid_client') {
+    return HTTP_UNAUTHORIZED;
+  }
+  return error === 'temporarily_unavailable' ? HTTP_UNAVAILABLE : HTTP_BAD_REQUEST;
+}
+
 export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDeps): void {
   acceptForms(server);
 
@@ -267,7 +280,9 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
     authorization_endpoint: `${deps.issuer}/authorize`,
     token_endpoint: `${deps.issuer}/token`,
     response_types_supported: ['code'],
-    grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
+    // The JWT bearer grant takes an ID-JAG where people sign in through pagasae (company sign-in design, slice 6).
+    grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials', ...(deps.signIn === undefined ? [] : [JWT_BEARER_GRANT])],
+    ...(deps.signIn === undefined ? {} : { authorization_grant_profiles_supported: [ID_JAG_GRANT_PROFILE] }),
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none', 'client_secret_basic', 'client_secret_post'],
     client_id_metadata_document_supported: true,
@@ -295,7 +310,7 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
     const exchanged = await deps.exchangeToken({ ...fieldsOf(request.body), ...basicCredentials(request.headers.authorization) });
     void reply.header('cache-control', 'no-store').header('pragma', 'no-cache');
     if (!exchanged.isOk) {
-      const status = exchanged.error.error === 'invalid_client' ? HTTP_UNAUTHORIZED : HTTP_BAD_REQUEST;
+      const status = statusOf(exchanged.error.error);
       return reply.code(status).send({ error: exchanged.error.error, error_description: exchanged.error.description });
     }
     const { accessToken, refreshToken, expiresInSeconds, scope } = exchanged.value;

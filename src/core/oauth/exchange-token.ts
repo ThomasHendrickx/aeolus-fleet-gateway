@@ -10,6 +10,9 @@ import type { AuthorizationCodes, IssuedTokens, OAuthClients, OAuthError, OAuthE
 export const ACCESS_TOKEN_LIFETIME_MS = 60 * 60_000;
 export const REFRESH_TOKEN_LIFETIME_MS = 30 * 24 * 60 * 60_000;
 
+/** The JWT bearer grant (RFC 7523), with which a client posts an ID-JAG. */
+export const JWT_BEARER_GRANT = 'urn:ietf:params:oauth:grant-type:jwt-bearer';
+
 /** The tokens a client gets: no refresh token for one signed in by client credentials, which asks again. */
 export interface IssuedPair {
   readonly accessToken: string;
@@ -40,6 +43,8 @@ interface ExchangeTokenDeps {
   parties: Pick<PartyStore, 'findByClient'>;
   /** Whether the fleet's outside parties are on (interop I-3). */
   servesOutsideParties: (fleetId: FleetId) => Promise<boolean>;
+  /** A client's ID-JAG, the JWT bearer grant (company sign-in design, slice 6); absent where nobody signs in through pagasae. */
+  exchangeIdJag?: ExchangeToken;
 }
 
 /**
@@ -169,8 +174,11 @@ export function createExchangeToken(deps: ExchangeTokenDeps): ExchangeToken {
     if (grantType === 'client_credentials') {
       return fromClientCredentials(request);
     }
+    if (grantType === JWT_BEARER_GRANT && deps.exchangeIdJag !== undefined) {
+      return deps.exchangeIdJag(request);
+    }
     if (grantType !== 'authorization_code' && grantType !== 'refresh_token') {
-      return refusal('unsupported_grant_type', 'Only authorization_code, refresh_token and client_credentials are served');
+      return refusal('unsupported_grant_type', 'Only authorization_code, refresh_token, client_credentials and, where people sign in, the JWT bearer grant are served');
     }
     if (!(await isAuthenticated(request))) {
       return refusal('invalid_client', 'The client could not be authenticated');

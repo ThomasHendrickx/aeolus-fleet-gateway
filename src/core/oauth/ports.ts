@@ -107,7 +107,7 @@ export interface OAuthSecrets {
 }
 
 /** OAuth's error codes the gateway answers (RFC 6749, RFC 8707). */
-export type OAuthErrorCode = 'invalid_request' | 'invalid_client' | 'invalid_grant' | 'unauthorized_client' | 'unsupported_grant_type' | 'unsupported_response_type' | 'invalid_target' | 'access_denied';
+export type OAuthErrorCode = 'invalid_request' | 'invalid_client' | 'invalid_grant' | 'unauthorized_client' | 'unsupported_grant_type' | 'unsupported_response_type' | 'invalid_target' | 'access_denied' | 'temporarily_unavailable';
 
 export interface OAuthError {
   readonly error: OAuthErrorCode;

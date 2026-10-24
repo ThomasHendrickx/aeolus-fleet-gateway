@@ -63,8 +63,29 @@ export function memoryAccountGrants(): AccountGrants & { held: AccountGrant[] } 
 }
 
 /**
+ * pagasae as a test hands it ID-JAGs (company sign-in design, slice 6): the
+ * account's grant for each it takes, by its text, every other refused, and
+ * each handed over, with the client that brought it.
+ */
+export function fakeIdJagPagasae(idJags: Readonly<Record<string, PagasaeTokens | 'refused' | 'unavailable'>>): Pick<Pagasae, 'exchangeIdJag'> & { handedOver: { idJag: string; clientId: string }[] } {
+  const handedOver: { idJag: string; clientId: string }[] = [];
+  return {
+    handedOver,
+    exchangeIdJag: (handed) => {
+      handedOver.push(handed);
+      const answer = idJags[handed.idJag] ?? 'refused';
+      if (answer === 'refused' || answer === 'unavailable') {
+        return Promise.resolve(err({ kind: answer, reason: answer === 'refused' ? 'invalid_grant' : 'pagasae did not answer' }));
+      }
+      return Promise.resolve(ok(answer));
+    },
+  };
+}
+
+/**
  * pagasae as a test sees it: its authorize address with the state and the
  * challenge in its query, and one code it redeems, for the verifier given.
+ * It takes no ID-JAG.
  */
 export function fakePagasae(
   redeemed: { code: string; verifier: string; tokens: PagasaeTokens } | { refusal: string },
@@ -73,6 +94,7 @@ export function fakePagasae(
   const refreshed: string[] = [];
   return {
     refreshed,
+    exchangeIdJag: () => Promise.resolve(err({ kind: 'refused', reason: 'invalid_grant' })),
     refresh: async (refreshToken) => {
       refreshed.push(refreshToken);
       // A turn of the event loop, as a call over the network takes, so calls made together overlap.

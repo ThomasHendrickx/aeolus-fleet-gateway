@@ -173,3 +173,36 @@ describe("refreshing a person's account token at pagasae", () => {
     ]);
   });
 });
+
+describe("handing a client's ID-JAG over to pagasae (company sign-in design, slice 6)", () => {
+  it("posts it as a token exchange naming the client, with the gateway's secret", async () => {
+    await pagasae().exchangeIdJag({ idJag: 'an-id-jag', clientId: 'client-claude' });
+
+    expect(received.map(({ url, form }) => ({ url, form: Object.fromEntries(form) }))).toEqual([
+      {
+        url: '/oauth/token',
+        form: {
+          grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+          subject_token_type: 'urn:ietf:params:oauth:token-type:id-jag',
+          subject_token: 'an-id-jag',
+          id_jag_client_id: 'client-claude',
+          client_id: 'gateway',
+          client_secret: SECRET,
+        },
+      },
+    ]);
+  });
+
+  it("answers the account's grant: its account token, refresh token, and what the token names", async () => {
+    await expect(pagasae().exchangeIdJag({ idJag: 'an-id-jag', clientId: 'client-claude' })).resolves.toMatchObject({
+      isOk: true,
+      value: { accountToken: anAccountToken(CHARLOTTE), refreshToken: 'pagasae-refresh-1', fleetId: FLEET, accountId: 'acc-charlotte' },
+    });
+  });
+
+  it("answers refused for pagasae's invalid_grant", async () => {
+    answer = { status: 400, body: { error: 'invalid_grant' } };
+
+    await expect(pagasae().exchangeIdJag({ idJag: 'an-id-jag', clientId: 'client-claude' })).resolves.toEqual({ isOk: false, error: { kind: 'refused', reason: 'invalid_grant' } });
+  });
+});
