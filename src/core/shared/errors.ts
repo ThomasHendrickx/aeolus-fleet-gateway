@@ -55,7 +55,8 @@ export type DomainErrorKind =
   | 'CARD_UNREACHABLE'
   | 'CARD_INVALID'
   | 'NOT_A_MESSAGE'
-  | 'CHANNEL_NOT_OFFERED';
+  | 'CHANNEL_NOT_OFFERED'
+  | 'INVALID_SUBSCRIPTION';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {

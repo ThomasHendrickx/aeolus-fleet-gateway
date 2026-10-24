@@ -19,6 +19,8 @@ import type { SetOutsideParties } from '../../core/outside-parties/set-outside-p
 import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
+import { createFocusPage } from '../../core/people/focus-page.js';
+import { memoryFocusedPages } from '../../../test/support/people-fakes.js';
 import { createChangeHub, type ChangeHub } from '../http/live.js';
 import { gatewayRouter, type Context } from './router.js';
 
@@ -29,6 +31,9 @@ function grantOf(caller: PersonCaller): string {
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
+const FOCUSED_AT = new Date('2026-10-23T10:00:00.000Z');
+/** The gateway's public push key, which a browser subscribes with. */
+const WEB_PUSH_KEY = 'BGatewayPublicKey';
 const ARGO_COOKIE = 'aeolus_session=argo';
 const VIEWER_COOKIE = 'aeolus_session=viewer';
 /** A person signed in to the gateway's pages, and one whose account token no longer works. */
@@ -75,7 +80,9 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   switched: Parameters<SetOutsideParties>[0][];
   answers: Record<string, string>[];
   changes: ChangeHub;
+  focused: ReturnType<typeof memoryFocusedPages>;
 } {
+  const focused = memoryFocusedPages();
   const approvals: Parameters<ApproveParty>[0][] = [];
   const additions: Parameters<AddClientParty>[0][] = [];
   const switched: Parameters<SetOutsideParties>[0][] = [];
@@ -127,11 +134,43 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
-      readWakeChannels: (caller) => Promise.resolve(ok({ email: { isOffered: true, isOn: answers.some(({ email }) => email === 'on') && grantOf(caller) === PERSON_TOKEN } })),
+      readWakeChannels: (caller) =>
+        Promise.resolve(
+          ok({
+            email: { isOffered: true, isOn: answers.some(({ email }) => email === 'on') && grantOf(caller) === PERSON_TOKEN },
+            webPush: {
+              publicKey: WEB_PUSH_KEY,
+              browsers: answers.flatMap(({ webPushOn, browser }) => (webPushOn === undefined || browser === undefined ? [] : [{ endpoint: webPushOn, browser, addedAt: FOCUSED_AT, isGone: false }])),
+            },
+          }),
+        ),
+      turnOnWebPush: ({ caller, fleetName, endpoint, browser }) => {
+        if (!endpoint.startsWith('https://')) {
+          return Promise.resolve(err({ kind: 'INVALID_SUBSCRIPTION' as const, message: "The push service's endpoint must be an https URL of at most 2048 characters" }));
+        }
+        answers.push({ grantId: grantOf(caller), webPushOn: endpoint, browser, fleetName });
+        return Promise.resolve(ok(undefined));
+      },
+      turnOffWebPush: ({ caller, endpoint }) => {
+        answers.push({ grantId: grantOf(caller), webPushOff: endpoint });
+        return Promise.resolve(ok(undefined));
+      },
       turnEmailChannel: ({ caller, isOn }) => {
         answers.push({ grantId: grantOf(caller), email: isOn ? 'on' : 'off' });
         return Promise.resolve(ok(undefined));
       },
+      // Seen again only once the page lets go, as the test reads what it held meanwhile.
+      focusPage: createFocusPage({
+        focused,
+        clock: { now: () => FOCUSED_AT },
+        seenEveryMs: 20_000,
+        sleep: (_ms, signal) =>
+          new Promise((resolve) => {
+            signal.addEventListener('abort', () => {
+              resolve();
+            }, { once: true });
+          }),
+      }),
     },
     changes,
     isServed: () => Promise.resolve(true),
@@ -249,7 +288,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, toolSwitches, agentAdditions, agentMarks, decisions, switched, answers, changes, additions };
+  return { context, approvals, marks, toolSwitches, agentAdditions, agentMarks, decisions, switched, answers, changes, additions, focused };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -701,14 +740,51 @@ describe("a person reads and deals with their person ship's deliveries through t
 });
 
 describe('a person turns on the channels that wake them, through the API (wake a person, W8)', () => {
+  const FIREFOX = { endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/firefox-1', keys: { p256dh: `B${'A'.repeat(86)}`, auth: 'A'.repeat(22) }, browser: 'Firefox on Linux' };
+
   it('turns email on as its own account, and reads it on', async () => {
     const { context, answers } = aContext(PERSON_COOKIE);
     const caller = gatewayRouter.createCaller(context);
 
     await caller.people.turnEmail({ isOn: true });
 
-    await expect(caller.people.wakeChannels()).resolves.toEqual({ email: { isOffered: true, isOn: true } });
+    await expect(caller.people.wakeChannels()).resolves.toEqual({ email: { isOffered: true, isOn: true }, webPush: { publicKey: WEB_PUSH_KEY, browsers: [] } });
     expect(answers).toEqual([{ grantId: PERSON_TOKEN, email: 'on' }]);
+  });
+
+  it('turns web push on for a browser, with the fleet name their shared sign-in states, and reads it with when it was turned on', async () => {
+    const { context, answers } = aContext(undefined);
+    const signIns = fakeSharedSignIn({});
+    const caller = gatewayRouter.createCaller({ ...context, signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET, accountApps: (signIn) => signIns.apps(signIn) });
+
+    await caller.people.turnOnWebPush(FIREFOX);
+
+    expect(answers).toEqual([{ grantId: SHARED_ACCOUNT_TOKEN, webPushOn: FIREFOX.endpoint, browser: 'Firefox on Linux', fleetName: 'Acme' }]);
+    await expect(caller.people.wakeChannels()).resolves.toMatchObject({ webPush: { publicKey: WEB_PUSH_KEY, browsers: [{ endpoint: FIREFOX.endpoint, browser: 'Firefox on Linux', addedAt: '2026-10-23T10:00:00.000Z', isGone: false }] } });
+  });
+
+  it('refuses a subscription the push service could not have given, saying why', async () => {
+    const { context } = aContext(undefined);
+    const signIns = fakeSharedSignIn({});
+    const caller = gatewayRouter.createCaller({ ...context, signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET, accountApps: (signIn) => signIns.apps(signIn) });
+
+    await expect(caller.people.turnOnWebPush({ ...FIREFOX, endpoint: 'http://push.example/firefox' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: "The push service's endpoint must be an https URL of at most 2048 characters" });
+  });
+
+  it('says pagasae did not answer, turning nothing on, as it names the fleet', async () => {
+    const { context, answers } = aContext(undefined);
+    const caller = gatewayRouter.createCaller({ ...context, signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET, accountApps: (signIn) => fakeSharedSignIn({ isAvailable: false }).apps(signIn) });
+
+    await expect(caller.people.turnOnWebPush(FIREFOX)).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    expect(answers).toEqual([]);
+  });
+
+  it('removes a browser as its own account', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await gatewayRouter.createCaller(context).people.turnOffWebPush({ endpoint: FIREFOX.endpoint });
+
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, webPushOff: FIREFOX.endpoint }]);
   });
 
   it('refuses any other actor: only a person is woken', async () => {
@@ -906,5 +982,25 @@ describe('a call whose input is wrong is told so in a sentence', () => {
     const body: unknown = await answer.json();
 
     expect(body).toMatchObject({ error: { message: 'Check what you filled in: client_id is missing or wrong.' } });
+  });
+});
+
+describe("a person's page tells the gateway's API while it is in focus (wake a person, W6)", () => {
+  it('counts in focus for their person ship while it follows, and no longer once it stops', async () => {
+    const { context, focused } = aContext(PERSON_COOKIE);
+    const stop = new AbortController();
+    const following = await gatewayRouter.createCaller(context, { signal: stop.signal }).people.focus();
+    const iterator = following[Symbol.asyncIterator]();
+
+    await iterator.next();
+    const isInFocus = await focused.isAnyInFocus({ fleetId: FLEET, shipId: OWNER }, FOCUSED_AT);
+    stop.abort();
+    await iterator.return?.();
+
+    expect({ isInFocus, held: focused.held }).toEqual({ isInFocus: true, held: [] });
+  });
+
+  it('refuses any other actor: only a person has a person ship', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).people.focus()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

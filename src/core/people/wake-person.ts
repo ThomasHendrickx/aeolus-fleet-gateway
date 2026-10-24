@@ -3,7 +3,7 @@ import { RECEIVE_MAX_UPPER_BOUND } from '@aeolus-fleet/common';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { PersonShip, PersonShipDoor, PushedPersonDelivery, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
+import type { FocusedPages, HandOverChannel, PersonShip, PersonShipDoor, PushedPersonDelivery, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
 
 /**
  * What a wake came to: nothing left to wake (settled), a wake held back
@@ -23,17 +23,22 @@ export type WakePerson = (ship: PersonShip, crewToken: string) => Promise<Result
  * a delivery is woken once. A wake held back by a window, or that no
  * channel sent, hands nothing. Each channel's window is kept after the
  * hand-overs, so a gateway that stopped in between wakes again: one wake
- * more, nothing lost.
+ * more, nothing lost. While a page of the person is in focus, the page
+ * shows what arrives (W6): each fresh delivery is handed through it and no
+ * wake goes out.
  */
 export function createWakePerson(deps: {
   door: Pick<PersonShipDoor, 'pushReceive' | 'handed'>;
   channels: readonly WakeChannel[];
   wakesSent: WakesSent;
+  focused: FocusedPages;
+  /** How long a page counts in focus since it was last seen so. */
+  focusFreshMs: number;
   clock: Clock;
 }): WakePerson {
   return async (ship, crewToken) => {
     /** Hands each fresh delivery no. 1 through the channel, up to the first refusal: that refusal, or none. */
-    const handEach = async (fresh: readonly PushedPersonDelivery[], channel: WakeChannelName): Promise<FleetRefusal | undefined> => {
+    const handEach = async (fresh: readonly PushedPersonDelivery[], channel: HandOverChannel): Promise<FleetRefusal | undefined> => {
       for (const { deliveryId } of fresh) {
         const handed = await deps.door.handed(crewToken, { deliveryId, handOverNumber: 1, channel });
         if (!handed.isOk) {
@@ -49,6 +54,10 @@ export function createWakePerson(deps: {
     const fresh = taken.value.filter(({ handOverNumber }) => handOverNumber === null);
     if (fresh.length === 0) {
       return ok({ kind: 'settled' });
+    }
+    if (await deps.focused.isAnyInFocus(ship, new Date(deps.clock.now().getTime() - deps.focusFreshMs))) {
+      const refused = await handEach(fresh, 'page');
+      return refused === undefined ? ok({ kind: 'settled' }) : err(refused);
     }
     const turnedOn = (await Promise.all(deps.channels.map(async (channel) => ((await channel.isOn(ship)) ? [channel] : [])))).flat();
     if (turnedOn.length === 0) {

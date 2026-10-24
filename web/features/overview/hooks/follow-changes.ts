@@ -1,8 +1,10 @@
 /**
- * The Overview's live updates for the browser: the web app's server follows
- * the API's stream of the fleet's request changes as the browser that asked,
- * by its shared sign-in alone, and passes each on. A change carries nothing
- * of what changed; the page reads itself again.
+ * The Overview's live streams for the browser: the web app's server follows
+ * the API's stream as the browser that asked, by its shared sign-in alone,
+ * and passes each event on. The changes stream tells the page to read
+ * itself again, carrying nothing of what changed; the focus stream is held
+ * open while the page is in focus (wake a person, W6), and ends with the
+ * browser's request.
  */
 import { FLEET_HEADER } from '@aeolus-fleet/common';
 
@@ -17,7 +19,16 @@ export function upstreamHeadersOf(request: Request): Record<string, string> {
   return { accept: 'text/event-stream', ...(cookie === undefined ? {} : { cookie }), ...(fleet === null ? {} : { [FLEET_HEADER]: fleet }) };
 }
 
-export async function followChanges(request: Request): Promise<Response> {
-  const upstream = await fetch(`${apiUrl()}/trpc/requests.changes`, { headers: upstreamHeadersOf(request), signal: request.signal });
+async function follow(request: Request, procedure: string): Promise<Response> {
+  const upstream = await fetch(`${apiUrl()}/trpc/${procedure}`, { headers: upstreamHeadersOf(request), signal: request.signal });
   return new Response(upstream.body, { status: upstream.status, headers: { 'content-type': upstream.headers.get('content-type') ?? 'text/event-stream', 'cache-control': 'no-store' } });
+}
+
+export function followChanges(request: Request): Promise<Response> {
+  return follow(request, 'requests.changes');
+}
+
+/** Holds the page in focus at the gateway for as long as the browser holds this stream open. */
+export function followFocus(request: Request): Promise<Response> {
+  return follow(request, 'people.focus');
 }

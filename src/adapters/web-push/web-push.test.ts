@@ -1,0 +1,91 @@
+import webPushLibrary from 'web-push';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { aWebPushSubscription } from '../../../test/support/people-fakes.js';
+import { startPushService } from '../../../test/support/push-service.js';
+import { createWebPush } from './web-push.js';
+
+// The gateway's web push: a wake to one browser through its push service,
+// encrypted for that browser and signed with the gateway's push keys (VAPID).
+
+const WAKE = { fleetName: 'Acme', overviewUrl: 'https://gateway.example/overview?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv' };
+const keys = webPushLibrary.generateVAPIDKeys();
+
+let service: Awaited<ReturnType<typeof startPushService>>;
+
+beforeEach(async () => {
+  service = await startPushService();
+});
+
+afterEach(async () => {
+  await service.stop();
+});
+
+/** The tests' push service listens on this machine: allowed here, as no real push service is. */
+const allowingLocal = (address: string) => address === '127.0.0.1';
+
+/** Every name resolves to this machine, where the tests' push service listens. */
+const toThisMachine = () => Promise.resolve(['127.0.0.1']);
+
+function webPush(options: { isAllowedAddress?: (address: string) => boolean } = {}) {
+  return createWebPush({ publicKey: keys.publicKey, privateKey: keys.privateKey, subject: 'mailto:gateway@example.com', timeoutMs: 2000, addressesOf: toThisMachine, isAllowedAddress: options.isAllowedAddress ?? allowingLocal });
+}
+
+function subscriptionOf(path: string) {
+  const browser = service.browser(path);
+  return aWebPushSubscription({ endpoint: browser.endpoint, keys: browser.keys });
+}
+
+describe('a wake sent to a browser through its push service', () => {
+  it('says only the fleet by its name and the overview link, as the browser reads it', async () => {
+    const sent = await webPush().send(subscriptionOf('/firefox'), WAKE);
+
+    expect({ sent, read: service.taken.map(({ text }) => text) }).toEqual({ sent: 'sent', read: ['{"fleetName":"Acme","overviewUrl":"https://gateway.example/overview?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv"}'] });
+  });
+
+  it("is signed with the gateway's push keys", async () => {
+    await webPush().send(subscriptionOf('/firefox'), WAKE);
+
+    expect(service.taken[0]?.headers.authorization).toMatch(new RegExp(`^vapid t=.+, k=${keys.publicKey}$`));
+  });
+
+  it.each([404, 410])('finds the subscription gone when its push service answers %i', async (status) => {
+    service.statuses.set('/gone', [status]);
+
+    await expect(webPush().send(subscriptionOf('/gone'), WAKE)).resolves.toBe('gone');
+  });
+
+  it.each([400, 429, 500])('failed when its push service answers %i', async (status) => {
+    service.statuses.set('/failing', [status]);
+
+    await expect(webPush().send(subscriptionOf('/failing'), WAKE)).resolves.toBe('failed');
+  });
+
+  it('failed when its push service does not answer', async () => {
+    await service.stop();
+
+    await expect(webPush().send(subscriptionOf('/away'), WAKE)).resolves.toBe('failed');
+  });
+
+  it('never connects to an address the policy refuses, as the name resolves at the moment of sending: it failed, and nothing reached the push service', async () => {
+    const subscription = subscriptionOf('/inside');
+    const named = { ...subscription, endpoint: subscription.endpoint.replace('127.0.0.1', 'push.localhost') };
+
+    const sent = await webPush({ isAllowedAddress: () => false }).send(named, WAKE);
+
+    expect({ sent, taken: service.taken }).toEqual({ sent: 'failed', taken: [] });
+  });
+
+  it('never connects to an address written in the endpoint that the policy refuses', async () => {
+    const sent = await webPush({ isAllowedAddress: () => false }).send(subscriptionOf('/literal'), WAKE);
+
+    expect({ sent, taken: service.taken }).toEqual({ sent: 'failed', taken: [] });
+  });
+
+  it('reaches a name at the address it resolves to, once allowed', async () => {
+    const subscription = subscriptionOf('/named');
+    const named = { ...subscription, endpoint: subscription.endpoint.replace('127.0.0.1', 'push.localhost') };
+
+    await expect(webPush().send(named, WAKE)).resolves.toBe('sent');
+  });
+});

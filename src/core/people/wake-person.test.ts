@@ -2,11 +2,11 @@ import type { DeliveryId } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, memoryFocusedPages } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { PersonShip, PushedPersonDelivery, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
+import type { FocusedPages, PersonShip, PushedPersonDelivery, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
 import { createWakePerson } from './wake-person.js';
 
 // The gateway wakes a person when something waits for their person ship
@@ -18,6 +18,7 @@ const SHIP: PersonShip = { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID };
 const CREW_TOKEN = 'aeolus_ct_v1_charlotte';
 const NOW = new Date('2026-10-23T12:00:00.000Z');
 const HOUR_MS = 3_600_000;
+const FOCUS_FRESH_MS = 60_000;
 
 function aDelivery(index: number, overrides: Partial<PushedPersonDelivery> = {}): PushedPersonDelivery {
   const deliveryId: DeliveryId = `dlv_01m3tbfspe96yf1rnr4ank${String(index).padStart(4, '0')}`;
@@ -69,8 +70,15 @@ function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: Flee
   };
 }
 
-function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[]; wakesSent?: WakesSent }) {
-  return createWakePerson({ door: deps.ship.door, channels: deps.channels, wakesSent: deps.wakesSent ?? memoryWakesSent(), clock: { now: () => NOW } });
+function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[]; wakesSent?: WakesSent; focused?: FocusedPages }) {
+  return createWakePerson({
+    door: deps.ship.door,
+    channels: deps.channels,
+    wakesSent: deps.wakesSent ?? memoryWakesSent(),
+    focused: deps.focused ?? memoryFocusedPages(),
+    focusFreshMs: FOCUS_FRESH_MS,
+    clock: { now: () => NOW },
+  });
 }
 
 describe('waking a person', () => {
@@ -182,7 +190,7 @@ describe('waking a person', () => {
     const email = aChannel('email');
     const wakesSent = memoryWakesSent();
     const crashing = { ...ship.door, handed: () => Promise.reject(new Error('the gateway stopped')) };
-    await expect(createWakePerson({ door: crashing, channels: [email.channel], wakesSent, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
+    await expect(createWakePerson({ door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
 
     await waking({ ship, channels: [email.channel], wakesSent })(SHIP, CREW_TOKEN);
 
@@ -194,7 +202,7 @@ describe('waking a person', () => {
     const refusing = { ...ship.door, handed: () => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) };
     const wakesSent = memoryWakesSent();
 
-    const woken = await createWakePerson({ door: refusing, channels: [aChannel('email').channel], wakesSent, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
+    const woken = await createWakePerson({ door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
 
     expect({ woken, sent: wakesSent.sent }).toEqual({ woken: err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }), sent: [{ channel: 'email', at: NOW }] });
   });
@@ -207,5 +215,62 @@ describe('waking a person', () => {
 
     expect(woken).toEqual(err({ code: 'LEASE_ENDED', message: 'The lease ended' }));
     expect(email.woken).toEqual([]);
+  });
+});
+
+describe('waking a person while a page of theirs is in focus (wake a person, W6)', () => {
+  it('sends no wake, and hands each fresh delivery no. 1 through the page', async () => {
+    const ship = aShip([aDelivery(1), aDelivery(2, { handOverNumber: 1 })]);
+    const email = aChannel('email');
+    const focused = memoryFocusedPages();
+    await focused.save({ ...SHIP, pageId: 'page-1', seenAt: new Date(NOW.getTime() - FOCUS_FRESH_MS) });
+
+    const woken = await waking({ ship, channels: [email.channel], focused })(SHIP, CREW_TOKEN);
+
+    expect(woken).toEqual(ok({ kind: 'settled' }));
+    expect(email.woken).toEqual([]);
+    expect(ship.handOvers).toEqual([{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', handOverNumber: 1, channel: 'page' }]);
+  });
+
+  it('hands through the page though no channel is on', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const focused = memoryFocusedPages();
+    await focused.save({ ...SHIP, pageId: 'page-1', seenAt: NOW });
+
+    await waking({ ship, channels: [aChannel('email', { isOn: false }).channel], focused })(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers.map(({ channel }) => channel)).toEqual(['page']);
+  });
+
+  it('hands through the page though the window of every channel is open', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const focused = memoryFocusedPages();
+    await focused.save({ ...SHIP, pageId: 'page-1', seenAt: NOW });
+
+    await waking({ ship, channels: [aChannel('email').channel], focused, wakesSent: memoryWakesSent([{ channel: 'email', at: NOW }]) })(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers.map(({ channel }) => channel)).toEqual(['page']);
+  });
+
+  it('wakes them while a page of theirs is open and not in focus', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email');
+    const focused = memoryFocusedPages();
+    await focused.save({ ...SHIP, pageId: 'page-1', seenAt: new Date(NOW.getTime() - FOCUS_FRESH_MS - 1) });
+
+    await waking({ ship, channels: [email.channel], focused })(SHIP, CREW_TOKEN);
+
+    expect({ woken: email.woken, channels: ship.handOvers.map(({ channel }) => channel) }).toEqual({ woken: [SHIP], channels: ['email'] });
+  });
+
+  it("is not kept from waking by another person's page in focus", async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email');
+    const focused = memoryFocusedPages();
+    await focused.save({ fleetId: FLEET_ID, shipId: 'shp_01m3tb1zgr5h2ffee12xnch8zz', pageId: 'page-1', seenAt: NOW });
+
+    await waking({ ship, channels: [email.channel], focused })(SHIP, CREW_TOKEN);
+
+    expect(email.woken).toEqual([SHIP]);
   });
 });

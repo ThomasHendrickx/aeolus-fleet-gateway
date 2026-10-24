@@ -3,7 +3,7 @@ import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
-import type { AccountDoor, EmailChannels, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../src/core/people/ports.js';
+import type { AccountDoor, EmailChannels, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -266,3 +266,86 @@ export function memoryEmailChannels(): EmailChannels & { turnedOn: Map<string, D
     },
   };
 }
+
+/** The person's pages in focus, in memory: each by its id, with when it was last seen in focus. */
+export function memoryFocusedPages(): FocusedPages & { held: FocusedPage[] } {
+  const held: FocusedPage[] = [];
+  return {
+    held,
+    save: (page) => {
+      const index = held.findIndex(({ pageId }) => pageId === page.pageId);
+      held.splice(index < 0 ? held.length : index, index < 0 ? 0 : 1, page);
+      return Promise.resolve();
+    },
+    remove: (fleetId, pageId) => {
+      const index = held.findIndex((page) => page.fleetId === fleetId && page.pageId === pageId);
+      if (index >= 0) {
+        held.splice(index, 1);
+      }
+      return Promise.resolve();
+    },
+    isAnyInFocus: ({ fleetId, shipId }, since) => Promise.resolve(held.some((page) => page.fleetId === fleetId && page.shipId === shipId && page.seenAt >= since)),
+  };
+}
+/** The browsers a person turned web push on in, in memory, by fleet, person ship and endpoint. */
+export function memoryWebPushSubscriptions(): WebPushSubscriptions & { held: WebPushSubscription[] } {
+  const held: WebPushSubscription[] = [];
+  const isSame = (fleetId: FleetId, { shipId, endpoint }: { shipId: ShipId; endpoint: string }) => (subscription: WebPushSubscription) =>
+    subscription.fleetId === fleetId && subscription.shipId === shipId && subscription.endpoint === endpoint;
+  return {
+    held,
+    list: (fleetId, shipId) => Promise.resolve(held.filter((subscription) => subscription.fleetId === fleetId && subscription.shipId === shipId)),
+    save: (subscription) => {
+      const index = held.findIndex(isSame(subscription.fleetId, subscription));
+      held.splice(index < 0 ? held.length : index, index < 0 ? 0 : 1, subscription);
+      return Promise.resolve();
+    },
+    markGone: (fleetId, gone) => {
+      const index = held.findIndex(isSame(fleetId, gone));
+      const subscription = held[index];
+      if (subscription !== undefined) {
+        held[index] = { ...subscription, goneAt: gone.goneAt };
+      }
+      return Promise.resolve();
+    },
+    remove: (fleetId, removed) => {
+      const index = held.findIndex(isSame(fleetId, removed));
+      if (index >= 0) {
+        held.splice(index, 1);
+      }
+      return Promise.resolve();
+    },
+  };
+}
+
+/** A browser of Charlotte's that took web push on, with its push service's endpoint. */
+export function aWebPushSubscription(overrides: Partial<WebPushSubscription> = {}): WebPushSubscription {
+  return {
+    fleetId: FLEET_ID,
+    shipId: PERSON_SHIP_ID,
+    endpoint: 'https://push.example/send/firefox-1',
+    keys: { p256dh: 'BPublicKeyOfTheBrowser', auth: 'AuthSecret' },
+    browser: 'Firefox on Linux',
+    fleetName: 'Acme',
+    addedAt: new Date('2026-10-22T09:00:00.000Z'),
+    goneAt: null,
+    ...overrides,
+  };
+}
+
+/** The browsers' push services, as the gateway's web push reaches them: each answers as the test sets it, sent by default. Every wake sent is kept. */
+export function fakeWebPush() {
+  const answers = new Map<string, WebPushSent[]>();
+  const sent: { endpoint: string; wake: Wake }[] = [];
+  const webPush: WebPush = {
+    send: (subscription, wake) => {
+      const answer = answers.get(subscription.endpoint)?.shift() ?? 'sent';
+      if (answer === 'sent') {
+        sent.push({ endpoint: subscription.endpoint, wake });
+      }
+      return Promise.resolve(answer);
+    },
+  };
+  return { webPush, sent, answers };
+}
+

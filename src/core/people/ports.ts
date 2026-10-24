@@ -118,7 +118,7 @@ export interface PersonShipDoor {
   /** Reports the person dealt with the delivery. */
   handled(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
   /** Hands the delivery over to the person with its number, naming the channel the wake went through (interop 5.1). */
-  handed(crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: WakeChannelName }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>>;
+  handed(crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: HandOverChannel }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>>;
   /** The ships and types the ship may send to now: the fleet checks its scopes and the network rules. */
   discover(crewToken: string): Promise<Result<PersonDiscovery, FleetRefusal>>;
   /** Sends the person's own message, once under its key. */
@@ -158,6 +158,9 @@ export interface OpenedDeliveries {
 /** The channels a person may turn on to be woken (wake a person, W1), as a hand-over names them. */
 export type WakeChannelName = 'email' | 'web-push';
 
+/** What a delivery is handed to the person through: a wake's channel, or a page of theirs in focus, which shows it (W6). */
+export type HandOverChannel = WakeChannelName | 'page';
+
 /**
  * Outbound port: one way to wake a person (wake a person, W1, W4): it says
  * only that something waits in the fleet, with the overview's link, and
@@ -183,4 +186,63 @@ export interface WakesSent {
 export interface EmailChannels {
   isOn(ship: PersonShip): Promise<boolean>;
   turn(ship: PersonShip, switched: { isOn: boolean; at: Date }): Promise<void>;
+}
+
+/** A page of a person in focus (wake a person, W6): by its own id, with when it was last seen in focus. */
+export interface FocusedPage {
+  readonly fleetId: FleetId;
+  readonly shipId: ShipId;
+  readonly pageId: string;
+  readonly seenAt: Date;
+}
+
+/** Outbound port: the pages in focus of every gateway instance, so the waiter of a ship sees them wherever it runs. */
+export interface FocusedPages {
+  /** Keeps it, or keeps when it was seen anew. */
+  save(page: FocusedPage): Promise<void>;
+  remove(fleetId: FleetId, pageId: string): Promise<void>;
+  /** Whether any page of the person ship's person was seen in focus since then. */
+  isAnyInFocus(ship: PersonShip, since: Date): Promise<boolean>;
+}
+
+/**
+ * A browser a person turned web push on in (wake a person, W8): its push
+ * service's endpoint and keys, and the fleet's name its wakes say, as the
+ * person's sign-in named it when they turned it on. A subscription its push
+ * service said is gone takes no wake again, and the overview says so.
+ */
+export interface WebPushSubscription {
+  readonly fleetId: FleetId;
+  readonly shipId: ShipId;
+  readonly endpoint: string;
+  readonly keys: { readonly p256dh: string; readonly auth: string };
+  /** The browser, as its person sees it named, such as Firefox on Linux. */
+  readonly browser: string;
+  readonly fleetName: string;
+  readonly addedAt: Date;
+  readonly goneAt: Date | null;
+}
+
+/** Outbound port: the browsers each person turned web push on in, by fleet, person ship and endpoint. */
+export interface WebPushSubscriptions {
+  /** The person ship's, oldest added first. */
+  list(fleetId: FleetId, shipId: ShipId): Promise<WebPushSubscription[]>;
+  /** Keeps it, or keeps it anew when its endpoint was kept before. */
+  save(subscription: WebPushSubscription): Promise<void>;
+  markGone(fleetId: FleetId, gone: { shipId: ShipId; endpoint: string; goneAt: Date }): Promise<void>;
+  remove(fleetId: FleetId, removed: { shipId: ShipId; endpoint: string }): Promise<void>;
+}
+
+/** What a wake says (W4): something waits in the fleet, by its name, and the link to the gateway's overview. Nothing else. */
+export interface Wake {
+  readonly fleetName: string;
+  readonly overviewUrl: string;
+}
+
+/** How a push service took a wake: sent, gone (it answered 404 or 410: the subscription ended), or failed otherwise. */
+export type WebPushSent = 'sent' | 'gone' | 'failed';
+
+/** Outbound port: sends a wake to one browser through its push service. */
+export interface WebPush {
+  send(subscription: WebPushSubscription, wake: Wake): Promise<WebPushSent>;
 }

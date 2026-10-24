@@ -32,6 +32,8 @@ async function start(): Promise<void> {
     gatewaySecret: config.gatewaySecret,
     mcpWaitMaxMs: config.mcpWaitMaxMs,
     emailWakeWindowMs: config.emailWakeWindowMs,
+    ...(config.webPush === undefined ? {} : { webPush: config.webPush }),
+    webPushWakeWindowMs: config.webPushWakeWindowMs,
     logger: { level: config.logLevel },
     ...(config.installationToken === undefined ? {} : { installationToken: config.installationToken }),
     ...(config.pagasae === undefined ? {} : { pagasae: config.pagasae }),

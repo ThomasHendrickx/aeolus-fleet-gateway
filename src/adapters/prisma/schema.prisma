@@ -437,3 +437,31 @@ model OwnerQuestion {
   @@id([fleetId, requestId])
   @@map("owner_questions")
 }
+
+/// A page of a person in focus, on any gateway instance, with when it was last seen so (wake a person, W6).
+model FocusedPage {
+  fleetId String   @map("fleet_id")
+  pageId  String   @map("page_id")
+  shipId  String   @map("ship_id")
+  seenAt  DateTime @map("seen_at") @db.Timestamptz(3)
+
+  @@id([fleetId, pageId])
+  @@index([fleetId, shipId, seenAt])
+  @@map("focused_pages")
+}
+
+/// A browser a person turned web push on in (wake a person, W8): its push service's endpoint and keys, and the fleet's name its wakes say. Gone once its push service answered 404 or 410.
+model WebPushSubscription {
+  fleetId   String    @map("fleet_id")
+  shipId    String    @map("ship_id")
+  endpoint  String
+  p256dh    String
+  auth      String
+  browser   String
+  fleetName String    @map("fleet_name")
+  addedAt   DateTime  @map("added_at") @db.Timestamptz(3)
+  goneAt    DateTime? @map("gone_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId, endpoint])
+  @@map("web_push_subscriptions")
+}

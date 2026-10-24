@@ -128,9 +128,16 @@ import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
 import { createWakePerson } from './core/people/wake-person.js';
+import { createFocusPage } from './core/people/focus-page.js';
 import { createEmailChannel } from './adapters/pagasae/email-channel.js';
 import { createPrismaEmailChannels } from './adapters/prisma/email-channels.js';
 import { createPrismaWakesSent } from './adapters/prisma/wakes-sent.js';
+import { createPrismaFocusedPages } from './adapters/prisma/focused-pages.js';
+import { createPrismaWebPushSubscriptions } from './adapters/prisma/web-push-subscriptions.js';
+import { createWebPush } from './adapters/web-push/web-push.js';
+import { createWebPushChannel } from './core/people/web-push-channel.js';
+import { createTurnOffWebPush } from './core/people/turn-off-web-push.js';
+import { createTurnOnWebPush } from './core/people/turn-on-web-push.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
@@ -191,6 +198,12 @@ export interface GatewayAppOptions {
   pagasae?: { url: string; clientId: string; clientSecret: string };
   /** The gateway's pages as an app at pagasae, for the shared account sign-in (header design H5): unset, nobody signs in to the pages that way. */
   pagasaeApp?: { clientId: string; clientSecret: string };
+  /** The gateway's push keys, which sign each web push wake, and the subject a push service may contact (wake a person, S3): unset, no one is offered web push. */
+  webPush?: { publicKey: string; privateKey: string; subject: string };
+  /** Which addresses web push may connect to: public ones unless set. Tests set it to reach their push service on this machine. */
+  isAllowedPushAddress?: (address: string) => boolean;
+  /** The least time between two wakes web push sends one person ship (wake a person, W10): 10 minutes unless set. */
+  webPushWakeWindowMs?: number;
   /** The least time between two wakes the email channel sends one person ship (wake a person, W10): 60 minutes unless set. */
   emailWakeWindowMs?: number;
   /** The gateway's web app, answering the pages the server has none of: unset, an unknown page is answered as any unknown address. */
@@ -208,6 +221,12 @@ const CLIENT_METADATA_TIMEOUT_MS = 5_000;
 
 /** How long pagasae's token endpoint may take to answer. */
 const PAGASAE_TIMEOUT_MS = 10_000;
+
+/** Web push's window unless told (wake a person, W10). */
+const WEB_PUSH_WAKE_WINDOW_MS = 10 * 60_000;
+
+/** How long a push service may take to take a wake. */
+const WEB_PUSH_TIMEOUT_MS = 10_000;
 
 /** The email channel's window unless told (wake a person, W10). */
 const EMAIL_WAKE_WINDOW_MS = 60 * 60_000;
@@ -240,6 +259,12 @@ const WAITER_ROUND_MS = 10_000;
 
 /** How long a person ship's waiter waits while the fleet does not answer, each longer than the last. */
 const WAITER_AGAIN_WAITS_MS = [1_000, 5_000, 30_000];
+
+/** How often a page in focus is seen again, so one whose gateway instance stopped stops counting soon after (wake a person, W6). */
+const FOCUS_SEEN_EVERY_MS = 20_000;
+
+/** How long a page counts in focus since it was last seen so: three times as long as it is seen again. */
+const FOCUS_FRESH_MS = 3 * FOCUS_SEEN_EVERY_MS;
 
 /** How long a wake that no channel sent waits before it is tried again, each longer than the last (wake a person, W3). */
 const WAKE_AGAIN_WAITS_MS = [60_000, 300_000, 900_000];
@@ -525,8 +550,10 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });
   // pagasae sends the email, asked with the gateway's installation token (wake a person, W2); without either, email wakes no one.
   const emailChannels = createPrismaEmailChannels(prisma);
-  const wakeChannels: WakeChannel[] =
-    options.pagasae === undefined || options.installationToken === undefined
+  // The browsers people turned web push on in (wake a person, W8).
+  const webPushSubscriptions = createPrismaWebPushSubscriptions(prisma);
+  const wakeChannels: WakeChannel[] = [
+    ...(options.pagasae === undefined || options.installationToken === undefined
       ? []
       : [
           createEmailChannel({
@@ -536,9 +563,25 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             windowMs: options.emailWakeWindowMs ?? EMAIL_WAKE_WINDOW_MS,
             emailChannels,
           }),
-        ];
+        ]),
+    // Web push, where the gateway holds push keys: a wake to each browser the person turned it on in (wake a person, S3).
+    ...(options.webPush === undefined
+      ? []
+      : [
+          createWebPushChannel({
+            subscriptions: webPushSubscriptions,
+            // A push service is reached at public addresses only, checked as its host resolves at each send.
+            webPush: createWebPush({ ...options.webPush, timeoutMs: WEB_PUSH_TIMEOUT_MS, addressesOf: (host) => systemHostResolver.addressesOf(host), isAllowedAddress: options.isAllowedPushAddress ?? isPublicAddress }),
+            clock,
+            windowMs: options.webPushWakeWindowMs ?? WEB_PUSH_WAKE_WINDOW_MS,
+            overviewUrlOf: (fleetId) => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`,
+          }),
+        ]),
+  ];
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
   const personCrews = createPrismaPersonCrews(prisma);
+  // A person's pages in focus, on every instance: while one is, what arrives is handed through it (wake a person, W6).
+  const focusedPages = createPrismaFocusedPages(prisma);
   const inboxChanges = createPrismaInboxChanges(prisma);
   const waiterLocks = createPostgresWaiterLocks(options.databaseUrl);
   const personWaiters = createPersonWaiters({
@@ -548,7 +591,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: door.person,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: door.person, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), clock }),
+      wakePerson: createWakePerson({ door: door.person, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,
@@ -576,8 +619,17 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes }),
-      readWakeChannels: createReadWakeChannels({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email') }),
+      readWakeChannels: createReadWakeChannels({
+        crewPersonShip: asCrew.crewPersonShip,
+        emailChannels,
+        isEmailOffered: wakeChannels.some(({ name }) => name === 'email'),
+        subscriptions: webPushSubscriptions,
+        webPushKey: options.webPush?.publicKey ?? null,
+      }),
       turnEmailChannel: createTurnEmailChannel({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), clock }),
+      turnOnWebPush: createTurnOnWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions, resolver: systemHostResolver, isWebPushOffered: options.webPush !== undefined, clock }),
+      turnOffWebPush: createTurnOffWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions }),
+      focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
       listShips: createListShips(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
