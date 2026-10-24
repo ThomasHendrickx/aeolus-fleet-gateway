@@ -51,6 +51,18 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
     expect(read.isOk ? read.value.deliveries.map(({ title }) => title) : []).toEqual(['The build is red']);
   });
 
+  it.each([
+    ['application/vnd.aeolus.meeting.added+json', 'You were added to a meeting'],
+    ['application/vnd.aeolus.meeting.mic+json', 'You hold the mic of a meeting'],
+    ['application/vnd.aeolus.meeting.ended+json', 'A meeting you took part in ended'],
+  ])('titles a meeting notice of %s in words, not by its payload', async (contentType, title) => {
+    const notice = aPersonDelivery({ contentType, payload: '{"meetingId":"mtg_01m5qa5j85mgd4z61d9c2k4mtg"}', questionTitle: null, meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
+
+    const read = await readInbox([notice]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk ? read.value.deliveries.map((entry) => entry.title) : []).toEqual([title]);
+  });
+
   it('cuts a first line at 80 characters, and keeps one of exactly 80', async () => {
     const eighty = 'a'.repeat(80);
 

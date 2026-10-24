@@ -35,8 +35,15 @@ describe('a person opens a delivery that waits for their person ship', () => {
 
     await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toEqual({
       isOk: true,
-      value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload },
+      value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null },
     });
+  });
+
+  it('says the meeting a contribution was made to, so the person goes on to it', async () => {
+    const contribution = aPersonDelivery({ ...NOTE, payload: 'Marketing is on track', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
+    const { openDelivery } = opening([contribution]);
+
+    await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
   });
 
   it('acknowledges it for the person, once it kept what an answer and the inbox need: its message, its sender, title and when it was sent, never its payload', async () => {
@@ -101,11 +108,19 @@ describe('a person opens again a delivery they opened, from any client (aeolus-f
     expect({ again, isSame: JSON.stringify(again) === JSON.stringify(first) }).toEqual({
       again: {
         isOk: true,
-        value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload },
+        value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null },
       },
       isSame: true,
     });
     expect(calls.filter((call) => call.startsWith('ack'))).toEqual([`ack(${QUESTION.deliveryId})`]);
+  });
+
+  it('says again the meeting a contribution was made to, so the person can go back to it', async () => {
+    const contribution = aPersonDelivery({ ...NOTE, payload: 'Marketing is on track', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
+    const { openDelivery } = opening([contribution]);
+    await openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId });
+
+    await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
   });
 
   it('keeps no payload of it: the second open reads it from the fleet', async () => {

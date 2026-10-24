@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { ACCOUNT_URL, CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn, GATEWAY_URL } from '../../../test/support/account-sign-in-fakes.js';
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { HEADS_MEETING_ID, aMeetingRead } from '../../../test/support/meeting-fakes.js';
 import { createAccountInView } from '../../core/account-sign-in/account-in-view.js';
 import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
@@ -116,7 +117,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       openDelivery: ({ caller, deliveryId }) =>
         Promise.resolve(
           deliveryId === DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
-            ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?' })
+            ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} waits for you: read your inbox again` }),
         ),
       answerDelivery: (input) => {
@@ -126,6 +127,23 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       doneDelivery: (input) => {
         answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
+      },
+      readMeeting: ({ meetingId }) =>
+        Promise.resolve(
+          meetingId === HEADS_MEETING_ID
+            ? ok({ meeting: aMeetingRead(), mic: { kind: 'requested' as const, place: 1 } })
+            : err({ kind: 'NO_SUCH_MEETING' as const, message: `The fleet did not read the meeting to you: Meeting ${meetingId} does not exist` }),
+        ),
+      sendMessage: (input) => {
+        answers.push({ grantId: grantOf(input.caller), to: JSON.stringify(input.to), contentType: input.contentType, payload: input.payload, idempotencyKey: input.idempotencyKey ?? '' });
+        return Promise.resolve(ok({ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0009' as const }));
+      },
+      changeOwnMic: (input) => {
+        if (input.change === 'release') {
+          return Promise.resolve(err({ kind: 'MIC_REFUSED' as const, message: 'The fleet did not change the mic: You do not hold the mic' }));
+        }
+        answers.push({ grantId: grantOf(input.caller), meetingId: input.meetingId, change: input.change });
+        return Promise.resolve(ok(undefined));
       },
     },
     changes,
@@ -644,7 +662,7 @@ describe("a person reads and deals with their person ship's deliveries through t
   it('opens one, whole', async () => {
     const { context } = aContext(PERSON_COOKIE);
 
-    await expect(gatewayRouter.createCaller(context).people.open({ deliveryId: DELIVERY })).resolves.toMatchObject({ contentType: 'text/plain', payload: 'Publish it?' });
+    await expect(gatewayRouter.createCaller(context).people.open({ deliveryId: DELIVERY })).resolves.toMatchObject({ contentType: 'text/plain', payload: 'Publish it?', meetingId: null });
   });
 
   it('answers one it opened, and is done with another, as its own account', async () => {
@@ -692,6 +710,51 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("a person takes part in a meeting through the gateway's API, signed in to its pages (decision 0061, M19)", () => {
+  it('reads a meeting with its times in ISO 8601, and where they stand on its mic', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.meeting({ meetingId: HEADS_MEETING_ID })).resolves.toMatchObject({
+      meetingId: HEADS_MEETING_ID,
+      openedAt: '2026-10-24T09:00:00.000Z',
+      endedAt: null,
+      contributions: { items: [{ payload: 'Round robin: marketing first', sentAt: '2026-10-24T09:01:00.000Z' }], nextCursor: null },
+      yourMic: { kind: 'requested', place: 1 },
+    });
+  });
+
+  it('says a meeting they take no part in is not found', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.meeting({ meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4zzz' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('contributes to a meeting as their own account, once under the key the page gives', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await gatewayRouter.createCaller(context).people.contribute({ meetingId: HEADS_MEETING_ID, payload: 'Marketing is on track', idempotencyKey: 'page-1' });
+
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, to: JSON.stringify({ kind: 'meeting', meetingId: HEADS_MEETING_ID }), contentType: 'text/plain', payload: 'Marketing is on track', idempotencyKey: 'page-1' }]);
+  });
+
+  it('requests the mic as their own account', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await gatewayRouter.createCaller(context).people.mic({ meetingId: HEADS_MEETING_ID, change: 'request' });
+
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, meetingId: HEADS_MEETING_ID, change: 'request' }]);
+  });
+
+  it("says why the fleet refused a mic call, in the fleet's words", async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.mic({ meetingId: HEADS_MEETING_ID, change: 'release' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'The fleet did not change the mic: You do not hold the mic',
+    });
   });
 });
 

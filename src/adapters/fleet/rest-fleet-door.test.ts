@@ -87,6 +87,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       inReplyTo: null,
       attempts: 0,
       isForced: false,
+      meetingId: null,
       state: 'received',
       handOverNumber: null,
     };
@@ -136,6 +137,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         inReplyTo: null,
         attempts: 1,
         isForced: false,
+        meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',
         state: 'acknowledged',
       },
     };
@@ -154,6 +156,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         questionTitle: 'Go for release 1.4?',
         sentAt: new Date('2026-10-19T08:00:00.000Z'),
         inReplyTo: null,
+        meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',
       },
     });
     expect(sent()).toEqual([{ url: '/api/v1/ship/delivery', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' } }]);
@@ -168,5 +171,78 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     await createRestFleetDoor(base).person[what]('aeolus_ct_v1_charlotte', 'dlv_01m3tbfspe96yf1rnr4ank0001');
 
     expect(sent().map((call) => ({ url: call.url, body: call.body }))).toEqual([{ url, body: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' } }]);
+  });
+});
+
+describe("the meeting calls the gateway makes as the crew of a person's ship (decision 0061)", () => {
+  const MEETING = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg';
+  const CHIEF = { id: 'shp_01m5qa5j85mgd4z61d9c2kchf0', name: 'chief-of-staff' };
+  const CHARLOTTE = { id: PERSON_SHIP, name: 'charlotte' };
+
+  it('reads a meeting and a page of its contributions after the cursor', async () => {
+    answer = {
+      status: 200,
+      body: {
+        meetingId: MEETING,
+        title: 'Weekly heads',
+        owner: CHIEF,
+        moderator: CHIEF,
+        openedAt: '2026-10-24T09:00:00.000Z',
+        endedAt: null,
+        participants: [
+          { ...CHIEF, kind: 'plugin', status: 'crewed', state: 'present' },
+          { ...CHARLOTTE, kind: 'person', status: 'awaitingCrew', state: 'left' },
+        ],
+        mic: { holder: CHARLOTTE, pattern: 'fifo', requests: [{ ship: CHIEF, requestedAt: '2026-10-24T09:02:00.000Z' }] },
+        contributions: {
+          items: [{ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0002', sender: CHIEF, payload: 'Marketing first', contentType: 'text/plain', model: 'claude-opus-5-5', sentAt: '2026-10-24T09:01:00.000Z' }],
+          nextCursor: 'msg_01m5qa5j85mgd4z61d9c2k0002',
+        },
+      },
+    };
+
+    const read = await createRestFleetDoor(base).meetings.meeting('aeolus_ct_v1_charlotte', { meetingId: MEETING, cursor: 'msg_01m5qa5j85mgd4z61d9c2k0003' });
+
+    expect(read).toEqual({
+      isOk: true,
+      value: {
+        meetingId: MEETING,
+        title: 'Weekly heads',
+        owner: { shipId: CHIEF.id, name: 'chief-of-staff' },
+        moderator: { shipId: CHIEF.id, name: 'chief-of-staff' },
+        openedAt: new Date('2026-10-24T09:00:00.000Z'),
+        endedAt: null,
+        participants: [
+          { shipId: CHIEF.id, name: 'chief-of-staff', kind: 'plugin', status: 'crewed', state: 'present' },
+          { shipId: PERSON_SHIP, name: 'charlotte', kind: 'person', status: 'awaitingCrew', state: 'left' },
+        ],
+        mic: { holder: { shipId: PERSON_SHIP, name: 'charlotte' }, pattern: 'fifo', requests: [{ ship: { shipId: CHIEF.id, name: 'chief-of-staff' }, requestedAt: new Date('2026-10-24T09:02:00.000Z') }] },
+        contributions: {
+          items: [{ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0002', sender: { shipId: CHIEF.id, name: 'chief-of-staff' }, contentType: 'text/plain', payload: 'Marketing first', sentAt: new Date('2026-10-24T09:01:00.000Z') }],
+          nextCursor: 'msg_01m5qa5j85mgd4z61d9c2k0002',
+        },
+      },
+    });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/meeting', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { meetingId: MEETING, cursor: 'msg_01m5qa5j85mgd4z61d9c2k0003' } }]);
+  });
+
+  it.each([
+    ['request', '/api/v1/ship/requestMic'],
+    ['withdraw', '/api/v1/ship/withdrawMicRequest'],
+    ['release', '/api/v1/ship/releaseMic'],
+  ] as const)('makes the %s mic call on the meeting', async (change, url) => {
+    answer = { status: 200, body: {} };
+
+    await expect(createRestFleetDoor(base).meetings.changeMic('aeolus_ct_v1_charlotte', { meetingId: MEETING, change })).resolves.toEqual({ isOk: true, value: undefined });
+    expect(sent()).toEqual([{ url, authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { meetingId: MEETING } }]);
+  });
+
+  it("answers the fleet's refusal of a mic call", async () => {
+    answer = { status: 409, body: { code: 'CONFLICT', message: 'You already requested the mic' } };
+
+    await expect(createRestFleetDoor(base).meetings.changeMic('aeolus_ct_v1_charlotte', { meetingId: MEETING, change: 'request' })).resolves.toEqual({
+      isOk: false,
+      error: { code: 'CONFLICT', message: 'You already requested the mic' },
+    });
   });
 });
