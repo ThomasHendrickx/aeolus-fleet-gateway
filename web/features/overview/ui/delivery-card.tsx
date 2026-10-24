@@ -9,8 +9,8 @@ export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'note
  * One delivery in focus (design B, Signal). A question is answered with one
  * tap on a button that names the option it sends, the asker's pick on a
  * dashed edge; any delivery may get a note as its answer, and a message may
- * be done with; one of a meeting leads to the meeting. Opened before, it shows by its title alone, as its content
- * was shown once.
+ * be done with; one of a meeting leads to the meeting. Opened before, it
+ * shows by its title alone, as its content was shown once.
  */
 export function DeliveryCard({
   delivery,
