@@ -3,7 +3,7 @@ import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
-import type { AccountDoor, EmailChannels, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../src/core/people/ports.js';
+import type { AccountDoor, EmailChannels, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -204,7 +204,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
       return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => ship.discovery ?? { ships: [], types: [] });
     },
     send: (crewToken, message) => {
-      calls.push(`send(${message.to.kind === 'ship' ? message.to.name : message.to.type})`);
+      calls.push(`send(${recipientOf(message.to)})`);
       const refused = refusals.send.shift();
       if (refused) {
         return Promise.resolve(err(refused));
@@ -216,6 +216,17 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
     },
   };
   return { door, calls, replies, sent, refusals, handOvers };
+}
+
+function recipientOf(to: PersonSelector): string {
+  switch (to.kind) {
+    case 'ship':
+      return to.name;
+    case 'type':
+      return to.type;
+    case 'meeting':
+      return to.meetingId;
+  }
 }
 
 /** The deliveries people opened, in memory, by fleet, person ship and delivery. */
