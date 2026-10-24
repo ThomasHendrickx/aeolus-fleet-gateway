@@ -43,8 +43,8 @@ async function attempt<T>(fleet: string, run: (api: GatewayApi) => Promise<T>): 
 export async function openDelivery(fleet: string, deliveryId: string): Promise<ActionOutcome<FocusedDelivery>> {
   return attempt(fleet, async (api) => {
     const opened = await api.people.open.mutate({ deliveryId });
-    const { contentType, payload, ...entry } = opened;
-    return { ...entry, payload, question: questionOf({ contentType, payload }) };
+    const { contentType, payload, meetingId, ...entry } = opened;
+    return { ...entry, payload, question: questionOf({ contentType, payload }), meetingId: meetingId ?? undefined };
   });
 }
 
