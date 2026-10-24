@@ -96,6 +96,16 @@ describe('aeolus-gateway start and migrate', () => {
     expect({ status: page.status, nothing: body.includes('Nothing waits on you') }).toEqual({ status: 200, nothing: true });
   }, 60_000);
 
+  it("start shows a signed-in person a meeting's page, saying why it could not be read, with the way back to the Overview", async () => {
+    await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
+
+    const page = await fetch(`${address}/meetings/mtg_01m5qa5j85mgd4z61d9c2k4mtg?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${SIGN_IN}` } });
+    const body = await page.text();
+
+    // The gateway is connected to no fleet here, so it crews no person ship: the page says the API's refusal in its place.
+    expect({ status: page.status, isAlert: body.includes('role="alert"'), hasWayBack: body.includes('← Overview') }).toEqual({ status: 200, isAlert: true, hasWayBack: true });
+  }, 60_000);
+
   it("start sends a browser connecting an unknown MCP client to the web app's page saying why", async () => {
     await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
 
