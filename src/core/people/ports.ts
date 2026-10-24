@@ -51,6 +51,8 @@ export interface PersonDelivery {
   readonly questionTitle: string | null;
   readonly sentAt: Date;
   readonly inReplyTo: MessageId | null;
+  /** The meeting its message was contributed to or tells of; none outside a meeting (decision 0061). */
+  readonly meetingId: MeetingId | null;
 }
 
 /** What a person ship may send to now, as the fleet's discover answers it: each ship by name, with what it offers, and each type. */

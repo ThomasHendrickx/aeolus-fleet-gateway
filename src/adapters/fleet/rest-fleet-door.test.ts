@@ -87,6 +87,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       inReplyTo: null,
       attempts: 0,
       isForced: false,
+      meetingId: null,
       state: 'received',
       handOverNumber: null,
     };
@@ -136,6 +137,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         inReplyTo: null,
         attempts: 1,
         isForced: false,
+        meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',
         state: 'acknowledged',
       },
     };
@@ -154,6 +156,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         questionTitle: 'Go for release 1.4?',
         sentAt: new Date('2026-10-19T08:00:00.000Z'),
         inReplyTo: null,
+        meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',
       },
     });
     expect(sent()).toEqual([{ url: '/api/v1/ship/delivery', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' } }]);

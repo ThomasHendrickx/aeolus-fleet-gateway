@@ -118,7 +118,7 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
 }
 
 /** A delivery to a person ship as the gateway shows it, with a question's title read from its payload. */
-function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, contentType, payload, sentAt, inReplyTo }: ReceivedDelivery): PersonDelivery {
+function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, contentType, payload, sentAt, inReplyTo, meetingId }: ReceivedDelivery): PersonDelivery {
   return {
     deliveryId,
     messageId,
@@ -129,6 +129,7 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     questionTitle: contentType === QUESTION_CONTENT_TYPE ? (questionOf(payload)?.title ?? null) : null,
     sentAt: new Date(sentAt),
     inReplyTo,
+    meetingId,
   };
 }
 
