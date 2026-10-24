@@ -1,7 +1,8 @@
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { Notice } from '../../overview/ui/notice';
 import { NoSignIn } from '../../sign-in/ui/no-sign-in';
-import { MEETINGS_PATH, meetingPathOf, readMeeting } from '../hooks/read-meeting';
+import { readMeeting } from '../hooks/read-meeting';
+import { MEETINGS_PATH, meetingPathOf } from '../paths';
 import { micLineOf, standingOf } from '../services/meeting';
 import { Contributions } from '../ui/contributions';
 import { Participants } from '../ui/participants';
