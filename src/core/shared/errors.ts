@@ -56,7 +56,9 @@ export type DomainErrorKind =
   | 'CARD_INVALID'
   | 'NOT_A_MESSAGE'
   | 'CHANNEL_NOT_OFFERED'
-  | 'INVALID_SUBSCRIPTION';
+  | 'INVALID_SUBSCRIPTION'
+  | 'NO_SUCH_MEETING'
+  | 'MIC_REFUSED';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {
