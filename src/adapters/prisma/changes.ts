@@ -1,21 +1,22 @@
 /**
- * The changes the pages' live channel hears from Postgres. A trigger
- * announces each committed change to a fleet's pending requests on the
- * `gateway_changes` channel, naming only the fleet and the topic, so every
- * gateway instance hears a decision made on any of them. One connection per
+ * The changes the pages' live channel hears from Postgres, on the
+ * `gateway_changes` channel, so every gateway instance hears a change made
+ * on any of them: a trigger announces each committed change to a fleet's
+ * pending requests, naming only the fleet and the topic; the gateway tells
+ * each change to a person ship's inbox, naming the fleet and the ship. One connection per
  * instance listens; when it is lost, or the database does not answer at
  * start, it connects again and asks its listener to read everything anew,
  * as changes made meanwhile were not heard.
  */
-import { idSchema, type FleetId } from '@aeolus-fleet/common';
+import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import pg from 'pg';
 import { z } from 'zod';
 
-/** A change a page may show: which fleet, and what changed in it. */
-export interface Change {
-  readonly fleetId: FleetId;
-  readonly topic: 'requests';
-}
+import type { InboxChanges } from '../../core/people/ports.js';
+import type { Db } from './client.js';
+
+/** A change a page may show: which fleet, and what changed in it: its requests, or a person ship's inbox. */
+export type Change = { readonly fleetId: FleetId; readonly topic: 'requests' } | { readonly fleetId: FleetId; readonly topic: 'inbox'; readonly shipId: ShipId };
 
 const CHANNEL = 'gateway_changes';
 
@@ -25,7 +26,20 @@ const APPLICATION_NAME = 'aeolus-gateway-changes';
 const RECONNECT_FIRST_MS = 100;
 const RECONNECT_MOST_MS = 5000;
 
-const changeSchema = z.object({ fleetId: idSchema('fleet'), topic: z.literal('requests') });
+const changeSchema = z.discriminatedUnion('topic', [
+  z.object({ fleetId: idSchema('fleet'), topic: z.literal('requests') }),
+  z.object({ fleetId: idSchema('fleet'), topic: z.literal('inbox'), shipId: idSchema('ship') }),
+]);
+
+/** Tells every gateway instance that a person ship's inbox changed. */
+export function createPrismaInboxChanges(db: Db): InboxChanges {
+  return {
+    tell: async ({ fleetId, shipId }) => {
+      const change: Change = { fleetId, topic: 'inbox', shipId };
+      await db.$executeRaw`SELECT pg_notify(${CHANNEL}, ${JSON.stringify(change)})`;
+    },
+  };
+}
 
 function parsedJson(text: string | undefined): unknown {
   try {

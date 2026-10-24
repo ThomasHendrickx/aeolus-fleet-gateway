@@ -46,6 +46,25 @@ describe("person ships' crews in Postgres (decision 0054)", () => {
     ]);
   });
 
+  it('lists the person ships it holds a crew for, of every fleet, a page at a time after the last one listed (wake a person, W7)', async () => {
+    const crews = createPrismaPersonCrews(prisma);
+    const fleetId: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch9zz';
+    for (const shipId of ['shp_01m3tb1zgr5h2ffee12xnch9a1', 'shp_01m3tb1zgr5h2ffee12xnch9a2', 'shp_01m3tb1zgr5h2ffee12xnch9a3'] as const) {
+      await crews.save({ fleetId, shipId, crewToken: `aeolus_ct_v1_${shipId}`, crewedAt: AT });
+    }
+
+    const first = await crews.crewed({ after: { fleetId, shipId: 'shp_01m3tb1zgr5h2ffee12xnch9a0' }, limit: 2 });
+    const next = await crews.crewed({ after: first.at(-1) ?? null, limit: 2 });
+
+    expect({ first, next }).toEqual({
+      first: [
+        { fleetId, shipId: 'shp_01m3tb1zgr5h2ffee12xnch9a1' },
+        { fleetId, shipId: 'shp_01m3tb1zgr5h2ffee12xnch9a2' },
+      ],
+      next: [{ fleetId, shipId: 'shp_01m3tb1zgr5h2ffee12xnch9a3' }],
+    });
+  });
+
   it('forgets a fleet with its person ships\' crews (decision 0021)', async () => {
     const crews = createPrismaPersonCrews(prisma);
     await crews.save({ fleetId: OTHER_FLEET, shipId: PERSON_SHIP, crewToken: 'aeolus_ct_v1_person_o', crewedAt: AT });

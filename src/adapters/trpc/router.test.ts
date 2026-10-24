@@ -746,6 +746,27 @@ describe("a page follows its fleet's request changes through the gateway's API, 
     stop.abort();
   });
 
+  it("hears each change to its person's inbox, and none to another person's (wake a person, #1014)", async () => {
+    const { context, changes } = aContext(PERSON_COOKIE);
+    const stop = new AbortController();
+    const heard = (await gatewayRouter.createCaller(context, { signal: stop.signal }).requests.changes())[Symbol.asyncIterator]();
+    const next = heard.next();
+    await expect.poll(() => changes.listeners()).toBe(1);
+    const other = { isHeard: false };
+    void next.then(() => {
+      other.isHeard = true;
+    });
+
+    changes.publish({ fleetId: FLEET, topic: 'inbox', shipId: 'shp_01m3tbfspe96yf1rnr4ank9dk1' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const isHeardOfAnother = other.isHeard;
+    changes.publish({ fleetId: FLEET, topic: 'inbox', shipId: OWNER });
+
+    await expect(next).resolves.toEqual({ done: false, value: { fleetId: FLEET } });
+    expect(isHeardOfAnother).toBe(false);
+    stop.abort();
+  });
+
   it('stops following once the page goes', async () => {
     const { context, changes } = aContext(PERSON_COOKIE);
     const stop = new AbortController();

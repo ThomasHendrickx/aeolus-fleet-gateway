@@ -106,7 +106,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       { questionTitle: 'Go for release 1.4?', sentAt: new Date('2026-10-19T08:00:00.000Z') },
       { questionTitle: null, sentAt: new Date('2026-10-19T08:00:00.000Z') },
     ]);
-    expect(sent().map(({ url, body }) => ({ url, body }))).toEqual([{ url: '/api/v1/ship/pushReceive', body: { max: 10 } }]);
+    expect(sent().map(({ url, body }) => ({ url, body }))).toEqual([{ url: '/api/v1/ship/pushReceive', body: { max: 10, waker: 'gateway' } }]);
   });
 
   it("replies to the sender's ship, in reply to its message, under the key given", async () => {

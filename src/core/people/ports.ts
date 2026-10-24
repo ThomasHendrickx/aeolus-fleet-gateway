@@ -32,11 +32,43 @@ export interface PersonCrew {
   readonly crewedAt: Date;
 }
 
+/** A person ship, by its fleet and id. */
+export interface PersonShip {
+  readonly fleetId: FleetId;
+  readonly shipId: ShipId;
+}
+
 export interface PersonCrews {
+  /** The person ships it holds a crew for, of every fleet, by fleet and ship, after the one given (wake a person, W7). */
+  crewed(page: { after: PersonShip | null; limit: number }): Promise<PersonShip[]>;
   find(fleetId: FleetId, shipId: ShipId): Promise<PersonCrew | undefined>;
   save(crew: PersonCrew): Promise<void>;
   /** Forgets a crew that no longer works, as when its lease ended, so the ship is crewed again. */
   drop(fleetId: FleetId, shipId: ShipId): Promise<void>;
+}
+
+/**
+ * Outbound port: the lock of each person ship's waiter, held by one gateway
+ * instance at a time (wake a person, W9). An instance that loses its hold,
+ * as when its connection to the database ends, loses every lock it held.
+ */
+export interface WaiterLocks {
+  /** Takes the ship's lock unless another instance holds it: whether it holds it now. */
+  take(ship: PersonShip): Promise<boolean>;
+  give(ship: PersonShip): Promise<void>;
+  /** Hears each loss of every lock this instance held. */
+  onLost(listener: () => void): void;
+}
+
+/** A change to a person ship's inbox: its pages read it again (wake a person, #1014). */
+export interface InboxChange {
+  readonly fleetId: FleetId;
+  readonly shipId: ShipId;
+}
+
+/** Outbound port: tells every gateway instance that a person ship's inbox changed, carrying nothing of it. */
+export interface InboxChanges {
+  tell(change: InboxChange): Promise<void>;
 }
 
 /** A delivery to the person ship, as the fleet's push receive hands it. */
@@ -64,8 +96,12 @@ export type PersonSelector = { readonly kind: 'ship'; readonly name: string } | 
 
 /** Outbound port: the fleet's calls the gateway makes as the crew of a person ship. */
 export interface PersonShipDoor {
-  /** How many deliveries wait for the ship, without waiting. */
-  inbox(crewToken: string): Promise<Result<{ waiting: number }, FleetRefusal>>;
+  /**
+   * How many deliveries wait for the ship: at once, or with a wait while the
+   * count is still the one the crew knows, up to the fleet's longest wait
+   * (wake a person, W5). Stopping the signal ends the wait.
+   */
+  inbox(crewToken: string, wait?: { knownWaiting: number; signal: AbortSignal }): Promise<Result<{ waiting: number }, FleetRefusal>>;
   /** The ship's deliveries, up to max, its own held ones again first. */
   pushReceive(crewToken: string, take: { max: number }): Promise<Result<PersonDelivery[], FleetRefusal>>;
   /** Acknowledges a delivery the person opened: their own act confirms it (interop 5.1). */
