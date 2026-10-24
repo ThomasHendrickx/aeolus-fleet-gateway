@@ -1,4 +1,4 @@
-import type { DeliveryId } from '@aeolus-fleet/common';
+import { MEETING_ADDED_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, type DeliveryId } from '@aeolus-fleet/common';
 
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 
@@ -13,9 +13,16 @@ export interface InboxEntry {
   readonly sentAt: string;
 }
 
-/** A question's own title; any other message's first line, cut to the longest title. */
+/** The title of each meeting notice (decision 0061, M11), whose payload only names the meeting. */
+const MEETING_NOTICE_TITLES = new Map([
+  [MEETING_ADDED_CONTENT_TYPE, 'You were added to a meeting'],
+  [MEETING_MIC_CONTENT_TYPE, 'You hold the mic of a meeting'],
+  [MEETING_ENDED_CONTENT_TYPE, 'A meeting you took part in ended'],
+]);
+
+/** A question's own title; a meeting notice's in words; any other message's first line, cut to the longest title. */
 export function titleOf(delivery: PersonDelivery): string {
-  const title = delivery.questionTitle ?? delivery.payload.split('\n', 1)[0] ?? '';
+  const title = delivery.questionTitle ?? MEETING_NOTICE_TITLES.get(delivery.contentType) ?? delivery.payload.split('\n', 1)[0] ?? '';
   return title.length > TITLE_MAX_LENGTH ? `${title.slice(0, TITLE_MAX_LENGTH - 1)}…` : title;
 }
 
