@@ -37,8 +37,15 @@ describe('a person opens a delivery that waits for their person ship', () => {
 
     await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toEqual({
       isOk: true,
-      value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload },
+      value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null },
     });
+  });
+
+  it('says the meeting a contribution was made to, so the person goes on to it', async () => {
+    const contribution = aPersonDelivery({ ...NOTE, payload: 'Marketing is on track', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
+    const { openDelivery } = opening([contribution]);
+
+    await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
   });
 
   it('acknowledges it for the person, once it kept what an answer and the inbox need: its message, its sender, title and when it was sent, never its payload', async () => {
