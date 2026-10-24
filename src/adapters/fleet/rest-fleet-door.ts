@@ -20,6 +20,7 @@ import {
   idSchema,
   INBOX_WAIT_MAX_SECONDS,
   inboxOutputSchema,
+  meetingOutputSchema,
   pushReceiveOutputSchema,
   deliveryOutputSchema,
   receiveOutputSchema,
@@ -29,6 +30,8 @@ import {
   sendOutputSchema,
   shipDetailOutputSchema,
   startingPromptOutputSchema,
+  type MeetingOutput,
+  type Party,
   type ReceivedDelivery,
   type ShipId,
 } from '@aeolus-fleet/common';
@@ -36,6 +39,7 @@ import { z } from 'zod';
 
 import type { FleetDoor, FleetRefusal, GatewayInbox } from '../../core/connection/ports.js';
 import type { CallSender, Discovery, ReplyReceiver, SentMessages } from '../../core/mcp-in/ports.js';
+import type { MeetingRead, MeetingShip, OwnMicChange, PersonMeetingDoor } from '../../core/meetings/ports.js';
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
@@ -141,6 +145,35 @@ function waitSecondsOf(atMostMs: number | undefined): number {
   return atMostMs === undefined ? INBOX_WAIT_MAX_SECONDS : Math.min(INBOX_WAIT_MAX_SECONDS, Math.ceil(atMostMs / MS_PER_SECOND));
 }
 
+/** The fleet's call for each of a participant's own mic changes (decision 0061). */
+const OWN_MIC_PATHS = { request: '/ship/requestMic', withdraw: '/ship/withdrawMicRequest', release: '/ship/releaseMic' } as const satisfies Record<OwnMicChange, string>;
+
+function meetingShipOf({ id, name }: Party): MeetingShip {
+  return { shipId: id, name };
+}
+
+/** A meeting as the fleet reads it, with its times as dates; a contribution's model stays out, as the person reads no model. */
+function meetingReadOf(read: MeetingOutput): MeetingRead {
+  return {
+    meetingId: read.meetingId,
+    title: read.title,
+    owner: meetingShipOf(read.owner),
+    moderator: meetingShipOf(read.moderator),
+    openedAt: new Date(read.openedAt),
+    endedAt: read.endedAt === null ? null : new Date(read.endedAt),
+    participants: read.participants.map(({ id, name, kind, status, state }) => ({ shipId: id, name, kind, status, state })),
+    mic: {
+      holder: read.mic.holder === null ? null : meetingShipOf(read.mic.holder),
+      pattern: read.mic.pattern,
+      requests: read.mic.requests.map(({ ship, requestedAt }) => ({ ship: meetingShipOf(ship), requestedAt: new Date(requestedAt) })),
+    },
+    contributions: {
+      items: read.contributions.items.map(({ messageId, sender, contentType, payload, sentAt }) => ({ messageId, sender: meetingShipOf(sender), contentType, payload, sentAt: new Date(sentAt) })),
+      nextCursor: read.contributions.nextCursor,
+    },
+  };
+}
+
 /** A question's payload, if it parses as one. */
 function questionOf(payload: string) {
   try {
@@ -153,7 +186,7 @@ function questionOf(payload: string) {
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & ReplyReceiver & SentMessages & AccountDoor & Owners & { person: PersonShipDoor; gatewayInbox: GatewayInbox } {
+): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & ReplyReceiver & SentMessages & AccountDoor & Owners & { person: PersonShipDoor; meetings: PersonMeetingDoor; gatewayInbox: GatewayInbox } {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   const done = async (crewToken: string, request: { path: string; body: unknown }) => {
@@ -292,6 +325,14 @@ export function createRestFleetDoor(
       },
       send: (crewToken, { to, contentType, payload, idempotencyKey }) =>
         call({ path: '/ship/send', method: 'POST', crewToken, body: { selector: to, contentType, payload, idempotencyKey }, answers: sendOutputSchema }),
+    },
+    // The meeting calls a person ship's crew makes for the person (decision 0061, M19).
+    meetings: {
+      meeting: async (crewToken, asked) => {
+        const read = await call({ path: '/ship/meeting', method: 'POST', crewToken, body: asked, answers: meetingOutputSchema });
+        return read.isOk ? ok(meetingReadOf(read.value)) : read;
+      },
+      changeMic: (crewToken, { meetingId, change }) => done(crewToken, { path: OWN_MIC_PATHS[change], body: { meetingId } }),
     },
     handed: async (crewToken, handOver) => {
       const answered = await call({ path: '/ship/handed', method: 'POST', crewToken, body: handOver, answers: handedOutputSchema });
