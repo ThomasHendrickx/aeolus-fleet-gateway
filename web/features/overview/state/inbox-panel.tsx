@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 
-import { meetingPathOf } from '../../meeting/hooks/read-meeting';
+import { meetingPathOf } from '../../meeting/paths';
 import { answerDelivery, doneDelivery, openDelivery, type ActionOutcome } from '../hooks/overview-actions';
 import type { FocusedDelivery, Inbox, InboxEntry } from '../services/deliveries';
 import { DeliveryCard, type DeliveryControl } from '../ui/delivery-card';

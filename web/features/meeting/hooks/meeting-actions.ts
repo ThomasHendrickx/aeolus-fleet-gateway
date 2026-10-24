@@ -12,7 +12,7 @@ import { redirect } from 'next/navigation';
 import { refusalCodeOf, refusalMessageOf, requestApi } from '../../../lib/gateway-api/page-api';
 import type { ActionOutcome } from '../../overview/hooks/overview-actions';
 import { contributionOf } from '../services/meeting';
-import { MEETINGS_PATH, meetingPathOf } from './read-meeting';
+import { MEETINGS_PATH, meetingPathOf } from '../paths';
 
 /** What an action says when the gateway gave no answer of its own. */
 const NO_ANSWER = 'The gateway did not answer: try again in a moment';
