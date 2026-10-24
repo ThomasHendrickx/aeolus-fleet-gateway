@@ -9,11 +9,12 @@ export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'note
  * One delivery in focus (design B, Signal). A question is answered with one
  * tap on a button that names the option it sends, the asker's pick on a
  * dashed edge; any delivery may get a note as its answer, and a message may
- * be done with. Opened before, it shows by its title alone, as its content
+ * be done with; one of a meeting leads to the meeting. Opened before, it shows by its title alone, as its content
  * was shown once.
  */
 export function DeliveryCard({
   delivery,
+  meetingHref,
   note,
   working,
   failure,
@@ -23,6 +24,8 @@ export function DeliveryCard({
   onBack,
 }: {
   delivery: FocusedDelivery;
+  /** The page of the meeting it belongs to, if it belongs to one. */
+  meetingHref: string | undefined;
   note: string;
   working: DeliveryControl | undefined;
   failure: string | undefined;
@@ -40,6 +43,11 @@ export function DeliveryCard({
         {delivery.from} · {new Date(delivery.sentAt).toUTCString()}
       </span>
       <h2 className="text-heading font-semibold">{question?.title ?? delivery.title}</h2>
+      {meetingHref === undefined ? null : (
+        <a data-testid="overview-meeting" href={meetingHref} className="inline-flex h-9 items-center justify-self-start rounded-md bg-primary px-4 text-primary-foreground hover:bg-primary-hover">
+          Go to the meeting
+        </a>
+      )}
       {question === undefined ? (
         delivery.payload === undefined ? (
           <p className="text-muted-foreground">You opened this before; its content was shown to you then.</p>

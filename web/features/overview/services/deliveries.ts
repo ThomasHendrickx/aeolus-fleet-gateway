@@ -25,6 +25,8 @@ export interface FocusedDelivery {
   readonly sentAt: string;
   readonly payload: string | undefined;
   readonly question: Question | undefined;
+  /** The meeting it was contributed to or tells of, when it was opened now and belongs to one. */
+  readonly meetingId: string | undefined;
 }
 
 /** A question, when the delivery is one the fleet's question content type carries. */
