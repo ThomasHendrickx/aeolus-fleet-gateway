@@ -122,9 +122,15 @@ import { createDoneDelivery } from './core/people/done-delivery.js';
 import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadInbox } from './core/people/read-inbox.js';
-import type { PersonCrews } from './core/people/ports.js';
+import { createReadWakeChannels } from './core/people/read-wake-channels.js';
+import { createTurnEmailChannel } from './core/people/turn-email-channel.js';
+import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
+import { createWakePerson } from './core/people/wake-person.js';
+import { createEmailChannel } from './adapters/pagasae/email-channel.js';
+import { createPrismaEmailChannels } from './adapters/prisma/email-channels.js';
+import { createPrismaWakesSent } from './adapters/prisma/wakes-sent.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
@@ -185,6 +191,8 @@ export interface GatewayAppOptions {
   pagasae?: { url: string; clientId: string; clientSecret: string };
   /** The gateway's pages as an app at pagasae, for the shared account sign-in (header design H5): unset, nobody signs in to the pages that way. */
   pagasaeApp?: { clientId: string; clientSecret: string };
+  /** The least time between two wakes the email channel sends one person ship (wake a person, W10): 60 minutes unless set. */
+  emailWakeWindowMs?: number;
   /** The gateway's web app, answering the pages the server has none of: unset, an unknown page is answered as any unknown address. */
   web?: WebApp;
 }
@@ -200,6 +208,9 @@ const CLIENT_METADATA_TIMEOUT_MS = 5_000;
 
 /** How long pagasae's token endpoint may take to answer. */
 const PAGASAE_TIMEOUT_MS = 10_000;
+
+/** The email channel's window unless told (wake a person, W10). */
+const EMAIL_WAKE_WINDOW_MS = 60 * 60_000;
 
 /** How a ship sends its own crew token to the gateway's API: as a bearer token (decision 0057). */
 const BEARER = 'Bearer ';
@@ -229,6 +240,9 @@ const WAITER_ROUND_MS = 10_000;
 
 /** How long a person ship's waiter waits while the fleet does not answer, each longer than the last. */
 const WAITER_AGAIN_WAITS_MS = [1_000, 5_000, 30_000];
+
+/** How long a wake that no channel sent waits before it is tried again, each longer than the last (wake a person, W3). */
+const WAKE_AGAIN_WAITS_MS = [60_000, 300_000, 900_000];
 
 /** How long a delivery answered again waits before it is handed with the next number, each longer than the last. */
 const AGAIN_WAITS_MS = [1_000, 10_000, 60_000, 300_000];
@@ -509,6 +523,20 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
   // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
   const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });
+  // pagasae sends the email, asked with the gateway's installation token (wake a person, W2); without either, email wakes no one.
+  const emailChannels = createPrismaEmailChannels(prisma);
+  const wakeChannels: WakeChannel[] =
+    options.pagasae === undefined || options.installationToken === undefined
+      ? []
+      : [
+          createEmailChannel({
+            url: options.pagasae.url,
+            installationToken: options.installationToken,
+            timeoutMs: PAGASAE_TIMEOUT_MS,
+            windowMs: options.emailWakeWindowMs ?? EMAIL_WAKE_WINDOW_MS,
+            emailChannels,
+          }),
+        ];
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
   const personCrews = createPrismaPersonCrews(prisma);
   const inboxChanges = createPrismaInboxChanges(prisma);
@@ -516,7 +544,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const personWaiters = createPersonWaiters({
     crews: personCrews,
     locks: waiterLocks,
-    waitOnPersonShip: createWaitOnPersonShip({ crews: personCrews, door: door.person, changes: inboxChanges, sleep, againWaitsMs: WAITER_AGAIN_WAITS_MS }),
+    waitOnPersonShip: createWaitOnPersonShip({
+      crews: personCrews,
+      door: door.person,
+      changes: inboxChanges,
+      wakePerson: createWakePerson({ door: door.person, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), clock }),
+      clock,
+      sleep,
+      againWaitsMs: WAITER_AGAIN_WAITS_MS,
+      wakeAgainWaitsMs: WAKE_AGAIN_WAITS_MS,
+    }),
     sleep,
     roundMs: WAITER_ROUND_MS,
     log: server.log,
@@ -539,6 +576,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes }),
+      readWakeChannels: createReadWakeChannels({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email') }),
+      turnEmailChannel: createTurnEmailChannel({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), clock }),
       listShips: createListShips(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),

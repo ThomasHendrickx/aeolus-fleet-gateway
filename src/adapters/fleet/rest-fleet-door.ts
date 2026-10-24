@@ -133,6 +133,13 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
   };
 }
 
+const MS_PER_SECOND = 1_000;
+
+/** The whole seconds an inbox call waits: the fleet's longest wait, or the time told, rounded up, when that is shorter. */
+function waitSecondsOf(atMostMs: number | undefined): number {
+  return atMostMs === undefined ? INBOX_WAIT_MAX_SECONDS : Math.min(INBOX_WAIT_MAX_SECONDS, Math.ceil(atMostMs / MS_PER_SECOND));
+}
+
 /** A question's payload, if it parses as one. */
 function questionOf(payload: string) {
   try {
@@ -255,7 +262,7 @@ export function createRestFleetDoor(
           path: '/ship/inbox',
           method: 'POST',
           crewToken,
-          body: wait === undefined ? { waitSeconds: 0 } : { waitSeconds: INBOX_WAIT_MAX_SECONDS, knownWaiting: wait.knownWaiting },
+          body: wait === undefined ? { waitSeconds: 0 } : { waitSeconds: waitSecondsOf(wait.atMostMs), knownWaiting: wait.knownWaiting },
           answers: inboxOutputSchema,
           ...(wait === undefined ? {} : { signal: wait.signal }),
         });
@@ -264,7 +271,7 @@ export function createRestFleetDoor(
       // The gateway wakes the person for their person ship, so its lease states the gateway as its waker (interop 5.1).
       pushReceive: async (crewToken, { max }) => {
         const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max, waker: 'gateway' }, answers: pushReceiveOutputSchema });
-        return taken.isOk ? ok(taken.value.deliveries.map(personDeliveryOf)) : taken;
+        return taken.isOk ? ok(taken.value.deliveries.map((delivery) => ({ ...personDeliveryOf(delivery), handOverNumber: delivery.handOverNumber }))) : taken;
       },
       ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
       delivery: async (crewToken, deliveryId) => {
@@ -274,6 +281,10 @@ export function createRestFleetDoor(
       reply: (crewToken, { to, inReplyTo, contentType, payload, idempotencyKey }) =>
         done(crewToken, { path: '/ship/send', body: { selector: { kind: 'ship', shipId: to }, inReplyTo, contentType, payload, idempotencyKey } }),
       handled: (crewToken, deliveryId) => done(crewToken, { path: '/ship/handled', body: { deliveryId } }),
+      handed: async (crewToken, handOver) => {
+        const answered = await call({ path: '/ship/handed', method: 'POST', crewToken, body: handOver, answers: handedOutputSchema });
+        return answered.isOk ? ok(answered.value.state) : answered;
+      },
       discover: async (crewToken) => {
         const found = await call({ path: '/ship/discover', method: 'GET', crewToken, answers: discoverOutputSchema });
         return found.isOk ? ok({ ships: found.value.ships.map(({ name, type, kind, statement }) => ({ name, type, kind, statement })), types: found.value.types }) : found;

@@ -9,6 +9,11 @@ const GATEWAY_SECRET_MIN_LENGTH = 32;
 /** How long an MCP client's call waits for its answer unless set (Q13). */
 export const MCP_WAIT_MAX_MS_DEFAULT = 10_000;
 
+/** The email channel's window unless set: at most one wake per hour (wake a person, W10). */
+const EMAIL_WAKE_WINDOW_MINUTES_DEFAULT = 60;
+
+const MINUTE_MS = 60_000;
+
 const environmentSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// or postgresql:// URL' }),
   FLEET_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }),
@@ -18,6 +23,7 @@ const environmentSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   GATEWAY_PUBLIC_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).optional(),
   MCP_WAIT_MAX_MS: z.coerce.number().int().min(0).default(MCP_WAIT_MAX_MS_DEFAULT),
+  EMAIL_WAKE_WINDOW_MINUTES: z.coerce.number().int().min(1).default(EMAIL_WAKE_WINDOW_MINUTES_DEFAULT),
   INSTALLATION_TOKEN: z.string().min(INSTALLATION_TOKEN_MIN_LENGTH, { error: `must hold at least ${String(INSTALLATION_TOKEN_MIN_LENGTH)} characters` }).optional(),
   PAGASAE_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).optional(),
   PAGASAE_CLIENT_ID: z.string().min(1).optional(),
@@ -58,6 +64,8 @@ export interface Config {
   gatewaySecret: string;
   /** How long an outside MCP client's call waits for its answer before it is answered its handle. */
   mcpWaitMaxMs: number;
+  /** The least time between two wakes the email channel sends one person ship (wake a person, W3, W10). */
+  emailWakeWindowMs: number;
   /**
    * pagasae, where people sign in (decision 0054), and the gateway's client
    * there, registered with the redirect URI `<public URL>/pagasae/callback`.
@@ -99,6 +107,7 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     apiUrl: `http://127.0.0.1:${String(variables.PORT)}`,
     gatewaySecret: variables.GATEWAY_SECRET,
     mcpWaitMaxMs: variables.MCP_WAIT_MAX_MS,
+    emailWakeWindowMs: variables.EMAIL_WAKE_WINDOW_MINUTES * MINUTE_MS,
     pagasae: pagasaeOf(variables),
     pagasaeApp: pagasaeAppOf(variables),
   };

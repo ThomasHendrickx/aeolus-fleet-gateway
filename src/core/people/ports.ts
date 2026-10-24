@@ -85,6 +85,11 @@ export interface PersonDelivery {
   readonly inReplyTo: MessageId | null;
 }
 
+/** A delivery as the person ship's push receive hands it: with the last number it was handed with under this lease, null while never handed (decision 0040). */
+export interface PushedPersonDelivery extends PersonDelivery {
+  readonly handOverNumber: number | null;
+}
+
 /** What a person ship may send to now, as the fleet's discover answers it: each ship by name, with what it offers, and each type. */
 export interface PersonDiscovery {
   readonly ships: readonly { readonly name: string; readonly type: string; readonly kind: ShipKind; readonly statement: DiscoveredStatement }[];
@@ -99,11 +104,11 @@ export interface PersonShipDoor {
   /**
    * How many deliveries wait for the ship: at once, or with a wait while the
    * count is still the one the crew knows, up to the fleet's longest wait
-   * (wake a person, W5). Stopping the signal ends the wait.
+   * (wake a person, W5), or less when told. Stopping the signal ends the wait.
    */
-  inbox(crewToken: string, wait?: { knownWaiting: number; signal: AbortSignal }): Promise<Result<{ waiting: number }, FleetRefusal>>;
+  inbox(crewToken: string, wait?: { knownWaiting: number; signal: AbortSignal; atMostMs?: number }): Promise<Result<{ waiting: number }, FleetRefusal>>;
   /** The ship's deliveries, up to max, its own held ones again first. */
-  pushReceive(crewToken: string, take: { max: number }): Promise<Result<PersonDelivery[], FleetRefusal>>;
+  pushReceive(crewToken: string, take: { max: number }): Promise<Result<PushedPersonDelivery[], FleetRefusal>>;
   /** Acknowledges a delivery the person opened: their own act confirms it (interop 5.1). */
   ack(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
   /** Reads a delivery the ship acknowledged again, whole, while it is not handled, recording nothing (decision 0040). */
@@ -112,6 +117,8 @@ export interface PersonShipDoor {
   reply(crewToken: string, reply: { to: ShipId; inReplyTo: MessageId; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<undefined, FleetRefusal>>;
   /** Reports the person dealt with the delivery. */
   handled(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
+  /** Hands the delivery over to the person with its number, naming the channel the wake went through (interop 5.1). */
+  handed(crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: WakeChannelName }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>>;
   /** The ships and types the ship may send to now: the fleet checks its scopes and the network rules. */
   discover(crewToken: string): Promise<Result<PersonDiscovery, FleetRefusal>>;
   /** Sends the person's own message, once under its key. */
@@ -146,4 +153,34 @@ export interface OpenedDeliveries {
   list(fleetId: FleetId, shipId: ShipId): Promise<OpenedDelivery[]>;
   /** Forgets it once the person dealt with it. */
   remove(fleetId: FleetId, opened: { shipId: ShipId; deliveryId: string }): Promise<void>;
+}
+
+/** The channels a person may turn on to be woken (wake a person, W1), as a hand-over names them. */
+export type WakeChannelName = 'email' | 'web-push';
+
+/**
+ * Outbound port: one way to wake a person (wake a person, W1, W4): it says
+ * only that something waits in the fleet, with the overview's link, and
+ * goes out at most once per its window (W3, W10).
+ */
+export interface WakeChannel {
+  readonly name: WakeChannelName;
+  /** The least time between two wakes it sends one person ship, from the gateway's configuration (W10). */
+  readonly windowMs: number;
+  /** Whether the person turned it on (W8): nothing is on by default. */
+  isOn(ship: PersonShip): Promise<boolean>;
+  /** Sends the wake: whether it went out. */
+  wake(ship: PersonShip): Promise<Result<undefined, { reason: string }>>;
+}
+
+/** Outbound port: when each channel last woke each person ship, so the window holds across restarts and instances (W3). */
+export interface WakesSent {
+  lastSentAt(ship: PersonShip, channel: WakeChannelName): Promise<Date | undefined>;
+  record(wake: { ship: PersonShip; channel: WakeChannelName; sentAt: Date }): Promise<void>;
+}
+
+/** Outbound port: whether each person turned email on to be woken for their person ship (W8), by fleet and person ship. */
+export interface EmailChannels {
+  isOn(ship: PersonShip): Promise<boolean>;
+  turn(ship: PersonShip, switched: { isOn: boolean; at: Date }): Promise<void>;
 }

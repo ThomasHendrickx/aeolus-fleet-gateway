@@ -18,6 +18,7 @@ describe('the gateway configuration from the environment', () => {
       apiUrl: 'http://127.0.0.1:4200',
       gatewaySecret: GATEWAY_SECRET,
       mcpWaitMaxMs: 10_000,
+      emailWakeWindowMs: 3_600_000,
       pagasae: undefined,
       pagasaeApp: undefined,
     });
@@ -35,6 +36,7 @@ describe('the gateway configuration from the environment', () => {
       apiUrl: 'http://127.0.0.1:8080',
       gatewaySecret: GATEWAY_SECRET,
       mcpWaitMaxMs: 10_000,
+      emailWakeWindowMs: 3_600_000,
       pagasae: undefined,
       pagasaeApp: undefined,
     });
@@ -57,6 +59,12 @@ describe('the gateway configuration from the environment', () => {
     const environment = { DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' };
     expect([loadConfig({ ...environment, MCP_WAIT_MAX_MS: '0' }).mcpWaitMaxMs, loadConfig({ ...environment, MCP_WAIT_MAX_MS: '30000' }).mcpWaitMaxMs]).toEqual([0, 30_000]);
     expect(() => loadConfig({ ...environment, MCP_WAIT_MAX_MS: '-1' })).toThrow(/^MCP_WAIT_MAX_MS: /);
+  });
+
+  it('reads the window of the email channel in minutes, at most one wake per window (wake a person, W10), and refuses one below a minute', () => {
+    const environment = { DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' };
+    expect([loadConfig({ ...environment, EMAIL_WAKE_WINDOW_MINUTES: '1' }).emailWakeWindowMs, loadConfig({ ...environment, EMAIL_WAKE_WINDOW_MINUTES: '120' }).emailWakeWindowMs]).toEqual([60_000, 7_200_000]);
+    expect(() => loadConfig({ ...environment, EMAIL_WAKE_WINDOW_MINUTES: '0' })).toThrow(/^EMAIL_WAKE_WINDOW_MINUTES: /);
   });
 
   it('refuses a public URL that is not http or https, naming the variable', () => {
