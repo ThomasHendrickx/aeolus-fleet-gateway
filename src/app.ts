@@ -121,6 +121,8 @@ import { createDoneDelivery } from './core/people/done-delivery.js';
 import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadInbox } from './core/people/read-inbox.js';
+import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
+import { createReadMeeting } from './core/meetings/read-meeting.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
@@ -511,6 +513,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       doneDelivery: createDoneDelivery({ ...asCrew, opened }),
       listShips: createListShips(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
+      readMeeting: createReadMeeting({ ...asCrew, door: door.meetings }),
+      changeOwnMic: createChangeOwnMic({ ...asCrew, door: door.meetings }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
     };
   };
