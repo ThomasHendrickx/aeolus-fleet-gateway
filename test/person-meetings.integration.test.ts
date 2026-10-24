@@ -1,4 +1,4 @@
-import { idSchema, openMeetingOutputSchema, receiveOutputSchema, type MeetingId } from '@aeolus-fleet/common';
+import { idSchema, inboxOutputSchema, openMeetingOutputSchema, receiveOutputSchema, type MeetingId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
@@ -91,7 +91,7 @@ describe('a person ship takes part in a meeting', () => {
 
     expect(sent.isOk).toBe(false);
     expect(!sent.isOk && sent.error.message).toMatch(/mic/i);
-    await expect(chiefReceives()).resolves.toEqual([]);
+    expect(inboxOutputSchema.parse(await chiefCalls('inbox', { waitSeconds: 0 })).waiting).toBe(0);
   });
 
   it('requests the mic, gets it first in line, contributes to every other participant and releases it', async () => {
