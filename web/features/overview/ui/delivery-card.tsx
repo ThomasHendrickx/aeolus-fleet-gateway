@@ -9,8 +9,7 @@ export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'note
  * One delivery in focus (design B, Signal). A question is answered with one
  * tap on a button that names the option it sends, the asker's pick on a
  * dashed edge; any delivery may get a note as its answer, and a message may
- * be done with; one of a meeting leads to the meeting. Opened before, it
- * shows by its title alone, as its content was shown once.
+ * be done with; one of a meeting leads to the meeting.
  */
 export function DeliveryCard({
   delivery,
@@ -49,11 +48,7 @@ export function DeliveryCard({
         </a>
       )}
       {question === undefined ? (
-        delivery.payload === undefined ? (
-          <p className="text-muted-foreground">You opened this before; its content was shown to you then.</p>
-        ) : (
-          <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-caption">{delivery.payload}</pre>
-        )
+        <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-caption">{delivery.payload}</pre>
       ) : (
         <>
           <p className="whitespace-pre-wrap">{question.context}</p>

@@ -14,7 +14,8 @@ function EntryText({ entry }: { entry: InboxEntry }) {
 /**
  * The person's inbox in two groups (aeolus-fleet #1046): what waits, which
  * they open one at a time, and what they opened and have not answered or
- * been done with yet. A failure to open says why by the delivery.
+ * been done with yet, which opens again. A failure to open says why by the
+ * delivery.
  */
 export function InboxList({
   waitingCount,
@@ -23,7 +24,6 @@ export function InboxList({
   openingId,
   failure,
   onOpen,
-  onFocus,
 }: {
   waitingCount: number;
   waiting: readonly InboxEntry[];
@@ -31,7 +31,6 @@ export function InboxList({
   openingId: string | undefined;
   failure: { deliveryId: string; message: string } | undefined;
   onOpen: (entry: InboxEntry) => void;
-  onFocus: (entry: InboxEntry) => void;
 }) {
   return (
     <div className="grid gap-6">
@@ -55,11 +54,14 @@ export function InboxList({
         <section className="grid gap-2">
           <h2 className="text-section font-semibold">Opened, not yet dealt with · {opened.length}</h2>
           {opened.map((entry) => (
-            <div key={entry.deliveryId} className="flex items-center gap-3 rounded-md border border-border bg-card p-3">
-              <EntryText entry={entry} />
-              <button type="button" data-testid="overview-deal" onClick={() => { onFocus(entry); }} className="inline-flex h-9 items-center rounded-md border border-border px-4 hover:bg-accent">
-                Answer or be done
-              </button>
+            <div key={entry.deliveryId} className="grid gap-2 rounded-md border border-border bg-card p-3">
+              <div className="flex items-center gap-3">
+                <EntryText entry={entry} />
+                <ActionButton data-testid="overview-deal" isPending={openingId === entry.deliveryId} pendingLabel="Opening..." disabled={openingId !== undefined} onClick={() => { onOpen(entry); }}>
+                  Answer or be done
+                </ActionButton>
+              </div>
+              {failure?.deliveryId === entry.deliveryId ? <Notice message={failure.message} isFailure /> : null}
             </div>
           ))}
         </section>
