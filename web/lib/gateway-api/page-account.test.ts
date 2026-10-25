@@ -21,6 +21,14 @@ describe('the account a page of the web app shows its fleet as', () => {
     expect(pageAccountOf({ inView: { kind: 'elsewhere', url: 'https://account.aeolus-fleet.dev/' } }, `/parties?fleet=${FLEET}`)).toEqual({ kind: 'goTo', location: 'https://account.aeolus-fleet.dev/' });
   });
 
+  it('shows an account that may open the gateway in none of its fleets that the gateway is off for its fleet, and the way back to its account', () => {
+    expect(pageAccountOf({ inView: { kind: 'off', fleetName: 'Acme', accountUrl: 'https://account.aeolus-fleet.dev/account' } }, '/overview')).toEqual({
+      kind: 'off',
+      fleetName: 'Acme',
+      accountUrl: 'https://account.aeolus-fleet.dev/account',
+    });
+  });
+
   it('sends a browser signed in to no account to sign in, and back to the page it asked for', () => {
     expect(pageAccountOf({ refusal: 'UNAUTHORIZED' }, `/outside-parties/linear?fleet=${FLEET}`)).toEqual({
       kind: 'goTo',
