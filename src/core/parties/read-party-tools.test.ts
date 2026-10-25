@@ -33,20 +33,22 @@ beforeEach(async () => {
   servers = fakeMcpServers([
     { name: 'list_issues', description: 'List issues by team, state or assignee', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
     { name: 'get_issue', inputSchema: { type: 'object' } },
+    { name: 'delete_issue', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false, destructiveHint: true } },
   ]);
   readPartyTools = createReadPartyTools({ parties, servers });
 });
 
 describe("an outside MCP server's tools, as it lists them now", () => {
-  it('answers each tool by name and short description, asking the server with the credential the gateway keeps', async () => {
+  it('answers each tool by name, short description and the hints the server gives, asking the server with the credential the gateway keeps', async () => {
     const read = await readPartyTools({ fleetId: FLEET_ID, name: 'linear' });
 
     expect(read).toEqual({
       isOk: true,
       value: {
         tools: [
-          { name: 'list_issues', description: 'List issues by team, state or assignee', isReadOnly: true, isOn: true, isNew: false },
-          { name: 'get_issue', isReadOnly: false, isOn: true, isNew: false },
+          { name: 'list_issues', description: 'List issues by team, state or assignee', readOnlyHint: true, isOn: true, isNew: false },
+          { name: 'get_issue', isOn: true, isNew: false },
+          { name: 'delete_issue', readOnlyHint: false, destructiveHint: true, isOn: true, isNew: false },
         ],
       },
     });
@@ -61,6 +63,7 @@ describe("an outside MCP server's tools, as it lists them now", () => {
     expect(read.isOk && read.value.tools.map(({ name, isOn, isNew }) => ({ name, isOn, isNew }))).toEqual([
       { name: 'list_issues', isOn: false, isNew: false },
       { name: 'get_issue', isOn: false, isNew: true },
+      { name: 'delete_issue', isOn: false, isNew: true },
     ]);
   });
 
