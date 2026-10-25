@@ -28,7 +28,7 @@ export function NeedsChips({ party = [], own, listed }: { party?: readonly strin
   return (
     <span className="flex flex-wrap gap-1">
       {party.map((scope) => chip(scope, true))}
-      {own.map((scope) => chip(scope, false))}
+      {own.filter((scope) => !party.includes(scope)).map((scope) => chip(scope, false))}
     </span>
   );
 }
