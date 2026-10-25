@@ -348,7 +348,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, requirements, timing: callTiming });
   const checkScopes = createCheckRequiredScopes({ connections, door });
   const readScopeRequirements = createReadScopeRequirements({ parties, requirements });
-  const setScopeRequirements = createSetScopeRequirements({ parties, requirements, connections, door, stateParty, stateA2aAgent });
+  const setScopeRequirements = createSetScopeRequirements({
+    parties,
+    requirements,
+    connections,
+    door,
+    stateParty,
+    stateA2aAgent,
+    fleet: createProxyShipsAsActor(options.fleetUrl),
+    credentialOf: (actor, sent) => credentialOf(actor, sent),
+  });
   const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, requirements, checkScopes, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
   const clientCalls = createPrismaClientCalls(prisma);
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);

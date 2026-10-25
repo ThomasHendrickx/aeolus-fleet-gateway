@@ -338,6 +338,8 @@ const SWITCH_TOOL_CODES = {
 const SET_SCOPE_REQUIREMENTS_CODES = {
   NOT_AN_APPROVER: 'FORBIDDEN',
   NO_SUCH_PARTY: 'NOT_FOUND',
+  PARTY_NOT_COMMISSIONED: 'PRECONDITION_FAILED',
+  NOT_REACHABLE: 'FORBIDDEN',
   NO_SUCH_TOOL: 'BAD_REQUEST',
   NOT_CONNECTED: 'PRECONDITION_FAILED',
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
@@ -919,7 +921,7 @@ export const gatewayRouter = t.router({
       )
       .output(z.intersection(scopeRequirementsSchema, z.object({ statementRefusal: z.string().nullable() })))
       .mutation(async ({ ctx, input }) => {
-        const set = await ctx.setScopeRequirements({ actor: ctx.actor, name: input.name, version: input.version, ...(input.party === undefined ? {} : { party: input.party }), tools: new Map(input.tools.map(({ tool, scopes }) => [tool, scopes])) });
+        const set = await ctx.setScopeRequirements({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, name: input.name, version: input.version, ...(input.party === undefined ? {} : { party: input.party }), tools: new Map(input.tools.map(({ tool, scopes }) => [tool, scopes])) });
         if (!set.isOk) {
           throw new TRPCError({ code: SET_SCOPE_REQUIREMENTS_CODES[set.error.kind], message: set.error.message });
         }

@@ -65,6 +65,8 @@ export interface ProxyShipsAsActor {
   setOwner(as: ActorCredential, ship: { shipId: ShipId; ownerShipId: ShipId }): Promise<Result<undefined, FleetRefusal>>;
   /** Grants and revokes the proxy ship's scopes (fleet.grantScopes, scopes:grant): every scope it holds now. */
   grantScopes(as: ActorCredential, change: { shipId: ShipId; grant: readonly string[]; revoke: readonly string[] }): Promise<Result<{ scopes: string[] }, FleetRefusal>>;
+  /** Whether the actor manages the proxy ship now (fleet.checkManage, no scope): OK, or the fleet's refusal, which it records. */
+  checkManage(as: ActorCredential, ship: { shipId: ShipId }): Promise<Result<undefined, FleetRefusal>>;
 }
 
 /** Outbound port: what the fleet holds for a proxy ship, read as the actor (fleet:read): its name, owner and scopes, only its name outside the actor's read reach. */

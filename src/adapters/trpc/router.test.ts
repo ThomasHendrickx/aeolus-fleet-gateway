@@ -296,6 +296,9 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       if (!input.actor.scopes.includes('gateway:approve')) {
         return Promise.resolve(err({ kind: 'NOT_AN_APPROVER' as const, message: 'Setting the scopes an outside party needs takes gateway:approve' }));
       }
+      if (input.name === 'erp') {
+        return Promise.resolve(err({ kind: 'NOT_REACHABLE' as const, message: 'erp is not within your manage reach' }));
+      }
       if (input.version !== 2) {
         return Promise.resolve(err({ kind: 'CONFLICT' as const, message: 'The requirements changed since you opened this page' }));
       }
@@ -607,8 +610,8 @@ describe("anyone reads, and an approver sets, the scopes an outside party needs 
     await expect(
       gatewayRouter.createCaller(context).parties.setScopeRequirements({ name: 'crm', version: 2, party: ['crm:read-leads'], tools: [{ tool: 'update_lead', scopes: ['crm:write-leads'] }, { tool: 'read_lead', scopes: [] }] }),
     ).resolves.toEqual({ version: 3, party: ['crm:read-leads'], tools: [{ tool: 'update_lead', scopes: ['crm:write-leads'] }, { tool: 'read_lead', scopes: [] }], statementRefusal: null });
-    expect(requirementChanges.map(({ name, version, party, tools }) => ({ name, version, party, tools }))).toEqual([
-      { name: 'crm', version: 2, party: ['crm:read-leads'], tools: new Map([['update_lead', ['crm:write-leads']], ['read_lead', []]]) },
+    expect(requirementChanges.map(({ as, name, version, party, tools }) => ({ as, name, version, party, tools }))).toEqual([
+      { as: { cookie: undefined, crewToken: APPROVER_CREW }, name: 'crm', version: 2, party: ['crm:read-leads'], tools: new Map([['update_lead', ['crm:write-leads']], ['read_lead', []]]) },
     ]);
   });
 
@@ -624,6 +627,7 @@ describe("anyone reads, and an approver sets, the scopes an outside party needs 
     { code: 'FORBIDDEN', what: 'an actor without gateway:approve', cookie: ARGO_COOKIE, crewToken: undefined, change: { version: 2, party: ['crm:use'] } },
     { code: 'CONFLICT', what: 'a change on requirements changed since', cookie: undefined, crewToken: APPROVER_CREW, change: { version: 1, party: ['crm:use'] } },
     { code: 'BAD_REQUEST', what: 'a scope the fleet does not list', cookie: undefined, crewToken: APPROVER_CREW, change: { version: 2, party: ['crm:admin'] } },
+    { code: 'FORBIDDEN', what: "an approver outside the proxy ship's manage reach", cookie: undefined, crewToken: APPROVER_CREW, change: { name: 'erp', version: 2, party: ['crm:use'] } },
   ])('answers $code to $what', async ({ code, cookie, crewToken, change }) => {
     await expect(gatewayRouter.createCaller(aContext(cookie, crewToken).context).parties.setScopeRequirements({ name: 'crm', tools: [], ...change })).rejects.toMatchObject({ code });
   });
