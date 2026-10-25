@@ -104,6 +104,8 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       attempts: 0,
       isForced: false,
       meetingId: null,
+      scheduleId: null,
+      sendTime: null,
       state: 'received',
       handOverNumber: null,
     };
@@ -154,6 +156,8 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         attempts: 1,
         isForced: false,
         meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',
+        scheduleId: null,
+        sendTime: null,
         state: 'acknowledged',
       },
     };
