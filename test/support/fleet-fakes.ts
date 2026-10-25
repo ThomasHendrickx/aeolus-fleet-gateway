@@ -59,7 +59,7 @@ export function fakeGatewayFleet() {
       if (!state.isAnswering) {
         return unavailable();
       }
-      return state.liveTokens.has(crewToken) ? Promise.resolve(ok({ status: 'crewed' as const, scopes: [...state.scopes] })) : released();
+      return state.liveTokens.has(crewToken) ? Promise.resolve(ok({ status: 'crewed' as const, name: 'gateway', scopes: [...state.scopes] })) : released();
     },
     deregister: (crewToken) => {
       state.deregistered.push(crewToken);

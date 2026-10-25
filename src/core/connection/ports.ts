@@ -15,6 +15,7 @@ export interface FleetRefusal {
 /** A ship as `fleet.ship` shows it: what the gateway reads of it. */
 export interface FleetShip {
   status: 'awaitingCrew' | 'crewed' | 'retired';
+  name: string;
   scopes: string[];
 }
 
