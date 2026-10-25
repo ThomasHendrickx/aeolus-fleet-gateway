@@ -25,6 +25,8 @@ import { createMcpServers } from './adapters/mcp/mcp-servers.js';
 import { createMarkTool } from './core/mcp-out/mark-tool.js';
 import { createSwitchTool } from './core/parties/switch-tool.js';
 import { createCheckRequiredScopes } from './core/parties/check-required-scopes.js';
+import { createReadScopeRequirements } from './core/parties/read-scope-requirements.js';
+import { createSetScopeRequirements } from './core/parties/set-scope-requirements.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
@@ -345,6 +347,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, timing: callTiming });
   const requirements = createPrismaScopeRequirements(prisma);
   const checkScopes = createCheckRequiredScopes({ connections, door });
+  const readScopeRequirements = createReadScopeRequirements({ parties, requirements });
+  const setScopeRequirements = createSetScopeRequirements({ parties, requirements, connections, door });
   const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, requirements, checkScopes, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
   const clientCalls = createPrismaClientCalls(prisma);
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
@@ -748,6 +752,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     stateParty,
     markTool,
     switchTool,
+    readScopeRequirements,
+    setScopeRequirements,
     readOutsideParties: createReadOutsideParties({ switches: outsidePartySwitches }),
     setOutsideParties,
     registerClient,

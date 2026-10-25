@@ -621,10 +621,10 @@ describe("anyone reads, and an approver sets, the scopes an outside party needs 
   });
 
   it.each([
-    ['FORBIDDEN', 'an actor without gateway:approve', ARGO_COOKIE, undefined, { version: 2, party: ['crm:use'] }],
-    ['CONFLICT', 'a change on requirements changed since', undefined, APPROVER_CREW, { version: 1, party: ['crm:use'] }],
-    ['BAD_REQUEST', 'a scope the fleet does not list', undefined, APPROVER_CREW, { version: 2, party: ['crm:admin'] }],
-  ])('answers %s to %s', async (code, _what, cookie, crewToken, change) => {
+    { code: 'FORBIDDEN', what: 'an actor without gateway:approve', cookie: ARGO_COOKIE, crewToken: undefined, change: { version: 2, party: ['crm:use'] } },
+    { code: 'CONFLICT', what: 'a change on requirements changed since', cookie: undefined, crewToken: APPROVER_CREW, change: { version: 1, party: ['crm:use'] } },
+    { code: 'BAD_REQUEST', what: 'a scope the fleet does not list', cookie: undefined, crewToken: APPROVER_CREW, change: { version: 2, party: ['crm:admin'] } },
+  ])('answers $code to $what', async ({ code, cookie, crewToken, change }) => {
     await expect(gatewayRouter.createCaller(aContext(cookie, crewToken).context).parties.setScopeRequirements({ name: 'crm', tools: [], ...change })).rejects.toMatchObject({ code });
   });
 });
