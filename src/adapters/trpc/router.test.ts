@@ -4,7 +4,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { ACCOUNT_URL, CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn, GATEWAY_URL } from '../../../test/support/account-sign-in-fakes.js';
+import { ACCOUNT_URL, CHARLOTTE, CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn, GATEWAY_URL } from '../../../test/support/account-sign-in-fakes.js';
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { HEADS_MEETING_ID, aMeetingRead } from '../../../test/support/meeting-fakes.js';
 import { createAccountInView } from '../../core/account-sign-in/account-in-view.js';
@@ -968,7 +968,8 @@ describe("a person lists the requests they asked through the gateway's API (deci
 
 describe("the web app's page asks which account it shows the fleet in its address as (H5)", () => {
   const signIns = fakeSharedSignIn({ tokens: new Map([[FLEET, { ...CHARLOTTE_ACCOUNT_TOKEN, endsAt: new Date('2099-01-01T00:00:00.000Z') }]]) });
-  const accountInView = createAccountInView({ signIns, accountOf: createAccountOfSignIn({ signIns, clock: { now: () => new Date('2026-10-21T09:00:00.000Z') } }) });
+  const isServed = () => Promise.resolve(true);
+  const accountInView = createAccountInView({ signIns, accountOf: createAccountOfSignIn({ signIns, clock: { now: () => new Date('2026-10-21T09:00:00.000Z') } }), isServed });
 
   function asked(sent: { signIn?: string; fleetInView?: FleetId }, inView: { accountInView: Context['accountInView'] } = { accountInView }) {
     return gatewayRouter.createCaller({ ...aContext(undefined).context, ...sent, ...inView }).account.inView();
@@ -986,6 +987,13 @@ describe("the web app's page asks which account it shows the fleet in its addres
     await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: OTHER_FLEET_ID })).resolves.toEqual({ kind: 'elsewhere', url: CONSOLE_URL });
   });
 
+  it('answers that the gateway is off for the fleet of an account that may open it in none, and where its account is', async () => {
+    const noGateway = fakeSharedSignIn({ apps: { account: CHARLOTTE, apps: [{ app: 'account', url: ACCOUNT_URL }], fleets: [{ fleetId: FLEET, name: 'Acme', apps: [] }] } });
+    const off = createAccountInView({ signIns: noGateway, accountOf: createAccountOfSignIn({ signIns: noGateway, clock: { now: () => new Date() } }), isServed: () => Promise.resolve(false) });
+
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN }, { accountInView: off })).resolves.toEqual({ kind: 'off', fleetName: 'Acme', accountUrl: ACCOUNT_URL });
+  });
+
   it('refuses a browser with no shared sign-in, so the page signs it in', async () => {
     await expect(asked({ fleetInView: FLEET })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
@@ -993,7 +1001,7 @@ describe("the web app's page asks which account it shows the fleet in its addres
   it('says pagasae did not answer', async () => {
     const down = fakeSharedSignIn({ isAvailable: false });
 
-    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, { accountInView: createAccountInView({ signIns: down, accountOf: createAccountOfSignIn({ signIns: down, clock: { now: () => new Date() } }) }) })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, { accountInView: createAccountInView({ signIns: down, accountOf: createAccountOfSignIn({ signIns: down, clock: { now: () => new Date() } }), isServed }) })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 
   it('refuses where the gateway signs no one in to its pages', async () => {

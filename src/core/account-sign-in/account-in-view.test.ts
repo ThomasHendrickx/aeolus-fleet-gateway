@@ -22,8 +22,10 @@ beforeEach(() => {
 
 const clock = { now: () => now };
 
-function inView(signIns: ReturnType<typeof fakeSharedSignIn>) {
-  return createAccountInView({ signIns, accountOf: createAccountOfSignIn({ signIns, clock }) });
+/** The gateway serves every fleet, as an open installation does, unless the test names the fleets it serves. */
+function inView(signIns: ReturnType<typeof fakeSharedSignIn>, served?: readonly FleetId[]) {
+  const isServed = (fleetId: FleetId) => Promise.resolve(served === undefined || served.includes(fleetId));
+  return createAccountInView({ signIns, accountOf: createAccountOfSignIn({ signIns, clock }), isServed });
 }
 
 const CHARLOTTE_IN_FLEET: ReadonlyMap<FleetId, SharedAccountToken> = new Map([[FLEET_ID, CHARLOTTE_ACCOUNT_TOKEN]]);
@@ -69,6 +71,18 @@ describe('a page asked for with no fleet in its address', () => {
     const signIns = fakeSharedSignIn({ apps: { account: CHARLOTTE, apps: [{ app: 'account', url: ACCOUNT_URL }], fleets: [{ fleetId: FLEET_ID, name: 'Acme', apps: [{ app: 'console', url: CONSOLE_URL }] }] } });
 
     expect(await inView(signIns)({ signIn: CHARLOTTE_SIGN_IN, fleetId: undefined })).toEqual({ isOk: true, value: { kind: 'elsewhere', url: ACCOUNT_URL } });
+  });
+
+  it('says the gateway is off for the fleet of an account that may open no gateway while the gateway does not serve that fleet, and where its account is', async () => {
+    const signIns = fakeSharedSignIn({ apps: { account: CHARLOTTE, apps: [{ app: 'account', url: ACCOUNT_URL }], fleets: [{ fleetId: FLEET_ID, name: 'Acme', apps: [{ app: 'console', url: CONSOLE_URL }] }] } });
+
+    expect(await inView(signIns, [])({ signIn: CHARLOTTE_SIGN_IN, fleetId: undefined })).toEqual({ isOk: true, value: { kind: 'off', fleetName: 'Acme', accountUrl: ACCOUNT_URL } });
+  });
+
+  it('goes to Account when the account holds no fleet at all', async () => {
+    const signIns = fakeSharedSignIn({ apps: { account: CHARLOTTE, apps: [{ app: 'account', url: ACCOUNT_URL }], fleets: [] } });
+
+    expect(await inView(signIns, [])({ signIn: CHARLOTTE_SIGN_IN, fleetId: undefined })).toEqual({ isOk: true, value: { kind: 'elsewhere', url: ACCOUNT_URL } });
   });
 
   it('is nobody without a shared sign-in', async () => {

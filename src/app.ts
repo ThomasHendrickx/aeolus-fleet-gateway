@@ -679,7 +679,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       : createSharedSignIn({ url: options.pagasae.url, ...options.pagasaeApp, redirectUri: `${issuer}/sign-in/done`, timeoutMs: PAGASAE_TIMEOUT_MS });
   const accountOf: AccountOfSignIn =
     signIns === undefined ? Object.assign(() => Promise.resolve(err({ kind: 'signedOut' as const })), { forget: () => undefined }) : createAccountOfSignIn({ signIns, clock });
-  const accountInView = signIns === undefined ? undefined : createAccountInView({ signIns, accountOf });
+  const accountInView = signIns === undefined ? undefined : createAccountInView({ signIns, accountOf, isServed });
   if (signIns !== undefined) {
     const accountSeals = createAccountSignInSeals(options.gatewaySecret);
     registerAccountSignIn(server, {

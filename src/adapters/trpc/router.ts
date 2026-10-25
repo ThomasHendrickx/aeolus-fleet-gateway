@@ -545,6 +545,7 @@ async function fleetNameOf(ctx: Pick<Context, 'accountApps' | 'signIn'> & { call
 const accountInViewOutputSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('signedIn'), fleetId: z.string(), accountId: z.string(), scopes: z.array(z.string()) }),
   z.object({ kind: z.literal('goTo'), fleetId: z.string() }),
+  z.object({ kind: z.literal('off'), fleetName: z.string(), accountUrl: z.string() }),
   z.object({ kind: z.literal('elsewhere'), url: z.string() }),
 ]);
 
@@ -561,7 +562,8 @@ export const gatewayRouter = t.router({
      * The account a page of the web app shows the fleet in its address as,
      * by the shared sign-in its server forwarded (header design H5): signed
      * in, with its scopes and never its token; the fleet to go to when the
-     * page names none; or the app to go to where the account may not open
+     * page names none; that the gateway is off for the account's fleet when
+     * it may open the gateway in none; or the app to go to where the account may not open
      * the gateway (H9). No shared sign-in, or one that ended, is UNAUTHORIZED.
      */
     inView: t.procedure.output(accountInViewOutputSchema).query(async ({ ctx }) => {
