@@ -77,3 +77,14 @@ export function shownTools(tools: readonly TableTool[], filter: { name: string; 
   const name = filter.name.trim().toLowerCase();
   return tools.filter((tool) => tool.name.toLowerCase().includes(name) && isInState(tool, filter));
 }
+
+/** What the page kept since it read the rows: each changed tool's own scopes, and each switched tool's switch. */
+export interface KeptChanges {
+  scopes: ReadonlyMap<string, readonly string[]>;
+  switches: ReadonlyMap<string, boolean>;
+}
+
+/** The rows with what was kept since they were read, so a change shows at once rather than when the page reads the server again. */
+export function keptToolsOf(tools: readonly TableTool[], kept: KeptChanges): TableTool[] {
+  return tools.map((tool) => ({ ...tool, scopes: kept.scopes.get(tool.name) ?? tool.scopes, isOn: tool.isOn === null ? null : (kept.switches.get(tool.name) ?? tool.isOn) }));
+}

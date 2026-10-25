@@ -14,7 +14,7 @@ import { switchedMessageOf } from '../../switched-message';
 import { hintSuggestionsOf, suggestedScopesOf } from '../hint-suggestions';
 import { changedScopesOf, SCOPE_CHANGES, type ScopeChange } from '../scope-change';
 import { partyScopesSetMessage, scopesSetMessage, statedMessage, suggestionsSetMessage, toolsSwitchedMessage } from '../table-messages';
-import { shownTools, STATE_FILTERS, type StateFilter, type TableTool } from '../table-tools';
+import { keptToolsOf, shownTools, STATE_FILTERS, type KeptChanges, type StateFilter, type TableTool } from '../table-tools';
 import { NeedsChips, type ListedScope } from './needs-chips';
 import { ScopePicker } from './scope-picker';
 import { TableDialog, type DialogRefusal } from './table-dialog';
@@ -62,7 +62,13 @@ export function ToolsTable(props: ToolsTableProps) {
   );
 }
 
-function TableBody({ fleetId, party, tools, version, partyScopes, listed, canChange, serverRefusal }: ToolsTableProps) {
+/** What was kept since the page read the rows it was kept on; a fresh read replaces it. */
+interface Kept extends KeptChanges {
+  basis: readonly TableTool[];
+  party: readonly string[] | null;
+}
+
+function TableBody({ fleetId, party, tools: readTools, version, partyScopes: readPartyScopes, listed, canChange, serverRefusal }: ToolsTableProps) {
   const router = useRouter();
   const toasts = Toast.useToastManager();
   const [, startTransition] = useTransition();
@@ -80,6 +86,12 @@ function TableBody({ fleetId, party, tools, version, partyScopes, listed, canCha
   const [highlighted, setHighlighted] = useState<{ names: ReadonlySet<string>; round: number }>({ names: new Set(), round: 0 });
   const [keptVersion, setKeptVersion] = useState<number | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [keptChanges, setKeptChanges] = useState<Kept | null>(null);
+
+  // A change kept here shows at once; once the page read itself again, its rows are the truth.
+  const live = keptChanges?.basis === readTools ? keptChanges : null;
+  const tools = live === null ? readTools : keptToolsOf(readTools, live);
+  const partyScopes = live?.party ?? readPartyScopes;
 
   // A change kept here moves the version on before the page reads itself again.
   const currentVersion = Math.max(version, keptVersion ?? 0);
@@ -91,7 +103,13 @@ function TableBody({ fleetId, party, tools, version, partyScopes, listed, canCha
   const suggestions = hintSuggestionsOf(tools);
   const suggested = suggestedScopesOf(suggestions, suggestPicks);
 
-  const kept = ({ outcome, changed, message }: { outcome: Extract<TableOutcome, { isOk: true }>; changed: readonly string[]; message: string }) => {
+  const kept = ({ outcome, changed, message, change }: { outcome: Extract<TableOutcome, { isOk: true }>; changed: readonly string[]; message: string; change: { party?: readonly string[]; scopes?: readonly { tool: string; scopes: readonly string[] }[]; switches?: ReadonlyMap<string, boolean> } }) => {
+    setKeptChanges({
+      basis: readTools,
+      party: change.party ?? live?.party ?? null,
+      scopes: new Map([...(live?.scopes ?? []), ...(change.scopes ?? []).map(({ tool, scopes }) => [tool, scopes] as const)]),
+      switches: new Map([...(live?.switches ?? []), ...(change.switches ?? [])]),
+    });
     if (outcome.version !== null) {
       setKeptVersion(outcome.version);
     }
@@ -126,7 +144,7 @@ function TableBody({ fleetId, party, tools, version, partyScopes, listed, canCha
       }
       setDialog(null);
       setSelected(new Set());
-      kept({ outcome, changed, message });
+      kept({ outcome, changed, message, change: { ...(change.party === undefined ? {} : { party: change.party }), scopes: change.tools } });
     });
   };
 
@@ -142,7 +160,7 @@ function TableBody({ fleetId, party, tools, version, partyScopes, listed, canCha
         return;
       }
       const [only] = names;
-      kept({ outcome, changed: names, message: names.length === 1 && only !== undefined ? switchedMessageOf({ tool: only, isOn, statementRefusal: null }) : toolsSwitchedMessage({ count: names.length, isOn, statementRefusal: null }) });
+      kept({ outcome, changed: names, change: { switches: new Map(names.map((name) => [name, isOn])) }, message: names.length === 1 && only !== undefined ? switchedMessageOf({ tool: only, isOn, statementRefusal: null }) : toolsSwitchedMessage({ count: names.length, isOn, statementRefusal: null }) });
     });
   };
 

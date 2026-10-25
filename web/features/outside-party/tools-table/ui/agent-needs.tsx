@@ -35,6 +35,9 @@ function AgentNeedsLine({ fleetId, party, version, scopes, listed, canChange }: 
   const [refusal, setRefusal] = useState<DialogRefusal | null>(null);
   const [keptVersion, setKeptVersion] = useState<number | null>(null);
   const [round, setRound] = useState(0);
+  const [kept, setKept] = useState<{ basis: readonly string[]; scopes: readonly string[] } | null>(null);
+  // What was kept shows at once; once the page read itself again, its scopes are the truth.
+  const shown = kept?.basis === scopes ? kept.scopes : scopes;
 
   const save = () => {
     setIsSaving(true);
@@ -47,6 +50,7 @@ function AgentNeedsLine({ fleetId, party, version, scopes, listed, canChange }: 
         return;
       }
       setKeptVersion(outcome.version);
+      setKept({ basis: scopes, scopes: picked });
       setIsOpen(false);
       setRound((previous) => previous + 1);
       toasts.add({ title: statedMessage(partyScopesSetMessage({ party, scopes: picked }), outcome.statementRefusal) });
@@ -56,14 +60,14 @@ function AgentNeedsLine({ fleetId, party, version, scopes, listed, canChange }: 
 
   return (
     <div key={round} className={`flex flex-wrap items-center gap-2 rounded-md ${round > 0 ? 'animate-highlight' : ''}`} data-testid="agent-needs">
-      <NeedsChips own={scopes} listed={listed === null ? null : new Set(listed.map(({ scope }) => scope))} />
+      <NeedsChips own={shown} listed={listed === null ? null : new Set(listed.map(({ scope }) => scope))} />
       {canChange && listed !== null ? (
         <>
           <button
             type="button"
             className="text-primary hover:underline"
             onClick={() => {
-              setPicked([...scopes]);
+              setPicked([...shown]);
               setRefusal(null);
               setIsOpen(true);
             }}
