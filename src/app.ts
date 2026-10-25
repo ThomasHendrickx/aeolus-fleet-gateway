@@ -23,7 +23,7 @@ import { createPrismaScopeRequirements } from './adapters/prisma/scope-requireme
 import { createPrismaToolMarks } from './adapters/prisma/tool-marks.js';
 import { createMcpServers } from './adapters/mcp/mcp-servers.js';
 import { createMarkTool } from './core/mcp-out/mark-tool.js';
-import { createSwitchTool } from './core/parties/switch-tool.js';
+import { createSwitchTools } from './core/parties/switch-tools.js';
 import { createCheckRequiredScopes } from './core/parties/check-required-scopes.js';
 import { createReadScopeRequirements } from './core/parties/read-scope-requirements.js';
 import { createSetScopeRequirements } from './core/parties/set-scope-requirements.js';
@@ -343,7 +343,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const requirements = createPrismaScopeRequirements(prisma);
   const stateParty = createStateParty({ parties, servers, door, marks, requirements, timing: callTiming });
   const markTool = createMarkTool({ parties, marks, stateParty });
-  const switchTool = createSwitchTool({ parties, servers, stateParty });
+  const switchTools = createSwitchTools({ parties, servers, stateParty });
   const agentCards = createHttpAgentCards({ timeoutMs: AGENT_CARD_TIMEOUT_MS });
   const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, requirements, timing: callTiming });
   const checkScopes = createCheckRequiredScopes({ connections, door });
@@ -760,7 +760,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readPartyTools,
     stateParty,
     markTool,
-    switchTool,
+    switchTools,
     readScopeRequirements,
     setScopeRequirements,
     readOutsideParties: createReadOutsideParties({ switches: outsidePartySwitches }),

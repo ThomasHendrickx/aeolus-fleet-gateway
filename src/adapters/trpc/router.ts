@@ -43,7 +43,7 @@ import type { StateParty } from '../../core/mcp-out/state-party.js';
 import type { CheckServer } from '../../core/parties/check-server.js';
 import type { ReadPartyTools } from '../../core/parties/read-party-tools.js';
 import { APPROVING_SCOPE } from '../../core/parties/approver.js';
-import type { SwitchTool, SwitchToolRefusal } from '../../core/parties/switch-tool.js';
+import type { SwitchTools, SwitchToolsRefusal } from '../../core/parties/switch-tools.js';
 import type { ReadScopeRequirements } from '../../core/parties/read-scope-requirements.js';
 import type { ScopeRequirements } from '../../core/parties/scope-requirements.js';
 import type { SetScopeRequirements, SetScopeRequirementsRefusal } from '../../core/parties/set-scope-requirements.js';
@@ -123,7 +123,7 @@ export interface Context {
   cardAddressOf: (alias: string) => string;
   stateParty: StateParty;
   markTool: MarkTool;
-  switchTool: SwitchTool;
+  switchTools: SwitchTools;
   readScopeRequirements: ReadScopeRequirements;
   setScopeRequirements: SetScopeRequirements;
   registerClient: RegisterClient;
@@ -326,13 +326,13 @@ const TOOLS_CODES = {
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
 } as const satisfies Record<'NO_SUCH_PARTY' | 'SERVER_UNREACHABLE', TRPCError['code']>;
 
-/** The refusals of switching an outside MCP server's tool, as the API states them. */
-const SWITCH_TOOL_CODES = {
+/** The refusals of switching an outside MCP server's tools, as the API states them. */
+const SWITCH_TOOLS_CODES = {
   NOT_AN_APPROVER: 'FORBIDDEN',
   NO_SUCH_PARTY: 'NOT_FOUND',
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
   NO_SUCH_TOOL: 'NOT_FOUND',
-} as const satisfies Record<SwitchToolRefusal['kind'], TRPCError['code']>;
+} as const satisfies Record<SwitchToolsRefusal['kind'], TRPCError['code']>;
 
 /** The refusals of setting the scopes an outside party needs, as the API states them. */
 const SET_SCOPE_REQUIREMENTS_CODES = {
@@ -882,14 +882,14 @@ export const gatewayRouter = t.router({
         }
         return stated.value;
       }),
-    /** An actor holding gateway:approve switches one tool of an outside MCP server on or off for the party (aeolus-fleet#1151): kept, then stated at once. */
-    switchTool: servedProcedure
-      .input(z.strictObject({ name: shipHandleSchema, tool: z.string().min(1).max(TOOL_NAME_MAX_LENGTH), isOn: z.boolean() }))
-      .output(z.object({ tool: z.string(), isOn: z.boolean(), statementRefusal: z.string().nullable() }))
+    /** An actor holding gateway:approve switches tools of an outside MCP server on or off for the party (aeolus-fleet#1151), one or a selection (gateway scopes 4.3): kept in one change, then stated at once. */
+    switchTools: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema, tools: z.array(z.string().min(1).max(TOOL_NAME_MAX_LENGTH)).min(1), isOn: z.boolean() }))
+      .output(z.object({ tools: z.array(z.string()), isOn: z.boolean(), statementRefusal: z.string().nullable() }))
       .mutation(async ({ ctx, input }) => {
-        const switched = await ctx.switchTool({ actor: ctx.actor, ...input });
+        const switched = await ctx.switchTools({ actor: ctx.actor, ...input });
         if (!switched.isOk) {
-          throw new TRPCError({ code: SWITCH_TOOL_CODES[switched.error.kind], message: switched.error.message });
+          throw new TRPCError({ code: SWITCH_TOOLS_CODES[switched.error.kind], message: switched.error.message });
         }
         return switched.value;
       }),

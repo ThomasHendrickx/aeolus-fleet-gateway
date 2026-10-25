@@ -50,7 +50,8 @@ export async function switchPartyTool(_previous: ToolSwitchState, form: FormData
   const name = fieldOf(form, NAME_FIELD);
   const api = await requestApi(fleetId);
   try {
-    const { tool, isOn, statementRefusal } = await api.parties.switchTool.mutate({ name, tool: fieldOf(form, 'tool'), isOn: fieldOf(form, 'isOn') === 'true' });
+    const tool = fieldOf(form, 'tool');
+    const { isOn, statementRefusal } = await api.parties.switchTools.mutate({ name, tools: [tool], isOn: fieldOf(form, 'isOn') === 'true' });
     revalidatePath(partyPath(name));
     return { kind: 'switched', isOn, message: switchedMessageOf({ tool, isOn, statementRefusal }) };
   } catch (error) {

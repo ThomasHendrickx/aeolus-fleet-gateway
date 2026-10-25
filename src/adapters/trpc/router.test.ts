@@ -11,7 +11,7 @@ import { createAccountInView } from '../../core/account-sign-in/account-in-view.
 import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
-import type { SwitchTool } from '../../core/parties/switch-tool.js';
+import type { SwitchTools } from '../../core/parties/switch-tools.js';
 import type { SetScopeRequirements } from '../../core/parties/set-scope-requirements.js';
 import type { AddA2aAgent } from '../../core/parties/add-a2a-agent.js';
 import type { MarkA2aAgent } from '../../core/a2a-out/mark-a2a-agent.js';
@@ -75,7 +75,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   approvals: Parameters<ApproveParty>[0][];
   additions: Parameters<AddClientParty>[0][];
   marks: Parameters<MarkTool>[0][];
-  toolSwitches: Parameters<SwitchTool>[0][];
+  toolSwitches: Parameters<SwitchTools>[0][];
   requirementChanges: Parameters<SetScopeRequirements>[0][];
   agentAdditions: Parameters<AddA2aAgent>[0][];
   agentMarks: Parameters<MarkA2aAgent>[0][];
@@ -91,7 +91,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   const switched: Parameters<SetOutsideParties>[0][] = [];
   const decisions: Parameters<DecideRequest>[0][] = [];
   const marks: Parameters<MarkTool>[0][] = [];
-  const toolSwitches: Parameters<SwitchTool>[0][] = [];
+  const toolSwitches: Parameters<SwitchTools>[0][] = [];
   const requirementChanges: Parameters<SetScopeRequirements>[0][] = [];
   const agentAdditions: Parameters<AddA2aAgent>[0][] = [];
   const agentMarks: Parameters<MarkA2aAgent>[0][] = [];
@@ -279,15 +279,15 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       marks.push(input);
       return Promise.resolve(ok({ capabilities: ['list_deals'] }));
     },
-    switchTool: (input) => {
+    switchTools: (input) => {
       toolSwitches.push(input);
       if (!input.actor.scopes.includes('gateway:approve')) {
         return Promise.resolve(err({ kind: 'NOT_AN_APPROVER' as const, message: "Switching an outside party's tools needs gateway:approve" }));
       }
-      if (input.tool === 'delete_project') {
+      if (input.tools.includes('delete_project')) {
         return Promise.resolve(err({ kind: 'NO_SUCH_TOOL' as const, message: 'The MCP server of crm lists no tool delete_project now' }));
       }
-      return Promise.resolve(ok({ tool: input.tool, isOn: input.isOn, statementRefusal: null }));
+      return Promise.resolve(ok({ tools: [...input.tools], isOn: input.isOn, statementRefusal: null }));
     },
     readScopeRequirements: ({ name }) =>
       Promise.resolve(name === 'crm' ? ok({ version: 2, party: ['crm:use'], tools: new Map([['update_lead', ['crm:write-leads']]]) }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `There is no outside MCP server or A2A agent ${name}` })),
@@ -575,19 +575,23 @@ describe("argo states a party's tools and marks them repeatable through the gate
 });
 
 describe("an approver switches an outside MCP server's tools through the gateway's API (aeolus-fleet#1151)", () => {
-  it('switches a tool as the actor, answering the switch', async () => {
+  it('switches the tools sent as the actor, answering the switch', async () => {
     const { context, toolSwitches } = aContext(undefined, APPROVER_CREW);
 
-    await expect(gatewayRouter.createCaller(context).parties.switchTool({ name: 'crm', tool: 'create_deal', isOn: false })).resolves.toEqual({ tool: 'create_deal', isOn: false, statementRefusal: null });
-    expect(toolSwitches.map(({ name, tool, isOn }) => ({ name, tool, isOn }))).toEqual([{ name: 'crm', tool: 'create_deal', isOn: false }]);
+    await expect(gatewayRouter.createCaller(context).parties.switchTools({ name: 'crm', tools: ['create_deal', 'list_deals'], isOn: false })).resolves.toEqual({ tools: ['create_deal', 'list_deals'], isOn: false, statementRefusal: null });
+    expect(toolSwitches.map(({ name, tools, isOn }) => ({ name, tools, isOn }))).toEqual([{ name: 'crm', tools: ['create_deal', 'list_deals'], isOn: false }]);
+  });
+
+  it('answers BAD_REQUEST for a switch naming no tool', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context).parties.switchTools({ name: 'crm', tools: [], isOn: true })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
   it('answers FORBIDDEN to an actor without gateway:approve', async () => {
-    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.switchTool({ name: 'crm', tool: 'create_deal', isOn: false })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.switchTools({ name: 'crm', tools: ['create_deal'], isOn: false })).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('answers NOT_FOUND for a tool the server does not list now', async () => {
-    await expect(gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context).parties.switchTool({ name: 'crm', tool: 'delete_project', isOn: true })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context).parties.switchTools({ name: 'crm', tools: ['delete_project'], isOn: true })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
 
