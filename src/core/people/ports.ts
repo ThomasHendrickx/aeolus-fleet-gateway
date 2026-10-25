@@ -112,8 +112,8 @@ export interface PersonShipDoor {
    * (wake a person, W5), or less when told. Stopping the signal ends the wait.
    */
   inbox(crewToken: string, wait?: { knownWaiting: number; signal: AbortSignal; atMostMs?: number }): Promise<Result<{ waiting: number }, FleetRefusal>>;
-  /** The ship's deliveries, up to max, its own held ones again first. */
-  pushReceive(crewToken: string, take: { max: number }): Promise<Result<PushedPersonDelivery[], FleetRefusal>>;
+  /** The ship's deliveries, up to max, its own held ones again first; shouldSkipHanded leaves the handed ones out before the limit, so a new one is not shut out by held ones. */
+  pushReceive(crewToken: string, take: { max: number; shouldSkipHanded?: boolean }): Promise<Result<PushedPersonDelivery[], FleetRefusal>>;
   /** Acknowledges a delivery the person opened: their own act confirms it (interop 5.1). */
   ack(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
   /** Reads a delivery the ship acknowledged again, whole, while it is not handled, recording nothing (decision 0040). */

@@ -32,7 +32,8 @@ export type WakePerson = (
 /**
  * Use case: wakes a person for what waits on their person ship (wake a
  * person, W3, W8). It takes the ship's deliveries with the gateway as their
- * waker; those never handed are fresh. Each channel the person turned on
+ * waker, leaving the handed ones out so ten held deliveries never shut a new
+ * one out; those never handed are fresh. Each channel the person turned on
  * whose window has passed sends one wake for all of them; each fresh
  * delivery is then handed no. 1, naming the first channel that went out, so
  * a delivery is woken once. A wake held back by a window, or that no
@@ -86,6 +87,7 @@ export function createWakePerson(deps: {
     };
     const taken = await deps.door.pushReceive(crewToken, {
       max: RECEIVE_MAX_UPPER_BOUND,
+      shouldSkipHanded: true,
     });
     if (!taken.isOk) {
       return taken;
