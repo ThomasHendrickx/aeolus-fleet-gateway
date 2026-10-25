@@ -268,7 +268,7 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
 });
 
 describe('the scopes the fleet lists, read as the gateway\'s ship (fleet.scopes, gateway scopes 4.2)', () => {
-  it("answers every listed scope, core's, a plugin's and the fleet's own", async () => {
+  it("answers every listed scope with its description, core's, a plugin's and the fleet's own", async () => {
     answer = {
       status: 200,
       body: [
@@ -278,7 +278,15 @@ describe('the scopes the fleet lists, read as the gateway\'s ship (fleet.scopes,
       ],
     };
 
-    await expect(createRestFleetDoor(base).listScopes('aeolus_ct_v1_gateway')).resolves.toEqual({ isOk: true, value: ['fleet:read', 'gateway:approve', 'crm:read-leads', 'crm:write-leads'] });
+    await expect(createRestFleetDoor(base).listScopes('aeolus_ct_v1_gateway')).resolves.toEqual({
+      isOk: true,
+      value: [
+        { scope: 'fleet:read', description: 'Read the fleet' },
+        { scope: 'gateway:approve', description: 'Approve outside parties' },
+        { scope: 'crm:read-leads', description: 'Read leads in the CRM' },
+        { scope: 'crm:write-leads', description: 'Change leads in the CRM' },
+      ],
+    });
     expect(received.map(({ url, headers }) => ({ url, authorization: headers.authorization }))).toEqual([{ url: '/api/v1/fleet/scopes', authorization: 'Bearer aeolus_ct_v1_gateway' }]);
   });
 
