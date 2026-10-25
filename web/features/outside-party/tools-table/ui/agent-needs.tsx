@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { setPartyScopes } from '../../actions';
-import { partyScopesSetMessage, statedMessage } from '../table-messages';
+import { agentScopesSetMessage, statedMessage } from '../table-messages';
 import { NeedsChips, type ListedScope } from './needs-chips';
 import { ScopePicker } from './scope-picker';
 import { standingRefusal, TableDialog, type DialogRefusal } from './table-dialog';
@@ -55,7 +55,7 @@ function AgentNeedsLine({ fleetId, party, version, scopes, listed, canChange }: 
       setKept({ basis: scopes, scopes: picked });
       setIsOpen(false);
       setRound((previous) => previous + 1);
-      toasts.add({ title: statedMessage(partyScopesSetMessage({ party, scopes: picked }), outcome.statementRefusal) });
+      toasts.add({ title: statedMessage(agentScopesSetMessage({ party, scopes: picked }), outcome.statementRefusal) });
       router.refresh();
     });
   };

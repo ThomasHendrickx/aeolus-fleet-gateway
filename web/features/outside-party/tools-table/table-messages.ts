@@ -35,3 +35,7 @@ export function suggestionsSetMessage(groups: readonly { scopes: readonly string
 export function toolsSwitchedMessage({ count, isOn, statementRefusal }: { count: number; isOn: boolean; statementRefusal: string | null }): string {
   return statedMessage(`${toolsOf(count)} switched ${isOn ? 'on' : 'off'}`, statementRefusal);
 }
+
+export function agentScopesSetMessage({ party, scopes }: { party: string; scopes: readonly string[] }): string {
+  return scopes.length === 0 ? `Every message to ${party} needs nothing beyond reaching it` : `Every message to ${party} needs ${listOf(scopes)}`;
+}
