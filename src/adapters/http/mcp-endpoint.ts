@@ -103,7 +103,7 @@ const objectSchema = z.object({ type: z.literal('object') }).catchall(z.json());
 
 /** The MCP server one request of one client is served by. Its tools are known per request, from the fleet, so it lists them itself. */
 function serverFor(holder: { fleetId: FleetId; party: string }, deps: McpEndpointDeps): McpServer {
-  const mcp = new McpServer({ name: 'aeolus-gateway', version: runningVersion() }, { capabilities: { tools: {}, extensions: { [TASKS_EXTENSION]: {} } } });
+  const mcp = new McpServer({ name: 'Aeolus', version: runningVersion() }, { capabilities: { tools: {}, extensions: { [TASKS_EXTENSION]: {} } } });
   mcp.server.setRequestHandler('tools/list', async () => {
     const listed = await deps.listTools({ fleetId: holder.fleetId, party: holder.party });
     if (!listed.isOk) {

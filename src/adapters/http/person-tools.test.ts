@@ -55,6 +55,12 @@ async function connected(deps: PersonToolsDeps): Promise<Client> {
 }
 
 describe("a person's MCP client starts a message", () => {
+  it('is served by a server named Aeolus', async () => {
+    const mcp = await connected(personTools().deps);
+
+    expect(mcp.getServerVersion()?.name).toBe('Aeolus');
+  });
+
   it('is served aeolus_ships and aeolus_send beside the inbox tools', async () => {
     const mcp = await connected(personTools().deps);
 

@@ -79,6 +79,14 @@ async function replyTo(crewToken: string, reply: { to: string; inReplyTo: string
 const textOf = (result: Awaited<ReturnType<Client['callTool']>>) => z.string().parse(z.array(z.object({ text: z.string() })).parse(result.content)[0]?.text);
 
 describe('an outside MCP client lists the tools of the ships its party reaches', () => {
+  it('connects to a server named Aeolus', async () => {
+    const mcp = await aConnectedClient();
+    const serverName = mcp.getServerVersion()?.name;
+    await mcp.close();
+
+    expect(serverName).toBe('Aeolus');
+  });
+
   it("lists a ship's capability as a tool named by alias, never by the ship's name", async () => {
     await aStatingShip();
     const client = await aSignedInClient(setting);
