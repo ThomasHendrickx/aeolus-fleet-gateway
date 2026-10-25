@@ -308,6 +308,17 @@ describe('an approver sets which scopes a calling ship needs for a tool of an ou
     });
   });
 
+  it("refuses an approver outside the proxy ship's manage reach, in a fleet that applies its own network rules, keeping nothing", async () => {
+    const address = await approvedWithScopes();
+    await applyEmptyOwnRules(fleet, cookie);
+
+    const set = await setRequirements(address, { version: 0, tools: [{ tool: 'create_deal', scopes: ['crm:write-leads'] }] });
+
+    expect(set.status, await set.clone().text()).toBe(403);
+    const read = await query(address, { procedure: 'parties.scopeRequirements', crewToken: approver, input: { name: 'crm' } });
+    expect(z.object({ result: z.object({ data: z.object({ version: z.number(), tools: z.array(z.unknown()) }) }) }).parse(await read.json()).result.data).toEqual({ version: 0, tools: [] });
+  });
+
   it('refuses the second of two changes made on the same version, keeping the first', async () => {
     const address = await approvedWithScopes();
 
