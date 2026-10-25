@@ -161,7 +161,7 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
   });
 
   it('counts a reply the fleet refuses under a key the follow derived as replied, and goes on to the end', async () => {
-    await crew.send('aeolus_ct_v1_proxy', { to: CALLER_SHIP_ID, inReplyTo: MESSAGE, contentType: 'text/plain', payload: 'an earlier reply', idempotencyKey: plainAgentKeys.replyKeyOf(FLEET_ID, { taskId: 'task-1', event: JSON.stringify(['artifact', 'a-1', 0]) }) });
+    await crew.send('aeolus_ct_v1_proxy', { to: CALLER_SHIP_ID, inReplyTo: MESSAGE, contentType: 'text/plain', payload: 'an earlier reply', idempotencyKey: plainAgentKeys.replyKeyOf(FLEET_ID, { taskId: 'task-1', event: JSON.stringify(['artifact', MESSAGE, 'a-1', 0]) }) });
     const agents = fakeA2aAgents({ sends: [taken([anArtifactChunk({ artifactId: 'a-1', text: '4 EUR', isAppended: false }), aStatus('completed')])] });
 
     await expect(handWith(agents)()).resolves.toEqual({ kind: 'handled' });
