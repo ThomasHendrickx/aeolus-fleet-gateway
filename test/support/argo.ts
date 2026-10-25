@@ -62,3 +62,25 @@ export async function applyEmptyOwnRules(fleet: FleetServer, cookie: string): Pr
   const { savedAgainstVersion } = z.object({ savedAgainstVersion: z.number() }).parse(await call('saveNetworkRulesDraft', { rules: [] }));
   await call('applyNetworkRules', { version: savedAgainstVersion });
 }
+
+/** argo calls one of the fleet's mutations with its console session, as the console does; it throws when the fleet refuses. */
+async function argoMutates(fleet: FleetServer, call: { cookie: string; procedure: string; input: unknown }): Promise<void> {
+  const response = await fetch(`${fleet.url}/trpc/fleet.${call.procedure}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: fleet.url, cookie: call.cookie },
+    body: JSON.stringify(call.input),
+  });
+  if (!response.ok) {
+    throw new Error(`${call.procedure} failed: ${await response.text()}`);
+  }
+}
+
+/** argo defines one of the fleet's own scopes (scopes:define, gateway scopes 4.1), which argo then holds and grants onwards. */
+export async function defineScope(fleet: FleetServer, argo: { cookie: string; scope: string; description: string }): Promise<void> {
+  await argoMutates(fleet, { cookie: argo.cookie, procedure: 'defineScope', input: { scope: argo.scope, description: argo.description } });
+}
+
+/** argo grants and revokes scopes on a live ship (scopes:grant), effective at the ship's next call (decision 0046). */
+export async function grantScopes(fleet: FleetServer, argo: { cookie: string; shipId: ShipId; grant: string[]; revoke: string[] }): Promise<void> {
+  await argoMutates(fleet, { cookie: argo.cookie, procedure: 'grantScopes', input: { shipId: argo.shipId, grant: argo.grant, revoke: argo.revoke } });
+}
