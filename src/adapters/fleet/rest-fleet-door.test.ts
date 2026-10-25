@@ -288,3 +288,25 @@ describe('the scopes the fleet lists, read as the gateway\'s ship (fleet.scopes,
     await expect(createRestFleetDoor(base).listScopes('aeolus_ct_v1_gateway')).resolves.toEqual({ isOk: false, error: { code: 'FORBIDDEN', message: 'Needs fleet:read' } });
   });
 });
+
+describe("where a sent message's delivery stands (ship.sentMessage, core 0.32.0)", () => {
+  it('answers the state of the one delivery a message sent to a ship has', async () => {
+    answer = {
+      status: 200,
+      body: {
+        messageId: 'msg_01m3tbfspe96yf1rnr4ank9msg',
+        sentAt: '2026-10-25T09:00:00.000Z',
+        recipient: { kind: 'ship', ship: { id: PERSON_SHIP, name: 'thomas' } },
+        deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d1v', ship: { id: PERSON_SHIP, name: 'thomas' }, state: 'acknowledged', since: '2026-10-25T09:01:00.000Z' }],
+      },
+    };
+
+    await expect(createRestFleetDoor(base).sentMessage('aeolus_ct_v1_gateway', 'msg_01m3tbfspe96yf1rnr4ank9msg')).resolves.toEqual({ isOk: true, value: { state: 'acknowledged', since: new Date('2026-10-25T09:01:00.000Z') } });
+  });
+
+  it('answers a message with no delivery as the fleet not answering where it stands', async () => {
+    answer = { status: 200, body: { messageId: 'msg_01m3tbfspe96yf1rnr4ank9msg', sentAt: '2026-10-25T09:00:00.000Z', recipient: { kind: 'ship', ship: { id: PERSON_SHIP, name: 'thomas' } }, deliveries: [] } };
+
+    await expect(createRestFleetDoor(base).sentMessage('aeolus_ct_v1_gateway', 'msg_01m3tbfspe96yf1rnr4ank9msg')).resolves.toMatchObject({ isOk: false, error: { code: 'UNAVAILABLE' } });
+  });
+});
