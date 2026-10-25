@@ -26,7 +26,7 @@ function aDelivery(index: number, overrides: Partial<PushedPersonDelivery> = {})
 }
 
 /** A channel the test holds: on or off, sending or failing, each wake it sent recorded. */
-function aChannel(name: WakeChannelName, options: { isOn?: boolean; windowMs?: number; isFailing?: boolean } = {}) {
+function aChannel(name: WakeChannelName, options: { isOn?: boolean; windowMs?: number; isFailing?: boolean; isRefusing?: boolean } = {}) {
   const woken: PersonShip[] = [];
   const channel: WakeChannel = {
     name,
@@ -34,7 +34,10 @@ function aChannel(name: WakeChannelName, options: { isOn?: boolean; windowMs?: n
     isOn: () => Promise.resolve(options.isOn ?? true),
     wake: (ship) => {
       if (options.isFailing === true) {
-        return Promise.resolve(err({ reason: 'pagasae did not answer' }));
+        return Promise.resolve(err({ kind: 'unavailable' as const, reason: 'pagasae did not answer' }));
+      }
+      if (options.isRefusing === true) {
+        return Promise.resolve(err({ kind: 'refused' as const, reason: 'pagasae answered 404: unknown_person_ship' }));
       }
       woken.push(ship);
       return Promise.resolve(ok(undefined));
@@ -61,7 +64,13 @@ function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: Flee
     handOvers,
     door: {
       pushReceive: (crewToken: string): Promise<Result<PushedPersonDelivery[], FleetRefusal>> =>
-        Promise.resolve(options.pushReceive !== undefined ? err(options.pushReceive) : crewToken === CREW_TOKEN ? ok(deliveries) : err({ code: 'UNAUTHORIZED', message: 'no' })),
+        Promise.resolve(
+          options.pushReceive !== undefined
+            ? err(options.pushReceive)
+            : crewToken === CREW_TOKEN
+              ? ok(deliveries.map((delivery) => (handOvers.some(({ deliveryId }) => deliveryId === delivery.deliveryId) ? { ...delivery, handOverNumber: 1 } : delivery)))
+              : err({ code: 'UNAUTHORIZED', message: 'no' }),
+        ),
       handed: (_crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: string }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>> => {
         handOvers.push(handOver);
         return Promise.resolve(ok('handed'));
@@ -70,8 +79,9 @@ function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: Flee
   };
 }
 
-function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[]; wakesSent?: WakesSent; focused?: FocusedPages }) {
+function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[]; wakesSent?: WakesSent; focused?: FocusedPages; endedAttempts?: { channel: WakeChannelName; reason: string }[] }) {
   return createWakePerson({
+    attemptEnded: (ended) => deps.endedAttempts?.push({ channel: ended.channel, reason: ended.reason }),
     door: deps.ship.door,
     channels: deps.channels,
     wakesSent: deps.wakesSent ?? memoryWakesSent(),
@@ -130,7 +140,7 @@ describe('waking a person', () => {
   });
 
   it("sends no second wake inside the channel's window, and looks again once it ends", async () => {
-    const ship = aShip([aDelivery(1)]);
+    const ship = aShip([aDelivery(1, { sentAt: new Date('2026-10-23T11:45:00.000Z') })]);
     const email = aChannel('email');
     const wakesSent = memoryWakesSent([{ channel: 'email', at: new Date('2026-10-23T11:30:00.000Z') }]);
 
@@ -190,7 +200,7 @@ describe('waking a person', () => {
     const email = aChannel('email');
     const wakesSent = memoryWakesSent();
     const crashing = { ...ship.door, handed: () => Promise.reject(new Error('the gateway stopped')) };
-    await expect(createWakePerson({ door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
+    await expect(createWakePerson({ attemptEnded: () => undefined, door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
 
     await waking({ ship, channels: [email.channel], wakesSent })(SHIP, CREW_TOKEN);
 
@@ -202,9 +212,54 @@ describe('waking a person', () => {
     const refusing = { ...ship.door, handed: () => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) };
     const wakesSent = memoryWakesSent();
 
-    const woken = await createWakePerson({ door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
+    const woken = await createWakePerson({ attemptEnded: () => undefined, door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
 
     expect({ woken, sent: wakesSent.sent }).toEqual({ woken: err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }), sent: [{ channel: 'email', at: NOW }] });
+  });
+
+  it('hands the deliveries a refusal left over with the email already sent, and sends no second email', async () => {
+    const ship = aShip([aDelivery(1), aDelivery(2), aDelivery(3)]);
+    const email = aChannel('email');
+    const wakesSent = memoryWakesSent();
+    let handedCalls = 0;
+    const refusingOnce = {
+      ...ship.door,
+      handed: (crewToken: string, handOver: Parameters<typeof ship.door.handed>[1]) => {
+        handedCalls += 1;
+        return handedCalls === 2 ? Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) : ship.door.handed(crewToken, handOver);
+      },
+    };
+    const wakePerson = createWakePerson({ attemptEnded: () => undefined, door: refusingOnce, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
+
+    const first = await wakePerson(SHIP, CREW_TOKEN);
+    const retried = await wakePerson(SHIP, CREW_TOKEN);
+
+    expect({ first: first.isOk, retried, woken: email.woken.length, handOvers: ship.handOvers.map(({ deliveryId, channel }) => `${deliveryId.slice(-4)} ${channel}`) }).toEqual({
+      first: false,
+      retried: ok({ kind: 'settled' }),
+      woken: 1,
+      handOvers: ['0001 email', '0002 email', '0003 email'],
+    });
+  });
+
+  it('leaves a delivery that arrived after the email waiting for the next window', async () => {
+    const ship = aShip([aDelivery(1, { sentAt: new Date('2026-10-23T11:30:00.000Z') }), aDelivery(2, { sentAt: new Date('2026-10-23T11:45:00.000Z') })]);
+    const email = aChannel('email');
+    const wakesSent = memoryWakesSent([{ channel: 'email', at: new Date('2026-10-23T11:40:00.000Z') }]);
+
+    const woken = await waking({ ship, channels: [email.channel], wakesSent })(SHIP, CREW_TOKEN);
+
+    expect({ woken, handOvers: ship.handOvers.map(({ deliveryId, channel }) => `${deliveryId.slice(-4)} ${channel}`) }).toEqual({ woken: ok({ kind: 'inWindow', until: new Date('2026-10-23T12:40:00.000Z') }), handOvers: ['0001 email'] });
+  });
+
+  it('ends the attempt and logs it when a channel refused the wake for good, as trying again cannot help', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email', { isRefusing: true });
+    const endedAttempts: { channel: WakeChannelName; reason: string }[] = [];
+
+    const woken = await waking({ ship, channels: [email.channel], endedAttempts })(SHIP, CREW_TOKEN);
+
+    expect({ woken, endedAttempts, handOvers: ship.handOvers }).toEqual({ woken: ok({ kind: 'settled' }), endedAttempts: [{ channel: 'email', reason: 'pagasae answered 404: unknown_person_ship' }], handOvers: [] });
   });
 
   it('says what the fleet refused, waking no one', async () => {
