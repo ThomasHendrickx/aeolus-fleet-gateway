@@ -164,8 +164,8 @@ describe("each party's required scopes in Postgres (design gateway-scopes, 4.2)"
     await createPrismaPartyStore(prisma).save(aParty({ fleetId: REQUIRING_FLEET, name: 'crm' }));
     const store = createPrismaScopeRequirements(prisma);
 
-    await store.change(REQUIRING_FLEET, 'crm', { version: 0, party: ['crm:use'], tools: new Map([['update_lead', ['crm:write-leads']], ['read_lead', ['crm:read-leads']]]) });
-    const changed = await store.change(REQUIRING_FLEET, 'crm', { version: 1, tools: new Map([['read_lead', []], ['delete_lead', ['crm:write-leads', 'crm:admin']]]) });
+    await store.change({ fleetId: REQUIRING_FLEET, name: 'crm' }, { version: 0, party: ['crm:use'], tools: new Map([['update_lead', ['crm:write-leads']], ['read_lead', ['crm:read-leads']]]) });
+    const changed = await store.change({ fleetId: REQUIRING_FLEET, name: 'crm' }, { version: 1, tools: new Map([['read_lead', []], ['delete_lead', ['crm:write-leads', 'crm:admin']]]) });
 
     const expected = { version: 2, party: ['crm:use'], tools: new Map([['update_lead', ['crm:write-leads']], ['delete_lead', ['crm:write-leads', 'crm:admin']]]) };
     expect(changed).toEqual(expected);
@@ -177,8 +177,8 @@ describe("each party's required scopes in Postgres (design gateway-scopes, 4.2)"
     const store = createPrismaScopeRequirements(prisma);
 
     const both = await Promise.all([
-      store.change(REQUIRING_FLEET, 'raced', { version: 0, party: ['crm:read-leads'], tools: new Map() }),
-      store.change(REQUIRING_FLEET, 'raced', { version: 0, party: ['crm:write-leads'], tools: new Map() }),
+      store.change({ fleetId: REQUIRING_FLEET, name: 'raced' }, { version: 0, party: ['crm:read-leads'], tools: new Map() }),
+      store.change({ fleetId: REQUIRING_FLEET, name: 'raced' }, { version: 0, party: ['crm:write-leads'], tools: new Map() }),
     ]);
 
     const kept = await store.find(REQUIRING_FLEET, 'raced');
@@ -190,7 +190,7 @@ describe("each party's required scopes in Postgres (design gateway-scopes, 4.2)"
     await createPrismaPartyStore(prisma).save(aParty({ fleetId: OTHER_FLEET, name: 'shared-req' }));
     const store = createPrismaScopeRequirements(prisma);
 
-    await store.change(OTHER_FLEET, 'shared-req', { version: 0, party: ['crm:use'], tools: new Map() });
+    await store.change({ fleetId: OTHER_FLEET, name: 'shared-req' }, { version: 0, party: ['crm:use'], tools: new Map() });
 
     await expect(store.find(REQUIRING_FLEET, 'shared-req')).resolves.toEqual({ version: 0, party: [], tools: new Map() });
   });
@@ -199,7 +199,7 @@ describe("each party's required scopes in Postgres (design gateway-scopes, 4.2)"
     const parties = createPrismaPartyStore(prisma);
     await parties.save(aParty({ fleetId: REQUIRING_FLEET, name: 'retired' }));
     const store = createPrismaScopeRequirements(prisma);
-    await store.change(REQUIRING_FLEET, 'retired', { version: 0, party: ['crm:use'], tools: new Map() });
+    await store.change({ fleetId: REQUIRING_FLEET, name: 'retired' }, { version: 0, party: ['crm:use'], tools: new Map() });
     await parties.save(aParty({ fleetId: REQUIRING_FLEET, name: 'retired', state: 'crewed', proxyShipId: PROXY, crewToken: 'aeolus_ct_v1_proxy' }));
     await expect(store.find(REQUIRING_FLEET, 'retired')).resolves.toMatchObject({ version: 1, party: ['crm:use'] });
 

@@ -4,7 +4,7 @@ import type { FleetDoor, FleetRefusal } from '../../src/core/connection/ports.js
 import type { Party } from '../../src/core/parties/party.js';
 import type { ActorCredential } from '../../src/core/actors/credential-of.js';
 import type { PartyStore, ProxyShipDoor, ProxyShipReads, ProxyShipsAsActor, ScopeRequirementsStore } from '../../src/core/parties/ports.js';
-import { NO_SCOPE_REQUIREMENTS, type ScopeRequirements } from '../../src/core/parties/scope-requirements.js';
+import { changedRequirements, NO_SCOPE_REQUIREMENTS, type ScopeRequirements } from '../../src/core/parties/scope-requirements.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 import { FLEET_ID } from './fleet-fakes.js';
 
@@ -49,21 +49,13 @@ export function memoryScopeRequirements(): ScopeRequirementsStore & { held: Map<
   return {
     held,
     find: (fleetId, party) => Promise.resolve(held.get(key(fleetId, party)) ?? NO_SCOPE_REQUIREMENTS),
-    change: (fleetId, party, change) => {
-      const kept = held.get(key(fleetId, party)) ?? NO_SCOPE_REQUIREMENTS;
+    change: ({ fleetId, name }, change) => {
+      const kept = held.get(key(fleetId, name)) ?? NO_SCOPE_REQUIREMENTS;
       if (kept.version !== change.version) {
         return Promise.resolve(undefined);
       }
-      const tools = new Map(kept.tools);
-      for (const [tool, scopes] of change.tools) {
-        if (scopes.length === 0) {
-          tools.delete(tool);
-        } else {
-          tools.set(tool, scopes);
-        }
-      }
-      const changed = { version: kept.version + 1, party: change.party ?? kept.party, tools };
-      held.set(key(fleetId, party), changed);
+      const changed = changedRequirements(kept, change);
+      held.set(key(fleetId, name), changed);
       return Promise.resolve(changed);
     },
   };

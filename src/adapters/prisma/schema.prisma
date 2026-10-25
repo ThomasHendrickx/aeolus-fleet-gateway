@@ -71,29 +71,33 @@ model InstallationRequest {
 /// gateway calls the party with, kept as squadrons keeps crew tokens, and the
 /// proxy ship's crew token.
 model Party {
-  fleetId          String   @map("fleet_id")
-  name             String
-  kind             String
+  fleetId                  String   @map("fleet_id")
+  name                     String
+  kind                     String
   /// An MCP server's: its URL, its credential as JSON (none, a static bearer, or OAuth client credentials), and its calls at once. An A2A agent's too, its card address as the URL.
-  url              String?
-  credential       Json?
-  concurrencyLimit Int?     @map("concurrency_limit")
+  url                      String?
+  credential               Json?
+  concurrencyLimit         Int?     @map("concurrency_limit")
   /// An MCP server's tool switches, by tool name (aeolus-fleet#1151); none kept yet means every tool it lists is on.
-  toolSwitches     Json?    @map("tool_switches")
+  toolSwitches             Json?    @map("tool_switches")
+  /// The scopes a calling ship needs (gateway scopes, 4.2): the party's set and each tool's, by scope text and tool name; none set yet needs nothing.
+  scopeRequirements        Json?    @map("scope_requirements")
+  /// The version the requirements were last changed to, so a change made on an older one is refused.
+  scopeRequirementsVersion Int      @default(0) @map("scope_requirements_version")
   /// An MCP client's: its OAuth client id.
-  clientId         String?  @map("client_id")
+  clientId                 String?  @map("client_id")
   /// An A2A client's: the hash of the bearer it was shown once, which names it on every call; unique across fleets, as the bearer alone names the party (decision 0060).
-  bearerHash       String?  @unique @map("bearer_hash")
+  bearerHash               String?  @unique @map("bearer_hash")
   /// An A2A agent's: whether a message that died unconfirmed may be handed again, until an approver marks it not (A9).
-  isRepeatable     Boolean? @map("is_repeatable")
-  state            String
-  proxyShipId      String?  @map("proxy_ship_id")
+  isRepeatable             Boolean? @map("is_repeatable")
+  state                    String
+  proxyShipId              String?  @map("proxy_ship_id")
   /// Kept only from the proxy ship's commission until the gateway crews it.
-  secret           String?
-  crewToken        String?  @map("crew_token")
-  requestId        String   @map("request_id")
-  requestHash      String   @map("request_hash")
-  approvedAt       DateTime @map("approved_at") @db.Timestamptz(3)
+  secret                   String?
+  crewToken                String?  @map("crew_token")
+  requestId                String   @map("request_id")
+  requestHash              String   @map("request_hash")
+  approvedAt               DateTime @map("approved_at") @db.Timestamptz(3)
 
   @@id([fleetId, name])
   @@unique([fleetId, clientId])
@@ -193,20 +197,20 @@ model AuthorizationCode {
 
 /// The access and refresh tokens the gateway issued, kept only as hashes, a pair per row.
 model IssuedToken {
-  accessHash       String   @id @map("access_hash")
+  accessHash       String    @id @map("access_hash")
   /// None for a client signed in by client credentials, which asks again.
-  refreshHash      String?  @unique @map("refresh_hash")
-  familyId         String   @map("family_id")
+  refreshHash      String?   @unique @map("refresh_hash")
+  familyId         String    @map("family_id")
   /// None for a token issued from client credentials.
-  codeHash         String?  @map("code_hash")
-  fleetId          String   @map("fleet_id")
-  clientId         String   @map("client_id")
+  codeHash         String?   @map("code_hash")
+  fleetId          String    @map("fleet_id")
+  clientId         String    @map("client_id")
   resource         String
   scope            String?
   /// The party it stands for, or else the account grant (decision 0054): exactly one of the two.
   party            String?
-  grantId          String?  @map("grant_id")
-  accessExpiresAt  DateTime @map("access_expires_at") @db.Timestamptz(3)
+  grantId          String?   @map("grant_id")
+  accessExpiresAt  DateTime  @map("access_expires_at") @db.Timestamptz(3)
   refreshExpiresAt DateTime? @map("refresh_expires_at") @db.Timestamptz(3)
   state            String
 
@@ -218,15 +222,15 @@ model IssuedToken {
 
 /// Outside MCP clients' calls: the message each proxy ship sent, and the handle its client reads it by.
 model ClientCall {
-  fleetId    String   @map("fleet_id")
-  messageId  String   @map("message_id")
-  party      String
-  handle     String
-  shipId     String   @map("ship_id")
+  fleetId           String    @map("fleet_id")
+  messageId         String    @map("message_id")
+  party             String
+  handle            String
+  shipId            String    @map("ship_id")
   /// None when an A2A message matched no capability, and then its first reply answers it (decision 0060).
   capability        String?
-  outputContentType String?  @map("output_content_type")
-  sentAt            DateTime @map("sent_at")
+  outputContentType String?   @map("output_content_type")
+  sentAt            DateTime  @map("sent_at")
   deadlineAt        DateTime? @map("deadline_at")
   /// Where its delivery stands, as the gateway last read it from the fleet's sentMessage.
   deliveryState     String?   @map("delivery_state")
@@ -256,17 +260,17 @@ model A2aTask {
 
 /// A push config of an outside A2A client's task (slice 4): its webhook, and the vault of its token and authentication, never answered back; with the task as last noticed.
 model A2aPushConfig {
-  fleetId        String   @map("fleet_id")
-  taskId         String   @map("task_id")
+  fleetId        String    @map("fleet_id")
+  taskId         String    @map("task_id")
   id             String
   party          String
   url            String
   token          String?
   /// The scheme and credentials the webhook is called with, as JSON.
   authentication Json?
-  createdAt      DateTime @map("created_at")
-  noticedMark    String   @map("noticed_mark")
-  isFollowing    Boolean  @map("is_following")
+  createdAt      DateTime  @map("created_at")
+  noticedMark    String    @map("noticed_mark")
+  isFollowing    Boolean   @map("is_following")
   pushes         A2aPush[]
 
   @@id([fleetId, taskId, id])
@@ -295,15 +299,15 @@ model A2aPush {
 
 /// The replies naming an outside client's call, each kept once per delivery before it is acknowledged.
 model ClientCallReply {
-  deliveryId     String   @id @map("delivery_id")
-  fleetId        String   @map("fleet_id")
-  callMessageId  String   @map("call_message_id")
-  messageId      String   @map("message_id")
-  contentType    String   @map("content_type")
-  payload        String
-  receivedAt     DateTime @map("received_at")
+  deliveryId    String   @id @map("delivery_id")
+  fleetId       String   @map("fleet_id")
+  callMessageId String   @map("call_message_id")
+  messageId     String   @map("message_id")
+  contentType   String   @map("content_type")
+  payload       String
+  receivedAt    DateTime @map("received_at")
   /// The order kept in, as receivedAt may tie.
-  sequence       Int      @default(autoincrement())
+  sequence      Int      @default(autoincrement())
 
   @@index([fleetId, callMessageId])
   @@map("client_call_replies")
@@ -377,25 +381,25 @@ model OpenedDelivery {
 /// A pending request for an outside party (decision 0056): an outside MCP client's authorize request, or a person's request for an outside MCP server, kept 7 days.
 /// One open request per client or server in a fleet (partial unique index pending_requests_one_open, in its migration).
 model PendingRequest {
-  fleetId    String    @map("fleet_id")
-  requestId  String    @map("request_id")
+  fleetId        String    @map("fleet_id")
+  requestId      String    @map("request_id")
   /// client or server.
-  kind       String
+  kind           String
   /// What one open request is unique by: client:<client id> or server:<url>.
-  subjectKey String    @map("subject_key")
-  clientId   String?   @map("client_id")
-  clientName String?   @map("client_name")
-  url        String?
+  subjectKey     String    @map("subject_key")
+  clientId       String?   @map("client_id")
+  clientName     String?   @map("client_name")
+  url            String?
   /// The accounts that asked, each with its person ship, as JSON.
-  requesters Json
-  askedAt    DateTime  @map("asked_at") @db.Timestamptz(3)
-  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  requesters     Json
+  askedAt        DateTime  @map("asked_at") @db.Timestamptz(3)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(3)
   /// pending, approving, approved, denied or expired.
-  state      String
-  decidedBy  Json?     @map("decided_by")
-  decidedAt  DateTime? @map("decided_at") @db.Timestamptz(3)
+  state          String
+  decidedBy      Json?     @map("decided_by")
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(3)
   /// The requesters told the request ended, by account id, as JSON, so their next try asks anew.
-  toldAccountIds Json  @default("[]") @map("told_account_ids")
+  toldAccountIds Json      @default("[]") @map("told_account_ids")
 
   @@id([fleetId, requestId])
   @@index([fleetId, askedAt], map: "pending_requests_fleet_asked")
@@ -426,13 +430,13 @@ model RequestOutcomeNotice {
 /// kept with its uuid before it is first sent, so a question sent again is the
 /// same question; withdrawn once the request ended.
 model OwnerQuestion {
-  fleetId      String    @map("fleet_id")
-  requestId    String    @map("request_id")
-  questionId   String    @map("question_id")
+  fleetId     String    @map("fleet_id")
+  requestId   String    @map("request_id")
+  questionId  String    @map("question_id")
   /// The ship asked; null before it is asked, or when the fleet refused it.
-  askedShipId  String?   @map("asked_ship_id")
-  askedAt      DateTime? @map("asked_at") @db.Timestamptz(3)
-  withdrawnAt  DateTime? @map("withdrawn_at") @db.Timestamptz(3)
+  askedShipId String?   @map("asked_ship_id")
+  askedAt     DateTime? @map("asked_at") @db.Timestamptz(3)
+  withdrawnAt DateTime? @map("withdrawn_at") @db.Timestamptz(3)
 
   @@id([fleetId, requestId])
   @@map("owner_questions")

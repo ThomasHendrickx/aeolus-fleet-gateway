@@ -18,6 +18,25 @@ export interface ScopeRequirements {
 /** A party with nothing required: every call needs only to reach it. */
 export const NO_SCOPE_REQUIREMENTS: ScopeRequirements = { version: 0, party: [], tools: new Map() };
 
+/** A change to a party's requirements: its own set when given, and each tool's set given, an empty one dropping the tool's. */
+export interface ScopeRequirementsChange {
+  readonly party?: readonly string[];
+  readonly tools: ReadonlyMap<string, readonly string[]>;
+}
+
+/** The requirements after a change, at the next version. */
+export function changedRequirements(kept: ScopeRequirements, change: ScopeRequirementsChange): ScopeRequirements {
+  const tools = new Map(kept.tools);
+  for (const [tool, scopes] of change.tools) {
+    if (scopes.length === 0) {
+      tools.delete(tool);
+    } else {
+      tools.set(tool, scopes);
+    }
+  }
+  return { version: kept.version + 1, party: change.party ?? kept.party, tools };
+}
+
 /** Every scope a call needs: the party's set and the tool's own, each once; a party called as a whole (no tool) needs its set alone. */
 export function scopesNeeded(requirements: ScopeRequirements, tool: string | null): string[] {
   const own = tool === null ? [] : (requirements.tools.get(tool) ?? []);

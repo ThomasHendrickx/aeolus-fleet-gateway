@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { lackingScopesMessage, NO_SCOPE_REQUIREMENTS, scopesLacking, scopesNeeded, type ScopeRequirements } from './scope-requirements.js';
+import { changedRequirements, lackingScopesMessage, NO_SCOPE_REQUIREMENTS, scopesLacking, scopesNeeded, type ScopeRequirements } from './scope-requirements.js';
 
 const CRM: ScopeRequirements = {
   version: 3,
@@ -53,5 +53,30 @@ describe('a refusal names what is missing (gateway scopes P2)', () => {
     expect(lackingScopesMessage({ needing: 'delete_lead', lacking: ['crm:write-leads', 'crm:admin'], shipName: 'lead-scout' })).toBe(
       'delete_lead needs crm:write-leads and crm:admin, which lead-scout does not hold',
     );
+  });
+});
+
+describe('an approver changes a party\'s requirements, set by set', () => {
+  it("replaces the party's set and each tool's set given, leaving every other tool's, at the next version", () => {
+    expect(changedRequirements(CRM, { party: ['crm:read-leads'], tools: new Map([['update_lead', ['crm:admin']]]) })).toEqual({
+      version: 4,
+      party: ['crm:read-leads'],
+      tools: new Map([
+        ['update_lead', ['crm:admin']],
+        ['delete_lead', ['crm:write-leads', 'crm:admin']],
+        ['read_lead', ['crm:use']],
+      ]),
+    });
+  });
+
+  it("keeps the party's set when none is given, and drops a tool's set changed to nothing", () => {
+    expect(changedRequirements(CRM, { tools: new Map([['read_lead', []]]) })).toEqual({
+      version: 4,
+      party: ['crm:use'],
+      tools: new Map([
+        ['update_lead', ['crm:write-leads']],
+        ['delete_lead', ['crm:write-leads', 'crm:admin']],
+      ]),
+    });
   });
 });
