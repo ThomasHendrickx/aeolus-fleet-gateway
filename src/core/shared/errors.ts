@@ -58,7 +58,9 @@ export type DomainErrorKind =
   | 'CHANNEL_NOT_OFFERED'
   | 'INVALID_SUBSCRIPTION'
   | 'NO_SUCH_MEETING'
-  | 'MIC_REFUSED';
+  | 'MIC_REFUSED'
+  | 'SCOPE_NOT_LISTED'
+  | 'CONFLICT';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
 export interface DomainError<K extends DomainErrorKind = DomainErrorKind> {
