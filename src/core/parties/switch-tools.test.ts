@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeMcpServers, fakeStatementDoor, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
-import { OWNER_SHIP_ID, PROXY_SHIP_ID, memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
+import { OWNER_SHIP_ID, PROXY_SHIP_ID, fakeProxyShipsAsActor, memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
 import type { Actor } from '../actors/authenticate-actor.js';
+import { createCredentialOf } from '../actors/credential-of.js';
 import { createStateParty } from '../mcp-out/state-party.js';
+import { err } from '../shared/result.js';
 import type { McpServerParty } from './party.js';
 import { createSwitchTools } from './switch-tools.js';
 
@@ -30,7 +32,8 @@ const CRM: McpServerParty = {
 let parties: ReturnType<typeof memoryPartyStore>;
 let servers: ReturnType<typeof fakeMcpServers>;
 let door: ReturnType<typeof fakeStatementDoor>;
-let switchTools: ReturnType<typeof createSwitchTools>;
+let build: (fleet: ReturnType<typeof fakeProxyShipsAsActor>) => ReturnType<typeof createSwitchTools>;
+let switchTools: (input: Omit<Parameters<ReturnType<typeof createSwitchTools>>[0], 'as'>) => ReturnType<ReturnType<typeof createSwitchTools>>;
 
 beforeEach(async () => {
   parties = memoryPartyStore();
@@ -38,7 +41,11 @@ beforeEach(async () => {
   servers = fakeMcpServers();
   door = fakeStatementDoor();
   const stateParty = createStateParty({ parties, servers, door, marks: memoryToolMarks(), requirements: memoryScopeRequirements(), timing: { waitMs: 10_000, deadlineMs: 300_000 } });
-  switchTools = createSwitchTools({ parties, servers, stateParty });
+  const connections = memoryConnectionStore();
+  await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-25T09:00:00.000Z') });
+  build = (fleet) => createSwitchTools({ parties, servers, stateParty, connections, fleet, credentialOf: createCredentialOf({ connections }) });
+  const fleet = fakeProxyShipsAsActor();
+  switchTools = (input) => build(fleet)({ ...input, as: {} });
 });
 
 const stated = () => door.stated.at(-1)?.statement.capabilities.map((capability) => capability.name);
@@ -83,6 +90,21 @@ describe("an approver switches tools of an outside MCP server on or off (aeolus-
 
   it('refuses an actor without gateway:approve, switching nothing', async () => {
     await expect(switchTools({ actor: { ...APPROVER, scopes: ['fleet:read', 'fleet:manage'] }, name: 'crm', tools: ['create_deal'], isOn: false })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_AN_APPROVER' } });
+    await expect(switchesOf('crm')).resolves.toEqual(CRM.toolSwitches);
+  });
+
+  it("refuses an approver outside the proxy ship's manage reach, switching nothing", async () => {
+    const switched = await build(fakeProxyShipsAsActor(err({ code: 'FORBIDDEN', message: 'You do not manage crm' })))({ actor: APPROVER, as: {}, name: 'crm', tools: ['create_deal'], isOn: false });
+
+    expect(switched).toEqual({ isOk: false, error: { kind: 'NOT_REACHABLE', message: 'You do not manage crm' } });
+    await expect(switchesOf('crm')).resolves.toEqual(CRM.toolSwitches);
+    expect(door.stated).toEqual([]);
+  });
+
+  it('refuses while the fleet does not answer whether the approver manages the proxy ship, switching nothing', async () => {
+    const switched = await build(fakeProxyShipsAsActor(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })))({ actor: APPROVER, as: {}, name: 'crm', tools: ['create_deal'], isOn: false });
+
+    expect(switched).toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
     await expect(switchesOf('crm')).resolves.toEqual(CRM.toolSwitches);
   });
 
