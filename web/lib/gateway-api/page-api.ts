@@ -9,7 +9,7 @@ import { redirect } from 'next/navigation';
 
 import type { GatewayRouter } from '../../../src/adapters/trpc/router.js';
 import { gatewayApi, type GatewayApi } from './gateway-api';
-import { FLEET_PARAMETER, pageAccountOf, type InView, type InViewRefusal } from './page-account';
+import { FLEET_PARAMETER, inFleet, pageAccountOf, type InView, type InViewRefusal } from './page-account';
 
 /** Set by the gateway's server as it starts the web app (src/adapters/web/next-web-app.ts). */
 const API_URL_VARIABLE = 'AEOLUS_GATEWAY_API_URL';
@@ -24,6 +24,12 @@ export interface SignedInPage {
   fleetId: string;
   scopes: readonly string[];
 }
+
+/** The page that says the gateway is off for the account's fleet. */
+export const GATEWAY_OFF_PATH = '/gateway-off';
+
+/** Where the page that says the gateway is off sends an account once it may open the gateway. */
+const OVERVIEW_PATH = '/overview';
 
 /** The gateway's own address, where the API answers. */
 export function apiUrl(): string {
@@ -60,9 +66,23 @@ function isInViewRefusal(code: string | undefined): code is InViewRefusal {
   return code === 'UNAUTHORIZED' || code === 'NOT_FOUND';
 }
 
+/** The API's answer to account.inView for the API given, the refusals a page answers included. */
+async function inViewOf(api: GatewayApi): Promise<{ inView: InView } | { refusal: InViewRefusal }> {
+  try {
+    return { inView: await api.account.inView.query() };
+  } catch (error) {
+    const code = refusalCodeOf(error);
+    if (!isInViewRefusal(code)) {
+      throw error;
+    }
+    return { refusal: code };
+  }
+}
+
 /**
  * The page as the account signed in, in the fleet its address names; or
- * the browser is sent where it may go. A gateway that signs no one in to
+ * the browser is sent where it may go, the page that says the gateway is
+ * off for the account's fleet included. A gateway that signs no one in to
  * its pages answers noSignIn.
  */
 export async function signedInPage(page: { path: string; searchParams: SearchParams }): Promise<SignedInPage | { kind: 'noSignIn' }> {
@@ -75,24 +95,34 @@ export async function signedInPage(page: { path: string; searchParams: SearchPar
   const fleet = query.get(FLEET_PARAMETER) ?? undefined;
   const asked = query.size === 0 ? page.path : `${page.path}?${query.toString()}`;
   const api = await requestApi(fleet);
-  let read: { inView: InView } | { refusal: InViewRefusal };
-  try {
-    read = { inView: await api.account.inView.query() };
-  } catch (error) {
-    const code = refusalCodeOf(error);
-    if (!isInViewRefusal(code)) {
-      throw error;
-    }
-    read = { refusal: code };
-  }
-  const account = pageAccountOf(read, asked);
+  const account = pageAccountOf(await inViewOf(api), asked);
   switch (account.kind) {
     case 'goTo':
       return redirect(account.location);
+    case 'off':
+      return redirect(GATEWAY_OFF_PATH);
     case 'noSignIn':
       return account;
     case 'signedIn':
       return { kind: 'signedIn', api, fleetId: account.fleetId, scopes: account.scopes };
+  }
+}
+
+/**
+ * The page that says the gateway is off for the account's fleet: its name
+ * and the way back to its account; once the account may open the gateway,
+ * the browser goes to the Overview.
+ */
+export async function gatewayOffPage(): Promise<{ kind: 'off'; fleetName: string; accountUrl: string } | { kind: 'noSignIn' }> {
+  const account = pageAccountOf(await inViewOf(await requestApi(undefined)), OVERVIEW_PATH);
+  switch (account.kind) {
+    case 'goTo':
+      return redirect(account.location);
+    case 'signedIn':
+      return redirect(inFleet(OVERVIEW_PATH, account.fleetId));
+    case 'off':
+    case 'noSignIn':
+      return account;
   }
 }
 
