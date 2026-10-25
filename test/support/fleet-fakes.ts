@@ -101,3 +101,28 @@ export function memoryConnectionStore(): ConnectionStore & { held: Map<FleetId, 
     },
   };
 }
+
+/**
+ * The fleet's ships as the gateway's ship reads them (fleet.ship), each read
+ * on its own behalf: a ship within its own read reach (decision 0034). Its
+ * scopes change as a grant or revoke changes them, at the next read.
+ */
+export function fakeShipReads() {
+  const state = {
+    ships: new Map<ShipId, { name: string; scopes: string[] }>(),
+    isAnswering: true,
+    /** Each read: by which crew token, of which ship, on whose behalf. */
+    reads: new Array<{ crewToken: string; shipId: ShipId; onBehalfOf: ShipId | undefined }>(),
+  };
+  const door: Pick<FleetDoor, 'getShip'> = {
+    getShip: (crewToken, { shipId, onBehalfOf }) => {
+      state.reads.push({ crewToken, shipId, onBehalfOf });
+      if (!state.isAnswering) {
+        return Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
+      }
+      const ship = state.ships.get(shipId);
+      return Promise.resolve(ship === undefined ? err({ code: 'NOT_FOUND', message: 'No such ship' }) : ok({ status: 'crewed' as const, name: ship.name, scopes: [...ship.scopes] }));
+    },
+  };
+  return { state, door };
+}
