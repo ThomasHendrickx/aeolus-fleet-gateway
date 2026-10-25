@@ -28,7 +28,12 @@ export function ScopePicker({ label, listed, picked, onPick, isDisabled = false,
       value={value}
       disabled={isDisabled}
       isItemEqualToValue={(item, chosen) => item.value === chosen.value}
-      onValueChange={(next: ScopeItem[]) => {
+      onValueChange={(next: ScopeItem[], details) => {
+        // Escape closes the list; it never takes back what was picked.
+        if (details.reason === 'escape-key') {
+          details.cancel();
+          return;
+        }
         onPick(next.map((item) => item.value));
       }}
       filter={(item: ScopeItem, query) => contains(item.label, query) || contains(item.description, query)}
