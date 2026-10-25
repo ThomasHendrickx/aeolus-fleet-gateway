@@ -262,6 +262,20 @@ describe('waking a person', () => {
     expect({ woken, endedAttempts, handOvers: ship.handOvers }).toEqual({ woken: ok({ kind: 'settled' }), endedAttempts: [{ channel: 'email', reason: 'pagasae answered 404: unknown_person_ship' }], handOvers: [] });
   });
 
+  it('does not retry a channel that refused for good when another due channel was unavailable', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email', { isRefusing: true });
+    const push = aChannel('web-push', { isFailing: true });
+    let emailAsked = 0;
+    const countingEmail: WakeChannel = { ...email.channel, wake: (asked) => ((emailAsked += 1), email.channel.wake(asked)) };
+    const wakePerson = waking({ ship, channels: [countingEmail, push.channel] });
+
+    const first = await wakePerson(SHIP, CREW_TOKEN);
+    const retry = await wakePerson(SHIP, CREW_TOKEN);
+
+    expect({ first, retry, emailAsked }).toEqual({ first: ok({ kind: 'failed' }), retry: ok({ kind: 'failed' }), emailAsked: 1 });
+  });
+
   it('says what the fleet refused, waking no one', async () => {
     const ship = aShip([aDelivery(1)], { pushReceive: { code: 'LEASE_ENDED', message: 'The lease ended' } });
     const email = aChannel('email');
