@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { partyScopesSetMessage, scopesSetMessage, statedMessage, suggestionsSetMessage, toolsSwitchedMessage } from './table-messages';
+import { agentScopesSetMessage, partyScopesSetMessage, scopesSetMessage, statedMessage, suggestionsSetMessage, toolsSwitchedMessage } from './table-messages';
 
 describe('what the tools table says once a change is kept (gateway scopes 4.3)', () => {
   it('says a scope set on the selected tools, as the design words it', () => {
@@ -41,5 +41,13 @@ describe('what the tools table says once a change is kept (gateway scopes 4.3)',
 
   it("says why the fleet sees a change of scopes only at the proxy ship's next statement", () => {
     expect(statedMessage('crm:admin removed from 3 tools', 'The fleet did not answer')).toBe("crm:admin removed from 3 tools; the fleet sees it at the proxy ship's next statement: The fleet did not answer");
+  });
+
+  it('says what every message to an A2A agent needs now, as its messages name no tool', () => {
+    expect(agentScopesSetMessage({ party: 'quotes', scopes: ['finance:read'] })).toBe('Every message to quotes needs finance:read');
+  });
+
+  it('says every message to an A2A agent needs nothing once its scopes are cleared', () => {
+    expect(agentScopesSetMessage({ party: 'quotes', scopes: [] })).toBe('Every message to quotes needs nothing beyond reaching it');
   });
 });
