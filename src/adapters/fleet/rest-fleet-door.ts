@@ -262,7 +262,12 @@ export function createRestFleetDoor(
     },
     sentMessage: async (crewToken, messageId) => {
       const sent = await call({ path: '/ship/sentMessage', method: 'POST', crewToken, body: { messageId }, answers: sentMessageOutputSchema });
-      return sent.isOk ? ok({ state: sent.value.delivery.state, since: new Date(sent.value.delivery.since) }) : sent;
+      if (!sent.isOk) {
+        return sent;
+      }
+      // The gateway sends each call to one ship, so its message has one delivery.
+      const [delivery] = sent.value.deliveries;
+      return delivery === undefined ? err({ code: 'UNAVAILABLE', message: 'The fleet answered no delivery for the message' }) : ok({ state: delivery.state, since: new Date(delivery.since) });
     },
     pushReceive: async (crewToken, { max, signal }) => {
       const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max }, answers: pushReceiveOutputSchema, signal });
