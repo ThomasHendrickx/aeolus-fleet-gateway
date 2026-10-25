@@ -66,6 +66,15 @@ async function aConnectedClient(tool: string): Promise<{ mcp: Client; name: stri
 }
 
 describe('an outside MCP client calls an outside MCP server through the fleet', () => {
+  it('connects to a server named Aeolus', async () => {
+    await aCrewedCrmParty();
+    const { mcp } = await aConnectedClient('list_deals');
+    const serverName = mcp.getServerVersion()?.name;
+    await mcp.close();
+
+    expect(serverName).toBe('Aeolus');
+  });
+
   it("is answered the server's tool result, through both proxy ships", async () => {
     await aCrewedCrmParty();
     const { mcp, name } = await aConnectedClient('list_deals');
