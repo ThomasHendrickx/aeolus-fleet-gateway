@@ -152,14 +152,17 @@ export function fakeProxyShipsAsActor(answer: Result<undefined, FleetRefusal> = 
   retired: { as: ActorCredential; shipId: ShipId }[];
   owned: { as: ActorCredential; shipId: ShipId; ownerShipId: ShipId }[];
   granted: { as: ActorCredential; shipId: ShipId; grant: readonly string[]; revoke: readonly string[] }[];
+  checked: { as: ActorCredential; shipId: ShipId }[];
 } {
   const retired: { as: ActorCredential; shipId: ShipId }[] = [];
   const owned: { as: ActorCredential; shipId: ShipId; ownerShipId: ShipId }[] = [];
   const granted: { as: ActorCredential; shipId: ShipId; grant: readonly string[]; revoke: readonly string[] }[] = [];
+  const checked: { as: ActorCredential; shipId: ShipId }[] = [];
   return {
     retired,
     owned,
     granted,
+    checked,
     retire: (as, { shipId }) => {
       retired.push({ as, shipId });
       return Promise.resolve(answer);
@@ -171,6 +174,10 @@ export function fakeProxyShipsAsActor(answer: Result<undefined, FleetRefusal> = 
     grantScopes: (as, { shipId, grant, revoke }) => {
       granted.push({ as, shipId, grant, revoke });
       return Promise.resolve(answer.isOk ? ok({ scopes: ['messages:send', 'messages:receive', ...grant] }) : answer);
+    },
+    checkManage: (as, { shipId }) => {
+      checked.push({ as, shipId });
+      return Promise.resolve(answer);
     },
   };
 }

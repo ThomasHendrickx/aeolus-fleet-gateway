@@ -3,15 +3,19 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { CARD_URL, anAgentParty, answeredCard, fakeAgentCards } from '../../../test/support/a2a-agent-fakes.js';
 import { fakeListedScopes, FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeMcpServers, fakeStatementDoor, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
-import { memoryPartyStore, memoryScopeRequirements, OWNER_SHIP_ID, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
+import { fakeProxyShipsAsActor, memoryPartyStore, memoryScopeRequirements, OWNER_SHIP_ID, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
 import type { Actor } from '../actors/authenticate-actor.js';
+import { createCredentialOf, type ActorCredential } from '../actors/credential-of.js';
 import { createStateA2aAgent } from '../a2a-out/state-a2a-agent.js';
 import { createStateParty } from '../mcp-out/state-party.js';
+import { err } from '../shared/result.js';
 import type { McpServerParty } from './party.js';
 import { createSetScopeRequirements } from './set-scope-requirements.js';
 
 const APPROVER: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-1', personShipId: OWNER_SHIP_ID, accountToken: 'account-token', scopes: ['gateway:approve', 'fleet:read'] };
 const GATEWAY_CREW = 'aeolus_ct_v1_gateway';
+/** What the approver's page sent: an account signed in with the shared sign-in sends neither cookie nor crew token. */
+const SENT: ActorCredential = {};
 
 const CRM: McpServerParty = {
   fleetId: FLEET_ID,
@@ -35,7 +39,9 @@ let requirements: ReturnType<typeof memoryScopeRequirements>;
 let listed: ReturnType<typeof fakeListedScopes>;
 let connections: ReturnType<typeof memoryConnectionStore>;
 let door: ReturnType<typeof fakeStatementDoor>;
-let setRequirements: ReturnType<typeof createSetScopeRequirements>;
+let fleet: ReturnType<typeof fakeProxyShipsAsActor>;
+let build: (fleet: ReturnType<typeof fakeProxyShipsAsActor>) => ReturnType<typeof createSetScopeRequirements>;
+let setRequirements: (input: Omit<Parameters<ReturnType<typeof createSetScopeRequirements>>[0], 'as'>) => ReturnType<ReturnType<typeof createSetScopeRequirements>>;
 
 beforeEach(async () => {
   parties = memoryPartyStore();
@@ -49,7 +55,60 @@ beforeEach(async () => {
   const timing = { waitMs: 10_000, deadlineMs: 300_000 };
   const stateParty = createStateParty({ parties, servers: fakeMcpServers(), door, marks: memoryToolMarks(), requirements, timing });
   const stateA2aAgent = createStateA2aAgent({ parties, cards: fakeAgentCards({ [CARD_URL]: answeredCard() }), door, requirements, timing });
-  setRequirements = createSetScopeRequirements({ parties, requirements, connections, door: listed.door, stateParty, stateA2aAgent });
+  const credentialOf = createCredentialOf({ connections });
+  build = (asActor) => createSetScopeRequirements({ parties, requirements, connections, door: listed.door, stateParty, stateA2aAgent, fleet: asActor, credentialOf });
+  fleet = fakeProxyShipsAsActor();
+  setRequirements = (input) => build(fleet)({ ...input, as: SENT });
+});
+
+describe("an approver's manage reach on the proxy ship (gateway scopes 4.2, A2)", () => {
+  const OUT_OF_REACH = { code: 'FORBIDDEN', message: 'You do not manage crm' };
+
+  it('asks the fleet as the approver whether it manages the proxy ship', async () => {
+    await setRequirements({ actor: APPROVER, name: 'crm', version: 0, party: ['crm:read-leads'], tools: new Map() });
+
+    expect(fleet.checked).toEqual([{ as: { crewToken: GATEWAY_CREW, accountToken: 'account-token' }, shipId: PROXY_SHIP_ID }]);
+  });
+
+  it("refuses an approver outside the MCP server's manage reach, changing nothing", async () => {
+    const set = await build(fakeProxyShipsAsActor(err(OUT_OF_REACH)))({ actor: APPROVER, as: SENT, name: 'crm', version: 0, party: ['crm:read-leads'], tools: new Map([['update_lead', ['crm:write-leads']]]) });
+
+    expect(set).toEqual({ isOk: false, error: { kind: 'NOT_REACHABLE', message: 'You do not manage crm' } });
+    await expect(requirements.find(FLEET_ID, 'crm')).resolves.toMatchObject({ version: 0, party: [] });
+    expect(door.stated).toEqual([]);
+  });
+
+  it("refuses an approver outside the A2A agent's manage reach, changing nothing", async () => {
+    const set = await build(fakeProxyShipsAsActor(err(OUT_OF_REACH)))({ actor: APPROVER, as: SENT, name: 'supplier', version: 0, party: ['crm:read-leads'], tools: new Map() });
+
+    expect(set).toMatchObject({ isOk: false, error: { kind: 'NOT_REACHABLE' } });
+    await expect(requirements.find(FLEET_ID, 'supplier')).resolves.toMatchObject({ version: 0, party: [] });
+  });
+
+  it('refuses clearing the requirements outside manage reach too', async () => {
+    await setRequirements({ actor: APPROVER, name: 'crm', version: 0, party: ['crm:read-leads'], tools: new Map() });
+
+    const cleared = await build(fakeProxyShipsAsActor(err(OUT_OF_REACH)))({ actor: APPROVER, as: SENT, name: 'crm', version: 1, party: [], tools: new Map() });
+
+    expect(cleared).toMatchObject({ isOk: false, error: { kind: 'NOT_REACHABLE' } });
+    await expect(requirements.find(FLEET_ID, 'crm')).resolves.toMatchObject({ version: 1, party: ['crm:read-leads'] });
+  });
+
+  it('refuses while the fleet does not answer whether the approver manages the proxy ship, changing nothing', async () => {
+    const set = await build(fakeProxyShipsAsActor(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })))({ actor: APPROVER, as: SENT, name: 'crm', version: 0, party: ['crm:read-leads'], tools: new Map() });
+
+    expect(set).toEqual({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE', message: 'The fleet did not say whether you manage crm: The fleet did not answer' } });
+    await expect(requirements.find(FLEET_ID, 'crm')).resolves.toMatchObject({ version: 0 });
+  });
+
+  it('refuses a party whose proxy ship is not commissioned yet: no reach can be checked', async () => {
+    await parties.save({ ...CRM, state: 'commissioning', proxyShipId: null });
+
+    await expect(setRequirements({ actor: APPROVER, name: 'crm', version: 0, party: ['crm:read-leads'], tools: new Map() })).resolves.toEqual({
+      isOk: false,
+      error: { kind: 'PARTY_NOT_COMMISSIONED', message: "crm's proxy ship is not commissioned yet" },
+    });
+  });
 });
 
 describe('an approver sets which scopes a calling ship needs for a party and its tools (gateway scopes 4.2, A2)', () => {
