@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { shownTools, tableToolsOf, type TableTool } from './table-tools';
+import { keptToolsOf, shownTools, tableToolsOf, type TableTool } from './table-tools';
 
 const REQUIREMENTS = { version: 3, party: ['crm:use'], tools: [{ tool: 'update_lead', scopes: ['crm:write-leads'] }, { tool: 'archived_tool', scopes: ['crm:admin'] }] };
 
@@ -59,5 +59,20 @@ describe('the tools shown by the filters (gateway scopes 4.3)', () => {
 
   it('combines the name and the state', () => {
     expect(namesOf(shownTools(tools, { name: 'delete', state: 'new', partyScopes: [] }))).toEqual(['delete_note']);
+  });
+});
+
+describe('the rows once a change is kept, before the page reads itself again (gateway scopes 4.3)', () => {
+  const tools = [aTool({ name: 'search_leads', scopes: ['crm:read-leads'] }), aTool({ name: 'delete_lead' })];
+
+  it("shows each kept tool's scopes and switch at once, every other row as read", () => {
+    expect(keptToolsOf(tools, { scopes: new Map([['delete_lead', ['crm:admin']]]), switches: new Map([['delete_lead', false]]) })).toEqual([
+      aTool({ name: 'search_leads', scopes: ['crm:read-leads'] }),
+      aTool({ name: 'delete_lead', isOn: false, scopes: ['crm:admin'] }),
+    ]);
+  });
+
+  it('leaves a switch unknown while the server does not answer', () => {
+    expect(keptToolsOf([aTool({ name: 'ping', isOn: null })], { scopes: new Map([['ping', ['crm:use']]]), switches: new Map() })).toEqual([aTool({ name: 'ping', isOn: null, scopes: ['crm:use'] })]);
   });
 });
