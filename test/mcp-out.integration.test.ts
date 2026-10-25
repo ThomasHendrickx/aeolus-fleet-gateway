@@ -282,6 +282,21 @@ describe('an approver sets which scopes a calling ship needs for a tool of an ou
     expect(crm.calls.get('list_deals')).toBe(1);
   });
 
+  it('states what each tool needs at once, which a ship reads in discovery before it calls (P1)', async () => {
+    const address = await approvedWithScopes();
+
+    const set = await setRequirements(address, { version: 0, tools: [{ tool: 'create_deal', scopes: ['crm:write-leads'] }] });
+
+    expect(z.object({ result: z.object({ data: z.object({ statementRefusal: z.string().nullable() }) }) }).parse(await set.json()).result.data.statementRefusal).toBeNull();
+    const found = await fetch(`${fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${caller.crewToken}` } });
+    const statement = discoverOutputSchema.parse(await found.json()).ships.find(({ id }) => id === proxyShipId)?.statement;
+    const capabilities = statement?.by === 'crew' ? statement.capabilities : [];
+    expect(capabilities.filter(({ name }) => ['create_deal', 'list_deals'].includes(name)).map(({ name, scopes }) => ({ name, scopes }))).toEqual([
+      { name: 'list_deals', scopes: undefined },
+      { name: 'create_deal', scopes: ['crm:write-leads'] },
+    ]);
+  });
+
   it('refuses a scope the fleet does not list, by name, keeping nothing', async () => {
     const address = await approvedWithScopes();
 

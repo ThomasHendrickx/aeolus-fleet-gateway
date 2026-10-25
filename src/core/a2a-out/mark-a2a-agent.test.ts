@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { CARD_URL, anAgentParty, answeredCard, fakeAgentCards } from '../../../test/support/a2a-agent-fakes.js';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeStatementDoor } from '../../../test/support/mcp-out-fakes.js';
-import { OWNER_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { OWNER_SHIP_ID, memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import { err } from '../shared/result.js';
 import { createMarkA2aAgent } from './mark-a2a-agent.js';
@@ -21,7 +21,7 @@ beforeEach(async () => {
   await parties.save(anAgentParty());
   cards = fakeAgentCards({ [CARD_URL]: answeredCard() });
   door = fakeStatementDoor();
-  mark = createMarkA2aAgent({ parties, stateA2aAgent: createStateA2aAgent({ parties, cards, door, timing: { waitMs: 10_000, deadlineMs: 300_000 } }) });
+  mark = createMarkA2aAgent({ parties, stateA2aAgent: createStateA2aAgent({ parties, cards, door, requirements: memoryScopeRequirements(), timing: { waitMs: 10_000, deadlineMs: 300_000 } }) });
 });
 
 describe('an approver marks an outside A2A agent not repeatable, or repeatable again (A9)', () => {

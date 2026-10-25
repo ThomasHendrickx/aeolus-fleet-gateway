@@ -1,5 +1,7 @@
+import type { StateA2aAgent } from '../a2a-out/state-a2a-agent.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import type { ConnectionStore, FleetDoor } from '../connection/ports.js';
+import type { StateParty } from '../mcp-out/state-party.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import { APPROVING_SCOPE } from './approver.js';
@@ -15,7 +17,9 @@ export type SetScopeRequirements = (input: {
   version: number;
   party?: readonly string[];
   tools: ReadonlyMap<string, readonly string[]>;
-}) => Promise<Result<ScopeRequirements, SetScopeRequirementsRefusal>>;
+}) => Promise<
+  Result<{ requirements: ScopeRequirements; /** Why the proxy ship's statement waits for its next one; none when the fleet sees the change now. */ statementRefusal: string | null }, SetScopeRequirementsRefusal>
+>;
 
 const unique = (scopes: readonly string[]): string[] => [...new Set(scopes)];
 
@@ -25,13 +29,18 @@ const unique = (scopes: readonly string[]): string[] => [...new Set(scopes)];
  * any tool's, for an outside A2A agent its set as a whole. Every scope must
  * be one the fleet lists now, core's, a plugin's or the fleet's own: any may
  * be required (0016). The change is made only on the version the approver
- * read, so two approvers never overwrite each other unseen.
+ * read, so two approvers never overwrite each other unseen. The change is
+ * kept first, so the check holds at once, then the proxy ship is stated
+ * anew with what each capability needs (P1); while it cannot be, the
+ * statement waits for its next one.
  */
 export function createSetScopeRequirements(deps: {
   parties: PartyStore;
   requirements: ScopeRequirementsStore;
   connections: Pick<ConnectionStore, 'find'>;
   door: Pick<FleetDoor, 'listScopes'>;
+  stateParty: StateParty;
+  stateA2aAgent: StateA2aAgent;
 }): SetScopeRequirements {
   return async ({ actor, name, version, party, tools }) => {
     if (!actor.scopes.includes(APPROVING_SCOPE)) {
@@ -61,6 +70,10 @@ export function createSetScopeRequirements(deps: {
       }
     }
     const changed = await deps.requirements.change({ fleetId: actor.fleetId, name }, { ...change, version });
-    return changed === undefined ? refuse('CONFLICT', 'The requirements changed since you opened this page') : ok(changed);
+    if (changed === undefined) {
+      return refuse('CONFLICT', 'The requirements changed since you opened this page');
+    }
+    const stated = await (kept.kind === 'mcpServer' ? deps.stateParty : deps.stateA2aAgent)({ fleetId: actor.fleetId, name });
+    return ok({ requirements: changed, statementRefusal: stated.isOk ? null : stated.error.message });
   };
 }

@@ -7,7 +7,7 @@ import type { AgentCards } from './ports.js';
 /** The statement of an outside A2A agent's proxy ship from its card as read now: refused when the card does not answer, is no AgentCard or makes no valid statement. */
 export async function readAgentStatement(
   deps: { cards: AgentCards; timing: CallTiming },
-  agent: { name: string; cardUrl: string; isRepeatable: boolean },
+  agent: { name: string; cardUrl: string; isRepeatable: boolean; scopes: readonly string[] },
 ): Promise<Result<Statement, DomainError<'CARD_UNREACHABLE' | 'CARD_INVALID'>>> {
   const card = await deps.cards.read(agent.cardUrl);
   if (!card.isOk) {
@@ -15,5 +15,5 @@ export async function readAgentStatement(
       ? refuse('CARD_UNREACHABLE', `The card of ${agent.name} could not be read: ${card.error.reason}`)
       : refuse('CARD_INVALID', `The card address of ${agent.name} answers no agent card: ${card.error.reason}`);
   }
-  return agentStatementOf({ partyName: agent.name, card: card.value, isRepeatable: agent.isRepeatable, timing: deps.timing });
+  return agentStatementOf({ partyName: agent.name, card: card.value, isRepeatable: agent.isRepeatable, timing: deps.timing, scopes: agent.scopes });
 }

@@ -7,6 +7,7 @@ import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgett
 import { createPrismaCalls } from '../src/adapters/prisma/calls.js';
 import { createPrismaToolMarks } from '../src/adapters/prisma/tool-marks.js';
 import { statementOf } from '../src/core/mcp-out/statement.js';
+import { NO_SCOPE_REQUIREMENTS } from '../src/core/parties/scope-requirements.js';
 import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
@@ -29,7 +30,7 @@ describe("a proxy ship's statement, stated through the fleet's REST API", () => 
     const cookie = await signIn(fleet);
     const proxy = await register(fleet, await commission(fleet, { cookie, ship: { name: 'crm', type: 'mcp-server', kind: 'app' } }));
     const caller = await register(fleet, await commission(fleet, { cookie, ship: { name: 'agent', type: 'agent', scopes: ['messages:send'] } }));
-    const statement = statementOf({ partyName: 'crm', tools: [{ name: 'list_deals', title: 'List deals', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } }], repeatable: new Set(['list_deals']), timing: { waitMs: 10_000, deadlineMs: 300_000 } });
+    const statement = statementOf({ partyName: 'crm', tools: [{ name: 'list_deals', title: 'List deals', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } }], repeatable: new Set(['list_deals']), timing: { waitMs: 10_000, deadlineMs: 300_000 }, requirements: NO_SCOPE_REQUIREMENTS });
 
     await expect(createRestFleetDoor(fleet.url).setStatement(proxy, statement)).resolves.toEqual({ isOk: true, value: undefined });
 
@@ -38,7 +39,7 @@ describe("a proxy ship's statement, stated through the fleet's REST API", () => 
   });
 
   it("answers the fleet's refusal", async () => {
-    const stated = await createRestFleetDoor(fleet.url).setStatement('aeolus_ct_v1_not-a-crew-token', statementOf({ partyName: 'crm', tools: [], repeatable: new Set(), timing: { waitMs: 10_000, deadlineMs: 300_000 } }));
+    const stated = await createRestFleetDoor(fleet.url).setStatement('aeolus_ct_v1_not-a-crew-token', statementOf({ partyName: 'crm', tools: [], repeatable: new Set(), timing: { waitMs: 10_000, deadlineMs: 300_000 }, requirements: NO_SCOPE_REQUIREMENTS }));
 
     expect(stated.isOk).toBe(false);
   });

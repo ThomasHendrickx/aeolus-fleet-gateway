@@ -905,7 +905,8 @@ export const gatewayRouter = t.router({
     /**
      * An actor holding gateway:approve sets the scopes a calling ship needs
      * (gateway scopes 4.2, A2): the party's set when sent, and each tool's
-     * sent, an empty one dropping it, all at once on the version it read.
+     * sent, an empty one dropping it, all at once on the version it read;
+     * then stated at once, as a tool switch is.
      */
     setScopeRequirements: servedProcedure
       .input(
@@ -916,13 +917,13 @@ export const gatewayRouter = t.router({
           tools: z.array(z.strictObject({ tool: z.string().min(1).max(TOOL_NAME_MAX_LENGTH), scopes: z.array(scopeNameSchema) })),
         }),
       )
-      .output(scopeRequirementsSchema)
+      .output(z.intersection(scopeRequirementsSchema, z.object({ statementRefusal: z.string().nullable() })))
       .mutation(async ({ ctx, input }) => {
         const set = await ctx.setScopeRequirements({ actor: ctx.actor, name: input.name, version: input.version, ...(input.party === undefined ? {} : { party: input.party }), tools: new Map(input.tools.map(({ tool, scopes }) => [tool, scopes])) });
         if (!set.isOk) {
           throw new TRPCError({ code: SET_SCOPE_REQUIREMENTS_CODES[set.error.kind], message: set.error.message });
         }
-        return scopeRequirementsOutputOf(set.value);
+        return { ...scopeRequirementsOutputOf(set.value.requirements), statementRefusal: set.value.statementRefusal };
       }),
     /** argo marks a party's tool repeatable, or takes the mark off (interop 5.2): kept, then stated at once. */
     markTool: managing(servedProcedure)

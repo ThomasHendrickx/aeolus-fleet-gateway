@@ -340,15 +340,15 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const servers = createMcpServers();
   // A caller of a proxy ship waits and gives up as the gateway does with its server (interop 3.4, 5.3).
   const callTiming = { waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, deadlineMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS };
-  const stateParty = createStateParty({ parties, servers, door, marks, timing: callTiming });
+  const requirements = createPrismaScopeRequirements(prisma);
+  const stateParty = createStateParty({ parties, servers, door, marks, requirements, timing: callTiming });
   const markTool = createMarkTool({ parties, marks, stateParty });
   const switchTool = createSwitchTool({ parties, servers, stateParty });
   const agentCards = createHttpAgentCards({ timeoutMs: AGENT_CARD_TIMEOUT_MS });
-  const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, timing: callTiming });
-  const requirements = createPrismaScopeRequirements(prisma);
+  const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, requirements, timing: callTiming });
   const checkScopes = createCheckRequiredScopes({ connections, door });
   const readScopeRequirements = createReadScopeRequirements({ parties, requirements });
-  const setScopeRequirements = createSetScopeRequirements({ parties, requirements, connections, door });
+  const setScopeRequirements = createSetScopeRequirements({ parties, requirements, connections, door, stateParty, stateA2aAgent });
   const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, requirements, checkScopes, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
   const clientCalls = createPrismaClientCalls(prisma);
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);

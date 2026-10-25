@@ -48,7 +48,7 @@ export function createAddA2aAgent(deps: ApprovalDeps & { cards: AgentCards; timi
     if (!(await deps.servesOutsideParties(fleetId))) {
       return refuse('OUTSIDE_PARTIES_OFF', "This fleet's outside parties are off: turn them on first");
     }
-    const statement = await readAgentStatement(deps, { name, cardUrl, isRepeatable: true });
+    const statement = await readAgentStatement(deps, { name, cardUrl, isRepeatable: true, scopes: [] });
     if (!statement.isOk) {
       return statement;
     }
