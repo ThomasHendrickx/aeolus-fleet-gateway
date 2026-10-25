@@ -2,20 +2,19 @@
 
 /**
  * One outside party's forms, as the account signed in (decision 0056):
- * changing its owner and scopes, switching a server's tools, marking an
- * A2A agent repeatable or not, and retiring it. Each asks the API, which
+ * changing its owner and scopes, switching a server's tools and setting the
+ * scopes a party needs, marking an A2A agent repeatable or not, and retiring it. Each asks the API, which
  * checks the account's scopes; a refusal is said on the form.
  */
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { inFleet } from '../../lib/gateway-api/page-account';
-import { refusalMessageOf, requestApi } from '../../lib/gateway-api/page-api';
+import { refusalCodeOf, refusalMessageOf, requestApi } from '../../lib/gateway-api/page-api';
 import { FLEET_FIELD, fieldOf, fieldsOf, type FormState } from '../forms/form-state';
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../outside-parties/paths';
 import { changesOf } from './scope-changes';
 import { markedMessageOf } from './marked-message';
-import { switchedMessageOf } from './switched-message';
 
 /** The field a party's form names it by. */
 const NAME_FIELD = 'name';
@@ -42,20 +41,36 @@ export async function changeParty(_previous: FormState, form: FormData): Promise
   redirect(inFleet(partyPath(name), fleetId));
 }
 
-/** How one tool's switch ended: as it stands now and what the fleet sees, or why the API refused it. */
-export type ToolSwitchState = { kind: 'idle' } | { kind: 'switched'; isOn: boolean; message: string } | { kind: 'refused'; message: string };
+/** How a change on a party's page ended (gateway scopes 4.3): kept, at the requirements' new version when it changed them, or refused with why, CONFLICT told apart for its Reload. */
+export type TableOutcome = { isOk: true; version: number | null; statementRefusal: string | null } | { isOk: false; message: string; isConflict: boolean };
 
-export async function switchPartyTool(_previous: ToolSwitchState, form: FormData): Promise<ToolSwitchState> {
-  const fleetId = fieldOf(form, FLEET_FIELD);
-  const name = fieldOf(form, NAME_FIELD);
+function refusedOutcome(error: unknown): TableOutcome {
+  return { isOk: false, message: refusalMessageOf(error), isConflict: refusalCodeOf(error) === 'CONFLICT' };
+}
+
+/** Sets the scopes a party needs, its own set when sent and each tool's sent, all at once on the version the page read. */
+export async function setPartyScopes(change: { fleetId: string; name: string; version: number; party?: string[]; tools: { tool: string; scopes: string[] }[] }): Promise<TableOutcome> {
+  const { fleetId, ...input } = change;
   const api = await requestApi(fleetId);
   try {
-    const tool = fieldOf(form, 'tool');
-    const { isOn, statementRefusal } = await api.parties.switchTools.mutate({ name, tools: [tool], isOn: fieldOf(form, 'isOn') === 'true' });
-    revalidatePath(partyPath(name));
-    return { kind: 'switched', isOn, message: switchedMessageOf({ tool, isOn, statementRefusal }) };
+    const { version, statementRefusal } = await api.parties.setScopeRequirements.mutate(input);
+    revalidatePath(partyPath(input.name));
+    return { isOk: true, version, statementRefusal };
   } catch (error) {
-    return { kind: 'refused', message: refusalMessageOf(error) };
+    return refusedOutcome(error);
+  }
+}
+
+/** Switches the tools selected on a server's page on or off, in one change. */
+export async function switchPartyTools(change: { fleetId: string; name: string; tools: string[]; isOn: boolean }): Promise<TableOutcome> {
+  const { fleetId, ...input } = change;
+  const api = await requestApi(fleetId);
+  try {
+    const { statementRefusal } = await api.parties.switchTools.mutate(input);
+    revalidatePath(partyPath(input.name));
+    return { isOk: true, version: null, statementRefusal };
+  } catch (error) {
+    return refusedOutcome(error);
   }
 }
 

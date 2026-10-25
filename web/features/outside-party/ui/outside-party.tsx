@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
@@ -8,9 +8,10 @@ import { outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } 
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
 import { scopeWords } from '../../outside-parties/scope-words';
 import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
-import { ToolRow } from '../../outside-parties/ui/tool-row';
+import { AgentNeeds } from '../tools-table/ui/agent-needs';
+import { approvalOf, ToolsSection } from '../tools-table/ui/tools-section';
+import { ToolsSkeleton } from '../tools-table/ui/tools-skeleton';
 import { RepeatableSwitch } from './repeatable-switch';
-import { ToolSwitch } from './tool-switch';
 
 /** The scopes that change a party's owner, its scopes, and retire it (0056). */
 export const OWNING_SCOPE = 'fleet:owner';
@@ -69,8 +70,9 @@ export function PartyHead({ party }: { party: ListedParty }) {
 /**
  * One outside party (design B, screens 12 and 14): its proxy ship's state,
  * then its facts as the fleet holds them, and for an MCP server the tools
- * it lists now, each with its switch for an approver (aeolus-fleet#1151);
- * for an A2A agent its repeatable mark, a switch for an approver (A9). Each control shows only to an account holding
+ * it lists now as a table, with the switch and the scopes each needs
+ * (aeolus-fleet#1151, gateway scopes 4.3); for an A2A agent the scopes it
+ * needs and its repeatable mark, a switch for an approver (A9). Each control shows only to an account holding
  * its scope; the API checks it again.
  */
 export async function OutsideParty({ page, name }: { page: SignedInPage; name: string }) {
@@ -86,9 +88,10 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
   }
   const party = read.value;
   const address = outsideAddressOf(party);
-  const [tools, cards] = await Promise.all([
-    party.kind === 'mcpServer' ? readOf(api.parties.tools.query({ name })) : undefined,
+  const isApprover = scopes.includes(APPROVING_SCOPE);
+  const [cards, agentNeeds] = await Promise.all([
     party.kind === 'a2aClient' ? readOf(api.parties.cardAddresses.query({ name })) : undefined,
+    party.kind === 'a2aAgent' ? Promise.all([readOf(api.parties.scopeRequirements.query({ name })), isApprover ? approvalOf({ api, name }) : { canChange: false, listed: null, reason: null }]) : undefined,
   ]);
   const change = (
     <a href={inFleet(partyPath(party.name, 'change'), fleetId)} className="text-primary hover:underline" data-testid="outside-party-change">
@@ -120,43 +123,30 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
         {party.kind === 'a2aAgent' ? (
           <>
             <Fact label="Messages at once">{party.concurrencyLimit}</Fact>
+            <Fact label="Needs">
+              {agentNeeds === undefined ? null : agentNeeds[0].isOk ? (
+                <AgentNeeds fleetId={fleetId} party={party.name} version={agentNeeds[0].value.version} scopes={agentNeeds[0].value.party} listed={agentNeeds[1].listed} canChange={agentNeeds[1].canChange} />
+              ) : (
+                <span className="text-muted-foreground">{agentNeeds[0].refusal}</span>
+              )}
+            </Fact>
             <Fact label="Repeatable">
               {scopes.includes(APPROVING_SCOPE) ? <RepeatableSwitch fleetId={fleetId} party={party.name} isRepeatable={party.isRepeatable} /> : <Tag>{party.isRepeatable ? 'Repeatable' : 'Not repeatable'}</Tag>}
             </Fact>
           </>
         ) : null}
       </dl>
-      {tools === undefined ? null : (
-        <section className={`${CARD} grid gap-2`} data-testid="outside-party-tools">
-          <h2 className="flex justify-between text-section font-semibold">
-            <span>Tools</span>
-            {tools.isOk ? (
-              <span>
-                {tools.value.tools.filter((tool) => tool.isOn).length} of {tools.value.tools.length} on
-              </span>
-            ) : null}
-          </h2>
-          {tools.isOk ? (
-            <>
-              <p className="text-muted-foreground">
-                The fleet may call only the tools switched on; every ship that may reach {party.name} reaches the same. {scopes.includes(APPROVING_SCOPE) ? null : 'Switching them needs gateway:approve.'}
-              </p>
-              <ul className="grid">
-                {tools.value.tools.map((tool) => (
-                  <ToolRow
-                    key={tool.name}
-                    tool={{ ...tool, isReadOnly: tool.isReadOnly === true }}
-                    testId="outside-party-tool"
-                    control={scopes.includes(APPROVING_SCOPE) ? <ToolSwitch fleetId={fleetId} party={party.name} tool={tool.name} isOn={tool.isOn} /> : <Tag>{tool.isOn ? 'On' : 'Off'}</Tag>}
-                  />
-                ))}
-              </ul>
-            </>
-          ) : (
-            <p className="text-muted-foreground">{tools.refusal}</p>
-          )}
+      {party.kind === 'mcpServer' ? (
+        <section className={`${CARD} grid gap-3`} data-testid="outside-party-tools">
+          <h2 className="text-section font-semibold">Tools</h2>
+          <p className="text-muted-foreground">
+            The fleet may call only the tools switched on, and a calling ship must hold every scope a tool needs; every ship that may reach {party.name} reaches the same tools. {isApprover ? null : 'Changing them needs gateway:approve.'}
+          </p>
+          <Suspense fallback={<ToolsSkeleton party={party.name} />}>
+            <ToolsSection api={api} fleetId={fleetId} name={party.name} isApprover={isApprover} />
+          </Suspense>
         </section>
-      )}
+      ) : null}
       {cards === undefined ? null : (
         <section className={`${CARD} grid gap-2`} data-testid="outside-party-cards">
           <h2 className="flex justify-between text-section font-semibold">
