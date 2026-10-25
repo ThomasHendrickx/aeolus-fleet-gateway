@@ -341,6 +341,10 @@ const LISTED_SCOPES_CODES = {
 const SWITCH_TOOLS_CODES = {
   NOT_AN_APPROVER: 'FORBIDDEN',
   NO_SUCH_PARTY: 'NOT_FOUND',
+  PARTY_NOT_COMMISSIONED: 'PRECONDITION_FAILED',
+  NOT_REACHABLE: 'FORBIDDEN',
+  NOT_CONNECTED: 'PRECONDITION_FAILED',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
   NO_SUCH_TOOL: 'NOT_FOUND',
 } as const satisfies Record<SwitchToolsRefusal['kind'], TRPCError['code']>;
@@ -893,12 +897,12 @@ export const gatewayRouter = t.router({
         }
         return stated.value;
       }),
-    /** An actor holding gateway:approve switches tools of an outside MCP server on or off for the party (aeolus-fleet#1151), one or a selection (gateway scopes 4.3): kept in one change, then stated at once. */
+    /** An actor holding gateway:approve within manage reach of the proxy ship switches tools of an outside MCP server on or off for the party (aeolus-fleet#1151), one or a selection (gateway scopes 4.3): kept in one change, then stated at once. */
     switchTools: servedProcedure
       .input(z.strictObject({ name: shipHandleSchema, tools: z.array(z.string().min(1).max(TOOL_NAME_MAX_LENGTH)).min(1), isOn: z.boolean() }))
       .output(z.object({ tools: z.array(z.string()), isOn: z.boolean(), statementRefusal: z.string().nullable() }))
       .mutation(async ({ ctx, input }) => {
-        const switched = await ctx.switchTools({ actor: ctx.actor, ...input });
+        const switched = await ctx.switchTools({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, ...input });
         if (!switched.isOk) {
           throw new TRPCError({ code: SWITCH_TOOLS_CODES[switched.error.kind], message: switched.error.message });
         }

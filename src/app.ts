@@ -345,7 +345,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const requirements = createPrismaScopeRequirements(prisma);
   const stateParty = createStateParty({ parties, servers, door, marks, requirements, timing: callTiming });
   const markTool = createMarkTool({ parties, marks, stateParty });
-  const switchTools = createSwitchTools({ parties, servers, stateParty });
+  const switchTools = createSwitchTools({ parties, servers, stateParty, connections, fleet: createProxyShipsAsActor(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
   const agentCards = createHttpAgentCards({ timeoutMs: AGENT_CARD_TIMEOUT_MS });
   const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, requirements, timing: callTiming });
   const checkScopes = createCheckRequiredScopes({ connections, door });
