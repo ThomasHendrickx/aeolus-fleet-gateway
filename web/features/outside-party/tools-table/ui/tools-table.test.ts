@@ -82,6 +82,13 @@ describe("an outside MCP server's tools table (gateway scopes 4.3)", () => {
 });
 
 describe('what a call needs, as chips', () => {
+  it("shows a scope every tool needs once, muted, though the tool needs it too", () => {
+    const markup = renderToStaticMarkup(createElement(NeedsChips, { party: ['crm:use'], own: ['crm:use', 'crm:admin'], listed: null }));
+
+    expect({ party: count(markup, 'tools-table-party-scope'), own: count(markup, 'tools-table-scope') }).toEqual({ party: 1, own: 1 });
+  });
+
+
   it('says Nothing when neither the party nor the tool needs a scope', () => {
     expect(textOf(renderToStaticMarkup(createElement(NeedsChips, { own: [], listed: null })))).toBe('Nothing');
   });
