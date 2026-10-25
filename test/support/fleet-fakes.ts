@@ -67,7 +67,7 @@ export function fakeGatewayFleet() {
       state.isCrewed = false;
       return Promise.resolve(ok(undefined));
     },
-    listScopes: () => Promise.resolve(ok([...state.scopes])),
+    listScopes: () => Promise.resolve(ok(state.scopes.map(describedScope))),
     declareScopes: (crewToken, declaration) => {
       if (!state.liveTokens.has(crewToken)) {
         return released();
@@ -128,13 +128,16 @@ export function fakeShipReads() {
   return { state, door };
 }
 
+/** A listed scope as the fake fleet describes it. */
+const describedScope = (scope: string) => ({ scope, description: `The fleet's ${scope}` });
+
 /** The scopes the fleet lists (fleet.scopes), as the gateway's ship reads them: core's, the plugins' and the fleet's own. */
 export function fakeListedScopes(listed: string[] = ['fleet:read', 'gateway:approve', 'crm:read-leads', 'crm:write-leads']) {
   const state = { listed, isAnswering: true, readers: new Array<string>() };
   const door: Pick<FleetDoor, 'listScopes'> = {
     listScopes: (crewToken) => {
       state.readers.push(crewToken);
-      return Promise.resolve(state.isAnswering ? ok([...state.listed]) : err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
+      return Promise.resolve(state.isAnswering ? ok(state.listed.map(describedScope)) : err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
     },
   };
   return { state, door };

@@ -83,7 +83,7 @@ export function createSetScopeRequirements(deps: {
       if (!listed.isOk) {
         return refuse('FLEET_UNAVAILABLE', `The fleet did not say which scopes it lists: ${listed.error.message}`);
       }
-      const unlisted = required.filter((scope) => !listed.value.includes(scope));
+      const unlisted = required.filter((scope) => !listed.value.some((each) => each.scope === scope));
       if (unlisted.length > 0) {
         return refuse('SCOPE_NOT_LISTED', `The fleet lists no scope ${unlisted.join(' or ')}: define it first, or pick a listed one`);
       }
