@@ -262,3 +262,25 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
     });
   });
 });
+
+describe('the scopes the fleet lists, read as the gateway\'s ship (fleet.scopes, gateway scopes 4.2)', () => {
+  it("answers every listed scope, core's, a plugin's and the fleet's own", async () => {
+    answer = {
+      status: 200,
+      body: [
+        { namespace: 'fleet', kind: 'core', declaredBy: null, scopes: [{ scope: 'fleet:read', description: 'Read the fleet' }] },
+        { namespace: 'gateway', kind: 'plugin', declaredBy: { id: 'shp_01m3tbfspe96yf1rnr4ank9h1a', name: 'gateway' }, scopes: [{ scope: 'gateway:approve', description: 'Approve outside parties' }] },
+        { namespace: 'crm', kind: 'fleet', declaredBy: null, scopes: [{ scope: 'crm:read-leads', description: 'Read leads in the CRM' }, { scope: 'crm:write-leads', description: 'Change leads in the CRM' }] },
+      ],
+    };
+
+    await expect(createRestFleetDoor(base).listScopes('aeolus_ct_v1_gateway')).resolves.toEqual({ isOk: true, value: ['fleet:read', 'gateway:approve', 'crm:read-leads', 'crm:write-leads'] });
+    expect(received.map(({ url, headers }) => ({ url, authorization: headers.authorization }))).toEqual([{ url: '/api/v1/fleet/scopes', authorization: 'Bearer aeolus_ct_v1_gateway' }]);
+  });
+
+  it("answers the fleet's refusal", async () => {
+    answer = { status: 403, body: { code: 'FORBIDDEN', message: 'Needs fleet:read' } };
+
+    await expect(createRestFleetDoor(base).listScopes('aeolus_ct_v1_gateway')).resolves.toEqual({ isOk: false, error: { code: 'FORBIDDEN', message: 'Needs fleet:read' } });
+  });
+});
