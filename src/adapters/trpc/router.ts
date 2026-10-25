@@ -44,6 +44,8 @@ import type { CheckServer } from '../../core/parties/check-server.js';
 import type { ReadPartyTools } from '../../core/parties/read-party-tools.js';
 import { APPROVING_SCOPE } from '../../core/parties/approver.js';
 import type { SwitchTools, SwitchToolsRefusal } from '../../core/parties/switch-tools.js';
+import type { CheckApproving } from '../../core/parties/check-approving.js';
+import type { ReadListedScopes } from '../../core/parties/read-listed-scopes.js';
 import type { ReadScopeRequirements } from '../../core/parties/read-scope-requirements.js';
 import type { ScopeRequirements } from '../../core/parties/scope-requirements.js';
 import type { SetScopeRequirements, SetScopeRequirementsRefusal } from '../../core/parties/set-scope-requirements.js';
@@ -125,6 +127,8 @@ export interface Context {
   markTool: MarkTool;
   switchTools: SwitchTools;
   readScopeRequirements: ReadScopeRequirements;
+  readListedScopes: ReadListedScopes;
+  checkApproving: CheckApproving;
   setScopeRequirements: SetScopeRequirements;
   registerClient: RegisterClient;
   /** An MCP client's authorization request, as the gateway reads it before it signs the person in. */
@@ -325,6 +329,13 @@ const TOOLS_CODES = {
   NO_SUCH_PARTY: 'NOT_FOUND',
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
 } as const satisfies Record<'NO_SUCH_PARTY' | 'SERVER_UNREACHABLE', TRPCError['code']>;
+
+/** The refusals of reading the scopes the fleet lists, as the API states them. */
+const LISTED_SCOPES_CODES = {
+  NOT_AN_APPROVER: 'FORBIDDEN',
+  NOT_CONNECTED: 'PRECONDITION_FAILED',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+} as const satisfies Record<'NOT_AN_APPROVER' | 'NOT_CONNECTED' | 'FLEET_UNAVAILABLE', TRPCError['code']>;
 
 /** The refusals of switching an outside MCP server's tools, as the API states them. */
 const SWITCH_TOOLS_CODES = {
@@ -892,6 +903,32 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: SWITCH_TOOLS_CODES[switched.error.kind], message: switched.error.message });
         }
         return switched.value;
+      }),
+    /** Every scope the fleet lists now, with its description: the scopes an approver may require (gateway scopes 4.3). Only an approver reads them. */
+    listedScopes: servedProcedure.output(z.object({ scopes: z.array(z.object({ scope: z.string(), description: z.string() })) })).query(async ({ ctx }) => {
+      const read = await ctx.readListedScopes({ actor: ctx.actor });
+      if (!read.isOk) {
+        throw new TRPCError({ code: LISTED_SCOPES_CODES[read.error.kind], message: read.error.message });
+      }
+      return { scopes: read.value };
+    }),
+    /**
+     * Whether the actor approves the party: gateway:approve within manage
+     * reach of its proxy ship (gateway scopes 4.3, A2). Its page shows the
+     * controls then, and otherwise the same table read-only, saying why.
+     */
+    approving: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema }))
+      .output(z.object({ isApproving: z.boolean(), reason: z.string().nullable() }))
+      .query(async ({ ctx, input }) => {
+        const checked = await ctx.checkApproving({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, ...input });
+        if (checked.isOk) {
+          return { isApproving: true, reason: null };
+        }
+        if (checked.error.kind === 'NO_SUCH_PARTY') {
+          throw new TRPCError({ code: 'NOT_FOUND', message: checked.error.message });
+        }
+        return { isApproving: false, reason: checked.error.message };
       }),
     /** Which scopes a calling ship needs for an outside MCP server or A2A agent, and the version to change them on (gateway scopes 4.2). Any actor reads them. */
     scopeRequirements: servedProcedure
