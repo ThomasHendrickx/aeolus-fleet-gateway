@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { createPrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
+import { createPrismaScopeRequirements } from '../src/adapters/prisma/scope-requirements.js';
+import { EVERY_FIFTY_TOOL, startFiftyTools, type FiftyTools } from './fixtures/fifty-tools/fifty-tools.js';
 import { charlotteIn, PAGASAE_APP_CLIENT, PAGASAE_CLIENT, startFakePagasae, type FakePagasae } from './support/fake-pagasae.js';
 import { aFreePort, aNewDatabaseUrl, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { startGateway, type RunningGateway } from './support/gateway-bin.js';
@@ -40,6 +42,7 @@ function hiddenFieldsOf(html: string, testId: string): FormData {
 }
 
 let fleet: FleetServer;
+let fiftyTools: FiftyTools;
 let pagasae: FakePagasae;
 let gateway: RunningGateway | undefined;
 let address: string;
@@ -49,6 +52,7 @@ let gatewayDatabaseUrl: string;
 beforeAll(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
   pagasae = await startFakePagasae();
+  fiftyTools = await startFiftyTools();
   pagasae.sharedSignIn(SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read fleet:network fleet:manage' });
   pagasae.sharedSignIn(READER_SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read' });
   pagasae.sharedSignIn(APPROVER_SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read gateway:approve' });
@@ -84,6 +88,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await gateway?.stop();
   await pagasae.stop();
+  await fiftyTools.close();
   await fleet.stop();
 });
 
@@ -229,7 +234,68 @@ describe('the parties pages, as the account signed in', () => {
     expect(textOf(approving)).toContain('CredentialBearer token');
     expect(textOf(approving)).toContain('Messages at once3');
     expect(approving).not.toContain('tok-1');
+    expect(textOf(approving)).toContain('NeedsNothing');
     expect({ approver: approving.includes('data-testid="outside-party-repeatable-switch"'), reader: reading.includes('data-testid="outside-party-repeatable-switch"'), readerSees: textOf(reading).includes('Not repeatable') }).toEqual({ approver: true, reader: false, readerSees: true });
+  }, 60_000);
+
+  /** An outside MCP server kept as the gateway keeps it, with the scopes it needs. */
+  async function serverSaved(party: { name: string; url: string; requirements: { party?: string[]; tools: Map<string, string[]> } }) {
+    const prisma = createPrismaClient(gatewayDatabaseUrl);
+    await createPrismaPartyStore(prisma).save({
+      fleetId: FLEET,
+      name: party.name,
+      kind: 'mcpServer',
+      url: party.url,
+      credential: { kind: 'none' },
+      concurrencyLimit: 4,
+      toolSwitches: new Map(EVERY_FIFTY_TOOL.map((tool) => [tool, tool !== 'delete_lead'])),
+      state: 'commissioning',
+      proxyShipId: null,
+      secret: null,
+      crewToken: null,
+      requestId: `r-${party.name}`,
+      requestHash: 'h',
+      approvedAt: new Date('2026-10-25T10:00:00.000Z'),
+    });
+    await createPrismaScopeRequirements(prisma).change({ fleetId: FLEET, name: party.name }, { version: 0, ...party.requirements });
+    await prisma.$disconnect();
+  }
+
+  const rowsOf = (body: string) => body.split('data-testid="tools-table-row"').length - 1;
+
+  it("shows a 50-tool server's tools as a table, behind skeleton rows while the server's tools/list is read (gateway scopes 4.3)", async () => {
+    await serverSaved({ name: 'fifty', url: fiftyTools.url, requirements: { party: ['crm:use'], tools: new Map([['update_lead', ['crm:write-leads']]]) } });
+
+    const body = await (await fetch(`${address}/outside-parties/fifty?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${READER_SIGN_IN}` } })).text();
+
+    expect({ isSkeletonFirst: body.indexOf('data-testid="tools-table-skeleton"') < body.indexOf('data-testid="tools-table-row"'), rows: rowsOf(body) }).toEqual({ isSkeletonFirst: true, rows: 50 });
+    expect(textOf(body)).toContain('update_lead');
+    expect(textOf(body)).toContain('Every tool needscrm:use');
+    expect(textOf(body)).toContain('Read only');
+    expect(textOf(body)).toContain('Destructive');
+  }, 60_000);
+
+  it('shows the table read-only to an account that only reads, and to an approver the fleet cannot say manages the proxy ship, saying why', async () => {
+    await serverSaved({ name: 'fifty-read', url: fiftyTools.url, requirements: { tools: new Map() } });
+    const pageAs = async (signIn: string) => (await fetch(`${address}/outside-parties/fifty-read?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${signIn}` } })).text();
+
+    const [reading, approving] = await Promise.all([pageAs(READER_SIGN_IN), pageAs(APPROVER_SIGN_IN)]);
+
+    expect([reading, approving].map((body) => ({ rows: rowsOf(body), hasSelect: body.includes('data-testid="tools-table-select"'), hasBulk: body.includes('data-testid="tools-table-set-scopes"') }))).toEqual([
+      { rows: 50, hasSelect: false, hasBulk: false },
+      { rows: 50, hasSelect: false, hasBulk: false },
+    ]);
+    expect(textOf(approving)).toContain('You see these read-only: fifty-read&#x27;s proxy ship is not commissioned yet');
+  }, 60_000);
+
+  it('shows the scopes kept per tool name when the server does not answer, and says so', async () => {
+    await serverSaved({ name: 'fifty-down', url: 'http://127.0.0.1:9/mcp', requirements: { tools: new Map([['update_lead', ['crm:write-leads']], ['delete_lead', ['crm:admin']]]) } });
+
+    const body = await (await fetch(`${address}/outside-parties/fifty-down?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${READER_SIGN_IN}` } })).text();
+
+    expect(rowsOf(body)).toBe(2);
+    expect(textOf(body)).toContain('The server did not answer, so this shows the scopes kept per tool name; they can still be changed.');
+    expect(textOf(body)).toContain('delete_leadNot known');
   }, 60_000);
 
   it('shows the header every Aeolus app shows: the fleet in view and Gateway in the title, and the avatar menu', async () => {
