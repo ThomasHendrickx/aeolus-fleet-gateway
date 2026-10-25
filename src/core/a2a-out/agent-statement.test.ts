@@ -20,7 +20,7 @@ function aCard(change: Partial<AgentCard> = {}): AgentCard {
   };
 }
 
-const stated = (card: AgentCard, isRepeatable = true) => agentStatementOf({ partyName: 'supplier', card, isRepeatable, timing: TIMING });
+const stated = (card: AgentCard, isRepeatable = true) => agentStatementOf({ partyName: 'supplier', card, isRepeatable, timing: TIMING, scopes: [] });
 
 describe("an outside A2A agent's statement, written from its card (slice 5)", () => {
   it('states each skill as a capability: its id, name and description, the card default modes, the gateway timing, repeatable', () => {
@@ -31,6 +31,17 @@ describe("an outside A2A agent's statement, written from its card (slice 5)", ()
         capabilities: [{ name: 'quote', title: 'Quote a price', description: 'Answers a price for a part list.', inputModes: ['text/plain'], outputModes: ['application/json'], waitMs: 10_000, deadlineMs: 300_000, repeatable: true }],
       },
     });
+  });
+
+  it('states on each skill the scopes the agent needs as a whole, so a ship sees them before it sends (P1)', () => {
+    const card = aCard({ skills: [QUOTE, { ...QUOTE, id: 'book', name: 'Book parts' }] });
+
+    const statement = agentStatementOf({ partyName: 'supplier', card, isRepeatable: true, timing: TIMING, scopes: ['supplier:quote'] });
+
+    expect(statement.isOk && statement.value.capabilities.map(({ name, scopes }) => ({ name, scopes }))).toEqual([
+      { name: 'quote', scopes: ['supplier:quote'] },
+      { name: 'book', scopes: ['supplier:quote'] },
+    ]);
   });
 
   it("takes a skill's own modes over the card's defaults", () => {

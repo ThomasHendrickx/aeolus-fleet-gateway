@@ -3,13 +3,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { CARD_URL, anAgentCard, anAgentParty, answeredCard, fakeAgentCards } from '../../../test/support/a2a-agent-fakes.js';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeStatementDoor } from '../../../test/support/mcp-out-fakes.js';
-import { memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
 import { err } from '../shared/result.js';
 import { createStateA2aAgent } from './state-a2a-agent.js';
 
 let parties: ReturnType<typeof memoryPartyStore>;
 let cards: ReturnType<typeof fakeAgentCards>;
 let door: ReturnType<typeof fakeStatementDoor>;
+let requirements: ReturnType<typeof memoryScopeRequirements>;
 let state: ReturnType<typeof createStateA2aAgent>;
 
 beforeEach(async () => {
@@ -17,7 +18,8 @@ beforeEach(async () => {
   await parties.save(anAgentParty());
   cards = fakeAgentCards({ [CARD_URL]: answeredCard() });
   door = fakeStatementDoor();
-  state = createStateA2aAgent({ parties, cards, door, timing: { waitMs: 10_000, deadlineMs: 300_000 } });
+  requirements = memoryScopeRequirements();
+  state = createStateA2aAgent({ parties, cards, door, requirements, timing: { waitMs: 10_000, deadlineMs: 300_000 } });
 });
 
 describe("the gateway states an outside A2A agent's proxy ship from its card, as its crew (slice 5)", () => {
@@ -25,6 +27,14 @@ describe("the gateway states an outside A2A agent's proxy ship from its card, as
     await expect(state({ fleetId: FLEET_ID, name: 'supplier' })).resolves.toEqual({ isOk: true, value: { capabilities: ['quote'] } });
     expect(cards.reads).toEqual([CARD_URL]);
     expect(door.stated).toMatchObject([{ crewToken: 'aeolus_ct_v1_proxy', statement: { capabilities: [{ name: 'quote', repeatable: true }] } }]);
+  });
+
+  it('states on each skill the scopes the agent needs as they are now (P1)', async () => {
+    await requirements.change({ fleetId: FLEET_ID, name: 'supplier' }, { version: 0, party: ['supplier:quote'], tools: new Map() });
+
+    await state({ fleetId: FLEET_ID, name: 'supplier' });
+
+    expect(door.stated).toMatchObject([{ statement: { capabilities: [{ name: 'quote', scopes: ['supplier:quote'] }] } }]);
   });
 
   it('states no capability repeatable for an agent marked not repeatable (A9)', async () => {

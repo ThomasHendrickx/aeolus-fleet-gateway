@@ -302,7 +302,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       if (input.party?.includes('crm:admin') === true) {
         return Promise.resolve(err({ kind: 'SCOPE_NOT_LISTED' as const, message: 'The fleet lists no scope crm:admin: define it first, or pick a listed one' }));
       }
-      return Promise.resolve(ok({ version: 3, party: input.party ?? ['crm:use'], tools: input.tools }));
+      return Promise.resolve(ok({ requirements: { version: 3, party: input.party ?? ['crm:use'], tools: input.tools }, statementRefusal: null }));
     },
     readOutsideParties: () => Promise.resolve({ isOn: false }),
     setOutsideParties: (input) => {
@@ -606,7 +606,7 @@ describe("anyone reads, and an approver sets, the scopes an outside party needs 
 
     await expect(
       gatewayRouter.createCaller(context).parties.setScopeRequirements({ name: 'crm', version: 2, party: ['crm:read-leads'], tools: [{ tool: 'update_lead', scopes: ['crm:write-leads'] }, { tool: 'read_lead', scopes: [] }] }),
-    ).resolves.toEqual({ version: 3, party: ['crm:read-leads'], tools: [{ tool: 'update_lead', scopes: ['crm:write-leads'] }, { tool: 'read_lead', scopes: [] }] });
+    ).resolves.toEqual({ version: 3, party: ['crm:read-leads'], tools: [{ tool: 'update_lead', scopes: ['crm:write-leads'] }, { tool: 'read_lead', scopes: [] }], statementRefusal: null });
     expect(requirementChanges.map(({ name, version, party, tools }) => ({ name, version, party, tools }))).toEqual([
       { name: 'crm', version: 2, party: ['crm:read-leads'], tools: new Map([['update_lead', ['crm:write-leads']], ['read_lead', []]]) },
     ]);

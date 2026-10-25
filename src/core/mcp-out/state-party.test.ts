@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeMcpServers, fakeStatementDoor, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
-import { PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { PROXY_SHIP_ID, memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
 import type { McpServerParty } from '../parties/party.js';
 import { createMarkTool } from './mark-tool.js';
 import { createStateParty } from './state-party.js';
@@ -33,6 +33,7 @@ let parties: ReturnType<typeof memoryPartyStore>;
 let servers: ReturnType<typeof fakeMcpServers>;
 let door: ReturnType<typeof fakeStatementDoor>;
 let marks: ReturnType<typeof memoryToolMarks>;
+let requirements: ReturnType<typeof memoryScopeRequirements>;
 let stateParty: ReturnType<typeof createStateParty>;
 
 beforeEach(async () => {
@@ -41,13 +42,25 @@ beforeEach(async () => {
   servers = fakeMcpServers();
   door = fakeStatementDoor();
   marks = memoryToolMarks();
-  stateParty = createStateParty({ parties, servers, door, marks, timing: { waitMs: 10_000, deadlineMs: 300_000 } });
+  requirements = memoryScopeRequirements();
+  stateParty = createStateParty({ parties, servers, door, marks, requirements, timing: { waitMs: 10_000, deadlineMs: 300_000 } });
 });
 
 describe('the gateway states what a proxy ship offers, as its crew (decision 0047)', () => {
   it("states the server's tools as the proxy ship, with its crew token", async () => {
     await expect(stateParty({ fleetId: FLEET_ID, name: 'crm' })).resolves.toEqual({ isOk: true, value: { capabilities: ['list_contacts', 'create_deal'] } });
     expect(door.stated.map(({ crewToken, statement }) => [crewToken, statement.capabilities.map((capability) => capability.name)])).toEqual([['aeolus_ct_v1_proxy', ['list_contacts', 'create_deal']]]);
+  });
+
+  it('states the scopes each tool needs as they are now (P1)', async () => {
+    await requirements.change({ fleetId: FLEET_ID, name: 'crm' }, { version: 0, tools: new Map([['create_deal', ['crm:write-leads']]]) });
+
+    await stateParty({ fleetId: FLEET_ID, name: 'crm' });
+
+    expect(door.stated[0]?.statement.capabilities.map(({ name, scopes }) => ({ name, scopes }))).toEqual([
+      { name: 'list_contacts', scopes: undefined },
+      { name: 'create_deal', scopes: ['crm:write-leads'] },
+    ]);
   });
 
   it('calls the server with the credential from the vault', async () => {
