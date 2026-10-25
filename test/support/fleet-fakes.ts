@@ -67,6 +67,7 @@ export function fakeGatewayFleet() {
       state.isCrewed = false;
       return Promise.resolve(ok(undefined));
     },
+    listScopes: () => Promise.resolve(ok([...state.scopes])),
     declareScopes: (crewToken, declaration) => {
       if (!state.liveTokens.has(crewToken)) {
         return released();

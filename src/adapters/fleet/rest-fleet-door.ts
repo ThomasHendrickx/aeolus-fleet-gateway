@@ -22,6 +22,7 @@ import {
   inboxOutputSchema,
   meetingOutputSchema,
   pushReceiveOutputSchema,
+  scopesOutputSchema,
   deliveryOutputSchema,
   receiveOutputSchema,
   sentMessageOutputSchema,
@@ -356,6 +357,10 @@ export function createRestFleetDoor(
     discover: async (crewToken) => {
       const found = await call({ path: '/ship/discover', method: 'GET', crewToken, answers: discoverOutputSchema });
       return found.isOk ? ok(found.value.ships.map(({ id, kind, statement }) => ({ shipId: id, kind, statement }))) : found;
+    },
+    listScopes: async (crewToken) => {
+      const listed = await call({ path: '/fleet/scopes', method: 'GET', crewToken, answers: scopesOutputSchema });
+      return listed.isOk ? ok(listed.value.flatMap((namespace) => namespace.scopes.map(({ scope }) => scope))) : listed;
     },
     declareScopes: async (crewToken, declaration) => {
       const declared = await call({ path: '/fleet/declareScopes', method: 'POST', crewToken, body: declaration, answers: z.unknown() });
