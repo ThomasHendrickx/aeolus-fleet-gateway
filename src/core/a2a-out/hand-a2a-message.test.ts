@@ -14,9 +14,10 @@ import {
   plainGatewayStatuses,
   type ScriptedStream,
 } from '../../../test/support/a2a-agent-fakes.js';
-import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { fakeShipReads, FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/fleet-fakes.js';
 import { CALLER_SHIP_ID, aPushedDelivery } from '../../../test/support/mcp-out-fakes.js';
-import { memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
+import { createCheckRequiredScopes } from '../parties/check-required-scopes.js';
 import type { PushedDelivery } from '../mcp-out/hand-call.js';
 import type { AgentEndpoint } from './agent-endpoint.js';
 import type { AgentEvent } from './agent-event.js';
@@ -40,6 +41,9 @@ const readAs = (...events: ReturnType<typeof aStatus>[]): TaskRead => ({ kind: '
 let crew: ReturnType<typeof fakeAgentShipCrew>;
 let calls: ReturnType<typeof memoryAgentCalls>;
 let parties: ReturnType<typeof memoryPartyStore>;
+let requirements: ReturnType<typeof memoryScopeRequirements>;
+let ships: ReturnType<typeof fakeShipReads>;
+let connections: ReturnType<typeof memoryConnectionStore>;
 let clock: ReturnType<typeof aMovingClock>;
 let slept: number[];
 /** What stops the gateway's follow, as a restart does. */
@@ -50,6 +54,11 @@ beforeEach(async () => {
   calls = memoryAgentCalls();
   parties = memoryPartyStore();
   await parties.save(anAgentParty());
+  requirements = memoryScopeRequirements();
+  ships = fakeShipReads();
+  ships.state.ships.set(CALLER_SHIP_ID, { name: 'buyer', scopes: ['messages:send', 'supplier:quote'] });
+  connections = memoryConnectionStore();
+  await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-25T09:00:00.000Z') });
   clock = aMovingClock();
   slept = [];
   stop = new AbortController();
@@ -65,12 +74,56 @@ function handWith(agents: ReturnType<typeof fakeA2aAgents>, endpoint = POLLED) {
     return Promise.resolve();
   };
   const follow = createFollowAgentTask({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, clock, sleep, pollMs: POLL_MS, deadlineMs: DEADLINE_MS });
-  const hand = createHandA2aMessage({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, parties, follow, clock, deadlineMs: DEADLINE_MS });
+  const checkScopes = createCheckRequiredScopes({ connections, door: ships.door });
+  const hand = createHandA2aMessage({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, parties, requirements, checkScopes, follow, clock, deadlineMs: DEADLINE_MS });
   return (delivery: PushedDelivery = aQuote()) => hand({ party: anAgentParty(), endpoint, delivery, signal: stop.signal });
 }
 
 /** What the crew did, by call, the replies by their content. */
 const steps = () => crew.log.map((call) => (call[0] === 'send' ? `send ${call[1].contentType} ${call[1].payload}` : call[0]));
+
+describe('the gateway refuses a message from a ship that lacks a scope the agent needs (gateway scopes 4.2)', () => {
+  const requireOfAgent = (scopes: string[]) => requirements.change({ fleetId: FLEET_ID, name: anAgentParty().name }, { version: 0, party: scopes, tools: new Map() });
+
+  it('replies to the sender naming what is missing, reports it handled, and never reaches the agent', async () => {
+    await requireOfAgent(['supplier:order']);
+    const agents = fakeA2aAgents({ sends: [taken([aStatus('completed')])] });
+
+    await expect(handWith(agents)()).resolves.toEqual({ kind: 'handled' });
+
+    expect(agents.sent).toEqual([]);
+    expect(steps()).toEqual([`send text/plain ${anAgentParty().name} needs supplier:order, which buyer does not hold`, 'ack', 'handled']);
+  });
+
+  it('sends the message for a ship holding every scope the agent needs', async () => {
+    await requireOfAgent(['supplier:quote']);
+    const agents = fakeA2aAgents({ sends: [taken([aStatus('completed')])] });
+
+    await handWith(agents)();
+
+    expect(agents.sent).toHaveLength(1);
+  });
+
+  it('refuses a message whose scope was revoked while it waited: the check is at hand-over', async () => {
+    await requireOfAgent(['supplier:quote']);
+    ships.state.ships.set(CALLER_SHIP_ID, { name: 'buyer', scopes: ['messages:send'] });
+    const agents = fakeA2aAgents({ sends: [taken([aStatus('completed')])] });
+
+    await handWith(agents)();
+
+    expect(agents.sent).toEqual([]);
+  });
+
+  it('hands nothing and tries again when core does not answer the scope read: never sent unchecked', async () => {
+    await requireOfAgent(['supplier:quote']);
+    ships.state.isAnswering = false;
+    const agents = fakeA2aAgents({ sends: [taken([aStatus('completed')])] });
+
+    await expect(handWith(agents)()).resolves.toEqual({ kind: 'again' });
+
+    expect({ sent: agents.sent, crew: crew.log }).toEqual({ sent: [], crew: [] });
+  });
+});
 
 describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2)', () => {
   it('hands it with the next number on channel a2a, then sends it at the endpoint, with the vault credential, under a messageId stable for the message', async () => {
