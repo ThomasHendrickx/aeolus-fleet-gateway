@@ -177,7 +177,7 @@ const toolError = (message: string) => ({ content: [{ type: 'text' as const, tex
 
 /** The MCP server one request of a person's client is served by. */
 export function personServerFor(caller: GrantCaller, deps: PersonToolsDeps): McpServer {
-  const mcp = new McpServer({ name: 'aeolus-gateway', version: runningVersion() }, { capabilities: { tools: {} } });
+  const mcp = new McpServer({ name: 'Aeolus', version: runningVersion() }, { capabilities: { tools: {} } });
   mcp.server.setRequestHandler('tools/list', () => ({ tools: PERSON_TOOLS }));
   const changeOwnMic = async (call: { name: string; change: OwnMicChange; args: unknown }) => {
     const sent = meetingArgumentsSchema.omit({ cursor: true }).safeParse(call.args);
