@@ -27,13 +27,15 @@ export function createEmailChannel(options: { url: string; installationToken: st
           signal: AbortSignal.timeout(options.timeoutMs),
         });
       } catch {
-        return err({ reason: 'pagasae did not answer' });
+        return err({ kind: 'unavailable', reason: 'pagasae did not answer' });
       }
       if (response.ok) {
         return ok(undefined);
       }
       const refusal = refusalSchema.safeParse(await response.json().catch(() => undefined));
-      return err({ reason: `pagasae answered ${String(response.status)}${refusal.success ? `: ${refusal.data.error}` : ''}` });
+      // A wrong installation token (401) or an unknown person ship (404) is not fixed by asking again.
+      const kind = response.status === 401 || response.status === 404 ? 'refused' : 'unavailable';
+      return err({ kind, reason: `pagasae answered ${String(response.status)}${refusal.success ? `: ${refusal.data.error}` : ''}` });
     },
   };
 }

@@ -23,7 +23,11 @@ export type WakePerson = (ship: PersonShip, crewToken: string) => Promise<Result
  * a delivery is woken once. A wake held back by a window, or that no
  * channel sent, hands nothing. Each channel's window is kept after the
  * hand-overs, so a gateway that stopped in between wakes again: one wake
- * more, nothing lost. While a page of the person is in focus, the page
+ * more, nothing lost. A fresh delivery sent before a channel's last wake
+ * that is still inside its window is one that wake covers: a hand-over the
+ * fleet refused is made again through that channel, never with a second
+ * wake. A channel that refused the wake for good ends the attempt, which is
+ * told, as asking again cannot help. While a page of the person is in focus, the page
  * shows what arrives (W6): each fresh delivery is handed through it and no
  * wake goes out.
  */
@@ -35,6 +39,8 @@ export function createWakePerson(deps: {
   /** How long a page counts in focus since it was last seen so. */
   focusFreshMs: number;
   clock: Clock;
+  /** Tells that a channel refused the wake for good, so the attempt ended. */
+  attemptEnded: (ended: { ship: PersonShip; channel: WakeChannelName; reason: string }) => void;
 }): WakePerson {
   return async (ship, crewToken) => {
     /** Hands each fresh delivery no. 1 through the channel, up to the first refusal: that refusal, or none. */
@@ -51,12 +57,12 @@ export function createWakePerson(deps: {
     if (!taken.isOk) {
       return taken;
     }
-    const fresh = taken.value.filter(({ handOverNumber }) => handOverNumber === null);
-    if (fresh.length === 0) {
+    const allFresh = taken.value.filter(({ handOverNumber }) => handOverNumber === null);
+    if (allFresh.length === 0) {
       return ok({ kind: 'settled' });
     }
     if (await deps.focused.isAnyInFocus(ship, new Date(deps.clock.now().getTime() - deps.focusFreshMs))) {
-      const refused = await handEach(fresh, 'page');
+      const refused = await handEach(allFresh, 'page');
       return refused === undefined ? ok({ kind: 'settled' }) : err(refused);
     }
     const turnedOn = (await Promise.all(deps.channels.map(async (channel) => ((await channel.isOn(ship)) ? [channel] : [])))).flat();
@@ -67,22 +73,44 @@ export function createWakePerson(deps: {
     const windows = await Promise.all(
       turnedOn.map(async (channel) => {
         const lastSentAt = await deps.wakesSent.lastSentAt(ship, channel.name);
-        return { channel, endsAt: lastSentAt === undefined ? now : new Date(lastSentAt.getTime() + channel.windowMs) };
+        return { channel, lastSentAt, endsAt: lastSentAt === undefined ? now : new Date(lastSentAt.getTime() + channel.windowMs) };
       }),
     );
+    // What a wake still inside its window covers was left unhanded by a refusal: hand it through that channel.
+    let fresh = allFresh;
+    for (const { channel, lastSentAt, endsAt } of windows) {
+      if (lastSentAt === undefined || endsAt.getTime() <= now.getTime()) {
+        continue;
+      }
+      const covered = fresh.filter(({ sentAt }) => sentAt.getTime() <= lastSentAt.getTime());
+      const refused = await handEach(covered, channel.name);
+      if (refused !== undefined) {
+        return err(refused);
+      }
+      fresh = fresh.filter((delivery) => !covered.includes(delivery));
+    }
+    if (fresh.length === 0) {
+      return ok({ kind: 'settled' });
+    }
     const due = windows.filter(({ endsAt }) => endsAt.getTime() <= now.getTime()).map(({ channel }) => channel);
     if (due.length === 0) {
       return ok({ kind: 'inWindow', until: new Date(Math.min(...windows.map(({ endsAt }) => endsAt.getTime()))) });
     }
     const wentOut: WakeChannelName[] = [];
+    let isRetryable = false;
     for (const channel of due) {
-      if ((await channel.wake(ship)).isOk) {
+      const woken = await channel.wake(ship);
+      if (woken.isOk) {
         wentOut.push(channel.name);
+      } else if (woken.error.kind === 'refused') {
+        deps.attemptEnded({ ship, channel: channel.name, reason: woken.error.reason });
+      } else {
+        isRetryable = true;
       }
     }
     const [firstOut] = wentOut;
     if (firstOut === undefined) {
-      return ok({ kind: 'failed' });
+      return ok(isRetryable ? { kind: 'failed' } : { kind: 'settled' });
     }
     const refused = await handEach(fresh, firstOut);
     // The window is kept only after the hand-overs: a gateway that stopped in between wakes again, as the design says. A refusal keeps it, so no second email follows at once.

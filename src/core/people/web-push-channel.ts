@@ -33,7 +33,7 @@ export function createWebPushChannel(deps: { subscriptions: WebPushSubscriptions
             break;
         }
       }
-      return isTaken ? ok(undefined) : err({ reason: 'no push service took the wake' });
+      return isTaken ? ok(undefined) : err({ kind: 'unavailable', reason: 'no push service took the wake' });
     },
   };
 }
