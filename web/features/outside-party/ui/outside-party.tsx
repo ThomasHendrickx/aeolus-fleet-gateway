@@ -145,7 +145,7 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
                 {tools.value.tools.map((tool) => (
                   <ToolRow
                     key={tool.name}
-                    tool={tool}
+                    tool={{ ...tool, isReadOnly: tool.isReadOnly === true }}
                     testId="outside-party-tool"
                     control={scopes.includes(APPROVING_SCOPE) ? <ToolSwitch fleetId={fleetId} party={party.name} tool={tool.name} isOn={tool.isOn} /> : <Tag>{tool.isOn ? 'On' : 'Off'}</Tag>}
                   />

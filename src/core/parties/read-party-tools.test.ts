@@ -46,9 +46,9 @@ describe("an outside MCP server's tools, as it lists them now", () => {
       isOk: true,
       value: {
         tools: [
-          { name: 'list_issues', description: 'List issues by team, state or assignee', readOnlyHint: true, isOn: true, isNew: false },
+          { name: 'list_issues', description: 'List issues by team, state or assignee', isReadOnly: true, isOn: true, isNew: false },
           { name: 'get_issue', isOn: true, isNew: false },
-          { name: 'delete_issue', readOnlyHint: false, destructiveHint: true, isOn: true, isNew: false },
+          { name: 'delete_issue', isReadOnly: false, isDestructive: true, isOn: true, isNew: false },
         ],
       },
     });

@@ -677,7 +677,7 @@ export const gatewayRouter = t.router({
     /** An outside MCP server's tools, as the server lists them now, asked with the credential the gateway keeps, each with its switch. Any actor reads them. */
     tools: servedProcedure
       .input(z.strictObject({ name: shipHandleSchema }))
-      .output(z.object({ tools: z.array(z.object({ name: z.string(), description: z.string().optional(), isReadOnly: z.boolean(), isOn: z.boolean(), isNew: z.boolean() })) }))
+      .output(z.object({ tools: z.array(z.object({ name: z.string(), description: z.string().optional(), isReadOnly: z.boolean().optional(), isDestructive: z.boolean().optional(), isOn: z.boolean(), isNew: z.boolean() })) }))
       .query(async ({ ctx, input }) => {
         const read = await ctx.readPartyTools({ fleetId: ctx.fleetId, ...input });
         if (!read.isOk) {
