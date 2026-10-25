@@ -382,7 +382,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     runA2aAgent: createRunA2aAgent({
       cards: agentCards,
       crew: door,
-      hand: createHandA2aMessage({ ...agentCallDeps, parties, follow: followAgentTask }),
+      hand: createHandA2aMessage({ ...agentCallDeps, parties, requirements, checkScopes, follow: followAgentTask }),
       follow: followAgentTask,
       calls: agentCallDeps.calls,
       sleep,
