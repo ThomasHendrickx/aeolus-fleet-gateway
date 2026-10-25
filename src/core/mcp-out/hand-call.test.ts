@@ -86,7 +86,7 @@ describe('the gateway refuses a call to a tool not switched on for the party (ae
 });
 
 describe('the gateway refuses a call from a ship that lacks a scope the tool needs (gateway scopes 4.2)', () => {
-  const requireOfListDeals = (scopes: string[]) => requirements.change(FLEET_ID, 'crm', { version: 0, tools: new Map([['list_deals', scopes]]) });
+  const requireOfListDeals = (scopes: string[]) => requirements.change({ fleetId: FLEET_ID, name: 'crm' }, { version: 0, tools: new Map([['list_deals', scopes]]) });
 
   it('replies a tool error naming what is missing, reports it handled, and never reaches the server', async () => {
     await requireOfListDeals(['crm:write-leads']);
@@ -99,7 +99,7 @@ describe('the gateway refuses a call from a ship that lacks a scope the tool nee
   });
 
   it('refuses a ship that holds the tool\'s own scope but not the party\'s', async () => {
-    await requirements.change(FLEET_ID, 'crm', { version: 0, party: ['crm:use'], tools: new Map([['list_deals', ['crm:read-leads']]]) });
+    await requirements.change({ fleetId: FLEET_ID, name: 'crm' }, { version: 0, party: ['crm:use'], tools: new Map([['list_deals', ['crm:read-leads']]]) });
 
     await handCall({ party: CRM, delivery: aPushedDelivery() });
 
@@ -125,7 +125,7 @@ describe('the gateway refuses a call from a ship that lacks a scope the tool nee
 
   it('calls a tool whose requirement was removed while the call waited', async () => {
     await requireOfListDeals(['crm:write-leads']);
-    await requirements.change(FLEET_ID, 'crm', { version: 1, tools: new Map([['list_deals', []]]) });
+    await requirements.change({ fleetId: FLEET_ID, name: 'crm' }, { version: 1, tools: new Map([['list_deals', []]]) });
 
     await handCall({ party: CRM, delivery: aPushedDelivery() });
 

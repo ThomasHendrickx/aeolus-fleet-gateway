@@ -19,10 +19,12 @@ import { createPrismaFleetForgetter } from './adapters/prisma/fleet-forgetter.js
 import { createPrismaFleetSwitches } from './adapters/prisma/fleet-switches.js';
 import { createPrismaInstallationRequests } from './adapters/prisma/installation-requests.js';
 import { createPrismaPartyStore } from './adapters/prisma/party-store.js';
+import { createPrismaScopeRequirements } from './adapters/prisma/scope-requirements.js';
 import { createPrismaToolMarks } from './adapters/prisma/tool-marks.js';
 import { createMcpServers } from './adapters/mcp/mcp-servers.js';
 import { createMarkTool } from './core/mcp-out/mark-tool.js';
 import { createSwitchTool } from './core/parties/switch-tool.js';
+import { createCheckRequiredScopes } from './core/parties/check-required-scopes.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
@@ -341,7 +343,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const switchTool = createSwitchTool({ parties, servers, stateParty });
   const agentCards = createHttpAgentCards({ timeoutMs: AGENT_CARD_TIMEOUT_MS });
   const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, timing: callTiming });
-  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
+  const requirements = createPrismaScopeRequirements(prisma);
+  const checkScopes = createCheckRequiredScopes({ connections, door });
+  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, requirements, checkScopes, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
   const clientCalls = createPrismaClientCalls(prisma);
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
