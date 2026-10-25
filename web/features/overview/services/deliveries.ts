@@ -17,17 +17,18 @@ export type WakeChannels = inferRouterOutputs<GatewayRouter>['people']['wakeChan
 export type InboxEntry = Inbox['deliveries'][number];
 
 /**
- * A delivery in focus: whole once, as the person opened it, with its
- * question when it is one; or, opened before, by its title alone, as the
- * gateway keeps no payload.
+ * A delivery in focus: whole, as the person opened it or opened it again,
+ * with its question when it is one.
  */
 export interface FocusedDelivery {
   readonly deliveryId: string;
   readonly from: string;
   readonly title: string;
   readonly sentAt: string;
-  readonly payload: string | undefined;
+  readonly payload: string;
   readonly question: Question | undefined;
+  /** The meeting it was contributed to or tells of, when it belongs to one. */
+  readonly meetingId: string | undefined;
 }
 
 /** A question, when the delivery is one the fleet's question content type carries. */

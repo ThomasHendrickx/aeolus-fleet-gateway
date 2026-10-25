@@ -3,7 +3,7 @@
  * messaging (decisions 0054, 0057): the fleet's calls it makes as their
  * account, and the one crew every client of the person shares.
  */
-import type { DeliveryId, FleetId, MessageId, ShipId, ShipKind } from '@aeolus-fleet/common';
+import type { DeliveryId, FleetId, MeetingId, MessageId, ShipId, ShipKind } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { DiscoveredStatement } from '../mcp-in/ports.js';
@@ -83,6 +83,8 @@ export interface PersonDelivery {
   readonly questionTitle: string | null;
   readonly sentAt: Date;
   readonly inReplyTo: MessageId | null;
+  /** The meeting its message was contributed to or tells of; none outside a meeting (decision 0061). */
+  readonly meetingId: MeetingId | null;
 }
 
 /** A delivery as the person ship's push receive hands it: with the last number it was handed with under this lease, null while never handed (decision 0040). */
@@ -96,8 +98,11 @@ export interface PersonDiscovery {
   readonly types: readonly { readonly type: string; readonly reachable: number }[];
 }
 
-/** Who a person's message is for: one ship by its name, or any ship of a type. */
-export type PersonSelector = { readonly kind: 'ship'; readonly name: string } | { readonly kind: 'type'; readonly type: string };
+/** Who a person's message is for: one ship by its name, any ship of a type, or every other participant of a meeting, a contribution (decision 0061). */
+export type PersonSelector =
+  | { readonly kind: 'ship'; readonly name: string }
+  | { readonly kind: 'type'; readonly type: string }
+  | { readonly kind: 'meeting'; readonly meetingId: MeetingId };
 
 /** Outbound port: the fleet's calls the gateway makes as the crew of a person ship. */
 export interface PersonShipDoor {

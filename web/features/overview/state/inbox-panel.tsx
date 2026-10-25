@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 
+import { meetingPathOf } from '../../meeting/paths';
 import { answerDelivery, doneDelivery, openDelivery, type ActionOutcome } from '../hooks/overview-actions';
 import type { FocusedDelivery, Inbox, InboxEntry } from '../services/deliveries';
 import { DeliveryCard, type DeliveryControl } from '../ui/delivery-card';
@@ -11,8 +12,10 @@ import { Notice } from '../ui/notice';
 /**
  * The person's inbox with one delivery in focus at a time. Opening is their
  * own act, so it is a press, never a link: the gateway acknowledges the
- * delivery for them, and it is shown whole, once. Answering or being done
- * says so in place, and the inbox reads itself again.
+ * delivery for them, and it is shown whole. One they opened before opens
+ * again whole, as the fleet reads it again (aeolus-fleet #1046), so the way
+ * to its meeting stays. Answering or being done says so in place, and the
+ * inbox reads itself again.
  */
 export function InboxPanel({ fleetId, inbox }: { fleetId: string; inbox: Inbox }) {
   const [focus, setFocus] = useState<FocusedDelivery | undefined>();
@@ -65,6 +68,7 @@ export function InboxPanel({ fleetId, inbox }: { fleetId: string; inbox: Inbox }
     return (
       <DeliveryCard
         delivery={focus}
+        meetingHref={focus.meetingId === undefined ? undefined : meetingPathOf({ fleetId, meetingId: focus.meetingId })}
         note={note}
         working={working}
         failure={failure}
@@ -86,7 +90,6 @@ export function InboxPanel({ fleetId, inbox }: { fleetId: string; inbox: Inbox }
         openingId={openingId}
         failure={openFailure}
         onOpen={open}
-        onFocus={(entry) => { show({ ...entry, payload: undefined, question: undefined }); }}
       />
     </div>
   );

@@ -125,6 +125,8 @@ import { createReadInbox } from './core/people/read-inbox.js';
 import { createReadWakeChannels } from './core/people/read-wake-channels.js';
 import { createTurnEmailChannel } from './core/people/turn-email-channel.js';
 import type { PersonCrews, WakeChannel } from './core/people/ports.js';
+import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
+import { createReadMeeting } from './core/meetings/read-meeting.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
 import { createWakePerson } from './core/people/wake-person.js';
@@ -632,6 +634,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
       listShips: createListShips(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
+      readMeeting: createReadMeeting({ ...asCrew, door: door.meetings }),
+      changeOwnMic: createChangeOwnMic({ ...asCrew, door: door.meetings }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
     };
   };
