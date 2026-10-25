@@ -8,7 +8,7 @@ import { setPartyScopes } from '../../actions';
 import { partyScopesSetMessage, statedMessage } from '../table-messages';
 import { NeedsChips, type ListedScope } from './needs-chips';
 import { ScopePicker } from './scope-picker';
-import { TableDialog, type DialogRefusal } from './table-dialog';
+import { standingRefusal, TableDialog, type DialogRefusal } from './table-dialog';
 import { TableToasts } from './table-toasts';
 
 /**
@@ -29,6 +29,7 @@ function AgentNeedsLine({ fleetId, party, version, scopes, listed, canChange }: 
   const router = useRouter();
   const toasts = Toast.useToastManager();
   const [, startTransition] = useTransition();
+  const [isReloading, startReload] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -42,11 +43,12 @@ function AgentNeedsLine({ fleetId, party, version, scopes, listed, canChange }: 
   const save = () => {
     setIsSaving(true);
     setRefusal(null);
+    const madeOn = Math.max(version, keptVersion ?? 0);
     startTransition(async () => {
-      const outcome = await setPartyScopes({ fleetId, name: party, version: Math.max(version, keptVersion ?? 0), party: picked, tools: [] });
+      const outcome = await setPartyScopes({ fleetId, name: party, version: madeOn, party: picked, tools: [] });
       setIsSaving(false);
       if (!outcome.isOk) {
-        setRefusal({ message: outcome.message, isConflict: outcome.isConflict });
+        setRefusal({ message: outcome.message, isConflict: outcome.isConflict, version: madeOn });
         return;
       }
       setKeptVersion(outcome.version);
@@ -83,10 +85,12 @@ function AgentNeedsLine({ fleetId, party, version, scopes, listed, canChange }: 
             appliesTo={`Applies to every message to ${party}`}
             action={{ label: 'Save', pending: 'Saving…', isDisabled: false, onPress: save }}
             isSaving={isSaving}
-            refusal={refusal}
+            refusal={standingRefusal(refusal, Math.max(version, keptVersion ?? 0))}
+            isReloading={isReloading}
             onReload={() => {
-              setRefusal(null);
-              router.refresh();
+              startReload(() => {
+                router.refresh();
+              });
             }}
             testId="agent-needs-dialog"
           >

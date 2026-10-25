@@ -6,10 +6,16 @@ import type { ReactNode } from 'react';
 import { BUTTONS } from '../../../forms/ui/look';
 import { ActionButton } from '../../../overview/ui/action-button';
 
-/** Why the API refused a change in a dialog: said inline, CONFLICT with Reload. */
+/** Why the API refused a change in a dialog: said inline, CONFLICT with Reload, at the requirements' version the change was made on. */
 export interface DialogRefusal {
   message: string;
   isConflict: boolean;
+  version: number;
+}
+
+/** The refusal still to say: a CONFLICT is answered once the page read newer requirements. */
+export function standingRefusal(refusal: DialogRefusal | null, version: number): DialogRefusal | null {
+  return refusal?.isConflict === true && version > refusal.version ? null : refusal;
 }
 
 /**
@@ -17,7 +23,8 @@ export interface DialogRefusal {
  * saying what it applies to, and its action. While the action is on its
  * way the action shows its spinner and the dialog takes no input and does
  * not close; a refusal stays inline, with Reload when the requirements
- * changed since the page was read.
+ * changed since the page was read, which shows its spinner until the page
+ * read them again.
  */
 export function TableDialog({
   isOpen,
@@ -30,6 +37,7 @@ export function TableDialog({
   isSaving,
   refusal,
   onReload,
+  isReloading,
   testId,
 }: {
   isOpen: boolean;
@@ -42,6 +50,7 @@ export function TableDialog({
   isSaving: boolean;
   refusal: DialogRefusal | null;
   onReload: () => void;
+  isReloading: boolean;
   testId: string;
 }) {
   return (
@@ -67,9 +76,9 @@ export function TableDialog({
             <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-tone-attention-border bg-tone-attention-bg px-3 py-2 text-tone-attention-fg" data-testid="tools-table-dialog-refusal">
               <span>{refusal.message}</span>
               {refusal.isConflict ? (
-                <button type="button" className={BUTTONS.secondary} onClick={onReload} data-testid="tools-table-reload">
+                <ActionButton isPending={isReloading} pendingLabel="Reloading…" onClick={onReload} data-testid="tools-table-reload">
                   Reload
-                </button>
+                </ActionButton>
               ) : null}
             </div>
           )}
@@ -81,7 +90,7 @@ export function TableDialog({
               <button type="button" className={BUTTONS.secondary} disabled={isSaving} onClick={onClose}>
                 Cancel
               </button>
-              <ActionButton variant="primary" isPending={isSaving} pendingLabel={action.pending} disabled={action.isDisabled} onClick={action.onPress} data-testid="tools-table-dialog-action">
+              <ActionButton variant="primary" isPending={isSaving} pendingLabel={action.pending} disabled={action.isDisabled || isReloading} onClick={action.onPress} data-testid="tools-table-dialog-action">
                 {action.label}
               </ActionButton>
             </div>

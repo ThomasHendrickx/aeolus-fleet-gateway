@@ -17,7 +17,7 @@ import { partyScopesSetMessage, scopesSetMessage, statedMessage, suggestionsSetM
 import { keptToolsOf, shownTools, STATE_FILTERS, type KeptChanges, type StateFilter, type TableTool } from '../table-tools';
 import { NeedsChips, type ListedScope } from './needs-chips';
 import { ScopePicker } from './scope-picker';
-import { TableDialog, type DialogRefusal } from './table-dialog';
+import { standingRefusal, TableDialog, type DialogRefusal } from './table-dialog';
 import { TableToasts } from './table-toasts';
 
 /** What the table shows of one outside MCP server, as its page read it. */
@@ -72,6 +72,7 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
   const router = useRouter();
   const toasts = Toast.useToastManager();
   const [, startTransition] = useTransition();
+  const [isReloading, startReload] = useTransition();
   const [nameFilter, setNameFilter] = useState('');
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -135,11 +136,12 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
   const save = ({ change, changed, message }: { change: { party?: string[]; tools: { tool: string; scopes: string[] }[] }; changed: readonly string[]; message: string }) => {
     setIsSaving(true);
     setRefusal(null);
+    const madeOn = currentVersion;
     startTransition(async () => {
-      const outcome = await setPartyScopes({ fleetId, name: party, version: currentVersion, ...change });
+      const outcome = await setPartyScopes({ fleetId, name: party, version: madeOn, ...change });
       setIsSaving(false);
       if (!outcome.isOk) {
-        setRefusal({ message: outcome.message, isConflict: outcome.isConflict });
+        setRefusal({ message: outcome.message, isConflict: outcome.isConflict, version: madeOn });
         return;
       }
       setDialog(null);
@@ -165,8 +167,9 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
   };
 
   const reload = () => {
-    setRefusal(null);
-    router.refresh();
+    startReload(() => {
+      router.refresh();
+    });
   };
 
   const toggle = (name: string) => {
@@ -362,7 +365,8 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
               },
             }}
             isSaving={isSaving}
-            refusal={refusal}
+            refusal={standingRefusal(refusal, currentVersion)}
+            isReloading={isReloading}
             onReload={reload}
             testId="tools-table-scopes-dialog"
           >
@@ -392,7 +396,8 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
               },
             }}
             isSaving={isSaving}
-            refusal={refusal}
+            refusal={standingRefusal(refusal, currentVersion)}
+            isReloading={isReloading}
             onReload={reload}
             testId="tools-table-party-dialog"
           >
@@ -417,7 +422,8 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
               },
             }}
             isSaving={isSaving}
-            refusal={refusal}
+            refusal={standingRefusal(refusal, currentVersion)}
+            isReloading={isReloading}
             onReload={reload}
             testId="tools-table-suggest-dialog"
           >
