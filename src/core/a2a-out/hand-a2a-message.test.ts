@@ -169,6 +169,27 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
     expect({ replies: crew.replies().map(({ payload }) => payload), slept }).toEqual({ replies: ['an earlier reply', aStatus('completed').json], slept: [] });
   });
 
+  it('replies every appended chunk once on a follow-up turn of the same task', async () => {
+    const agents = fakeA2aAgents({ sends: [
+      taken([anArtifactChunk({ artifactId: 'a-1', text: '4 ', isAppended: false }), anArtifactChunk({ artifactId: 'a-1', text: 'EUR', isAppended: true }), aStatus('inputRequired')]),
+      taken([anArtifactChunk({ artifactId: 'a-1', text: ' incl.', isAppended: true }), anArtifactChunk({ artifactId: 'a-1', text: ' VAT', isAppended: true }), aStatus('completed')]),
+    ] });
+    const hand = handWith(agents);
+    await expect(hand()).resolves.toEqual({ kind: 'handled' });
+    const asked = crew.replies().at(-1);
+    const followUp = aQuote({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d02', messageId: 'msg_01m3tbfspe96yf1rnr4ank9m02', payload: 'Include VAT', inReplyTo: await replyMessageIdOf(asked?.idempotencyKey) });
+
+    await expect(hand(followUp)).resolves.toEqual({ kind: 'handled' });
+    await expect(hand(followUp)).resolves.toEqual({ kind: 'handled' });
+
+    expect(crew.replies().filter(({ contentType }) => contentType === 'text/plain').map(({ payload, inReplyTo }) => ({ payload, inReplyTo }))).toEqual([
+      { payload: '4 ', inReplyTo: MESSAGE },
+      { payload: 'EUR', inReplyTo: MESSAGE },
+      { payload: ' incl.', inReplyTo: followUp.messageId },
+      { payload: ' VAT', inReplyTo: followUp.messageId },
+    ]);
+  });
+
   it('stops sending a reply the fleet does not take at the deadline', async () => {
     const agents = fakeA2aAgents({ sends: [taken([aStatus('working')])] });
     crew.state.isSendAnswering = false;
