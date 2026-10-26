@@ -177,8 +177,8 @@ export interface WakeChannel {
   readonly windowMs: number;
   /** Whether the person turned it on (W8): nothing is on by default. */
   isOn(ship: PersonShip): Promise<boolean>;
-  /** Sends the wake: whether it went out. */
-  wake(ship: PersonShip): Promise<Result<undefined, { reason: string }>>;
+  /** Sends the wake: whether it went out. A refusal for good (refused) cannot be fixed by trying again; unavailable can succeed later. */
+  wake(ship: PersonShip): Promise<Result<undefined, { kind: 'refused' | 'unavailable'; reason: string }>>;
 }
 
 /** Outbound port: when each channel last woke each person ship, so the window holds across restarts and instances (W3). */
