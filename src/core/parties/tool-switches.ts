@@ -19,8 +19,10 @@ export const TOOL_NOT_ENABLED = 'tool not enabled for this party';
 export interface SwitchedTool {
   name: string;
   description?: string;
-  /** Whether the server says the tool changes nothing (its readOnlyHint): a hint, never trusted on its own. */
-  isReadOnly: boolean;
+  /** Whether the server says the tool changes nothing, its readOnlyHint as it gives it: a hint, never trusted on its own; none when it says nothing. */
+  isReadOnly?: boolean;
+  /** Whether the server says the tool may destroy what it changes, its destructiveHint as it gives it; none when it says nothing. */
+  isDestructive?: boolean;
   isOn: boolean;
   isNew: boolean;
 }
@@ -35,7 +37,8 @@ export function switchedToolsOf(listed: readonly OutsideTool[], switches: ToolSw
   return listed.map(({ name, description, annotations }) => ({
     name,
     ...(description === undefined ? {} : { description }),
-    isReadOnly: annotations?.readOnlyHint === true,
+    ...(annotations?.readOnlyHint === undefined ? {} : { isReadOnly: annotations.readOnlyHint }),
+    ...(annotations?.destructiveHint === undefined ? {} : { isDestructive: annotations.destructiveHint }),
     isOn: isToolOn(switches, name),
     isNew: switches !== null && !switches.has(name),
   }));

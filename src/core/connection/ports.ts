@@ -23,6 +23,12 @@ export interface FleetShip {
  * Outbound port: the fleet's public ship calls, as the gateway makes them for
  * its own ship. The gateway is a ship like any other.
  */
+/** A scope the fleet lists (fleet.scopes): core's, a plugin's or the fleet's own, with its one-line description. */
+export interface ListedScope {
+  scope: string;
+  description: string;
+}
+
 export interface FleetDoor {
   register(claim: { shipId: ShipId; secret: string }): Promise<Result<{ crewToken: string }, FleetRefusal>>;
   whoami(crewToken: string): Promise<Result<{ shipId: ShipId; fleetId: FleetId; name: string; type: string }, FleetRefusal>>;
@@ -35,7 +41,7 @@ export interface FleetDoor {
   /** Ends this session's crew of its ship: the lease and the secret it claimed with. */
   deregister(crewToken: string): Promise<Result<undefined, FleetRefusal>>;
   /** Every scope the fleet lists (fleet.scopes, fleet:read): core's, each plugin's and the fleet's own. */
-  listScopes(crewToken: string): Promise<Result<string[], FleetRefusal>>;
+  listScopes(crewToken: string): Promise<Result<ListedScope[], FleetRefusal>>;
   /** Declares the ship's own namespace and its whole list of scopes; the fleet stores them, the gateway enforces them (decision 0046). */
   declareScopes(crewToken: string, declaration: { namespace: string; scopes: { scope: string; description: string }[] }): Promise<Result<undefined, FleetRefusal>>;
 }

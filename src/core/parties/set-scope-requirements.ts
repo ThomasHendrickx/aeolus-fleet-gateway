@@ -5,7 +5,7 @@ import type { ConnectionStore, FleetDoor } from '../connection/ports.js';
 import type { StateParty } from '../mcp-out/state-party.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import { APPROVING_SCOPE } from './approver.js';
+import { approvedParty } from './check-approving.js';
 import type { PartyStore, ProxyShipsAsActor, ScopeRequirementsStore } from './ports.js';
 import type { ScopeRequirements } from './scope-requirements.js';
 
@@ -49,32 +49,13 @@ export function createSetScopeRequirements(deps: {
   credentialOf: CredentialOf;
 }): SetScopeRequirements {
   return async ({ actor, as, name, version, party, tools }) => {
-    if (!actor.scopes.includes(APPROVING_SCOPE)) {
-      return refuse('NOT_AN_APPROVER', `Setting the scopes an outside party needs takes ${APPROVING_SCOPE}`);
+    const approved = await approvedParty(deps, { actor, as, name });
+    if (!approved.isOk) {
+      return approved;
     }
-    const kept = await deps.parties.find(actor.fleetId, name);
-    if (kept?.kind !== 'mcpServer' && kept?.kind !== 'a2aAgent') {
-      return refuse('NO_SUCH_PARTY', `There is no outside MCP server or A2A agent ${name}`);
-    }
+    const { party: kept, gateway } = approved.value;
     if (kept.kind === 'a2aAgent' && tools.size > 0) {
       return refuse('NO_SUCH_TOOL', `${name} is an outside A2A agent: its messages name no tool, so set the scopes it needs as a whole`);
-    }
-    if (kept.proxyShipId === null) {
-      return refuse('PARTY_NOT_COMMISSIONED', `${name}'s proxy ship is not commissioned yet`);
-    }
-    const gateway = await deps.connections.find(actor.fleetId);
-    if (gateway === undefined) {
-      return refuse('NOT_CONNECTED', 'The gateway is not connected to the fleet');
-    }
-    const credential = await deps.credentialOf(actor, as);
-    if (!credential.isOk) {
-      return credential;
-    }
-    const managed = await deps.fleet.checkManage(credential.value, { shipId: kept.proxyShipId });
-    if (!managed.isOk) {
-      return managed.error.code === 'UNAVAILABLE'
-        ? refuse('FLEET_UNAVAILABLE', `The fleet did not say whether you manage ${name}: ${managed.error.message}`)
-        : refuse('NOT_REACHABLE', managed.error.message);
     }
     const change = { ...(party === undefined ? {} : { party: unique(party) }), tools: new Map([...tools].map(([tool, scopes]) => [tool, unique(scopes)])) };
     const required = unique([...(change.party ?? []), ...[...change.tools.values()].flat()]);
@@ -83,7 +64,7 @@ export function createSetScopeRequirements(deps: {
       if (!listed.isOk) {
         return refuse('FLEET_UNAVAILABLE', `The fleet did not say which scopes it lists: ${listed.error.message}`);
       }
-      const unlisted = required.filter((scope) => !listed.value.includes(scope));
+      const unlisted = required.filter((scope) => !listed.value.some((each) => each.scope === scope));
       if (unlisted.length > 0) {
         return refuse('SCOPE_NOT_LISTED', `The fleet lists no scope ${unlisted.join(' or ')}: define it first, or pick a listed one`);
       }

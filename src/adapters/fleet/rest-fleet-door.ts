@@ -365,7 +365,7 @@ export function createRestFleetDoor(
     },
     listScopes: async (crewToken) => {
       const listed = await call({ path: '/fleet/scopes', method: 'GET', crewToken, answers: scopesOutputSchema });
-      return listed.isOk ? ok(listed.value.flatMap((namespace) => namespace.scopes.map(({ scope }) => scope))) : listed;
+      return listed.isOk ? ok(listed.value.flatMap((namespace) => namespace.scopes.map(({ scope, description }) => ({ scope, description })))) : listed;
     },
     declareScopes: async (crewToken, declaration) => {
       const declared = await call({ path: '/fleet/declareScopes', method: 'POST', crewToken, body: declaration, answers: z.unknown() });

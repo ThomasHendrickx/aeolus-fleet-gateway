@@ -413,7 +413,7 @@ describe('an approver picks which tools of an outside MCP server the fleet may c
       tool: { name: 'archive_contact', isOn: false, isNew: true },
     });
 
-    const switched = await mutate(address, { procedure: 'parties.switchTool', crewToken: approver, body: { name: 'vault', tool: 'archive_contact', isOn: true } });
+    const switched = await mutate(address, { procedure: 'parties.switchTools', crewToken: approver, body: { name: 'vault', tools: ['archive_contact'], isOn: true } });
     expect(switched.status, await switched.clone().text()).toBe(200);
     await callTool('archive_contact', {});
     expect(await receiveOne(fleet, caller.crewToken).then((reply) => reply && parsed(reply.payload))).toEqual({ content: [{ type: 'text', text: 'archive_contact' }], isError: false });
@@ -423,7 +423,7 @@ describe('an approver picks which tools of an outside MCP server the fleet may c
     const address = await connectedWithApprover();
     await vaultAdded(address, EVERY_TOOL.map((name) => ({ name, isOn: true })));
 
-    const switched = await mutate(address, { procedure: 'parties.switchTool', crewToken: approver, body: { name: 'vault', tool: 'create_contact', isOn: false } });
+    const switched = await mutate(address, { procedure: 'parties.switchTools', crewToken: approver, body: { name: 'vault', tools: ['create_contact'], isOn: false } });
 
     expect(switched.status, await switched.clone().text()).toBe(200);
     expect(await statedTools(address, 'vault')).toEqual(EVERY_TOOL.filter((name) => name !== 'create_contact'));
