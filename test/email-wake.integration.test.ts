@@ -2,6 +2,7 @@ import { createServer, type Server } from 'node:http';
 
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
+import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaFocusedPages } from '../src/adapters/prisma/focused-pages.js';
@@ -89,8 +90,8 @@ let app: GatewayApp;
 let prisma: PrismaClient;
 let address: string;
 let argo: string;
-let fleetId: string;
-let charlotteShipId: string;
+let fleetId: FleetId;
+let charlotteShipId: ShipId;
 let tracker: string;
 
 beforeEach(async () => {
