@@ -104,6 +104,8 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       attempts: 0,
       isForced: false,
       meetingId: null,
+      scheduleId: null,
+      sendTime: null,
       state: 'received',
       handOverNumber: null,
     };
@@ -154,6 +156,8 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         attempts: 1,
         isForced: false,
         meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',
+        scheduleId: null,
+        sendTime: null,
         state: 'acknowledged',
       },
     };
@@ -260,5 +264,21 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
       isOk: false,
       error: { code: 'CONFLICT', message: 'You already requested the mic' },
     });
+  });
+});
+
+describe('where the delivery of a message a proxy ship sent stands, as sentMessage answers (common 0.32.0)', () => {
+  it("reads the state and since of the message's one delivery to the ship it went to", async () => {
+    answer = {
+      status: 200,
+      body: {
+        messageId: 'msg_01m3tb1zgr5h2ffee12xnch8pp',
+        sentAt: '2026-10-26T07:00:00.000Z',
+        recipient: { kind: 'ship', ship: { id: PERSON_SHIP, name: 'supplier' } },
+        deliveries: [{ deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch8pp', ship: { id: PERSON_SHIP, name: 'supplier' }, state: 'handed', since: '2026-10-26T07:00:05.000Z' }],
+      },
+    };
+
+    await expect(createRestFleetDoor(base).sentMessage('aeolus_ct_v1_gateway', 'msg_01m3tb1zgr5h2ffee12xnch8pp')).resolves.toEqual({ isOk: true, value: { state: 'handed', since: new Date('2026-10-26T07:00:05.000Z') } });
   });
 });
