@@ -47,18 +47,38 @@ export function aNewDatabaseUrl(adminUrl: string, prefix: string): string {
   return url.toString();
 }
 
+/** Each test worker takes ports from a block of its own, below the range the system hands out to port 0. */
+const PORTS_PER_WORKER = 400;
+const FIRST_PORT = 10_000;
+const WORKER_BLOCKS = 50;
+let nextPort = 0;
+
+/**
+ * A port nothing listens on, that no other test worker hands out: a port from port 0
+ * is free again once closed, so two files starting servers side by side could be given
+ * the same one, and a server then answered for another's.
+ */
 export async function aFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
+  const block = (Number(process.env.VITEST_POOL_ID ?? process.pid) % WORKER_BLOCKS) * PORTS_PER_WORKER;
+  for (let tries = 0; tries < PORTS_PER_WORKER; tries += 1) {
+    const port = FIRST_PORT + block + (nextPort % PORTS_PER_WORKER);
+    nextPort += 1;
+    if (await isFree(port)) {
+      return port;
+    }
+  }
+  throw new Error('no free port');
+}
+
+function isFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
     const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
+    server.once('error', () => {
+      resolve(false);
+    });
+    server.listen(port, '127.0.0.1', () => {
       server.close(() => {
-        if (address !== null && typeof address === 'object') {
-          resolve(address.port);
-        } else {
-          reject(new Error('no free port'));
-        }
+        resolve(true);
       });
     });
   });
