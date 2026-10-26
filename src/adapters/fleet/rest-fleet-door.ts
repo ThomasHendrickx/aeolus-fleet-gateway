@@ -309,8 +309,8 @@ export function createRestFleetDoor(
         return counted.isOk ? ok({ waiting: counted.value.waiting }) : counted;
       },
       // The gateway wakes the person for their person ship, so its lease states the gateway as its waker (interop 5.1).
-      pushReceive: async (crewToken, { max }) => {
-        const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max, waker: 'gateway' }, answers: pushReceiveOutputSchema });
+      pushReceive: async (crewToken, { max, shouldSkipHanded }) => {
+        const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max, waker: 'gateway', ...(shouldSkipHanded === undefined ? {} : { shouldSkipHanded }) }, answers: pushReceiveOutputSchema });
         return taken.isOk ? ok(taken.value.deliveries.map((delivery) => ({ ...personDeliveryOf(delivery), handOverNumber: delivery.handOverNumber }))) : taken;
       },
       ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),

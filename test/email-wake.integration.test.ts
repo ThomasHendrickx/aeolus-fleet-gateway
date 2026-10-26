@@ -1,7 +1,11 @@
+import { createServer, type Server } from 'node:http';
+
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
+import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
+import { createPrismaFocusedPages } from '../src/adapters/prisma/focused-pages.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaPersonCrews } from '../src/adapters/prisma/person-crews.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
@@ -20,15 +24,74 @@ import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 const SIGN_IN = 'charlotte-shared-sign-in';
 const WINDOW_MS = 8_000;
 const SEEN_WITHIN_MS = 20_000;
+/** The first wait before a wake that failed is tried again (the gateway's own). */
+const FAILED_WAKE_AGAIN_MS = 60_000;
+
+/** The fleet as the gateway reaches it: every call passes through, except the answer of a push receive that can be told to get lost. */
+interface LossyFleet {
+  url: string;
+  /** Lets the next push receive that took a delivery reach the fleet, but loses its answer. */
+  loseNextTakenAnswer(): void;
+  /** How many push-receive answers were lost. */
+  readonly lost: number;
+  stop(): Promise<void>;
+}
+
+async function lossyFleetIn(target: string): Promise<LossyFleet> {
+  let isLosing = false;
+  let lost = 0;
+  const server: Server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('end', () => {
+      const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+      const forwarded = fetch(`${target}${request.url ?? ''}`, {
+        method: request.method ?? 'GET',
+        headers: Object.fromEntries(Object.entries(request.headers).flatMap(([name, value]) => (typeof value === 'string' && name !== 'host' && name !== 'content-length' ? [[name, value]] : []))),
+        ...(hasBody ? { body: Buffer.concat(chunks) } : {}),
+      });
+      forwarded
+        .then(async (answered) => {
+          const body = Buffer.from(await answered.arrayBuffer());
+          if (isLosing && request.url === '/api/v1/ship/pushReceive' && (z.object({ deliveries: z.array(z.unknown()) }).safeParse(JSON.parse(body.toString())).data?.deliveries.length ?? 0) > 0) {
+            isLosing = false;
+            lost += 1;
+            request.socket.destroy();
+            return;
+          }
+          response.writeHead(answered.status, { 'content-type': answered.headers.get('content-type') ?? 'application/json' });
+          response.end(body);
+        })
+        .catch(() => request.socket.destroy());
+    });
+  });
+  const port = await aFreePort();
+  await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
+  return {
+    url: `http://127.0.0.1:${String(port)}`,
+    loseNextTakenAnswer: () => {
+      isLosing = true;
+    },
+    get lost() {
+      return lost;
+    },
+    stop: () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => { resolve(); });
+      }),
+  };
+}
 
 let fleet: FleetServer;
+let lossy: LossyFleet;
 let pagasae: FakePagasae;
 let app: GatewayApp;
 let prisma: PrismaClient;
 let address: string;
 let argo: string;
-let fleetId: string;
-let charlotteShipId: string;
+let fleetId: FleetId;
+let charlotteShipId: ShipId;
 let tracker: string;
 
 beforeEach(async () => {
@@ -40,6 +103,7 @@ beforeEach(async () => {
   if (!who.isOk) {
     throw new Error('charlotte is not crewed');
   }
+  lossy = await lossyFleetIn(fleet.url);
   fleetId = who.value.fleetId;
   charlotteShipId = who.value.shipId;
   const databaseUrl = await migratedDatabase(inject('postgresUrl'));
@@ -52,7 +116,7 @@ beforeEach(async () => {
   address = `http://127.0.0.1:${String(port)}`;
   app = createGatewayApp({
     databaseUrl,
-    fleetUrl: fleet.url,
+    fleetUrl: lossy.url,
     logger: false,
     publicUrl: address,
     gatewaySecret: TEST_GATEWAY_SECRET,
@@ -70,6 +134,7 @@ afterEach(async () => {
   await app.close();
   await prisma.$disconnect();
   await pagasae.stop();
+  await lossy.stop();
   await fleet.stop();
 });
 
@@ -143,5 +208,68 @@ describe('a person woken by email (wake a person, S4)', () => {
 
     await expect.poll(() => pagasae.refusedWakes, { timeout: SEEN_WITHIN_MS }).toBeGreaterThan(0);
     expect({ wakes: pagasae.wakes, handOvers: await handOvers(messageId) }).toEqual({ wakes: [], handOvers: [] });
+  });
+
+  describe('with ten deliveries held, handed and not opened', () => {
+    const HELD = 10;
+
+    /** Ten deliveries handed through email and never acknowledged: the most one push receive returns. */
+    async function holdTen(): Promise<void> {
+      await turnEmail(true);
+      const held = await Promise.all(Array.from({ length: HELD }, () => trackerSendsCharlotte()));
+      for (const messageId of held) {
+        await expect.poll(async () => handOvers(messageId), { timeout: SEEN_WITHIN_MS + WINDOW_MS }).toEqual(['email']);
+      }
+    }
+
+    it('wakes for an eleventh delivery and hands it no. 1 through email', async () => {
+      await holdTen();
+      const wakesBefore = pagasae.wakes.length;
+
+      const eleventh = await trackerSendsCharlotte();
+
+      await expect.poll(async () => handOvers(eleventh), { timeout: SEEN_WITHIN_MS + WINDOW_MS }).toEqual(['email']);
+      expect(pagasae.wakes.length).toBe(wakesBefore + 1);
+    }, 120_000);
+
+    it('wakes for the eleventh delivery again when the answer to the push receive that took it was lost before its hand-over', async () => {
+      await holdTen();
+      const wakesBefore = pagasae.wakes.length;
+      lossy.loseNextTakenAnswer();
+
+      const eleventh = await trackerSendsCharlotte();
+
+      await expect.poll(async () => handOvers(eleventh), { timeout: FAILED_WAKE_AGAIN_MS + SEEN_WITHIN_MS }).toEqual(['email']);
+      expect({ lost: lossy.lost, wakes: pagasae.wakes.length - wakesBefore }).toEqual({ lost: 1, wakes: 1 });
+    }, 200_000);
+
+    it('holds the eleventh delivery back while the window of the last wake runs, then hands it', async () => {
+      await holdTen();
+      const eleventh = await trackerSendsCharlotte();
+      await expect.poll(async () => handOvers(eleventh), { timeout: SEEN_WITHIN_MS + WINDOW_MS }).toEqual(['email']);
+      const twelfth = await trackerSendsCharlotte();
+      await expect.poll(async () => (await historyOf(twelfth)).some(({ type }) => type === 'DeliveryReceived'), { timeout: SEEN_WITHIN_MS }).toBe(true);
+      const insideTheWindow = await handOvers(twelfth);
+
+      await expect.poll(async () => handOvers(twelfth), { timeout: SEEN_WITHIN_MS + WINDOW_MS }).toEqual(['email']);
+      expect(insideTheWindow).toEqual([]);
+    }, 180_000);
+
+    it('hands the eleventh delivery through the page while a page of theirs is in focus, and sends no email', async () => {
+      await holdTen();
+      const wakesBefore = pagasae.wakes.length;
+      const focused = createPrismaFocusedPages(prisma);
+      const keepFocus = setInterval(() => void focused.save({ fleetId, shipId: charlotteShipId, pageId: 'page-1', seenAt: new Date() }), 1_000);
+      await focused.save({ fleetId, shipId: charlotteShipId, pageId: 'page-1', seenAt: new Date() });
+
+      try {
+        const eleventh = await trackerSendsCharlotte();
+
+        await expect.poll(async () => handOvers(eleventh), { timeout: SEEN_WITHIN_MS }).toEqual(['page']);
+        expect(pagasae.wakes.length).toBe(wakesBefore);
+      } finally {
+        clearInterval(keepFocus);
+      }
+    }, 120_000);
   });
 });

@@ -1,4 +1,4 @@
-import type { DeliveryId } from '@aeolus-fleet/common';
+import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
@@ -63,12 +63,18 @@ function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: Flee
   return {
     handOvers,
     door: {
-      pushReceive: (crewToken: string): Promise<Result<PushedPersonDelivery[], FleetRefusal>> =>
+      // Core takes at most max, its own received and handed deliveries first; shouldSkipHanded leaves the handed out before the limit.
+      pushReceive: (crewToken: string, take: { max: number; shouldSkipHanded?: boolean }): Promise<Result<PushedPersonDelivery[], FleetRefusal>> =>
         Promise.resolve(
           options.pushReceive !== undefined
             ? err(options.pushReceive)
             : crewToken === CREW_TOKEN
-              ? ok(deliveries.map((delivery) => (handOvers.some(({ deliveryId }) => deliveryId === delivery.deliveryId) ? { ...delivery, handOverNumber: 1 } : delivery)))
+              ? ok(
+                  deliveries
+                    .map((delivery) => (handOvers.some(({ deliveryId }) => deliveryId === delivery.deliveryId) ? { ...delivery, handOverNumber: 1 } : delivery))
+                    .filter(({ handOverNumber }) => take.shouldSkipHanded !== true || handOverNumber === null)
+                    .slice(0, take.max),
+                )
               : err({ code: 'UNAUTHORIZED', message: 'no' }),
         ),
       handed: (_crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: string }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>> => {
@@ -128,6 +134,21 @@ describe('waking a person', () => {
     expect(woken).toEqual(ok({ kind: 'settled' }));
     expect(email.woken).toEqual([]);
     expect(ship.handOvers).toEqual([]);
+  });
+
+  it('wakes for a new delivery though the person holds more handed deliveries than one take returns', async () => {
+    const held = Array.from({ length: RECEIVE_MAX_UPPER_BOUND }, (_, index) => aDelivery(index + 1, { handOverNumber: 1 }));
+    const newest = aDelivery(RECEIVE_MAX_UPPER_BOUND + 1);
+    const ship = aShip([...held, newest]);
+    const email = aChannel('email');
+
+    const woken = await waking({ ship, channels: [email.channel] })(SHIP, CREW_TOKEN);
+
+    expect({ woken, wakes: email.woken.length, handOvers: ship.handOvers }).toEqual({
+      woken: ok({ kind: 'settled' }),
+      wakes: 1,
+      handOvers: [{ deliveryId: newest.deliveryId, handOverNumber: 1, channel: 'email' }],
+    });
   });
 
   it('wakes only for what was never handed, and hands only that', async () => {

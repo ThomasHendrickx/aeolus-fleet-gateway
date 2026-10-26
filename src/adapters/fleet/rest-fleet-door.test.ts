@@ -128,6 +128,18 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     expect(sent().map(({ url, body }) => ({ url, body }))).toEqual([{ url: '/api/v1/ship/pushReceive', body: { max: 10, waker: 'gateway' } }]);
   });
 
+  it('forwards shouldSkipHanded to the push receive of a person ship, and leaves it out when not asked', async () => {
+    answer = { status: 200, body: { deliveries: [] } };
+
+    await createRestFleetDoor(base).person.pushReceive('aeolus_ct_v1_charlotte', { max: 10, shouldSkipHanded: true });
+    await createRestFleetDoor(base).person.pushReceive('aeolus_ct_v1_charlotte', { max: 10 });
+
+    expect(sent().map(({ body }) => body)).toEqual([
+      { max: 10, waker: 'gateway', shouldSkipHanded: true },
+      { max: 10, waker: 'gateway' },
+    ]);
+  });
+
   it("replies to the sender's ship, in reply to its message, under the key given", async () => {
     answer = { status: 200, body: { messageId: 'msg_01m3tbfspe96yf1rnr4ank0009', isNew: true } };
 
