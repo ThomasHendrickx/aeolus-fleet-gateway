@@ -4,6 +4,7 @@ import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
 import type { Party } from './party.js';
+import type { ScopeRequirements, ScopeRequirementsChange } from './scope-requirements.js';
 import type { FromFleet } from './shown-party.js';
 import type { ToolSwitches } from './tool-switches.js';
 
@@ -24,6 +25,18 @@ export interface PartyStore {
    */
   switchTools(party: { fleetId: FleetId; name: string }, change: { listed: readonly string[]; switched: ToolSwitches }): Promise<void>;
   remove(fleetId: FleetId, name: string): Promise<void>;
+}
+
+/** Outbound port: each party's required scopes (design gateway-scopes, 4.2), kept with the party and gone with it. */
+export interface ScopeRequirementsStore {
+  /** The party's requirements as they are now; none set yet is version 0, needing nothing. */
+  find(fleetId: FleetId, party: string): Promise<ScopeRequirements>;
+  /**
+   * Makes the change, all at once and only while the requirements are still
+   * at the version named: the requirements after, at the next version; none
+   * once another change moved them on.
+   */
+  change(party: { fleetId: FleetId; name: string }, change: ScopeRequirementsChange & { version: number }): Promise<ScopeRequirements | undefined>;
 }
 
 /** Outbound port: the fleet's calls the gateway makes for a party's proxy ship. */
@@ -52,6 +65,8 @@ export interface ProxyShipsAsActor {
   setOwner(as: ActorCredential, ship: { shipId: ShipId; ownerShipId: ShipId }): Promise<Result<undefined, FleetRefusal>>;
   /** Grants and revokes the proxy ship's scopes (fleet.grantScopes, scopes:grant): every scope it holds now. */
   grantScopes(as: ActorCredential, change: { shipId: ShipId; grant: readonly string[]; revoke: readonly string[] }): Promise<Result<{ scopes: string[] }, FleetRefusal>>;
+  /** Whether the actor manages the proxy ship now (fleet.checkManage, no scope): OK, or the fleet's refusal, which it records. */
+  checkManage(as: ActorCredential, ship: { shipId: ShipId }): Promise<Result<undefined, FleetRefusal>>;
 }
 
 /** Outbound port: what the fleet holds for a proxy ship, read as the actor (fleet:read): its name, owner and scopes, only its name outside the actor's read reach. */

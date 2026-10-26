@@ -1,6 +1,8 @@
 import { MAY_HAVE_RUN, type HandOutcome, type PushedDelivery } from '../mcp-out/hand-call.js';
+import type { CheckRequiredScopes } from '../parties/check-required-scopes.js';
 import type { A2aAgentParty } from '../parties/party.js';
-import type { PartyStore } from '../parties/ports.js';
+import type { PartyStore, ScopeRequirementsStore } from '../parties/ports.js';
+import { scopesNeeded } from '../parties/scope-requirements.js';
 import type { Clock } from '../shared/clock.js';
 import type { AgentEndpoint } from './agent-endpoint.js';
 import { replyContentOf, type AgentEvent } from './agent-event.js';
@@ -25,7 +27,9 @@ const AGAIN = { kind: 'again' } as const;
  * replied rejected and handled. With no answer, it is handed again when the
  * agent is repeatable (A9), else reported not handled. An answer to a reply
  * the gateway sent continues that reply's task. Each step is kept before
- * the next, so a delivery that comes again picks up where it stopped.
+ * the next, so a delivery that comes again picks up where it stopped. A
+ * message from a ship that lacks a scope the agent needs is answered so and
+ * never reaches the agent (design gateway-scopes, 4.2).
  */
 export function createHandA2aMessage(deps: {
   crew: AgentShipCrew;
@@ -34,6 +38,8 @@ export function createHandA2aMessage(deps: {
   keys: AgentKeys;
   statuses: GatewayStatuses;
   parties: PartyStore;
+  requirements: ScopeRequirementsStore;
+  checkScopes: CheckRequiredScopes;
   follow: FollowAgentTask;
   clock: Clock;
   deadlineMs: number;
@@ -121,6 +127,17 @@ export function createHandA2aMessage(deps: {
     // Handed before with no answer kept and not judged unsent: the gateway stopped mid send, so it may have run.
     if (delivery.state === 'handed' && kept?.state !== 'notSent' && !isRepeatable) {
       return mayHaveRun(call);
+    }
+    // The requirements and the sender's scopes as they are now, at hand-over: either may change while a message waits.
+    const needed = scopesNeeded(await deps.requirements.find(fleetId, party.name), null);
+    const checked = await deps.checkScopes({ fleetId, senderShipId: delivery.senderShipId, needing: party.name, needed });
+    switch (checked.kind) {
+      case 'unread':
+        return AGAIN;
+      case 'lacks':
+        return answered(undefined, { contentType: 'text/plain', payload: checked.message, key: checked.message });
+      case 'holds':
+        break;
     }
 
     const handed = await deps.crew.handed(crewToken, { deliveryId: delivery.deliveryId, handOverNumber: (delivery.handOverNumber ?? 0) + 1, channel: A2A_CHANNEL });

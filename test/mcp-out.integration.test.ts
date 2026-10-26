@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { MAY_HAVE_RUN } from '../src/core/mcp-out/hand-call.js';
 import { MOCK_CRM_BEARER, startMockCrm, type MockCrm } from './fixtures/mock-crm/mock-crm.js';
-import { applyEmptyOwnRules, commission, register, signIn } from './support/argo.js';
+import { applyEmptyOwnRules, commission, defineScope, grantScopes, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
@@ -237,6 +237,94 @@ describe("the CRM's proxy ship states its tools as the server lists them (aeolus
       { name: 'create_contact', annotations: { readOnlyHint: false, idempotentHint: false }, repeatable: undefined },
       { name: 'list_deals', annotations: { readOnlyHint: true, idempotentHint: true }, repeatable: true },
     ]);
+  });
+});
+
+describe('an approver sets which scopes a calling ship needs for a tool of an outside MCP server (gateway scopes 4.2)', () => {
+  let approver: string;
+
+  /** The CRM approved, the fleet's own crm:write-leads defined, and an approver holding gateway:approve, the scope the gateway declares as it connects. */
+  async function approvedWithScopes(): Promise<string> {
+    const address = await started();
+    await approved(address);
+    await defineScope(fleet, { cookie, scope: 'crm:write-leads', description: 'Change leads in the CRM' });
+    approver = await register(fleet, await commission(fleet, { cookie, ship: { name: 'approver', type: 'agent', scopes: ['fleet:read', 'gateway:approve'] } }));
+    return address;
+  }
+
+  function setRequirements(address: string, body: { version: number; party?: string[]; tools: { tool: string; scopes: string[] }[] }) {
+    return mutate(address, { procedure: 'parties.setScopeRequirements', crewToken: approver, body: { name: 'crm', ...body } });
+  }
+
+  it('refuses a call from a ship that lacks the scope, naming it, and the call never reaches the server', async () => {
+    const address = await approvedWithScopes();
+    const set = await setRequirements(address, { version: 0, tools: [{ tool: 'create_deal', scopes: ['crm:write-leads'] }] });
+    expect(set.status, await set.clone().text()).toBe(200);
+
+    const request = await callTool('create_deal', { contactId: 'c1', title: 'Difference engine', amount: 900 });
+
+    const reply = await receiveOne(fleet, caller.crewToken);
+    expect(reply && { inReplyTo: reply.inReplyTo, result: parsed(reply.payload) }).toEqual({
+      inReplyTo: request,
+      result: { content: [{ type: 'text', text: 'create_deal needs crm:write-leads, which agent does not hold' }], isError: true },
+    });
+    expect(crm.calls.get('create_deal')).toBeUndefined();
+  });
+
+  it('lets the call through once the ship is granted the scope, at its next call', async () => {
+    const address = await approvedWithScopes();
+    await setRequirements(address, { version: 0, party: ['crm:write-leads'], tools: [] });
+    await grantScopes(fleet, { cookie, shipId: caller.shipId, grant: ['crm:write-leads'], revoke: [] });
+
+    await callTool('list_deals', { contactId: 'c1' });
+
+    expect(await receiveOne(fleet, caller.crewToken)).toMatchObject({ contentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals' });
+    expect(crm.calls.get('list_deals')).toBe(1);
+  });
+
+  it('states what each tool needs at once, which a ship reads in discovery before it calls (P1)', async () => {
+    const address = await approvedWithScopes();
+
+    const set = await setRequirements(address, { version: 0, tools: [{ tool: 'create_deal', scopes: ['crm:write-leads'] }] });
+
+    expect(z.object({ result: z.object({ data: z.object({ statementRefusal: z.string().nullable() }) }) }).parse(await set.json()).result.data.statementRefusal).toBeNull();
+    const found = await fetch(`${fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${caller.crewToken}` } });
+    const statement = discoverOutputSchema.parse(await found.json()).ships.find(({ id }) => id === proxyShipId)?.statement;
+    const capabilities = statement?.by === 'crew' ? statement.capabilities : [];
+    expect(capabilities.filter(({ name }) => ['create_deal', 'list_deals'].includes(name)).map(({ name, scopes }) => ({ name, scopes }))).toEqual([
+      { name: 'list_deals', scopes: undefined },
+      { name: 'create_deal', scopes: ['crm:write-leads'] },
+    ]);
+  });
+
+  it('refuses a scope the fleet does not list, by name, keeping nothing', async () => {
+    const address = await approvedWithScopes();
+
+    const set = await setRequirements(address, { version: 0, party: ['crm:admin'], tools: [] });
+
+    expect({ status: set.status, message: z.object({ error: z.object({ message: z.string() }) }).parse(await set.json()).error.message }).toEqual({
+      status: 400,
+      message: 'The fleet lists no scope crm:admin: define it first, or pick a listed one',
+    });
+  });
+
+  it("refuses an approver outside the proxy ship's manage reach, in a fleet that applies its own network rules, keeping nothing", async () => {
+    const address = await approvedWithScopes();
+    await applyEmptyOwnRules(fleet, cookie);
+
+    const set = await setRequirements(address, { version: 0, tools: [{ tool: 'create_deal', scopes: ['crm:write-leads'] }] });
+
+    expect(set.status, await set.clone().text()).toBe(403);
+    const read = await query(address, { procedure: 'parties.scopeRequirements', crewToken: approver, input: { name: 'crm' } });
+    expect(z.object({ result: z.object({ data: z.object({ version: z.number(), tools: z.array(z.unknown()) }) }) }).parse(await read.json()).result.data).toEqual({ version: 0, tools: [] });
+  });
+
+  it('refuses the second of two changes made on the same version, keeping the first', async () => {
+    const address = await approvedWithScopes();
+
+    const both = await Promise.all([setRequirements(address, { version: 0, party: ['crm:write-leads'], tools: [] }), setRequirements(address, { version: 0, party: ['fleet:read'], tools: [] })]);
+
+    expect(both.map(({ status }) => status).sort()).toEqual([200, 409]);
   });
 });
 

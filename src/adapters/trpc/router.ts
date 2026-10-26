@@ -11,7 +11,7 @@
  */
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
-import { idempotencyKeySchema, idSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
+import { idempotencyKeySchema, idSchema, scopeNameSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
 import { initTRPC, TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
@@ -44,6 +44,9 @@ import type { CheckServer } from '../../core/parties/check-server.js';
 import type { ReadPartyTools } from '../../core/parties/read-party-tools.js';
 import { APPROVING_SCOPE } from '../../core/parties/approver.js';
 import type { SwitchTool, SwitchToolRefusal } from '../../core/parties/switch-tool.js';
+import type { ReadScopeRequirements } from '../../core/parties/read-scope-requirements.js';
+import type { ScopeRequirements } from '../../core/parties/scope-requirements.js';
+import type { SetScopeRequirements, SetScopeRequirementsRefusal } from '../../core/parties/set-scope-requirements.js';
 import type { RegisterClient } from '../../core/oauth/register-client.js';
 import type { DecideRequest, DecideRefusal } from '../../core/requests/decide-request.js';
 import type { ListMine } from '../../core/requests/list-mine.js';
@@ -121,6 +124,8 @@ export interface Context {
   stateParty: StateParty;
   markTool: MarkTool;
   switchTool: SwitchTool;
+  readScopeRequirements: ReadScopeRequirements;
+  setScopeRequirements: SetScopeRequirements;
   registerClient: RegisterClient;
   /** An MCP client's authorization request, as the gateway reads it before it signs the person in. */
   readAuthorization?: ReadAuthorization;
@@ -328,6 +333,26 @@ const SWITCH_TOOL_CODES = {
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
   NO_SUCH_TOOL: 'NOT_FOUND',
 } as const satisfies Record<SwitchToolRefusal['kind'], TRPCError['code']>;
+
+/** The refusals of setting the scopes an outside party needs, as the API states them. */
+const SET_SCOPE_REQUIREMENTS_CODES = {
+  NOT_AN_APPROVER: 'FORBIDDEN',
+  NO_SUCH_PARTY: 'NOT_FOUND',
+  PARTY_NOT_COMMISSIONED: 'PRECONDITION_FAILED',
+  NOT_REACHABLE: 'FORBIDDEN',
+  NO_SUCH_TOOL: 'BAD_REQUEST',
+  NOT_CONNECTED: 'PRECONDITION_FAILED',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+  SCOPE_NOT_LISTED: 'BAD_REQUEST',
+  CONFLICT: 'CONFLICT',
+} as const satisfies Record<SetScopeRequirementsRefusal['kind'], TRPCError['code']>;
+
+/** A party's required scopes as the API states them: its own set, and each tool's set by name. */
+const scopeRequirementsSchema = z.object({ version: z.int().min(0), party: z.array(z.string()), tools: z.array(z.object({ tool: z.string(), scopes: z.array(z.string()) })) });
+
+function scopeRequirementsOutputOf(requirements: ScopeRequirements): z.infer<typeof scopeRequirementsSchema> {
+  return { version: requirements.version, party: [...requirements.party], tools: [...requirements.tools].map(([tool, scopes]) => ({ tool, scopes: [...scopes] })) };
+}
 
 /** The refusals of checking an outside MCP server, as the API states them. */
 const CHECK_CODES = {
@@ -867,6 +892,40 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: SWITCH_TOOL_CODES[switched.error.kind], message: switched.error.message });
         }
         return switched.value;
+      }),
+    /** Which scopes a calling ship needs for an outside MCP server or A2A agent, and the version to change them on (gateway scopes 4.2). Any actor reads them. */
+    scopeRequirements: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema }))
+      .output(scopeRequirementsSchema)
+      .query(async ({ ctx, input }) => {
+        const read = await ctx.readScopeRequirements({ fleetId: ctx.fleetId, ...input });
+        if (!read.isOk) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: read.error.message });
+        }
+        return scopeRequirementsOutputOf(read.value);
+      }),
+    /**
+     * An actor holding gateway:approve sets the scopes a calling ship needs
+     * (gateway scopes 4.2, A2): the party's set when sent, and each tool's
+     * sent, an empty one dropping it, all at once on the version it read;
+     * then stated at once, as a tool switch is.
+     */
+    setScopeRequirements: servedProcedure
+      .input(
+        z.strictObject({
+          name: shipHandleSchema,
+          version: z.int().min(0),
+          party: z.array(scopeNameSchema).optional(),
+          tools: z.array(z.strictObject({ tool: z.string().min(1).max(TOOL_NAME_MAX_LENGTH), scopes: z.array(scopeNameSchema) })),
+        }),
+      )
+      .output(z.intersection(scopeRequirementsSchema, z.object({ statementRefusal: z.string().nullable() })))
+      .mutation(async ({ ctx, input }) => {
+        const set = await ctx.setScopeRequirements({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, name: input.name, version: input.version, ...(input.party === undefined ? {} : { party: input.party }), tools: new Map(input.tools.map(({ tool, scopes }) => [tool, scopes])) });
+        if (!set.isOk) {
+          throw new TRPCError({ code: SET_SCOPE_REQUIREMENTS_CODES[set.error.kind], message: set.error.message });
+        }
+        return { ...scopeRequirementsOutputOf(set.value.requirements), statementRefusal: set.value.statementRefusal };
       }),
     /** argo marks a party's tool repeatable, or takes the mark off (interop 5.2): kept, then stated at once. */
     markTool: managing(servedProcedure)

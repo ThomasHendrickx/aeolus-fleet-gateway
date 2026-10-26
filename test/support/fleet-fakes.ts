@@ -59,7 +59,7 @@ export function fakeGatewayFleet() {
       if (!state.isAnswering) {
         return unavailable();
       }
-      return state.liveTokens.has(crewToken) ? Promise.resolve(ok({ status: 'crewed' as const, scopes: [...state.scopes] })) : released();
+      return state.liveTokens.has(crewToken) ? Promise.resolve(ok({ status: 'crewed' as const, name: 'gateway', scopes: [...state.scopes] })) : released();
     },
     deregister: (crewToken) => {
       state.deregistered.push(crewToken);
@@ -67,6 +67,7 @@ export function fakeGatewayFleet() {
       state.isCrewed = false;
       return Promise.resolve(ok(undefined));
     },
+    listScopes: () => Promise.resolve(ok([...state.scopes])),
     declareScopes: (crewToken, declaration) => {
       if (!state.liveTokens.has(crewToken)) {
         return released();
@@ -100,4 +101,41 @@ export function memoryConnectionStore(): ConnectionStore & { held: Map<FleetId, 
       return Promise.resolve();
     },
   };
+}
+
+/**
+ * The fleet's ships as the gateway's ship reads them (fleet.ship), each read
+ * on its own behalf: a ship within its own read reach (decision 0034). Its
+ * scopes change as a grant or revoke changes them, at the next read.
+ */
+export function fakeShipReads() {
+  const state = {
+    ships: new Map<ShipId, { name: string; scopes: string[] }>(),
+    isAnswering: true,
+    /** Each read: by which crew token, of which ship, on whose behalf. */
+    reads: new Array<{ crewToken: string; shipId: ShipId; onBehalfOf: ShipId | undefined }>(),
+  };
+  const door: Pick<FleetDoor, 'getShip'> = {
+    getShip: (crewToken, { shipId, onBehalfOf }) => {
+      state.reads.push({ crewToken, shipId, onBehalfOf });
+      if (!state.isAnswering) {
+        return Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
+      }
+      const ship = state.ships.get(shipId);
+      return Promise.resolve(ship === undefined ? err({ code: 'NOT_FOUND', message: 'No such ship' }) : ok({ status: 'crewed' as const, name: ship.name, scopes: [...ship.scopes] }));
+    },
+  };
+  return { state, door };
+}
+
+/** The scopes the fleet lists (fleet.scopes), as the gateway's ship reads them: core's, the plugins' and the fleet's own. */
+export function fakeListedScopes(listed: string[] = ['fleet:read', 'gateway:approve', 'crm:read-leads', 'crm:write-leads']) {
+  const state = { listed, isAnswering: true, readers: new Array<string>() };
+  const door: Pick<FleetDoor, 'listScopes'> = {
+    listScopes: (crewToken) => {
+      state.readers.push(crewToken);
+      return Promise.resolve(state.isAnswering ? ok([...state.listed]) : err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
+    },
+  };
+  return { state, door };
 }

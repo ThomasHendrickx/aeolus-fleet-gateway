@@ -3,7 +3,8 @@ import type { FleetId, ShipId, VerifiedFact } from '@aeolus-fleet/common';
 import type { FleetDoor, FleetRefusal } from '../../src/core/connection/ports.js';
 import type { Party } from '../../src/core/parties/party.js';
 import type { ActorCredential } from '../../src/core/actors/credential-of.js';
-import type { PartyStore, ProxyShipDoor, ProxyShipReads, ProxyShipsAsActor } from '../../src/core/parties/ports.js';
+import type { PartyStore, ProxyShipDoor, ProxyShipReads, ProxyShipsAsActor, ScopeRequirementsStore } from '../../src/core/parties/ports.js';
+import { changedRequirements, NO_SCOPE_REQUIREMENTS, type ScopeRequirements } from '../../src/core/parties/scope-requirements.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 import { FLEET_ID } from './fleet-fakes.js';
 
@@ -37,6 +38,25 @@ export function memoryPartyStore(): PartyStore & { held: Map<string, Party> } {
     remove: (fleetId, name) => {
       held.delete(key(fleetId, name));
       return Promise.resolve();
+    },
+  };
+}
+
+/** Each party's required scopes in memory, by fleet and name, changed only at the version they were read at. */
+export function memoryScopeRequirements(): ScopeRequirementsStore & { held: Map<string, ScopeRequirements> } {
+  const held = new Map<string, ScopeRequirements>();
+  const key = (fleetId: FleetId, name: string) => `${fleetId}/${name}`;
+  return {
+    held,
+    find: (fleetId, party) => Promise.resolve(held.get(key(fleetId, party)) ?? NO_SCOPE_REQUIREMENTS),
+    change: ({ fleetId, name }, change) => {
+      const kept = held.get(key(fleetId, name)) ?? NO_SCOPE_REQUIREMENTS;
+      if (kept.version !== change.version) {
+        return Promise.resolve(undefined);
+      }
+      const changed = changedRequirements(kept, change);
+      held.set(key(fleetId, name), changed);
+      return Promise.resolve(changed);
     },
   };
 }
@@ -132,14 +152,17 @@ export function fakeProxyShipsAsActor(answer: Result<undefined, FleetRefusal> = 
   retired: { as: ActorCredential; shipId: ShipId }[];
   owned: { as: ActorCredential; shipId: ShipId; ownerShipId: ShipId }[];
   granted: { as: ActorCredential; shipId: ShipId; grant: readonly string[]; revoke: readonly string[] }[];
+  checked: { as: ActorCredential; shipId: ShipId }[];
 } {
   const retired: { as: ActorCredential; shipId: ShipId }[] = [];
   const owned: { as: ActorCredential; shipId: ShipId; ownerShipId: ShipId }[] = [];
   const granted: { as: ActorCredential; shipId: ShipId; grant: readonly string[]; revoke: readonly string[] }[] = [];
+  const checked: { as: ActorCredential; shipId: ShipId }[] = [];
   return {
     retired,
     owned,
     granted,
+    checked,
     retire: (as, { shipId }) => {
       retired.push({ as, shipId });
       return Promise.resolve(answer);
@@ -151,6 +174,10 @@ export function fakeProxyShipsAsActor(answer: Result<undefined, FleetRefusal> = 
     grantScopes: (as, { shipId, grant, revoke }) => {
       granted.push({ as, shipId, grant, revoke });
       return Promise.resolve(answer.isOk ? ok({ scopes: ['messages:send', 'messages:receive', ...grant] }) : answer);
+    },
+    checkManage: (as, { shipId }) => {
+      checked.push({ as, shipId });
+      return Promise.resolve(answer);
     },
   };
 }

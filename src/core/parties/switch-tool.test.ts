@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeMcpServers, fakeStatementDoor, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
-import { OWNER_SHIP_ID, PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { OWNER_SHIP_ID, PROXY_SHIP_ID, memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import { createStateParty } from '../mcp-out/state-party.js';
 import type { McpServerParty } from './party.js';
@@ -37,7 +37,7 @@ beforeEach(async () => {
   await parties.save(CRM);
   servers = fakeMcpServers();
   door = fakeStatementDoor();
-  const stateParty = createStateParty({ parties, servers, door, marks: memoryToolMarks(), timing: { waitMs: 10_000, deadlineMs: 300_000 } });
+  const stateParty = createStateParty({ parties, servers, door, marks: memoryToolMarks(), requirements: memoryScopeRequirements(), timing: { waitMs: 10_000, deadlineMs: 300_000 } });
   switchTool = createSwitchTool({ parties, servers, stateParty });
 });
 

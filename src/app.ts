@@ -19,10 +19,14 @@ import { createPrismaFleetForgetter } from './adapters/prisma/fleet-forgetter.js
 import { createPrismaFleetSwitches } from './adapters/prisma/fleet-switches.js';
 import { createPrismaInstallationRequests } from './adapters/prisma/installation-requests.js';
 import { createPrismaPartyStore } from './adapters/prisma/party-store.js';
+import { createPrismaScopeRequirements } from './adapters/prisma/scope-requirements.js';
 import { createPrismaToolMarks } from './adapters/prisma/tool-marks.js';
 import { createMcpServers } from './adapters/mcp/mcp-servers.js';
 import { createMarkTool } from './core/mcp-out/mark-tool.js';
 import { createSwitchTool } from './core/parties/switch-tool.js';
+import { createCheckRequiredScopes } from './core/parties/check-required-scopes.js';
+import { createReadScopeRequirements } from './core/parties/read-scope-requirements.js';
+import { createSetScopeRequirements } from './core/parties/set-scope-requirements.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
@@ -336,12 +340,25 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const servers = createMcpServers();
   // A caller of a proxy ship waits and gives up as the gateway does with its server (interop 3.4, 5.3).
   const callTiming = { waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, deadlineMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS };
-  const stateParty = createStateParty({ parties, servers, door, marks, timing: callTiming });
+  const requirements = createPrismaScopeRequirements(prisma);
+  const stateParty = createStateParty({ parties, servers, door, marks, requirements, timing: callTiming });
   const markTool = createMarkTool({ parties, marks, stateParty });
   const switchTool = createSwitchTool({ parties, servers, stateParty });
   const agentCards = createHttpAgentCards({ timeoutMs: AGENT_CARD_TIMEOUT_MS });
-  const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, timing: callTiming });
-  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
+  const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, requirements, timing: callTiming });
+  const checkScopes = createCheckRequiredScopes({ connections, door });
+  const readScopeRequirements = createReadScopeRequirements({ parties, requirements });
+  const setScopeRequirements = createSetScopeRequirements({
+    parties,
+    requirements,
+    connections,
+    door,
+    stateParty,
+    stateA2aAgent,
+    fleet: createProxyShipsAsActor(options.fleetUrl),
+    credentialOf: (actor, sent) => credentialOf(actor, sent),
+  });
+  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, requirements, checkScopes, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
   const clientCalls = createPrismaClientCalls(prisma);
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
@@ -378,7 +395,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     runA2aAgent: createRunA2aAgent({
       cards: agentCards,
       crew: door,
-      hand: createHandA2aMessage({ ...agentCallDeps, parties, follow: followAgentTask }),
+      hand: createHandA2aMessage({ ...agentCallDeps, parties, requirements, checkScopes, follow: followAgentTask }),
       follow: followAgentTask,
       calls: agentCallDeps.calls,
       sleep,
@@ -744,6 +761,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     stateParty,
     markTool,
     switchTool,
+    readScopeRequirements,
+    setScopeRequirements,
     readOutsideParties: createReadOutsideParties({ switches: outsidePartySwitches }),
     setOutsideParties,
     registerClient,

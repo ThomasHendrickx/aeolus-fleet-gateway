@@ -47,7 +47,7 @@ const door: Pick<FleetDoor, 'whoami' | 'getShip'> = {
     }
     // A read on behalf of a ship answers with that ship's read reach, which holds the ship itself (decision 0034).
     const isInReach = !isOutsideGatewayReach || onBehalfOf === AGENT;
-    return Promise.resolve(isInReach ? ok({ status: 'crewed' as const, scopes: ['messages:send', 'gateway:approve'] }) : err({ code: 'FORBIDDEN', message: 'The ship is outside your read reach' }));
+    return Promise.resolve(isInReach ? ok({ status: 'crewed' as const, name: 'approver', scopes: ['messages:send', 'gateway:approve'] }) : err({ code: 'FORBIDDEN', message: 'The ship is outside your read reach' }));
   },
 };
 

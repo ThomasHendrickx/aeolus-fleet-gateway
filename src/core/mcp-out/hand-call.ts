@@ -1,8 +1,10 @@
 import { PAYLOAD_MAX_BYTES, payloadBytes, type DeliveryId, type FleetId, type MessageId, type ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
+import type { CheckRequiredScopes } from '../parties/check-required-scopes.js';
 import type { McpServerParty } from '../parties/party.js';
-import type { PartyStore } from '../parties/ports.js';
+import type { PartyStore, ScopeRequirementsStore } from '../parties/ports.js';
+import { scopesNeeded } from '../parties/scope-requirements.js';
 import { isToolOn, TOOL_NOT_ENABLED } from '../parties/tool-switches.js';
 import type { Result } from '../shared/result.js';
 import { toolCalledBy, toolInputType, toolResultType } from './content-types.js';
@@ -133,9 +135,19 @@ function notACallReply(party: McpServerParty, delivery: PushedDelivery): Reply {
  * nothing. A call that died unanswered is handed again only where argo
  * marked its tool repeatable; otherwise it is reported not handled. A call
  * to a tool not switched on is answered an error and reaches no server
- * (aeolus-fleet#1151).
+ * (aeolus-fleet#1151); so is a call from a ship that lacks a scope the
+ * tool needs (design gateway-scopes, 4.2).
  */
-export function createHandCall(deps: { crew: ProxyShipCrew; servers: McpServers; calls: CallStore; marks: ToolMarks; parties: PartyStore; timeoutMs: number }): HandCall {
+export function createHandCall(deps: {
+  crew: ProxyShipCrew;
+  servers: McpServers;
+  calls: CallStore;
+  marks: ToolMarks;
+  parties: PartyStore;
+  requirements: ScopeRequirementsStore;
+  checkScopes: CheckRequiredScopes;
+  timeoutMs: number;
+}): HandCall {
   return async ({ party, delivery }) => {
     const crewToken = party.crewToken;
     if (crewToken === null) {
@@ -184,6 +196,17 @@ export function createHandCall(deps: { crew: ProxyShipCrew; servers: McpServers;
     const now = await deps.parties.find(party.fleetId, party.name);
     if (!isToolOn(now?.kind === 'mcpServer' ? now.toolSwitches : party.toolSwitches, tool)) {
       return finish(resultReply(delivery, { tool, result: errorResult(TOOL_NOT_ENABLED) }));
+    }
+    // The requirements and the sender's scopes as they are now, at hand-over: either may change while a call waits.
+    const needed = scopesNeeded(await deps.requirements.find(party.fleetId, party.name), tool);
+    const checked = await deps.checkScopes({ fleetId: party.fleetId, senderShipId: delivery.senderShipId, needing: tool, needed });
+    switch (checked.kind) {
+      case 'unread':
+        return AGAIN;
+      case 'lacks':
+        return finish(resultReply(delivery, { tool, result: errorResult(checked.message) }));
+      case 'holds':
+        break;
     }
 
     const handed = await deps.crew.handed(crewToken, { deliveryId: delivery.deliveryId, handOverNumber: (delivery.handOverNumber ?? 0) + 1, channel: MCP_CHANNEL });

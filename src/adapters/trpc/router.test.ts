@@ -12,6 +12,7 @@ import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sig
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { MarkTool } from '../../core/mcp-out/mark-tool.js';
 import type { SwitchTool } from '../../core/parties/switch-tool.js';
+import type { SetScopeRequirements } from '../../core/parties/set-scope-requirements.js';
 import type { AddA2aAgent } from '../../core/parties/add-a2a-agent.js';
 import type { MarkA2aAgent } from '../../core/a2a-out/mark-a2a-agent.js';
 import type { AddClientParty } from '../../core/parties/add-client-party.js';
@@ -75,6 +76,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   additions: Parameters<AddClientParty>[0][];
   marks: Parameters<MarkTool>[0][];
   toolSwitches: Parameters<SwitchTool>[0][];
+  requirementChanges: Parameters<SetScopeRequirements>[0][];
   agentAdditions: Parameters<AddA2aAgent>[0][];
   agentMarks: Parameters<MarkA2aAgent>[0][];
   decisions: Parameters<DecideRequest>[0][];
@@ -90,6 +92,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   const decisions: Parameters<DecideRequest>[0][] = [];
   const marks: Parameters<MarkTool>[0][] = [];
   const toolSwitches: Parameters<SwitchTool>[0][] = [];
+  const requirementChanges: Parameters<SetScopeRequirements>[0][] = [];
   const agentAdditions: Parameters<AddA2aAgent>[0][] = [];
   const agentMarks: Parameters<MarkA2aAgent>[0][] = [];
   const answers: Record<string, string>[] = [];
@@ -286,6 +289,24 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       }
       return Promise.resolve(ok({ tool: input.tool, isOn: input.isOn, statementRefusal: null }));
     },
+    readScopeRequirements: ({ name }) =>
+      Promise.resolve(name === 'crm' ? ok({ version: 2, party: ['crm:use'], tools: new Map([['update_lead', ['crm:write-leads']]]) }) : err({ kind: 'NO_SUCH_PARTY' as const, message: `There is no outside MCP server or A2A agent ${name}` })),
+    setScopeRequirements: (input) => {
+      requirementChanges.push(input);
+      if (!input.actor.scopes.includes('gateway:approve')) {
+        return Promise.resolve(err({ kind: 'NOT_AN_APPROVER' as const, message: 'Setting the scopes an outside party needs takes gateway:approve' }));
+      }
+      if (input.name === 'erp') {
+        return Promise.resolve(err({ kind: 'NOT_REACHABLE' as const, message: 'erp is not within your manage reach' }));
+      }
+      if (input.version !== 2) {
+        return Promise.resolve(err({ kind: 'CONFLICT' as const, message: 'The requirements changed since you opened this page' }));
+      }
+      if (input.party?.includes('crm:admin') === true) {
+        return Promise.resolve(err({ kind: 'SCOPE_NOT_LISTED' as const, message: 'The fleet lists no scope crm:admin: define it first, or pick a listed one' }));
+      }
+      return Promise.resolve(ok({ requirements: { version: 3, party: input.party ?? ['crm:use'], tools: input.tools }, statementRefusal: null }));
+    },
     readOutsideParties: () => Promise.resolve({ isOn: false }),
     setOutsideParties: (input) => {
       switched.push(input);
@@ -306,7 +327,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, toolSwitches, agentAdditions, agentMarks, decisions, switched, answers, changes, additions, focused };
+  return { context, approvals, marks, toolSwitches, requirementChanges, agentAdditions, agentMarks, decisions, switched, answers, changes, additions, focused };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -567,6 +588,48 @@ describe("an approver switches an outside MCP server's tools through the gateway
 
   it('answers NOT_FOUND for a tool the server does not list now', async () => {
     await expect(gatewayRouter.createCaller(aContext(undefined, APPROVER_CREW).context).parties.switchTool({ name: 'crm', tool: 'delete_project', isOn: true })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe("anyone reads, and an approver sets, the scopes an outside party needs through the gateway's API (gateway scopes 4.2)", () => {
+  it('reads the requirements and their version, each tool by name', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.scopeRequirements({ name: 'crm' })).resolves.toEqual({
+      version: 2,
+      party: ['crm:use'],
+      tools: [{ tool: 'update_lead', scopes: ['crm:write-leads'] }],
+    });
+  });
+
+  it('answers NOT_FOUND for a party with no requirements to read', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.scopeRequirements({ name: 'claude' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('sets them as the actor on the version read, answering them changed', async () => {
+    const { context, requirementChanges } = aContext(undefined, APPROVER_CREW);
+
+    await expect(
+      gatewayRouter.createCaller(context).parties.setScopeRequirements({ name: 'crm', version: 2, party: ['crm:read-leads'], tools: [{ tool: 'update_lead', scopes: ['crm:write-leads'] }, { tool: 'read_lead', scopes: [] }] }),
+    ).resolves.toEqual({ version: 3, party: ['crm:read-leads'], tools: [{ tool: 'update_lead', scopes: ['crm:write-leads'] }, { tool: 'read_lead', scopes: [] }], statementRefusal: null });
+    expect(requirementChanges.map(({ as, name, version, party, tools }) => ({ as, name, version, party, tools }))).toEqual([
+      { as: { cookie: undefined, crewToken: APPROVER_CREW }, name: 'crm', version: 2, party: ['crm:read-leads'], tools: new Map([['update_lead', ['crm:write-leads']], ['read_lead', []]]) },
+    ]);
+  });
+
+  it("leaves the party's set as it is when none is sent", async () => {
+    const { context, requirementChanges } = aContext(undefined, APPROVER_CREW);
+
+    await gatewayRouter.createCaller(context).parties.setScopeRequirements({ name: 'crm', version: 2, tools: [{ tool: 'update_lead', scopes: ['crm:write-leads'] }] });
+
+    expect(requirementChanges[0]?.party).toBeUndefined();
+  });
+
+  it.each([
+    { code: 'FORBIDDEN', what: 'an actor without gateway:approve', cookie: ARGO_COOKIE, crewToken: undefined, change: { version: 2, party: ['crm:use'] } },
+    { code: 'CONFLICT', what: 'a change on requirements changed since', cookie: undefined, crewToken: APPROVER_CREW, change: { version: 1, party: ['crm:use'] } },
+    { code: 'BAD_REQUEST', what: 'a scope the fleet does not list', cookie: undefined, crewToken: APPROVER_CREW, change: { version: 2, party: ['crm:admin'] } },
+    { code: 'FORBIDDEN', what: "an approver outside the proxy ship's manage reach", cookie: undefined, crewToken: APPROVER_CREW, change: { name: 'erp', version: 2, party: ['crm:use'] } },
+  ])('answers $code to $what', async ({ code, cookie, crewToken, change }) => {
+    await expect(gatewayRouter.createCaller(aContext(cookie, crewToken).context).parties.setScopeRequirements({ name: 'crm', tools: [], ...change })).rejects.toMatchObject({ code });
   });
 });
 

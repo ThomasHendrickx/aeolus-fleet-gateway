@@ -89,6 +89,28 @@ describe("a party's proxy ship, retired as the actor", () => {
     expect(received.map(({ url, body }) => ({ url, body }))).toEqual([{ url: '/api/v1/fleet/grantScopes', body: JSON.stringify({ shipId: PROXY, grant: ['fleet:read'], revoke: [] }) }]);
   });
 
+  it('asks whether the actor manages the proxy ship over REST: a ship, or an account presented by the gateway\'s ship', async () => {
+    answer = { status: 200, body: {} };
+
+    await expect(createProxyShipsAsActor(base).checkManage({ crewToken: 'aeolus_ct_v1_gateway', accountToken: 'account-token-1' }, { shipId: PROXY })).resolves.toEqual({ isOk: true, value: undefined });
+    expect(received.map(({ url, headers, body }) => ({ url, authorization: headers.authorization, account: headers['aeolus-account-token'], body }))).toEqual([
+      { url: '/api/v1/fleet/checkManage', authorization: 'Bearer aeolus_ct_v1_gateway', account: 'account-token-1', body: JSON.stringify({ shipId: PROXY }) },
+    ]);
+  });
+
+  it('asks it as argo by the console session over tRPC, as a query', async () => {
+    answer = { status: 200, body: { result: { data: {} } } };
+
+    await expect(createProxyShipsAsActor(base).checkManage({ cookie: 'aeolus_session=argo' }, { shipId: PROXY })).resolves.toEqual({ isOk: true, value: undefined });
+    expect(received.map(({ url, headers }) => ({ url, cookie: headers.cookie }))).toEqual([{ url: `/trpc/fleet.checkManage?input=${encodeURIComponent(JSON.stringify({ shipId: PROXY }))}`, cookie: 'aeolus_session=argo' }]);
+  });
+
+  it("answers the fleet's refusal of a ship outside the actor's manage reach", async () => {
+    answer = { status: 403, body: { code: 'FORBIDDEN', message: 'crm is not within your manage reach' } };
+
+    await expect(createProxyShipsAsActor(base).checkManage({ crewToken: 'aeolus_ct_v1_approver' }, { shipId: PROXY })).resolves.toEqual({ isOk: false, error: { code: 'FORBIDDEN', message: 'crm is not within your manage reach' } });
+  });
+
   it('answers UNAVAILABLE when the fleet does not answer', async () => {
     await expect(createProxyShipsAsActor('http://127.0.0.1:1').retire({ crewToken: 'aeolus_ct_v1_manager' }, { shipId: PROXY })).resolves.toMatchObject({ isOk: false, error: { code: 'UNAVAILABLE' } });
   });

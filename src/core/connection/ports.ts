@@ -15,6 +15,7 @@ export interface FleetRefusal {
 /** A ship as `fleet.ship` shows it: what the gateway reads of it. */
 export interface FleetShip {
   status: 'awaitingCrew' | 'crewed' | 'retired';
+  name: string;
   scopes: string[];
 }
 
@@ -33,6 +34,8 @@ export interface FleetDoor {
   getShip(crewToken: string, ship: { shipId: ShipId; onBehalfOf?: ShipId }): Promise<Result<FleetShip, FleetRefusal>>;
   /** Ends this session's crew of its ship: the lease and the secret it claimed with. */
   deregister(crewToken: string): Promise<Result<undefined, FleetRefusal>>;
+  /** Every scope the fleet lists (fleet.scopes, fleet:read): core's, each plugin's and the fleet's own. */
+  listScopes(crewToken: string): Promise<Result<string[], FleetRefusal>>;
   /** Declares the ship's own namespace and its whole list of scopes; the fleet stores them, the gateway enforces them (decision 0046). */
   declareScopes(crewToken: string, declaration: { namespace: string; scopes: { scope: string; description: string }[] }): Promise<Result<undefined, FleetRefusal>>;
 }

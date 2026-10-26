@@ -15,10 +15,11 @@ import {
   plainAgentKeys,
   plainGatewayStatuses,
 } from '../../../test/support/a2a-agent-fakes.js';
-import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { fakeShipReads, FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { CALLER_SHIP_ID, aPushedDelivery } from '../../../test/support/mcp-out-fakes.js';
-import { memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
 import type { PushedDelivery } from '../mcp-out/hand-call.js';
+import { createCheckRequiredScopes } from '../parties/check-required-scopes.js';
 import { ok } from '../shared/result.js';
 import { createFollowAgentTask } from './follow-agent-task.js';
 import { createHandA2aMessage } from './hand-a2a-message.js';
@@ -72,7 +73,9 @@ function runWith({ cards, agents, waiting = [aPushedDelivery({ contentType: 'tex
     return Promise.resolve();
   };
   const follow = createFollowAgentTask({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, clock, sleep, pollMs: POLL_MS, deadlineMs: 60_000 });
-  const hand = createHandA2aMessage({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, parties, follow, clock, deadlineMs: 60_000 });
+  // No scope is required of the agent, so the check reads nothing.
+  const checkScopes = createCheckRequiredScopes({ connections: memoryConnectionStore(), door: fakeShipReads().door });
+  const hand = createHandA2aMessage({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, parties, requirements: memoryScopeRequirements(), checkScopes, follow, clock, deadlineMs: 60_000 });
   const run = createRunA2aAgent({ cards, crew, hand, follow, calls, sleep, pollMs: POLL_MS, againWaitsMs: [1_000], cardWaitMs: CARD_WAIT_MS });
   return run({ party: anAgentParty(), signal: stop.signal });
 }

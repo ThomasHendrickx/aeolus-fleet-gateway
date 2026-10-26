@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { fakeShipReads, FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/fleet-fakes.js';
 import { aPushedDelivery, CALLER_SHIP_ID, fakeMcpServers, fakeProxyShipCrew, memoryCalls, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
-import { memoryPartyStore, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
+import { memoryPartyStore, memoryScopeRequirements, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
+import { createCheckRequiredScopes } from '../parties/check-required-scopes.js';
 import type { McpServerParty } from '../parties/party.js';
 import { createHandCall } from './hand-call.js';
 
@@ -33,6 +34,8 @@ let servers: ReturnType<typeof fakeMcpServers>;
 let calls: ReturnType<typeof memoryCalls>;
 let marks: ReturnType<typeof memoryToolMarks>;
 let parties: ReturnType<typeof memoryPartyStore>;
+let requirements: ReturnType<typeof memoryScopeRequirements>;
+let ships: ReturnType<typeof fakeShipReads>;
 let handCall: ReturnType<typeof createHandCall>;
 
 beforeEach(async () => {
@@ -43,7 +46,13 @@ beforeEach(async () => {
   servers.state.outcome = { kind: 'answered', result: DEALS };
   calls = memoryCalls();
   marks = memoryToolMarks();
-  handCall = createHandCall({ crew, servers, calls, marks, parties, timeoutMs: 60_000 });
+  requirements = memoryScopeRequirements();
+  ships = fakeShipReads();
+  ships.state.ships.set(CALLER_SHIP_ID, { name: 'lead-scout', scopes: ['messages:send', 'crm:read-leads'] });
+  const connections = memoryConnectionStore();
+  await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-25T09:00:00.000Z') });
+  const checkScopes = createCheckRequiredScopes({ connections, door: ships.door });
+  handCall = createHandCall({ crew, servers, calls, marks, parties, requirements, checkScopes, timeoutMs: 60_000 });
 });
 
 describe('the gateway refuses a call to a tool not switched on for the party (aeolus-fleet#1151)', () => {
@@ -73,6 +82,72 @@ describe('the gateway refuses a call to a tool not switched on for the party (ae
     await handCall({ party: CRM, delivery: aPushedDelivery() });
 
     expect(servers.called.map(({ call }) => call.name)).toEqual(['list_deals']);
+  });
+});
+
+describe('the gateway refuses a call from a ship that lacks a scope the tool needs (gateway scopes 4.2)', () => {
+  const requireOfListDeals = (scopes: string[]) => requirements.change({ fleetId: FLEET_ID, name: 'crm' }, { version: 0, tools: new Map([['list_deals', scopes]]) });
+
+  it('replies a tool error naming what is missing, reports it handled, and never reaches the server', async () => {
+    await requireOfListDeals(['crm:write-leads']);
+
+    await expect(handCall({ party: CRM, delivery: aPushedDelivery() })).resolves.toEqual({ kind: 'handled' });
+
+    expect(servers.called).toEqual([]);
+    expect(crew.sent().map((sent) => parsed(sent.payload))).toEqual([{ content: [{ type: 'text', text: 'list_deals needs crm:write-leads, which lead-scout does not hold' }], isError: true }]);
+    expect(crew.log.map(([call]) => call)).toEqual(['send', 'ack', 'handled']);
+  });
+
+  it('refuses a ship that holds the tool\'s own scope but not the party\'s', async () => {
+    await requirements.change({ fleetId: FLEET_ID, name: 'crm' }, { version: 0, party: ['crm:use'], tools: new Map([['list_deals', ['crm:read-leads']]]) });
+
+    await handCall({ party: CRM, delivery: aPushedDelivery() });
+
+    expect(servers.called).toEqual([]);
+  });
+
+  it('calls the tool for a ship holding every scope it needs', async () => {
+    await requireOfListDeals(['crm:read-leads']);
+
+    await expect(handCall({ party: CRM, delivery: aPushedDelivery() })).resolves.toEqual({ kind: 'handled' });
+
+    expect(servers.called.map(({ call }) => call.name)).toEqual(['list_deals']);
+  });
+
+  it('refuses a call whose scope was revoked while it waited: the check is at hand-over', async () => {
+    await requireOfListDeals(['crm:read-leads']);
+    ships.state.ships.set(CALLER_SHIP_ID, { name: 'lead-scout', scopes: ['messages:send'] });
+
+    await handCall({ party: CRM, delivery: aPushedDelivery() });
+
+    expect(servers.called).toEqual([]);
+  });
+
+  it('calls a tool whose requirement was removed while the call waited', async () => {
+    await requireOfListDeals(['crm:write-leads']);
+    await requirements.change({ fleetId: FLEET_ID, name: 'crm' }, { version: 1, tools: new Map([['list_deals', []]]) });
+
+    await handCall({ party: CRM, delivery: aPushedDelivery() });
+
+    expect(servers.called.map(({ call }) => call.name)).toEqual(['list_deals']);
+  });
+
+  it('hands nothing and tries again when core does not answer the scope read: never called unchecked', async () => {
+    await requireOfListDeals(['crm:read-leads']);
+    ships.state.isAnswering = false;
+
+    await expect(handCall({ party: CRM, delivery: aPushedDelivery() })).resolves.toEqual({ kind: 'again' });
+
+    expect({ called: servers.called, crew: crew.log }).toEqual({ called: [], crew: [] });
+  });
+
+  it('answers a tool switched off as not enabled, before any scope is read', async () => {
+    await requireOfListDeals(['crm:write-leads']);
+    await parties.switchTools({ fleetId: FLEET_ID, name: 'crm' }, { listed: ['list_deals'], switched: new Map([['list_deals', false]]) });
+
+    await handCall({ party: CRM, delivery: aPushedDelivery() });
+
+    expect(ships.state.reads).toEqual([]);
   });
 });
 
