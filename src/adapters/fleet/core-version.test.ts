@@ -33,9 +33,9 @@ describe('the gateway starts only against a core it runs with (decision 0049)', 
     await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.0.0'))).resolves.toBeUndefined();
   });
 
-  it("refuses to start against core 0.31.0, the minor before its minimum, which has none of the fleet's own scopes, naming the gateway and both versions", async () => {
-    await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.31.0'))).rejects.toThrow(
-      new ConfigError('gateway 0.0.0 needs core 0.32.0 or later; the fleet at https://fleet.example runs core 0.31.0: upgrade core first'),
+  it('refuses to start against core 0.30.0, the minor before its minimum, which holds no meetings, naming the gateway and both versions', async () => {
+    await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.30.0'))).rejects.toThrow(
+      new ConfigError('gateway 0.0.0 needs core 0.32.0 or later; the fleet at https://fleet.example runs core 0.30.0: upgrade core first'),
     );
   });
 
