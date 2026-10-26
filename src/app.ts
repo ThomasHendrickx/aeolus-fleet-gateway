@@ -614,7 +614,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: door.person,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: door.person, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock }),
+      wakePerson: createWakePerson({ door: door.person, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,

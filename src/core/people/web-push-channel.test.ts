@@ -74,7 +74,7 @@ describe('the web push channel', () => {
     await subscriptions.save(aWebPushSubscription());
     push.answers.set(aWebPushSubscription().endpoint, ['failed']);
 
-    await expect(webPushChannel().wake(SHIP)).resolves.toEqual(err({ reason: 'no push service took the wake' }));
+    await expect(webPushChannel().wake(SHIP)).resolves.toEqual(err({ kind: 'unavailable', reason: 'no push service took the wake' }));
   });
 
   it('forgets a subscription its push service says is gone, keeping it shown as gone, and sends it nothing again', async () => {
@@ -84,6 +84,6 @@ describe('the web push channel', () => {
     const woken = await webPushChannel().wake(SHIP);
     await webPushChannel().wake(SHIP);
 
-    expect({ woken, held: subscriptions.held, sent: push.sent }).toEqual({ woken: err({ reason: 'no push service took the wake' }), held: [aWebPushSubscription({ goneAt: NOW })], sent: [] });
+    expect({ woken, held: subscriptions.held, sent: push.sent }).toEqual({ woken: err({ kind: 'unavailable', reason: 'no push service took the wake' }), held: [aWebPushSubscription({ goneAt: NOW })], sent: [] });
   });
 });

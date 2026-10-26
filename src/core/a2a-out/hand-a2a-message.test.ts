@@ -214,12 +214,33 @@ describe('the gateway hands a message to an outside A2A agent (slice 6, flow 4.2
   });
 
   it('counts a reply the fleet refuses under a key the follow derived as replied, and goes on to the end', async () => {
-    await crew.send('aeolus_ct_v1_proxy', { to: CALLER_SHIP_ID, inReplyTo: MESSAGE, contentType: 'text/plain', payload: 'an earlier reply', idempotencyKey: plainAgentKeys.replyKeyOf(FLEET_ID, { taskId: 'task-1', event: JSON.stringify(['artifact', 'a-1', 0]) }) });
+    await crew.send('aeolus_ct_v1_proxy', { to: CALLER_SHIP_ID, inReplyTo: MESSAGE, contentType: 'text/plain', payload: 'an earlier reply', idempotencyKey: plainAgentKeys.replyKeyOf(FLEET_ID, { taskId: 'task-1', event: JSON.stringify(['artifact', MESSAGE, 'a-1', 0]) }) });
     const agents = fakeA2aAgents({ sends: [taken([anArtifactChunk({ artifactId: 'a-1', text: '4 EUR', isAppended: false }), aStatus('completed')])] });
 
     await expect(handWith(agents)()).resolves.toEqual({ kind: 'handled' });
 
     expect({ replies: crew.replies().map(({ payload }) => payload), slept }).toEqual({ replies: ['an earlier reply', aStatus('completed').json], slept: [] });
+  });
+
+  it('replies every appended chunk once on a follow-up turn of the same task', async () => {
+    const agents = fakeA2aAgents({ sends: [
+      taken([anArtifactChunk({ artifactId: 'a-1', text: '4 ', isAppended: false }), anArtifactChunk({ artifactId: 'a-1', text: 'EUR', isAppended: true }), aStatus('inputRequired')]),
+      taken([anArtifactChunk({ artifactId: 'a-1', text: ' incl.', isAppended: true }), anArtifactChunk({ artifactId: 'a-1', text: ' VAT', isAppended: true }), aStatus('completed')]),
+    ] });
+    const hand = handWith(agents);
+    await expect(hand()).resolves.toEqual({ kind: 'handled' });
+    const asked = crew.replies().at(-1);
+    const followUp = aQuote({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d02', messageId: 'msg_01m3tbfspe96yf1rnr4ank9m02', payload: 'Include VAT', inReplyTo: await replyMessageIdOf(asked?.idempotencyKey) });
+
+    await expect(hand(followUp)).resolves.toEqual({ kind: 'handled' });
+    await expect(hand(followUp)).resolves.toEqual({ kind: 'handled' });
+
+    expect(crew.replies().filter(({ contentType }) => contentType === 'text/plain').map(({ payload, inReplyTo }) => ({ payload, inReplyTo }))).toEqual([
+      { payload: '4 ', inReplyTo: MESSAGE },
+      { payload: 'EUR', inReplyTo: MESSAGE },
+      { payload: ' incl.', inReplyTo: followUp.messageId },
+      { payload: ' VAT', inReplyTo: followUp.messageId },
+    ]);
   });
 
   it('stops sending a reply the fleet does not take at the deadline', async () => {

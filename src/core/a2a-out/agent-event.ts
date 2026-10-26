@@ -40,7 +40,7 @@ export type ChunkPlaces = Readonly<Record<string, number>>;
 /**
  * What makes an event of a task one reply, as a follow of one fleet message sees them in turn, and the chunk places after it:
  * - a status: the message it answers, its state and its time, so a status told again is one reply and the same state on a follow-up is another;
- * - an artifact: its id and the place of its chunk, so the whole artifact a task read or a new stream starts with is its first chunk again, never its chunks once more;
+ * - an artifact: the message it answers, its id and the place of its chunk, so the whole artifact a task read or a new stream starts with is its first chunk again, never its chunks once more;
  * - a message: its id.
  */
 export function eventIdentityOf(event: AgentEvent, seen: { answering: string; chunkPlaces: ChunkPlaces }): { identity: string; chunkPlaces: ChunkPlaces } {
@@ -51,7 +51,7 @@ export function eventIdentityOf(event: AgentEvent, seen: { answering: string; ch
     case 'artifact': {
       const next = chunkPlaces[event.artifactId] ?? 1;
       const chunk = event.isAppended ? next : 0;
-      return { identity: JSON.stringify(['artifact', event.artifactId, chunk]), chunkPlaces: { ...chunkPlaces, [event.artifactId]: Math.max(next, chunk + 1) } };
+      return { identity: JSON.stringify(['artifact', answering, event.artifactId, chunk]), chunkPlaces: { ...chunkPlaces, [event.artifactId]: Math.max(next, chunk + 1) } };
     }
     case 'message':
       return { identity: JSON.stringify(['message', event.messageId]), chunkPlaces };
