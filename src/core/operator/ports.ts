@@ -1,12 +1,12 @@
-import type { FleetId, Scope } from '@aeolus-fleet/common';
+import type { FleetId, ScopeName } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
 
 /** A signed-in console session: argo's or a viewer's, with its ship's scopes, or an account's, with its account token's. */
 export type ConsoleSession =
-  | { fleetId: FleetId; kind: 'operator' | 'viewer'; scopes: readonly Scope[] }
-  | { fleetId: FleetId; kind: 'account'; accountId: string; scopes: readonly Scope[] };
+  | { fleetId: FleetId; kind: 'operator' | 'viewer'; scopes: readonly ScopeName[] }
+  | { fleetId: FleetId; kind: 'account'; accountId: string; scopes: readonly ScopeName[] };
 
 /**
  * Outbound port: asks the fleet whose a forwarded console session cookie is
