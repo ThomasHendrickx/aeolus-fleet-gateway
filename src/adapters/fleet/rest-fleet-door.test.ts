@@ -297,24 +297,18 @@ describe('the scopes the fleet lists, read as the gateway\'s ship (fleet.scopes,
   });
 });
 
-describe("where a sent message's delivery stands (ship.sentMessage, core 0.32.0)", () => {
-  it('answers the state of the one delivery a message sent to a ship has', async () => {
+describe('where the delivery of a message a proxy ship sent stands, as sentMessage answers (common 0.32.0)', () => {
+  it("reads the state and since of the message's one delivery to the ship it went to", async () => {
     answer = {
       status: 200,
       body: {
-        messageId: 'msg_01m3tbfspe96yf1rnr4ank9msg',
-        sentAt: '2026-10-25T09:00:00.000Z',
-        recipient: { kind: 'ship', ship: { id: PERSON_SHIP, name: 'thomas' } },
-        deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d1v', ship: { id: PERSON_SHIP, name: 'thomas' }, state: 'acknowledged', since: '2026-10-25T09:01:00.000Z' }],
+        messageId: 'msg_01m3tb1zgr5h2ffee12xnch8pp',
+        sentAt: '2026-10-26T07:00:00.000Z',
+        recipient: { kind: 'ship', ship: { id: PERSON_SHIP, name: 'supplier' } },
+        deliveries: [{ deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch8pp', ship: { id: PERSON_SHIP, name: 'supplier' }, state: 'handed', since: '2026-10-26T07:00:05.000Z' }],
       },
     };
 
-    await expect(createRestFleetDoor(base).sentMessage('aeolus_ct_v1_gateway', 'msg_01m3tbfspe96yf1rnr4ank9msg')).resolves.toEqual({ isOk: true, value: { state: 'acknowledged', since: new Date('2026-10-25T09:01:00.000Z') } });
-  });
-
-  it('answers a message with no delivery as the fleet not answering where it stands', async () => {
-    answer = { status: 200, body: { messageId: 'msg_01m3tbfspe96yf1rnr4ank9msg', sentAt: '2026-10-25T09:00:00.000Z', recipient: { kind: 'ship', ship: { id: PERSON_SHIP, name: 'thomas' } }, deliveries: [] } };
-
-    await expect(createRestFleetDoor(base).sentMessage('aeolus_ct_v1_gateway', 'msg_01m3tbfspe96yf1rnr4ank9msg')).resolves.toMatchObject({ isOk: false, error: { code: 'UNAVAILABLE' } });
+    await expect(createRestFleetDoor(base).sentMessage('aeolus_ct_v1_gateway', 'msg_01m3tb1zgr5h2ffee12xnch8pp')).resolves.toEqual({ isOk: true, value: { state: 'handed', since: new Date('2026-10-26T07:00:05.000Z') } });
   });
 });
