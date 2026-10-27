@@ -16,10 +16,11 @@ import type { ReadMeeting } from '../../core/meetings/read-meeting.js';
 import type { AnswerDelivery } from '../../core/people/answer-delivery.js';
 import type { DoneDelivery } from '../../core/people/done-delivery.js';
 import type { ListShips } from '../../core/people/list-ships.js';
-import type { OpenDelivery } from '../../core/people/open-delivery.js';
+import type { OpenDelivery, OpenedView } from '../../core/people/open-delivery.js';
 import type { GrantCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { SendMessage } from '../../core/people/send-message.js';
+import { meetingNoticeTextOf } from '../../core/people/meeting-notice.js';
 import type { AskForServer } from '../../core/requests/ask-for-server.js';
 import { runningVersion } from './version.js';
 
@@ -172,6 +173,12 @@ const meetingIdRefusal = (name: string) => toolError(`${name} takes the meetingI
 /** A tool's answer as one text block of JSON. */
 const answered = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
 
+/** An added-to-meeting notice has a structured payload for the fleet, but a person needs its sentence. */
+const openedAnswer = (value: OpenedView) => {
+  const text = meetingNoticeTextOf(value);
+  return text === undefined ? answered(value) : { content: [{ type: 'text' as const, text }] };
+};
+
 /** A tool error the person's model reads. */
 const toolError = (message: string) => ({ content: [{ type: 'text' as const, text: message }], isError: true });
 
@@ -193,14 +200,20 @@ export function personServerFor(caller: GrantCaller, deps: PersonToolsDeps): Mcp
         const read = await deps.readInbox(caller);
         return read.isOk ? answered(read.value) : toolError(read.error.message);
       }
-      case OPEN_TOOL.name:
+      case OPEN_TOOL.name: {
+        const sent = deliveryArgumentsSchema.safeParse(params.arguments);
+        if (!sent.success) {
+          return toolError(`${params.name} takes the deliveryId your inbox lists`);
+        }
+        const opened = await deps.openDelivery({ caller, deliveryId: sent.data.deliveryId });
+        return opened.isOk ? openedAnswer(opened.value) : toolError(opened.error.message);
+      }
       case DONE_TOOL.name: {
         const sent = deliveryArgumentsSchema.safeParse(params.arguments);
         if (!sent.success) {
           return toolError(`${params.name} takes the deliveryId your inbox lists`);
         }
-        const asked = { caller, deliveryId: sent.data.deliveryId };
-        const dealt = params.name === OPEN_TOOL.name ? await deps.openDelivery(asked) : await deps.doneDelivery(asked);
+        const dealt = await deps.doneDelivery({ caller, deliveryId: sent.data.deliveryId });
         return dealt.isOk ? answered(dealt.value) : toolError(dealt.error.message);
       }
       case ANSWER_TOOL.name: {

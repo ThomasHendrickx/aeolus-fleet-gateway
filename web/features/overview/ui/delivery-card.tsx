@@ -1,4 +1,5 @@
 import type { FocusedDelivery } from '../services/deliveries';
+import { meetingNoticeTextOf } from '../../../../src/core/people/meeting-notice.js';
 import { ActionButton } from './action-button';
 import { Notice } from './notice';
 
@@ -48,7 +49,7 @@ export function DeliveryCard({
         </a>
       )}
       {question === undefined ? (
-        <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-caption">{delivery.payload}</pre>
+        <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-caption">{meetingNoticeTextOf(delivery) ?? delivery.payload}</pre>
       ) : (
         <>
           <p className="whitespace-pre-wrap">{question.context}</p>
