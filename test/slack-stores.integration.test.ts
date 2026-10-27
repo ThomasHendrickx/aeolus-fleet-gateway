@@ -70,6 +70,16 @@ describe("Slack apps in the gateway's vault", () => {
     ]);
   });
 
+  it("finds a ship's bot by the ship and by its app id alone, and forgets one bot", async () => {
+    const apps = createPrismaSlackApps(prisma);
+    const shipBot: SlackApp = { ...BOT, appId: 'A05', shipId: 'shp_01m3tbfspe96yf1rnr4ank9r1n', name: 'release-notes', installStartedAt: AT, removedInSlackAt: AT };
+    await apps.save(shipBot);
+
+    await expect(Promise.all([apps.ofShip(ACME, 'shp_01m3tbfspe96yf1rnr4ank9r1n'), apps.findByAppId('A05')])).resolves.toEqual([shipBot, shipBot]);
+    await apps.remove(ACME, 'A05');
+    await expect(apps.findByAppId('A05')).resolves.toBeUndefined();
+  });
+
   it('forgets the workspace with every app made in it, and the fleet whole', async () => {
     const workspaces = createPrismaSlackWorkspaces(prisma);
     const apps = createPrismaSlackApps(prisma);
