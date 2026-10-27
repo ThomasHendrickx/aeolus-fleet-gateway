@@ -23,7 +23,12 @@ describe('the gateway configuration from the environment', () => {
       webPushWakeWindowMs: 600_000,
       pagasae: undefined,
       pagasaeApp: undefined,
+      slackApiUrl: 'https://slack.com/api',
     });
+  });
+
+  it("reads Slack's Web API address without its trailing slash, as a test points it at its Slack double", () => {
+    expect(loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'http://localhost:4000', SLACK_API_URL: 'http://127.0.0.1:5999/api/' }).slackApiUrl).toBe('http://127.0.0.1:5999/api');
   });
 
   it('reads the host, port and log level', () => {
