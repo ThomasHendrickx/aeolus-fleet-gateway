@@ -10,7 +10,7 @@ import { createCompleteInstall } from './complete-install.js';
 
 const NOW = new Date('2026-10-27T09:05:00.000Z');
 const REDIRECT_URL = 'https://gateway.acme.test/gw/slack/install';
-const MADE_BOT = { fleetId: FLEET_ID, appId: 'A01', shipId: null, clientId: 'client-A01', clientSecret: 'secret-A01', signingSecret: 'signing-A01', installUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-A01', madeAt: NOW, bot: null };
+const MADE_BOT = { fleetId: FLEET_ID, appId: 'A01', shipId: null, clientId: 'client-A01', clientSecret: 'secret-A01', signingSecret: 'signing-A01', installUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-A01', name: 'Acme', madeAt: NOW, installStartedAt: null, removedInSlackAt: null, bot: null };
 const STATE = JSON.stringify({ fleetId: FLEET_ID, appId: 'A01', expiresAt: '2026-10-27T09:10:00.000Z' });
 
 let tooling: ReturnType<typeof fakeSlackTooling>;

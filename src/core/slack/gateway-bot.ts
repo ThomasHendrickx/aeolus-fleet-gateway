@@ -22,7 +22,8 @@ export async function gatewayBotOf(
   if (!app.isOk) {
     return err(app.error);
   }
-  const bot: SlackApp = { fleetId: made.fleetId, shipId: null, ...app.value, madeAt: deps.clock.now(), bot: null };
+  const description = gatewayBotDescription(made.fleetName, deps.installRedirectUrl);
+  const bot: SlackApp = { fleetId: made.fleetId, shipId: null, ...app.value, name: description.name, madeAt: deps.clock.now(), installStartedAt: null, bot: null, removedInSlackAt: null };
   await deps.apps.save(bot);
   return ok(bot);
 }

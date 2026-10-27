@@ -44,8 +44,11 @@ function appOf(row: SlackAppRow): SlackApp {
     clientSecret: row.clientSecret,
     signingSecret: row.signingSecret,
     installUrl: row.installUrl,
+    name: row.name,
     madeAt: row.madeAt,
+    installStartedAt: row.installStartedAt,
     bot: row.botToken === null || row.botUserId === null ? null : { token: row.botToken, userId: row.botUserId },
+    removedInSlackAt: row.removedInSlackAt,
   };
 }
 
@@ -97,7 +100,19 @@ export function createPrismaSlackApps(db: PrismaClient): SlackApps {
       return row === null ? undefined : appOf(row);
     },
     save: async (app) => {
-      const row = { shipId: app.shipId, clientId: app.clientId, clientSecret: app.clientSecret, signingSecret: app.signingSecret, installUrl: app.installUrl, madeAt: app.madeAt, botToken: app.bot?.token ?? null, botUserId: app.bot?.userId ?? null };
+      const row = {
+        shipId: app.shipId,
+        clientId: app.clientId,
+        clientSecret: app.clientSecret,
+        signingSecret: app.signingSecret,
+        installUrl: app.installUrl,
+        name: app.name,
+        madeAt: app.madeAt,
+        installStartedAt: app.installStartedAt,
+        botToken: app.bot?.token ?? null,
+        botUserId: app.bot?.userId ?? null,
+        removedInSlackAt: app.removedInSlackAt,
+      };
       await db.slackApp.upsert({ where: { fleetId_appId: { fleetId: app.fleetId, appId: app.appId } }, create: { fleetId: app.fleetId, appId: app.appId, ...row }, update: row });
     },
   };

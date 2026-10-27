@@ -496,11 +496,16 @@ model SlackApp {
   clientId      String   @map("client_id")
   clientSecret  String   @map("client_secret")
   signingSecret String   @map("signing_secret")
-  installUrl    String   @map("install_url")
-  madeAt        DateTime @map("made_at") @db.Timestamptz(3)
-  botToken      String?  @map("bot_token")
-  botUserId     String?  @map("bot_user_id")
+  installUrl       String    @map("install_url")
+  /// The bot's name in Slack as last made or renamed.
+  name             String
+  madeAt           DateTime  @map("made_at") @db.Timestamptz(3)
+  installStartedAt DateTime? @map("install_started_at") @db.Timestamptz(3)
+  botToken         String?   @map("bot_token")
+  botUserId        String?   @map("bot_user_id")
+  removedInSlackAt DateTime? @map("removed_in_slack_at") @db.Timestamptz(3)
 
   @@id([fleetId, appId])
+  @@unique([appId])
   @@map("slack_apps")
 }

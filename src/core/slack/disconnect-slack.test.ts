@@ -12,7 +12,7 @@ import { createTakeAccessToken } from './take-access-token.js';
 
 const NOW = new Date('2026-10-27T09:00:00.000Z');
 const HOLDER: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: 'shp_01m3tbfspe96yf1rnr4ank9c4r', accountToken: 'account-token-1', scopes: ['gateway:slack'] };
-const BOT = { fleetId: FLEET_ID, appId: 'A01', shipId: null, clientId: 'c', clientSecret: 's', signingSecret: 'g', installUrl: 'https://slack.com/i', madeAt: NOW, bot: { token: 'xoxb-1', userId: 'U01' } };
+const BOT = { fleetId: FLEET_ID, appId: 'A01', shipId: null, clientId: 'c', clientSecret: 's', signingSecret: 'g', installUrl: 'https://slack.com/i', name: 'Acme', madeAt: NOW, installStartedAt: null, removedInSlackAt: null, bot: { token: 'xoxb-1', userId: 'U01' } };
 
 let tooling: ReturnType<typeof fakeSlackTooling>;
 let workspaces: ReturnType<typeof memorySlackWorkspaces>;

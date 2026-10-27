@@ -12,7 +12,7 @@ import { createReadSlack } from './read-slack.js';
 const NOW = new Date('2026-10-27T09:00:00.000Z');
 const HOLDER: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: 'shp_01m3tbfspe96yf1rnr4ank9c4r', accountToken: 'account-token-1', scopes: ['gateway:slack'] };
 const READER: Actor = { ...HOLDER, scopes: ['fleet:read'] };
-const BOT = { fleetId: FLEET_ID, appId: 'A01', shipId: null, clientId: 'c', clientSecret: 's', signingSecret: 'g', installUrl: 'https://slack.com/i', madeAt: NOW, bot: null };
+const BOT = { fleetId: FLEET_ID, appId: 'A01', shipId: null, clientId: 'c', clientSecret: 's', signingSecret: 'g', installUrl: 'https://slack.com/i', name: 'Acme', madeAt: NOW, installStartedAt: null, removedInSlackAt: null, bot: null };
 
 let workspaces: ReturnType<typeof memorySlackWorkspaces>;
 let apps: ReturnType<typeof memorySlackApps>;

@@ -54,11 +54,11 @@ describe('connecting a Slack workspace', () => {
       {
         accessToken: 'xoxe.xoxp-1',
         appId: 'A01',
-        description: { name: 'Acme', description: 'What waits for you in the Acme fleet of Aeolus', botScopes: ['chat:write', 'im:history', 'im:write'], redirectUrl: REDIRECT_URL },
+        description: { name: 'Acme', description: 'What waits for you in the Acme fleet of Aeolus', botScopes: ['chat:write', 'im:history', 'im:write'], redirectUrl: REDIRECT_URL, events: null },
       },
     ]);
     expect(apps.held).toEqual([
-      { fleetId: FLEET_ID, appId: 'A01', shipId: null, clientId: 'client-A01', clientSecret: 'secret-A01', signingSecret: 'signing-A01', installUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-A01', madeAt: NOW, bot: null },
+      { fleetId: FLEET_ID, appId: 'A01', shipId: null, clientId: 'client-A01', clientSecret: 'secret-A01', signingSecret: 'signing-A01', installUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-A01', name: 'Acme', madeAt: NOW, installStartedAt: null, removedInSlackAt: null, bot: null },
     ]);
   });
 
@@ -97,7 +97,7 @@ describe('connecting a Slack workspace', () => {
 
   it('connects again with a new configuration token of the same workspace after Slack refused the old one, keeping its apps', async () => {
     await workspaces.save(aSlackWorkspace({ teamName: 'Acme', isTokenRefused: true }));
-    await apps.save({ fleetId: FLEET_ID, appId: 'A07', shipId: null, clientId: 'c', clientSecret: 's', signingSecret: 'g', installUrl: 'https://slack.com/i', madeAt: NOW, bot: { token: 'xoxb-7', userId: 'U07' } });
+    await apps.save({ fleetId: FLEET_ID, appId: 'A07', shipId: null, clientId: 'c', clientSecret: 's', signingSecret: 'g', installUrl: 'https://slack.com/i', name: 'Acme', madeAt: NOW, installStartedAt: null, removedInSlackAt: null, bot: { token: 'xoxb-7', userId: 'U07' } });
 
     await expect(connectSlack({})).resolves.toEqual({ isOk: true, value: { isGatewayBotMade: true } });
     const workspace = workspaces.held.get(FLEET_ID);

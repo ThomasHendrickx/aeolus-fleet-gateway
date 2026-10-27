@@ -14,7 +14,7 @@ import { createTakeAccessToken } from './take-access-token.js';
 const NOW = new Date('2026-10-27T09:00:00.000Z');
 const REDIRECT_URL = 'https://gateway.acme.test/gw/slack/install';
 const CHARLOTTE: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: 'shp_01m3tbfspe96yf1rnr4ank9c4r', accountToken: 'account-token-1', scopes: ['gateway:slack'] };
-const MADE_BOT = { fleetId: FLEET_ID, appId: 'A01', shipId: null, clientId: 'client-A01', clientSecret: 'secret-A01', signingSecret: 'signing-A01', installUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-A01&scope=chat%3Awrite', madeAt: NOW, bot: null };
+const MADE_BOT = { fleetId: FLEET_ID, appId: 'A01', shipId: null, clientId: 'client-A01', clientSecret: 'secret-A01', signingSecret: 'signing-A01', installUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-A01&scope=chat%3Awrite', name: 'Acme', madeAt: NOW, installStartedAt: null, removedInSlackAt: null, bot: null };
 
 let tooling: ReturnType<typeof fakeSlackTooling>;
 let workspaces: ReturnType<typeof memorySlackWorkspaces>;

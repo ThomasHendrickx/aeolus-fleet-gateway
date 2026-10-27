@@ -16,7 +16,7 @@ import { aSlackWorkspace } from './support/slack-fakes.js';
 const ACME: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const LABS: FleetId = 'flt_01m4ajt7abh4rypkmdnjene67g';
 const AT = new Date('2026-10-27T09:00:00.000Z');
-const BOT: SlackApp = { fleetId: ACME, appId: 'A01', shipId: null, clientId: 'client-A01', clientSecret: 'secret-A01', signingSecret: 'signing-A01', installUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-A01', madeAt: AT, bot: null };
+const BOT: SlackApp = { fleetId: ACME, appId: 'A01', shipId: null, clientId: 'client-A01', clientSecret: 'secret-A01', signingSecret: 'signing-A01', installUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-A01', name: 'Acme', madeAt: AT, installStartedAt: null, removedInSlackAt: null, bot: null };
 
 let prisma: PrismaClient;
 

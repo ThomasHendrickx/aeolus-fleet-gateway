@@ -16,16 +16,42 @@ export interface SlackApp {
   readonly signingSecret: string;
   /** Slack's install screen for the app. */
   readonly installUrl: string;
+  /** The bot's name in Slack, as the gateway last made or renamed it: the ship's name then, or the fleet's for its own bot. */
+  readonly name: string;
   readonly madeAt: Date;
+  /** When someone last opened Slack's install screen for it from the gateway, while no install came back. */
+  readonly installStartedAt: Date | null;
   readonly bot: { readonly token: string; readonly userId: string } | null;
+  /** When Slack said the app was uninstalled or its tokens revoked (app_uninstalled, tokens_revoked). */
+  readonly removedInSlackAt: Date | null;
 }
 
-/** What the gateway asks Slack to make: the app's name and description, its bot's scopes, and where Slack sends an install back. */
+/** A bot's state on the Slack page (gateway scopes 9.2). */
+export type BotState = 'made' | 'waitingForInstall' | 'inSlack' | 'removedInSlack';
+
+export function botStateOf(app: SlackApp): BotState {
+  if (app.removedInSlackAt !== null) {
+    return 'removedInSlack';
+  }
+  if (app.bot !== null) {
+    return 'inSlack';
+  }
+  return app.installStartedAt === null ? 'made' : 'waitingForInstall';
+}
+
+/** What the gateway asks Slack to make: the app's name and description, its bot's scopes, where Slack sends an install back, and the events it sends the gateway and where. */
 export interface SlackAppDescription {
   readonly name: string;
   readonly description: string;
   readonly botScopes: readonly string[];
   readonly redirectUrl: string;
+  readonly events: { readonly url: string; readonly botEvents: readonly string[] } | null;
+}
+
+/** The gateway's addresses Slack calls: where an install comes back, and where events go. */
+export interface SlackAddresses {
+  readonly installRedirectUrl: string;
+  readonly eventsUrl: string;
 }
 
 /** Slack's longest app name. */
@@ -44,5 +70,22 @@ export function gatewayBotDescription(fleetName: string, redirectUrl: string): S
     description: `What waits for you in the ${fleetName} fleet of Aeolus`.slice(0, APP_DESCRIPTION_MAX_LENGTH),
     botScopes: ['chat:write', 'im:history', 'im:write'],
     redirectUrl,
+    events: null,
+  };
+}
+
+/**
+ * A ship's own bot (gateway scopes 9.2): the ship's name, its statement's
+ * summary as the description (0047), a direct messages tab, the events of a
+ * direct message and a mention, and the bot scopes to read them, post and
+ * react. Slack sends its uninstall and revoked tokens too.
+ */
+export function shipBotDescription(ship: { name: string; summary: string | null }, addresses: SlackAddresses): SlackAppDescription {
+  return {
+    name: ship.name.slice(0, APP_NAME_MAX_LENGTH),
+    description: (ship.summary ?? `The ${ship.name} ship of Aeolus`).slice(0, APP_DESCRIPTION_MAX_LENGTH),
+    botScopes: ['chat:write', 'im:history', 'app_mentions:read', 'reactions:write'],
+    redirectUrl: addresses.installRedirectUrl,
+    events: { url: addresses.eventsUrl, botEvents: ['message.im', 'app_mention', 'app_uninstalled', 'tokens_revoked'] },
   };
 }
