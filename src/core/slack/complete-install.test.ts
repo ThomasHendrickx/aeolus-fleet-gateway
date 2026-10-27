@@ -43,6 +43,14 @@ describe("completing a Slack app's install", () => {
     });
   });
 
+  it('puts a bot removed in Slack back in Slack when installed again', async () => {
+    await apps.save({ ...MADE_BOT, installStartedAt: NOW, removedInSlackAt: NOW });
+
+    await completeInstall({});
+
+    expect(apps.held[0]).toMatchObject({ bot: { token: 'xoxb-A01', userId: 'U0A01' }, installStartedAt: null, removedInSlackAt: null });
+  });
+
   it('is refused for a state the gateway did not seal, asking Slack nothing', async () => {
     await expect(completeInstall({ state: 'forged' })).resolves.toEqual({ isOk: false, error: { kind: 'INSTALL_REFUSED', message: 'This install did not start at the gateway, or took longer than ten minutes: press Install again' } });
     expect(tooling.state.installs).toEqual([]);
