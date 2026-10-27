@@ -8,8 +8,10 @@ import { Notice } from '../ui/notice';
 import { OverviewLead } from '../ui/overview-lead';
 import { OverviewSkeleton } from '../ui/overview-skeleton';
 import { RequestsList } from '../ui/requests-list';
+import { slackLinkOutcomeOf } from '../services/slack-link-outcomes';
 import { InboxPanel } from './inbox-panel';
 import { LiveRefresh } from './live-refresh';
+import { SlackLinkPanel } from './slack-link-panel';
 import { WakePanel } from './wake-panel';
 
 /** What a decision the person just made came to, said once they are back. */
@@ -19,13 +21,14 @@ const DECIDED: Record<string, string> = {
 };
 
 async function OverviewParts({ api, fleetId }: { api: GatewayApi; fleetId: string }) {
-  const { inbox, wakeChannels, toDecide, mine } = await readOverview(api);
+  const { inbox, wakeChannels, toDecide, mine, slackLink } = await readOverview(api);
   const now = new Date();
   return (
     <>
       <OverviewLead waiting={inbox?.waiting} toDecide={toDecide?.length} />
       {inbox === undefined ? null : <InboxPanel fleetId={fleetId} inbox={inbox} />}
       {wakeChannels === undefined ? null : <WakePanel fleetId={fleetId} channels={wakeChannels} />}
+      {slackLink === undefined || slackLink === null ? null : <SlackLinkPanel fleetId={fleetId} slackLink={slackLink} />}
       {toDecide === undefined ? null : toDecide.length === 0 ? (
         <p className="text-muted-foreground">No request waits for a decision.</p>
       ) : (
@@ -39,7 +42,7 @@ async function OverviewParts({ api, fleetId }: { api: GatewayApi; fleetId: strin
 /**
  * The Overview (design B, Signal): what waits on the person, their inbox
  * and the channels that wake them, the requests to decide for an approver,
- * oldest first, and the requests they asked. Signed out, the browser goes to sign in before anything shows;
+ * oldest first, the requests they asked, and their Slack link. Signed out, the browser goes to sign in before anything shows;
  * signed in, the shape shows while the parts load. It reads itself again
  * whenever the fleet's requests change.
  */
@@ -50,10 +53,12 @@ export async function Overview({ searchParams }: { searchParams: SearchParams })
   }
   const { decided } = searchParams;
   const said = typeof decided === 'string' ? DECIDED[decided] : undefined;
+  const linked = slackLinkOutcomeOf(searchParams);
   return (
     <div className="grid gap-6">
       <LiveRefresh fleetId={page.fleetId} />
       {said === undefined ? null : <Notice message={said} isFailure={false} />}
+      {linked === undefined ? null : <Notice message={linked.message} isFailure={linked.isFailure} />}
       <Suspense fallback={<OverviewSkeleton />}>
         <OverviewParts api={page.api} fleetId={page.fleetId} />
       </Suspense>

@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
 
+import { createPrismaClient } from '../src/adapters/prisma/client.js';
+import { createPrismaSlackLinks } from '../src/adapters/prisma/slack-links.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
@@ -13,6 +15,7 @@ import { aFreePort, startFleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
 import { aClientProvider, aRegisteredClient, CALLBACK, TEST_GATEWAY_SECRET, type Setting } from './support/mcp-client.js';
 import { outsidePartiesOn } from './support/outside-parties.js';
+import { aSlackLink } from './support/slack-fakes.js';
 
 // A person signs in to the gateway through pagasae from their MCP client, as
 // Claude would (decision 0054): /authorize asks them to sign in as
@@ -190,6 +193,18 @@ describe("pagasae tells the gateway an account was disabled (decision 0055, flow
     const told = await mutate(setting.address, { procedure: 'installation.accountDisabled', installationToken: INSTALLATION_TOKEN, body: { fleetId, accountId: 'acc-charlotte' } });
 
     expect({ told: told.status, clients: [await initializeStatus(first), await initializeStatus(second)] }).toEqual({ told: 200, clients: [401, 401] });
+  });
+
+  it("stops the account's Slack link, so its Slack user is told it cannot message the fleet now (gateway scopes 9.3)", async () => {
+    const prisma = createPrismaClient(setting.databaseUrl);
+    const links = createPrismaSlackLinks(prisma);
+    await links.add(aSlackLink({ fleetId, accountId: 'acc-charlotte' }));
+
+    const told = await mutate(setting.address, { procedure: 'installation.accountDisabled', installationToken: INSTALLATION_TOKEN, body: { fleetId, accountId: 'acc-charlotte' } });
+
+    const link = await links.ofAccount(fleetId, 'acc-charlotte');
+    await prisma.$disconnect();
+    expect({ told: told.status, isStopped: link?.stoppedAt instanceof Date }).toEqual({ told: 200, isStopped: true });
   });
 
   it('is refused without the installation token, and the sign-in goes on', async () => {

@@ -90,6 +90,14 @@ export async function turnOffWebPush(fleet: string, endpoint: string): Promise<A
   });
 }
 
+/** Unlinks the person's Slack account (gateway scopes 9.3). */
+export async function unlinkSlack(fleet: string): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    await api.slack.unlink.mutate();
+    return undefined;
+  });
+}
+
 /** Decides a request; approving names the proxy ship, its owner and its scopes, messages:send and messages:receive always among them. */
 export async function decideRequest({ fleet, requestId, input }: { fleet: string; requestId: string; input: DecisionInput }): Promise<ActionOutcome<undefined>> {
   if (input.kind === 'deny') {
