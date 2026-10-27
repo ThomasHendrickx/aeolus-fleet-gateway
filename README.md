@@ -90,6 +90,10 @@ Codes and tokens are kept only as hashes, and so are client secrets.
 
 Serve the gateway at its own origin, such as `https://gateway.example.com`, with `GATEWAY_PUBLIC_URL` set to it: RFC 8414 and RFC 9728 put the metadata at the origin's root, and `/authorize` and `/token` are served there.
 
+## The ChatGPT plugin
+
+`plugin/` holds the plugin listed in ChatGPT's Plugins directory (chatgpt-plugin design, 7.2): `plugin.json` (the listing's texts and the review cases OpenAI runs), `mcp.json` (one server at `https://gateway.aeolus-fleet.dev/plugin/mcp`, signing in by OAuth with CIMD) and the logo. `npm run plugin:build` sets the gateway's version in `plugin.json` and writes `dist/aeolus-<version>.zip`, `dist/aeolus-<version>.tools.json` (the person tools as `tools/list` answers them) and `dist/aeolus-<version>.notes.md`; `--out <dir>` writes them elsewhere. It refuses, naming the field, a package that breaks OpenAI's limits, a review case naming a tool the gateway does not serve, and a person tool without its three hints. Given `--previous <dir>` holding the last release's ZIP and tools, the notes say whether the package changed (the version aside), and name the tools that are new, changed or removed; a package name other than the last release's is refused (`plugin_name_mismatch`). The release workflow runs it before publishing and attaches the ZIP and tools to the GitHub Release.
+
 ## MCP clients list and call tools
 
 `<GATEWAY_PUBLIC_URL>/mcp` is the gateway's MCP endpoint (Streamable HTTP, stateless). A call without a token, or with one the gateway did not issue for it, gets 401 with `resource_metadata` naming where to sign in (RFC 9728).

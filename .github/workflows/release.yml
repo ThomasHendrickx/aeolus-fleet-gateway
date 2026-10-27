@@ -1,7 +1,8 @@
 # Publishes @aeolus-fleet/gateway to npm and tags v<version> the
 # released commit, so a version on npm always matches a tag in git. Then
 # creates the GitHub Release for the tag, with notes from the merged pull
-# requests carrying the label <version>.
+# requests carrying the label <version>, and the ChatGPT plugin's package
+# attached with its notes.
 #
 # The only way the package can be published: npm trusted publishing (OIDC) is
 # configured for exactly this file name, and tokens are disallowed (decision
@@ -97,6 +98,24 @@ jobs:
 
       - run: npm run build
 
+      # The ChatGPT plugin's package (chatgpt-plugin design, 7.6), built and
+      # checked before anything is published: a package that breaks OpenAI's
+      # limits, or a tool without its three hints, fails the release. It is
+      # compared with the latest release's package and tools; a release with
+      # none, as before the plugin, counts every tool as new.
+      - name: Build the ChatGPT plugin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/previous-plugin"
+          previous="$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // empty')"
+          if [[ -n "$previous" ]]; then
+            # A release from before the plugin has no such assets: gh says no asset matches.
+            gh release download "$previous" --pattern 'aeolus-*.zip' --pattern 'aeolus-*.tools.json' --dir "$RUNNER_TEMP/previous-plugin" \
+              || echo "$previous has no plugin package"
+          fi
+          npm run plugin:build -- --previous "$RUNNER_TEMP/previous-plugin" --out "$RUNNER_TEMP/plugin"
+
       # Catches a problem in the package before it is published. A dry run
       # refuses a version on npm already too, so it skips it, as the publish
       # step below does.
@@ -135,8 +154,9 @@ jobs:
           git push origin "refs/tags/v$VERSION"
 
       # Notes from the merged pull requests labelled with the version: git and the
-      # labels are the source, there is no changelog file. Skipped when the
-      # Release exists already, as when a release is dispatched again.
+      # labels are the source, there is no changelog file. Then the plugin's
+      # notes, and its ZIP and tools attached. Skipped when the Release exists
+      # already, as when a release is dispatched again.
       - name: Create the GitHub Release v${{ inputs.version }}
         env:
           VERSION: ${{ inputs.version }}
@@ -148,4 +168,6 @@ jobs:
           fi
           gh pr list --state merged --label "$VERSION" --json number,title,url --limit 1000 \
             | node scripts/release-notes.ts "$VERSION" > "$RUNNER_TEMP/release-notes.md"
-          gh release create "v$VERSION" --verify-tag --title "v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+          { echo; cat "$RUNNER_TEMP/plugin/aeolus-$VERSION.notes.md"; } >> "$RUNNER_TEMP/release-notes.md"
+          gh release create "v$VERSION" --verify-tag --title "v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" \
+            "$RUNNER_TEMP/plugin/aeolus-$VERSION.zip" "$RUNNER_TEMP/plugin/aeolus-$VERSION.tools.json"
