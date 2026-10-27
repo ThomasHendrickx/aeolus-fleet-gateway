@@ -1,7 +1,7 @@
 import { idSchema, type FleetId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
-import type { InstallState, InstallStates, MadeApp, SlackApps, SlackRefusal, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
+import type { InstallState, InstallStates, MadeApp, ShipNames, SlackApps, SlackRefusal, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
 import type { SlackApp, SlackAppDescription } from '../../src/core/slack/slack-app.js';
 import type { SlackWorkspace } from '../../src/core/slack/slack-workspace.js';
 import { err, ok } from '../../src/core/shared/result.js';
@@ -154,4 +154,9 @@ export function aSlackWorkspace(overrides: Partial<SlackWorkspace> = {}): SlackW
     isTokenRefused: false,
     ...overrides,
   };
+}
+
+/** Ships' names as the fleet answers them; a ship it does not name, none. */
+export function fakeShipNames(names: Record<string, string> = { shp_01m3tbfspe96yf1rnr4ank9c4r: 'charlotte' }): ShipNames {
+  return { nameOf: (_fleetId, shipId) => Promise.resolve(names[shipId]) };
 }

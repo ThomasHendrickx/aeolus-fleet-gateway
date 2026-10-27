@@ -1,4 +1,4 @@
-import type { FleetId } from '@aeolus-fleet/common';
+import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import type { Result } from '../shared/result.js';
 import type { SlackApp, SlackAppDescription } from './slack-app.js';
@@ -82,4 +82,9 @@ export interface InstallStates {
   seal(state: InstallState): string;
   /** The state a sealed text holds; none for one the gateway did not seal. */
   open(sealed: string): InstallState | undefined;
+}
+
+/** Outbound port: a ship's name as the fleet answers it now, read as the gateway's ship; none when the fleet does not answer. */
+export interface ShipNames {
+  nameOf(fleetId: FleetId, shipId: ShipId): Promise<string | undefined>;
 }
