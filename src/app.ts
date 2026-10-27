@@ -487,11 +487,13 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     return set;
   };
 
-  // The OAuth server for outside MCP clients: the issuer is the public URL, and every token is bound to its MCP endpoint (RFC 8707).
+  // The OAuth server for outside MCP clients: the issuer is the public URL, and every token is bound to the MCP address it was asked for (RFC 8707).
+  // The plugin's address serves the same tools; a person signs in there as themselves with no pick (chatgpt-plugin design, 6).
   const issuer = options.publicUrl ?? DEFAULT_PUBLIC_URL;
   const resource = `${issuer}/mcp`;
+  const pluginResource = `${issuer}/plugin/mcp`;
   const authorizationCodes = createPrismaAuthorizationCodes(prisma);
-  const readAuthorization = createReadAuthorization({ clients: oauthClients, documents: createClientMetadataDocuments({ timeoutMs: CLIENT_METADATA_TIMEOUT_MS }), resource });
+  const readAuthorization = createReadAuthorization({ clients: oauthClients, documents: createClientMetadataDocuments({ timeoutMs: CLIENT_METADATA_TIMEOUT_MS }), resources: [resource, pluginResource] });
   const registerClient = createRegisterClient({ clients: oauthClients, secrets: oauthSecrets });
   const seals = createSignInSeals(options.gatewaySecret);
   // People sign in through pagasae where it is set (decision 0054); else no client connects, as only an account asks for one (A a).
@@ -513,7 +515,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     pagasae === undefined
       ? undefined
       : {
-          start: createStartSignIn({ readAuthorization, seals, pagasae, secrets: oauthSecrets, clock }),
+          start: createStartSignIn({ readAuthorization, pluginResource, seals, pagasae, secrets: oauthSecrets, clock }),
           complete: createCompleteSignIn({
             readAuthorization,
             seals,
@@ -542,6 +544,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     ...(signIn === undefined ? {} : { signIn }),
     issuer,
     resource,
+    pluginResource,
     readAuthorization,
     exchangeToken: createExchangeToken({
       clients: oauthClients,
@@ -663,15 +666,20 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const person = pagasae === undefined ? undefined : personToolsOf();
   const aliases = createShipAliases(options.gatewaySecret);
   const listTools = createListTools({ parties, discovery: door, aliases });
-  registerMcpEndpoint(server, {
-    resource,
-    authenticateAccessToken: createAuthenticateAccessToken({ tokens: issuedTokens, secrets: oauthSecrets, clock, resource }),
-    listTools,
-    callTool: createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, sleep, waitMaxMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS }),
-    readClientCall: createReadClientCall({ calls: clientCalls, clock }),
-    servesOutsideParties,
-    ...(person === undefined ? {} : { person }),
-  });
+  const callTool = createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, sleep, waitMaxMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS });
+  const readClientCall = createReadClientCall({ calls: clientCalls, clock });
+  // The same tools at each address, each taking only the tokens issued for it.
+  for (const address of [resource, pluginResource]) {
+    registerMcpEndpoint(server, {
+      resource: address,
+      authenticateAccessToken: createAuthenticateAccessToken({ tokens: issuedTokens, secrets: oauthSecrets, clock, resource: address }),
+      listTools,
+      callTool,
+      readClientCall,
+      servesOutsideParties,
+      ...(person === undefined ? {} : { person }),
+    });
+  }
   // Outside A2A clients call the ships their proxy ship reaches, by alias, with the bearer they were shown (decision 0060).
   // A blocking send waits as its capability states, at most the gateway's own most, as an MCP call does (I-9).
   const listReachedShips = createListReachedShips({ parties, discovery: door, aliases });
