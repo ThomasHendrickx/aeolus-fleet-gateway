@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aSlackWorkspace, memorySlackApps, memorySlackWorkspaces } from '../../../test/support/slack-fakes.js';
+import { aSlackApp, aSlackWorkspace, fakeSlackShips, memorySlackApps, memorySlackWorkspaces } from '../../../test/support/slack-fakes.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import { createReadSlack } from './read-slack.js';
 
@@ -22,8 +22,16 @@ beforeEach(() => {
   apps = memorySlackApps();
 });
 
+const RELEASE_NOTES = { shipId: 'shp_01m3tbfspe96yf1rnr4ank9r1n', name: 'release-notes', kind: 'agent', status: 'crewed', summary: null } as const;
+const QUOTES = { shipId: 'shp_01m3tbfspe96yf1rnr4ank9q0t', name: 'quotes', kind: 'app', status: 'crewed', summary: null } as const;
+let ships: ReturnType<typeof fakeSlackShips>;
+
+beforeEach(() => {
+  ships = fakeSlackShips([RELEASE_NOTES, QUOTES]);
+});
+
 function readSlack(actor: Actor) {
-  return createReadSlack({ workspaces, apps })(actor);
+  return createReadSlack({ workspaces, apps, ships: ships.port })(actor);
 }
 
 describe('the Slack page', () => {
@@ -45,7 +53,23 @@ describe('the Slack page', () => {
       connectedAt: new Date('2026-10-27T08:00:00.000Z'),
       tokenState: 'fresh',
       gatewayBot: 'made',
+      bots: [],
       canChange: true,
+    });
+  });
+
+  it("shows each exposed ship by its id with its bot's state, both names while a rename waits for Slack, and the ship's name gone from the fleet as the bot's", async () => {
+    await workspaces.save(aSlackWorkspace());
+    await apps.save(aSlackApp({ appId: 'A02', shipId: RELEASE_NOTES.shipId, name: 'changelog', installStartedAt: NOW }));
+    await apps.save(aSlackApp({ appId: 'A03', shipId: QUOTES.shipId, name: 'quotes', bot: { token: 'xoxb-3', userId: 'U03' } }));
+    await apps.save(aSlackApp({ appId: 'A04', shipId: 'shp_01m3tbfspe96yf1rnr4ank9g0n', name: 'gone', bot: { token: 'xoxb-4', userId: 'U04' }, removedInSlackAt: NOW }));
+
+    await expect(readSlack(HOLDER)).resolves.toMatchObject({
+      bots: [
+        { appId: 'A02', shipId: RELEASE_NOTES.shipId, shipName: 'release-notes', botName: 'changelog', state: 'waitingForInstall' },
+        { appId: 'A03', shipId: QUOTES.shipId, shipName: 'quotes', botName: 'quotes', state: 'inSlack' },
+        { appId: 'A04', shipId: 'shp_01m3tbfspe96yf1rnr4ank9g0n', shipName: 'gone', botName: 'gone', state: 'removedInSlack' },
+      ],
     });
   });
 
