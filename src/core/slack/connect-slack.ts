@@ -4,6 +4,7 @@ import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import { gatewayBotOf } from './gateway-bot.js';
 import type { ShipNames, SlackApps, SlackTooling, SlackWorkspaces } from './ports.js';
+import type { SlackAddresses } from './slack-app.js';
 import { slackUnavailableMessage } from './take-access-token.js';
 
 /** The scope that connects Slack and exposes ships as bots (gateway scopes B6). */
@@ -29,8 +30,7 @@ export function createConnectSlack(deps: {
   apps: Pick<SlackApps, 'gatewayBot' | 'save'>;
   shipNames: ShipNames;
   clock: Clock;
-  installRedirectUrl: string;
-  linkRedirectUrl: string;
+  addresses: SlackAddresses;
 }): ConnectSlack {
   return async ({ actor, refreshToken, fleetName }) => {
     if (!actor.scopes.includes(SLACK_SCOPE)) {

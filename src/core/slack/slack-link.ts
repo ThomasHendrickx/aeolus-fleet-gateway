@@ -16,4 +16,6 @@ export interface SlackLink {
   readonly personShipId: ShipId;
   readonly linkedAt: Date;
   readonly stoppedAt: Date | null;
+  /** Show everything that waits in Slack (B5): messages from ships that are not bots too, off until turned on (W8). */
+  readonly isShowingAll: boolean;
 }

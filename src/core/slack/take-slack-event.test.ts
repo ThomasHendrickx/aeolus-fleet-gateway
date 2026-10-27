@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aKeptSlackEvent, aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks } from '../../../test/support/slack-fakes.js';
+import { aKeptSlackEvent, aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks, memorySlackPosts } from '../../../test/support/slack-fakes.js';
 import type { SlackEventFields } from './slack-event.js';
 import { createTakeSlackEvent } from './take-slack-event.js';
 
@@ -19,10 +19,12 @@ let apps: ReturnType<typeof memorySlackApps>;
 let links: ReturnType<typeof memorySlackLinks>;
 let slack: ReturnType<typeof fakeSlackMessages>;
 let events: ReturnType<typeof memorySlackEvents>;
+let posts: ReturnType<typeof memorySlackPosts>;
 let sendsNow: number;
 
 beforeEach(async () => {
   events = memorySlackEvents();
+  posts = memorySlackPosts();
   sendsNow = 0;
   apps = memorySlackApps();
   links = memorySlackLinks();
@@ -37,13 +39,13 @@ function takeEvent(event: { type: string; timestamp?: string; signature?: string
   const timestamp = event.timestamp ?? NOW_SECONDS;
   const fields: SlackEventFields = { eventId: 'Ev01', type: event.type, teamId: 'T0ACME', userId: null, channel: null, channelType: null, subtype: null, botId: null, text: '', ts: '1730019600.000100', threadTs: null, files: [], ...event.fields };
   const body = JSON.stringify({ api_app_id: event.appId ?? 'A02', event: fields });
-  return createTakeSlackEvent({ apps, links, events, sendNow: () => { sendsNow += 1; }, slack: slack.messages, signatures, clock: { now: () => NOW }, linkPageUrl: LINK_PAGE_URL })({
+  return createTakeSlackEvent({ apps, links, events, posts, sendNow: () => { sendsNow += 1; }, slack: slack.messages, signatures, clock: { now: () => NOW }, linkPageUrl: LINK_PAGE_URL })({
     appId: event.appId ?? 'A02',
     event: fields,
     isRetry: event.isRetry ?? false,
     body,
     timestamp,
-    signature: event.signature ?? `signing-A02:${timestamp}:${body}`,
+    signature: event.signature ?? `signing-${event.appId ?? 'A02'}:${timestamp}:${body}`,
   });
 }
 
@@ -133,6 +135,25 @@ describe("a person's message to a bot, from Slack", () => {
     await takeEvent({ type: 'message', fields: { ...MATHILDE_WRITES, subtype: 'file_share', text: 'here', files: [{ name: 'notes.pdf', permalink: 'https://acme.slack.com/files/U0M/F01/notes.pdf' }] } });
 
     expect(events.held.map(({ markdown }) => markdown)).toEqual(['here\n\n[notes.pdf](https://acme.slack.com/files/U0M/F01/notes.pdf)']);
+  });
+
+  it('keeps an answer in the thread under a posted delivery in reply to its message, to its sender, to hand it then', async () => {
+    await links.add(aSlackLink());
+    await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
+    await posts.save({ fleetId: FLEET_ID, personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', appId: 'A01', channel: 'D0MATHILDE', ts: '1730020000.000001', threadTs: null, isLinkOnly: false, ackedAt: NOW });
+
+    await takeEvent({ type: 'message', appId: 'A01', fields: { ...MATHILDE_WRITES, text: 'Cut the travel', threadTs: '1730020000.000001' } });
+
+    expect(events.held.map(({ shipId, inReplyTo, deliveryId, markdown }) => ({ shipId, inReplyTo, deliveryId, markdown }))).toEqual([{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', markdown: 'Cut the travel' }]);
+  });
+
+  it("keeps nothing of a message to the gateway's own bot that answers no posted delivery", async () => {
+    await links.add(aSlackLink());
+    await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
+
+    const taken = await takeEvent({ type: 'message', appId: 'A01', fields: { ...MATHILDE_WRITES, text: 'hello' } });
+
+    expect({ taken, kept: events.held }).toEqual({ taken: { isOk: true, value: { kind: 'ignored' } }, kept: [] });
   });
 
   it("keeps Slack's retry of a kept event no second time", async () => {

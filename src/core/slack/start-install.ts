@@ -7,7 +7,7 @@ import { SLACK_SCOPE } from './connect-slack.js';
 import { gatewayBotOf } from './gateway-bot.js';
 import type { InstallStates, SlackApps, SlackShips, SlackTooling, SlackWorkspaces } from './ports.js';
 import { managedShipBot } from './ship-bot.js';
-import type { SlackApp } from './slack-app.js';
+import type { SlackApp, SlackAddresses } from './slack-app.js';
 import { slackUnavailableMessage, type TakeAccessToken } from './take-access-token.js';
 
 /** How long an install the gateway started may take to come back. */
@@ -34,8 +34,7 @@ export function createStartInstall(deps: {
   ships: Pick<SlackShips, 'read' | 'checkManage'>;
   credentialOf: CredentialOf;
   clock: Clock;
-  installRedirectUrl: string;
-  linkRedirectUrl: string;
+  addresses: SlackAddresses;
 }): StartInstall {
   return async ({ actor, as, bot: asked }) => {
     if (!actor.scopes.includes(SLACK_SCOPE)) {

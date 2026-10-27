@@ -31,7 +31,13 @@ describe("a person's Slack link on the Overview", () => {
   it('shows the Slack name it is linked as, in the workspace', async () => {
     await links.add(aSlackLink());
 
-    await expect(readSlackLink()).resolves.toEqual({ workspaceName: 'Acme', link: { slackName: 'mathilde' } });
+    await expect(readSlackLink()).resolves.toEqual({ workspaceName: 'Acme', link: { slackName: 'mathilde', isShowingAll: false } });
+  });
+
+  it('shows whether everything that waits shows in Slack', async () => {
+    await links.add(aSlackLink({ isShowingAll: true }));
+
+    await expect(readSlackLink()).resolves.toEqual({ workspaceName: 'Acme', link: { slackName: 'mathilde', isShowingAll: true } });
   });
 
   it('offers Link Slack while the account is not linked', async () => {

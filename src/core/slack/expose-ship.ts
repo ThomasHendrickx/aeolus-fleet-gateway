@@ -32,7 +32,7 @@ export function createExposeShip(deps: {
   takeAccessToken: TakeAccessToken;
   credentialOf: CredentialOf;
   clock: Clock;
-  addresses: Pick<SlackAddresses, 'installRedirectUrl' | 'eventsUrl'>;
+  addresses: SlackAddresses;
 }): ExposeShip {
   return async ({ actor, as, shipId }) => {
     if (!actor.scopes.includes(SLACK_SCOPE)) {

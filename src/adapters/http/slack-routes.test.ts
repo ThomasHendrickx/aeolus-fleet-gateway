@@ -3,12 +3,13 @@ import { createHmac } from 'node:crypto';
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 
-import { aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks } from '../../../test/support/slack-fakes.js';
+import { aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks, memorySlackPosts } from '../../../test/support/slack-fakes.js';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { err, ok } from '../../core/shared/result.js';
 import { createTakeSlackEvent } from '../../core/slack/take-slack-event.js';
 import { createSlackSignatures } from '../crypto/slack-signatures.js';
-import { registerSlackRoutes, SLACK_EVENTS_PATH, SLACK_LINK_PATH } from './slack-routes.js';
+import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_LINK_PATH } from './slack-routes.js';
+import type { AnswerInSlack } from '../../core/slack/answer-in-slack.js';
 import type { CompleteLink } from '../../core/slack/complete-link.js';
 
 // Slack's events door (gateway scopes 9.2, 9.4 step 1): Slack checks the
@@ -29,13 +30,19 @@ async function aServer(completeLink: CompleteLink = () => Promise.resolve(err({ 
   const slack = fakeSlackMessages();
   const links = memorySlackLinks();
   const events = memorySlackEvents();
+  const posts = memorySlackPosts();
+  const pressed: Parameters<AnswerInSlack>[0][] = [];
   const server = Fastify();
   registerSlackRoutes(server, {
     completeInstall: () => Promise.resolve(err({ kind: 'INSTALL_REFUSED' as const, message: 'unused' })),
     completeLink,
-    takeSlackEvent: createTakeSlackEvent({ apps, links, events, sendNow: () => undefined, slack: slack.messages, signatures: createSlackSignatures(), clock: { now: () => NOW }, linkPageUrl: 'https://gateway.acme.test/slack/link' }),
+    answerInSlack: (press) => {
+      pressed.push(press);
+      return Promise.resolve(ok({ kind: 'answered' as const }));
+    },
+    takeSlackEvent: createTakeSlackEvent({ apps, links, events, posts, sendNow: () => undefined, slack: slack.messages, signatures: createSlackSignatures(), clock: { now: () => NOW }, linkPageUrl: 'https://gateway.acme.test/slack/link' }),
   });
-  return { server, apps, slack, links, events };
+  return { server, apps, slack, links, events, pressed };
 }
 
 describe("Slack's events door", () => {
@@ -75,6 +82,19 @@ describe("Slack's events door", () => {
 
     expect([first.statusCode, retry.statusCode]).toEqual([200, 200]);
     expect(slack.state.onlyTo.map(({ channel, user }) => ({ channel, user }))).toEqual([{ channel: 'D0MATHILDE', user: 'U0MATHILDE' }]);
+  });
+});
+
+describe("Slack's actions door", () => {
+  it('reads a press of an option\'s button under a question, with its raw body to check its signature', async () => {
+    const { server, pressed } = await aServer();
+    const payload = { type: 'block_actions', api_app_id: 'A01', team: { id: 'T0ACME' }, user: { id: 'U0MATHILDE' }, container: { type: 'message', channel_id: 'D0MATHILDE', message_ts: '1730020000.000001' }, actions: [{ action_id: 'answer-2', value: '2' }] };
+    const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+
+    const answer = await server.inject({ method: 'POST', url: SLACK_ACTIONS_PATH, headers: { ...signed(body, 'signing-A01'), 'content-type': 'application/x-www-form-urlencoded' }, payload: body });
+
+    expect(answer.statusCode).toBe(200);
+    expect(pressed.map(({ appId, teamId, userId, channel, messageTs, option, body: raw }) => ({ appId, teamId, userId, channel, messageTs, option, raw }))).toEqual([{ appId: 'A01', teamId: 'T0ACME', userId: 'U0MATHILDE', channel: 'D0MATHILDE', messageTs: '1730020000.000001', option: 2, raw: body }]);
   });
 });
 

@@ -1,12 +1,21 @@
 import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
-import type { InstallState, InstallStates, LinkState, LinkStates, MadeApp, ProxyShipKinds, ShipNames, ShipToExpose, SlackApps, SlackEvents, SlackIdentity, SlackLinks, SlackMessages, SlackRefusal, SlackShips, SlackSignIn, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
+import type { InstallState, InstallStates, LinkState, LinkStates, MadeApp, ProxyShipKinds, ShipNames, ShipToExpose, SlackApps, SlackButton, SlackEvents, SlackIdentity, SlackLinks, SlackMessages, SlackPosts, SlackRefusal, SlackShips, SlackSignIn, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
 import type { KeptSlackEvent } from '../../src/core/slack/kept-slack-event.js';
 import type { SlackLink } from '../../src/core/slack/slack-link.js';
+import { isUnfinished, type SlackPost } from '../../src/core/slack/slack-post.js';
 import type { SlackApp, SlackAppDescription } from '../../src/core/slack/slack-app.js';
 import type { SlackWorkspace } from '../../src/core/slack/slack-workspace.js';
 import { err, ok } from '../../src/core/shared/result.js';
+
+/** The gateway's addresses Slack calls, as a test gateway names them. */
+export const SLACK_ADDRESSES = {
+  installRedirectUrl: 'https://gateway.acme.test/gw/slack/install',
+  eventsUrl: 'https://gateway.acme.test/gw/slack/events',
+  actionsUrl: 'https://gateway.acme.test/gw/slack/actions',
+  linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link',
+};
 
 /** How long Slack's configuration access token lives. */
 const CONFIGURATION_TOKEN_MS = 12 * 60 * 60 * 1000;
@@ -268,6 +277,11 @@ export function memorySlackLinks(): SlackLinks & { held: SlackLink[] } {
     held,
     find: (fleetId, { teamId, userId }) => Promise.resolve(held.find((link) => link.fleetId === fleetId && link.teamId === teamId && link.slackUserId === userId)),
     ofAccount: (fleetId, accountId) => Promise.resolve(held.find((link) => link.fleetId === fleetId && link.accountId === accountId)),
+    ofPersonShip: (fleetId, personShipId) => Promise.resolve(held.find((link) => link.fleetId === fleetId && link.personShipId === personShipId)),
+    showAll: (fleetId, { accountId, isOn }) => {
+      held.splice(0, held.length, ...held.map((link) => (link.fleetId === fleetId && link.accountId === accountId ? { ...link, isShowingAll: isOn } : link)));
+      return Promise.resolve();
+    },
     add: (link) => {
       const isTaken = held.some((each) => each.fleetId === link.fleetId && ((each.teamId === link.teamId && each.slackUserId === link.slackUserId) || each.accountId === link.accountId));
       if (!isTaken) {
@@ -293,7 +307,10 @@ export function fakeSlackMessages() {
     onlyTo: new Array<{ botToken: string; channel: string; user: string; text: string; button?: { text: string; url: string } }>(),
     inThread: new Array<{ botToken: string; channel: string; threadTs: string; text: string }>(),
     reactions: new Array<{ botToken: string; channel: string; ts: string; name: string }>(),
+    posts: new Array<{ botToken: string; channel: string; threadTs: string | null; text: string; buttons: readonly SlackButton[]; ts: string }>(),
     refusal: noRefusal(),
+    /** Slack's answers to the next posts, before it takes one. */
+    postRefusals: new Array<SlackRefusal>(),
   };
   const posted = <T>(list: T[], item: T) => {
     if (state.refusal !== undefined) {
@@ -306,6 +323,15 @@ export function fakeSlackMessages() {
     postOnlyTo: (botToken, message) => posted(state.onlyTo, { botToken, ...message }),
     postInThread: (botToken, message) => posted(state.inThread, { botToken, ...message }),
     react: (botToken, reaction) => posted(state.reactions, { botToken, ...reaction }),
+    post: (botToken, message) => {
+      const refused = state.postRefusals.shift() ?? state.refusal;
+      if (refused !== undefined) {
+        return Promise.resolve(err(refused));
+      }
+      const ts = `1730020000.${String(state.posts.length + 1).padStart(6, '0')}`;
+      state.posts.push({ botToken, ...message, ts });
+      return Promise.resolve(ok({ channel: message.channel, ts }));
+    },
   };
   return { state, messages };
 }
@@ -321,6 +347,7 @@ export function aSlackLink(overrides: Partial<SlackLink> = {}): SlackLink {
     personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t',
     linkedAt: new Date('2026-10-27T08:45:00.000Z'),
     stoppedAt: null,
+    isShowingAll: false,
     ...overrides,
   };
 }
@@ -372,8 +399,40 @@ export function aKeptSlackEvent(overrides: Partial<KeptSlackEvent> = {}): KeptSl
     ts: '1730019600.000100',
     threadTs: null,
     markdown: 'when is the release?',
+    inReplyTo: null,
+    deliveryId: null,
     receivedAt: new Date('2026-10-27T09:00:00.000Z'),
     takenAt: null,
     ...overrides,
+  };
+}
+
+/** The fleet messages in Slack, in memory, by fleet, person ship and message. */
+export function memorySlackPosts(): SlackPosts & { held: SlackPost[] } {
+  const held = new Array<SlackPost>();
+  const indexOf = (fleetId: FleetId, { personShipId, messageId }: { personShipId: string; messageId: string }) => held.findIndex((post) => post.fleetId === fleetId && post.personShipId === personShipId && post.messageId === messageId);
+  return {
+    held,
+    save: (post) => {
+      const index = indexOf(post.fleetId, post);
+      if (index === -1) {
+        held.push(post);
+      } else {
+        held[index] = post;
+      }
+      return Promise.resolve();
+    },
+    ofMessage: (fleetId, post) => Promise.resolve(held[indexOf(fleetId, post)]),
+    atSlackMessage: (fleetId, { personShipId, appId, channel, ts }) => Promise.resolve(held.find((post) => post.fleetId === fleetId && post.personShipId === personShipId && post.deliveryId !== null && post.appId === appId && post.channel === channel && post.ts === ts)),
+    lastInThread: (fleetId, { personShipId, appId, channel, threadTs }) =>
+      Promise.resolve(held.filter((post) => post.fleetId === fleetId && post.personShipId === personShipId && post.deliveryId !== null && post.appId === appId && post.channel === channel && (post.threadTs === threadTs || post.ts === threadTs)).sort((a, b) => (a.ts ?? '').localeCompare(b.ts ?? '')).at(-1)),
+    unfinished: (fleetId, personShipId) => Promise.resolve(held.filter((post) => post.fleetId === fleetId && post.personShipId === personShipId && isUnfinished(post))),
+    remove: (fleetId, post) => {
+      const index = indexOf(fleetId, post);
+      if (index !== -1) {
+        held.splice(index, 1);
+      }
+      return Promise.resolve();
+    },
   };
 }

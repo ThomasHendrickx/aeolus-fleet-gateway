@@ -6,7 +6,7 @@ import { aPersonDelivery, memoryFocusedPages } from '../../../test/support/peopl
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { FocusedPages, PersonShip, PushedPersonDelivery, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
+import type { FocusedPages, PersonShip, PushedPersonDelivery, ShownElsewhere, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
 import { createWakePerson } from './wake-person.js';
 
 // The gateway wakes a person when something waits for their person ship
@@ -85,8 +85,9 @@ function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: Flee
   };
 }
 
-function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[]; wakesSent?: WakesSent; focused?: FocusedPages; endedAttempts?: { channel: WakeChannelName; reason: string }[] }) {
+function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[]; wakesSent?: WakesSent; focused?: FocusedPages; endedAttempts?: { channel: WakeChannelName; reason: string }[]; shownElsewhere?: ShownElsewhere }) {
   return createWakePerson({
+    ...(deps.shownElsewhere === undefined ? {} : { shownElsewhere: deps.shownElsewhere }),
     attemptEnded: (ended) => deps.endedAttempts?.push({ channel: ended.channel, reason: ended.reason }),
     door: deps.ship.door,
     channels: deps.channels,
@@ -97,7 +98,56 @@ function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[];
   });
 }
 
+/** Slack, showing the deliveries given: it hands each with channel slack, as the gateway does once it posted one. */
+function slackShowing(ship: ReturnType<typeof aShip>, shown: readonly DeliveryId[]): ShownElsewhere & { asked: DeliveryId[][] } {
+  const asked: DeliveryId[][] = [];
+  return {
+    asked,
+    show: async (_ship, { crewToken, fresh }) => {
+      asked.push(fresh.map(({ deliveryId }) => deliveryId));
+      const taken = fresh.filter(({ deliveryId }) => shown.includes(deliveryId));
+      for (const { deliveryId } of taken) {
+        await ship.door.handed(crewToken, { deliveryId, handOverNumber: 1, channel: 'slack' });
+      }
+      return ok(new Set(taken.map(({ deliveryId }) => deliveryId)));
+    },
+  };
+}
+
 describe('waking a person', () => {
+  it('wakes no one for what Slack showed, and wakes for the rest (gateway scopes 9.5 step 5)', async () => {
+    const ship = aShip([aDelivery(1), aDelivery(2)]);
+    const email = aChannel('email');
+    const slack = slackShowing(ship, ['dlv_01m3tbfspe96yf1rnr4ank0001']);
+
+    await waking({ ship, channels: [email.channel], shownElsewhere: slack })(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers).toEqual([
+      { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', handOverNumber: 1, channel: 'slack' },
+      { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', handOverNumber: 1, channel: 'email' },
+    ]);
+  });
+
+  it('sends no wake at all when Slack showed every delivery', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email');
+
+    const woken = await waking({ ship, channels: [email.channel], shownElsewhere: slackShowing(ship, ['dlv_01m3tbfspe96yf1rnr4ank0001']) })(SHIP, CREW_TOKEN);
+
+    expect({ woken, emails: email.woken.length }).toEqual({ woken: ok({ kind: 'settled' }), emails: 0 });
+  });
+
+  it('lets Slack show a delivery even while a page of the person is in focus', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const focused = memoryFocusedPages();
+    await focused.save({ ...SHIP, pageId: 'page-1', seenAt: NOW });
+    const slack = slackShowing(ship, ['dlv_01m3tbfspe96yf1rnr4ank0001']);
+
+    await waking({ ship, channels: [], focused, shownElsewhere: slack })(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers.map(({ channel }) => channel)).toEqual(['slack']);
+  });
+
   it('sends no wake and hands nothing while the person turned no channel on', async () => {
     const ship = aShip([aDelivery(1)]);
     const email = aChannel('email', { isOn: false });

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aSlackApp, aSlackWorkspace, fakeSlackShips, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces, plainInstallStates } from '../../../test/support/slack-fakes.js';
+import { aSlackApp, aSlackWorkspace, fakeSlackShips, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces, plainInstallStates, SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
 import { ok } from '../shared/result.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import { createStartInstall } from './start-install.js';
@@ -13,7 +13,6 @@ import { createTakeAccessToken } from './take-access-token.js';
 // an install it started, within ten minutes.
 
 const NOW = new Date('2026-10-27T09:00:00.000Z');
-const REDIRECT_URL = 'https://gateway.acme.test/gw/slack/install';
 const CHARLOTTE: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-charlotte', personShipId: 'shp_01m3tbfspe96yf1rnr4ank9c4r', accountToken: 'account-token-1', scopes: ['gateway:slack'] };
 const MADE_BOT = { fleetId: FLEET_ID, appId: 'A01', shipId: null, clientId: 'client-A01', clientSecret: 'secret-A01', signingSecret: 'signing-A01', installUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-A01&scope=chat%3Awrite', name: 'Acme', madeAt: NOW, installStartedAt: null, removedInSlackAt: null, bot: null };
 
@@ -45,8 +44,7 @@ function startInstall(actor: Actor = CHARLOTTE, appId?: string) {
     ships: ships.port,
     credentialOf: (_actor, sent) => Promise.resolve(ok(sent)),
     clock,
-    installRedirectUrl: REDIRECT_URL,
-    linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link',
+    addresses: SLACK_ADDRESSES,
   })({ actor, as: { cookie: 'aeolus_account_session=charlotte' }, bot: appId === undefined ? { kind: 'gateway', fleetName: 'Acme' } : { kind: 'ship', appId } });
 }
 

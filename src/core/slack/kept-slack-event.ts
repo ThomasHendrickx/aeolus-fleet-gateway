@@ -1,10 +1,12 @@
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import type { DeliveryId, FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 /**
  * A linked person's message from Slack, kept by Slack's event id until core
- * stored or refused it (gateway scopes 9.4 step 3, P-B2): the bot's app and
- * ship, the person ship it is sent as, where it was written in Slack, and
- * the Markdown it is sent as. Once core took it, only its event id stays,
+ * stored or refused it (gateway scopes 9.4 step 3, P-B2): the bot's app,
+ * the ship it goes to, the person ship it is sent as, where it was written
+ * in Slack, and the Markdown it is sent as. An answer in the thread under a
+ * posted delivery goes to its sender in reply to its message, and hands the
+ * delivery (9.5 step 4). Once core took it, only its event id stays,
  * for an hour, to answer Slack's retries.
  */
 export interface KeptSlackEvent {
@@ -17,6 +19,9 @@ export interface KeptSlackEvent {
   readonly ts: string;
   readonly threadTs: string | null;
   readonly markdown: string;
+  readonly inReplyTo: MessageId | null;
+  /** The delivery the message answers, handled once core stored it. */
+  readonly deliveryId: DeliveryId | null;
   readonly receivedAt: Date;
   readonly takenAt: Date | null;
 }

@@ -1,8 +1,8 @@
 import type { CallSender } from '../mcp-in/ports.js';
-import type { PersonCrews } from '../people/ports.js';
+import type { PersonCrews, PersonShipDoor } from '../people/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { TAKEN_KEPT_MS, UNTAKEN_KEPT_MS, type KeptSlackEvent } from './kept-slack-event.js';
-import type { SlackApps, SlackEvents, SlackMessages } from './ports.js';
+import type { SlackApps, SlackEvents, SlackMessages, SlackPosts } from './ports.js';
 
 /** How many kept events a round sends at most. */
 const ROUND_LIMIT = 50;
@@ -48,6 +48,8 @@ export function createSendSlackEvents(deps: {
   apps: Pick<SlackApps, 'findByAppId'>;
   crews: Pick<PersonCrews, 'find'>;
   sender: Pick<CallSender, 'send'>;
+  door: Pick<PersonShipDoor, 'handled'>;
+  posts: Pick<SlackPosts, 'save'>;
   slack: Pick<SlackMessages, 'postInThread' | 'react'>;
   clock: Clock;
 }): SendSlackEvents {
@@ -59,10 +61,17 @@ export function createSendSlackEvents(deps: {
       return 'later';
     }
     const where = { channel: event.channel, threadTs: event.threadTs ?? event.ts };
-    const sent = await deps.sender.send(crew.crewToken, { to: event.shipId, contentType: 'text/markdown', payload: event.markdown, idempotencyKey: `slack:${event.eventId}` });
+    const message = { to: event.shipId, contentType: 'text/markdown', payload: event.markdown, idempotencyKey: `slack:${event.eventId}` };
+    const sent = await deps.sender.send(crew.crewToken, event.inReplyTo === null ? message : { ...message, inReplyTo: event.inReplyTo });
     if (sent.isOk) {
+      const { fleetId, personShipId, appId, channel, ts, threadTs } = event;
+      await deps.posts.save({ fleetId, personShipId, messageId: sent.value.messageId, deliveryId: null, senderShipId: null, appId, channel, ts, threadTs, isLinkOnly: false, ackedAt: null });
+      if (event.deliveryId !== null) {
+        // A refusal leaves the delivery acknowledged, as an answer on the gateway's page does when handled is refused.
+        await deps.door.handled(crew.crewToken, event.deliveryId);
+      }
       // Without the reaction the person sees no sign and sends again: the event goes again, the same send by its key.
-      const reacted = await deps.slack.react(app.bot.token, { channel: event.channel, ts: event.ts, name: STORED_REACTION });
+      const reacted = await deps.slack.react(app.bot.token, { channel, ts, name: STORED_REACTION });
       return reacted.isOk ? 'taken' : 'later';
     }
     if (NOT_ANSWERED.has(sent.error.code) || ENDED_CREW.has(sent.error.code)) {

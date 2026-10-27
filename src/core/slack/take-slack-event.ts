@@ -1,13 +1,9 @@
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { SlackApps, SlackEvents, SlackLinks, SlackMessages, SlackSignatures } from './ports.js';
+import type { SlackApps, SlackEvents, SlackLinks, SlackMessages, SlackPosts, SlackSignatures } from './ports.js';
 import { isRemovedEvent, personMessageOf, type SlackEventFields } from './slack-event.js';
 import { markdownOf } from './slack-markdown.js';
-
-/** How far an event's timestamp may be from now (gateway scopes 9.4 step 1). */
-export const EVENT_SKEW_MS = 5 * 60 * 1000;
-
-const SECOND_MS = 1000;
+import { isSignedBy } from './slack-request.js';
 
 /** What the gateway answers a person whose disabled account's link stopped (gateway scopes 9.3). */
 export const STOPPED_LINK_TEXT = 'Your account cannot message the fleet now';
@@ -33,11 +29,15 @@ export type TakeSlackEvent = (event: {
  * Slack's retry of an event is answered once, the first time. A linked
  * person's message is kept by Slack's event id, as the Markdown it is sent
  * as, and sent now (9.4 step 3); a retry of a kept one changes nothing.
+ * One in the thread under a delivery the gateway posted answers it: it goes
+ * to that delivery's sender in reply to its message (9.5 step 4). Through
+ * the gateway's own bot, only such an answer is sent.
  */
 export function createTakeSlackEvent(deps: {
   apps: Pick<SlackApps, 'findByAppId' | 'save'>;
   links: Pick<SlackLinks, 'find'>;
   events: Pick<SlackEvents, 'keep'>;
+  posts: Pick<SlackPosts, 'lastInThread'>;
   /** Sends the kept events now, not at the next round. */
   sendNow: () => void;
   slack: Pick<SlackMessages, 'postOnlyTo'>;
@@ -49,8 +49,7 @@ export function createTakeSlackEvent(deps: {
   return async ({ appId, event, isRetry, body, timestamp, signature }) => {
     const app = await deps.apps.findByAppId(appId);
     const now = deps.clock.now();
-    const sentAt = Number(timestamp) * SECOND_MS;
-    if (app === undefined || !Number.isFinite(sentAt) || Math.abs(now.getTime() - sentAt) > EVENT_SKEW_MS || !deps.signatures.isSigned({ secret: app.signingSecret, timestamp, body, signature })) {
+    if (!isSignedBy(app, { request: { body, timestamp, signature }, signatures: deps.signatures, clock: deps.clock })) {
       return err({ kind: 'notSigned' });
     }
     if (isRemovedEvent(event)) {
@@ -58,18 +57,25 @@ export function createTakeSlackEvent(deps: {
       return ok({ kind: 'taken' });
     }
     const message = personMessageOf(event);
-    if (message === undefined || app.bot === null || app.shipId === null) {
+    if (message === undefined || app.bot === null) {
       return ok({ kind: 'ignored' });
     }
     const link = await deps.links.find(app.fleetId, { teamId: message.teamId, userId: message.userId });
     if (link?.stoppedAt === null) {
       const { eventId, channel, ts, threadTs, text, files } = message;
+      const answered = threadTs === null ? undefined : await deps.posts.lastInThread(app.fleetId, { personShipId: link.personShipId, appId, channel, threadTs });
+      const shipId = answered?.senderShipId ?? app.shipId;
+      if (shipId === null) {
+        return ok({ kind: 'ignored' });
+      }
       const kept = await deps.events.keep({
         fleetId: app.fleetId,
         eventId,
         appId,
-        shipId: app.shipId,
+        shipId,
         personShipId: link.personShipId,
+        inReplyTo: answered?.messageId ?? null,
+        deliveryId: answered?.deliveryId ?? null,
         channel,
         ts,
         threadTs,

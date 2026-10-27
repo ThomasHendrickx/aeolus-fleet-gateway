@@ -53,4 +53,33 @@ describe("a bot's message only one person sees", () => {
     await expect(Promise.all([messages.react('xoxb-A02', reaction), messages.react('xoxb-A02', reaction)])).resolves.toEqual([{ isOk: true, value: undefined }, { isOk: true, value: undefined }]);
     expect(slack.reactions).toEqual([{ botToken: 'xoxb-A02', form: { channel: 'D0MATHILDE', timestamp: '1730019600.000100', name: 'white_check_mark' } }]);
   });
+
+  it('posts in a conversation, with a button per option under a question, answering the Slack message it is', async () => {
+    const posted = await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A01', { channel: 'U0MATHILDE', threadTs: null, text: '*Cut travel?*\nOver by 10%', buttons: [{ text: 'Cut', option: 1 }, { text: 'Keep', option: 2 }] });
+
+    expect(posted).toEqual({ isOk: true, value: { channel: 'U0MATHILDE', ts: '1730019600.000001' } });
+    const form = slack.posted[0]?.form;
+    const blocks: unknown = JSON.parse(form?.blocks ?? 'null');
+    expect({ channel: form?.channel, threadTs: form?.thread_ts, text: form?.text, blocks }).toEqual({
+      channel: 'U0MATHILDE',
+      threadTs: undefined,
+      text: '*Cut travel?*\nOver by 10%',
+      blocks: [
+        { type: 'section', text: { type: 'mrkdwn', text: '*Cut travel?*\nOver by 10%' } },
+        { type: 'actions', elements: [{ type: 'button', action_id: 'answer-1', text: { type: 'plain_text', text: 'Cut' }, value: '1' }, { type: 'button', action_id: 'answer-2', text: { type: 'plain_text', text: 'Keep' }, value: '2' }] },
+      ],
+    });
+  });
+
+  it('posts text alone in a thread', async () => {
+    await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A02', { channel: 'C0LAUNCH', threadTs: '1730019600.000100', text: 'Friday', buttons: [] });
+
+    expect(slack.posted[0]?.form).toEqual({ channel: 'C0LAUNCH', thread_ts: '1730019600.000100', text: 'Friday' });
+  });
+
+  it("answers rate limited with Slack's Retry-After", async () => {
+    slack.rateLimit('chat.postMessage', 7);
+
+    await expect(createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A02', { channel: 'U0MATHILDE', threadTs: null, text: 'Friday', buttons: [] })).resolves.toEqual({ isOk: false, error: { kind: 'rateLimited', retryAfterSeconds: 7 } });
+  });
 });

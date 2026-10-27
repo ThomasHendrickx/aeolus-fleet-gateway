@@ -80,6 +80,7 @@ import type { ListExposable } from '../../core/slack/list-exposable.js';
 import type { RemoveBot } from '../../core/slack/remove-bot.js';
 import type { ReadSlack } from '../../core/slack/read-slack.js';
 import type { ReadSlackLink } from '../../core/slack/read-slack-link.js';
+import type { ShowAllInSlack } from '../../core/slack/show-all-in-slack.js';
 import type { StartLink } from '../../core/slack/start-link.js';
 import type { StopSlackLink } from '../../core/slack/stop-slack-link.js';
 import type { UnlinkSlack } from '../../core/slack/unlink-slack.js';
@@ -179,6 +180,7 @@ export interface Context {
     readSlackLink: ReadSlackLink;
     startLink: StartLink;
     unlinkSlack: UnlinkSlack;
+    showAllInSlack: ShowAllInSlack;
   };
   readOutsideParties: ReadOutsideParties;
   setOutsideParties: SetOutsideParties;
@@ -618,6 +620,7 @@ const SLACK_CODES = {
   SLACK_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
   NO_SUCH_BOT: 'NOT_FOUND',
   NOT_A_PERSON: 'FORBIDDEN',
+  NOT_LINKED: 'NOT_FOUND',
   NOT_REACHABLE: 'FORBIDDEN',
   NOT_EXPOSABLE: 'BAD_REQUEST',
   CONFLICT: 'CONFLICT',
@@ -1227,10 +1230,18 @@ export const gatewayRouter = t.router({
       }),
     /** The person's Slack link as the Overview shows it (9.6): the workspace and the Slack name linked; none while the fleet's own bot is not in Slack. */
     link: servedProcedure
-      .output(z.object({ workspaceName: z.string(), link: z.object({ slackName: z.string() }).nullable() }).nullable())
+      .output(z.object({ workspaceName: z.string(), link: z.object({ slackName: z.string(), isShowingAll: z.boolean() }).nullable() }).nullable())
       .query(({ ctx }) => ctx.slack.readSlackLink({ actor: ctx.actor })),
     /** Sign in with Slack to link the person's Slack account, from the Overview or Slack's answer to an unlinked person (9.3). */
     startLink: servedProcedure.output(z.object({ url: z.string() })).mutation(async ({ ctx }) => slackAnswerOf(await ctx.slack.startLink({ actor: ctx.actor }))),
+    /** Turns Show everything that waits in Slack on or off for the person's own link (9.6, B5). */
+    showAll: servedProcedure
+      .input(z.strictObject({ isOn: z.boolean() }))
+      .output(z.strictObject({}))
+      .mutation(async ({ ctx, input }) => {
+        slackAnswerOf(await ctx.slack.showAllInSlack({ actor: ctx.actor, isOn: input.isOn }));
+        return {};
+      }),
     /** Unlinks the person's own Slack account (9.3). */
     unlink: servedProcedure.output(z.strictObject({})).mutation(async ({ ctx }) => {
       await ctx.slack.unlinkSlack({ actor: ctx.actor });

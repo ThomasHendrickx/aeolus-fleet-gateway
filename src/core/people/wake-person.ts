@@ -1,4 +1,4 @@
-import { RECEIVE_MAX_UPPER_BOUND } from "@aeolus-fleet/common";
+import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from "@aeolus-fleet/common";
 
 import type { FleetRefusal } from "../connection/ports.js";
 import type { Clock } from "../shared/clock.js";
@@ -9,6 +9,7 @@ import type {
   PersonShip,
   PersonShipDoor,
   PushedPersonDelivery,
+  ShownElsewhere,
   WakeChannel,
   WakeChannelName,
   WakesSent,
@@ -46,10 +47,15 @@ export type WakePerson = (
  * told, as asking again cannot help; while another channel's wake fails and is
  * tried again, that channel is not asked again. While a page of the person is in focus, the page
  * shows what arrives (W6): each fresh delivery is handed through it and no
- * wake goes out.
+ * wake goes out. Before all that, a place beyond the pages that shows
+ * deliveries itself, as Slack does for a linked person, shows what it
+ * shows, even while a page is in focus; nothing wakes for those
+ * (gateway scopes 9.5 step 5).
  */
 export function createWakePerson(deps: {
   door: Pick<PersonShipDoor, "pushReceive" | "handed">;
+  /** Slack, where the person linked it; none where nothing beyond the pages shows deliveries. */
+  shownElsewhere?: ShownElsewhere;
   channels: readonly WakeChannel[];
   wakesSent: WakesSent;
   focused: FocusedPages;
@@ -92,8 +98,18 @@ export function createWakePerson(deps: {
     if (!taken.isOk) {
       return taken;
     }
-    const allFresh = taken.value.filter(
+    const everyFresh = taken.value.filter(
       ({ handOverNumber }) => handOverNumber === null,
+    );
+    const shownElsewhere =
+      deps.shownElsewhere === undefined || everyFresh.length === 0
+        ? ok(new Set<DeliveryId>())
+        : await deps.shownElsewhere.show(ship, { crewToken, fresh: everyFresh });
+    if (!shownElsewhere.isOk) {
+      return shownElsewhere;
+    }
+    const allFresh = everyFresh.filter(
+      ({ deliveryId }) => !shownElsewhere.value.has(deliveryId),
     );
     if (allFresh.length === 0) {
       return ok({ kind: "settled" });

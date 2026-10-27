@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startFakeSlack, type FakeSlack } from '../../../test/support/fake-slack.js';
+import { SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
 import { gatewayBotDescription } from '../../core/slack/slack-app.js';
 import { createSlackSignIn } from './slack-sign-in.js';
 import { createSlackTooling } from './slack-tooling.js';
@@ -18,7 +19,7 @@ beforeEach(async () => {
   slack.issueRefreshToken('xoxe-1-first');
   const tooling = createSlackTooling({ apiUrl: slack.apiUrl });
   const rotated = await tooling.rotateConfigurationToken('xoxe-1-first');
-  await tooling.makeApp(rotated.isOk ? rotated.value.token.accessToken : '', gatewayBotDescription('Acme', { installRedirectUrl: 'https://gateway.acme.test/gw/slack/install', linkRedirectUrl: LINK_REDIRECT_URL }));
+  await tooling.makeApp(rotated.isOk ? rotated.value.token.accessToken : '', gatewayBotDescription('Acme', SLACK_ADDRESSES));
 });
 
 afterEach(async () => {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startFakeSlack, type FakeSlack } from '../../../test/support/fake-slack.js';
+import { SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
 import { gatewayBotDescription, shipBotDescription } from '../../core/slack/slack-app.js';
 import { createSlackTooling } from './slack-tooling.js';
 
@@ -10,7 +11,7 @@ import { createSlackTooling } from './slack-tooling.js';
 
 const REDIRECT_URL = 'https://gateway.acme.test/gw/slack/install';
 const LINK_REDIRECT_URL = 'https://gateway.acme.test/gw/slack/link';
-const GATEWAY_ADDRESSES = { installRedirectUrl: REDIRECT_URL, linkRedirectUrl: LINK_REDIRECT_URL };
+const GATEWAY_ADDRESSES = SLACK_ADDRESSES;
 
 let slack: FakeSlack;
 
@@ -54,7 +55,13 @@ describe("Slack's app management", () => {
       display_information: { name: 'Acme', description: 'What waits for you in the Acme fleet of Aeolus' },
       features: { bot_user: { display_name: 'Acme', always_online: true }, app_home: { home_tab_enabled: false, messages_tab_enabled: true, messages_tab_read_only_enabled: false } },
       oauth_config: { redirect_urls: [REDIRECT_URL, LINK_REDIRECT_URL], scopes: { bot: ['chat:write', 'im:history', 'im:write'], user: ['openid', 'profile'] } },
-      settings: { org_deploy_enabled: false, socket_mode_enabled: false, token_rotation_enabled: false },
+      settings: {
+        event_subscriptions: { request_url: SLACK_ADDRESSES.eventsUrl, bot_events: ['message.im', 'app_uninstalled', 'tokens_revoked'] },
+        interactivity: { is_enabled: true, request_url: SLACK_ADDRESSES.actionsUrl },
+        org_deploy_enabled: false,
+        socket_mode_enabled: false,
+        token_rotation_enabled: false,
+      },
     });
     await expect(tooling.removeApp(accessToken, 'A01')).resolves.toEqual({ isOk: true, value: undefined });
     expect(slack.apps.get('A01')?.isRemoved).toBe(true);
@@ -64,7 +71,7 @@ describe("Slack's app management", () => {
     const tooling = createSlackTooling({ apiUrl: slack.apiUrl });
     const rotated = await tooling.rotateConfigurationToken('xoxe-1-first');
     const accessToken = rotated.isOk ? rotated.value.token.accessToken : '';
-    const addresses = { installRedirectUrl: REDIRECT_URL, eventsUrl: 'https://gateway.acme.test/gw/slack/events' };
+    const addresses = SLACK_ADDRESSES;
     await tooling.makeApp(accessToken, shipBotDescription({ name: 'release-notes', summary: 'Writes the release notes' }, addresses));
 
     await expect(tooling.renameApp(accessToken, { appId: 'A01', description: shipBotDescription({ name: 'changelog', summary: 'Writes the release notes' }, addresses) })).resolves.toEqual({ isOk: true, value: undefined });
@@ -75,6 +82,7 @@ describe("Slack's app management", () => {
       oauth_config: { redirect_urls: [REDIRECT_URL], scopes: { bot: ['chat:write', 'im:history', 'app_mentions:read', 'reactions:write'] } },
       settings: {
         event_subscriptions: { request_url: 'https://gateway.acme.test/gw/slack/events', bot_events: ['message.im', 'app_mention', 'app_uninstalled', 'tokens_revoked'] },
+        interactivity: { is_enabled: true, request_url: SLACK_ADDRESSES.actionsUrl },
         org_deploy_enabled: false,
         socket_mode_enabled: false,
         token_rotation_enabled: false,

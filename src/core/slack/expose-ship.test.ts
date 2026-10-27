@@ -2,7 +2,7 @@ import type { ShipId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aSlackApp, aSlackWorkspace, fakeProxyShipKinds, fakeSlackShips, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces } from '../../../test/support/slack-fakes.js';
+import { aSlackApp, aSlackWorkspace, fakeProxyShipKinds, fakeSlackShips, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces, SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import { ok } from '../shared/result.js';
 import { createExposeShip } from './expose-ship.js';
@@ -15,7 +15,7 @@ import { createTakeAccessToken } from './take-access-token.js';
 // outside MCP server's proxy ship takes tool calls, not words: never.
 
 const NOW = new Date('2026-10-27T09:00:00.000Z');
-const ADDRESSES = { installRedirectUrl: 'https://gateway.acme.test/gw/slack/install', eventsUrl: 'https://gateway.acme.test/gw/slack/events' };
+const ADDRESSES = SLACK_ADDRESSES;
 const ANA: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-ana', personShipId: 'shp_01m3tbfspe96yf1rnr4ank9a7a', accountToken: 'account-token-ana', scopes: ['gateway:slack'] };
 const AS = { cookie: 'aeolus_account_session=ana' };
 const RELEASE_NOTES = { shipId: 'shp_01m3tbfspe96yf1rnr4ank9r1n', name: 'release-notes', kind: 'agent', status: 'crewed', summary: 'Writes the release notes of each version' } as const;
@@ -61,6 +61,7 @@ describe('exposing a ship as a Slack bot', () => {
         userScopes: [],
         redirectUrls: [ADDRESSES.installRedirectUrl],
         events: { url: ADDRESSES.eventsUrl, botEvents: ['message.im', 'app_mention', 'app_uninstalled', 'tokens_revoked'] },
+        actionsUrl: ADDRESSES.actionsUrl,
       },
     ]);
     expect(apps.held).toEqual([aSlackApp({ appId: 'A01', shipId: RELEASE_NOTES.shipId, name: 'release-notes', madeAt: NOW, installUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-A01' })]);

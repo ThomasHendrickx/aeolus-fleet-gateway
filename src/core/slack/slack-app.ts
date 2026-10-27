@@ -39,7 +39,7 @@ export function botStateOf(app: SlackApp): BotState {
   return app.installStartedAt === null ? 'made' : 'waitingForInstall';
 }
 
-/** What the gateway asks Slack to make: the app's name and description, its bot's scopes, the user scopes Sign in with Slack asks, where Slack sends an install or a sign-in back, and the events it sends the gateway and where. */
+/** What the gateway asks Slack to make: the app's name and description, its bot's scopes, the user scopes Sign in with Slack asks, where Slack sends an install or a sign-in back, the events it sends the gateway and where, and where a press of a button goes. */
 export interface SlackAppDescription {
   readonly name: string;
   readonly description: string;
@@ -47,15 +47,20 @@ export interface SlackAppDescription {
   readonly userScopes: readonly string[];
   /** Where Slack sends an install back first, then any other address Slack may send the person back to. */
   readonly redirectUrls: readonly string[];
-  readonly events: { readonly url: string; readonly botEvents: readonly string[] } | null;
+  readonly events: { readonly url: string; readonly botEvents: readonly string[] };
+  readonly actionsUrl: string;
 }
 
-/** The gateway's addresses Slack calls: where an install comes back, where events go, and where Sign in with Slack comes back to link. */
+/** The gateway's addresses Slack calls: where an install comes back, where events and presses of buttons go, and where Sign in with Slack comes back to link. */
 export interface SlackAddresses {
   readonly installRedirectUrl: string;
   readonly eventsUrl: string;
+  readonly actionsUrl: string;
   readonly linkRedirectUrl: string;
 }
+
+/** The events every bot sends the gateway: its uninstall and revoked tokens (gateway scopes 9.2). */
+const REMOVAL_EVENTS = ['app_uninstalled', 'tokens_revoked'];
 
 /** Sign in with Slack's user scopes (OpenID Connect): who signed in, in which workspace, and their name. */
 export const SIGN_IN_SCOPES = ['openid', 'profile'];
@@ -68,17 +73,19 @@ export const APP_DESCRIPTION_MAX_LENGTH = 140;
 
 /**
  * The gateway's own bot (B5), named after the fleet: it shows a person what
- * waits for their person ship, in a direct message. A person links their
- * Slack account through its Sign in with Slack (gateway scopes 9.3).
+ * waits for their person ship, in a direct message, where they answer in
+ * its thread or by a button (9.5). A person links their Slack account
+ * through its Sign in with Slack (gateway scopes 9.3).
  */
-export function gatewayBotDescription(fleetName: string, addresses: Pick<SlackAddresses, 'installRedirectUrl' | 'linkRedirectUrl'>): SlackAppDescription {
+export function gatewayBotDescription(fleetName: string, addresses: SlackAddresses): SlackAppDescription {
   return {
     name: fleetName.slice(0, APP_NAME_MAX_LENGTH),
     description: `What waits for you in the ${fleetName} fleet of Aeolus`.slice(0, APP_DESCRIPTION_MAX_LENGTH),
     botScopes: ['chat:write', 'im:history', 'im:write'],
     userScopes: SIGN_IN_SCOPES,
     redirectUrls: [addresses.installRedirectUrl, addresses.linkRedirectUrl],
-    events: null,
+    events: { url: addresses.eventsUrl, botEvents: ['message.im', ...REMOVAL_EVENTS] },
+    actionsUrl: addresses.actionsUrl,
   };
 }
 
@@ -86,15 +93,17 @@ export function gatewayBotDescription(fleetName: string, addresses: Pick<SlackAd
  * A ship's own bot (gateway scopes 9.2): the ship's name, its statement's
  * summary as the description (0047), a direct messages tab, the events of a
  * direct message and a mention, and the bot scopes to read them, post and
- * react. Slack sends its uninstall and revoked tokens too.
+ * react. Slack sends its uninstall and revoked tokens too, and a press of a
+ * button under a question it posted (9.5).
  */
-export function shipBotDescription(ship: { name: string; summary: string | null }, addresses: Pick<SlackAddresses, 'installRedirectUrl' | 'eventsUrl'>): SlackAppDescription {
+export function shipBotDescription(ship: { name: string; summary: string | null }, addresses: SlackAddresses): SlackAppDescription {
   return {
     name: ship.name.slice(0, APP_NAME_MAX_LENGTH),
     description: (ship.summary ?? `The ${ship.name} ship of Aeolus`).slice(0, APP_DESCRIPTION_MAX_LENGTH),
     botScopes: ['chat:write', 'im:history', 'app_mentions:read', 'reactions:write'],
     userScopes: [],
     redirectUrls: [addresses.installRedirectUrl],
-    events: { url: addresses.eventsUrl, botEvents: ['message.im', 'app_mention', 'app_uninstalled', 'tokens_revoked'] },
+    events: { url: addresses.eventsUrl, botEvents: ['message.im', 'app_mention', ...REMOVAL_EVENTS] },
+    actionsUrl: addresses.actionsUrl,
   };
 }

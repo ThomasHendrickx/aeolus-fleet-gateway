@@ -33,7 +33,8 @@ function manifestOf(description: SlackAppDescription) {
     features: { bot_user: { display_name: description.name, always_online: true }, app_home: { home_tab_enabled: false, messages_tab_enabled: true, messages_tab_read_only_enabled: false } },
     oauth_config: { redirect_urls: [...description.redirectUrls], scopes: { bot: [...description.botScopes], ...(description.userScopes.length === 0 ? {} : { user: [...description.userScopes] }) } },
     settings: {
-      ...(description.events === null ? {} : { event_subscriptions: { request_url: description.events.url, bot_events: [...description.events.botEvents] } }),
+      event_subscriptions: { request_url: description.events.url, bot_events: [...description.events.botEvents] },
+      interactivity: { is_enabled: true, request_url: description.actionsUrl },
       org_deploy_enabled: false,
       socket_mode_enabled: false,
       token_rotation_enabled: false,

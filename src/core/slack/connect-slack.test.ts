@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aSlackWorkspace, fakeShipNames, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces } from '../../../test/support/slack-fakes.js';
+import { aSlackWorkspace, fakeShipNames, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces, SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import { createConnectSlack } from './connect-slack.js';
 
@@ -26,7 +26,7 @@ beforeEach(() => {
 });
 
 function connectSlack(input: { actor?: Actor; refreshToken?: string }) {
-  return createConnectSlack({ slack: tooling.slack, workspaces, apps, shipNames: fakeShipNames(), clock: { now: () => NOW }, installRedirectUrl: REDIRECT_URL, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' })({
+  return createConnectSlack({ slack: tooling.slack, workspaces, apps, shipNames: fakeShipNames(), clock: { now: () => NOW }, addresses: SLACK_ADDRESSES })({
     actor: input.actor ?? CHARLOTTE,
     refreshToken: input.refreshToken ?? 'xoxe-1-first',
     fleetName: 'Acme',
@@ -54,7 +54,7 @@ describe('connecting a Slack workspace', () => {
       {
         accessToken: 'xoxe.xoxp-1',
         appId: 'A01',
-        description: { name: 'Acme', description: 'What waits for you in the Acme fleet of Aeolus', botScopes: ['chat:write', 'im:history', 'im:write'], userScopes: ['openid', 'profile'], redirectUrls: [REDIRECT_URL, 'https://gateway.acme.test/gw/slack/link'], events: null },
+        description: { name: 'Acme', description: 'What waits for you in the Acme fleet of Aeolus', botScopes: ['chat:write', 'im:history', 'im:write'], userScopes: ['openid', 'profile'], redirectUrls: [REDIRECT_URL, 'https://gateway.acme.test/gw/slack/link'], events: { url: SLACK_ADDRESSES.eventsUrl, botEvents: ['message.im', 'app_uninstalled', 'tokens_revoked'] }, actionsUrl: SLACK_ADDRESSES.actionsUrl },
       },
     ]);
     expect(apps.held).toEqual([

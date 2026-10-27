@@ -1,4 +1,4 @@
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
@@ -6,6 +6,7 @@ import type { Result } from '../shared/result.js';
 import type { KeptSlackEvent } from './kept-slack-event.js';
 import type { SlackApp, SlackAppDescription } from './slack-app.js';
 import type { SlackLink } from './slack-link.js';
+import type { SlackPost } from './slack-post.js';
 import type { ConfigurationToken, SlackWorkspace } from './slack-workspace.js';
 
 /**
@@ -163,6 +164,9 @@ export interface SlackLinks {
   /** The link of the Slack user in the workspace, in the fleet. */
   find(fleetId: FleetId, slack: { teamId: string; userId: string }): Promise<SlackLink | undefined>;
   ofAccount(fleetId: FleetId, accountId: string): Promise<SlackLink | undefined>;
+  ofPersonShip(fleetId: FleetId, personShipId: ShipId): Promise<SlackLink | undefined>;
+  /** Turns Show everything that waits in Slack on or off for the account's link (B5). */
+  showAll(fleetId: FleetId, shown: { accountId: string; isOn: boolean }): Promise<void>;
   /** Keeps a new link; none when the Slack user or the account is linked already, as two links at once find. */
   add(link: SlackLink): Promise<'added' | 'taken'>;
   remove(fleetId: FleetId, accountId: string): Promise<void>;
@@ -174,6 +178,8 @@ export interface SlackLinks {
 export interface SlackMessages {
   /** A message only one person sees, in a conversation (chat.postEphemeral), with a button that opens an address. */
   postOnlyTo(botToken: string, message: { channel: string; user: string; text: string; button?: { text: string; url: string } }): Promise<Result<undefined, SlackRefusal>>;
+  /** A message in a conversation, or a thread of it, with a button per option to answer (chat.postMessage): the Slack message it is. */
+  post(botToken: string, message: { channel: string; threadTs: string | null; text: string; buttons: readonly SlackButton[] }): Promise<Result<{ channel: string; ts: string }, SlackRefusal>>;
   /** A message in a message's thread, everyone in the conversation sees (chat.postMessage). */
   postInThread(botToken: string, message: { channel: string; threadTs: string; text: string }): Promise<Result<undefined, SlackRefusal>>;
   /** A reaction on a message (reactions.add); one already there is no refusal. */
@@ -198,4 +204,24 @@ export interface SlackEvents {
   /** The events core has not taken that were received before the time given. */
   untakenSince(before: Date): Promise<KeptSlackEvent[]>;
   remove(fleetId: FleetId, eventId: string): Promise<void>;
+}
+
+/** A button under a posted question: its option's label, and the option it answers. */
+export interface SlackButton {
+  readonly text: string;
+  readonly option: number;
+}
+
+/** Outbound port: the fleet messages in Slack, by person ship. */
+export interface SlackPosts {
+  /** Keeps the post by its fleet, person ship and message, as it is now. */
+  save(post: SlackPost): Promise<void>;
+  ofMessage(fleetId: FleetId, post: { personShipId: ShipId; messageId: MessageId }): Promise<SlackPost | undefined>;
+  /** The delivery posted to the person ship as this Slack message. */
+  atSlackMessage(fleetId: FleetId, message: { personShipId: ShipId; appId: string; channel: string; ts: string }): Promise<SlackPost | undefined>;
+  /** The latest delivery posted to the person ship in the thread, the thread's first message included. */
+  lastInThread(fleetId: FleetId, thread: { personShipId: ShipId; appId: string; channel: string; threadTs: string }): Promise<SlackPost | undefined>;
+  /** The person ship's posts of deliveries the gateway did not finish. */
+  unfinished(fleetId: FleetId, personShipId: ShipId): Promise<SlackPost[]>;
+  remove(fleetId: FleetId, post: { personShipId: ShipId; messageId: MessageId }): Promise<void>;
 }

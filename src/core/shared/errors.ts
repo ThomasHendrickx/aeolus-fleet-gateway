@@ -71,6 +71,7 @@ export type DomainErrorKind =
   | 'LINK_REFUSED'
   | 'SLACK_USER_LINKED'
   | 'ACCOUNT_LINKED'
+  | 'NOT_LINKED'
   | 'CONFLICT';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */

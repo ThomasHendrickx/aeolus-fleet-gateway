@@ -1,8 +1,8 @@
-import type { MessageId, ShipId } from '@aeolus-fleet/common';
+import type { DeliveryId, MessageId, ShipId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aKeptSlackEvent, aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks } from '../../../test/support/slack-fakes.js';
+import { aKeptSlackEvent, aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks, memorySlackPosts } from '../../../test/support/slack-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { PersonCrew } from '../people/ports.js';
 import { err, ok, type Result } from '../shared/result.js';
@@ -23,9 +23,13 @@ const MATHILDE_SHIP: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9m4t';
 /** The fleet's send as the person ship's crew: one message per idempotency key, unless it does not answer or refuses. */
 function fakeSender() {
   const noRefusal = (): FleetRefusal | undefined => undefined;
-  const state = { messages: new Map<string, { crewToken: string; to: ShipId; contentType: string; payload: string }>(), calls: 0, refusal: noRefusal() };
+  const state = { messages: new Map<string, { crewToken: string; to: ShipId; contentType: string; payload: string; inReplyTo?: MessageId }>(), calls: 0, refusal: noRefusal(), handled: new Array<DeliveryId>() };
   const sender = {
-    send: (crewToken: string, message: { to: ShipId; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<{ messageId: MessageId }, FleetRefusal>> => {
+    handled: (_crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>> => {
+      state.handled.push(deliveryId);
+      return Promise.resolve(ok(undefined));
+    },
+    send: (crewToken: string, message: { to: ShipId; contentType: string; payload: string; idempotencyKey: string; inReplyTo?: MessageId }): Promise<Result<{ messageId: MessageId }, FleetRefusal>> => {
       state.calls += 1;
       if (state.refusal !== undefined) {
         return Promise.resolve(err(state.refusal));
@@ -46,6 +50,7 @@ let events: ReturnType<typeof memorySlackEvents>;
 let slack: ReturnType<typeof fakeSlackMessages>;
 let fleet: ReturnType<typeof fakeSender>;
 let crews: Map<string, PersonCrew>;
+let posts: ReturnType<typeof memorySlackPosts>;
 
 beforeEach(async () => {
   apps = memorySlackApps();
@@ -53,6 +58,7 @@ beforeEach(async () => {
   events = memorySlackEvents();
   slack = fakeSlackMessages();
   fleet = fakeSender();
+  posts = memorySlackPosts();
   crews = new Map([[MATHILDE_SHIP, { fleetId: FLEET_ID, shipId: MATHILDE_SHIP, crewToken: 'crew-mathilde', crewedAt: NOW }]]);
   await apps.save(aSlackApp({ appId: 'A02', shipId: RELEASE_NOTES, name: 'release-notes', bot: { token: 'xoxb-2', userId: 'U0BOT' } }));
   await links.add(aSlackLink());
@@ -65,6 +71,8 @@ function sendRound(now = NOW) {
     apps,
     crews: { find: (_fleetId, shipId) => Promise.resolve(crews.get(shipId)) },
     sender: fleet.sender,
+    door: fleet.sender,
+    posts,
     slack: slack.messages,
     clock: { now: () => now },
   })();
@@ -77,6 +85,22 @@ describe("a linked person's message from Slack into the fleet", () => {
     expect([...fleet.state.messages.entries()]).toEqual([['slack:Ev01', { crewToken: 'crew-mathilde', to: RELEASE_NOTES, contentType: 'text/markdown', payload: 'when is the release?' }]]);
     expect(slack.state.reactions).toEqual([{ botToken: 'xoxb-2', channel: 'D0MATHILDE', ts: '1730019600.000100', name: 'white_check_mark' }]);
     expect(events.held[0]).toMatchObject({ eventId: 'Ev01', takenAt: NOW, markdown: '' });
+  });
+
+  it("keeps the person's message as it is in Slack, so the ship's reply goes into that conversation", async () => {
+    await sendRound();
+
+    expect(posts.held).toEqual([{ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: 'msg_01m3tb1zgr5h2ffee12xnch001', deliveryId: null, senderShipId: null, appId: 'A02', channel: 'D0MATHILDE', ts: '1730019600.000100', threadTs: null, isLinkOnly: false, ackedAt: null }]);
+  });
+
+  it('sends an answer in the thread under a posted delivery in reply to its message, then hands the delivery', async () => {
+    await events.remove(FLEET_ID, 'Ev01');
+    await events.keep(aKeptSlackEvent({ eventId: 'Ev02', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', receivedAt: NOW }));
+
+    await sendRound();
+
+    expect(fleet.state.messages.get('slack:Ev02')?.inReplyTo).toBe('msg_01m3tbfspe96yf1rnr4ank0002');
+    expect(fleet.state.handled).toEqual(['dlv_01m3tbfspe96yf1rnr4ank0002']);
   });
 
   it('is sent again next round while core does not answer, giving exactly one message', async () => {

@@ -76,7 +76,7 @@ export function createCompleteLink(deps: {
     if (own !== undefined) {
       await deps.links.remove(fleetId, accountId);
     }
-    const added = await deps.links.add({ fleetId, teamId, slackUserId: userId, slackName: name, accountId, personShipId, linkedAt: now, stoppedAt: null });
+    const added = await deps.links.add({ fleetId, teamId, slackUserId: userId, slackName: name, accountId, personShipId, linkedAt: now, stoppedAt: null, isShowingAll: false });
     if (added === 'taken') {
       // Another link of the Slack user or the account was kept meanwhile.
       return refuse('LINK_REFUSED', 'This Slack account or your account was linked meanwhile: reload the Overview');

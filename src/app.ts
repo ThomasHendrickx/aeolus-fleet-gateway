@@ -108,7 +108,11 @@ import { createPrismaSlackEvents } from './adapters/prisma/slack-events.js';
 import { createSendSlackEvents } from './core/slack/send-slack-events.js';
 import { createSlackInstallSeals } from './adapters/crypto/slack-install-seals.js';
 import { createSlackLinkSeals } from './adapters/crypto/slack-link-seals.js';
-import { registerSlackRoutes, SLACK_EVENTS_PATH, SLACK_INSTALL_PATH, SLACK_LINK_PATH } from './adapters/http/slack-routes.js';
+import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_INSTALL_PATH, SLACK_LINK_PATH } from './adapters/http/slack-routes.js';
+import { createPrismaSlackPosts } from './adapters/prisma/slack-posts.js';
+import { createAnswerInSlack } from './core/slack/answer-in-slack.js';
+import { createShowAllInSlack } from './core/slack/show-all-in-slack.js';
+import { createShowInSlack } from './core/slack/show-in-slack.js';
 import { createPrismaSlackLinks } from './adapters/prisma/slack-links.js';
 import { createSlackMessages } from './adapters/slack/slack-messages.js';
 import { createSlackSignIn } from './adapters/slack/slack-sign-in.js';
@@ -643,6 +647,14 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           }),
         ]),
   ];
+  // What waits for a linked person shows in Slack before anything wakes them (gateway scopes 9.5).
+  const slackApiUrl = options.slackApiUrl ?? SLACK_API_URL;
+  const slackApps = createPrismaSlackApps(prisma);
+  const slackLinks = createPrismaSlackLinks(prisma);
+  const slackPosts = createPrismaSlackPosts(prisma);
+  const slackMessages = createSlackMessages({ apiUrl: slackApiUrl });
+  const overviewUrlOf = (fleetId: FleetId): string => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`;
+  const showInSlack = createShowInSlack({ links: slackLinks, apps: slackApps, posts: slackPosts, slack: slackMessages, door: door.person, sleep, clock, overviewUrlOf });
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
   const personCrews = createPrismaPersonCrews(prisma);
   // A person's pages in focus, on every instance: while one is, what arrives is handed through it (wake a person, W6).
@@ -656,7 +668,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: door.person,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: door.person, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
+      wakePerson: createWakePerson({ door: door.person, shownElsewhere: { show: showInSlack }, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,
@@ -765,13 +777,10 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     log: server.log,
   });
   const slackWorkspaces = createPrismaSlackWorkspaces(prisma);
-  const slackApps = createPrismaSlackApps(prisma);
-  const slackApiUrl = options.slackApiUrl ?? SLACK_API_URL;
   const slackTooling = createSlackTooling({ apiUrl: slackApiUrl });
   const slackInstallStates = createSlackInstallSeals(options.gatewaySecret);
   const installRedirectUrl = `${issuer}${SLACK_INSTALL_PATH}`;
   const linkRedirectUrl = `${issuer}${SLACK_LINK_PATH}`;
-  const slackLinks = createPrismaSlackLinks(prisma);
   const slackSignIn = createSlackSignIn({ apiUrl: slackApiUrl });
   const slackLinkStates = createSlackLinkSeals(options.gatewaySecret);
   const takeAccessToken = createTakeAccessToken({ slack: slackTooling, workspaces: slackWorkspaces, clock });
@@ -785,11 +794,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const slackShips = createSlackShips({ fleetUrl: options.fleetUrl, crewTokenOf: async (fleetId) => (await connections.find(fleetId))?.crewToken, ships: createFleetShips(options.fleetUrl), asActor: createProxyShipsAsActor(options.fleetUrl) });
   // Which outside party a ship is the proxy ship of: a fleet has few parties.
   const proxyShips: ProxyShipKinds = { kindOf: async (fleetId, shipId) => (await parties.list(fleetId)).find((party) => party.proxyShipId === shipId)?.kind };
-  const slackAddresses = { installRedirectUrl, eventsUrl: `${issuer}${SLACK_EVENTS_PATH}`, linkRedirectUrl };
+  const slackAddresses = { installRedirectUrl, eventsUrl: `${issuer}${SLACK_EVENTS_PATH}`, actionsUrl: `${issuer}${SLACK_ACTIONS_PATH}`, linkRedirectUrl };
   const slack: Context['slack'] = {
     readSlack: createReadSlack({ workspaces: slackWorkspaces, apps: slackApps, ships: slackShips }),
-    connectSlack: createConnectSlack({ slack: slackTooling, workspaces: slackWorkspaces, apps: slackApps, shipNames, clock, installRedirectUrl, linkRedirectUrl }),
-    startInstall: createStartInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, takeAccessToken, states: slackInstallStates, ships: slackShips, credentialOf: credentialOf, clock, installRedirectUrl, linkRedirectUrl }),
+    connectSlack: createConnectSlack({ slack: slackTooling, workspaces: slackWorkspaces, apps: slackApps, shipNames, clock, addresses: slackAddresses }),
+    startInstall: createStartInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, takeAccessToken, states: slackInstallStates, ships: slackShips, credentialOf: credentialOf, clock, addresses: slackAddresses }),
     disconnectSlack: createDisconnectSlack({ slack: slackTooling, workspaces: slackWorkspaces, apps: slackApps, takeAccessToken }),
     listExposable: createListExposable({ ships: slackShips, apps: slackApps, proxyShips, credentialOf: credentialOf }),
     exposeShip: createExposeShip({ slack: slackTooling, apps: slackApps, ships: slackShips, proxyShips, takeAccessToken, credentialOf: credentialOf, clock, addresses: slackAddresses }),
@@ -798,19 +807,20 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     // Where no pagasae is set no one signs in, so no account has a person ship to link.
     startLink: createStartLink({ workspaces: slackWorkspaces, apps: slackApps, signIn: slackSignIn, states: slackLinkStates, crewPersonShip: person?.crewPersonShip ?? (() => Promise.resolve(err({ kind: 'noPersonShip' as const }))), clock, linkRedirectUrl }),
     unlinkSlack: createUnlinkSlack({ links: slackLinks }),
+    showAllInSlack: createShowAllInSlack({ links: slackLinks }),
   };
-  const slackMessages = createSlackMessages({ apiUrl: slackApiUrl });
   const slackEvents = createPrismaSlackEvents(prisma);
   const slackSends = createSlackEventWorker({
-    send: createSendSlackEvents({ events: slackEvents, apps: slackApps, crews: personCrews, sender: door, slack: slackMessages, clock }),
+    send: createSendSlackEvents({ events: slackEvents, apps: slackApps, crews: personCrews, sender: door, door: door.person, posts: slackPosts, slack: slackMessages, clock }),
     sleep,
     intervalMs: SLACK_EVENT_ROUND_MS,
     log: server.log,
   });
   registerSlackRoutes(server, {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
+    answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, slack: slackMessages, signatures: createSlackSignatures(), clock }),
     completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl }),
-    takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl: `${issuer}/slack/link` }),
+    takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, posts: slackPosts, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl: `${issuer}/slack/link` }),
   });
   const rotateConfigurationTokens = createRotateConfigurationTokens({ workspaces: slackWorkspaces, takeAccessToken });
   const followExposedShips = createFollowExposedShips({ workspaces: slackWorkspaces, apps: slackApps, ships: slackShips, slack: slackTooling, takeAccessToken, addresses: slackAddresses });

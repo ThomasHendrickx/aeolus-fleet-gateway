@@ -22,6 +22,8 @@ function eventOf(row: SlackEventRow): KeptSlackEvent {
     ts: row.ts,
     threadTs: row.threadTs,
     markdown: row.markdown,
+    inReplyTo: row.inReplyTo === null ? null : idSchema('message').parse(row.inReplyTo),
+    deliveryId: row.deliveryId === null ? null : idSchema('delivery').parse(row.deliveryId),
     receivedAt: row.receivedAt,
     takenAt: row.takenAt,
   };

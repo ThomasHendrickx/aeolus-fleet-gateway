@@ -24,7 +24,7 @@ import { err, ok } from '../../core/shared/result.js';
 import { createFocusPage } from '../../core/people/focus-page.js';
 import { memoryFocusedPages } from '../../../test/support/people-fakes.js';
 import { createChangeHub, type ChangeHub } from '../http/live.js';
-import { fakeProxyShipKinds, fakeShipNames, fakeSlackShips, fakeSlackSignIn, fakeSlackTooling, memorySlackApps, memorySlackLinks, memorySlackWorkspaces, plainInstallStates, plainLinkStates } from '../../../test/support/slack-fakes.js';
+import { fakeProxyShipKinds, fakeShipNames, fakeSlackShips, fakeSlackSignIn, fakeSlackTooling, memorySlackApps, memorySlackLinks, memorySlackWorkspaces, plainInstallStates, plainLinkStates, SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
 import type { CredentialOf } from '../../core/actors/credential-of.js';
 import { createExposeShip } from '../../core/slack/expose-ship.js';
 import { createListExposable } from '../../core/slack/list-exposable.js';
@@ -35,6 +35,7 @@ import { createReadSlack } from '../../core/slack/read-slack.js';
 import { createReadSlackLink } from '../../core/slack/read-slack-link.js';
 import { createStartLink } from '../../core/slack/start-link.js';
 import { createUnlinkSlack } from '../../core/slack/unlink-slack.js';
+import { createShowAllInSlack } from '../../core/slack/show-all-in-slack.js';
 import { createStartInstall } from '../../core/slack/start-install.js';
 import { createTakeAccessToken } from '../../core/slack/take-access-token.js';
 import { gatewayRouter, type Context } from './router.js';
@@ -361,7 +362,6 @@ function aContext(cookie: string | undefined, crewToken?: string): {
 }
 
 const SLACK_NOW = new Date('2026-10-27T09:00:00.000Z');
-const SLACK_REDIRECT_URL = 'https://gateway.acme.test/gw/slack/install';
 const SLACK_SHIP: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9r1n';
 
 /** The Slack procedures' use cases over Slack and the vault in memory. */
@@ -370,19 +370,20 @@ function slackOf({ tooling, workspaces, apps }: { tooling: ReturnType<typeof fak
   const takeAccessToken = createTakeAccessToken({ slack: tooling.slack, workspaces, clock });
   const ships = fakeSlackShips([{ shipId: SLACK_SHIP, name: 'release-notes', kind: 'agent', status: 'crewed', summary: 'Writes the release notes' }]).port;
   const credentialOf: CredentialOf = (_actor, sent) => Promise.resolve(ok(sent));
-  const addresses = { installRedirectUrl: SLACK_REDIRECT_URL, eventsUrl: 'https://gateway.acme.test/gw/slack/events' };
+  const addresses = SLACK_ADDRESSES;
   const links = memorySlackLinks();
   return {
     readSlack: createReadSlack({ workspaces, apps, ships }),
     listExposable: createListExposable({ ships, apps, proxyShips: fakeProxyShipKinds(), credentialOf }),
     exposeShip: createExposeShip({ slack: tooling.slack, apps, ships, proxyShips: fakeProxyShipKinds(), takeAccessToken, credentialOf, clock, addresses }),
     removeBot: createRemoveBot({ slack: tooling.slack, apps, ships, takeAccessToken, credentialOf }),
-    connectSlack: createConnectSlack({ slack: tooling.slack, workspaces, apps, shipNames: fakeShipNames({ [OWNER]: 'charlotte' }), clock, installRedirectUrl: SLACK_REDIRECT_URL, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' }),
-    startInstall: createStartInstall({ slack: tooling.slack, apps, workspaces, takeAccessToken, states: plainInstallStates(), ships, credentialOf, clock, installRedirectUrl: SLACK_REDIRECT_URL, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' }),
+    connectSlack: createConnectSlack({ slack: tooling.slack, workspaces, apps, shipNames: fakeShipNames({ [OWNER]: 'charlotte' }), clock, addresses }),
+    startInstall: createStartInstall({ slack: tooling.slack, apps, workspaces, takeAccessToken, states: plainInstallStates(), ships, credentialOf, clock, addresses }),
     disconnectSlack: createDisconnectSlack({ slack: tooling.slack, workspaces, apps, takeAccessToken }),
     readSlackLink: createReadSlackLink({ workspaces, apps, links }),
     startLink: createStartLink({ workspaces, apps, signIn: fakeSlackSignIn().signIn, states: plainLinkStates(), crewPersonShip: (caller) => Promise.resolve('signedIn' in caller && caller.signedIn.personShipId !== null ? ok({ shipId: caller.signedIn.personShipId, crewToken: 'crew-person' }) : err({ kind: 'noPersonShip' as const })), clock, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' }),
     unlinkSlack: createUnlinkSlack({ links }),
+    showAllInSlack: createShowAllInSlack({ links }),
   };
 }
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aSlackApp, aSlackWorkspace, fakeSlackShips, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces } from '../../../test/support/slack-fakes.js';
+import { aSlackApp, aSlackWorkspace, fakeSlackShips, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces, SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
 import { createFollowExposedShips } from './follow-exposed-ships.js';
 import { createTakeAccessToken } from './take-access-token.js';
 
@@ -10,7 +10,7 @@ import { createTakeAccessToken } from './take-access-token.js';
 // ship's bot is deleted (gateway scopes 9.2).
 
 const NOW = new Date('2026-10-27T09:00:00.000Z');
-const ADDRESSES = { installRedirectUrl: 'https://gateway.acme.test/gw/slack/install', eventsUrl: 'https://gateway.acme.test/gw/slack/events' };
+const ADDRESSES = SLACK_ADDRESSES;
 const RELEASE_NOTES = 'shp_01m3tbfspe96yf1rnr4ank9r1n';
 const OLD_WRITER = 'shp_01m3tbfspe96yf1rnr4ank9o1d';
 const QUOTES = 'shp_01m3tbfspe96yf1rnr4ank9q0t';
