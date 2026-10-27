@@ -67,11 +67,17 @@ describe('connecting the gateway', () => {
     expect([store.held.size, fleet.state.deregistered]).toEqual([0, ['aeolus_ct_v1_1']]);
   });
 
-  it("declares the gateway's approving scope, gateway:approve, so any actor the fleet grants it approves outside parties (decision 0056)", async () => {
+  it("declares the gateway's scopes, gateway:approve to approve outside parties (decision 0056) and gateway:slack for Slack (gateway scopes B6)", async () => {
     await connect({ secret: 'aeolus_sk_v1_good' });
 
     expect(fleet.state.declared).toEqual([
-      { namespace: 'gateway', scopes: [{ scope: 'gateway:approve', description: 'Approve outside parties: outside MCP clients and servers, each acting in the fleet as its proxy ship' }] },
+      {
+        namespace: 'gateway',
+        scopes: [
+          { scope: 'gateway:approve', description: 'Approve outside parties: outside MCP clients and servers, each acting in the fleet as its proxy ship' },
+          { scope: 'gateway:slack', description: 'Connect the fleet to a Slack workspace, and expose ships within manage reach as Slack bots' },
+        ],
+      },
     ]);
   });
 
@@ -80,7 +86,7 @@ describe('connecting the gateway', () => {
 
     await expect(connect({ secret: 'aeolus_sk_v1_good' })).resolves.toMatchObject({
       isOk: false,
-      error: { kind: 'SCOPE_REFUSED', message: "The fleet did not take the gateway's scope gateway:approve: The namespace gateway is taken by another ship" },
+      error: { kind: 'SCOPE_REFUSED', message: "The fleet did not take the gateway's scopes gateway:approve, gateway:slack: The namespace gateway is taken by another ship" },
     });
     expect([store.held.size, fleet.state.deregistered]).toEqual([0, ['aeolus_ct_v1_1']]);
   });
