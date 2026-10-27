@@ -121,3 +121,8 @@ export interface SlackShips {
 export interface ProxyShipKinds {
   kindOf(fleetId: FleetId, shipId: ShipId): Promise<'mcpServer' | 'mcpClient' | 'a2aClient' | 'a2aAgent' | undefined>;
 }
+
+/** Outbound port: whether Slack signed a request's body at its timestamp with the app's signing secret. */
+export interface SlackSignatures {
+  isSigned(signed: { secret: string; timestamp: string; body: string; signature: string }): boolean;
+}
