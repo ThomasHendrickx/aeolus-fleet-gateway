@@ -90,6 +90,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   answers: Record<string, string>[];
   changes: ChangeHub;
   focused: ReturnType<typeof memoryFocusedPages>;
+  slack: { tooling: ReturnType<typeof fakeSlackTooling>; workspaces: ReturnType<typeof memorySlackWorkspaces>; apps: ReturnType<typeof memorySlackApps> };
 } {
   const focused = memoryFocusedPages();
   const approvals: Parameters<ApproveParty>[0][] = [];
@@ -327,7 +328,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       }
       return Promise.resolve(ok({ requirements: { version: 3, party: input.party ?? ['crm:use'], tools: input.tools }, statementRefusal: null }));
     },
-    slack: slackOf(slackTooling, slackWorkspaces, slackApps),
+    slack: slackOf({ tooling: slackTooling, workspaces: slackWorkspaces, apps: slackApps }),
     readOutsideParties: () => Promise.resolve({ isOn: false }),
     setOutsideParties: (input) => {
       switched.push(input);
@@ -355,7 +356,7 @@ const SLACK_NOW = new Date('2026-10-27T09:00:00.000Z');
 const SLACK_REDIRECT_URL = 'https://gateway.acme.test/gw/slack/install';
 
 /** The Slack procedures' use cases over Slack and the vault in memory. */
-function slackOf(tooling: ReturnType<typeof fakeSlackTooling>, workspaces: ReturnType<typeof memorySlackWorkspaces>, apps: ReturnType<typeof memorySlackApps>): Context['slack'] {
+function slackOf({ tooling, workspaces, apps }: { tooling: ReturnType<typeof fakeSlackTooling>; workspaces: ReturnType<typeof memorySlackWorkspaces>; apps: ReturnType<typeof memorySlackApps> }): Context['slack'] {
   const clock = { now: () => SLACK_NOW };
   const takeAccessToken = createTakeAccessToken({ slack: tooling.slack, workspaces, clock });
   return {

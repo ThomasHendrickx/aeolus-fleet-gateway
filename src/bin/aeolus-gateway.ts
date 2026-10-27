@@ -39,6 +39,7 @@ async function start(): Promise<void> {
     ...(config.pagasae === undefined ? {} : { pagasae: config.pagasae }),
     ...(config.pagasaeApp === undefined ? {} : { pagasaeApp: config.pagasaeApp }),
     web: web.handle,
+    slackApiUrl: config.slackApiUrl,
   });
   // Every fleet the gateway was connected to, connected again with its kept crew token.
   const restored = await app.restoreConnections();

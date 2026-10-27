@@ -73,6 +73,10 @@ import type { TurnEmailChannel } from '../../core/people/turn-email-channel.js';
 import type { ReadAuthorization } from '../../core/oauth/read-authorization.js';
 import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
 import type { Result } from '../../core/shared/result.js';
+import { SLACK_SCOPE, type ConnectSlack } from '../../core/slack/connect-slack.js';
+import type { DisconnectSlack } from '../../core/slack/disconnect-slack.js';
+import type { ReadSlack } from '../../core/slack/read-slack.js';
+import type { StartInstall } from '../../core/slack/start-install.js';
 
 /** The header the web app's waiting page sends its browser's secret in (web/lib/gateway-api/gateway-api.ts names the same). */
 export const WAITING_SECRET_HEADER = 'aeolus-waiting-secret';
@@ -155,6 +159,8 @@ export interface Context {
     readMeeting: ReadMeeting;
     changeOwnMic: ChangeOwnMic;
   };
+  /** The fleet's Slack workspace and the gateway's bot (gateway scopes, part B). */
+  slack: { readSlack: ReadSlack; connectSlack: ConnectSlack; startInstall: StartInstall; disconnectSlack: DisconnectSlack };
   readOutsideParties: ReadOutsideParties;
   setOutsideParties: SetOutsideParties;
 }
@@ -566,21 +572,53 @@ const webPushSubscriptionInputSchema = z.strictObject({
   browser: z.string(),
 });
 
-/** The fleet's name as the person's shared sign-in states it, which their web push wakes say (wake a person, W4). */
-async function fleetNameOf(ctx: Pick<Context, 'accountApps' | 'signIn'> & { caller: PersonCaller }): Promise<string> {
+/** The fleet's name as the account's shared sign-in states it, which their web push wakes say (wake a person, W4) and the gateway's Slack bot is named (gateway scopes B5). */
+async function fleetNameOf(ctx: Pick<Context, 'accountApps' | 'signIn'>, asked: { fleetId: FleetId; toDo: string }): Promise<string> {
   if (ctx.accountApps === undefined || ctx.signIn === undefined) {
-    throw new TRPCError({ code: 'FORBIDDEN', message: "Open the gateway's pages, signed in with your account, to turn web push on" });
+    throw new TRPCError({ code: 'FORBIDDEN', message: `Open the gateway's pages, signed in with your account, to ${asked.toDo}` });
   }
   const apps = await ctx.accountApps(ctx.signIn);
   if (!apps.isOk) {
     throw apps.error.kind === 'signedOut' ? new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in with your account' }) : new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: 'The sign-in service did not answer: try again' });
   }
-  const fleet = apps.value.fleets.find(({ fleetId }) => fleetId === ctx.caller.fleetId);
+  const fleet = apps.value.fleets.find(({ fleetId }) => fleetId === asked.fleetId);
   if (fleet === undefined) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Your account may not open this fleet' });
   }
   return fleet.name;
 }
+
+/** The refusals of the fleet's Slack, as the API states them. */
+const SLACK_CODES = {
+  SLACK_SCOPE_NOT_HELD: 'FORBIDDEN',
+  NOT_AN_ACCOUNT: 'FORBIDDEN',
+  ALREADY_CONNECTED: 'CONFLICT',
+  OTHER_WORKSPACE: 'CONFLICT',
+  SLACK_NOT_CONNECTED: 'NOT_FOUND',
+  SLACK_TOKEN_REFUSED: 'BAD_REQUEST',
+  SLACK_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+} as const;
+
+/** The Slack procedures' answer, or its refusal as the API states it. */
+function slackAnswerOf<T>(answered: Result<T, { kind: keyof typeof SLACK_CODES; message: string }>): T {
+  if (!answered.isOk) {
+    throw new TRPCError({ code: SLACK_CODES[answered.error.kind], message: answered.error.message });
+  }
+  return answered.value;
+}
+
+const slackViewOutputSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('notConnected'), canChange: z.boolean() }),
+  z.object({
+    state: z.literal('connected'),
+    workspace: z.object({ teamId: z.string(), name: z.string().nullable() }),
+    connectedBy: z.string(),
+    connectedAt: z.string(),
+    tokenState: z.enum(['fresh', 'refused']),
+    gatewayBot: z.enum(['notMade', 'made', 'installed']),
+    canChange: z.boolean(),
+  }),
+]);
 
 const accountInViewOutputSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('signedIn'), fleetId: z.string(), accountId: z.string(), scopes: z.array(z.string()) }),
@@ -1000,7 +1038,7 @@ export const gatewayRouter = t.router({
     turnEmail: personProcedure.input(z.strictObject({ isOn: z.boolean() })).mutation(async ({ ctx, input }) => { personAnswerOf(await ctx.person.turnEmailChannel({ caller: ctx.caller, ...input })); }),
     /** Turns web push on for the browser that sent its subscription; its wakes name the fleet as the person's shared sign-in states it. */
     turnOnWebPush: personProcedure.input(webPushSubscriptionInputSchema).mutation(async ({ ctx, input }) => {
-      personAnswerOf(await ctx.person.turnOnWebPush({ caller: ctx.caller, fleetName: await fleetNameOf(ctx), ...input }));
+      personAnswerOf(await ctx.person.turnOnWebPush({ caller: ctx.caller, fleetName: await fleetNameOf(ctx, { fleetId: ctx.caller.fleetId, toDo: 'turn web push on' }), ...input }));
     }),
     /** Removes a browser the person turned web push on in. */
     turnOffWebPush: personProcedure.input(z.strictObject({ endpoint: z.string().min(1) })).mutation(async ({ ctx, input }) => {
@@ -1113,6 +1151,37 @@ export const gatewayRouter = t.router({
         }
         return decided.value;
       }),
+  }),
+  slack: t.router({
+    /** The fleet's Slack as the Slack page shows it (gateway scopes 9.6), to any actor; canChange says whether it holds gateway:slack. */
+    view: servedProcedure.output(slackViewOutputSchema).query(async ({ ctx }) => {
+      const view = await ctx.slack.readSlack(ctx.actor);
+      return view.state === 'connected' ? { ...view, connectedAt: view.connectedAt.toISOString() } : view;
+    }),
+    /** Connects the fleet to a workspace by an app configuration refresh token, and makes the gateway's bot, named after the fleet (9.1). */
+    connect: servedProcedure
+      .input(z.strictObject({ refreshToken: z.string().trim().min(1) }))
+      .output(z.object({ isGatewayBotMade: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        if (!ctx.scopes.includes(SLACK_SCOPE)) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: `Connecting Slack needs ${SLACK_SCOPE}` });
+        }
+        const fleetName = await fleetNameOf(ctx, { fleetId: ctx.fleetId, toDo: 'connect Slack' });
+        return slackAnswerOf(await ctx.slack.connectSlack({ actor: ctx.actor, refreshToken: input.refreshToken, fleetName }));
+      }),
+    /** Slack's install screen for the gateway's bot, made first if Slack did not make it at connect. */
+    install: servedProcedure.output(z.object({ url: z.string() })).mutation(async ({ ctx }) => {
+      if (!ctx.scopes.includes(SLACK_SCOPE)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: `Installing a Slack bot needs ${SLACK_SCOPE}` });
+      }
+      const fleetName = await fleetNameOf(ctx, { fleetId: ctx.fleetId, toDo: 'install a Slack bot' });
+      return slackAnswerOf(await ctx.slack.startInstall({ actor: ctx.actor, fleetName }));
+    }),
+    /** Removes every bot the gateway made in Slack, then forgets the workspace (after the page's confirm). */
+    disconnect: servedProcedure.output(z.strictObject({})).mutation(async ({ ctx }) => {
+      slackAnswerOf(await ctx.slack.disconnectSlack({ actor: ctx.actor }));
+      return {};
+    }),
   }),
   outsideParties: t.router({
     /** Whether the fleet's outside parties are on (interop I-3). */

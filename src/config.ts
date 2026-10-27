@@ -37,6 +37,7 @@ const environmentSchema = z.object({
   PAGASAE_CLIENT_SECRET: z.string().min(1).optional(),
   PAGASAE_APP_CLIENT_ID: z.string().min(1).optional(),
   PAGASAE_APP_CLIENT_SECRET: z.string().min(1).optional(),
+  SLACK_API_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).default('https://slack.com/api'),
 });
 
 /** What `aeolus-gateway migrate` reads: the database alone. */
@@ -94,6 +95,8 @@ export interface Config {
    * Unset, nobody signs in to them that way.
    */
   pagasaeApp: { clientId: string; clientSecret: string } | undefined;
+  /** Slack's Web API, where the gateway makes and installs Slack bots (gateway scopes, part B): Slack's own unless set. */
+  slackApiUrl: string;
 }
 
 export class ConfigError extends Error {
@@ -127,6 +130,7 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     webPushWakeWindowMs: variables.WEB_PUSH_WAKE_WINDOW_MINUTES * MINUTE_MS,
     pagasae: pagasaeOf(variables),
     pagasaeApp: pagasaeAppOf(variables),
+    slackApiUrl: variables.SLACK_API_URL.replace(/\/$/, ''),
   };
 }
 

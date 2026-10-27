@@ -48,6 +48,7 @@ describe('the gateway configuration from the environment', () => {
       webPushWakeWindowMs: 600_000,
       pagasae: undefined,
       pagasaeApp: undefined,
+      slackApiUrl: 'https://slack.com/api',
     });
   });
 

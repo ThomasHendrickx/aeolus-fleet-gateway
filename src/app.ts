@@ -102,6 +102,19 @@ import { createPrismaOutcomeNotices } from './adapters/prisma/outcome-notices.js
 import { createOutcomeWorker } from './outcome-worker.js';
 import { createPersonWaiters } from './person-waiters.js';
 import { createPingWorker } from './ping-worker.js';
+import { createSlackTokenWorker } from './slack-token-worker.js';
+import { createSlackInstallSeals } from './adapters/crypto/slack-install-seals.js';
+import { registerSlackRoutes, SLACK_INSTALL_PATH } from './adapters/http/slack-routes.js';
+import { createPrismaSlackApps, createPrismaSlackWorkspaces } from './adapters/prisma/slack-stores.js';
+import { createSlackTooling, SLACK_API_URL } from './adapters/slack/slack-tooling.js';
+import { createCompleteInstall } from './core/slack/complete-install.js';
+import { createConnectSlack } from './core/slack/connect-slack.js';
+import { createDisconnectSlack } from './core/slack/disconnect-slack.js';
+import type { ShipNames } from './core/slack/ports.js';
+import { createReadSlack } from './core/slack/read-slack.js';
+import { createRotateConfigurationTokens } from './core/slack/rotate-configuration-tokens.js';
+import { createStartInstall } from './core/slack/start-install.js';
+import { createTakeAccessToken } from './core/slack/take-access-token.js';
 import { createOpenRequest, type OpenRequest } from './core/requests/open-request.js';
 import { createReadWaiting } from './core/requests/read-waiting.js';
 import { createWatchWaiting } from './core/requests/watch-waiting.js';
@@ -217,6 +230,8 @@ export interface GatewayAppOptions {
   emailWakeWindowMs?: number;
   /** The gateway's web app, answering the pages the server has none of: unset, an unknown page is answered as any unknown address. */
   web?: WebApp;
+  /** Slack's Web API: Slack's own unless set. Tests set it to their Slack double. */
+  slackApiUrl?: string;
 }
 
 /** Within the fleet's 10 minutes a handed delivery may wait for its confirmation (decision 0040). */
@@ -245,6 +260,9 @@ const BEARER = 'Bearer ';
 
 /** How often a proxy ship's worker looks again while the fleet hands it only what it holds, or does not answer. */
 const POLL_MS = 2_000;
+
+/** How often the gateway rotates the Slack configuration tokens due, well within the hour before one ends (gateway scopes 9.1). */
+const SLACK_TOKEN_ROUND_MS = 10 * 60_000;
 
 /** How often the gateway expires due requests and tells outcomes still to tell (P5-1 a). */
 const OUTCOME_ROUND_MS = 60_000;
@@ -723,6 +741,29 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     intervalMs: OUTCOME_ROUND_MS,
     log: server.log,
   });
+  const slackWorkspaces = createPrismaSlackWorkspaces(prisma);
+  const slackApps = createPrismaSlackApps(prisma);
+  const slackTooling = createSlackTooling({ apiUrl: options.slackApiUrl ?? SLACK_API_URL });
+  const slackInstallStates = createSlackInstallSeals(options.gatewaySecret);
+  const installRedirectUrl = `${issuer}${SLACK_INSTALL_PATH}`;
+  const takeAccessToken = createTakeAccessToken({ slack: slackTooling, workspaces: slackWorkspaces, clock });
+  const shipNames: ShipNames = {
+    nameOf: async (fleetId, shipId) => {
+      const crew = await connections.find(fleetId);
+      const ship = crew === undefined ? undefined : await door.getShip(crew.crewToken, { shipId });
+      return ship?.isOk === true ? ship.value.name : undefined;
+    },
+  };
+  const slack: Context['slack'] = {
+    readSlack: createReadSlack({ workspaces: slackWorkspaces, apps: slackApps }),
+    connectSlack: createConnectSlack({ slack: slackTooling, workspaces: slackWorkspaces, apps: slackApps, shipNames, clock, installRedirectUrl }),
+    startInstall: createStartInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, takeAccessToken, states: slackInstallStates, clock, installRedirectUrl }),
+    disconnectSlack: createDisconnectSlack({ slack: slackTooling, workspaces: slackWorkspaces, apps: slackApps, takeAccessToken }),
+  };
+  registerSlackRoutes(server, {
+    completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
+  });
+  const slackTokens = createSlackTokenWorker({ rotate: createRotateConfigurationTokens({ workspaces: slackWorkspaces, takeAccessToken }), sleep, intervalMs: SLACK_TOKEN_ROUND_MS, log: server.log });
   const pings = createPingWorker({ answerPings: createAnswerPings({ connections, inbox: door.gatewayInbox }), sleep, intervalMs: POLL_MS, log: server.log });
   const decideRequestOnly = createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock });
   // A decided request's outcomes are told at once, not at the next round.
@@ -736,6 +777,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined; waitingSecret: string | undefined }): Context => ({
     ...sent,
     authenticateActor,
+    slack,
     changes: hub,
     accountInView,
     accountApps: signIns === undefined ? undefined : (signIn: string) => signIns.apps(signIn),
@@ -841,12 +883,14 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       outcomes.start();
       pings.start();
       personWaiters.start();
+      slackTokens.start();
       return restored;
     },
     close: async () => {
       await outcomes.stop();
       await pings.stop();
       await personWaiters.stop();
+      await slackTokens.stop();
       await workers.stop();
       await server.close();
     },
