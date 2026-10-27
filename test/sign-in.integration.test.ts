@@ -121,6 +121,50 @@ describe('a person signs in from their MCP client through pagasae', () => {
   });
 });
 
+describe('a person adds the plugin and signs in (chatgpt-plugin design, 6)', () => {
+  /** The 11 tools of a signed-in person. */
+  const PERSON_TOOLS = ['aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_meeting', 'aeolus_request_mic', 'aeolus_withdraw_mic_request', 'aeolus_release_mic', 'aeolus_ask_for_server'];
+
+  it('a person adds the plugin and signs in: with no pick page, the client lists the 11 tools at the plugin address', async () => {
+    pagasae.answer(charlotteIn(pagasae, fleetId));
+    const client = aClientProvider(await aRegisteredClient(setting, false));
+    const serverUrl = `${setting.address}/plugin/mcp`;
+    await expect(auth(client.provider, { serverUrl })).resolves.toBe('REDIRECT');
+
+    const back = new URL(z.string().parse((await aBrowser().follow(z.instanceof(URL).parse(client.sentTo()).toString(), CALLBACK)).headers.get('location')));
+    const iss = back.searchParams.get('iss');
+    await expect(auth(client.provider, { serverUrl, authorizationCode: z.string().parse(back.searchParams.get('code')), ...(iss === null ? {} : { iss }) })).resolves.toBe('AUTHORIZED');
+    const mcp = new Client({ name: 'chatgpt', version: '1' });
+    await mcp.connect(new StreamableHTTPClientTransport(new URL(serverUrl), { authProvider: client.provider }));
+
+    const listed = await mcp.listTools();
+    await mcp.close();
+
+    expect(listed.tools.map(({ name }) => name)).toEqual(PERSON_TOOLS);
+  });
+
+  it('the plugin path has its own metadata: a 401 from /plugin/mcp names it in resource_metadata', async () => {
+    const response = await fetch(`${setting.address}/plugin/mcp`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: '{}' });
+
+    expect({ status: response.status, challenge: response.headers.get('www-authenticate') }).toEqual({
+      status: 401,
+      challenge: `Bearer resource_metadata="${setting.address}/.well-known/oauth-protected-resource/plugin/mcp"`,
+    });
+  });
+
+  it('a token for one address is refused at the other: the plain address answers 401 to a plugin token', async () => {
+    pagasae.answer(charlotteIn(pagasae, fleetId));
+    const client = aClientProvider(await aRegisteredClient(setting, false));
+    const serverUrl = `${setting.address}/plugin/mcp`;
+    await auth(client.provider, { serverUrl });
+    const back = new URL(z.string().parse((await aBrowser().follow(z.instanceof(URL).parse(client.sentTo()).toString(), CALLBACK)).headers.get('location')));
+    const iss = back.searchParams.get('iss');
+    await auth(client.provider, { serverUrl, authorizationCode: z.string().parse(back.searchParams.get('code')), ...(iss === null ? {} : { iss }) });
+
+    expect(await initializeStatus(client)).toBe(401);
+  });
+});
+
 describe('a person asks for access for their MCP client (decision 0056)', () => {
   const toDecideSchema = z.object({ result: z.object({ data: z.array(z.object({ requestId: z.string(), subject: z.object({ clientName: z.string() }) })) }) });
 

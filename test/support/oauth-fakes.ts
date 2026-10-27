@@ -4,6 +4,8 @@ import { err, ok } from '../../src/core/shared/result.js';
 /** The gateway's MCP endpoint in the tests: the resource every token is bound to (RFC 8707). */
 export const RESOURCE = 'http://gateway.example.com/mcp';
 export const ISSUER = 'http://gateway.example.com';
+/** The plugin's own address of the same tools, where a person signs in only as themselves (chatgpt-plugin design, 6). */
+export const PLUGIN_RESOURCE = 'http://gateway.example.com/plugin/mcp';
 
 /**
  * Secrets as a test reads them: numbered in the order they are drawn, each
