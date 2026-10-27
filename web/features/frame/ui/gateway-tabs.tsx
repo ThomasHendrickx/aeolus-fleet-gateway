@@ -17,11 +17,11 @@ function isTabOf(pathname: string, path: string): boolean {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
 
-/** The header's tabs: the overview, the outside parties, the parties and Slack of the fleet in view, the page shown current. */
+/** The header's tabs: the overview, the outside parties, the parties and Slack of the fleet in view, the page shown current; on a phone they scroll within the bar rather than widen the page. */
 export function GatewayTabs({ fleetId }: { fleetId: string }) {
   const pathname = usePathname();
   return (
-    <nav aria-label="Gateway" className="flex shrink-0 items-center gap-1">
+    <nav aria-label="Gateway" className="flex min-w-0 items-center gap-1 overflow-x-auto">
       {TABS.map(({ key, label, path }) => {
         const isCurrent = isTabOf(pathname, path);
         return (
