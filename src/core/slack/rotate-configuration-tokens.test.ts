@@ -1,3 +1,4 @@
+import type { FleetId } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
 import { aSlackWorkspace, fakeSlackTooling, memorySlackWorkspaces } from '../../../test/support/slack-fakes.js';
@@ -9,9 +10,9 @@ import { createTakeAccessToken } from './take-access-token.js';
 // removed whenever someone asks; a refused token is left for Connect again.
 
 const NOW = new Date('2026-10-27T09:00:00.000Z');
-const ACME = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
-const LABS = 'flt_01m4ajt7abh4rypkmdnjene67g';
-const GLOBEX = 'flt_01m4ajt7abh4rypkmdnjene6zz';
+const ACME: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
+const LABS: FleetId = 'flt_01m4ajt7abh4rypkmdnjene67g';
+const GLOBEX: FleetId = 'flt_01m4ajt7abh4rypkmdnjene6zz';
 
 describe('rotating configuration tokens', () => {
   it('rotates each token within its last hour, leaves fresh ones, and skips refused ones', async () => {
