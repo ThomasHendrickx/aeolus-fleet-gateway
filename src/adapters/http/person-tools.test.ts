@@ -6,6 +6,7 @@ import { HEADS_MEETING_ID, aMeetingRead } from '../../../test/support/meeting-fa
 import { CHARLOTTE_GRANT, SENT_MESSAGE_ID } from '../../../test/support/people-fakes.js';
 import type { ChangeOwnMic } from '../../core/meetings/change-own-mic.js';
 import type { ReadMeeting } from '../../core/meetings/read-meeting.js';
+import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { PersonDiscovery } from '../../core/people/ports.js';
 import type { SendMessage } from '../../core/people/send-message.js';
 import { err, ok } from '../../core/shared/result.js';
@@ -131,6 +132,23 @@ describe("a person's MCP client starts a message", () => {
 });
 
 describe("a person's MCP client takes part in a meeting", () => {
+  it('reads an added-to-meeting notice in words, not as its payload', async () => {
+    const openDelivery: OpenDelivery = () => Promise.resolve(ok({
+      deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+      from: 'chief-of-staff',
+      title: 'You were added to a meeting',
+      sentAt: '2026-10-27T10:00:00.000Z',
+      contentType: 'application/vnd.aeolus.meeting.added+json',
+      payload: '{"meetingId":"mtg_01m5qa5j85mgd4z61d9c2k4mtg","title":"Weekly heads","owner":{"id":"shp_01m5qa5j85mgd4z61d9c2k0001","name":"chief-of-staff"},"moderator":{"id":"shp_01m5qa5j85mgd4z61d9c2k0001","name":"chief-of-staff"},"participants":[]}',
+      meetingId: HEADS_MEETING_ID,
+    }));
+    const mcp = await connected(personTools({ openDelivery }).deps);
+
+    await expect(mcp.callTool({ name: 'aeolus_open', arguments: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' } })).resolves.toEqual({
+      content: [{ type: 'text', text: 'chief-of-staff added you to the meeting “Weekly heads”.' }],
+    });
+  });
+
   it('reads a meeting, where the person stands on its mic and a page of contributions after the cursor, with aeolus_meeting', async () => {
     const asked: Parameters<ReadMeeting>[0][] = [];
     const readMeeting: ReadMeeting = (input) => {
