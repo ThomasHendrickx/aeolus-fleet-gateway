@@ -155,6 +155,7 @@ import { createFleetNetwork } from './adapters/fleet/fleet-network.js';
 import { createPrismaOutsidePartySwitches } from './adapters/prisma/outside-party-switches.js';
 import { createReadOutsideParties, createSetOutsideParties, type SetOutsideParties } from './core/outside-parties/set-outside-parties.js';
 import { createConnect } from './core/connection/connect.js';
+import { createDeclareGatewayScopes } from './core/connection/declare-gateway-scopes.js';
 import { createAnswerPings } from './core/connection/answer-pings.js';
 import { createReadConnection, type ReadConnection } from './core/connection/read-connection.js';
 import { createDeleteFleet } from './core/installation/delete-fleet.js';
@@ -333,6 +334,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const readFleet = createReadFleet({ isServed, connections });
   const deleteFleet = createDeleteFleet({ forgetter: createPrismaFleetForgetter(prisma), requests, hasher: sha256RequestHasher, clock });
   const connect = createConnect({ door, store: connections, clock });
+  const declareGatewayScopes = createDeclareGatewayScopes({ door, store: connections });
   const authenticateOperator = createAuthenticateOperator({ sessions: createFleetConsoleSessions(options.fleetUrl) });
   const parties = createPrismaPartyStore(prisma);
   // The OAuth server's clients and tokens: a client party's secret and tokens change as its proxy ship's crew does.
@@ -818,10 +820,17 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     restoreConnections: async () => {
       const restored: { fleetId: FleetId; ship: string }[] = [];
       for (const crew of await connections.connected()) {
-        // A fleet that is off is not read.
-        const connection = (await isServed(crew.fleetId)) ? await readConnection(crew.fleetId) : await heldConnection(crew.fleetId);
+        // A fleet that is off is not read, nor declared to.
+        const isOn = await isServed(crew.fleetId);
+        const connection = isOn ? await readConnection(crew.fleetId) : await heldConnection(crew.fleetId);
         if (connection.state === 'connected') {
           restored.push({ fleetId: crew.fleetId, ship: connection.ship?.name ?? crew.name });
+        }
+        if (isOn && connection.state === 'connected') {
+          const declared = await declareGatewayScopes(crew.fleetId);
+          if (!declared.isOk) {
+            server.log.warn({ fleetId: crew.fleetId, reason: declared.error.message }, "the fleet did not take the gateway's scopes again");
+          }
         }
       }
       for (const party of await parties.crewed()) {

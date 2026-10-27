@@ -29,7 +29,7 @@ export const GATEWAY_NAMESPACE = {
   ],
 };
 
-const DECLARED_SCOPES = GATEWAY_NAMESPACE.scopes.map(({ scope }) => scope).join(', ');
+export const DECLARED_SCOPES = GATEWAY_NAMESPACE.scopes.map(({ scope }) => scope).join(', ');
 
 /**
  * Use case: argo connects the gateway, as the other plugins are connected.

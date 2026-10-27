@@ -22,6 +22,7 @@ beforeEach(() => {
 describe("declaring the gateway's scopes again", () => {
   it('declares the whole namespace, gateway:slack included, with the kept crew token of a connected fleet', async () => {
     await store.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_kept', crewedAt: AT });
+    fleet.state.liveTokens.add('aeolus_ct_v1_kept');
 
     await expect(createDeclareGatewayScopes({ door: fleet.door, store })(FLEET_ID)).resolves.toEqual({ isOk: true, value: undefined });
     expect(fleet.state.declared).toEqual([GATEWAY_NAMESPACE]);
@@ -34,6 +35,7 @@ describe("declaring the gateway's scopes again", () => {
 
   it('says why the fleet did not take the declaration, keeping the connection', async () => {
     await store.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_kept', crewedAt: AT });
+    fleet.state.liveTokens.add('aeolus_ct_v1_kept');
     fleet.state.declareRefusal = { code: 'UNAVAILABLE', message: 'The fleet did not answer' };
 
     await expect(createDeclareGatewayScopes({ door: fleet.door, store })(FLEET_ID)).resolves.toEqual({
