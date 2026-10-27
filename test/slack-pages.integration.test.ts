@@ -235,7 +235,8 @@ describe('linking a Slack account (gateway scopes S7)', () => {
   }
 
   /** A Slack event for the app, signed with its signing secret as Slack signs it; a retry carries Slack's retry number. */
-  async function slackEvent(appId: string, event: Record<string, string>, sent: { eventId?: string; retryNumber?: number } = {}): Promise<Response> {
+  async function slackEvent(appId: string, sent: { event: Record<string, string>; eventId?: string; retryNumber?: number }): Promise<Response> {
+    const { event } = sent;
     const body = JSON.stringify({ type: 'event_callback', api_app_id: appId, team_id: 'T0ACME', event_id: sent.eventId ?? `Ev-${String(Date.now())}`, event });
     const timestamp = String(Math.floor(Date.now() / 1000));
     return fetch(`${address}/gw/slack/events`, {
@@ -308,7 +309,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
   }, 60_000);
 
   it("answers an unlinked person's message to a bot only they see, with a button to link, and the message never reaches the fleet", async () => {
-    const answered = await slackEvent(releaseNotesAppId, { type: 'message', channel_type: 'im', channel: 'D0NEW', user: 'U0NEW', text: 'When is the release?', ts: '1730019600.000100' });
+    const answered = await slackEvent(releaseNotesAppId, { event: { type: 'message', channel_type: 'im', channel: 'D0NEW', user: 'U0NEW', text: 'When is the release?', ts: '1730019600.000100' } });
 
     expect(answered.status).toBe(200);
     const posted = slack.postedOnlyTo.at(-1);
@@ -327,8 +328,8 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     await linked(HOLDER_SIGN_IN);
     const message = { type: 'message', channel_type: 'im', channel: 'D0CHARLOTTE', user: 'U0CHARLOTTE', text: '*When* is the release?', ts: '1730019800.000300' };
 
-    const first = await slackEvent(releaseNotesAppId, message, { eventId: 'Ev-s8' });
-    const retry = await slackEvent(releaseNotesAppId, message, { eventId: 'Ev-s8', retryNumber: 1 });
+    const first = await slackEvent(releaseNotesAppId, { event: message, eventId: 'Ev-s8' });
+    const retry = await slackEvent(releaseNotesAppId, { event: message, eventId: 'Ev-s8', retryNumber: 1 });
 
     expect([first.status, retry.status]).toEqual([200, 200]);
     await expect.poll(() => slack.reactions.map(({ form }) => form)).toEqual([{ channel: 'D0CHARLOTTE', timestamp: '1730019800.000300', name: 'white_check_mark' }]);
