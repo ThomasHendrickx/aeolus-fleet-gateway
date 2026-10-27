@@ -99,6 +99,17 @@ export function createPrismaSlackApps(db: PrismaClient): SlackApps {
       const row = await db.slackApp.findUnique({ where: { fleetId_appId: { fleetId, appId } } });
       return row === null ? undefined : appOf(row);
     },
+    findByAppId: async (appId) => {
+      const row = await db.slackApp.findUnique({ where: { appId } });
+      return row === null ? undefined : appOf(row);
+    },
+    ofShip: async (fleetId, shipId) => {
+      const row = await db.slackApp.findFirst({ where: { fleetId, shipId } });
+      return row === null ? undefined : appOf(row);
+    },
+    remove: async (fleetId, appId) => {
+      await db.slackApp.deleteMany({ where: { fleetId, appId } });
+    },
     save: async (app) => {
       const row = {
         shipId: app.shipId,

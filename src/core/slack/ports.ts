@@ -1,5 +1,7 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
+import type { ActorCredential } from '../actors/credential-of.js';
+import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
 import type { SlackApp, SlackAppDescription } from './slack-app.js';
 import type { ConfigurationToken, SlackWorkspace } from './slack-workspace.js';
@@ -69,7 +71,12 @@ export interface SlackApps {
   /** Every app the gateway made in the fleet's workspace. */
   all(fleetId: FleetId): Promise<SlackApp[]>;
   find(fleetId: FleetId, appId: string): Promise<SlackApp | undefined>;
+  /** The app by its id alone, as Slack names it in an event; one id is one app across fleets. */
+  findByAppId(appId: string): Promise<SlackApp | undefined>;
+  /** The bot of the ship, once exposed. */
+  ofShip(fleetId: FleetId, shipId: ShipId): Promise<SlackApp | undefined>;
   save(app: SlackApp): Promise<void>;
+  remove(fleetId: FleetId, appId: string): Promise<void>;
 }
 
 /** What an install's state names: the app it is for, sealed so Slack's redirect can not be forged or replayed past its expiry. */
@@ -89,4 +96,28 @@ export interface InstallStates {
 /** Outbound port: a ship's name as the fleet answers it now, read as the gateway's ship; none when the fleet does not answer. */
 export interface ShipNames {
   nameOf(fleetId: FleetId, shipId: ShipId): Promise<string | undefined>;
+}
+
+/** A ship of the fleet as Slack's part of the gateway reads it: what it is, and its statement's summary (0047), none while it states none. */
+export interface ShipToExpose {
+  readonly shipId: ShipId;
+  readonly name: string;
+  readonly kind: 'operator' | 'agent' | 'viewer' | 'person' | 'app' | 'plugin';
+  readonly status: 'awaitingCrew' | 'crewed' | 'retired';
+  readonly summary: string | null;
+}
+
+/** Outbound port: the fleet's ships as Slack's part of the gateway needs them. */
+export interface SlackShips {
+  /** A ship as the gateway's ship reads it now. */
+  read(fleetId: FleetId, shipId: ShipId): Promise<Result<ShipToExpose, FleetRefusal>>;
+  /** The ships the actor reads (fleet.list as the actor), within its read reach. */
+  list(as: ActorCredential): Promise<Result<Omit<ShipToExpose, 'summary'>[], FleetRefusal>>;
+  /** Whether the actor manages the ship now (fleet.checkManage): OK, or the fleet's refusal, which names the ship. */
+  checkManage(as: ActorCredential, shipId: ShipId): Promise<Result<undefined, FleetRefusal>>;
+}
+
+/** Outbound port: which outside party a ship is the proxy ship of, if any: an outside MCP server's takes tool calls, not a person's words (P-B3). */
+export interface ProxyShipKinds {
+  kindOf(fleetId: FleetId, shipId: ShipId): Promise<'mcpServer' | 'mcpClient' | 'a2aClient' | 'a2aAgent' | undefined>;
 }

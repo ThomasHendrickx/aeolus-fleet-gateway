@@ -1,7 +1,7 @@
-import { idSchema, type FleetId } from '@aeolus-fleet/common';
+import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
-import type { InstallState, InstallStates, MadeApp, ShipNames, SlackApps, SlackRefusal, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
+import type { InstallState, InstallStates, MadeApp, ProxyShipKinds, ShipNames, ShipToExpose, SlackApps, SlackRefusal, SlackShips, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
 import type { SlackApp, SlackAppDescription } from '../../src/core/slack/slack-app.js';
 import type { SlackWorkspace } from '../../src/core/slack/slack-workspace.js';
 import { err, ok } from '../../src/core/shared/result.js';
@@ -122,6 +122,15 @@ export function memorySlackApps(): SlackApps & { held: SlackApp[] } {
     gatewayBot: (fleetId) => Promise.resolve(held.find((app) => app.fleetId === fleetId && app.shipId === null)),
     all: (fleetId) => Promise.resolve(held.filter((app) => app.fleetId === fleetId)),
     find: (fleetId, appId) => Promise.resolve(held.find((app) => app.fleetId === fleetId && app.appId === appId)),
+    findByAppId: (appId) => Promise.resolve(held.find((app) => app.appId === appId)),
+    ofShip: (fleetId, shipId) => Promise.resolve(held.find((app) => app.fleetId === fleetId && app.shipId === shipId)),
+    remove: (fleetId, appId) => {
+      const index = indexOf(fleetId, appId);
+      if (index !== -1) {
+        held.splice(index, 1);
+      }
+      return Promise.resolve();
+    },
     save: (app) => {
       const index = indexOf(app.fleetId, app.appId);
       if (index === -1) {
@@ -167,4 +176,50 @@ export function aSlackWorkspace(overrides: Partial<SlackWorkspace> = {}): SlackW
 /** Ships' names as the fleet answers them; a ship it does not name, none. */
 export function fakeShipNames(names: Record<string, string> = { shp_01m3tbfspe96yf1rnr4ank9c4r: 'charlotte' }): ShipNames {
   return { nameOf: (_fleetId, shipId) => Promise.resolve(names[shipId]) };
+}
+
+/**
+ * The fleet's ships as Slack's part of the gateway reads them: each as the
+ * gateway's ship reads it, the actor's list, and the ships the actor manages.
+ */
+export function fakeSlackShips(ships: ShipToExpose[] = []) {
+  const state = { ships: [...ships], managed: new Set<ShipId>(ships.map(({ shipId }) => shipId)), isAnswering: true };
+  const unavailable = err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' });
+  const port: SlackShips = {
+    read: (_fleetId, shipId) => {
+      const ship = state.ships.find((each) => each.shipId === shipId);
+      return Promise.resolve(!state.isAnswering ? unavailable : ship === undefined ? err({ code: 'NOT_FOUND', message: 'No such ship' }) : ok(ship));
+    },
+    list: () => Promise.resolve(state.isAnswering ? ok(state.ships.map(({ summary: _summary, ...ship }) => ship)) : unavailable),
+    checkManage: (_as, shipId) => {
+      const name = state.ships.find((each) => each.shipId === shipId)?.name ?? shipId;
+      return Promise.resolve(!state.isAnswering ? unavailable : state.managed.has(shipId) ? ok(undefined) : err({ code: 'FORBIDDEN', message: `You do not manage ${name}` }));
+    },
+  };
+  return { state, port };
+}
+
+/** The proxy ships of the gateway's outside parties, by kind. */
+export function fakeProxyShipKinds(kinds: Record<string, 'mcpServer' | 'mcpClient' | 'a2aClient' | 'a2aAgent'> = {}): ProxyShipKinds {
+  return { kindOf: (_fleetId, shipId) => Promise.resolve(kinds[shipId]) };
+}
+
+/** An app the gateway made, its bot not installed, unless the test says otherwise. */
+export function aSlackApp(overrides: Partial<SlackApp> = {}): SlackApp {
+  const appId = overrides.appId ?? 'A01';
+  return {
+    fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8sv',
+    appId,
+    shipId: null,
+    clientId: `client-${appId}`,
+    clientSecret: `secret-${appId}`,
+    signingSecret: `signing-${appId}`,
+    installUrl: `https://slack.com/oauth/v2/authorize?client_id=client-${appId}`,
+    name: 'Acme',
+    madeAt: new Date('2026-10-27T08:30:00.000Z'),
+    installStartedAt: null,
+    bot: null,
+    removedInSlackAt: null,
+    ...overrides,
+  };
 }
