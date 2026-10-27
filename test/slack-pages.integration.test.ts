@@ -55,13 +55,14 @@ async function slackPage(signIn = HOLDER_SIGN_IN): Promise<string> {
 }
 
 /** Sends a form of the Slack page, as before the page's script took over. */
-async function sent(testId: string, fields: Record<string, string> = {}, path = '/slack'): Promise<Response> {
+async function sent(testId: string, form: { fields?: Record<string, string>; path?: string } = {}): Promise<Response> {
+  const { fields = {}, path = '/slack' } = form;
   const page = await (await fetch(`${address}${path}?fleet=${fleetId}`, { headers: pageHeaders(HOLDER_SIGN_IN) })).text();
-  const form = hiddenFieldsOf(page, testId);
+  const body = hiddenFieldsOf(page, testId);
   for (const [name, value] of Object.entries(fields)) {
-    form.append(name, value);
+    body.append(name, value);
   }
-  return fetch(`${address}${path}?fleet=${fleetId}`, { method: 'POST', headers: { ...pageHeaders(HOLDER_SIGN_IN), origin: address }, body: form, redirect: 'manual' });
+  return fetch(`${address}${path}?fleet=${fleetId}`, { method: 'POST', headers: { ...pageHeaders(HOLDER_SIGN_IN), origin: address }, body, redirect: 'manual' });
 }
 
 beforeAll(async () => {
@@ -118,7 +119,7 @@ describe('connecting Slack on the Slack page', () => {
   }, 60_000);
 
   it('says Slack refused a configuration token, and connects nothing', async () => {
-    const answer = await sent('slack-connect-form', { refreshToken: 'xoxe-1-expired' });
+    const answer = await sent('slack-connect-form', { fields: { refreshToken: 'xoxe-1-expired' } });
 
     expect(textOf(await answer.text())).toContain('Slack refused the configuration token (invalid_refresh_token): copy a new one from your Slack app management page');
     expect(await prisma.slackWorkspace.count()).toBe(0);
@@ -127,7 +128,7 @@ describe('connecting Slack on the Slack page', () => {
   it("connects with a configuration token, makes the gateway's bot named after the fleet, and installs it through Slack's install screen", async () => {
     slack.issueRefreshToken('xoxe-1-good');
 
-    const connected = textOf(await (await sent('slack-connect-form', { refreshToken: 'xoxe-1-good' })).text());
+    const connected = textOf(await (await sent('slack-connect-form', { fields: { refreshToken: 'xoxe-1-good' } })).text());
     const toSlack = await sent('slack-install-form');
     const back = await fetch(toSlack.headers.get('location') ?? '', { redirect: 'manual' });
     const installed = await fetch(back.headers.get('location') ?? '', { redirect: 'manual' });
@@ -143,7 +144,7 @@ describe('connecting Slack on the Slack page', () => {
     // Slack revoked the kept token: its next rotation, due now, is refused.
     await prisma.slackWorkspace.updateMany({ data: { configExpiresAt: new Date(), configRefreshToken: 'xoxe-1-revoked' } });
 
-    const refused = textOf(await (await sent('slack-disconnect-form', {}, '/slack/disconnect')).text());
+    const refused = textOf(await (await sent('slack-disconnect-form', { path: '/slack/disconnect' })).text());
 
     expect(refused).toContain('Slack refused the configuration token. Connect again to make or change bots; bots already installed keep working');
     const page = await slackPage();
@@ -152,9 +153,9 @@ describe('connecting Slack on the Slack page', () => {
 
   it('connects again with a new token of the workspace, then disconnects, removing the gateway\'s bot in Slack', async () => {
     slack.issueRefreshToken('xoxe-1-again');
-    await sent('slack-connect-form', { refreshToken: 'xoxe-1-again' });
+    await sent('slack-connect-form', { fields: { refreshToken: 'xoxe-1-again' } });
 
-    const disconnected = await sent('slack-disconnect-form', {}, '/slack/disconnect');
+    const disconnected = await sent('slack-disconnect-form', { path: '/slack/disconnect' });
 
     expect(disconnected.status).toBe(303);
     expect([...slack.apps.values()].map(({ isRemoved }) => isRemoved)).toEqual([true]);
