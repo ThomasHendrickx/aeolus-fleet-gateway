@@ -1,8 +1,10 @@
+import type { ShipId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { aSlackApp, aSlackWorkspace, fakeProxyShipKinds, fakeSlackShips, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces } from '../../../test/support/slack-fakes.js';
 import type { Actor } from '../actors/authenticate-actor.js';
+import { ok } from '../shared/result.js';
 import { createExposeShip } from './expose-ship.js';
 import { createTakeAccessToken } from './take-access-token.js';
 
@@ -34,18 +36,18 @@ beforeEach(async () => {
   await workspaces.save(aSlackWorkspace());
 });
 
-function exposeShip(shipId: string, actor: Actor = ANA) {
+function exposeShip(shipId: ShipId, actor: Actor = ANA) {
   const clock = { now: () => NOW };
   return createExposeShip({
     slack: tooling.slack,
-    workspaces,
     apps,
     ships: ships.port,
     proxyShips: fakeProxyShipKinds({ [QUOTES.shipId]: 'a2aAgent', [CRM.shipId]: 'mcpServer' }),
     takeAccessToken: createTakeAccessToken({ slack: tooling.slack, workspaces, clock }),
+    credentialOf: (_actor, sent) => Promise.resolve(ok(sent)),
     clock,
     addresses: ADDRESSES,
-  })({ actor, as: AS, shipId: shipId as typeof RELEASE_NOTES.shipId });
+  })({ actor, as: AS, shipId });
 }
 
 describe('exposing a ship as a Slack bot', () => {

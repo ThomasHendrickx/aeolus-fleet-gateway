@@ -66,6 +66,8 @@ export type DomainErrorKind =
   | 'SLACK_UNAVAILABLE'
   | 'OTHER_WORKSPACE'
   | 'INSTALL_REFUSED'
+  | 'NOT_EXPOSABLE'
+  | 'NO_SUCH_BOT'
   | 'CONFLICT';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
