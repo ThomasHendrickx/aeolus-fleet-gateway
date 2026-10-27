@@ -1180,14 +1180,18 @@ export const gatewayRouter = t.router({
       }),
     /** Slack's install screen for the gateway's bot, made first if Slack did not make it at connect; with an app id, for a ship's bot. */
     install: servedProcedure
-      .input(z.strictObject({ appId: z.string().min(1).optional() }).optional())
+      .input(z.strictObject({ appId: z.string().min(1).optional() }))
       .output(z.object({ url: z.string() }))
       .mutation(async ({ ctx, input }) => {
         if (!ctx.scopes.includes(SLACK_SCOPE)) {
           throw new TRPCError({ code: 'FORBIDDEN', message: `Installing a Slack bot needs ${SLACK_SCOPE}` });
         }
-        const fleetName = await fleetNameOf(ctx, { fleetId: ctx.fleetId, toDo: 'install a Slack bot' });
-        return slackAnswerOf(await ctx.slack.startInstall({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, fleetName, ...(input?.appId === undefined ? {} : { appId: input.appId }) }));
+        const as = { cookie: ctx.cookie, crewToken: ctx.crewToken };
+        if (input.appId !== undefined) {
+          return slackAnswerOf(await ctx.slack.startInstall({ actor: ctx.actor, as, bot: { kind: 'ship', appId: input.appId } }));
+        }
+        const fleetName = await fleetNameOf(ctx, { fleetId: ctx.fleetId, toDo: "install the gateway's Slack bot" });
+        return slackAnswerOf(await ctx.slack.startInstall({ actor: ctx.actor, as, bot: { kind: 'gateway', fleetName } }));
       }),
     /** The agent ships and outside A2A agents' proxy ships Expose a ship… offers (9.2). */
     exposable: servedProcedure.output(z.array(z.object({ shipId: z.string(), name: z.string() }))).query(async ({ ctx }) => slackAnswerOf(await ctx.slack.listExposable({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken } }))),

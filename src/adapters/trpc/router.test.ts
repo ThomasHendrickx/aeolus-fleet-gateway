@@ -1285,7 +1285,7 @@ describe("an actor holding gateway:slack connects the fleet's Slack through the 
     const { caller, slack } = asCharlotte(['gateway:slack']);
     await caller.slack.connect({ refreshToken: 'xoxe-1-first' });
 
-    const installing = await caller.slack.install();
+    const installing = await caller.slack.install({});
     await caller.slack.disconnect();
 
     expect({ isSlackAddress: installing.url.startsWith('https://slack.com/oauth/v2/authorize?client_id=client-A01&state='), removed: slack.tooling.state.removed.map(({ appId }) => appId) }).toEqual({ isSlackAddress: true, removed: ['A01'] });
@@ -1293,6 +1293,6 @@ describe("an actor holding gateway:slack connects the fleet's Slack through the 
   });
 
   it('refuses Install while the fleet is connected to no workspace', async () => {
-    await expect(asCharlotte(['gateway:slack']).caller.slack.install()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(asCharlotte(['gateway:slack']).caller.slack.install({})).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

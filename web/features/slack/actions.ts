@@ -33,7 +33,7 @@ export async function installBot(_previous: FormState, form: FormData): Promise<
   const appId = fieldOf(form, 'appId');
   let url: string;
   try {
-    ({ url } = await api.slack.install.mutate(appId === '' ? undefined : { appId }));
+    ({ url } = await api.slack.install.mutate(appId === '' ? {} : { appId }));
   } catch (error) {
     return { kind: 'refused', message: refusalMessageOf(error) };
   }

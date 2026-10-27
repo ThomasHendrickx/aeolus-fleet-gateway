@@ -15,8 +15,8 @@ export const INSTALL_MS = 10 * 60 * 1000;
 
 export type StartInstallRefusal = DomainError<'SLACK_SCOPE_NOT_HELD' | 'SLACK_NOT_CONNECTED' | 'SLACK_TOKEN_REFUSED' | 'SLACK_UNAVAILABLE' | 'NO_SUCH_BOT' | 'NOT_REACHABLE' | 'FLEET_UNAVAILABLE'>;
 
-/** Install for the gateway's own bot, or with an app id for a ship's bot. */
-export type StartInstall = (input: { actor: Actor; as: ActorCredential; fleetName: string; appId?: string }) => Promise<Result<{ url: string }, StartInstallRefusal>>;
+/** Install for the gateway's own bot, named after the fleet if it is made now, or for a ship's bot by its app id. */
+export type StartInstall = (input: { actor: Actor; as: ActorCredential; bot: { kind: 'gateway'; fleetName: string } | { kind: 'ship'; appId: string } }) => Promise<Result<{ url: string }, StartInstallRefusal>>;
 
 /**
  * Use case: an actor holding gateway:slack presses Install (gateway scopes
@@ -36,7 +36,7 @@ export function createStartInstall(deps: {
   clock: Clock;
   installRedirectUrl: string;
 }): StartInstall {
-  return async ({ actor, as, fleetName, appId }) => {
+  return async ({ actor, as, bot: asked }) => {
     if (!actor.scopes.includes(SLACK_SCOPE)) {
       return refuse('SLACK_SCOPE_NOT_HELD', `Installing a Slack bot needs ${SLACK_SCOPE}`);
     }
@@ -45,8 +45,8 @@ export function createStartInstall(deps: {
       return refuse('SLACK_NOT_CONNECTED', 'The fleet is connected to no Slack workspace');
     }
     let bot: SlackApp | undefined;
-    if (appId !== undefined) {
-      const shipBot = await managedShipBot(deps, { actor, as, appId });
+    if (asked.kind === 'ship') {
+      const shipBot = await managedShipBot(deps, { actor, as, appId: asked.appId });
       if (!shipBot.isOk) {
         return shipBot;
       }
@@ -54,16 +54,19 @@ export function createStartInstall(deps: {
     } else {
       bot = await deps.apps.gatewayBot(fleetId);
     }
-    if (bot === undefined) {
+    if (bot === undefined && asked.kind === 'gateway') {
       const accessToken = await deps.takeAccessToken(fleetId);
       if (!accessToken.isOk) {
         return accessToken;
       }
-      const made = await gatewayBotOf(deps, { fleetId, fleetName, accessToken: accessToken.value });
+      const made = await gatewayBotOf(deps, { fleetId, fleetName: asked.fleetName, accessToken: accessToken.value });
       if (!made.isOk) {
         return refuse('SLACK_UNAVAILABLE', made.error.kind === 'refused' ? `Slack did not make the gateway's bot (${made.error.error})` : slackUnavailableMessage(made.error));
       }
       bot = made.value;
+    }
+    if (bot === undefined) {
+      return refuse('NO_SUCH_BOT', "The gateway's bot is not made");
     }
     const now = deps.clock.now();
     await deps.apps.save({ ...bot, installStartedAt: now });

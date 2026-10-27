@@ -46,7 +46,7 @@ function startInstall(actor: Actor = CHARLOTTE, appId?: string) {
     credentialOf: (_actor, sent) => Promise.resolve(ok(sent)),
     clock,
     installRedirectUrl: REDIRECT_URL,
-  })({ actor, as: { cookie: 'aeolus_account_session=charlotte' }, fleetName: 'Acme', ...(appId === undefined ? {} : { appId }) });
+  })({ actor, as: { cookie: 'aeolus_account_session=charlotte' }, bot: appId === undefined ? { kind: 'gateway', fleetName: 'Acme' } : { kind: 'ship', appId } });
 }
 
 describe("installing the gateway's bot", () => {

@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 import { idSchema, type FleetId } from '@aeolus-fleet/common';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
@@ -7,7 +9,7 @@ import { commission, register, signIn } from './support/argo.js';
 import { charlotteIn, PAGASAE_APP_CLIENT, PAGASAE_CLIENT, startFakePagasae, type FakePagasae } from './support/fake-pagasae.js';
 import { startFakeSlack, type FakeSlack } from './support/fake-slack.js';
 import { aFreePort, aNewDatabaseUrl, startFleetServer, type FleetServer } from './support/fleet-server.js';
-import { connectGateway } from './support/gateway-api.js';
+import { connectGateway, mutate, query } from './support/gateway-api.js';
 import { startGateway, type RunningGateway } from './support/gateway-bin.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
@@ -29,6 +31,7 @@ let gateway: RunningGateway | undefined;
 let address: string;
 let fleetId: FleetId;
 let prisma: PrismaClient;
+let argoCookie: string;
 
 /** A page's text as a person reads it: its tags gone, its spaces as one. */
 function textOf(html: string): string {
@@ -70,6 +73,7 @@ beforeAll(async () => {
   pagasae = await startFakePagasae();
   slack = await startFakeSlack();
   const cookie = await signIn(fleet);
+  argoCookie = cookie;
   const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'] } });
   const charlotte = await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } });
   const crewToken = await register(fleet, await commission(fleet, { cookie, ship: { name: 'reader', type: 'agent' } }));
@@ -130,6 +134,7 @@ describe('connecting Slack on the Slack page', () => {
 
     const connected = textOf(await (await sent('slack-connect-form', { fields: { refreshToken: 'xoxe-1-good' } })).text());
     const toSlack = await sent('slack-install-form');
+    expect(toSlack.headers.get('location'), textOf(await toSlack.clone().text()).slice(0, 3000)).toBeTruthy();
     const back = await fetch(toSlack.headers.get('location') ?? '', { redirect: 'manual' });
     const installed = await fetch(back.headers.get('location') ?? '', { redirect: 'manual' });
 
@@ -160,5 +165,51 @@ describe('connecting Slack on the Slack page', () => {
     expect(disconnected.status).toBe(303);
     expect([...slack.apps.values()].map(({ isRemoved }) => isRemoved)).toEqual([true]);
     expect(await slackPage()).toContain('data-testid="slack-not-connected"');
+  }, 60_000);
+});
+
+describe('a ship as a Slack bot (gateway scopes S6)', () => {
+  /** A tRPC answer's data. */
+  async function dataOf<D>(response: Response, data: z.ZodType<D>): Promise<D> {
+    expect(response.status, await response.clone().text()).toBe(200);
+    return data.parse(z.object({ result: z.object({ data: z.unknown() }) }).parse(await response.json()).result.data);
+  }
+
+  it("exposes an agent ship by its id, installs its bot, shows it Removed in Slack once Slack says so, and removes it", async () => {
+    slack.issueRefreshToken('xoxe-1-s6');
+    await sent('slack-connect-form', { fields: { refreshToken: 'xoxe-1-s6' } });
+    const releaseNotes = await commission(fleet, { cookie: argoCookie, ship: { name: 'release-notes', type: 'agent' } });
+    const admin = await register(fleet, await commission(fleet, { cookie: argoCookie, ship: { name: 'slack-admin', type: 'agent', scopes: ['fleet:read', 'fleet:manage', 'gateway:slack'] } }));
+
+    const offered = await dataOf(await query(address, { procedure: 'slack.exposable', crewToken: admin }), z.array(z.object({ shipId: z.string(), name: z.string() })));
+    const { appId } = await dataOf(await mutate(address, { procedure: 'slack.expose', crewToken: admin, body: { shipId: releaseNotes.shipId } }), z.object({ appId: z.string() }));
+    const made = textOf(await slackPage());
+    const { url } = await dataOf(await mutate(address, { procedure: 'slack.install', crewToken: admin, body: { appId } }), z.object({ url: z.string() }));
+    const back = await fetch(url, { redirect: 'manual' });
+    await fetch(back.headers.get('location') ?? '', { redirect: 'manual' });
+    const inSlack = textOf(await slackPage());
+
+    expect(offered.map(({ name }) => name)).toContain('release-notes');
+    expect(z.object({ display_information: z.object({ name: z.string() }) }).parse(slack.apps.get(appId)?.manifest).display_information.name).toBe('release-notes');
+    expect([made.includes('release-notes') && made.includes('Made'), inSlack.includes('release-notes') && inSlack.includes('In Slack')]).toEqual([true, true]);
+
+    const body = JSON.stringify({ type: 'event_callback', api_app_id: appId, team_id: 'T0ACME', event_id: 'Ev-uninstalled', event: { type: 'app_uninstalled' } });
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const event = await fetch(`${address}/gw/slack/events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-slack-request-timestamp': timestamp, 'x-slack-signature': `v0=${createHmac('sha256', `signing-${appId}`).update(`v0:${timestamp}:${body}`).digest('hex')}` },
+      body,
+    });
+    expect(event.status).toBe(200);
+    expect(textOf(await slackPage())).toContain('Removed in Slack');
+
+    await dataOf(await mutate(address, { procedure: 'slack.remove', crewToken: admin, body: { appId } }), z.object({}));
+    expect({ isRemoved: slack.apps.get(appId)?.isRemoved, page: textOf(await slackPage()).includes('No ship is a Slack bot yet.') }).toEqual({ isRemoved: true, page: true });
+  }, 60_000);
+
+  it("answers Slack's address check at the events door as it makes an app", async () => {
+    const answer = await fetch(`${address}/gw/slack/events`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'url_verification', token: 't', challenge: 'c-1' }) });
+
+    expect(await answer.json()).toEqual({ challenge: 'c-1' });
   }, 60_000);
 });
