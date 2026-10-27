@@ -190,7 +190,7 @@ export function fakeSlackShips(ships: ShipToExpose[] = []) {
       const ship = state.ships.find((each) => each.shipId === shipId);
       return Promise.resolve(!state.isAnswering ? unavailable : ship === undefined ? err({ code: 'NOT_FOUND', message: 'No such ship' }) : ok(ship));
     },
-    list: () => Promise.resolve(state.isAnswering ? ok(state.ships.map(({ summary: _summary, ...ship }) => ship)) : unavailable),
+    list: () => Promise.resolve(state.isAnswering ? ok(state.ships.map(({ shipId, name, kind, status }) => ({ shipId, name, kind, status }))) : unavailable),
     checkManage: (_as, shipId) => {
       const name = state.ships.find((each) => each.shipId === shipId)?.name ?? shipId;
       return Promise.resolve(!state.isAnswering ? unavailable : state.managed.has(shipId) ? ok(undefined) : err({ code: 'FORBIDDEN', message: `You do not manage ${name}` }));
