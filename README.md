@@ -24,6 +24,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 | `EMAIL_WAKE_WINDOW_MINUTES` | `60` | At least 1. The email channel sends one person ship at most one wake per this many minutes; what waits meanwhile goes in the next wake (aeolus-fleet's wake a person design, W3, W10). Email wakes need `PAGASAE_URL` and `INSTALLATION_TOKEN`, which the gateway presents to pagasae's `/api/wakes` |
 | `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, `WEB_PUSH_SUBJECT` | unset | The gateway's push keys (VAPID, as `npx web-push generate-vapid-keys` makes them), which sign each web push wake, and the `mailto:` or `https:` URL a push service may contact about them. All three or none; unset, the overview offers no web push |
 | `WEB_PUSH_WAKE_WINDOW_MINUTES` | `10` | At least 1. Web push sends one person ship at most one wake per this many minutes; what waits meanwhile goes in the next wake (W3, W10) |
+| `OPENAI_APPS_CHALLENGE` | unset | The token OpenAI's plugin portal shows to prove the domain, served as plain text at `/.well-known/openai-apps-challenge` (chatgpt-plugin design, 7.5). Public by design; unset, there is no such address |
 | `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
 | Command | Does |
