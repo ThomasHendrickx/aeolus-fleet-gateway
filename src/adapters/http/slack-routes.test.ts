@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto';
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 
-import { aSlackApp, fakeSlackMessages, memorySlackApps, memorySlackLinks } from '../../../test/support/slack-fakes.js';
+import { aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks } from '../../../test/support/slack-fakes.js';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { err, ok } from '../../core/shared/result.js';
 import { createTakeSlackEvent } from '../../core/slack/take-slack-event.js';
@@ -27,13 +27,15 @@ async function aServer(completeLink: CompleteLink = () => Promise.resolve(err({ 
   const apps = memorySlackApps();
   await apps.save(aSlackApp({ appId: 'A02', shipId: 'shp_01m3tbfspe96yf1rnr4ank9r1n', name: 'release-notes', bot: { token: 'xoxb-2', userId: 'U02' } }));
   const slack = fakeSlackMessages();
+  const links = memorySlackLinks();
+  const events = memorySlackEvents();
   const server = Fastify();
   registerSlackRoutes(server, {
     completeInstall: () => Promise.resolve(err({ kind: 'INSTALL_REFUSED' as const, message: 'unused' })),
     completeLink,
-    takeSlackEvent: createTakeSlackEvent({ apps, links: memorySlackLinks(), slack: slack.messages, signatures: createSlackSignatures(), clock: { now: () => NOW }, linkPageUrl: 'https://gateway.acme.test/slack/link' }),
+    takeSlackEvent: createTakeSlackEvent({ apps, links, events, sendNow: () => undefined, slack: slack.messages, signatures: createSlackSignatures(), clock: { now: () => NOW }, linkPageUrl: 'https://gateway.acme.test/slack/link' }),
   });
-  return { server, apps, slack };
+  return { server, apps, slack, links, events };
 }
 
 describe("Slack's events door", () => {
@@ -57,7 +59,7 @@ describe("Slack's events door", () => {
 
   it('refuses an event not signed with the app\'s signing secret, 401, changing nothing', async () => {
     const { server, apps } = await aServer();
-    const body = JSON.stringify({ type: 'event_callback', api_app_id: 'A02', team_id: 'T0ACME', event: { type: 'app_uninstalled' } });
+    const body = JSON.stringify({ type: 'event_callback', api_app_id: 'A02', team_id: 'T0ACME', event_id: 'Ev00', event: { type: 'app_uninstalled' } });
 
     const answer = await server.inject({ method: 'POST', url: SLACK_EVENTS_PATH, headers: signed(body, 'another-secret'), payload: body });
 
@@ -73,6 +75,25 @@ describe("Slack's events door", () => {
 
     expect([first.statusCode, retry.statusCode]).toEqual([200, 200]);
     expect(slack.state.onlyTo.map(({ channel, user }) => ({ channel, user }))).toEqual([{ channel: 'D0MATHILDE', user: 'U0MATHILDE' }]);
+  });
+});
+
+describe("a linked person's message at the events door", () => {
+  it('is kept by its event id with its text, thread and files, and answered 200', async () => {
+    const { server, links, events } = await aServer();
+    await links.add(aSlackLink());
+    const body = JSON.stringify({
+      type: 'event_callback',
+      api_app_id: 'A02',
+      team_id: 'T0ACME',
+      event_id: 'Ev03',
+      event: { type: 'message', subtype: 'file_share', channel_type: 'im', channel: 'D0MATHILDE', user: 'U0MATHILDE', text: '*soon*?', ts: '1730019700.000200', thread_ts: '1730019600.000100', files: [{ id: 'F01', name: 'notes.pdf', permalink: 'https://acme.slack.com/files/F01' }] },
+    });
+
+    const answer = await server.inject({ method: 'POST', url: SLACK_EVENTS_PATH, headers: signed(body, 'signing-A02'), payload: body });
+
+    expect(answer.statusCode).toBe(200);
+    expect(events.held.map(({ eventId, ts, threadTs, markdown }) => ({ eventId, ts, threadTs, markdown }))).toEqual([{ eventId: 'Ev03', ts: '1730019700.000200', threadTs: '1730019600.000100', markdown: '**soon**?\n\n[notes.pdf](https://acme.slack.com/files/F01)' }]);
   });
 });
 

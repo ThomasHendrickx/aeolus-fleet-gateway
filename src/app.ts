@@ -103,6 +103,9 @@ import { createOutcomeWorker } from './outcome-worker.js';
 import { createPersonWaiters } from './person-waiters.js';
 import { createPingWorker } from './ping-worker.js';
 import { createSlackTokenWorker } from './slack-token-worker.js';
+import { createSlackEventWorker } from './slack-event-worker.js';
+import { createPrismaSlackEvents } from './adapters/prisma/slack-events.js';
+import { createSendSlackEvents } from './core/slack/send-slack-events.js';
 import { createSlackInstallSeals } from './adapters/crypto/slack-install-seals.js';
 import { createSlackLinkSeals } from './adapters/crypto/slack-link-seals.js';
 import { registerSlackRoutes, SLACK_EVENTS_PATH, SLACK_INSTALL_PATH, SLACK_LINK_PATH } from './adapters/http/slack-routes.js';
@@ -279,6 +282,9 @@ const POLL_MS = 2_000;
 
 /** How often the gateway rotates the Slack configuration tokens due, well within the hour before one ends (gateway scopes 9.1). */
 const SLACK_TOKEN_ROUND_MS = 10 * 60_000;
+
+/** How often the gateway sends the kept Slack messages core has not taken, as while core does not answer (gateway scopes 9.4 step 7). */
+const SLACK_EVENT_ROUND_MS = 5_000;
 
 /** How often the gateway expires due requests and tells outcomes still to tell (P5-1 a). */
 const OUTCOME_ROUND_MS = 60_000;
@@ -793,10 +799,18 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     startLink: createStartLink({ workspaces: slackWorkspaces, apps: slackApps, signIn: slackSignIn, states: slackLinkStates, crewPersonShip: person?.crewPersonShip ?? (() => Promise.resolve(err({ kind: 'noPersonShip' as const }))), clock, linkRedirectUrl }),
     unlinkSlack: createUnlinkSlack({ links: slackLinks }),
   };
+  const slackMessages = createSlackMessages({ apiUrl: slackApiUrl });
+  const slackEvents = createPrismaSlackEvents(prisma);
+  const slackSends = createSlackEventWorker({
+    send: createSendSlackEvents({ events: slackEvents, apps: slackApps, crews: personCrews, sender: door, slack: slackMessages, clock }),
+    sleep,
+    intervalMs: SLACK_EVENT_ROUND_MS,
+    log: server.log,
+  });
   registerSlackRoutes(server, {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
     completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl }),
-    takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, slack: createSlackMessages({ apiUrl: slackApiUrl }), signatures: createSlackSignatures(), clock, linkPageUrl: `${issuer}/slack/link` }),
+    takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl: `${issuer}/slack/link` }),
   });
   const rotateConfigurationTokens = createRotateConfigurationTokens({ workspaces: slackWorkspaces, takeAccessToken });
   const followExposedShips = createFollowExposedShips({ workspaces: slackWorkspaces, apps: slackApps, ships: slackShips, slack: slackTooling, takeAccessToken, addresses: slackAddresses });
@@ -927,6 +941,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       pings.start();
       personWaiters.start();
       slackTokens.start();
+      slackSends.start();
       return restored;
     },
     close: async () => {
@@ -934,6 +949,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       await pings.stop();
       await personWaiters.stop();
       await slackTokens.stop();
+      await slackSends.stop();
       await workers.stop();
       await server.close();
     },

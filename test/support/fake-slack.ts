@@ -25,6 +25,10 @@ export interface FakeSlack {
   signInAs(user: { userId: string; name: string; teamId?: string }): void;
   /** Each message only one person sees, as posted with a bot token. */
   postedOnlyTo: { botToken: string; form: Record<string, string> }[];
+  /** Each message posted in a conversation, with a bot token. */
+  posted: { botToken: string; form: Record<string, string> }[];
+  /** Each reaction added, with a bot token. */
+  reactions: { botToken: string; form: Record<string, string> }[];
   /** Answers the method 429 with this Retry-After, until cleared. */
   rateLimit(method: string, retryAfterSeconds: number | undefined): void;
   stop(): Promise<void>;
@@ -71,6 +75,8 @@ export async function startFakeSlack(): Promise<FakeSlack> {
   const signInCodes = new Map<string, { appId: string; userId: string; name: string; teamId: string }>();
   const userTokens = new Map<string, { userId: string; name: string; teamId: string }>();
   const postedOnlyTo = new Array<{ botToken: string; form: Record<string, string> }>();
+  const posted = new Array<{ botToken: string; form: Record<string, string> }>();
+  const reactions = new Array<{ botToken: string; form: Record<string, string> }>();
   let signingInAs = { userId: 'U0MATHILDE', name: 'mathilde', teamId: SLACK_TEAM.id };
   let rotations = 0;
   let base = '';
@@ -204,6 +210,23 @@ export async function startFakeSlack(): Promise<FakeSlack> {
         answer(response, { body: { ok: true, sub: user.userId, 'https://slack.com/user_id': user.userId, 'https://slack.com/team_id': user.teamId, name: user.name } });
         return;
       }
+      case 'chat.postMessage': {
+        if (!bearer.startsWith('xoxb-')) {
+          answer(response, { body: { ok: false, error: 'invalid_auth' } });
+          return;
+        }
+        posted.push({ botToken: bearer, form: Object.fromEntries(form) });
+        answer(response, { body: { ok: true, channel: form.get('channel'), ts: `1730019600.${String(posted.length).padStart(6, '0')}` } });
+        return;
+      }
+      case 'reactions.add': {
+        const isThere = reactions.some((each) => each.form.channel === form.get('channel') && each.form.timestamp === form.get('timestamp') && each.form.name === form.get('name'));
+        if (!isThere) {
+          reactions.push({ botToken: bearer, form: Object.fromEntries(form) });
+        }
+        answer(response, { body: isThere ? { ok: false, error: 'already_reacted' } : { ok: true } });
+        return;
+      }
       case 'chat.postEphemeral': {
         if (!bearer.startsWith('xoxb-')) {
           answer(response, { body: { ok: false, error: 'invalid_auth' } });
@@ -232,6 +255,8 @@ export async function startFakeSlack(): Promise<FakeSlack> {
       signingInAs = { teamId: SLACK_TEAM.id, ...user };
     },
     postedOnlyTo,
+    posted,
+    reactions,
     apps,
     get rotations() {
       return rotations;

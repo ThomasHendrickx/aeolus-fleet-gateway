@@ -39,4 +39,18 @@ describe("a bot's message only one person sees", () => {
 
     expect(slack.postedOnlyTo[0]?.form).toEqual({ channel: 'D0MATHILDE', user: 'U0MATHILDE', text: 'Your account cannot message the fleet now' });
   });
+
+  it("posts in a message's thread", async () => {
+    await createSlackMessages({ apiUrl: slack.apiUrl }).postInThread('xoxb-A02', { channel: 'D0MATHILDE', threadTs: '1730019600.000100', text: 'You may not message release-notes' });
+
+    expect(slack.posted).toEqual([{ botToken: 'xoxb-A02', form: { channel: 'D0MATHILDE', thread_ts: '1730019600.000100', text: 'You may not message release-notes' } }]);
+  });
+
+  it('reacts to a message, a reaction already there no refusal', async () => {
+    const messages = createSlackMessages({ apiUrl: slack.apiUrl });
+    const reaction = { channel: 'D0MATHILDE', ts: '1730019600.000100', name: 'white_check_mark' };
+
+    await expect(Promise.all([messages.react('xoxb-A02', reaction), messages.react('xoxb-A02', reaction)])).resolves.toEqual([{ isOk: true, value: undefined }, { isOk: true, value: undefined }]);
+    expect(slack.reactions).toEqual([{ botToken: 'xoxb-A02', form: { channel: 'D0MATHILDE', timestamp: '1730019600.000100', name: 'white_check_mark' } }]);
+  });
 });

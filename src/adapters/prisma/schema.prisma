@@ -526,3 +526,23 @@ model SlackLink {
   @@unique([fleetId, accountId])
   @@map("slack_links")
 }
+
+/// A linked person's Slack message, kept by Slack's event id until core takes it (gateway scopes 9.4 step 3); then only its id, for an hour.
+model SlackEvent {
+  fleetId      String    @map("fleet_id")
+  eventId      String    @map("event_id")
+  appId        String    @map("app_id")
+  shipId       String    @map("ship_id")
+  personShipId String    @map("person_ship_id")
+  channel      String
+  ts           String
+  threadTs     String?   @map("thread_ts")
+  /// What is sent to the fleet; emptied once core took it.
+  markdown     String
+  receivedAt   DateTime  @map("received_at") @db.Timestamptz(3)
+  takenAt      DateTime? @map("taken_at") @db.Timestamptz(3)
+
+  @@id([fleetId, eventId])
+  @@index([takenAt, receivedAt])
+  @@map("slack_events")
+}

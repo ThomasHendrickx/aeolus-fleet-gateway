@@ -42,6 +42,7 @@ const eventCallbackSchema = z.object({
   type: z.literal('event_callback'),
   api_app_id: z.string(),
   team_id: z.string(),
+  event_id: z.string(),
   event: z.object({
     type: z.string(),
     user: z.string().optional(),
@@ -49,6 +50,10 @@ const eventCallbackSchema = z.object({
     channel_type: z.string().optional(),
     subtype: z.string().optional(),
     bot_id: z.string().optional(),
+    text: z.string().optional(),
+    ts: z.string().optional(),
+    thread_ts: z.string().optional(),
+    files: z.array(z.object({ name: z.string(), permalink: z.string() })).optional(),
   }),
 });
 
@@ -125,10 +130,23 @@ export function registerSlackRoutes(server: FastifyInstance, deps: { completeIns
       if (!event.success) {
         return reply.code(HTTP_BAD_REQUEST).send();
       }
-      const { api_app_id: appId, team_id: teamId, event: fields } = event.data;
+      const { api_app_id: appId, team_id: teamId, event_id: eventId, event: fields } = event.data;
       const taken = await deps.takeSlackEvent({
         appId,
-        event: { type: fields.type, teamId, userId: fields.user ?? null, channel: fields.channel ?? null, channelType: fields.channel_type ?? null, subtype: fields.subtype ?? null, botId: fields.bot_id ?? null },
+        event: {
+          eventId,
+          type: fields.type,
+          teamId,
+          userId: fields.user ?? null,
+          channel: fields.channel ?? null,
+          channelType: fields.channel_type ?? null,
+          subtype: fields.subtype ?? null,
+          botId: fields.bot_id ?? null,
+          text: fields.text ?? '',
+          ts: fields.ts ?? null,
+          threadTs: fields.thread_ts ?? null,
+          files: fields.files ?? [],
+        },
         isRetry: request.headers['x-slack-retry-num'] !== undefined,
         body,
         timestamp: headerOf(request.headers['x-slack-request-timestamp']),

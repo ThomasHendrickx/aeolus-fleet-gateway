@@ -1,7 +1,8 @@
 /**
  * A bot's posts in Slack, with its bot token: a message only one person
  * sees in a conversation (chat.postEphemeral), its text as a section and a
- * button that opens an address, if any.
+ * button that opens an address, if any; a message in a thread
+ * (chat.postMessage); and a reaction (reactions.add).
  */
 import { z } from 'zod';
 
@@ -10,6 +11,9 @@ import type { SlackMessages } from '../../core/slack/ports.js';
 import { createSlackCall } from './slack-call.js';
 
 const postedSchema = z.object({ ok: z.literal(true) });
+
+/** Slack's refusal of a reaction the message carries already: what was asked holds. */
+const ALREADY_REACTED = 'already_reacted';
 
 export function createSlackMessages(options: { apiUrl: string }): SlackMessages {
   const call = createSlackCall(options.apiUrl);
@@ -24,6 +28,14 @@ export function createSlackMessages(options: { apiUrl: string }): SlackMessages 
       }
       const posted = await call({ method: 'chat.postEphemeral', form, token: botToken }, postedSchema);
       return posted.isOk ? ok(undefined) : posted;
+    },
+    postInThread: async (botToken, { channel, threadTs, text }) => {
+      const posted = await call({ method: 'chat.postMessage', form: { channel, thread_ts: threadTs, text }, token: botToken }, postedSchema);
+      return posted.isOk ? ok(undefined) : posted;
+    },
+    react: async (botToken, { channel, ts, name }) => {
+      const reacted = await call({ method: 'reactions.add', form: { channel, timestamp: ts, name }, token: botToken }, postedSchema);
+      return reacted.isOk || (reacted.error.kind === 'refused' && reacted.error.error === ALREADY_REACTED) ? ok(undefined) : reacted;
     },
   };
 }
