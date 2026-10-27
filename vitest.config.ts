@@ -1,7 +1,7 @@
 import { configDefaults, defineConfig } from 'vitest/config';
 
 /** The integration files that start the gateway's bin, and with it its web app's development server. */
-const GATEWAY_BIN_FILES = ['test/start.integration.test.ts', 'test/parties-pages.integration.test.ts'];
+const GATEWAY_BIN_FILES = ['test/start.integration.test.ts', 'test/parties-pages.integration.test.ts', 'test/slack-pages.integration.test.ts'];
 
 export default defineConfig({
   test: {
