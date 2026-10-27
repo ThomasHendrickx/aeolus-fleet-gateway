@@ -44,7 +44,7 @@ describe("a fleet's configuration access token", () => {
 
     await expect(takeAccessToken()).resolves.toEqual({
       isOk: false,
-      error: { kind: 'SLACK_TOKEN_REFUSED', message: 'Slack refused the configuration token (invalid_refresh_token). Connect again to make or change bots; bots already installed keep working' },
+      error: { kind: 'SLACK_TOKEN_REFUSED', message: 'Slack refused the configuration token. Connect again to make or change bots; bots already installed keep working' },
     });
     await expect(takeAccessToken()).resolves.toMatchObject({ isOk: false, error: { kind: 'SLACK_TOKEN_REFUSED' } });
     expect({ isRefused: workspaces.held.get(FLEET_ID)?.isTokenRefused, rotations: tooling.state.rotations }).toEqual({ isRefused: true, rotations: 0 });

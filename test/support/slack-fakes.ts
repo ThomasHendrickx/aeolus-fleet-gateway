@@ -1,4 +1,5 @@
-import type { FleetId } from '@aeolus-fleet/common';
+import { idSchema, type FleetId } from '@aeolus-fleet/common';
+import { z } from 'zod';
 
 import type { InstallState, InstallStates, MadeApp, SlackApps, SlackRefusal, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
 import type { SlackApp, SlackAppDescription } from '../../src/core/slack/slack-app.js';
@@ -16,6 +17,7 @@ const CONFIGURATION_TOKEN_MS = 12 * 60 * 60 * 1000;
 export function fakeSlackTooling(options: { teamId?: string; teamName?: string; now?: () => Date } = {}) {
   const teamId = options.teamId ?? 'T0ACME';
   const now = options.now ?? (() => new Date('2026-10-27T09:00:00.000Z'));
+  const noRefusal = (): SlackRefusal | undefined => undefined;
   const state = {
     /** Refresh tokens Slack takes, each once. */
     refreshTokens: new Set<string>(['xoxe-1-first']),
@@ -26,9 +28,9 @@ export function fakeSlackTooling(options: { teamId?: string; teamName?: string; 
     /** Codes Slack's install screen sent back, each for its app. */
     codes: new Map<string, string>(),
     /** What Slack answers every call with instead, while set. */
-    refusal: undefined as SlackRefusal | undefined,
+    refusal: noRefusal(),
     /** What Slack answers making an app with instead, while set. */
-    makeRefusal: undefined as SlackRefusal | undefined,
+    makeRefusal: noRefusal(),
   };
   const issued = (count: number) => ({ accessToken: `xoxe.xoxp-${String(count)}`, refreshToken: `xoxe-1-${String(count)}`, expiresAt: new Date(now().getTime() + CONFIGURATION_TOKEN_MS) });
   const slack: SlackTooling = {
@@ -126,16 +128,13 @@ export function memorySlackApps(): SlackApps & { held: SlackApp[] } {
 
 /** Install states as readable text: a test reads what the gateway sealed. */
 export function plainInstallStates(): InstallStates {
+  const sealedSchema = z.object({ fleetId: idSchema('fleet'), appId: z.string(), expiresAt: z.coerce.date() });
   return {
-    seal: (state) => JSON.stringify({ ...state, expiresAt: state.expiresAt.toISOString() }),
+    seal: (state) => JSON.stringify(state),
     open: (sealed) => {
       try {
-        const parsed: unknown = JSON.parse(sealed);
-        if (typeof parsed !== 'object' || parsed === null || !('fleetId' in parsed) || !('appId' in parsed) || !('expiresAt' in parsed)) {
-          return undefined;
-        }
-        const { fleetId, appId, expiresAt } = parsed;
-        return typeof fleetId === 'string' && fleetId.startsWith('flt_') && typeof appId === 'string' && typeof expiresAt === 'string' ? ({ fleetId: fleetId as FleetId, appId, expiresAt: new Date(expiresAt) } satisfies InstallState) : undefined;
+        const opened: InstallState | undefined = sealedSchema.safeParse(JSON.parse(sealed)).data;
+        return opened;
       } catch {
         return undefined;
       }
