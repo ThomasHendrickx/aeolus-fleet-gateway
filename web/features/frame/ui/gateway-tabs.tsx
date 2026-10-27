@@ -9,6 +9,7 @@ const TABS = [
   { key: 'overview', label: 'Overview', path: '/overview' },
   { key: 'outside-parties', label: 'Outside parties', path: '/outside-parties' },
   { key: 'parties', label: 'Parties', path: '/parties' },
+  { key: 'slack', label: 'Slack', path: '/slack' },
 ] as const;
 
 /** Whether the page at this path is the tab's page or one of its own. */
@@ -16,7 +17,7 @@ function isTabOf(pathname: string, path: string): boolean {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
 
-/** The header's tabs: the overview, the outside parties and the parties of the fleet in view, the page shown current. */
+/** The header's tabs: the overview, the outside parties, the parties and Slack of the fleet in view, the page shown current. */
 export function GatewayTabs({ fleetId }: { fleetId: string }) {
   const pathname = usePathname();
   return (
