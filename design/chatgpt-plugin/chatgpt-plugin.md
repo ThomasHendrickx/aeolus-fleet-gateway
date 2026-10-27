@@ -233,43 +233,44 @@ flowchart TD
 
 The reviewer takes the happy path with J = yes and a provider password.
 
-## 8. What OpenAI shows to people (drafts for Thomas to approve)
+## 8. What OpenAI shows to people (approved by Thomas)
 
-No translations. Nothing here is built until Thomas approves it. No em dashes.
+The texts below are Thomas's own listing, taken word for word. No translations. No em dashes.
 
 **Display name** (limit 30): `Aeolus`
 
-**Short description** (limit 30, 27 used): `Your Aeolus inbox and fleet`
+**Short description** (limit 30, 30 used): `Stay in sync with your AI team`
 
-**Category:** Communication
+**Category:** Productivity
 
-**Developer name:** set by OpenAI from the verified identity (Thomas Hendrickx, if Q5 stands).
+**Developer:** Thomas Hendrickx (OpenAI sets it from the verified identity, if Q5 stands).
+
+**Long description** (limit 4000), exactly:
+
+> Your AI team is working. Stay part of the conversation.
+>
+> AI agents can work across different tools, but sometimes they need your input. Aeolus keeps you connected to that work, bringing messages, questions and decisions into ChatGPT.
+>
+> Whether you are checking progress, answering a question or coordinating with your team, Aeolus helps you stay involved without switching between different tools.
+>
+> With Aeolus, you can:
+> - Know what needs your attention. See incoming messages, questions and updates from your team and AI agents.
+> - Make decisions and keep work moving. Answer questions, choose from suggested options or reply in your own words.
+> - Stay connected. Send messages to colleagues and AI agents across your organisation.
+> - Take part in the conversation. Participate in Aeolus meetings you are part of, directly from ChatGPT.
+> - Keep your inbox organised. Mark messages as handled when you are done.
+>
+> Getting started
+> Sign in with your Aeolus account to connect ChatGPT to your organisation's fleet. Your existing permissions determine what you can access and do.
+>
+> Messages remain available in Aeolus until you check them. ChatGPT does not proactively notify you when new messages arrive.
 
 **Starter prompts** (up to 3, each at most 128):
-1. `What is waiting in my Aeolus inbox?`
-2. `Who can I send a message to in Aeolus?`
-3. `Show me the meeting I am in on Aeolus.`
+1. `What needs my attention in Aeolus?`
+2. `Help me answer the questions waiting for me.`
+3. `Who can I message through Aeolus?`
 
-**Long description** (limit 4000, about 1100 used):
-
-> Aeolus carries messages between the people and the AI agents of an organisation, and no message is lost. This plugin connects ChatGPT to your own Aeolus account.
->
-> Sign in with the account you use for Aeolus. Then ChatGPT can:
-> - show what waits in your inbox, who sent it and when
-> - open a message and read it
-> - answer a question with one of its options, or with your own words
-> - mark a message as dealt with
-> - show who you may send to, and send a message to one of them
-> - show a meeting you take part in, and ask for the mic and speak in it
-> - ask the approvers of your fleet to add an outside MCP server
->
-> Good to know:
-> - You see and do only what your fleet allows your account. ChatGPT adds no rights.
-> - A message waits for you until you write in a chat. ChatGPT does not wake you when one arrives.
-> - A message is at most 64 KB.
-> - You need an Aeolus account in a fleet whose administrator has switched on the gateway.
->
-> Aeolus is run by Thomas Hendrickx. Questions and problems: see the support page.
+**Release notes for the first submission** (shown to reviewers): `Initial release of Aeolus for ChatGPT. Connect to your Aeolus account to view and respond to messages, answer questions from AI agents, communicate with your team and participate in meetings.`
 
 **The four pages** (HTTPS, same publisher):
 
@@ -280,17 +281,22 @@ No translations. Nothing here is built until Thomas approves it. No em dashes.
 | Terms of service | `https://pagasae.aeolus-fleet.dev/terms` | exists; the same |
 | Support | `https://aeolus-fleet.dev/support` | new, draft below |
 
-**Support page draft** (`aeolus-site/src/pages/support.astro`, in the site's tone):
+**Support page draft** (`aeolus-site/src/pages/support.astro`, in the site's tone). It states no response time. The technical limits live here, not in the listing.
 
 > # Support
 >
 > Help with Aeolus, including Aeolus in ChatGPT.
 >
 > ## Write to me
-> Email [thomas@aeolus-fleet.dev](mailto:thomas@aeolus-fleet.dev). Aeolus is run by me, Thomas Hendrickx, a private individual in Belgium. I answer within a month, as the privacy notice says.
+> Email [thomas@aeolus-fleet.dev](mailto:thomas@aeolus-fleet.dev). Aeolus is run by me, Thomas Hendrickx, a private individual in Belgium.
 >
 > ## When you cannot sign in
-> Sign in with the account you use for Aeolus. If your organisation connected a company sign-in, use that; otherwise Aeolus mails you a link that works for 10 minutes. If the plugin says your fleet is not served, ask the administrator of your fleet to switch the gateway on.
+> Sign in with the account you use for Aeolus. If your organisation connected a company sign-in, use that; otherwise Aeolus mails you a link that works for 10 minutes.
+>
+> ## Limits
+> - A message is at most 64 KB.
+> - Asking for an outside MCP server only sends the request to the approvers of your fleet.
+> - Your fleet's administrator must have switched the gateway on. If the plugin says your fleet is not served, ask them.
 >
 > ## What to send
 > The address you sign in with, what you asked ChatGPT, and what it answered. Never send a password.
@@ -300,8 +306,6 @@ No translations. Nothing here is built until Thomas approves it. No em dashes.
 >
 > ## More
 > [Privacy notice](https://pagasae.aeolus-fleet.dev/privacy) · [Terms](https://pagasae.aeolus-fleet.dev/terms)
-
-**Release notes for the first submission** (shown to reviewers): `First release. Connects ChatGPT to a person's Aeolus account: inbox, who they may send to, answering, meetings and asking for an outside MCP server.`
 
 **Commerce answer:** none. The plugin sells nothing.
 
@@ -545,7 +549,7 @@ Five that work, run with the reviewer account first.
 ```
 Scenario: positive 1, read the inbox
   Given the reviewer's inbox holds a question and the "Weekly digest"
-  When the reviewer asks "What is waiting in my Aeolus inbox?"
+  When the reviewer asks "What needs my attention in Aeolus?"
   Then aeolus_inbox is called
   And the answer names both deliveries with who sent them and when
 
@@ -656,12 +660,11 @@ The scenarios answer the four questions as follows: how big, the two "how big" s
 1. **Verify an identity in the OpenAI platform organisation that submits.** Needs: a government ID for individual verification; an organisation owner; the `Apps Management Write` role for anyone else who uploads. Verify before the first upload.
 2. **Ask OpenAI support one question:** can the developer identity of a published plugin change from individual to business, and does it cost a new review or listing? Also: does a directory plugin need workspace-admin approval in enterprise workspaces? Needs: the platform organisation's support channel; the answers stay out of the repo until they change the design.
 3. **Build the demo organisation:** a test Entra tenant (or Okta or Google) with security defaults off, a proved domain and one reviewer user with a password; connect it in a pagasae demo organisation with a fallback account of yours; make the demo fleet; ask the installation admin to switch the gateway on for it; give the group the right; make the ships `demo-planner` and `demo-notes` and the "Demo standup" meeting; set the daily refill schedule. Needs: the provider's admin rights; a domain you own; the console. Check first that a schedule can send to a person ship; if not, tell me and the refill changes.
-4. **Put the domain challenge token in the hosted deployment** as `OPENAI_APPS_CHALLENGE`. Needs: the token the portal shows when you connect the server; aeolus-fleet-infra. The portal shows it only during the upload, so this is done during step 8.
-5. **Approve the words in section 8,** or change them: name, short and long description, category, starter prompts, release notes.
-6. **Write and publish the support page** on the site, and decide whether the privacy notice and terms need a line about ChatGPT. Needs: the site repository; your decision on wording.
-7. **Choose the logo:** a square image, at least 48 px, PNG, JPEG, WebP or SVG (the site's `favicon.svg` is one candidate), and brand colours if the portal asks. Needs: the image file.
-8. **Upload and submit in the portal:** the ZIP from `npm run plugin:build`; connect `https://gateway.aeolus-fleet.dev/plugin/mcp` and complete Verify Domain; enter the reviewer address, account, password and instructions under Review details; the commerce answer (none); the policy attestations; the age statement (OpenAI asks for a service suitable for ages 13 to 17; Aeolus serves staff of organisations); the category; the four URLs. Needs: items 1 to 7 done; the portal.
-9. **Record the demo video** of the five positive cases with the reviewer account, in a place reviewers can open. Needs: the demo fleet and a screen recording.
-10. **Publish after approval,** and appeal a rejection by replying to OpenAI's email. Needs: the approval email.
-11. **After a release that changes a tool:** press Rescan, and approve or appeal a held change. After a release that changes the package: upload the ZIP attached to the release. Needs: the portal.
-12. **Approve the scenarios in section 9.** The build is held to them.
+4. **Put the domain challenge token in the hosted deployment** as `OPENAI_APPS_CHALLENGE`. Needs: the token the portal shows when you connect the server; aeolus-fleet-infra. The portal shows it only during the upload, so this is done during step 7.
+5. **Write and publish the support page** on the site, and decide whether the privacy notice and terms need a line about ChatGPT. Needs: the site repository; your decision on wording.
+6. **Choose the logo:** a square image, at least 48 px, PNG, JPEG, WebP or SVG (the site's `favicon.svg` is one candidate), and brand colours if the portal asks. Needs: the image file.
+7. **Upload and submit in the portal:** the ZIP from `npm run plugin:build`; connect `https://gateway.aeolus-fleet.dev/plugin/mcp` and complete Verify Domain; enter the reviewer address, account, password and instructions under Review details; the commerce answer (none); the policy attestations; the age statement (OpenAI asks for a service suitable for ages 13 to 17; Aeolus serves staff of organisations); the category; the four URLs. Needs: items 1 to 6 done; the portal.
+8. **Record the demo video** of the five positive cases with the reviewer account, in a place reviewers can open. Needs: the demo fleet and a screen recording.
+9. **Publish after approval,** and appeal a rejection by replying to OpenAI's email. Needs: the approval email.
+10. **After a release that changes a tool:** press Rescan, and approve or appeal a held change. After a release that changes the package: upload the ZIP attached to the release. Needs: the portal.
+11. **Approve the scenarios in section 9.** The build is held to them.
