@@ -43,7 +43,7 @@ describe("Slack workspaces in the gateway's vault", () => {
     const seen = new Array<string>();
     const rotate = (next: string) => (workspace: ReturnType<typeof aSlackWorkspace>) => {
       seen.push(workspace.token.refreshToken);
-      return new Promise<ReturnType<typeof aSlackWorkspace>>((resolve) => setTimeout(() => resolve({ ...workspace, token: { ...workspace.token, refreshToken: next } }), 50));
+      return new Promise<ReturnType<typeof aSlackWorkspace>>((resolve) => setTimeout(() => { resolve({ ...workspace, token: { ...workspace.token, refreshToken: next } }); }, 50));
     };
 
     await Promise.all([workspaces.change(ACME, rotate('xoxe-1-second')), workspaces.change(ACME, rotate('xoxe-1-third'))]);

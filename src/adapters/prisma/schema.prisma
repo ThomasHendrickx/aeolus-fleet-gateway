@@ -469,3 +469,38 @@ model WebPushSubscription {
   @@id([fleetId, shipId, endpoint])
   @@map("web_push_subscriptions")
 }
+
+/// A fleet's Slack workspace (gateway scopes 9.1): one per fleet, with Slack's app configuration token, which the gateway rotates before its 12 hours end.
+model SlackWorkspace {
+  fleetId            String   @id @map("fleet_id")
+  teamId             String   @map("team_id")
+  /// Known once Slack named the workspace, at the gateway's bot's install.
+  teamName           String?  @map("team_name")
+  connectedByShipId  String   @map("connected_by_ship_id")
+  connectedByName    String   @map("connected_by_name")
+  connectedAt        DateTime @map("connected_at") @db.Timestamptz(3)
+  configAccessToken  String   @map("config_access_token")
+  /// Single use: each rotation spends it for the next.
+  configRefreshToken String   @map("config_refresh_token")
+  configExpiresAt    DateTime @map("config_expires_at") @db.Timestamptz(3)
+  isConfigRefused    Boolean  @map("is_config_refused")
+
+  @@map("slack_workspaces")
+}
+
+/// A Slack app the gateway made in a fleet's workspace, with its secrets, and its bot token once installed; no ship for the gateway's own bot.
+model SlackApp {
+  fleetId       String   @map("fleet_id")
+  appId         String   @map("app_id")
+  shipId        String?  @map("ship_id")
+  clientId      String   @map("client_id")
+  clientSecret  String   @map("client_secret")
+  signingSecret String   @map("signing_secret")
+  installUrl    String   @map("install_url")
+  madeAt        DateTime @map("made_at") @db.Timestamptz(3)
+  botToken      String?  @map("bot_token")
+  botUserId     String?  @map("bot_user_id")
+
+  @@id([fleetId, appId])
+  @@map("slack_apps")
+}
