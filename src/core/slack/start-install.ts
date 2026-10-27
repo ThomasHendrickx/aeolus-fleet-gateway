@@ -35,6 +35,7 @@ export function createStartInstall(deps: {
   credentialOf: CredentialOf;
   clock: Clock;
   installRedirectUrl: string;
+  linkRedirectUrl: string;
 }): StartInstall {
   return async ({ actor, as, bot: asked }) => {
     if (!actor.scopes.includes(SLACK_SCOPE)) {

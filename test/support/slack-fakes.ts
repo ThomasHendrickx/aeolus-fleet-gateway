@@ -278,7 +278,7 @@ export function memorySlackLinks(): SlackLinks & { held: SlackLink[] } {
       held.splice(0, held.length, ...without(fleetId, accountId));
       return Promise.resolve();
     },
-    stop: (fleetId, accountId, at) => {
+    stop: (fleetId, { accountId, at }) => {
       held.splice(0, held.length, ...held.map((link) => (link.fleetId === fleetId && link.accountId === accountId && link.stoppedAt === null ? { ...link, stoppedAt: at } : link)));
       return Promise.resolve();
     },

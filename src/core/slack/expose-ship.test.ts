@@ -58,7 +58,8 @@ describe('exposing a ship as a Slack bot', () => {
         name: 'release-notes',
         description: 'Writes the release notes of each version',
         botScopes: ['chat:write', 'im:history', 'app_mentions:read', 'reactions:write'],
-        redirectUrl: ADDRESSES.installRedirectUrl,
+        userScopes: [],
+        redirectUrls: [ADDRESSES.installRedirectUrl],
         events: { url: ADDRESSES.eventsUrl, botEvents: ['message.im', 'app_mention', 'app_uninstalled', 'tokens_revoked'] },
       },
     ]);

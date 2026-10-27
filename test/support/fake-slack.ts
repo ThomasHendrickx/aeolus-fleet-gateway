@@ -4,8 +4,10 @@
  * configuration refresh token is good once, and turns into the next pair;
  * a made app's install screen (/oauth/v2/authorize) sends the person
  * straight back to the app's redirect address with a code, as when they
- * press Allow; the code is good once for that app's bot token. The test
- * refuses tokens, rate limits a method, or reads what was asked.
+ * press Allow; the code is good once for that app's bot token. Sign in with
+ * Slack (/openid/connect/authorize) sends the person back the same way, as
+ * the Slack user the test signs in as. The test refuses tokens, rate limits
+ * a method, or reads what was asked and what was posted.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
@@ -19,6 +21,10 @@ export interface FakeSlack {
   apps: Map<string, { manifest: unknown; isRemoved: boolean }>;
   /** Each rotation Slack answered, in order. */
   rotations: number;
+  /** Who Sign in with Slack signs in as next, in the workspace given (Slack's own unless named). */
+  signInAs(user: { userId: string; name: string; teamId?: string }): void;
+  /** Each message only one person sees, as posted with a bot token. */
+  postedOnlyTo: { botToken: string; form: Record<string, string> }[];
   /** Answers the method 429 with this Retry-After, until cleared. */
   rateLimit(method: string, retryAfterSeconds: number | undefined): void;
   stop(): Promise<void>;
@@ -39,17 +45,21 @@ function answer(response: ServerResponse, reply: { body: unknown; status?: numbe
   response.writeHead(reply.status ?? 200, { 'content-type': 'application/json', ...reply.headers }).end(JSON.stringify(reply.body));
 }
 
-function redirectUrlOf(manifest: unknown): string | undefined {
+function redirectUrlsOf(manifest: unknown): string[] {
   if (typeof manifest !== 'object' || manifest === null || !('oauth_config' in manifest)) {
-    return undefined;
+    return [];
   }
   const { oauth_config: oauthConfig } = manifest;
   if (typeof oauthConfig !== 'object' || oauthConfig === null || !('redirect_urls' in oauthConfig) || !Array.isArray(oauthConfig.redirect_urls)) {
-    return undefined;
+    return [];
   }
   const urls: unknown[] = oauthConfig.redirect_urls;
-  const first = urls[0];
-  return typeof first === 'string' ? first : undefined;
+  return urls.filter((url) => typeof url === 'string');
+}
+
+/** Where an install goes back: the app's first redirect address. */
+function redirectUrlOf(manifest: unknown): string | undefined {
+  return redirectUrlsOf(manifest)[0];
 }
 
 export async function startFakeSlack(): Promise<FakeSlack> {
@@ -58,6 +68,10 @@ export async function startFakeSlack(): Promise<FakeSlack> {
   const apps = new Map<string, { manifest: unknown; isRemoved: boolean }>();
   const codes = new Map<string, string>();
   const rateLimits = new Map<string, number>();
+  const signInCodes = new Map<string, { appId: string; userId: string; name: string; teamId: string }>();
+  const userTokens = new Map<string, { userId: string; name: string; teamId: string }>();
+  const postedOnlyTo = new Array<{ botToken: string; form: Record<string, string> }>();
+  let signingInAs = { userId: 'U0MATHILDE', name: 'mathilde', teamId: SLACK_TEAM.id };
   let rotations = 0;
   let base = '';
 
@@ -73,6 +87,22 @@ export async function startFakeSlack(): Promise<FakeSlack> {
       }
       const code = `code-${appId}-${String(codes.size + 1)}`;
       codes.set(code, appId);
+      const back = new URL(redirectUrl);
+      back.searchParams.set('code', code);
+      back.searchParams.set('state', url.searchParams.get('state') ?? '');
+      response.writeHead(302, { location: back.toString() }).end();
+      return;
+    }
+    if (url.pathname === '/openid/connect/authorize') {
+      const appId = url.searchParams.get('client_id')?.replace(/^client-/, '') ?? '';
+      const app = apps.get(appId);
+      const redirectUrl = url.searchParams.get('redirect_uri') ?? '';
+      if (app === undefined || !redirectUrlsOf(app.manifest).includes(redirectUrl) || url.searchParams.get('scope') !== 'openid profile') {
+        response.writeHead(400).end();
+        return;
+      }
+      const code = `signin-${appId}-${String(signInCodes.size + 1)}`;
+      signInCodes.set(code, { appId, ...signingInAs });
       const back = new URL(redirectUrl);
       back.searchParams.set('code', code);
       back.searchParams.set('state', url.searchParams.get('state') ?? '');
@@ -152,6 +182,37 @@ export async function startFakeSlack(): Promise<FakeSlack> {
         answer(response, { body: { ok: true, access_token: `xoxb-${appId}`, token_type: 'bot', bot_user_id: `U0${appId}`, app_id: appId, team: SLACK_TEAM } });
         return;
       }
+      case 'openid.connect.token': {
+        const code = form.get('code') ?? '';
+        const signedIn = signInCodes.get(code);
+        if (signedIn === undefined || form.get('client_id') !== `client-${signedIn.appId}` || form.get('client_secret') !== `secret-${signedIn.appId}`) {
+          answer(response, { body: { ok: false, error: 'invalid_code' } });
+          return;
+        }
+        signInCodes.delete(code);
+        const token = `xoxp-${signedIn.userId}`;
+        userTokens.set(token, signedIn);
+        answer(response, { body: { ok: true, access_token: token, token_type: 'Bearer', id_token: 'unused' } });
+        return;
+      }
+      case 'openid.connect.userInfo': {
+        const user = userTokens.get(bearer);
+        if (user === undefined) {
+          answer(response, { body: { ok: false, error: 'invalid_auth' } });
+          return;
+        }
+        answer(response, { body: { ok: true, sub: user.userId, 'https://slack.com/user_id': user.userId, 'https://slack.com/team_id': user.teamId, name: user.name } });
+        return;
+      }
+      case 'chat.postEphemeral': {
+        if (!bearer.startsWith('xoxb-')) {
+          answer(response, { body: { ok: false, error: 'invalid_auth' } });
+          return;
+        }
+        postedOnlyTo.push({ botToken: bearer, form: Object.fromEntries(form) });
+        answer(response, { body: { ok: true, message_ts: '1730019600.000100' } });
+        return;
+      }
       default:
         answer(response, { body: { ok: false, error: 'unknown_method' }, status: 404 });
     }
@@ -167,6 +228,10 @@ export async function startFakeSlack(): Promise<FakeSlack> {
     url: base,
     apiUrl: `${base}/api`,
     issueRefreshToken: (refreshToken) => refreshTokens.add(refreshToken),
+    signInAs: (user) => {
+      signingInAs = { teamId: SLACK_TEAM.id, ...user };
+    },
+    postedOnlyTo,
     apps,
     get rotations() {
       return rotations;

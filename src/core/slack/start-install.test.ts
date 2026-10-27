@@ -46,6 +46,7 @@ function startInstall(actor: Actor = CHARLOTTE, appId?: string) {
     credentialOf: (_actor, sent) => Promise.resolve(ok(sent)),
     clock,
     installRedirectUrl: REDIRECT_URL,
+    linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link',
   })({ actor, as: { cookie: 'aeolus_account_session=charlotte' }, bot: appId === undefined ? { kind: 'gateway', fleetName: 'Acme' } : { kind: 'ship', appId } });
 }
 

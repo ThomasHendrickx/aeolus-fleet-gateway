@@ -24,7 +24,7 @@ import { err, ok } from '../../core/shared/result.js';
 import { createFocusPage } from '../../core/people/focus-page.js';
 import { memoryFocusedPages } from '../../../test/support/people-fakes.js';
 import { createChangeHub, type ChangeHub } from '../http/live.js';
-import { fakeProxyShipKinds, fakeShipNames, fakeSlackShips, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces, plainInstallStates } from '../../../test/support/slack-fakes.js';
+import { fakeProxyShipKinds, fakeShipNames, fakeSlackShips, fakeSlackSignIn, fakeSlackTooling, memorySlackApps, memorySlackLinks, memorySlackWorkspaces, plainInstallStates, plainLinkStates } from '../../../test/support/slack-fakes.js';
 import type { CredentialOf } from '../../core/actors/credential-of.js';
 import { createExposeShip } from '../../core/slack/expose-ship.js';
 import { createListExposable } from '../../core/slack/list-exposable.js';
@@ -32,6 +32,9 @@ import { createRemoveBot } from '../../core/slack/remove-bot.js';
 import { createConnectSlack } from '../../core/slack/connect-slack.js';
 import { createDisconnectSlack } from '../../core/slack/disconnect-slack.js';
 import { createReadSlack } from '../../core/slack/read-slack.js';
+import { createReadSlackLink } from '../../core/slack/read-slack-link.js';
+import { createStartLink } from '../../core/slack/start-link.js';
+import { createUnlinkSlack } from '../../core/slack/unlink-slack.js';
 import { createStartInstall } from '../../core/slack/start-install.js';
 import { createTakeAccessToken } from '../../core/slack/take-access-token.js';
 import { gatewayRouter, type Context } from './router.js';
@@ -216,6 +219,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     readFleet: unused,
     deleteFleet: unused,
     endSignIns: unused,
+    stopSlackLink: unused,
     readConnection: unused,
     connect: unused,
     approveParty: (input) => {
@@ -367,14 +371,18 @@ function slackOf({ tooling, workspaces, apps }: { tooling: ReturnType<typeof fak
   const ships = fakeSlackShips([{ shipId: SLACK_SHIP, name: 'release-notes', kind: 'agent', status: 'crewed', summary: 'Writes the release notes' }]).port;
   const credentialOf: CredentialOf = (_actor, sent) => Promise.resolve(ok(sent));
   const addresses = { installRedirectUrl: SLACK_REDIRECT_URL, eventsUrl: 'https://gateway.acme.test/gw/slack/events' };
+  const links = memorySlackLinks();
   return {
     readSlack: createReadSlack({ workspaces, apps, ships }),
     listExposable: createListExposable({ ships, apps, proxyShips: fakeProxyShipKinds(), credentialOf }),
     exposeShip: createExposeShip({ slack: tooling.slack, apps, ships, proxyShips: fakeProxyShipKinds(), takeAccessToken, credentialOf, clock, addresses }),
     removeBot: createRemoveBot({ slack: tooling.slack, apps, ships, takeAccessToken, credentialOf }),
-    connectSlack: createConnectSlack({ slack: tooling.slack, workspaces, apps, shipNames: fakeShipNames({ [OWNER]: 'charlotte' }), clock, installRedirectUrl: SLACK_REDIRECT_URL }),
-    startInstall: createStartInstall({ slack: tooling.slack, apps, workspaces, takeAccessToken, states: plainInstallStates(), ships, credentialOf, clock, installRedirectUrl: SLACK_REDIRECT_URL }),
+    connectSlack: createConnectSlack({ slack: tooling.slack, workspaces, apps, shipNames: fakeShipNames({ [OWNER]: 'charlotte' }), clock, installRedirectUrl: SLACK_REDIRECT_URL, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' }),
+    startInstall: createStartInstall({ slack: tooling.slack, apps, workspaces, takeAccessToken, states: plainInstallStates(), ships, credentialOf, clock, installRedirectUrl: SLACK_REDIRECT_URL, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' }),
     disconnectSlack: createDisconnectSlack({ slack: tooling.slack, workspaces, apps, takeAccessToken }),
+    readSlackLink: createReadSlackLink({ workspaces, apps, links }),
+    startLink: createStartLink({ workspaces, apps, signIn: fakeSlackSignIn().signIn, states: plainLinkStates(), crewPersonShip: (caller) => Promise.resolve('signedIn' in caller && caller.signedIn.personShipId !== null ? ok({ shipId: caller.signedIn.personShipId, crewToken: 'crew-person' }) : err({ kind: 'noPersonShip' as const })), clock, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' }),
+    unlinkSlack: createUnlinkSlack({ links }),
   };
 }
 

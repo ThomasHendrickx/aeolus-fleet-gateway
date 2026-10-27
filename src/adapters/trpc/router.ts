@@ -79,6 +79,10 @@ import type { ExposeShip } from '../../core/slack/expose-ship.js';
 import type { ListExposable } from '../../core/slack/list-exposable.js';
 import type { RemoveBot } from '../../core/slack/remove-bot.js';
 import type { ReadSlack } from '../../core/slack/read-slack.js';
+import type { ReadSlackLink } from '../../core/slack/read-slack-link.js';
+import type { StartLink } from '../../core/slack/start-link.js';
+import type { StopSlackLink } from '../../core/slack/stop-slack-link.js';
+import type { UnlinkSlack } from '../../core/slack/unlink-slack.js';
 import type { StartInstall } from '../../core/slack/start-install.js';
 
 /** The header the web app's waiting page sends its browser's secret in (web/lib/gateway-api/gateway-api.ts names the same). */
@@ -110,6 +114,7 @@ export interface Context {
   readFleet: ReadFleet;
   deleteFleet: DeleteFleet;
   endSignIns: EndSignIns;
+  stopSlackLink: StopSlackLink;
   readConnection: ReadConnection;
   connect: Connect;
   approveParty: ApproveParty;
@@ -163,7 +168,18 @@ export interface Context {
     changeOwnMic: ChangeOwnMic;
   };
   /** The fleet's Slack workspace and the gateway's bot (gateway scopes, part B). */
-  slack: { readSlack: ReadSlack; connectSlack: ConnectSlack; startInstall: StartInstall; disconnectSlack: DisconnectSlack; listExposable: ListExposable; exposeShip: ExposeShip; removeBot: RemoveBot };
+  slack: {
+    readSlack: ReadSlack;
+    connectSlack: ConnectSlack;
+    startInstall: StartInstall;
+    disconnectSlack: DisconnectSlack;
+    listExposable: ListExposable;
+    exposeShip: ExposeShip;
+    removeBot: RemoveBot;
+    readSlackLink: ReadSlackLink;
+    startLink: StartLink;
+    unlinkSlack: UnlinkSlack;
+  };
   readOutsideParties: ReadOutsideParties;
   setOutsideParties: SetOutsideParties;
 }
@@ -601,6 +617,7 @@ const SLACK_CODES = {
   SLACK_TOKEN_REFUSED: 'BAD_REQUEST',
   SLACK_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
   NO_SUCH_BOT: 'NOT_FOUND',
+  NOT_A_PERSON: 'FORBIDDEN',
   NOT_REACHABLE: 'FORBIDDEN',
   NOT_EXPOSABLE: 'BAD_REQUEST',
   CONFLICT: 'CONFLICT',
@@ -1208,6 +1225,17 @@ export const gatewayRouter = t.router({
         slackAnswerOf(await ctx.slack.removeBot({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, appId: input.appId }));
         return {};
       }),
+    /** The person's Slack link as the Overview shows it (9.6): the workspace and the Slack name linked; none while the fleet's own bot is not in Slack. */
+    link: servedProcedure
+      .output(z.object({ workspaceName: z.string(), link: z.object({ slackName: z.string() }).nullable() }).nullable())
+      .query(({ ctx }) => ctx.slack.readSlackLink({ actor: ctx.actor })),
+    /** Sign in with Slack to link the person's Slack account, from the Overview or Slack's answer to an unlinked person (9.3). */
+    startLink: servedProcedure.output(z.object({ url: z.string() })).mutation(async ({ ctx }) => slackAnswerOf(await ctx.slack.startLink({ actor: ctx.actor }))),
+    /** Unlinks the person's own Slack account (9.3). */
+    unlink: servedProcedure.output(z.strictObject({})).mutation(async ({ ctx }) => {
+      await ctx.slack.unlinkSlack({ actor: ctx.actor });
+      return {};
+    }),
     /** Removes every bot the gateway made in Slack, then forgets the workspace (after the page's confirm). */
     disconnect: servedProcedure.output(z.strictObject({})).mutation(async ({ ctx }) => {
       slackAnswerOf(await ctx.slack.disconnectSlack({ actor: ctx.actor }));
@@ -1304,12 +1332,13 @@ export const gatewayRouter = t.router({
         }
         return {};
       }),
-    /** pagasae disabled the account (decision 0055): every sign-in of it in the fleet ends, and its clients' tokens are revoked. Told again, it ends nothing more. */
+    /** pagasae disabled the account (decision 0055): every sign-in of it in the fleet ends, its clients' tokens are revoked, and its Slack link stops. Told again, it ends nothing more. */
     accountDisabled: installationProcedure
       .input(z.strictObject({ fleetId: idSchema('fleet'), accountId: z.string().min(1) }))
       .output(z.strictObject({}))
       .mutation(async ({ ctx, input }) => {
         await ctx.endSignIns(input);
+        await ctx.stopSlackLink(input);
         return {};
       }),
   }),

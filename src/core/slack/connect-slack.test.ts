@@ -26,7 +26,7 @@ beforeEach(() => {
 });
 
 function connectSlack(input: { actor?: Actor; refreshToken?: string }) {
-  return createConnectSlack({ slack: tooling.slack, workspaces, apps, shipNames: fakeShipNames(), clock: { now: () => NOW }, installRedirectUrl: REDIRECT_URL })({
+  return createConnectSlack({ slack: tooling.slack, workspaces, apps, shipNames: fakeShipNames(), clock: { now: () => NOW }, installRedirectUrl: REDIRECT_URL, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' })({
     actor: input.actor ?? CHARLOTTE,
     refreshToken: input.refreshToken ?? 'xoxe-1-first',
     fleetName: 'Acme',
@@ -54,7 +54,7 @@ describe('connecting a Slack workspace', () => {
       {
         accessToken: 'xoxe.xoxp-1',
         appId: 'A01',
-        description: { name: 'Acme', description: 'What waits for you in the Acme fleet of Aeolus', botScopes: ['chat:write', 'im:history', 'im:write'], redirectUrl: REDIRECT_URL, events: null },
+        description: { name: 'Acme', description: 'What waits for you in the Acme fleet of Aeolus', botScopes: ['chat:write', 'im:history', 'im:write'], userScopes: ['openid', 'profile'], redirectUrls: [REDIRECT_URL, 'https://gateway.acme.test/gw/slack/link'], events: null },
       },
     ]);
     expect(apps.held).toEqual([

@@ -30,6 +30,7 @@ export function createConnectSlack(deps: {
   shipNames: ShipNames;
   clock: Clock;
   installRedirectUrl: string;
+  linkRedirectUrl: string;
 }): ConnectSlack {
   return async ({ actor, refreshToken, fleetName }) => {
     if (!actor.scopes.includes(SLACK_SCOPE)) {

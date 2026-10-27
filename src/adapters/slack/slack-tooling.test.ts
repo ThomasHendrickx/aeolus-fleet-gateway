@@ -9,6 +9,8 @@ import { createSlackTooling } from './slack-tooling.js';
 // error code, a 429 its Retry-After.
 
 const REDIRECT_URL = 'https://gateway.acme.test/gw/slack/install';
+const LINK_REDIRECT_URL = 'https://gateway.acme.test/gw/slack/link';
+const GATEWAY_ADDRESSES = { installRedirectUrl: REDIRECT_URL, linkRedirectUrl: LINK_REDIRECT_URL };
 
 let slack: FakeSlack;
 
@@ -37,12 +39,12 @@ describe("Slack's app management", () => {
     await expect(createSlackTooling({ apiUrl: slack.apiUrl }).rotateConfigurationToken('xoxe-1-spent')).resolves.toEqual({ isOk: false, error: { kind: 'refused', error: 'invalid_refresh_token' } });
   });
 
-  it('makes an app from a manifest with the bot user, its scopes and the install redirect, then removes it', async () => {
+  it('makes an app from a manifest with the bot user, its scopes, the install redirect and Sign in with Slack, then removes it', async () => {
     const tooling = createSlackTooling({ apiUrl: slack.apiUrl });
     const rotated = await tooling.rotateConfigurationToken('xoxe-1-first');
     const accessToken = rotated.isOk ? rotated.value.token.accessToken : '';
 
-    const made = await tooling.makeApp(accessToken, gatewayBotDescription('Acme', REDIRECT_URL));
+    const made = await tooling.makeApp(accessToken, gatewayBotDescription('Acme', GATEWAY_ADDRESSES));
 
     expect(made).toEqual({
       isOk: true,
@@ -51,7 +53,7 @@ describe("Slack's app management", () => {
     expect(slack.apps.get('A01')?.manifest).toEqual({
       display_information: { name: 'Acme', description: 'What waits for you in the Acme fleet of Aeolus' },
       features: { bot_user: { display_name: 'Acme', always_online: true }, app_home: { home_tab_enabled: false, messages_tab_enabled: true, messages_tab_read_only_enabled: false } },
-      oauth_config: { redirect_urls: [REDIRECT_URL], scopes: { bot: ['chat:write', 'im:history', 'im:write'] } },
+      oauth_config: { redirect_urls: [REDIRECT_URL, LINK_REDIRECT_URL], scopes: { bot: ['chat:write', 'im:history', 'im:write'], user: ['openid', 'profile'] } },
       settings: { org_deploy_enabled: false, socket_mode_enabled: false, token_rotation_enabled: false },
     });
     await expect(tooling.removeApp(accessToken, 'A01')).resolves.toEqual({ isOk: true, value: undefined });
@@ -83,13 +85,13 @@ describe("Slack's app management", () => {
   it("answers rate limited with Slack's Retry-After", async () => {
     slack.rateLimit('apps.manifest.create', 30);
 
-    await expect(createSlackTooling({ apiUrl: slack.apiUrl }).makeApp('xoxe.xoxp-1-1', gatewayBotDescription('Acme', REDIRECT_URL))).resolves.toEqual({ isOk: false, error: { kind: 'rateLimited', retryAfterSeconds: 30 } });
+    await expect(createSlackTooling({ apiUrl: slack.apiUrl }).makeApp('xoxe.xoxp-1-1', gatewayBotDescription('Acme', GATEWAY_ADDRESSES))).resolves.toEqual({ isOk: false, error: { kind: 'rateLimited', retryAfterSeconds: 30 } });
   });
 
   it("turns an install's code into the bot token, with the workspace's name", async () => {
     const tooling = createSlackTooling({ apiUrl: slack.apiUrl });
     const rotated = await tooling.rotateConfigurationToken('xoxe-1-first');
-    const made = await tooling.makeApp(rotated.isOk ? rotated.value.token.accessToken : '', gatewayBotDescription('Acme', REDIRECT_URL));
+    const made = await tooling.makeApp(rotated.isOk ? rotated.value.token.accessToken : '', gatewayBotDescription('Acme', GATEWAY_ADDRESSES));
     const back = await fetch(made.isOk ? `${made.value.installUrl}&state=s` : '', { redirect: 'manual' });
     const code = new URL(back.headers.get('location') ?? '').searchParams.get('code') ?? '';
 

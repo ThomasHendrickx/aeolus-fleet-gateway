@@ -166,7 +166,7 @@ export interface SlackLinks {
   add(link: SlackLink): Promise<'added' | 'taken'>;
   remove(fleetId: FleetId, accountId: string): Promise<void>;
   /** Stops the account's link, as when the account is disabled. */
-  stop(fleetId: FleetId, accountId: string, at: Date): Promise<void>;
+  stop(fleetId: FleetId, stopped: { accountId: string; at: Date }): Promise<void>;
 }
 
 /** Outbound port: a bot's message only one person sees, in a conversation (chat.postEphemeral), with a button that opens an address. */

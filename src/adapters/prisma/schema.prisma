@@ -509,3 +509,20 @@ model SlackApp {
   @@unique([appId])
   @@map("slack_apps")
 }
+
+/// A person's Slack account linked to their account in a fleet (gateway scopes 9.3): one Slack user to one account, one Slack user per account.
+model SlackLink {
+  fleetId      String    @map("fleet_id")
+  teamId       String    @map("team_id")
+  slackUserId  String    @map("slack_user_id")
+  slackName    String    @map("slack_name")
+  accountId    String    @map("account_id")
+  personShipId String    @map("person_ship_id")
+  linkedAt     DateTime  @map("linked_at") @db.Timestamptz(3)
+  /// When the account was disabled (0055), its link stopped.
+  stoppedAt    DateTime? @map("stopped_at") @db.Timestamptz(3)
+
+  @@id([fleetId, teamId, slackUserId])
+  @@unique([fleetId, accountId])
+  @@map("slack_links")
+}

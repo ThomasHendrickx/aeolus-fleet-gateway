@@ -11,18 +11,18 @@ import { gatewayBotDescription, type SlackApp } from './slack-app.js';
  * answered as is, and nothing is kept.
  */
 export async function gatewayBotOf(
-  deps: { slack: Pick<SlackTooling, 'makeApp'>; apps: Pick<SlackApps, 'gatewayBot' | 'save'>; clock: Clock; installRedirectUrl: string },
+  deps: { slack: Pick<SlackTooling, 'makeApp'>; apps: Pick<SlackApps, 'gatewayBot' | 'save'>; clock: Clock; installRedirectUrl: string; linkRedirectUrl: string },
   made: { fleetId: FleetId; fleetName: string; accessToken: string },
 ): Promise<Result<SlackApp, SlackRefusal>> {
   const kept = await deps.apps.gatewayBot(made.fleetId);
   if (kept !== undefined) {
     return ok(kept);
   }
-  const app = await deps.slack.makeApp(made.accessToken, gatewayBotDescription(made.fleetName, deps.installRedirectUrl));
+  const description = gatewayBotDescription(made.fleetName, deps);
+  const app = await deps.slack.makeApp(made.accessToken, description);
   if (!app.isOk) {
     return err(app.error);
   }
-  const description = gatewayBotDescription(made.fleetName, deps.installRedirectUrl);
   const bot: SlackApp = { fleetId: made.fleetId, shipId: null, ...app.value, name: description.name, madeAt: deps.clock.now(), installStartedAt: null, bot: null, removedInSlackAt: null };
   await deps.apps.save(bot);
   return ok(bot);

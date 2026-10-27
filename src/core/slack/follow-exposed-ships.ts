@@ -18,7 +18,7 @@ export function createFollowExposedShips(deps: {
   ships: Pick<SlackShips, 'read'>;
   slack: Pick<SlackTooling, 'renameApp' | 'removeApp'>;
   takeAccessToken: TakeAccessToken;
-  addresses: SlackAddresses;
+  addresses: Pick<SlackAddresses, 'installRedirectUrl' | 'eventsUrl'>;
 }): FollowExposedShips {
   return async () => {
     for (const fleetId of await deps.workspaces.rotatable()) {

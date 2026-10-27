@@ -68,6 +68,9 @@ export type DomainErrorKind =
   | 'INSTALL_REFUSED'
   | 'NOT_EXPOSABLE'
   | 'NO_SUCH_BOT'
+  | 'LINK_REFUSED'
+  | 'SLACK_USER_LINKED'
+  | 'ACCOUNT_LINKED'
   | 'CONFLICT';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
