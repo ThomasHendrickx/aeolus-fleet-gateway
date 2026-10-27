@@ -65,7 +65,7 @@ describe("Slack's app management", () => {
     const addresses = { installRedirectUrl: REDIRECT_URL, eventsUrl: 'https://gateway.acme.test/gw/slack/events' };
     await tooling.makeApp(accessToken, shipBotDescription({ name: 'release-notes', summary: 'Writes the release notes' }, addresses));
 
-    await expect(tooling.renameApp(accessToken, 'A01', shipBotDescription({ name: 'changelog', summary: 'Writes the release notes' }, addresses))).resolves.toEqual({ isOk: true, value: undefined });
+    await expect(tooling.renameApp(accessToken, { appId: 'A01', description: shipBotDescription({ name: 'changelog', summary: 'Writes the release notes' }, addresses) })).resolves.toEqual({ isOk: true, value: undefined });
 
     expect(slack.apps.get('A01')?.manifest).toEqual({
       display_information: { name: 'changelog', description: 'Writes the release notes' },

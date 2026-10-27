@@ -24,6 +24,7 @@ export function fakeSlackTooling(options: { teamId?: string; teamName?: string; 
     rotations: 0,
     made: new Array<{ accessToken: string; description: SlackAppDescription; appId: string }>(),
     removed: new Array<{ accessToken: string; appId: string }>(),
+    renamed: new Array<{ accessToken: string; appId: string; description: SlackAppDescription }>(),
     installs: new Array<{ clientId: string; code: string; redirectUrl: string }>(),
     /** Codes Slack's install screen sent back, each for its app. */
     codes: new Map<string, string>(),
@@ -55,6 +56,13 @@ export function fakeSlackTooling(options: { teamId?: string; teamName?: string; 
       state.made.push({ accessToken, description, appId });
       const made: MadeApp = { appId, clientId: `client-${appId}`, clientSecret: `secret-${appId}`, signingSecret: `signing-${appId}`, installUrl: `https://slack.com/oauth/v2/authorize?client_id=client-${appId}` };
       return Promise.resolve(ok(made));
+    },
+    renameApp: (accessToken, { appId, description }) => {
+      if (state.refusal !== undefined) {
+        return Promise.resolve(err(state.refusal));
+      }
+      state.renamed.push({ accessToken, appId, description });
+      return Promise.resolve(ok(undefined));
     },
     removeApp: (accessToken, appId) => {
       if (state.refusal !== undefined) {

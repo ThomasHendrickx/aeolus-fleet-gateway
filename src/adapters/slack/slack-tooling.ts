@@ -35,13 +35,18 @@ const madeSchema = z.object({
 
 const installedSchema = z.object({ ok: z.literal(true), access_token: z.string(), bot_user_id: z.string(), app_id: z.string(), team: z.object({ id: z.string(), name: z.string() }) });
 
-/** Slack's app manifest for what the gateway asks it to make: a bot with a direct messages tab, its scopes, and the install redirect. */
+/** Slack's app manifest for what the gateway asks it to make: a bot with a direct messages tab, its scopes, the install redirect, and the events Slack sends the gateway. */
 function manifestOf(description: SlackAppDescription) {
   return {
     display_information: { name: description.name, description: description.description },
     features: { bot_user: { display_name: description.name, always_online: true }, app_home: { home_tab_enabled: false, messages_tab_enabled: true, messages_tab_read_only_enabled: false } },
     oauth_config: { redirect_urls: [description.redirectUrl], scopes: { bot: [...description.botScopes] } },
-    settings: { org_deploy_enabled: false, socket_mode_enabled: false, token_rotation_enabled: false },
+    settings: {
+      ...(description.events === null ? {} : { event_subscriptions: { request_url: description.events.url, bot_events: [...description.events.botEvents] } }),
+      org_deploy_enabled: false,
+      socket_mode_enabled: false,
+      token_rotation_enabled: false,
+    },
   };
 }
 
@@ -85,6 +90,10 @@ export function createSlackTooling(options: { apiUrl: string }): SlackTooling {
       }
       const { app_id: appId, credentials, oauth_authorize_url: installUrl } = made.value;
       return ok({ appId, clientId: credentials.client_id, clientSecret: credentials.client_secret, signingSecret: credentials.signing_secret, installUrl });
+    },
+    renameApp: async (accessToken, { appId, description }) => {
+      const renamed = await call({ method: 'apps.manifest.update', form: { app_id: appId, manifest: JSON.stringify(manifestOf(description)) }, token: accessToken }, z.object({ ok: z.literal(true) }));
+      return renamed.isOk ? ok(undefined) : renamed;
     },
     removeApp: async (accessToken, appId) => {
       const removed = await call({ method: 'apps.manifest.delete', form: { app_id: appId }, token: accessToken }, z.object({ ok: z.literal(true) }));

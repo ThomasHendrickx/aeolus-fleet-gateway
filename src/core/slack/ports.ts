@@ -38,6 +38,8 @@ export interface SlackTooling {
   rotateConfigurationToken(refreshToken: string): Promise<Result<{ token: ConfigurationToken; teamId: string }, SlackRefusal>>;
   /** Makes an app from a manifest (apps.manifest.create). */
   makeApp(accessToken: string, description: SlackAppDescription): Promise<Result<MadeApp, SlackRefusal>>;
+  /** Gives an app the configuration token made its whole manifest anew, as a rename does (apps.manifest.update). */
+  renameApp(accessToken: string, app: { appId: string; description: SlackAppDescription }): Promise<Result<undefined, SlackRefusal>>;
   /** Removes an app the configuration token made (apps.manifest.delete). */
   removeApp(accessToken: string, appId: string): Promise<Result<undefined, SlackRefusal>>;
   /** Turns the code Slack's install screen sent back into the app's bot token (oauth.v2.access). */
