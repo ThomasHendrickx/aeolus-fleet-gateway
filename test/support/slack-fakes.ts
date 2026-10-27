@@ -1,7 +1,8 @@
 import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
-import type { InstallState, InstallStates, LinkState, LinkStates, MadeApp, ProxyShipKinds, ShipNames, ShipToExpose, SlackApps, SlackIdentity, SlackLinks, SlackMessages, SlackRefusal, SlackShips, SlackSignIn, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
+import type { InstallState, InstallStates, LinkState, LinkStates, MadeApp, ProxyShipKinds, ShipNames, ShipToExpose, SlackApps, SlackEvents, SlackIdentity, SlackLinks, SlackMessages, SlackRefusal, SlackShips, SlackSignIn, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
+import type { KeptSlackEvent } from '../../src/core/slack/kept-slack-event.js';
 import type { SlackLink } from '../../src/core/slack/slack-link.js';
 import type { SlackApp, SlackAppDescription } from '../../src/core/slack/slack-app.js';
 import type { SlackWorkspace } from '../../src/core/slack/slack-workspace.js';
@@ -288,15 +289,23 @@ export function memorySlackLinks(): SlackLinks & { held: SlackLink[] } {
 /** Slack's posts in memory: each message only one person sees, with the bot token it went with. */
 export function fakeSlackMessages() {
   const noRefusal = (): SlackRefusal | undefined => undefined;
-  const state = { onlyTo: new Array<{ botToken: string; channel: string; user: string; text: string; button?: { text: string; url: string } }>(), refusal: noRefusal() };
+  const state = {
+    onlyTo: new Array<{ botToken: string; channel: string; user: string; text: string; button?: { text: string; url: string } }>(),
+    inThread: new Array<{ botToken: string; channel: string; threadTs: string; text: string }>(),
+    reactions: new Array<{ botToken: string; channel: string; ts: string; name: string }>(),
+    refusal: noRefusal(),
+  };
+  const posted = <T>(list: T[], item: T) => {
+    if (state.refusal !== undefined) {
+      return Promise.resolve(err(state.refusal));
+    }
+    list.push(item);
+    return Promise.resolve(ok(undefined));
+  };
   const messages: SlackMessages = {
-    postOnlyTo: (botToken, message) => {
-      if (state.refusal !== undefined) {
-        return Promise.resolve(err(state.refusal));
-      }
-      state.onlyTo.push({ botToken, ...message });
-      return Promise.resolve(ok(undefined));
-    },
+    postOnlyTo: (botToken, message) => posted(state.onlyTo, { botToken, ...message }),
+    postInThread: (botToken, message) => posted(state.inThread, { botToken, ...message }),
+    react: (botToken, reaction) => posted(state.reactions, { botToken, ...reaction }),
   };
   return { state, messages };
 }
@@ -312,6 +321,59 @@ export function aSlackLink(overrides: Partial<SlackLink> = {}): SlackLink {
     personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t',
     linkedAt: new Date('2026-10-27T08:45:00.000Z'),
     stoppedAt: null,
+    ...overrides,
+  };
+}
+
+/** The kept events in memory, by fleet and event id. */
+export function memorySlackEvents(): SlackEvents & { held: KeptSlackEvent[] } {
+  const held = new Array<KeptSlackEvent>();
+  const indexOf = (fleetId: FleetId, eventId: string) => held.findIndex((event) => event.fleetId === fleetId && event.eventId === eventId);
+  return {
+    held,
+    keep: (event) => {
+      if (indexOf(event.fleetId, event.eventId) !== -1) {
+        return Promise.resolve('known');
+      }
+      held.push(event);
+      return Promise.resolve('kept');
+    },
+    sendDue: async (send, { limit, at }) => {
+      for (const event of held.filter(({ takenAt }) => takenAt === null).slice(0, limit)) {
+        if ((await send(event)) === 'taken') {
+          held[indexOf(event.fleetId, event.eventId)] = { ...event, markdown: '', takenAt: at };
+        }
+      }
+    },
+    forgetTaken: (before) => {
+      held.splice(0, held.length, ...held.filter(({ takenAt }) => takenAt === null || takenAt >= before));
+      return Promise.resolve();
+    },
+    untakenSince: (before) => Promise.resolve(held.filter(({ takenAt, receivedAt }) => takenAt === null && receivedAt < before)),
+    remove: (fleetId, eventId) => {
+      const index = indexOf(fleetId, eventId);
+      if (index !== -1) {
+        held.splice(index, 1);
+      }
+      return Promise.resolve();
+    },
+  };
+}
+
+/** Mathilde's direct message to release-notes, kept, core not having taken it, unless the test says otherwise. */
+export function aKeptSlackEvent(overrides: Partial<KeptSlackEvent> = {}): KeptSlackEvent {
+  return {
+    fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8sv',
+    eventId: 'Ev01',
+    appId: 'A02',
+    shipId: 'shp_01m3tbfspe96yf1rnr4ank9r1n',
+    personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t',
+    channel: 'D0MATHILDE',
+    ts: '1730019600.000100',
+    threadTs: null,
+    markdown: 'when is the release?',
+    receivedAt: new Date('2026-10-27T09:00:00.000Z'),
+    takenAt: null,
     ...overrides,
   };
 }

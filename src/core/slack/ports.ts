@@ -3,6 +3,7 @@ import type { FleetId, ShipId } from '@aeolus-fleet/common';
 import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
+import type { KeptSlackEvent } from './kept-slack-event.js';
 import type { SlackApp, SlackAppDescription } from './slack-app.js';
 import type { SlackLink } from './slack-link.js';
 import type { ConfigurationToken, SlackWorkspace } from './slack-workspace.js';
@@ -169,7 +170,32 @@ export interface SlackLinks {
   stop(fleetId: FleetId, stopped: { accountId: string; at: Date }): Promise<void>;
 }
 
-/** Outbound port: a bot's message only one person sees, in a conversation (chat.postEphemeral), with a button that opens an address. */
+/** Outbound port: a bot's posts and reactions in Slack, with its bot token. */
 export interface SlackMessages {
+  /** A message only one person sees, in a conversation (chat.postEphemeral), with a button that opens an address. */
   postOnlyTo(botToken: string, message: { channel: string; user: string; text: string; button?: { text: string; url: string } }): Promise<Result<undefined, SlackRefusal>>;
+  /** A message in a message's thread, everyone in the conversation sees (chat.postMessage). */
+  postInThread(botToken: string, message: { channel: string; threadTs: string; text: string }): Promise<Result<undefined, SlackRefusal>>;
+  /** A reaction on a message (reactions.add); one already there is no refusal. */
+  react(botToken: string, reaction: { channel: string; ts: string; name: string }): Promise<Result<undefined, SlackRefusal>>;
+}
+
+/**
+ * Outbound port: the linked people's messages from Slack, kept until core
+ * takes them (gateway scopes 9.4 step 3); temporary, so nothing builds up.
+ */
+export interface SlackEvents {
+  /** Keeps the event by its fleet and Slack's event id; one kept already, as on Slack's retry, is known and changes nothing. */
+  keep(event: KeptSlackEvent): Promise<'kept' | 'known'>;
+  /**
+   * Hands each event core has not taken yet to send, up to the limit, held
+   * so one gateway instance at a time sends it. An event sent as taken keeps
+   * only its id from then, taken at the time given.
+   */
+  sendDue(send: (event: KeptSlackEvent) => Promise<'taken' | 'later'>, page: { limit: number; at: Date }): Promise<void>;
+  /** Forgets the ids of the events taken before the time given. */
+  forgetTaken(before: Date): Promise<void>;
+  /** The events core has not taken that were received before the time given. */
+  untakenSince(before: Date): Promise<KeptSlackEvent[]>;
+  remove(fleetId: FleetId, eventId: string): Promise<void>;
 }

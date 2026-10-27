@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackLinks } from '../../../test/support/slack-fakes.js';
+import { aKeptSlackEvent, aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks } from '../../../test/support/slack-fakes.js';
 import type { SlackEventFields } from './slack-event.js';
 import { createTakeSlackEvent } from './take-slack-event.js';
 
@@ -18,8 +18,12 @@ const LINK_PAGE_URL = 'https://gateway.acme.test/slack/link';
 let apps: ReturnType<typeof memorySlackApps>;
 let links: ReturnType<typeof memorySlackLinks>;
 let slack: ReturnType<typeof fakeSlackMessages>;
+let events: ReturnType<typeof memorySlackEvents>;
+let sendsNow: number;
 
 beforeEach(async () => {
+  events = memorySlackEvents();
+  sendsNow = 0;
   apps = memorySlackApps();
   links = memorySlackLinks();
   slack = fakeSlackMessages();
@@ -31,9 +35,9 @@ const signatures = { isSigned: ({ secret, timestamp, body, signature }: { secret
 
 function takeEvent(event: { type: string; timestamp?: string; signature?: string; appId?: string; fields?: Partial<SlackEventFields>; isRetry?: boolean }) {
   const timestamp = event.timestamp ?? NOW_SECONDS;
-  const fields: SlackEventFields = { type: event.type, teamId: 'T0ACME', userId: null, channel: null, channelType: null, subtype: null, botId: null, ...event.fields };
+  const fields: SlackEventFields = { eventId: 'Ev01', type: event.type, teamId: 'T0ACME', userId: null, channel: null, channelType: null, subtype: null, botId: null, text: '', ts: '1730019600.000100', threadTs: null, files: [], ...event.fields };
   const body = JSON.stringify({ api_app_id: event.appId ?? 'A02', event: fields });
-  return createTakeSlackEvent({ apps, links, slack: slack.messages, signatures, clock: { now: () => NOW }, linkPageUrl: LINK_PAGE_URL })({
+  return createTakeSlackEvent({ apps, links, events, sendNow: () => { sendsNow += 1; }, slack: slack.messages, signatures, clock: { now: () => NOW }, linkPageUrl: LINK_PAGE_URL })({
     appId: event.appId ?? 'A02',
     event: fields,
     isRetry: event.isRetry ?? false,
@@ -89,6 +93,7 @@ describe("a person's message to a bot, from Slack", () => {
     const taken = await takeEvent({ type: 'message', fields: MATHILDE_WRITES });
 
     expect(taken).toEqual({ isOk: true, value: { kind: 'notLinked' } });
+    expect(events.held).toEqual([]);
     expect(slack.state.onlyTo).toEqual([{
       botToken: 'xoxb-2',
       channel: 'D0MATHILDE',
@@ -112,13 +117,32 @@ describe("a person's message to a bot, from Slack", () => {
     expect(slack.state.onlyTo.map(({ text, button }) => ({ text, button }))).toEqual([{ text: 'Your account cannot message the fleet now', button: undefined }]);
   });
 
-  it('answers nothing yet to a linked person', async () => {
+  it("keeps a linked person's message by its event id, as Markdown for the bot's ship and the person ship, and sends it now", async () => {
     await links.add(aSlackLink());
 
-    const taken = await takeEvent({ type: 'message', fields: MATHILDE_WRITES });
+    const taken = await takeEvent({ type: 'message', fields: { ...MATHILDE_WRITES, text: '<@U02> when is the release?' } });
 
-    expect(taken).toEqual({ isOk: true, value: { kind: 'ignored' } });
-    expect(slack.state.onlyTo).toEqual([]);
+    expect(taken).toEqual({ isOk: true, value: { kind: 'kept' } });
+    expect(events.held).toEqual([aKeptSlackEvent({ receivedAt: NOW })]);
+    expect({ sendsNow, onlyTo: slack.state.onlyTo }).toEqual({ sendsNow: 1, onlyTo: [] });
+  });
+
+  it('keeps a message with a shared file, the file as its Slack link', async () => {
+    await links.add(aSlackLink());
+
+    await takeEvent({ type: 'message', fields: { ...MATHILDE_WRITES, subtype: 'file_share', text: 'here', files: [{ name: 'notes.pdf', permalink: 'https://acme.slack.com/files/U0M/F01/notes.pdf' }] } });
+
+    expect(events.held.map(({ markdown }) => markdown)).toEqual(['here\n\n[notes.pdf](https://acme.slack.com/files/U0M/F01/notes.pdf)']);
+  });
+
+  it("keeps Slack's retry of a kept event no second time", async () => {
+    await links.add(aSlackLink());
+    await takeEvent({ type: 'message', fields: { ...MATHILDE_WRITES, text: 'when is the release?' } });
+
+    const retried = await takeEvent({ type: 'message', fields: { ...MATHILDE_WRITES, text: 'when is the release?' }, isRetry: true });
+
+    expect(retried).toEqual({ isOk: true, value: { kind: 'known' } });
+    expect({ kept: events.held.length, sendsNow }).toEqual({ kept: 1, sendsNow: 1 });
   });
 
   it("answers a Slack retry of the event no second time", async () => {
@@ -130,6 +154,7 @@ describe("a person's message to a bot, from Slack", () => {
   it("answers no bot's message, edit or message in a channel that is not a mention", async () => {
     await takeEvent({ type: 'message', fields: { ...MATHILDE_WRITES, botId: 'B0OTHER' } });
     await takeEvent({ type: 'message', fields: { ...MATHILDE_WRITES, subtype: 'message_changed' } });
+    await takeEvent({ type: 'message', fields: { ...MATHILDE_WRITES, subtype: 'channel_join' } });
     await takeEvent({ type: 'message', fields: { ...MATHILDE_WRITES, channelType: 'channel' } });
 
     expect(slack.state.onlyTo).toEqual([]);
