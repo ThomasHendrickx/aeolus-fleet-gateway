@@ -17,11 +17,19 @@ export type Connect = (input: { operatorFleetId: FleetId; shipId: ShipId; secret
  */
 const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
 
-/** The gateway's own scopes, under its namespace: approving is a scope any actor may hold (decision 0056). */
-const GATEWAY_NAMESPACE = {
+/**
+ * The gateway's own scopes, under its namespace: approving is a scope any
+ * actor may hold (decision 0056); Slack is apart from it (gateway scopes B6).
+ */
+export const GATEWAY_NAMESPACE = {
   namespace: 'gateway',
-  scopes: [{ scope: 'gateway:approve', description: 'Approve outside parties: outside MCP clients and servers, each acting in the fleet as its proxy ship' }],
+  scopes: [
+    { scope: 'gateway:approve', description: 'Approve outside parties: outside MCP clients and servers, each acting in the fleet as its proxy ship' },
+    { scope: 'gateway:slack', description: 'Connect the fleet to a Slack workspace, and expose ships within manage reach as Slack bots' },
+  ],
 };
+
+const DECLARED_SCOPES = GATEWAY_NAMESPACE.scopes.map(({ scope }) => scope).join(', ');
 
 /**
  * Use case: argo connects the gateway, as the other plugins are connected.
@@ -61,7 +69,7 @@ export function createConnect(deps: { door: FleetDoor; store: ConnectionStore; c
     }
     const declared = await deps.door.declareScopes(crewToken, GATEWAY_NAMESPACE);
     if (!declared.isOk) {
-      return letGo('SCOPE_REFUSED', `The fleet did not take the gateway's scope gateway:approve: ${declared.error.message}`);
+      return letGo('SCOPE_REFUSED', `The fleet did not take the gateway's scopes ${DECLARED_SCOPES}: ${declared.error.message}`);
     }
 
     await deps.store.save({ fleetId: who.value.fleetId, shipId, name: who.value.name, crewToken, crewedAt: deps.clock.now() });
