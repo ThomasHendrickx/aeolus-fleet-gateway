@@ -3,9 +3,12 @@ import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { ActionForm } from '../../forms/ui/action-form';
 import { BUTTONS, CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { StatusBadge } from '../../outside-parties/ui/status-badge';
-import { connectSlack, installGatewayBot } from '../actions';
+import { connectSlack, installBot } from '../actions';
+import { BOT_STATES } from '../bot-states';
 import { installOutcomeOf } from '../install-outcomes';
-import { DISCONNECT_SLACK_PATH } from '../paths';
+import { DISCONNECT_SLACK_PATH, EXPOSE_SHIP_PATH, removeBotPath } from '../paths';
+
+interface ShownBot { appId: string; shipName: string; botName: string; state: keyof typeof BOT_STATES }
 
 /** What the gateway's bot shows as, by its state. */
 const GATEWAY_BOT_STATES = {
@@ -35,10 +38,56 @@ function ConnectForm({ fleetId, label }: { fleetId: string; label: string }) {
   );
 }
 
+/** The ships exposed as bots, each with its state, Install and Remove for an account holding gateway:slack, and Expose a ship…. */
+function ShipsInSlack({ fleetId, bots, canChange, isTokenFresh }: { fleetId: string; bots: readonly ShownBot[]; canChange: boolean; isTokenFresh: boolean }) {
+  return (
+    <section className={`${CARD} grid gap-3`} data-testid="slack-bots">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-heading font-semibold">Ships in Slack</h2>
+        {canChange && isTokenFresh ? (
+          <a className={BUTTONS.secondary} href={inFleet(EXPOSE_SHIP_PATH, fleetId)} data-testid="slack-expose">
+            Expose a ship…
+          </a>
+        ) : null}
+      </div>
+      {bots.length === 0 ? (
+        <p className="text-muted-foreground">No ship is a Slack bot yet.</p>
+      ) : (
+        <ul className="grid gap-3">
+          {bots.map((bot) => (
+            <li key={bot.appId} className="grid gap-2 border-t border-border pt-3" data-testid="slack-bot">
+              <span className="flex flex-wrap items-center gap-2">
+                <strong>{bot.shipName}</strong>
+                {bot.botName === bot.shipName ? null : <span className="text-muted-foreground">In Slack as {bot.botName} until Slack is told the new name</span>}
+                <StatusBadge tone={BOT_STATES[bot.state].tone} label={BOT_STATES[bot.state].label} />
+              </span>
+              {canChange ? (
+                <div className="flex flex-wrap items-start gap-2">
+                  {bot.state === 'inSlack' || !isTokenFresh ? null : (
+                    <ActionForm action={installBot} fleetId={fleetId} submit={{ label: 'Install', pending: 'Opening Slack…' }} className="grid gap-2" testId="slack-bot-install-form">
+                      <input type="hidden" name="appId" value={bot.appId} />
+                    </ActionForm>
+                  )}
+                  {isTokenFresh ? (
+                    <a className={BUTTONS.secondary} href={inFleet(removeBotPath(bot.appId), fleetId)} data-testid="slack-bot-remove">
+                      Remove
+                    </a>
+                  ) : null}
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /**
  * The Slack page (gateway scopes 9.6): the workspace and its configuration
- * token's state, the gateway's bot, Install and Disconnect, for an account
- * holding gateway:slack; the same state, read-only, for others.
+ * token's state, the gateway's bot, the ships in Slack with their states,
+ * Expose a ship…, Install, Remove and Disconnect, for an account holding
+ * gateway:slack; the same state, read-only, for others.
  */
 export async function Slack({ page, install }: { page: SignedInPage; install: string | undefined }) {
   const { api, fleetId } = page;
@@ -94,9 +143,10 @@ export async function Slack({ page, install }: { page: SignedInPage; install: st
               <StatusBadge tone={GATEWAY_BOT_STATES[read.value.gatewayBot].tone} label={GATEWAY_BOT_STATES[read.value.gatewayBot].label} />
             </span>
             {read.value.canChange && read.value.gatewayBot !== 'installed' && read.value.tokenState === 'fresh' ? (
-              <ActionForm action={installGatewayBot} fleetId={fleetId} submit={{ label: 'Install', pending: 'Opening Slack…' }} testId="slack-install-form" />
+              <ActionForm action={installBot} fleetId={fleetId} submit={{ label: 'Install', pending: 'Opening Slack…' }} testId="slack-install-form" />
             ) : null}
           </section>
+          <ShipsInSlack fleetId={fleetId} bots={read.value.bots} canChange={read.value.canChange} isTokenFresh={read.value.tokenState === 'fresh'} />
         </>
       )}
     </div>
