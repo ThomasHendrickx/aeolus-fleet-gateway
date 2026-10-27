@@ -40,6 +40,9 @@ function personTools(overrides: Partial<PersonToolsDeps> = {}) {
   return { deps, asked };
 }
 
+/** Where the endpoint serving the tools names its protected resource metadata (RFC 9728). */
+const RESOURCE_METADATA = 'http://gateway.example.com/.well-known/oauth-protected-resource/plugin/mcp';
+
 let client: Client | undefined;
 
 afterEach(async () => {
@@ -48,7 +51,7 @@ afterEach(async () => {
 
 async function connected(deps: PersonToolsDeps): Promise<Client> {
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  await personServerFor(CHARLOTTE_GRANT, deps).connect(serverSide);
+  await personServerFor({ caller: CHARLOTTE_GRANT, resourceMetadata: RESOURCE_METADATA }, deps).connect(serverSide);
   client = new Client({ name: 'charlotte', version: '1' });
   await client.connect(clientSide);
   return client;
@@ -180,6 +183,47 @@ describe("a person's MCP client takes part in a meeting", () => {
     await expect(mcp.callTool({ name, arguments: { meetingId: 'weekly' } })).resolves.toEqual({
       content: [{ type: 'text', text: `${name} takes the meetingId of a meeting you take part in, as its notices name it` }],
       isError: true,
+    });
+  });
+});
+
+describe("a person's tools say what each call does (chatgpt-plugin design, 7.4)", () => {
+  it('every person tool carries its three hints, as the table in 7.4 sets them', async () => {
+    const mcp = await connected(personTools().deps);
+
+    const listed = await mcp.listTools();
+
+    expect(Object.fromEntries(listed.tools.map(({ name, annotations }) => [name, annotations]))).toEqual({
+      aeolus_inbox: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      aeolus_ships: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      aeolus_meeting: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      aeolus_open: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      aeolus_done: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      aeolus_answer: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      aeolus_send: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      aeolus_request_mic: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      aeolus_withdraw_mic_request: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      aeolus_release_mic: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      aeolus_ask_for_server: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    });
+  });
+
+  it('every tool declares sign-in: a securitySchemes entry of type oauth2', async () => {
+    const mcp = await connected(personTools().deps);
+
+    const listed = await mcp.listTools();
+
+    expect(listed.tools.map((tool) => [tool.name, tool.securitySchemes])).toEqual(listed.tools.map(({ name }) => [name, [{ type: 'oauth2' }]]));
+  });
+
+  it("a person whose sign-in is gone is asked to sign in again: the tool's error carries mcp/www_authenticate naming the resource metadata", async () => {
+    const message = 'Your sign-in ended: sign in again from your MCP client';
+    const mcp = await connected(personTools({ listShips: () => Promise.resolve(err({ kind: 'SIGNED_OUT', message })) }).deps);
+
+    await expect(mcp.callTool({ name: 'aeolus_ships', arguments: {} })).resolves.toEqual({
+      content: [{ type: 'text', text: message }],
+      isError: true,
+      _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${RESOURCE_METADATA}", error="invalid_token", error_description="${message}"`] },
     });
   });
 });
