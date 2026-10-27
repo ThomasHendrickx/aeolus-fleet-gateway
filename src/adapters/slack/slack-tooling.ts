@@ -47,7 +47,8 @@ function manifestOf(description: SlackAppDescription) {
 
 export function createSlackTooling(options: { apiUrl: string }): SlackTooling {
   /** Calls a Web API method with a form, as the token given if any, and parses what it answers OK. */
-  const call = async <T>(method: string, form: Record<string, string>, answers: z.ZodType<T>, token?: string): Promise<Result<T, SlackRefusal>> => {
+  const call = async <T>(asked: { method: string; form: Record<string, string>; token?: string }, answers: z.ZodType<T>): Promise<Result<T, SlackRefusal>> => {
+    const { method, form, token } = asked;
     let response: Response;
     try {
       response = await fetch(`${options.apiUrl}/${method}`, {
@@ -74,11 +75,11 @@ export function createSlackTooling(options: { apiUrl: string }): SlackTooling {
 
   return {
     rotateConfigurationToken: async (refreshToken) => {
-      const rotated = await call('tooling.tokens.rotate', { refresh_token: refreshToken }, rotatedSchema);
+      const rotated = await call({ method: 'tooling.tokens.rotate', form: { refresh_token: refreshToken } }, rotatedSchema);
       return rotated.isOk ? ok({ token: { accessToken: rotated.value.token, refreshToken: rotated.value.refresh_token, expiresAt: new Date(rotated.value.exp * SECOND_MS) }, teamId: rotated.value.team_id }) : rotated;
     },
     makeApp: async (accessToken, description) => {
-      const made = await call('apps.manifest.create', { manifest: JSON.stringify(manifestOf(description)) }, madeSchema, accessToken);
+      const made = await call({ method: 'apps.manifest.create', form: { manifest: JSON.stringify(manifestOf(description)) }, token: accessToken }, madeSchema);
       if (!made.isOk) {
         return made;
       }
@@ -86,11 +87,11 @@ export function createSlackTooling(options: { apiUrl: string }): SlackTooling {
       return ok({ appId, clientId: credentials.client_id, clientSecret: credentials.client_secret, signingSecret: credentials.signing_secret, installUrl });
     },
     removeApp: async (accessToken, appId) => {
-      const removed = await call('apps.manifest.delete', { app_id: appId }, z.object({ ok: z.literal(true) }), accessToken);
+      const removed = await call({ method: 'apps.manifest.delete', form: { app_id: appId }, token: accessToken }, z.object({ ok: z.literal(true) }));
       return removed.isOk ? ok(undefined) : removed;
     },
     completeInstall: async ({ clientId, clientSecret, code, redirectUrl }) => {
-      const installed = await call('oauth.v2.access', { client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUrl }, installedSchema);
+      const installed = await call({ method: 'oauth.v2.access', form: { client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUrl } }, installedSchema);
       if (!installed.isOk) {
         return installed;
       }
