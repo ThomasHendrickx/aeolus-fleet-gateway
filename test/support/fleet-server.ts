@@ -51,6 +51,7 @@ export function aNewDatabaseUrl(adminUrl: string, prefix: string): string {
 const PORTS_PER_WORKER = 400;
 const FIRST_PORT = 10_000;
 const WORKER_BLOCKS = 50;
+const workerPoolId = z.coerce.number().int().min(1);
 let nextPort = 0;
 
 /**
@@ -59,7 +60,8 @@ let nextPort = 0;
  * the same one, and a server then answered for another's.
  */
 export async function aFreePort(): Promise<number> {
-  const block = (Number(process.env.VITEST_POOL_ID ?? process.pid) % WORKER_BLOCKS) * PORTS_PER_WORKER;
+  const poolId = workerPoolId.parse(process.env.VITEST_POOL_ID ?? process.pid);
+  const block = (poolId % WORKER_BLOCKS) * PORTS_PER_WORKER;
   for (let tries = 0; tries < PORTS_PER_WORKER; tries += 1) {
     const port = FIRST_PORT + block + (nextPort % PORTS_PER_WORKER);
     nextPort += 1;
