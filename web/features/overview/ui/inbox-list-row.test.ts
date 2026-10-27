@@ -20,7 +20,7 @@ function render(group: 'waiting' | 'opened'): string {
   );
 }
 
-// A grid or flex item will not shrink below its content unless min-w-0 lets it. jsdom has no layout,
+// A grid or flex item will not shrink below its content unless min-w-0 lets it. static markup has no layout,
 // so this guards the classes; the width itself was measured at 390 px (aeolus-fleet#1238).
 describe('a message row on the Overview (aeolus-fleet#1238)', () => {
   it.each(['waiting', 'opened'] as const)('lets its %s card and row shrink to the phone page', (group) => {

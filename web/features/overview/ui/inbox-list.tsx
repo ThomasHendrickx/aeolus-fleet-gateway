@@ -54,8 +54,8 @@ export function InboxList({
         <section className="grid gap-2">
           <h2 className="text-section font-semibold">Opened, not yet dealt with · {opened.length}</h2>
           {opened.map((entry) => (
-            <div key={entry.deliveryId} className="grid gap-2 rounded-md border border-border bg-card p-3">
-              <div className="flex items-center gap-3">
+            <div key={entry.deliveryId} className="grid min-w-0 gap-2 rounded-md border border-border bg-card p-3">
+              <div className="flex min-w-0 items-center gap-3">
                 <EntryText entry={entry} />
                 <ActionButton data-testid="overview-deal" isPending={openingId === entry.deliveryId} pendingLabel="Opening..." disabled={openingId !== undefined} onClick={() => { onOpen(entry); }}>
                   Answer or be done
