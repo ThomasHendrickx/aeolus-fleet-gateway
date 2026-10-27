@@ -4,6 +4,7 @@ import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
 import type { SlackApp, SlackAppDescription } from './slack-app.js';
+import type { SlackLink } from './slack-link.js';
 import type { ConfigurationToken, SlackWorkspace } from './slack-workspace.js';
 
 /**
@@ -125,4 +126,50 @@ export interface ProxyShipKinds {
 /** Outbound port: whether Slack signed a request's body at its timestamp with the app's signing secret. */
 export interface SlackSignatures {
   isSigned(signed: { secret: string; timestamp: string; body: string; signature: string }): boolean;
+}
+
+/** Who Sign in with Slack says signed in: the workspace and the user, and the person's name there. */
+export interface SlackIdentity {
+  readonly teamId: string;
+  readonly userId: string;
+  readonly name: string;
+}
+
+/** Outbound port: Sign in with Slack (OpenID Connect), through the fleet's own bot's app. */
+export interface SlackSignIn {
+  /** Slack's sign-in screen for the app, for the workspace, carrying the state. */
+  authorizeUrl(asked: { clientId: string; redirectUrl: string; state: string; teamId: string }): string;
+  /** Turns the code Slack's sign-in sent back into who signed in (openid.connect.token). */
+  complete(asked: { clientId: string; clientSecret: string; code: string; redirectUrl: string }): Promise<Result<SlackIdentity, SlackRefusal>>;
+}
+
+/** What a link's state names: the account and person ship it is for, in which fleet, sealed until it expires. */
+export interface LinkState {
+  readonly fleetId: FleetId;
+  readonly accountId: string;
+  readonly personShipId: ShipId;
+  readonly expiresAt: Date;
+}
+
+/** Outbound port: seals a link's state into Slack's sign-in address, and opens it again. */
+export interface LinkStates {
+  seal(state: LinkState): string;
+  open(sealed: string): LinkState | undefined;
+}
+
+/** Outbound port: the Slack links of each fleet, in the gateway's database. */
+export interface SlackLinks {
+  /** The link of the Slack user in the workspace, in the fleet. */
+  find(fleetId: FleetId, slack: { teamId: string; userId: string }): Promise<SlackLink | undefined>;
+  ofAccount(fleetId: FleetId, accountId: string): Promise<SlackLink | undefined>;
+  /** Keeps a new link; none when the Slack user or the account is linked already, as two links at once find. */
+  add(link: SlackLink): Promise<'added' | 'taken'>;
+  remove(fleetId: FleetId, accountId: string): Promise<void>;
+  /** Stops the account's link, as when the account is disabled. */
+  stop(fleetId: FleetId, accountId: string, at: Date): Promise<void>;
+}
+
+/** Outbound port: a bot's message only one person sees, in a conversation (chat.postEphemeral), with a button that opens an address. */
+export interface SlackMessages {
+  postOnlyTo(botToken: string, message: { channel: string; user: string; text: string; button?: { text: string; url: string } }): Promise<Result<undefined, SlackRefusal>>;
 }

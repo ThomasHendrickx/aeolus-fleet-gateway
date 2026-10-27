@@ -1,7 +1,8 @@
 import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
-import type { InstallState, InstallStates, MadeApp, ProxyShipKinds, ShipNames, ShipToExpose, SlackApps, SlackRefusal, SlackShips, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
+import type { InstallState, InstallStates, LinkState, LinkStates, MadeApp, ProxyShipKinds, ShipNames, ShipToExpose, SlackApps, SlackIdentity, SlackLinks, SlackMessages, SlackRefusal, SlackShips, SlackSignIn, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
+import type { SlackLink } from '../../src/core/slack/slack-link.js';
 import type { SlackApp, SlackAppDescription } from '../../src/core/slack/slack-app.js';
 import type { SlackWorkspace } from '../../src/core/slack/slack-workspace.js';
 import { err, ok } from '../../src/core/shared/result.js';
@@ -220,6 +221,97 @@ export function aSlackApp(overrides: Partial<SlackApp> = {}): SlackApp {
     installStartedAt: null,
     bot: null,
     removedInSlackAt: null,
+    ...overrides,
+  };
+}
+
+/** Link states as readable text: a test reads what the gateway sealed. */
+export function plainLinkStates(): LinkStates {
+  const sealedSchema = z.object({ fleetId: idSchema('fleet'), accountId: z.string(), personShipId: idSchema('ship'), expiresAt: z.coerce.date() });
+  return {
+    seal: (state) => JSON.stringify(state),
+    open: (sealed) => {
+      try {
+        const opened: LinkState | undefined = sealedSchema.safeParse(JSON.parse(sealed)).data;
+        return opened;
+      } catch {
+        return undefined;
+      }
+    },
+  };
+}
+
+/** Sign in with Slack in memory: each code Slack's sign-in sent back, for who signed in with it. */
+export function fakeSlackSignIn() {
+  const noRefusal = (): SlackRefusal | undefined => undefined;
+  const state = { codes: new Map<string, SlackIdentity>(), signIns: new Array<{ clientId: string; code: string; redirectUrl: string }>(), refusal: noRefusal() };
+  const signIn: SlackSignIn = {
+    authorizeUrl: ({ clientId, redirectUrl, state: sealed, teamId }) => `https://slack.com/openid/connect/authorize?${new URLSearchParams({ client_id: clientId, redirect_uri: redirectUrl, state: sealed, team: teamId }).toString()}`,
+    complete: ({ clientId, code, redirectUrl }) => {
+      if (state.refusal !== undefined) {
+        return Promise.resolve(err(state.refusal));
+      }
+      state.signIns.push({ clientId, code, redirectUrl });
+      const identity = state.codes.get(code);
+      return Promise.resolve(identity === undefined ? err({ kind: 'refused' as const, error: 'invalid_code' }) : ok(identity));
+    },
+  };
+  return { state, signIn };
+}
+
+/** The Slack links of each fleet in memory: one per Slack user, one per account, in each fleet. */
+export function memorySlackLinks(): SlackLinks & { held: SlackLink[] } {
+  const held = new Array<SlackLink>();
+  const without = (fleetId: FleetId, accountId: string) => held.filter((link) => !(link.fleetId === fleetId && link.accountId === accountId));
+  return {
+    held,
+    find: (fleetId, { teamId, userId }) => Promise.resolve(held.find((link) => link.fleetId === fleetId && link.teamId === teamId && link.slackUserId === userId)),
+    ofAccount: (fleetId, accountId) => Promise.resolve(held.find((link) => link.fleetId === fleetId && link.accountId === accountId)),
+    add: (link) => {
+      const isTaken = held.some((each) => each.fleetId === link.fleetId && ((each.teamId === link.teamId && each.slackUserId === link.slackUserId) || each.accountId === link.accountId));
+      if (!isTaken) {
+        held.push(link);
+      }
+      return Promise.resolve(isTaken ? 'taken' : 'added');
+    },
+    remove: (fleetId, accountId) => {
+      held.splice(0, held.length, ...without(fleetId, accountId));
+      return Promise.resolve();
+    },
+    stop: (fleetId, accountId, at) => {
+      held.splice(0, held.length, ...held.map((link) => (link.fleetId === fleetId && link.accountId === accountId && link.stoppedAt === null ? { ...link, stoppedAt: at } : link)));
+      return Promise.resolve();
+    },
+  };
+}
+
+/** Slack's posts in memory: each message only one person sees, with the bot token it went with. */
+export function fakeSlackMessages() {
+  const noRefusal = (): SlackRefusal | undefined => undefined;
+  const state = { onlyTo: new Array<{ botToken: string; channel: string; user: string; text: string; button?: { text: string; url: string } }>(), refusal: noRefusal() };
+  const messages: SlackMessages = {
+    postOnlyTo: (botToken, message) => {
+      if (state.refusal !== undefined) {
+        return Promise.resolve(err(state.refusal));
+      }
+      state.onlyTo.push({ botToken, ...message });
+      return Promise.resolve(ok(undefined));
+    },
+  };
+  return { state, messages };
+}
+
+/** Mathilde's Slack account linked to their account in the fleet, unless the test says otherwise. */
+export function aSlackLink(overrides: Partial<SlackLink> = {}): SlackLink {
+  return {
+    fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8sv',
+    teamId: 'T0ACME',
+    slackUserId: 'U0MATHILDE',
+    slackName: 'mathilde',
+    accountId: 'acc-mathilde',
+    personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t',
+    linkedAt: new Date('2026-10-27T08:45:00.000Z'),
+    stoppedAt: null,
     ...overrides,
   };
 }
