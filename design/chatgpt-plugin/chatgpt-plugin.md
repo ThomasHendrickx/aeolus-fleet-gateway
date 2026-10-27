@@ -6,7 +6,7 @@ OpenAI's pages read on 27 Oct, all under developers.openai.com: [S] apps-sdk/dep
 
 ## 1. Purpose
 
-**What it is.** The gateway's connection, named "Aeolus", listed in ChatGPT's Plugins directory. It is a ZIP of two files, `plugin.json` and `mcp.json`, that points ChatGPT at `https://gateway.aeolus-fleet.dev/mcp`. It adds no new behaviour: the person reaches the fleet through the same endpoint, sign-in and tools as today.
+**What it is.** The gateway's connection, named "Aeolus", listed in ChatGPT's Plugins directory. It is a ZIP of two files, `plugin.json` and `mcp.json`, that points ChatGPT at `https://gateway.aeolus-fleet.dev/plugin/mcp`, a second address of the same MCP tools (section 6). It adds no new behaviour: the person reaches the fleet through the same tools and sign-in as today, minus one page they would otherwise see.
 
 **For whom.** A person in a fleet on the hosted Aeolus, working in ChatGPT: someone who is given the right to talk with the fleet and is not technical enough to paste a connector address.
 
@@ -24,7 +24,7 @@ OpenAI's pages read on 27 Oct, all under developers.openai.com: [S] apps-sdk/dep
 | --- | --- | --- |
 | Sign-in is pagasae's mailed link only, or the company identity once a directory is connected. The gateway has no password, test account or bypass. | decision 0054; flows.md F5; gateway code `src/core/sign-in/start-sign-in.ts` | OpenAI refuses sign-in by magic link, email code or MFA for reviewers, and rejects plugins that need extra login steps ([S], [G]) |
 | Policy stays in core: the gateway shows and allows exactly what core answers for the actor. A fleet's tool switches ("Every tool needs") are the gateway's, set per fleet. | gateway CLAUDE.md; decisions 0043, 0046, 0057; gateway commits `276aed2` (S3), `22e68cc` (S4) | The tool list a reviewer or the daily scan sees depends on the fleet and on the account; OpenAI holds new or changed tools until approved ([S]) |
-| An outside client waits for approval up to 7 days, and outside parties are a switch per fleet, off by default. | decision 0056; flows.md F9 | A reviewer must not wait on an approval. Whether a signed-in person using ChatGPT as the account's client passes that wait is decided by the pick page (see 6) |
+| An outside client waits for approval up to 7 days, and outside parties are a switch per fleet, off by default. | decision 0056; flows.md F9 | A reviewer must not wait on an approval. A person who adds the plugin never meets that wait: the plugin's address goes straight to signing in as the person (see 6) |
 | A colleague given the gateway right could not reach it in a new fleet, and only the installation admin can switch the gateway on per fleet. | aeolus-fleet#1233 (onboarding audit, 25 Oct) | The reviewer's demo fleet, and every customer's fleet, needs the gateway on before the plugin works |
 | A chat has no process between turns, so a message waits until the person writes in the chat. The waker is stated on the lease. | interop.md, "Chat with the connector" row and 5.x; decision 0040 | The listing must not promise to wake the person |
 | The chat holds no crew token; a person works their ship behind OAuth. | interop.md 0.8, step 5 of the flow; decision 0015 | The plugin needs no secret in the ZIP, which OpenAI also forbids ([S]) |
@@ -37,7 +37,7 @@ OpenAI's pages read on 27 Oct, all under developers.openai.com: [S] apps-sdk/dep
 
 | Need | Source of the need | Where the gateway meets it |
 | --- | --- | --- |
-| One remote MCP server on a public HTTPS endpoint | [S] | `/mcp`, `mcp-endpoint.ts:170`; hostname `gateway.aeolus-fleet.dev` from `GATEWAY_PUBLIC_URL` |
+| One remote MCP server on a public HTTPS endpoint | [S] | `/mcp`, `mcp-endpoint.ts:170`; hostname `gateway.aeolus-fleet.dev` from `GATEWAY_PUBLIC_URL`. The plugin's address `/plugin/mcp` is new (section 6) |
 | OAuth authorization code with PKCE `S256` | [A] | `read-authorization.ts:101`; metadata `oauth-routes.ts:286` |
 | Protected resource metadata, and `WWW-Authenticate: Bearer resource_metadata=...` on a 401 | [A] | `oauth-routes.ts:276-277`; `mcp-endpoint.ts:163-173` |
 | Authorization server metadata | [A] | `oauth-routes.ts:278-290`. `openid-configuration` is not served; [A] accepts either document |
@@ -55,12 +55,13 @@ Thomas, 27 Oct. Purpose agreed as written. Each answer is recorded here and not 
 | Question | Answer |
 | --- | --- |
 | Q1 Who is it for | The person with an account only. Outside parties still add the gateway by URL. |
-| Q2 Hosted only | Hosted Aeolus only; the listing's server address is `https://gateway.aeolus-fleet.dev/mcp`. |
+| Q2 Hosted only | Hosted Aeolus only; the listing's server address is `https://gateway.aeolus-fleet.dev/plugin/mcp` (Q8, section 6). |
 | Q3 Reviewer sign-in | A demo organisation in pagasae connected to a company sign-in provider with a password (decision 0054). No new gateway behaviour. |
 | Q4 What the package holds | The connection only. Thomas: "For now, just needs to be able to connect." |
 | Q5 Whose name | Not answered; see 5. |
 | Q6 The four pages | On Aeolus's own sites, outside this repository. Correction: the privacy notice and terms exist in pagasae (`content/privacy.tsx`, `content/terms.tsx`, at `https://pagasae.aeolus-fleet.dev/privacy` and `/terms`), the one-pager site exists (`https://aeolus-fleet.dev`); only the support page is missing. |
 | Q7 Where the package lives | In this repository, built by an npm script, versioned with the gateway. |
+| Q8 The pick page | Decided 27 Oct (decision 0056 stands); see section 6. The plugin points at its own path, which skips the pick. |
 
 ## 5. Q5: can the publisher change later
 
@@ -86,12 +87,41 @@ Thomas, 27 Oct: "No answer yet here ... can you change this afterwards? Currentl
 
 ## 6. Q8: the pick page before sign-in
 
-`/authorize` shows two tiles first (`web/features/authorize/ui/pick-holder.tsx`): "Sign in as yourself" and "Ask for access for this client" (decision 0056; the second waits up to 7 days for an approver and is refused while the fleet's outside parties are off). ChatGPT is the same client whether a person adds the plugin or adds the gateway by URL, so the gateway cannot tell them apart.
+Decided by Thomas, 27 Oct. His question: "cant we give the mcp the ?source=aeolus_chatgpt_plugin parameter that automatically goes through the 'sign is as yourself' path?" He approved this form of it.
 
-1. Keep the pick as it is. The reviewer instructions say which tile to press; the negative case below covers the other. A person who picks the second tile in a fleet with outside parties off is refused with the page that exists today.
-2. Name ChatGPT's client document in the gateway and skip the pick for it. A vendor named in code, and a person who wants ChatGPT as an outside party cannot.
+`/authorize` shows two tiles first (`web/features/authorize/ui/pick-holder.tsx`): "Sign in as yourself" and "Ask for access for this client" (decision 0056; the second waits up to 7 days for an approver and is refused while the fleet's outside parties are off). ChatGPT is the same client whether a person adds the plugin or adds the gateway by URL, so the client cannot tell the two apart. The address it was given can.
 
-Pick 1: it is the recorded behaviour, it needs no code, and the person chooses on a page that says what each tile means. The design below proceeds on 1.
+**The decision.**
+
+1. The gateway serves the same MCP tools at a second address, its own path: `https://gateway.aeolus-fleet.dev/plugin/mcp`. Not a query parameter: the address is also the OAuth resource identifier, and RFC 8707 says the resource value "SHOULD NOT include a query component". A client may normalise or drop a query; a path survives every step, because the client sends the address as the `resource` of the authorization request and of the token request.
+2. The second path has its own protected resource metadata, whose `resource` is `https://gateway.aeolus-fleet.dev/plugin/mcp`, and its 401 names that metadata in `resource_metadata`.
+3. A sign-in whose `resource` is the plugin address goes straight to "Sign in as yourself". The pick is not shown.
+4. The plugin's `mcp.json` points at the plugin address (7.2). The listing's server address is the plugin address.
+5. It is a preselection, not a trust signal. Anyone may use the plugin address; all it does is skip to the path with the fewest rights. "Ask for access for this client" stays on plain `/mcp`, where the pick page is unchanged.
+
+**Where the metadata lives.** RFC 9728 section 3.1 inserts the well-known string between host and path: for the resource identifier `https://resource.example.com/resource1`, the request is `GET /.well-known/oauth-protected-resource/resource1`. For ours:
+
+| Resource identifier | Protected resource metadata |
+| --- | --- |
+| `https://gateway.aeolus-fleet.dev/mcp` | `https://gateway.aeolus-fleet.dev/.well-known/oauth-protected-resource/mcp` (or the root document, as today) |
+| `https://gateway.aeolus-fleet.dev/plugin/mcp` | `https://gateway.aeolus-fleet.dev/.well-known/oauth-protected-resource/plugin/mcp` |
+
+The authorization server metadata is the same document for both addresses; the two addresses differ only in the resource they name.
+
+**Checked against the sources** (read 27 Oct):
+
+- MCP authorization spec, version 2025-11-25, "Protected Resource Metadata Discovery Requirements": a server MUST do one of two things, send `resource_metadata` in `WWW-Authenticate` on a 401, or serve metadata at a well-known URI "at the path of the server's MCP endpoint: `https://example.com/public/mcp` could host metadata at `https://example.com/.well-known/oauth-protected-resource/public/mcp`", or at the root. Clients MUST support both, use the `WWW-Authenticate` URL when present, and otherwise try the path form first, then the root.
+- The same spec, "Canonical Server URI": the `resource` parameter MUST be sent in the authorization and the token request, MUST identify the MCP server, and clients SHOULD send the most specific URI; `https://mcp.example.com/server/mcp` is listed as valid "when path component is necessary to identify individual MCP server".
+- RFC 9728 section 3.3: the `resource` value in the metadata MUST be identical to the resource identifier the well-known URL was built from, and when the metadata came from `resource_metadata`, identical to the URL the client used for the request; otherwise the metadata MUST NOT be used. So the plugin path's metadata names exactly `.../plugin/mcp`, and the plain path's names `.../mcp`.
+- RFC 8707 section 2: the value is an absolute URI without fragment; no rule on path; the query is SHOULD NOT, "recognized" as sometimes useful. Section 3 asks for a specific resource URI "including any portion of the URI that identifies the tenant, such as a path component".
+
+Not verified: that ChatGPT's own client follows `resource_metadata` and sends the plugin path unchanged as `resource`. The spec says it MUST; nothing was run against ChatGPT. The first test is the reviewer path in a demo fleet (7.3), and the negative scenario below fails loud if the path is dropped.
+
+**What follows from "a preselection, not a trust signal".**
+
+- The plugin address grants nothing. The person is still signed in by pagasae and gets only what core answers for their person ship; the outside-party wait and its switch are untouched.
+- A token issued for one address is not accepted at the other: audience binding (`authenticate-access-token.ts:28`) holds each token to its own resource, as the MCP spec requires ("MUST validate that access tokens were issued specifically for them").
+- A person who wants ChatGPT as an outside party adds the gateway by URL, `/mcp`, and sees the pick as today.
 
 ## 7. The design
 
@@ -111,7 +141,7 @@ No new table, port or use case: the gateway's core is untouched. The one new rou
 
 ### 7.2 The package and its build
 
-`plugin.json` uses the Agent Plugins layout (`$schema`, `name`, `version`, `description`, `author`, `extensions.com.openai` with `interface` and `review`). `name` is `aeolus`. `version` is the gateway's `package.json` version, so one number names the ZIP and the release. `mcp.json` holds exactly one server, `type` `streamable-http`, url `https://gateway.aeolus-fleet.dev/mcp`, and under `extensions["com.openai"].auth` the type `oauth` with client mode `cimd`. It holds no `headers` and no `clientSecret`; neither exists to hold.
+`plugin.json` uses the Agent Plugins layout (`$schema`, `name`, `version`, `description`, `author`, `extensions.com.openai` with `interface` and `review`). `name` is `aeolus`. `version` is the gateway's `package.json` version, so one number names the ZIP and the release. `mcp.json` holds exactly one server, `type` `streamable-http`, url `https://gateway.aeolus-fleet.dev/plugin/mcp`, and under `extensions["com.openai"].auth` the type `oauth` with client mode `cimd`. It holds no `headers` and no `clientSecret`; neither exists to hold.
 
 The ZIP holds `plugin.json`, `mcp.json` and the logo, and nothing else: no skill (Q4), no hooks, no `test_credentials` or `reviewer_instructions` (OpenAI rejects them).
 
@@ -127,7 +157,7 @@ OpenAI needs an account that "should work immediately without MFA approval, emai
 2. A test Entra tenant for that organisation's proved domain, with security defaults off so no MFA is asked, and one user, the reviewer, whose password needs no change at first sign-in. Thomas may choose Okta or Google instead if that is easier; the design needs only a provider whose password sign-in asks nothing more.
 3. A demo fleet in the organisation: the gateway switched on by the installation admin (aeolus-fleet#1233), a group giving the reviewer the right to the gateway, the reviewer's person ship, and ships `demo-planner` and `demo-notes`.
 4. Sample data the five positive cases need: a question from `demo-planner` with numbered options, a message titled "Weekly digest", and a meeting "Demo standup" with the reviewer in it. A schedule of the demo fleet sends a fresh question and digest each day, so the inbox is not empty for the next review ("Keep the test account and sample data available for subsequent reviews").
-5. Reviewer instructions in the portal (never in the ZIP): the sign-in address, the account and password, "press Sign in as yourself", and the demo fleet.
+5. Reviewer instructions in the portal (never in the ZIP): the sign-in address, the account and password, and the demo fleet. No tile is pressed: the plugin's address skips the pick.
 
 The gateway has no password, no test account and no bypass in any of this. Policy stays in core: the reviewer sees what core answers for their person ship, and the outside-parties switch stays off in the demo fleet.
 
@@ -168,18 +198,19 @@ The portal shows a token and its URL. The gateway answers `GET /.well-known/open
 
 ```mermaid
 flowchart TD
-  A[Person opens ChatGPT, finds Aeolus, presses Add] --> B[ChatGPT reads mcp.json, calls /mcp with no token]
-  B --> C[Gateway answers 401 with resource_metadata]
+  A[Person opens ChatGPT, finds Aeolus, presses Add] --> B[ChatGPT reads mcp.json, calls /plugin/mcp with no token]
+  B --> C[Gateway answers 401 with resource_metadata for the plugin path]
   C --> D[ChatGPT reads protected resource and authorization server metadata, and its own client document]
   D --> E{Client document and redirect URI pass?}
   E -- no --> E1[Refusal back to ChatGPT: invalid client or redirect. Nothing is added]
   E -- yes --> F[Browser opens /authorize: PKCE S256, resource, state]
-  F --> G[Gateway shows the pick page]
-  G --> H{Which tile?}
-  H -- Ask for access for this client --> H1{Fleet's outside parties on?}
+  F --> G{Is resource the plugin address?}
+  G -- no, plain /mcp --> G1[Pick page: Sign in as yourself, or Ask for access for this client, as today]
+  G1 -- Ask for access for this client --> H1{Fleet's outside parties on?}
   H1 -- no --> H2[Refused page: outside parties off. Person goes back and picks the other tile]
   H1 -- yes --> H3[Waits up to 7 days for an approver, as any outside client]
-  H -- Sign in as yourself --> I[Gateway seals the sign-in and sends the person to pagasae naming no fleet]
+  G1 -- Sign in as yourself --> I
+  G -- yes --> I[Gateway seals the sign-in and sends the person to pagasae naming no fleet]
   I --> J{Account at a connected company directory?}
   J -- yes --> K[Company sign-in with the person's own provider]
   J -- no --> L[Mailed sign-in link]
@@ -285,7 +316,7 @@ Scenario: the package is the connection and nothing else
   Given the gateway at version 0.33.0
   When npm run plugin:build runs
   Then dist/aeolus-0.33.0.zip holds plugin.json, mcp.json and the logo, and no other file
-  And mcp.json holds exactly one server, of type streamable-http, at https://gateway.aeolus-fleet.dev/mcp
+  And mcp.json holds exactly one server, of type streamable-http, at https://gateway.aeolus-fleet.dev/plugin/mcp
   And it declares auth type oauth with client mode cimd, and holds no headers, no clientSecret and no hooks
 
 Scenario: the version is the gateway's
@@ -405,12 +436,43 @@ Scenario: with no token set there is no route
 ```
 Scenario: a person adds the plugin and signs in
   Given Ana has an account in a fleet that serves the gateway
-  When Ana adds Aeolus in ChatGPT and presses "Sign in as yourself"
-  Then she signs in at pagasae and ChatGPT lists the 11 tools
+  When Ana adds Aeolus in ChatGPT and signs in at pagasae
+  Then ChatGPT lists the 11 tools
   And aeolus_inbox answers the deliveries of her person ship
 
+Scenario: a person adding the plugin never sees the choice
+  Given Ana has an account in a fleet that serves the gateway
+  When Ana adds Aeolus in ChatGPT, which starts /authorize with resource https://gateway.aeolus-fleet.dev/plugin/mcp
+  Then she is sent to pagasae with no pick page shown
+  And the sign-in is the one for "Sign in as yourself", with no request for access for the client
+
+Scenario: the plugin address is open to anyone and grants nothing
+  Given Cy has no account
+  When Cy starts /authorize with resource https://gateway.aeolus-fleet.dev/plugin/mcp
+  Then Cy reaches pagasae's sign-in like anyone, no code is issued without a signed-in account, and no outside-party request is made
+
+Scenario: the plugin address cannot ask for access for the client
+  Given a fleet with outside parties on
+  When a client starts /authorize with resource https://gateway.aeolus-fleet.dev/plugin/mcp
+  Then no choice is offered and no approver is asked
+
+Scenario: the plugin path has its own metadata
+  When GET /.well-known/oauth-protected-resource/plugin/mcp is called
+  Then its resource is exactly https://gateway.aeolus-fleet.dev/plugin/mcp
+  And a 401 from /plugin/mcp names this document in resource_metadata
+  And the document at /.well-known/oauth-protected-resource/mcp still names https://gateway.aeolus-fleet.dev/mcp
+
+Scenario: a token for one address is refused at the other
+  Given Ana holds an access token issued for resource https://gateway.aeolus-fleet.dev/plugin/mcp
+  When it is presented at /mcp
+  Then the call is refused with 401, and the same the other way round
+
+Scenario: a resource the gateway does not serve
+  When a client starts /authorize with resource https://gateway.aeolus-fleet.dev/plugin/other
+  Then the refusal goes back to the client and no sign-in starts
+
 Scenario: the sign-in link has expired
-  Given Ana pressed "Sign in as yourself" 11 minutes ago and did not finish
+  Given Ana started the plugin sign-in 11 minutes ago and did not finish
   When she comes back from pagasae
   Then she sees the sign-in is unknown or expired and no code is issued
 
@@ -429,18 +491,19 @@ Scenario: a person with no fleet the gateway serves
   When Bo signs in
   Then Bo sees that the fleet is not served and nothing is added
 
-Scenario: the other tile waits or is refused
+Scenario: the other tile waits or is refused, on the plain address
   Given a fleet with outside parties off
+  And Ana adds the gateway by the address https://gateway.aeolus-fleet.dev/mcp
   When Ana presses "Ask for access for this client"
   Then she is refused with the outside-parties-off page and no code is issued
 
 Scenario: the sign-in survives a restart
-  Given Ana pressed "Sign in as yourself" and the gateway restarts before she returns
+  Given Ana started the plugin sign-in and the gateway restarts before she returns
   When she returns from pagasae within 10 minutes
   Then a code is issued
 
 Scenario: how big: sign-ins at launch
-  Given 100 people press "Sign in as yourself" within one minute
+  Given 100 people start the plugin sign-in within one minute
   When each returns from pagasae
   Then each gets a code within 2 seconds of returning
 
@@ -456,7 +519,7 @@ Scenario: how big: a large inbox
 Scenario: the reviewer signs in with a password and nothing else
   Given the demo organisation is connected to the test provider
   And the reviewer account has a password and no MFA
-  When the reviewer adds Aeolus, presses "Sign in as yourself" and enters the password
+  When the reviewer adds Aeolus and enters the password
   Then the plugin is connected with no mailed link, no code and no other step
 
 Scenario: the reviewer sees only the demo fleet
@@ -597,9 +660,8 @@ The scenarios answer the four questions as follows: how big, the two "how big" s
 5. **Approve the words in section 8,** or change them: name, short and long description, category, starter prompts, release notes.
 6. **Write and publish the support page** on the site, and decide whether the privacy notice and terms need a line about ChatGPT. Needs: the site repository; your decision on wording.
 7. **Choose the logo:** a square image, at least 48 px, PNG, JPEG, WebP or SVG (the site's `favicon.svg` is one candidate), and brand colours if the portal asks. Needs: the image file.
-8. **Upload and submit in the portal:** the ZIP from `npm run plugin:build`; connect `https://gateway.aeolus-fleet.dev/mcp` and complete Verify Domain; enter the reviewer address, account, password and instructions under Review details; the commerce answer (none); the policy attestations; the age statement (OpenAI asks for a service suitable for ages 13 to 17; Aeolus serves staff of organisations); the category; the four URLs. Needs: items 1 to 7 done; the portal.
+8. **Upload and submit in the portal:** the ZIP from `npm run plugin:build`; connect `https://gateway.aeolus-fleet.dev/plugin/mcp` and complete Verify Domain; enter the reviewer address, account, password and instructions under Review details; the commerce answer (none); the policy attestations; the age statement (OpenAI asks for a service suitable for ages 13 to 17; Aeolus serves staff of organisations); the category; the four URLs. Needs: items 1 to 7 done; the portal.
 9. **Record the demo video** of the five positive cases with the reviewer account, in a place reviewers can open. Needs: the demo fleet and a screen recording.
 10. **Publish after approval,** and appeal a rejection by replying to OpenAI's email. Needs: the approval email.
 11. **After a release that changes a tool:** press Rescan, and approve or appeal a held change. After a release that changes the package: upload the ZIP attached to the release. Needs: the portal.
-12. **Answer Q8** (the pick page): keep it or skip it for ChatGPT. Needs: this document's section 6.
-13. **Approve the scenarios in section 9.** The build is held to them.
+12. **Approve the scenarios in section 9.** The build is held to them.
