@@ -24,6 +24,12 @@ import { err, ok } from '../../core/shared/result.js';
 import { createFocusPage } from '../../core/people/focus-page.js';
 import { memoryFocusedPages } from '../../../test/support/people-fakes.js';
 import { createChangeHub, type ChangeHub } from '../http/live.js';
+import { fakeShipNames, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces, plainInstallStates } from '../../../test/support/slack-fakes.js';
+import { createConnectSlack } from '../../core/slack/connect-slack.js';
+import { createDisconnectSlack } from '../../core/slack/disconnect-slack.js';
+import { createReadSlack } from '../../core/slack/read-slack.js';
+import { createStartInstall } from '../../core/slack/start-install.js';
+import { createTakeAccessToken } from '../../core/slack/take-access-token.js';
 import { gatewayRouter, type Context } from './router.js';
 
 /** The grant a person called by from an MCP client, or the account token their shared sign-in was exchanged for. */
@@ -98,6 +104,9 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   const answers: Record<string, string>[] = [];
   const unused = () => Promise.reject(new Error('not used by the parties procedures'));
   const changes = createChangeHub();
+  const slackTooling = fakeSlackTooling({ now: () => SLACK_NOW });
+  const slackWorkspaces = memorySlackWorkspaces();
+  const slackApps = memorySlackApps();
   const context: Context = {
     cookie,
     crewToken,
@@ -318,6 +327,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       }
       return Promise.resolve(ok({ requirements: { version: 3, party: input.party ?? ['crm:use'], tools: input.tools }, statementRefusal: null }));
     },
+    slack: slackOf(slackTooling, slackWorkspaces, slackApps),
     readOutsideParties: () => Promise.resolve({ isOn: false }),
     setOutsideParties: (input) => {
       switched.push(input);
@@ -338,7 +348,22 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, toolSwitches, requirementChanges, agentAdditions, agentMarks, decisions, switched, answers, changes, additions, focused };
+  return { context, approvals, marks, toolSwitches, requirementChanges, agentAdditions, agentMarks, decisions, switched, answers, changes, additions, focused, slack: { tooling: slackTooling, workspaces: slackWorkspaces, apps: slackApps } };
+}
+
+const SLACK_NOW = new Date('2026-10-27T09:00:00.000Z');
+const SLACK_REDIRECT_URL = 'https://gateway.acme.test/gw/slack/install';
+
+/** The Slack procedures' use cases over Slack and the vault in memory. */
+function slackOf(tooling: ReturnType<typeof fakeSlackTooling>, workspaces: ReturnType<typeof memorySlackWorkspaces>, apps: ReturnType<typeof memorySlackApps>): Context['slack'] {
+  const clock = { now: () => SLACK_NOW };
+  const takeAccessToken = createTakeAccessToken({ slack: tooling.slack, workspaces, clock });
+  return {
+    readSlack: createReadSlack({ workspaces, apps }),
+    connectSlack: createConnectSlack({ slack: tooling.slack, workspaces, apps, shipNames: fakeShipNames({ [OWNER]: 'charlotte' }), clock, installRedirectUrl: SLACK_REDIRECT_URL }),
+    startInstall: createStartInstall({ slack: tooling.slack, apps, workspaces, takeAccessToken, states: plainInstallStates(), clock, installRedirectUrl: SLACK_REDIRECT_URL }),
+    disconnectSlack: createDisconnectSlack({ slack: tooling.slack, workspaces, apps, takeAccessToken }),
+  };
 }
 
 const APPROVAL = { requestId: 'a-1', name: 'crm', url: 'https://crm.example.com/mcp', credential: { kind: 'bearer' as const, token: 'crm-token' }, ownerShipId: OWNER };
@@ -1176,5 +1201,65 @@ describe("a person's page tells the gateway's API while it is in focus (wake a p
 
   it('refuses any other actor: only a person has a person ship', async () => {
     await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).people.focus()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("an actor holding gateway:slack connects the fleet's Slack through the API (gateway scopes 9.1)", () => {
+  /** Charlotte on the gateway's pages, holding the scopes given. */
+  function asCharlotte(scopes: string[]) {
+    const made = aContext(undefined);
+    const signIns = fakeSharedSignIn({});
+    const context: Context = {
+      ...made.context,
+      signIn: CHARLOTTE_SIGN_IN,
+      fleetInView: FLEET,
+      accountApps: (signIn) => signIns.apps(signIn),
+      authenticateActor: () => Promise.resolve(ok({ fleetId: FLEET, kind: 'account' as const, accountId: 'acc-charlotte', personShipId: OWNER, accountToken: SHARED_ACCOUNT_TOKEN, scopes })),
+    };
+    return { caller: gatewayRouter.createCaller(context), slack: made.slack };
+  }
+
+  it("connects with the configuration token, making the gateway's bot named after the fleet as the shared sign-in states it", async () => {
+    const { caller, slack } = asCharlotte(['fleet:read', 'gateway:slack']);
+
+    await expect(caller.slack.connect({ refreshToken: 'xoxe-1-first' })).resolves.toEqual({ isGatewayBotMade: true });
+    expect(slack.tooling.state.made.map(({ description }) => description.name)).toEqual(['Acme']);
+    await expect(caller.slack.view()).resolves.toEqual({
+      state: 'connected',
+      workspace: { teamId: 'T0ACME', name: null },
+      connectedBy: 'charlotte',
+      connectedAt: SLACK_NOW.toISOString(),
+      tokenState: 'fresh',
+      gatewayBot: 'made',
+      canChange: true,
+    });
+  });
+
+  it('says Slack refused the configuration token as a bad request', async () => {
+    const { caller } = asCharlotte(['gateway:slack']);
+
+    await expect(caller.slack.connect({ refreshToken: 'xoxe-1-expired' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: 'Slack refused the configuration token (invalid_refresh_token): copy a new one from your Slack app management page' });
+  });
+
+  it('refuses an actor without gateway:slack, showing it the page read-only', async () => {
+    const { caller } = asCharlotte(['fleet:read']);
+
+    await expect(caller.slack.connect({ refreshToken: 'xoxe-1-first' })).rejects.toMatchObject({ code: 'FORBIDDEN', message: 'Connecting Slack needs gateway:slack' });
+    await expect(caller.slack.view()).resolves.toEqual({ state: 'notConnected', canChange: false });
+  });
+
+  it("answers Slack's install address for the gateway's bot, then disconnects, removing it in Slack", async () => {
+    const { caller, slack } = asCharlotte(['gateway:slack']);
+    await caller.slack.connect({ refreshToken: 'xoxe-1-first' });
+
+    const installing = await caller.slack.install();
+    await caller.slack.disconnect();
+
+    expect({ isSlackAddress: installing.url.startsWith('https://slack.com/oauth/v2/authorize?client_id=client-A01&state='), removed: slack.tooling.state.removed.map(({ appId }) => appId) }).toEqual({ isSlackAddress: true, removed: ['A01'] });
+    await expect(caller.slack.view()).resolves.toEqual({ state: 'notConnected', canChange: true });
+  });
+
+  it('refuses Install while the fleet is connected to no workspace', async () => {
+    await expect(asCharlotte(['gateway:slack']).caller.slack.install()).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
