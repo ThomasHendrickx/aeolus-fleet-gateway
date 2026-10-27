@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { HEADS_MEETING_ID, aMeetingRead } from '../../../test/support/meeting-fakes.js';
 import { CHARLOTTE_GRANT, SENT_MESSAGE_ID } from '../../../test/support/people-fakes.js';
@@ -55,6 +56,24 @@ async function connected(deps: PersonToolsDeps): Promise<Client> {
   client = new Client({ name: 'charlotte', version: '1' });
   await client.connect(clientSide);
   return client;
+}
+
+/** tools/list as the server sends it, before an SDK client drops what its schema does not name, such as securitySchemes. */
+async function rawToolsList(deps: PersonToolsDeps) {
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+  await personServerFor({ caller: CHARLOTTE_GRANT, resourceMetadata: RESOURCE_METADATA }, deps).connect(serverSide);
+  const received: unknown[] = [];
+  clientSide.onmessage = (message) => received.push(message);
+  await clientSide.start();
+  await clientSide.send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'charlotte', version: '1' } } });
+  await clientSide.send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+  await vi.waitFor(() => {
+    expect(received).toHaveLength(2);
+  });
+  await clientSide.close();
+  return z
+    .object({ result: z.object({ tools: z.array(z.looseObject({ name: z.string(), securitySchemes: z.unknown() })) }) })
+    .parse(received[1]).result.tools;
 }
 
 describe("a person's MCP client starts a message", () => {
@@ -209,11 +228,9 @@ describe("a person's tools say what each call does (chatgpt-plugin design, 7.4)"
   });
 
   it('every tool declares sign-in: a securitySchemes entry of type oauth2', async () => {
-    const mcp = await connected(personTools().deps);
+    const tools = await rawToolsList(personTools().deps);
 
-    const listed = await mcp.listTools();
-
-    expect(listed.tools.map((tool) => [tool.name, tool.securitySchemes])).toEqual(listed.tools.map(({ name }) => [name, [{ type: 'oauth2' }]]));
+    expect(tools.map((tool) => [tool.name, tool.securitySchemes])).toEqual(tools.map(({ name }) => [name, [{ type: 'oauth2' }]]));
   });
 
   it("a person whose sign-in is gone is asked to sign in again: the tool's error carries mcp/www_authenticate naming the resource metadata", async () => {
