@@ -4,6 +4,7 @@ import type { ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
+import { createPrismaClient } from '../src/adapters/prisma/client.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, applyEmptyOwnRules, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
@@ -86,15 +87,39 @@ describe('argo connects the gateway', () => {
     await expect(status(address)).resolves.toEqual({ enabled: true, state: 'connected', ship: { shipId: gatewayShip.shipId, name: 'gateway' }, lastShipId: gatewayShip.shipId });
   });
 
-  it("declares its approving scope in the fleet, gateway:approve, declared by the gateway's ship (decision 0056)", async () => {
+  /** The scopes the fleet lists under the gateway's namespace, as a reading ship sees them. */
+  async function gatewayNamespace() {
+    const reader = await register(fleet, await commission(fleet, { cookie, ship: { name: `reader-${crypto.randomUUID().slice(0, 8)}`, type: 'agent', scopes: ['fleet:read'] } }));
+    const answer = await fetch(`${fleet.url}/api/v1/fleet/scopes`, { headers: { authorization: `Bearer ${reader}` } });
+    const namespaces = z.array(z.object({ namespace: z.string(), declaredBy: z.object({ name: z.string() }).nullable(), scopes: z.array(z.object({ scope: z.string() })) })).parse(await answer.json());
+    return namespaces.find(({ namespace }) => namespace === 'gateway');
+  }
+
+  it("declares its scopes in the fleet, gateway:approve and gateway:slack, declared by the gateway's ship (decision 0056, gateway scopes B6)", async () => {
     const address = await started();
     await connectGateway(address, { cookie, ...gatewayShip });
-    const reader = await register(fleet, await commission(fleet, { cookie, ship: { name: 'reader', type: 'agent', scopes: ['fleet:read'] } }));
 
-    const answer = await fetch(`${fleet.url}/api/v1/fleet/scopes`, { headers: { authorization: `Bearer ${reader}` } });
+    await expect(gatewayNamespace()).resolves.toEqual({ namespace: 'gateway', declaredBy: { name: 'gateway' }, scopes: [{ scope: 'gateway:approve' }, { scope: 'gateway:slack' }] });
+  });
 
-    const namespaces = z.array(z.object({ namespace: z.string(), declaredBy: z.object({ name: z.string() }).nullable(), scopes: z.array(z.object({ scope: z.string() })) })).parse(await answer.json());
-    expect(namespaces.find(({ namespace }) => namespace === 'gateway')).toEqual({ namespace: 'gateway', declaredBy: { name: 'gateway' }, scopes: [{ scope: 'gateway:approve' }] });
+  it('declares its whole namespace again as it starts, so a fleet connected before gateway:slack offers it', async () => {
+    await connectGateway(await started(), { cookie, ...gatewayShip });
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+    // The fleet holds the list the gateway declared before gateway:slack joined it.
+    const prisma = createPrismaClient(databaseUrl);
+    const { crewToken } = await prisma.connection.findFirstOrThrow();
+    await prisma.$disconnect();
+    const older = await fetch(`${fleet.url}/api/v1/fleet/declareScopes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${String(crewToken)}` },
+      body: JSON.stringify({ namespace: 'gateway', scopes: [{ scope: 'gateway:approve', description: 'Approve outside parties' }] }),
+    });
+    expect(older.status, await older.clone().text()).toBe(200);
+    await expect(gatewayNamespace()).resolves.toMatchObject({ scopes: [{ scope: 'gateway:approve' }] });
+
+    await started();
+
+    await expect(gatewayNamespace()).resolves.toMatchObject({ scopes: [{ scope: 'gateway:approve' }, { scope: 'gateway:slack' }] });
   });
 
   it("serves a ship by its own crew token, with the scopes the fleet holds for it (decision 0057)", async () => {
