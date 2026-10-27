@@ -43,7 +43,7 @@ export function createCompleteInstall(deps: {
     if (teamId !== workspace.teamId) {
       return refuse('OTHER_WORKSPACE', `The fleet is connected to ${workspace.teamName ?? workspace.teamId}: install into that workspace`);
     }
-    await deps.apps.save({ ...app, bot: { token: botToken, userId: botUserId } });
+    await deps.apps.save({ ...app, bot: { token: botToken, userId: botUserId }, installStartedAt: null, removedInSlackAt: null });
     // Held, so a configuration token rotated meanwhile is kept.
     await deps.workspaces.change(opened.fleetId, (current) => Promise.resolve({ ...current, teamName }));
     return ok({ fleetId: opened.fleetId });
