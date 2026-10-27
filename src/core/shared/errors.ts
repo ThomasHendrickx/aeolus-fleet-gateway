@@ -60,6 +60,12 @@ export type DomainErrorKind =
   | 'NO_SUCH_MEETING'
   | 'MIC_REFUSED'
   | 'SCOPE_NOT_LISTED'
+  | 'SLACK_SCOPE_NOT_HELD'
+  | 'SLACK_NOT_CONNECTED'
+  | 'SLACK_TOKEN_REFUSED'
+  | 'SLACK_UNAVAILABLE'
+  | 'OTHER_WORKSPACE'
+  | 'INSTALL_REFUSED'
   | 'CONFLICT';
 
 /** Why the core refused a request. Adapters map the kind to their own error shape; the message is safe to show. */
