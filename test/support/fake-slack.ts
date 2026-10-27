@@ -35,8 +35,8 @@ async function bodyOf(request: IncomingMessage): Promise<URLSearchParams> {
   return new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
 }
 
-function answer(response: ServerResponse, body: unknown, status = 200, headers: Record<string, string> = {}): void {
-  response.writeHead(status, { 'content-type': 'application/json', ...headers }).end(JSON.stringify(body));
+function answer(response: ServerResponse, reply: { body: unknown; status?: number; headers?: Record<string, string> }): void {
+  response.writeHead(reply.status ?? 200, { 'content-type': 'application/json', ...reply.headers }).end(JSON.stringify(reply.body));
 }
 
 function redirectUrlOf(manifest: unknown): string | undefined {
@@ -47,7 +47,8 @@ function redirectUrlOf(manifest: unknown): string | undefined {
   if (typeof oauthConfig !== 'object' || oauthConfig === null || !('redirect_urls' in oauthConfig) || !Array.isArray(oauthConfig.redirect_urls)) {
     return undefined;
   }
-  const [first]: unknown[] = oauthConfig.redirect_urls;
+  const urls: unknown[] = oauthConfig.redirect_urls;
+  const first = urls[0];
   return typeof first === 'string' ? first : undefined;
 }
 
@@ -82,7 +83,7 @@ export async function startFakeSlack(): Promise<FakeSlack> {
     const form = await bodyOf(request);
     const retryAfter = rateLimits.get(method);
     if (retryAfter !== undefined) {
-      answer(response, { ok: false, error: 'ratelimited' }, 429, { 'retry-after': String(retryAfter) });
+      answer(response, { body: { ok: false, error: 'ratelimited' }, status: 429, headers: { 'retry-after': String(retryAfter) } });
       return;
     }
     const bearer = request.headers.authorization?.replace(/^Bearer /, '') ?? '';
@@ -90,7 +91,7 @@ export async function startFakeSlack(): Promise<FakeSlack> {
       case 'tooling.tokens.rotate': {
         const refreshToken = form.get('refresh_token') ?? '';
         if (!refreshTokens.delete(refreshToken)) {
-          answer(response, { ok: false, error: 'invalid_refresh_token' });
+          answer(response, { body: { ok: false, error: 'invalid_refresh_token' } });
           return;
         }
         rotations += 1;
@@ -99,48 +100,50 @@ export async function startFakeSlack(): Promise<FakeSlack> {
         accessTokens.add(token);
         refreshTokens.add(next);
         const iat = Math.floor(Date.now() / 1000);
-        answer(response, { ok: true, token, refresh_token: next, team_id: SLACK_TEAM.id, user_id: 'U0CHARLOTTE', iat, exp: iat + 12 * 60 * 60 });
+        answer(response, { body: { ok: true, token, refresh_token: next, team_id: SLACK_TEAM.id, user_id: 'U0CHARLOTTE', iat, exp: iat + 12 * 60 * 60 } });
         return;
       }
       case 'apps.manifest.create': {
         if (!accessTokens.has(bearer)) {
-          answer(response, { ok: false, error: 'invalid_auth' });
+          answer(response, { body: { ok: false, error: 'invalid_auth' } });
           return;
         }
         const manifest: unknown = JSON.parse(form.get('manifest') ?? 'null');
         const appId = `A0${String(apps.size + 1)}`;
         apps.set(appId, { manifest, isRemoved: false });
         answer(response, {
-          ok: true,
-          app_id: appId,
-          credentials: { client_id: `client-${appId}`, client_secret: `secret-${appId}`, verification_token: 'unused', signing_secret: `signing-${appId}` },
-          oauth_authorize_url: `${base}/oauth/v2/authorize?client_id=client-${appId}&scope=chat%3Awrite`,
+          body: {
+            ok: true,
+            app_id: appId,
+            credentials: { client_id: `client-${appId}`, client_secret: `secret-${appId}`, verification_token: 'unused', signing_secret: `signing-${appId}` },
+            oauth_authorize_url: `${base}/oauth/v2/authorize?client_id=client-${appId}&scope=chat%3Awrite`,
+          },
         });
         return;
       }
       case 'apps.manifest.delete': {
         const app = apps.get(form.get('app_id') ?? '');
         if (!accessTokens.has(bearer) || app === undefined || app.isRemoved) {
-          answer(response, { ok: false, error: accessTokens.has(bearer) ? 'app_not_found' : 'invalid_auth' });
+          answer(response, { body: { ok: false, error: accessTokens.has(bearer) ? 'app_not_found' : 'invalid_auth' } });
           return;
         }
         app.isRemoved = true;
-        answer(response, { ok: true });
+        answer(response, { body: { ok: true } });
         return;
       }
       case 'oauth.v2.access': {
         const code = form.get('code') ?? '';
         const appId = codes.get(code);
         if (appId === undefined || form.get('client_id') !== `client-${appId}` || form.get('client_secret') !== `secret-${appId}`) {
-          answer(response, { ok: false, error: 'invalid_code' });
+          answer(response, { body: { ok: false, error: 'invalid_code' } });
           return;
         }
         codes.delete(code);
-        answer(response, { ok: true, access_token: `xoxb-${appId}`, token_type: 'bot', bot_user_id: `U0${appId}`, app_id: appId, team: SLACK_TEAM });
+        answer(response, { body: { ok: true, access_token: `xoxb-${appId}`, token_type: 'bot', bot_user_id: `U0${appId}`, app_id: appId, team: SLACK_TEAM } });
         return;
       }
       default:
-        answer(response, { ok: false, error: 'unknown_method' }, 404);
+        answer(response, { body: { ok: false, error: 'unknown_method' }, status: 404 });
     }
   };
 
@@ -165,6 +168,6 @@ export async function startFakeSlack(): Promise<FakeSlack> {
         rateLimits.set(method, retryAfterSeconds);
       }
     },
-    stop: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    stop: () => new Promise<void>((resolve) => server.close(() => { resolve(); })),
   };
 }
