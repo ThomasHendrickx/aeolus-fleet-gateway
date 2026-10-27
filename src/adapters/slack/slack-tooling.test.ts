@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startFakeSlack, type FakeSlack } from '../../../test/support/fake-slack.js';
-import { gatewayBotDescription } from '../../core/slack/slack-app.js';
+import { gatewayBotDescription, shipBotDescription } from '../../core/slack/slack-app.js';
 import { createSlackTooling } from './slack-tooling.js';
 
 // Slack's Web API as the gateway calls it for app management (gateway
@@ -56,6 +56,28 @@ describe("Slack's app management", () => {
     });
     await expect(tooling.removeApp(accessToken, 'A01')).resolves.toEqual({ isOk: true, value: undefined });
     expect(slack.apps.get('A01')?.isRemoved).toBe(true);
+  });
+
+  it("makes a ship's bot with its events sent to the gateway, and renames it with its whole manifest", async () => {
+    const tooling = createSlackTooling({ apiUrl: slack.apiUrl });
+    const rotated = await tooling.rotateConfigurationToken('xoxe-1-first');
+    const accessToken = rotated.isOk ? rotated.value.token.accessToken : '';
+    const addresses = { installRedirectUrl: REDIRECT_URL, eventsUrl: 'https://gateway.acme.test/gw/slack/events' };
+    await tooling.makeApp(accessToken, shipBotDescription({ name: 'release-notes', summary: 'Writes the release notes' }, addresses));
+
+    await expect(tooling.renameApp(accessToken, 'A01', shipBotDescription({ name: 'changelog', summary: 'Writes the release notes' }, addresses))).resolves.toEqual({ isOk: true, value: undefined });
+
+    expect(slack.apps.get('A01')?.manifest).toEqual({
+      display_information: { name: 'changelog', description: 'Writes the release notes' },
+      features: { bot_user: { display_name: 'changelog', always_online: true }, app_home: { home_tab_enabled: false, messages_tab_enabled: true, messages_tab_read_only_enabled: false } },
+      oauth_config: { redirect_urls: [REDIRECT_URL], scopes: { bot: ['chat:write', 'im:history', 'app_mentions:read', 'reactions:write'] } },
+      settings: {
+        event_subscriptions: { request_url: 'https://gateway.acme.test/gw/slack/events', bot_events: ['message.im', 'app_mention', 'app_uninstalled', 'tokens_revoked'] },
+        org_deploy_enabled: false,
+        socket_mode_enabled: false,
+        token_rotation_enabled: false,
+      },
+    });
   });
 
   it("answers rate limited with Slack's Retry-After", async () => {

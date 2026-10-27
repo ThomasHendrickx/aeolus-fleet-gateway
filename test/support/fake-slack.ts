@@ -121,6 +121,16 @@ export async function startFakeSlack(): Promise<FakeSlack> {
         });
         return;
       }
+      case 'apps.manifest.update': {
+        const app = apps.get(form.get('app_id') ?? '');
+        if (!accessTokens.has(bearer) || app === undefined || app.isRemoved) {
+          answer(response, { body: { ok: false, error: accessTokens.has(bearer) ? 'app_not_found' : 'invalid_auth' } });
+          return;
+        }
+        app.manifest = JSON.parse(form.get('manifest') ?? 'null');
+        answer(response, { body: { ok: true, app_id: form.get('app_id'), permissions_updated: false } });
+        return;
+      }
       case 'apps.manifest.delete': {
         const app = apps.get(form.get('app_id') ?? '');
         if (!accessTokens.has(bearer) || app === undefined || app.isRemoved) {
