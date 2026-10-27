@@ -75,6 +75,9 @@ import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
 import type { Result } from '../../core/shared/result.js';
 import { SLACK_SCOPE, type ConnectSlack } from '../../core/slack/connect-slack.js';
 import type { DisconnectSlack } from '../../core/slack/disconnect-slack.js';
+import type { ExposeShip } from '../../core/slack/expose-ship.js';
+import type { ListExposable } from '../../core/slack/list-exposable.js';
+import type { RemoveBot } from '../../core/slack/remove-bot.js';
 import type { ReadSlack } from '../../core/slack/read-slack.js';
 import type { StartInstall } from '../../core/slack/start-install.js';
 
@@ -160,7 +163,7 @@ export interface Context {
     changeOwnMic: ChangeOwnMic;
   };
   /** The fleet's Slack workspace and the gateway's bot (gateway scopes, part B). */
-  slack: { readSlack: ReadSlack; connectSlack: ConnectSlack; startInstall: StartInstall; disconnectSlack: DisconnectSlack };
+  slack: { readSlack: ReadSlack; connectSlack: ConnectSlack; startInstall: StartInstall; disconnectSlack: DisconnectSlack; listExposable: ListExposable; exposeShip: ExposeShip; removeBot: RemoveBot };
   readOutsideParties: ReadOutsideParties;
   setOutsideParties: SetOutsideParties;
 }
@@ -597,6 +600,11 @@ const SLACK_CODES = {
   SLACK_NOT_CONNECTED: 'NOT_FOUND',
   SLACK_TOKEN_REFUSED: 'BAD_REQUEST',
   SLACK_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+  NO_SUCH_BOT: 'NOT_FOUND',
+  NOT_REACHABLE: 'FORBIDDEN',
+  NOT_EXPOSABLE: 'BAD_REQUEST',
+  CONFLICT: 'CONFLICT',
+  FLEET_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
 } as const;
 
 /** The Slack procedures' answer, or its refusal as the API states it. */
@@ -616,6 +624,7 @@ const slackViewOutputSchema = z.discriminatedUnion('state', [
     connectedAt: z.string(),
     tokenState: z.enum(['fresh', 'refused']),
     gatewayBot: z.enum(['notMade', 'made', 'installed']),
+    bots: z.array(z.object({ appId: z.string(), shipId: z.string(), shipName: z.string(), botName: z.string(), state: z.enum(['made', 'waitingForInstall', 'inSlack', 'removedInSlack']) })),
     canChange: z.boolean(),
   }),
 ]);
@@ -1156,7 +1165,7 @@ export const gatewayRouter = t.router({
     /** The fleet's Slack as the Slack page shows it (gateway scopes 9.6), to any actor; canChange says whether it holds gateway:slack. */
     view: servedProcedure.output(slackViewOutputSchema).query(async ({ ctx }) => {
       const view = await ctx.slack.readSlack(ctx.actor);
-      return view.state === 'connected' ? { ...view, connectedAt: view.connectedAt.toISOString() } : view;
+      return view.state === 'connected' ? { ...view, connectedAt: view.connectedAt.toISOString(), bots: [...view.bots] } : view;
     }),
     /** Connects the fleet to a workspace by an app configuration refresh token, and makes the gateway's bot, named after the fleet (9.1). */
     connect: servedProcedure
@@ -1169,14 +1178,32 @@ export const gatewayRouter = t.router({
         const fleetName = await fleetNameOf(ctx, { fleetId: ctx.fleetId, toDo: 'connect Slack' });
         return slackAnswerOf(await ctx.slack.connectSlack({ actor: ctx.actor, refreshToken: input.refreshToken, fleetName }));
       }),
-    /** Slack's install screen for the gateway's bot, made first if Slack did not make it at connect. */
-    install: servedProcedure.output(z.object({ url: z.string() })).mutation(async ({ ctx }) => {
-      if (!ctx.scopes.includes(SLACK_SCOPE)) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: `Installing a Slack bot needs ${SLACK_SCOPE}` });
-      }
-      const fleetName = await fleetNameOf(ctx, { fleetId: ctx.fleetId, toDo: 'install a Slack bot' });
-      return slackAnswerOf(await ctx.slack.startInstall({ actor: ctx.actor, fleetName }));
-    }),
+    /** Slack's install screen for the gateway's bot, made first if Slack did not make it at connect; with an app id, for a ship's bot. */
+    install: servedProcedure
+      .input(z.strictObject({ appId: z.string().min(1).optional() }).optional())
+      .output(z.object({ url: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        if (!ctx.scopes.includes(SLACK_SCOPE)) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: `Installing a Slack bot needs ${SLACK_SCOPE}` });
+        }
+        const fleetName = await fleetNameOf(ctx, { fleetId: ctx.fleetId, toDo: 'install a Slack bot' });
+        return slackAnswerOf(await ctx.slack.startInstall({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, fleetName, ...(input?.appId === undefined ? {} : { appId: input.appId }) }));
+      }),
+    /** The agent ships and outside A2A agents' proxy ships Expose a ship… offers (9.2). */
+    exposable: servedProcedure.output(z.array(z.object({ shipId: z.string(), name: z.string() }))).query(async ({ ctx }) => slackAnswerOf(await ctx.slack.listExposable({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken } }))),
+    /** Exposes a ship as a Slack bot, within manage reach of it: its app made from a manifest, to install next (9.2). */
+    expose: servedProcedure
+      .input(z.strictObject({ shipId: idSchema('ship') }))
+      .output(z.object({ appId: z.string() }))
+      .mutation(async ({ ctx, input }) => slackAnswerOf(await ctx.slack.exposeShip({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, shipId: input.shipId }))),
+    /** Deletes a ship's bot in Slack, after the page's confirm (9.2). */
+    remove: servedProcedure
+      .input(z.strictObject({ appId: z.string().min(1) }))
+      .output(z.strictObject({}))
+      .mutation(async ({ ctx, input }) => {
+        slackAnswerOf(await ctx.slack.removeBot({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, appId: input.appId }));
+        return {};
+      }),
     /** Removes every bot the gateway made in Slack, then forgets the workspace (after the page's confirm). */
     disconnect: servedProcedure.output(z.strictObject({})).mutation(async ({ ctx }) => {
       slackAnswerOf(await ctx.slack.disconnectSlack({ actor: ctx.actor }));

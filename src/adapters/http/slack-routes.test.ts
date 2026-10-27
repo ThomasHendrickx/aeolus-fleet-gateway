@@ -16,7 +16,8 @@ import { registerSlackRoutes, SLACK_EVENTS_PATH } from './slack-routes.js';
 const NOW = new Date('2026-10-27T09:00:00.000Z');
 
 /** Signs a body as Slack does, with the app's signing secret: v0= and the hex HMAC-SHA256 of v0, the timestamp and the body. */
-function signed(body: string, secret: string, timestamp = String(NOW.getTime() / 1000)) {
+function signed(body: string, secret: string) {
+  const timestamp = String(NOW.getTime() / 1000);
   return { 'x-slack-request-timestamp': timestamp, 'x-slack-signature': `v0=${createHmac('sha256', secret).update(`v0:${timestamp}:${body}`).digest('hex')}`, 'content-type': 'application/json' };
 }
 
@@ -34,7 +35,8 @@ describe("Slack's events door", () => {
 
     const answer = await server.inject({ method: 'POST', url: SLACK_EVENTS_PATH, headers: { 'content-type': 'application/json' }, payload: JSON.stringify({ type: 'url_verification', token: 't', challenge: 'the-challenge' }) });
 
-    expect({ status: answer.statusCode, body: answer.json() }).toEqual({ status: 200, body: { challenge: 'the-challenge' } });
+    const answered: unknown = answer.json();
+    expect({ status: answer.statusCode, body: answered }).toEqual({ status: 200, body: { challenge: 'the-challenge' } });
   });
 
   it("takes an app_uninstalled signed with the app's signing secret: the bot shows Removed in Slack", async () => {

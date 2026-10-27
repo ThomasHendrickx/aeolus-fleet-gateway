@@ -104,13 +104,20 @@ import { createPersonWaiters } from './person-waiters.js';
 import { createPingWorker } from './ping-worker.js';
 import { createSlackTokenWorker } from './slack-token-worker.js';
 import { createSlackInstallSeals } from './adapters/crypto/slack-install-seals.js';
-import { registerSlackRoutes, SLACK_INSTALL_PATH } from './adapters/http/slack-routes.js';
+import { registerSlackRoutes, SLACK_EVENTS_PATH, SLACK_INSTALL_PATH } from './adapters/http/slack-routes.js';
+import { createSlackSignatures } from './adapters/crypto/slack-signatures.js';
+import { createSlackShips } from './adapters/fleet/slack-ships.js';
+import { createExposeShip } from './core/slack/expose-ship.js';
+import { createFollowExposedShips } from './core/slack/follow-exposed-ships.js';
+import { createListExposable } from './core/slack/list-exposable.js';
+import { createRemoveBot } from './core/slack/remove-bot.js';
+import { createTakeSlackEvent } from './core/slack/take-slack-event.js';
 import { createPrismaSlackApps, createPrismaSlackWorkspaces } from './adapters/prisma/slack-stores.js';
 import { createSlackTooling, SLACK_API_URL } from './adapters/slack/slack-tooling.js';
 import { createCompleteInstall } from './core/slack/complete-install.js';
 import { createConnectSlack } from './core/slack/connect-slack.js';
 import { createDisconnectSlack } from './core/slack/disconnect-slack.js';
-import type { ShipNames } from './core/slack/ports.js';
+import type { ProxyShipKinds, ShipNames } from './core/slack/ports.js';
 import { createReadSlack } from './core/slack/read-slack.js';
 import { createRotateConfigurationTokens } from './core/slack/rotate-configuration-tokens.js';
 import { createStartInstall } from './core/slack/start-install.js';
@@ -754,16 +761,31 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       return ship?.isOk === true ? ship.value.name : undefined;
     },
   };
+  const slackShips = createSlackShips({ fleetUrl: options.fleetUrl, crewTokenOf: async (fleetId) => (await connections.find(fleetId))?.crewToken, ships: createFleetShips(options.fleetUrl), asActor: createProxyShipsAsActor(options.fleetUrl) });
+  // Which outside party a ship is the proxy ship of: a fleet has few parties.
+  const proxyShips: ProxyShipKinds = { kindOf: async (fleetId, shipId) => (await parties.list(fleetId)).find((party) => party.proxyShipId === shipId)?.kind };
+  const slackAddresses = { installRedirectUrl, eventsUrl: `${issuer}${SLACK_EVENTS_PATH}` };
   const slack: Context['slack'] = {
-    readSlack: createReadSlack({ workspaces: slackWorkspaces, apps: slackApps }),
+    readSlack: createReadSlack({ workspaces: slackWorkspaces, apps: slackApps, ships: slackShips }),
     connectSlack: createConnectSlack({ slack: slackTooling, workspaces: slackWorkspaces, apps: slackApps, shipNames, clock, installRedirectUrl }),
-    startInstall: createStartInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, takeAccessToken, states: slackInstallStates, clock, installRedirectUrl }),
+    startInstall: createStartInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, takeAccessToken, states: slackInstallStates, ships: slackShips, credentialOf: credentialOf, clock, installRedirectUrl }),
     disconnectSlack: createDisconnectSlack({ slack: slackTooling, workspaces: slackWorkspaces, apps: slackApps, takeAccessToken }),
+    listExposable: createListExposable({ ships: slackShips, apps: slackApps, proxyShips, credentialOf: credentialOf }),
+    exposeShip: createExposeShip({ slack: slackTooling, apps: slackApps, ships: slackShips, proxyShips, takeAccessToken, credentialOf: credentialOf, clock, addresses: slackAddresses }),
+    removeBot: createRemoveBot({ slack: slackTooling, apps: slackApps, ships: slackShips, takeAccessToken, credentialOf: credentialOf }),
   };
   registerSlackRoutes(server, {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
+    takeSlackEvent: createTakeSlackEvent({ apps: slackApps, signatures: createSlackSignatures(), clock }),
   });
-  const slackTokens = createSlackTokenWorker({ rotate: createRotateConfigurationTokens({ workspaces: slackWorkspaces, takeAccessToken }), sleep, intervalMs: SLACK_TOKEN_ROUND_MS, log: server.log });
+  const rotateConfigurationTokens = createRotateConfigurationTokens({ workspaces: slackWorkspaces, takeAccessToken });
+  const followExposedShips = createFollowExposedShips({ workspaces: slackWorkspaces, apps: slackApps, ships: slackShips, slack: slackTooling, takeAccessToken, addresses: slackAddresses });
+  const slackTokens = createSlackTokenWorker({
+    rotate: async () => {
+      await rotateConfigurationTokens();
+      await followExposedShips();
+    },
+    sleep, intervalMs: SLACK_TOKEN_ROUND_MS, log: server.log });
   const pings = createPingWorker({ answerPings: createAnswerPings({ connections, inbox: door.gatewayInbox }), sleep, intervalMs: POLL_MS, log: server.log });
   const decideRequestOnly = createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock });
   // A decided request's outcomes are told at once, not at the next round.

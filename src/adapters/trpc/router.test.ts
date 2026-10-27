@@ -24,7 +24,11 @@ import { err, ok } from '../../core/shared/result.js';
 import { createFocusPage } from '../../core/people/focus-page.js';
 import { memoryFocusedPages } from '../../../test/support/people-fakes.js';
 import { createChangeHub, type ChangeHub } from '../http/live.js';
-import { fakeShipNames, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces, plainInstallStates } from '../../../test/support/slack-fakes.js';
+import { fakeProxyShipKinds, fakeShipNames, fakeSlackShips, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces, plainInstallStates } from '../../../test/support/slack-fakes.js';
+import type { CredentialOf } from '../../core/actors/credential-of.js';
+import { createExposeShip } from '../../core/slack/expose-ship.js';
+import { createListExposable } from '../../core/slack/list-exposable.js';
+import { createRemoveBot } from '../../core/slack/remove-bot.js';
 import { createConnectSlack } from '../../core/slack/connect-slack.js';
 import { createDisconnectSlack } from '../../core/slack/disconnect-slack.js';
 import { createReadSlack } from '../../core/slack/read-slack.js';
@@ -354,15 +358,22 @@ function aContext(cookie: string | undefined, crewToken?: string): {
 
 const SLACK_NOW = new Date('2026-10-27T09:00:00.000Z');
 const SLACK_REDIRECT_URL = 'https://gateway.acme.test/gw/slack/install';
+const SLACK_SHIP: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9r1n';
 
 /** The Slack procedures' use cases over Slack and the vault in memory. */
 function slackOf({ tooling, workspaces, apps }: { tooling: ReturnType<typeof fakeSlackTooling>; workspaces: ReturnType<typeof memorySlackWorkspaces>; apps: ReturnType<typeof memorySlackApps> }): Context['slack'] {
   const clock = { now: () => SLACK_NOW };
   const takeAccessToken = createTakeAccessToken({ slack: tooling.slack, workspaces, clock });
+  const ships = fakeSlackShips([{ shipId: SLACK_SHIP, name: 'release-notes', kind: 'agent', status: 'crewed', summary: 'Writes the release notes' }]).port;
+  const credentialOf: CredentialOf = (_actor, sent) => Promise.resolve(ok(sent));
+  const addresses = { installRedirectUrl: SLACK_REDIRECT_URL, eventsUrl: 'https://gateway.acme.test/gw/slack/events' };
   return {
-    readSlack: createReadSlack({ workspaces, apps }),
+    readSlack: createReadSlack({ workspaces, apps, ships }),
+    listExposable: createListExposable({ ships, apps, proxyShips: fakeProxyShipKinds(), credentialOf }),
+    exposeShip: createExposeShip({ slack: tooling.slack, apps, ships, proxyShips: fakeProxyShipKinds(), takeAccessToken, credentialOf, clock, addresses }),
+    removeBot: createRemoveBot({ slack: tooling.slack, apps, ships, takeAccessToken, credentialOf }),
     connectSlack: createConnectSlack({ slack: tooling.slack, workspaces, apps, shipNames: fakeShipNames({ [OWNER]: 'charlotte' }), clock, installRedirectUrl: SLACK_REDIRECT_URL }),
-    startInstall: createStartInstall({ slack: tooling.slack, apps, workspaces, takeAccessToken, states: plainInstallStates(), clock, installRedirectUrl: SLACK_REDIRECT_URL }),
+    startInstall: createStartInstall({ slack: tooling.slack, apps, workspaces, takeAccessToken, states: plainInstallStates(), ships, credentialOf, clock, installRedirectUrl: SLACK_REDIRECT_URL }),
     disconnectSlack: createDisconnectSlack({ slack: tooling.slack, workspaces, apps, takeAccessToken }),
   };
 }
@@ -1232,8 +1243,29 @@ describe("an actor holding gateway:slack connects the fleet's Slack through the 
       connectedAt: SLACK_NOW.toISOString(),
       tokenState: 'fresh',
       gatewayBot: 'made',
+      bots: [],
       canChange: true,
     });
+  });
+
+  it("exposes a ship from the ships offered, shows its bot, opens its install, and removes it", async () => {
+    const { caller, slack } = asCharlotte(['gateway:slack']);
+    await caller.slack.connect({ refreshToken: 'xoxe-1-first' });
+
+    await expect(caller.slack.exposable()).resolves.toEqual([{ shipId: SLACK_SHIP, name: 'release-notes' }]);
+    await expect(caller.slack.expose({ shipId: SLACK_SHIP })).resolves.toEqual({ appId: 'A02' });
+    const installing = await caller.slack.install({ appId: 'A02' });
+    await expect(caller.slack.view()).resolves.toMatchObject({ bots: [{ appId: 'A02', shipId: SLACK_SHIP, shipName: 'release-notes', botName: 'release-notes', state: 'waitingForInstall' }] });
+    await caller.slack.remove({ appId: 'A02' });
+
+    expect({ isShipBot: installing.url.includes('client_id=client-A02'), removed: slack.tooling.state.removed.map(({ appId }) => appId) }).toEqual({ isShipBot: true, removed: ['A02'] });
+  });
+
+  it('says a bot the gateway did not make is not found', async () => {
+    const { caller } = asCharlotte(['gateway:slack']);
+    await caller.slack.connect({ refreshToken: 'xoxe-1-first' });
+
+    await expect(caller.slack.remove({ appId: 'A99' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('says Slack refused the configuration token as a bad request', async () => {
