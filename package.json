@@ -42,7 +42,8 @@
     "test:unit": "vitest run --project '*:unit'",
     "test:integration": "vitest run --project '*:integration'",
     "start": "node dist/bin/aeolus-gateway.js start",
-    "db:migrate": "tsx --env-file-if-exists=.env src/bin/aeolus-gateway.ts migrate"
+    "db:migrate": "tsx --env-file-if-exists=.env src/bin/aeolus-gateway.ts migrate",
+    "plugin:build": "tsx scripts/plugin-build.ts"
   },
   "dependencies": {
     "@a2a-js/sdk": "1.3.0",

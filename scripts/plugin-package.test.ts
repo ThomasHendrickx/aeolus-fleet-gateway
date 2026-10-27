@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { PERSON_TOOLS } from '../src/adapters/http/person-tools.ts';
-import { buildPlugin, type PluginSource, type ServedTool } from './plugin-package.ts';
+import { buildPlugin, type PluginContext, type PluginSource, type ServedTool } from './plugin-package.ts';
 import { readPluginSource } from './plugin-build.ts';
 import { readZip } from './zip.ts';
 
@@ -65,10 +65,10 @@ function aSource(overrides: { interface?: Record<string, unknown>; positive?: un
   };
 }
 
-const CONTEXT = { gatewayVersion: '0.33.0', tools: [A_TOOL], previousName: undefined };
+const CONTEXT: PluginContext = { gatewayVersion: '0.33.0', tools: [A_TOOL], previousName: undefined };
 
 /** The problems the build refuses the source with, or none. */
-function problemsOf(source: PluginSource, context: Partial<typeof CONTEXT> & { previousName?: string; tools?: readonly ServedTool[] } = {}): readonly string[] {
+function problemsOf(source: PluginSource, context: Partial<PluginContext> = {}): readonly string[] {
   const built = buildPlugin(source, { ...CONTEXT, ...context });
   return built.isOk ? [] : built.error;
 }
