@@ -98,6 +98,14 @@ export async function unlinkSlack(fleet: string): Promise<ActionOutcome<undefine
   });
 }
 
+/** Turns Show everything that waits in Slack on or off (gateway scopes 9.6, B5). */
+export async function showAllInSlack(fleet: string, isOn: boolean): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    await api.slack.showAll.mutate({ isOn });
+    return undefined;
+  });
+}
+
 /** Decides a request; approving names the proxy ship, its owner and its scopes, messages:send and messages:receive always among them. */
 export async function decideRequest({ fleet, requestId, input }: { fleet: string; requestId: string; input: DecisionInput }): Promise<ActionOutcome<undefined>> {
   if (input.kind === 'deny') {

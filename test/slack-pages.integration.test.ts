@@ -220,6 +220,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
   const JORIS_SIGN_IN = 'joris-shared-sign-in';
   let releaseNotesAppId = '';
   let releaseNotesCrew = '';
+  let received: { contentType: string; payload: string; inReplyTo: string | null }[] = [];
 
   /** Where a browser that follows each redirect by hand ends: the gateway, Slack's sign-in, the gateway again, in the browser of the sign-in that follows. */
   async function linked(signIn: string, followedBy = signIn): Promise<string> {
@@ -338,4 +339,51 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     const deliveries = z.object({ deliveries: z.array(z.object({ senderName: z.string(), contentType: z.string(), payload: z.string() })) }).parse(await received.json()).deliveries;
     expect(deliveries.map(({ senderName, contentType, payload }) => ({ senderName, contentType, payload }))).toEqual([{ senderName: 'charlotte', contentType: 'text/markdown', payload: '**When** is the release?' }]);
   }, 60_000);
+
+  /** Sends as release-notes-s7 to charlotte, through the fleet. */
+  async function releaseNotesSends(message: { contentType: string; payload: string; inReplyTo?: string }): Promise<string> {
+    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${releaseNotesCrew}` }, body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, idempotencyKey: `s9-${String(Date.now())}`, model: 'test-model', ...message }) });
+    expect(sent.status, await sent.clone().text()).toBe(200);
+    return z.object({ messageId: z.string() }).parse(await sent.json()).messageId;
+  }
+
+  /** What release-notes-s7 received since, acknowledged. */
+  async function releaseNotesReceives(): Promise<{ contentType: string; payload: string; inReplyTo: string | null }[]> {
+    const received = await fetch(`${fleet.url}/api/v1/ship/receive`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${releaseNotesCrew}` }, body: JSON.stringify({ max: 10 }) });
+    const deliveries = z.object({ deliveries: z.array(z.object({ deliveryId: z.string(), contentType: z.string(), payload: z.string(), inReplyTo: z.string().nullable().optional() })) }).parse(await received.json()).deliveries;
+    for (const { deliveryId } of deliveries) {
+      await fetch(`${fleet.url}/api/v1/ship/ack`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${releaseNotesCrew}` }, body: JSON.stringify({ deliveryId }) });
+    }
+    return deliveries.map(({ contentType, payload, inReplyTo }) => ({ contentType, payload, inReplyTo: inReplyTo ?? null }));
+  }
+
+  it("shows a bot ship's message to a linked person in that bot's direct messages once, acknowledged, and their answers by button and in the thread reach the ship (gateway scopes S9)", async () => {
+    await releaseNotesReceives();
+    const posted = slack.posted.length;
+
+    await releaseNotesSends({ contentType: 'text/markdown', payload: '**Friday**' });
+    await expect.poll(() => slack.posted.slice(posted).map(({ botToken, form }) => ({ botToken, channel: form.channel, text: form.text })), { timeout: 30_000 }).toEqual([{ botToken: `xoxb-${releaseNotesAppId}`, channel: 'U0CHARLOTTE', text: '*Friday*' }]);
+    const shownTs = `1730019600.${String(posted + 1).padStart(6, '0')}`;
+
+    const question = JSON.stringify({ id: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', title: 'Ship it?', context: 'Notes ready', options: [{ key: 1, label: 'Ship', detail: '' }, { key: 2, label: 'Wait', detail: '' }], pick: { option: 1, why: 'ready' } });
+    await releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: question });
+    await expect.poll(() => slack.posted.length, { timeout: 30_000 }).toBe(posted + 2);
+    const questionTs = `1730019600.${String(posted + 2).padStart(6, '0')}`;
+    const payload = { type: 'block_actions', api_app_id: releaseNotesAppId, team: { id: 'T0ACME' }, user: { id: 'U0CHARLOTTE' }, container: { type: 'message', channel_id: 'U0CHARLOTTE', message_ts: questionTs }, actions: [{ action_id: 'answer-2', value: '2' }] };
+    const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const pressed = await fetch(`${address}/gw/slack/actions`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-slack-request-timestamp': timestamp, 'x-slack-signature': `v0=${createHmac('sha256', `signing-${releaseNotesAppId}`).update(`v0:${timestamp}:${body}`).digest('hex')}` }, body });
+    expect(pressed.status).toBe(200);
+
+    await slackEvent(releaseNotesAppId, { event: { type: 'message', channel_type: 'im', channel: 'U0CHARLOTTE', user: 'U0CHARLOTTE', text: 'Friday works', ts: '1730019900.000400', thread_ts: shownTs }, eventId: 'Ev-s9-thread' });
+    await expect.poll(async () => (received = [...received, ...(await releaseNotesReceives())]).length, { timeout: 30_000 }).toBe(2);
+
+    expect(received.map(({ contentType, payload: text }) => ({ contentType, text }))).toEqual(expect.arrayContaining([
+      { contentType: 'application/vnd.aeolus.answer+json', text: '{"questionId":"5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11","option":2}' },
+      { contentType: 'text/markdown', text: 'Friday works' },
+    ]));
+    expect(received.every(({ inReplyTo }) => inReplyTo !== null)).toBe(true);
+    expect(slack.posted.length).toBe(posted + 2);
+  }, 120_000);
 });
+
