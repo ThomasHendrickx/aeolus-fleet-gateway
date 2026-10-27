@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aSlackWorkspace, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces, plainInstallStates } from '../../../test/support/slack-fakes.js';
+import { aSlackApp, aSlackWorkspace, fakeSlackShips, fakeSlackTooling, memorySlackApps, memorySlackWorkspaces, plainInstallStates } from '../../../test/support/slack-fakes.js';
+import { ok } from '../shared/result.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import { createStartInstall } from './start-install.js';
 import { createTakeAccessToken } from './take-access-token.js';
@@ -26,7 +27,14 @@ beforeEach(() => {
   apps = memorySlackApps();
 });
 
-function startInstall(actor: Actor = CHARLOTTE) {
+const RELEASE_NOTES = { shipId: 'shp_01m3tbfspe96yf1rnr4ank9r1n', name: 'release-notes', kind: 'agent', status: 'crewed', summary: null } as const;
+let ships: ReturnType<typeof fakeSlackShips>;
+
+beforeEach(() => {
+  ships = fakeSlackShips([RELEASE_NOTES]);
+});
+
+function startInstall(actor: Actor = CHARLOTTE, appId?: string) {
   const clock = { now: () => NOW };
   return createStartInstall({
     slack: tooling.slack,
@@ -34,9 +42,11 @@ function startInstall(actor: Actor = CHARLOTTE) {
     workspaces,
     takeAccessToken: createTakeAccessToken({ slack: tooling.slack, workspaces, clock }),
     states: plainInstallStates(),
+    ships: ships.port,
+    credentialOf: (_actor, sent) => Promise.resolve(ok(sent)),
     clock,
     installRedirectUrl: REDIRECT_URL,
-  })({ actor, fleetName: 'Acme' });
+  })({ actor, as: { cookie: 'aeolus_account_session=charlotte' }, fleetName: 'Acme', ...(appId === undefined ? {} : { appId }) });
 }
 
 describe("installing the gateway's bot", () => {
@@ -75,6 +85,30 @@ describe("installing the gateway's bot", () => {
     await apps.save(MADE_BOT);
 
     await expect(startInstall({ ...CHARLOTTE, scopes: ['gateway:approve'] })).resolves.toMatchObject({ isOk: false, error: { kind: 'SLACK_SCOPE_NOT_HELD' } });
+  });
+
+  it("opens Slack's install screen for a ship's bot, which then waits for its install", async () => {
+    await workspaces.save(aSlackWorkspace());
+    await apps.save(aSlackApp({ appId: 'A02', shipId: RELEASE_NOTES.shipId, name: 'release-notes' }));
+
+    const started = await startInstall(CHARLOTTE, 'A02');
+
+    expect(started.isOk && new URL(started.value.url).searchParams.get('client_id')).toBe('client-A02');
+    expect(apps.held[0]?.installStartedAt).toEqual(NOW);
+  });
+
+  it("is refused for a ship's bot outside the actor's manage reach, by the ship's name", async () => {
+    await workspaces.save(aSlackWorkspace());
+    await apps.save(aSlackApp({ appId: 'A02', shipId: RELEASE_NOTES.shipId, name: 'release-notes' }));
+    ships.state.managed.clear();
+
+    await expect(startInstall(CHARLOTTE, 'A02')).resolves.toEqual({ isOk: false, error: { kind: 'NOT_REACHABLE', message: 'You do not manage release-notes' } });
+  });
+
+  it('is refused for a bot the gateway did not make in the fleet', async () => {
+    await workspaces.save(aSlackWorkspace());
+
+    await expect(startInstall(CHARLOTTE, 'A09')).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_BOT' } });
   });
 
   it('is refused while the fleet is connected to no workspace', async () => {
