@@ -100,8 +100,11 @@ describe('connecting a Slack workspace', () => {
     await apps.save({ fleetId: FLEET_ID, appId: 'A07', shipId: null, clientId: 'c', clientSecret: 's', signingSecret: 'g', installUrl: 'https://slack.com/i', madeAt: NOW, bot: { token: 'xoxb-7', userId: 'U07' } });
 
     await expect(connectSlack({})).resolves.toEqual({ isOk: true, value: { isGatewayBotMade: true } });
-    expect({ workspace: workspaces.held.get(FLEET_ID), made: tooling.state.made.length }).toEqual({
-      workspace: expect.objectContaining({ teamName: 'Acme', isTokenRefused: false, token: expect.objectContaining({ refreshToken: 'xoxe-1-1' }) }),
+    const workspace = workspaces.held.get(FLEET_ID);
+    expect({ teamName: workspace?.teamName, isTokenRefused: workspace?.isTokenRefused, refreshToken: workspace?.token.refreshToken, made: tooling.state.made.length }).toEqual({
+      teamName: 'Acme',
+      isTokenRefused: false,
+      refreshToken: 'xoxe-1-1',
       made: 0,
     });
   });
