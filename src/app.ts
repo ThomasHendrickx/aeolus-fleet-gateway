@@ -795,7 +795,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   };
   registerSlackRoutes(server, {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
-    completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, shipNames, clock, linkRedirectUrl }),
+    completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl }),
     takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, slack: createSlackMessages({ apiUrl: slackApiUrl }), signatures: createSlackSignatures(), clock, linkPageUrl: `${issuer}/slack/link` }),
   });
   const rotateConfigurationTokens = createRotateConfigurationTokens({ workspaces: slackWorkspaces, takeAccessToken });

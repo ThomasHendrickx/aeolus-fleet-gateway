@@ -4,7 +4,8 @@
  * state the gateway sealed. The person goes on to the Slack page, which says
  * how the install went by its outcome in the address, never by a text the
  * address carries. `/gw/slack/link` is where Sign in with Slack sends them
- * back to link, going on to the Overview the same way; a link refused for
+ * back to link, with the browser's shared sign-in so the link binds to the
+ * account that started it, going on to the Overview the same way; a link refused for
  * one kept already carries the first link's name. `/gw/slack/events` takes
  * the events of the apps the gateway made, each read as its raw body so its
  * signature can be checked.
@@ -12,9 +13,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
+import { SHARED_SIGN_IN_COOKIE } from '../../core/account-sign-in/ports.js';
 import type { CompleteInstall } from '../../core/slack/complete-install.js';
 import type { CompleteLink } from '../../core/slack/complete-link.js';
 import type { TakeSlackEvent } from '../../core/slack/take-slack-event.js';
+import { cookieValueOf } from './account-sign-in-routes.js';
 
 export const SLACK_INSTALL_PATH = '/gw/slack/install';
 
@@ -95,7 +98,7 @@ export function registerSlackRoutes(server: FastifyInstance, deps: { completeIns
       // The person cancelled on Slack's screen, or Slack sent nothing to take.
       return goTo({ slack: 'cancelled' });
     }
-    const completed = await deps.completeLink({ code, state });
+    const completed = await deps.completeLink({ code, state, signIn: cookieValueOf(SHARED_SIGN_IN_COOKIE, request.headers.cookie) });
     if (completed.isOk) {
       return goTo({ fleet: completed.value.fleetId, slack: 'linked' });
     }

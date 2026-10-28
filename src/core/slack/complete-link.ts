@@ -1,5 +1,6 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
+import type { AccountOfSignIn } from '../account-sign-in/account-of-sign-in.js';
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { err, ok, type Result } from '../shared/result.js';
@@ -11,7 +12,7 @@ export type CompleteLinkRefusal =
   | DomainError<'LINK_REFUSED' | 'SLACK_NOT_CONNECTED' | 'NO_SUCH_BOT' | 'OTHER_WORKSPACE' | 'SLACK_UNAVAILABLE'>
   | (DomainError<'SLACK_USER_LINKED' | 'ACCOUNT_LINKED'> & { readonly fleetId: FleetId; readonly name: string });
 
-export type CompleteLink = (input: { code: string; state: string }) => Promise<Result<{ fleetId: FleetId }, CompleteLinkRefusal>>;
+export type CompleteLink = (input: { code: string; state: string; signIn: string | undefined }) => Promise<Result<{ fleetId: FleetId }, CompleteLinkRefusal>>;
 
 /**
  * Use case: Sign in with Slack sends the person back with a code and the
@@ -21,7 +22,9 @@ export type CompleteLink = (input: { code: string; state: string }) => Promise<R
  * account per fleet: a second link is refused, naming the first. An account
  * keeps one link, so linking another Slack user waits until it is unlinked.
  * The same user linking the same account again links it anew, as after a
- * disabled account's link stopped.
+ * disabled account's link stopped. The link completes only in a browser
+ * whose shared sign-in names the account that started it, so a followed
+ * link never attaches the follower's Slack user to the starter's account.
  */
 export function createCompleteLink(deps: {
   workspaces: Pick<SlackWorkspaces, 'find'>;
@@ -29,17 +32,22 @@ export function createCompleteLink(deps: {
   links: SlackLinks;
   signIn: Pick<SlackSignIn, 'complete'>;
   states: LinkStates;
+  accountOf: (asked: Parameters<AccountOfSignIn>[0]) => ReturnType<AccountOfSignIn>;
   shipNames: ShipNames;
   clock: Clock;
   linkRedirectUrl: string;
 }): CompleteLink {
-  return async ({ code, state }) => {
+  return async ({ code, state, signIn }) => {
     const now = deps.clock.now();
     const opened = deps.states.open(state);
     if (opened === undefined || opened.expiresAt <= now) {
       return refuse('LINK_REFUSED', 'This link did not start at the gateway, or took longer than ten minutes: press Link Slack again');
     }
     const { fleetId, accountId, personShipId } = opened;
+    const signedIn = signIn === undefined ? undefined : await deps.accountOf({ signIn, fleetId });
+    if (signedIn === undefined || !signedIn.isOk || signedIn.value.accountId !== accountId) {
+      return refuse('LINK_REFUSED', 'This link was started by another account or browser: sign in and press Link Slack again');
+    }
     const workspace = await deps.workspaces.find(fleetId);
     if (workspace === undefined) {
       return refuse('SLACK_NOT_CONNECTED', 'The fleet is connected to no Slack workspace');
@@ -48,11 +56,11 @@ export function createCompleteLink(deps: {
     if (bot === undefined) {
       return refuse('NO_SUCH_BOT', "The fleet's own Slack bot is not made");
     }
-    const signedIn = await deps.signIn.complete({ clientId: bot.clientId, clientSecret: bot.clientSecret, code, redirectUrl: deps.linkRedirectUrl });
-    if (!signedIn.isOk) {
-      return signedIn.error.kind === 'refused' ? refuse('LINK_REFUSED', `Slack refused the sign-in (${signedIn.error.error}): press Link Slack again`) : refuse('SLACK_UNAVAILABLE', slackUnavailableMessage(signedIn.error));
+    const slackSignIn = await deps.signIn.complete({ clientId: bot.clientId, clientSecret: bot.clientSecret, code, redirectUrl: deps.linkRedirectUrl });
+    if (!slackSignIn.isOk) {
+      return slackSignIn.error.kind === 'refused' ? refuse('LINK_REFUSED', `Slack refused the sign-in (${slackSignIn.error.error}): press Link Slack again`) : refuse('SLACK_UNAVAILABLE', slackUnavailableMessage(slackSignIn.error));
     }
-    const { teamId, userId, name } = signedIn.value;
+    const { teamId, userId, name } = slackSignIn.value;
     if (teamId !== workspace.teamId) {
       return refuse('OTHER_WORKSPACE', `The fleet is connected to ${workspace.teamName ?? workspace.teamId}: sign in with Slack there`);
     }

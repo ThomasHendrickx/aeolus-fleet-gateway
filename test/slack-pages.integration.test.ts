@@ -221,12 +221,12 @@ describe('linking a Slack account (gateway scopes S7)', () => {
   let releaseNotesAppId = '';
   let releaseNotesCrew = '';
 
-  /** Where a browser that follows each redirect by hand ends: the gateway, Slack's sign-in, the gateway again. */
-  async function linked(signIn: string): Promise<string> {
+  /** Where a browser that follows each redirect by hand ends: the gateway, Slack's sign-in, the gateway again, in the browser of the sign-in that follows. */
+  async function linked(signIn: string, followedBy = signIn): Promise<string> {
     const toSlack = await fetch(`${address}/slack/link?fleet=${fleetId}`, { headers: pageHeaders(signIn), redirect: 'manual' });
     expect(toSlack.status, await toSlack.clone().text()).toBeGreaterThanOrEqual(300);
     const back = await fetch(toSlack.headers.get('location') ?? '', { redirect: 'manual' });
-    const done = await fetch(back.headers.get('location') ?? '', { redirect: 'manual' });
+    const done = await fetch(back.headers.get('location') ?? '', { headers: pageHeaders(followedBy), redirect: 'manual' });
     return done.headers.get('location') ?? '';
   }
 
@@ -285,6 +285,15 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     const unlink = await fetch(`${address}/trpc/slack.unlink`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: `aeolus_account_session=${HOLDER_SIGN_IN}`, [FLEET_HEADER]: fleetId }, body: '{}' });
     expect(unlink.status).toBe(200);
     expect(await overview(HOLDER_SIGN_IN)).toContain('Not linked in Acme');
+  }, 60_000);
+
+  it("refuses a link started by one account and followed in another's browser, linking neither", async () => {
+    slack.signInAs({ userId: 'U0JORIS', name: 'joris.v' });
+
+    const followed = await linked(HOLDER_SIGN_IN, JORIS_SIGN_IN);
+
+    expect(followed).toBe('/overview?slack=refused');
+    expect([await overview(HOLDER_SIGN_IN), await overview(JORIS_SIGN_IN)].map((page) => page.includes('Not linked in Acme'))).toEqual([true, true]);
   }, 60_000);
 
   it("answers an unlinked person's message to a bot only they see, with a button to link, and the message never reaches the fleet", async () => {
