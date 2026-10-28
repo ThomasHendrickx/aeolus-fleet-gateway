@@ -1,7 +1,7 @@
 import type { OAuthSecrets } from '../oauth/ports.js';
 import type { AuthorizationRefusal, ReadAuthorization } from '../oauth/read-authorization.js';
 import type { Clock } from '../shared/clock.js';
-import { ok, type Result } from '../shared/result.js';
+import { err, ok, type Result } from '../shared/result.js';
 import type { Pagasae, SignInHolder, SignInSeals } from './ports.js';
 
 /** How long a person has to sign in at pagasae and come back. */
@@ -16,13 +16,19 @@ export type StartSignIn = (picked: { request: Readonly<Record<string, string | u
  * gateway's own PKCE verifier into the state, and the person is sent to
  * pagasae naming no fleet, so pagasae answers their only fleet or asks
  * which (decision 0054). The browser is given a secret of its own, sealed
- * too, so only it finishes the sign-in.
+ * too, so only it finishes the sign-in. The plugin's address signs the
+ * person in as themselves only: no one asks for access for a client there
+ * (chatgpt-plugin design, 6).
  */
-export function createStartSignIn(deps: { readAuthorization: ReadAuthorization; seals: SignInSeals; pagasae: Pagasae; secrets: OAuthSecrets; clock: Clock }): StartSignIn {
+export function createStartSignIn(deps: { readAuthorization: ReadAuthorization; pluginResource: string; seals: SignInSeals; pagasae: Pagasae; secrets: OAuthSecrets; clock: Clock }): StartSignIn {
   return async ({ request, holder }) => {
     const read = await deps.readAuthorization(request);
     if (!read.isOk) {
       return read;
+    }
+    if (holder === 'party' && read.value.resource === deps.pluginResource) {
+      const { redirectUri, state } = read.value;
+      return err({ kind: 'redirect', redirectUri, error: 'invalid_request', description: 'The plugin address signs in as yourself only', state });
     }
     const verifier = deps.secrets.newSecret();
     const browserSecret = deps.secrets.newSecret();

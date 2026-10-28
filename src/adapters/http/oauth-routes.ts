@@ -2,7 +2,8 @@
  * The gateway's OAuth 2.1 authorization server over HTTP, for outside MCP
  * clients (MCP 2026-07-28 authorization): the metadata of RFC 9728 and RFC
  * 8414; /authorize, where a person picks what the client acts as (Q1 a) and
- * is sent to pagasae to sign in; /pagasae/callback, where pagasae sends them
+ * is sent to pagasae to sign in, or from the plugin's address is sent there
+ * at once as themselves (chatgpt-plugin design, 6); /pagasae/callback, where pagasae sends them
  * back; the waiting address, where a client asked for waits for an approver
  * (decision 0056); and /token. What a person reads is the web app's (header
  * design H3): a door sends the browser to its page, the pick page, the
@@ -53,6 +54,8 @@ const holderSchema = z.enum(['account', 'party']);
 export interface OAuthRoutesDeps {
   issuer: string;
   resource: string;
+  /** The plugin's own address of the same tools, where /authorize signs the person in as themselves with no pick (chatgpt-plugin design, 6). */
+  pluginResource: string;
   readAuthorization: ReadAuthorization;
   exchangeToken: ExchangeToken;
   /** Signing people in through pagasae (decision 0054) and their clients' waits, followed live; unset where no pagasae is set. */
@@ -154,6 +157,17 @@ function basicCredentials(header: string | undefined): Record<string, string> {
   return { client_id: decode(decoded.slice(0, separator)), client_secret: decode(decoded.slice(separator + 1)) };
 }
 
+/** Starts the sign-in at pagasae, the browser's secret in a cookie only the callback reads; or sends a refused request back. */
+async function startSignIn(reply: FastifyReply, started: Parameters<StartSignIn>[0] & { signIn: NonNullable<OAuthRoutesDeps['signIn']>; issuer: string }): Promise<FastifyReply> {
+  const { signIn, issuer, ...picked } = started;
+  const start = await signIn.start(picked);
+  if (!start.isOk) {
+    return sendBack(reply, { refusal: start.error, issuer });
+  }
+  const cookie = cookieHeader(SIGN_IN_COOKIE, { value: start.value.browserSecret, maxAgeSeconds: SIGN_IN_LIFETIME_MS / MS_PER_SECOND, isSecure: isHttps(issuer) });
+  return reply.code(HTTP_FOUND).header('location', start.value.redirectTo).header('set-cookie', cookie).send();
+}
+
 /** Signing people in through pagasae, and the waiting page (decisions 0054, 0056). */
 function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn: NonNullable<OAuthRoutesDeps['signIn']> }): void {
   const { issuer, signIn } = deps;
@@ -165,12 +179,7 @@ function registerSignIn(server: FastifyInstance, deps: { issuer: string; signIn:
     if (!holder.success) {
       return failed(reply, 'noPick');
     }
-    const started = await signIn.start({ request: authorizationRequestOf(fields), holder: holder.data });
-    if (!started.isOk) {
-      return sendBack(reply, { refusal: started.error, issuer });
-    }
-    const cookie = cookieHeader(SIGN_IN_COOKIE, { value: started.value.browserSecret, maxAgeSeconds: SIGN_IN_LIFETIME_MS / MS_PER_SECOND, isSecure });
-    return reply.code(HTTP_FOUND).header('location', started.value.redirectTo).header('set-cookie', cookie).send();
+    return startSignIn(reply, { request: authorizationRequestOf(fields), holder: holder.data, signIn, issuer });
   });
 
   /** Where the browser goes next: back to the client, or, holding the secret in its waiting cookie, to the waiting page. */
@@ -272,9 +281,12 @@ function statusOf(error: OAuthErrorCode): number {
 export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDeps): void {
   acceptForms(server);
 
-  const protectedResource = { resource: deps.resource, authorization_servers: [deps.issuer], bearer_methods_supported: ['header'] };
-  server.get('/.well-known/oauth-protected-resource', () => protectedResource);
-  server.get(`/.well-known/oauth-protected-resource${new URL(deps.resource).pathname}`, () => protectedResource);
+  // Each address's metadata names exactly that address (RFC 9728, 3.3); the root document names the plain one.
+  const protectedResource = (resource: string) => ({ resource, authorization_servers: [deps.issuer], bearer_methods_supported: ['header'] });
+  server.get('/.well-known/oauth-protected-resource', () => protectedResource(deps.resource));
+  for (const resource of [deps.resource, deps.pluginResource]) {
+    server.get(`/.well-known/oauth-protected-resource${new URL(resource).pathname}`, () => protectedResource(resource));
+  }
   server.get('/.well-known/oauth-authorization-server', () => ({
     issuer: deps.issuer,
     authorization_endpoint: `${deps.issuer}/authorize`,
@@ -294,6 +306,10 @@ export function registerOAuthRoutes(server: FastifyInstance, deps: OAuthRoutesDe
       return failed(reply, 'noSignIn');
     }
     const parameters = authorizationRequestOf(fieldsOf(request.query));
+    // The plugin's address skips the pick: its person signs in as themselves (chatgpt-plugin design, 6).
+    if (parameters.resource === deps.pluginResource) {
+      return startSignIn(reply, { request: parameters, holder: 'account', signIn: deps.signIn, issuer: deps.issuer });
+    }
     const read = await deps.readAuthorization(parameters);
     if (!read.isOk) {
       return sendBack(reply, { refusal: read.error, issuer: deps.issuer });

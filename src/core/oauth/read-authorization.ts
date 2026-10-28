@@ -58,10 +58,10 @@ interface KnownClient {
  * Use case: the gateway reads an authorization request from an MCP client
  * (OAuth 2.1 with PKCE, MCP 2026-07-28). The client is pre-registered, or
  * known by its metadata document (CIMD), fetched from its client id. Only
- * the S256 challenge is taken, and the resource must be the gateway's MCP
- * endpoint (RFC 8707), so a token is bound to it.
+ * the S256 challenge is taken, and the resource must be one of the addresses
+ * the gateway serves its MCP tools at (RFC 8707), so a token is bound to it.
  */
-export function createReadAuthorization(deps: { clients: OAuthClients; documents: ClientMetadataDocuments; resource: string }): ReadAuthorization {
+export function createReadAuthorization(deps: { clients: OAuthClients; documents: ClientMetadataDocuments; resources: readonly string[] }): ReadAuthorization {
   const knownClient = async (clientId: string): Promise<Result<KnownClient, string>> => {
     const url = metadataDocumentUrl(clientId);
     if (url === undefined) {
@@ -101,9 +101,10 @@ export function createReadAuthorization(deps: { clients: OAuthClients; documents
     if (codeChallenge === undefined || codeChallenge === '' || request.code_challenge_method !== 'S256') {
       return sendBack('invalid_request', 'A PKCE code challenge with the S256 method is required');
     }
-    if (request.resource !== deps.resource) {
-      return sendBack('invalid_target', `The resource must be ${deps.resource}`);
+    const { resource } = request;
+    if (resource === undefined || !deps.resources.includes(resource)) {
+      return sendBack('invalid_target', `The resource must be one of ${deps.resources.join(', ')}`);
     }
-    return ok({ clientId, clientName: client.value.name, clientFleetId: client.value.fleetId, redirectUri, codeChallenge, resource: deps.resource, scope: request.scope ?? null, state });
+    return ok({ clientId, clientName: client.value.name, clientFleetId: client.value.fleetId, redirectUri, codeChallenge, resource, scope: request.scope ?? null, state });
   };
 }

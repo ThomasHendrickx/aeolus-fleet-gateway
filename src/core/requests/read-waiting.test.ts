@@ -63,7 +63,7 @@ beforeEach(() => {
 function readWaiting(documents = fakeClientMetadataDocuments({ [CLIENT_ID]: { client_id: CLIENT_ID, client_name: 'Orderbot', redirect_uris: [CALLBACK] } })) {
   return createReadWaiting({
     waitings,
-    readAuthorization: createReadAuthorization({ clients: memoryOAuthClients(), documents, resource: RESOURCE }),
+    readAuthorization: createReadAuthorization({ clients: memoryOAuthClients(), documents, resources: [RESOURCE] }),
     requests,
     parties,
     codes,
