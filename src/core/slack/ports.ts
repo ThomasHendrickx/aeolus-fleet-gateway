@@ -1,0 +1,227 @@
+import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
+
+import type { ActorCredential } from '../actors/credential-of.js';
+import type { FleetRefusal } from '../connection/ports.js';
+import type { Result } from '../shared/result.js';
+import type { KeptSlackEvent } from './kept-slack-event.js';
+import type { SlackApp, SlackAppDescription } from './slack-app.js';
+import type { SlackLink } from './slack-link.js';
+import type { SlackPost } from './slack-post.js';
+import type { ConfigurationToken, SlackWorkspace } from './slack-workspace.js';
+
+/**
+ * Why Slack did not do what the gateway asked: refused, with Slack's own
+ * error code (invalid_refresh_token, token_revoked, ...); rate limited, to
+ * ask again after Retry-After; or no answer came.
+ */
+export type SlackRefusal =
+  | { readonly kind: 'refused'; readonly error: string }
+  | { readonly kind: 'rateLimited'; readonly retryAfterSeconds: number }
+  | { readonly kind: 'unavailable'; readonly message: string };
+
+/** What Slack gives for a new app: its id, its credentials and its install screen. */
+export interface MadeApp {
+  readonly appId: string;
+  readonly clientId: string;
+  readonly clientSecret: string;
+  readonly signingSecret: string;
+  readonly installUrl: string;
+}
+
+/** What Slack gives for an install: the workspace it went into and the app's bot. */
+export interface Install {
+  readonly appId: string;
+  readonly teamId: string;
+  readonly teamName: string;
+  readonly botToken: string;
+  readonly botUserId: string;
+}
+
+/** Outbound port: Slack's app management and install calls, as the gateway makes them. */
+export interface SlackTooling {
+  /** Spends the refresh token for the next configuration token (tooling.tokens.rotate), naming the workspace it is of. */
+  rotateConfigurationToken(refreshToken: string): Promise<Result<{ token: ConfigurationToken; teamId: string }, SlackRefusal>>;
+  /** Makes an app from a manifest (apps.manifest.create). */
+  makeApp(accessToken: string, description: SlackAppDescription): Promise<Result<MadeApp, SlackRefusal>>;
+  /** Gives an app the configuration token made its whole manifest anew, as a rename does (apps.manifest.update). */
+  renameApp(accessToken: string, app: { appId: string; description: SlackAppDescription }): Promise<Result<undefined, SlackRefusal>>;
+  /** Removes an app the configuration token made (apps.manifest.delete). */
+  removeApp(accessToken: string, appId: string): Promise<Result<undefined, SlackRefusal>>;
+  /** Turns the code Slack's install screen sent back into the app's bot token (oauth.v2.access). */
+  completeInstall(install: { clientId: string; clientSecret: string; code: string; redirectUrl: string }): Promise<Result<Install, SlackRefusal>>;
+}
+
+/** Outbound port: each fleet's Slack workspace, in the gateway's vault. */
+export interface SlackWorkspaces {
+  find(fleetId: FleetId): Promise<SlackWorkspace | undefined>;
+  /** Every fleet connected to a workspace whose configuration token Slack has not refused: the ones to rotate. */
+  rotatable(): Promise<FleetId[]>;
+  save(workspace: SlackWorkspace): Promise<void>;
+  /**
+   * Runs the change holding the fleet's workspace, and keeps what it
+   * answers: one change at a time spends a single-use refresh token. None
+   * while the fleet is connected to no workspace.
+   */
+  change(fleetId: FleetId, change: (workspace: SlackWorkspace) => Promise<SlackWorkspace>): Promise<SlackWorkspace | undefined>;
+  /** Forgets the fleet's workspace and every app the gateway made in it. */
+  remove(fleetId: FleetId): Promise<void>;
+}
+
+/** Outbound port: the Slack apps the gateway made, in its vault. */
+export interface SlackApps {
+  /** The gateway's own bot in the fleet's workspace, once made. */
+  gatewayBot(fleetId: FleetId): Promise<SlackApp | undefined>;
+  /** Every app the gateway made in the fleet's workspace. */
+  all(fleetId: FleetId): Promise<SlackApp[]>;
+  find(fleetId: FleetId, appId: string): Promise<SlackApp | undefined>;
+  /** The app by its id alone, as Slack names it in an event; one id is one app across fleets. */
+  findByAppId(appId: string): Promise<SlackApp | undefined>;
+  /** The bot of the ship, once exposed. */
+  ofShip(fleetId: FleetId, shipId: ShipId): Promise<SlackApp | undefined>;
+  save(app: SlackApp): Promise<void>;
+  remove(fleetId: FleetId, appId: string): Promise<void>;
+}
+
+/** What an install's state names: the app it is for, sealed so Slack's redirect can not be forged or replayed past its expiry. */
+export interface InstallState {
+  readonly fleetId: FleetId;
+  readonly appId: string;
+  readonly expiresAt: Date;
+}
+
+/** Outbound port: seals an install's state into Slack's install address, and opens it again. */
+export interface InstallStates {
+  seal(state: InstallState): string;
+  /** The state a sealed text holds; none for one the gateway did not seal. */
+  open(sealed: string): InstallState | undefined;
+}
+
+/** Outbound port: a ship's name as the fleet answers it now, read as the gateway's ship; none when the fleet does not answer. */
+export interface ShipNames {
+  nameOf(fleetId: FleetId, shipId: ShipId): Promise<string | undefined>;
+}
+
+/** A ship of the fleet as Slack's part of the gateway reads it: what it is, and its statement's summary (0047), none while it states none. */
+export interface ShipToExpose {
+  readonly shipId: ShipId;
+  readonly name: string;
+  readonly kind: 'operator' | 'agent' | 'viewer' | 'person' | 'app' | 'plugin';
+  readonly status: 'awaitingCrew' | 'crewed' | 'retired';
+  readonly summary: string | null;
+}
+
+/** Outbound port: the fleet's ships as Slack's part of the gateway needs them. */
+export interface SlackShips {
+  /** A ship as the gateway's ship reads it now. */
+  read(fleetId: FleetId, shipId: ShipId): Promise<Result<ShipToExpose, FleetRefusal>>;
+  /** The ships the actor reads (fleet.list as the actor), within its read reach. */
+  list(as: ActorCredential): Promise<Result<Omit<ShipToExpose, 'summary'>[], FleetRefusal>>;
+  /** Whether the actor manages the ship now (fleet.checkManage): OK, or the fleet's refusal, which names the ship. */
+  checkManage(as: ActorCredential, shipId: ShipId): Promise<Result<undefined, FleetRefusal>>;
+}
+
+/** Outbound port: which outside party a ship is the proxy ship of, if any: an outside MCP server's takes tool calls, not a person's words (P-B3). */
+export interface ProxyShipKinds {
+  kindOf(fleetId: FleetId, shipId: ShipId): Promise<'mcpServer' | 'mcpClient' | 'a2aClient' | 'a2aAgent' | undefined>;
+}
+
+/** Outbound port: whether Slack signed a request's body at its timestamp with the app's signing secret. */
+export interface SlackSignatures {
+  isSigned(signed: { secret: string; timestamp: string; body: string; signature: string }): boolean;
+}
+
+/** Who Sign in with Slack says signed in: the workspace and the user, and the person's name there. */
+export interface SlackIdentity {
+  readonly teamId: string;
+  readonly userId: string;
+  readonly name: string;
+}
+
+/** Outbound port: Sign in with Slack (OpenID Connect), through the fleet's own bot's app. */
+export interface SlackSignIn {
+  /** Slack's sign-in screen for the app, for the workspace, carrying the state. */
+  authorizeUrl(asked: { clientId: string; redirectUrl: string; state: string; teamId: string }): string;
+  /** Turns the code Slack's sign-in sent back into who signed in (openid.connect.token). */
+  complete(asked: { clientId: string; clientSecret: string; code: string; redirectUrl: string }): Promise<Result<SlackIdentity, SlackRefusal>>;
+}
+
+/** What a link's state names: the account and person ship it is for, in which fleet, sealed until it expires. */
+export interface LinkState {
+  readonly fleetId: FleetId;
+  readonly accountId: string;
+  readonly personShipId: ShipId;
+  readonly expiresAt: Date;
+}
+
+/** Outbound port: seals a link's state into Slack's sign-in address, and opens it again. */
+export interface LinkStates {
+  seal(state: LinkState): string;
+  open(sealed: string): LinkState | undefined;
+}
+
+/** Outbound port: the Slack links of each fleet, in the gateway's database. */
+export interface SlackLinks {
+  /** The link of the Slack user in the workspace, in the fleet. */
+  find(fleetId: FleetId, slack: { teamId: string; userId: string }): Promise<SlackLink | undefined>;
+  ofAccount(fleetId: FleetId, accountId: string): Promise<SlackLink | undefined>;
+  ofPersonShip(fleetId: FleetId, personShipId: ShipId): Promise<SlackLink | undefined>;
+  /** Turns Show everything that waits in Slack on or off for the account's link (B5). */
+  showAll(fleetId: FleetId, shown: { accountId: string; isOn: boolean }): Promise<void>;
+  /** Keeps a new link; none when the Slack user or the account is linked already, as two links at once find. */
+  add(link: SlackLink): Promise<'added' | 'taken'>;
+  remove(fleetId: FleetId, accountId: string): Promise<void>;
+  /** Stops the account's link, as when the account is disabled. */
+  stop(fleetId: FleetId, stopped: { accountId: string; at: Date }): Promise<void>;
+}
+
+/** Outbound port: a bot's posts and reactions in Slack, with its bot token. */
+export interface SlackMessages {
+  /** A message only one person sees, in a conversation (chat.postEphemeral), with a button that opens an address. */
+  postOnlyTo(botToken: string, message: { channel: string; user: string; text: string; button?: { text: string; url: string } }): Promise<Result<undefined, SlackRefusal>>;
+  /** A message in a conversation, or a thread of it, with a button per option to answer (chat.postMessage): the Slack message it is. */
+  post(botToken: string, message: { channel: string; threadTs: string | null; text: string; buttons: readonly SlackButton[] }): Promise<Result<{ channel: string; ts: string }, SlackRefusal>>;
+  /** A message in a message's thread, everyone in the conversation sees (chat.postMessage). */
+  postInThread(botToken: string, message: { channel: string; threadTs: string; text: string }): Promise<Result<undefined, SlackRefusal>>;
+  /** A reaction on a message (reactions.add); one already there is no refusal. */
+  react(botToken: string, reaction: { channel: string; ts: string; name: string }): Promise<Result<undefined, SlackRefusal>>;
+}
+
+/**
+ * Outbound port: the linked people's messages from Slack, kept until core
+ * takes them (gateway scopes 9.4 step 3); temporary, so nothing builds up.
+ */
+export interface SlackEvents {
+  /** Keeps the event by its fleet and Slack's event id; one kept already, as on Slack's retry, is known and changes nothing. */
+  keep(event: KeptSlackEvent): Promise<'kept' | 'known'>;
+  /**
+   * Hands each event core has not taken yet to send, up to the limit, held
+   * so one gateway instance at a time sends it. An event sent as taken keeps
+   * only its id from then, taken at the time given.
+   */
+  sendDue(send: (event: KeptSlackEvent) => Promise<'taken' | 'later'>, page: { limit: number; at: Date }): Promise<void>;
+  /** Forgets the ids of the events taken before the time given. */
+  forgetTaken(before: Date): Promise<void>;
+  /** The events core has not taken that were received before the time given. */
+  untakenSince(before: Date): Promise<KeptSlackEvent[]>;
+  remove(fleetId: FleetId, eventId: string): Promise<void>;
+}
+
+/** A button under a posted question: its option's label, and the option it answers. */
+export interface SlackButton {
+  readonly text: string;
+  readonly option: number;
+}
+
+/** Outbound port: the fleet messages in Slack, by person ship. */
+export interface SlackPosts {
+  /** Keeps the post by its fleet, person ship and message, as it is now. */
+  save(post: SlackPost): Promise<void>;
+  ofMessage(fleetId: FleetId, post: { personShipId: ShipId; messageId: MessageId }): Promise<SlackPost | undefined>;
+  /** The delivery posted to the person ship as this Slack message. */
+  atSlackMessage(fleetId: FleetId, message: { personShipId: ShipId; appId: string; channel: string; ts: string }): Promise<SlackPost | undefined>;
+  /** The latest delivery posted to the person ship in the thread, the thread's first message included. */
+  lastInThread(fleetId: FleetId, thread: { personShipId: ShipId; appId: string; channel: string; threadTs: string }): Promise<SlackPost | undefined>;
+  /** The person ship's posts of deliveries the gateway did not finish. */
+  unfinished(fleetId: FleetId, personShipId: ShipId): Promise<SlackPost[]>;
+  remove(fleetId: FleetId, post: { personShipId: ShipId; messageId: MessageId }): Promise<void>;
+}

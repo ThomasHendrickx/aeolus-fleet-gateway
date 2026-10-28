@@ -1,4 +1,4 @@
-import { RECEIVE_MAX_UPPER_BOUND } from "@aeolus-fleet/common";
+import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from "@aeolus-fleet/common";
 
 import type { FleetRefusal } from "../connection/ports.js";
 import type { Clock } from "../shared/clock.js";
@@ -9,6 +9,7 @@ import type {
   PersonShip,
   PersonShipDoor,
   PushedPersonDelivery,
+  ShownElsewhere,
   WakeChannel,
   WakeChannelName,
   WakesSent,
@@ -46,10 +47,17 @@ export type WakePerson = (
  * told, as asking again cannot help; while another channel's wake fails and is
  * tried again, that channel is not asked again. While a page of the person is in focus, the page
  * shows what arrives (W6): each fresh delivery is handed through it and no
- * wake goes out.
+ * wake goes out. Before all that, a place beyond the pages that shows
+ * deliveries itself, as Slack does for a linked person, shows what it
+ * shows, even while a page is in focus; nothing wakes for those
+ * (gateway scopes 9.5 step 5). It is asked at every wake, fresh deliveries
+ * or none, so what it left unfinished is finished, and while anything is
+ * left the wake counts as failed, so it is tried again.
  */
 export function createWakePerson(deps: {
   door: Pick<PersonShipDoor, "pushReceive" | "handed">;
+  /** Slack, where the person linked it; none where nothing beyond the pages shows deliveries. */
+  shownElsewhere?: ShownElsewhere;
   channels: readonly WakeChannel[];
   wakesSent: WakesSent;
   focused: FocusedPages;
@@ -68,6 +76,39 @@ export function createWakePerson(deps: {
   const attemptKey = (ship: PersonShip): string =>
     `${ship.fleetId}/${ship.shipId}`;
   const wakePerson: WakePerson = async (ship, crewToken) => {
+    const taken = await deps.door.pushReceive(crewToken, {
+      max: RECEIVE_MAX_UPPER_BOUND,
+      shouldSkipHanded: true,
+    });
+    if (!taken.isOk) {
+      return taken;
+    }
+    const everyFresh = taken.value.filter(
+      ({ handOverNumber }) => handOverNumber === null,
+    );
+    // Asked even with nothing fresh: it finishes what an earlier wake left unfinished, as after a restart.
+    const shownElsewhere =
+      deps.shownElsewhere === undefined
+        ? ok({ shown: new Set<DeliveryId>(), isAnyUnfinished: false })
+        : await deps.shownElsewhere.show(ship, { crewToken, fresh: everyFresh });
+    if (!shownElsewhere.isOk) {
+      return shownElsewhere;
+    }
+    const { shown, isAnyUnfinished } = shownElsewhere.value;
+    const woken = await wakeFor(ship, {
+      crewToken,
+      allFresh: everyFresh.filter(({ deliveryId }) => !shown.has(deliveryId)),
+    });
+    // What it left unfinished is finished at a wake tried again.
+    return isAnyUnfinished && woken.isOk && woken.value.kind === "settled"
+      ? ok({ kind: "failed" })
+      : woken;
+  };
+  /** Wakes the person for the fresh deliveries nothing beyond the pages showed. */
+  const wakeFor = async (
+    ship: PersonShip,
+    { crewToken, allFresh }: { crewToken: string; allFresh: readonly PushedPersonDelivery[] },
+  ): Promise<Result<WakeOutcome, FleetRefusal>> => {
     /** Hands each fresh delivery no. 1 through the channel, up to the first refusal: that refusal, or none. */
     const handEach = async (
       fresh: readonly PushedPersonDelivery[],
@@ -85,16 +126,6 @@ export function createWakePerson(deps: {
       }
       return undefined;
     };
-    const taken = await deps.door.pushReceive(crewToken, {
-      max: RECEIVE_MAX_UPPER_BOUND,
-      shouldSkipHanded: true,
-    });
-    if (!taken.isOk) {
-      return taken;
-    }
-    const allFresh = taken.value.filter(
-      ({ handOverNumber }) => handOverNumber === null,
-    );
     if (allFresh.length === 0) {
       return ok({ kind: "settled" });
     }

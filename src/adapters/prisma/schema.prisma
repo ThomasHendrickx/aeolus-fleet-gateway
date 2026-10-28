@@ -469,3 +469,106 @@ model WebPushSubscription {
   @@id([fleetId, shipId, endpoint])
   @@map("web_push_subscriptions")
 }
+
+/// A fleet's Slack workspace (gateway scopes 9.1): one per fleet, with Slack's app configuration token, which the gateway rotates before its 12 hours end.
+model SlackWorkspace {
+  fleetId            String   @id @map("fleet_id")
+  teamId             String   @map("team_id")
+  /// Known once Slack named the workspace, at the gateway's bot's install.
+  teamName           String?  @map("team_name")
+  connectedByShipId  String   @map("connected_by_ship_id")
+  connectedByName    String   @map("connected_by_name")
+  connectedAt        DateTime @map("connected_at") @db.Timestamptz(3)
+  configAccessToken  String   @map("config_access_token")
+  /// Single use: each rotation spends it for the next.
+  configRefreshToken String   @map("config_refresh_token")
+  configExpiresAt    DateTime @map("config_expires_at") @db.Timestamptz(3)
+  isConfigRefused    Boolean  @map("is_config_refused")
+
+  @@map("slack_workspaces")
+}
+
+/// A Slack app the gateway made in a fleet's workspace, with its secrets, and its bot token once installed; no ship for the gateway's own bot.
+model SlackApp {
+  fleetId       String   @map("fleet_id")
+  appId         String   @map("app_id")
+  shipId        String?  @map("ship_id")
+  clientId      String   @map("client_id")
+  clientSecret  String   @map("client_secret")
+  signingSecret String   @map("signing_secret")
+  installUrl       String    @map("install_url")
+  /// The bot's name in Slack as last made or renamed.
+  name             String
+  madeAt           DateTime  @map("made_at") @db.Timestamptz(3)
+  installStartedAt DateTime? @map("install_started_at") @db.Timestamptz(3)
+  botToken         String?   @map("bot_token")
+  botUserId        String?   @map("bot_user_id")
+  removedInSlackAt DateTime? @map("removed_in_slack_at") @db.Timestamptz(3)
+
+  @@id([fleetId, appId])
+  @@unique([appId])
+  @@map("slack_apps")
+}
+
+/// A person's Slack account linked to their account in a fleet (gateway scopes 9.3): one Slack user to one account, one Slack user per account.
+model SlackLink {
+  fleetId      String    @map("fleet_id")
+  teamId       String    @map("team_id")
+  slackUserId  String    @map("slack_user_id")
+  slackName    String    @map("slack_name")
+  accountId    String    @map("account_id")
+  personShipId String    @map("person_ship_id")
+  linkedAt     DateTime  @map("linked_at") @db.Timestamptz(3)
+  /// When the account was disabled (0055), its link stopped.
+  stoppedAt    DateTime? @map("stopped_at") @db.Timestamptz(3)
+  /// Show everything that waits in Slack (B5), off until turned on.
+  isShowingAll Boolean   @default(false) @map("is_showing_all")
+
+  @@id([fleetId, teamId, slackUserId])
+  @@unique([fleetId, accountId])
+  @@index([fleetId, personShipId])
+  @@map("slack_links")
+}
+
+/// A linked person's Slack message, kept by Slack's event id until core takes it (gateway scopes 9.4 step 3); then only its id, for an hour.
+model SlackEvent {
+  fleetId      String    @map("fleet_id")
+  eventId      String    @map("event_id")
+  appId        String    @map("app_id")
+  shipId       String    @map("ship_id")
+  personShipId String    @map("person_ship_id")
+  channel      String
+  ts           String
+  threadTs     String?   @map("thread_ts")
+  /// What is sent to the fleet; emptied once core took it.
+  markdown     String
+  inReplyTo    String?   @map("in_reply_to")
+  deliveryId   String?   @map("delivery_id")
+  receivedAt   DateTime  @map("received_at") @db.Timestamptz(3)
+  takenAt      DateTime? @map("taken_at") @db.Timestamptz(3)
+
+  @@id([fleetId, eventId])
+  @@index([takenAt, receivedAt])
+  @@map("slack_events")
+}
+
+/// A fleet message as it is in Slack, for a person ship (gateway scopes 9.5): a delivery posted there, or the person's own message sent from there.
+model SlackPost {
+  fleetId      String    @map("fleet_id")
+  personShipId String    @map("person_ship_id")
+  messageId    String    @map("message_id")
+  deliveryId   String?   @map("delivery_id")
+  senderShipId String?   @map("sender_ship_id")
+  appId        String    @map("app_id")
+  channel      String
+  /// The Slack message, once Slack accepted the post.
+  ts           String?
+  threadTs     String?   @map("thread_ts")
+  isLinkOnly   Boolean   @map("is_link_only")
+  ackedAt      DateTime? @map("acked_at") @db.Timestamptz(3)
+
+  @@id([fleetId, personShipId, messageId])
+  @@index([fleetId, appId, channel, ts])
+  @@index([fleetId, appId, channel, threadTs])
+  @@map("slack_posts")
+}

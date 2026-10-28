@@ -103,6 +103,42 @@ import { createPrismaOutcomeNotices } from './adapters/prisma/outcome-notices.js
 import { createOutcomeWorker } from './outcome-worker.js';
 import { createPersonWaiters } from './person-waiters.js';
 import { createPingWorker } from './ping-worker.js';
+import { createSlackTokenWorker } from './slack-token-worker.js';
+import { createSlackEventWorker } from './slack-event-worker.js';
+import { createPrismaSlackEvents } from './adapters/prisma/slack-events.js';
+import { createSendSlackEvents } from './core/slack/send-slack-events.js';
+import { createSlackInstallSeals } from './adapters/crypto/slack-install-seals.js';
+import { createSlackLinkSeals } from './adapters/crypto/slack-link-seals.js';
+import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_INSTALL_PATH, SLACK_LINK_PATH } from './adapters/http/slack-routes.js';
+import { createPrismaSlackPosts } from './adapters/prisma/slack-posts.js';
+import { createAnswerInSlack } from './core/slack/answer-in-slack.js';
+import { createShowAllInSlack } from './core/slack/show-all-in-slack.js';
+import { createShowInSlack } from './core/slack/show-in-slack.js';
+import { createPrismaSlackLinks } from './adapters/prisma/slack-links.js';
+import { createSlackMessages } from './adapters/slack/slack-messages.js';
+import { createSlackSignIn } from './adapters/slack/slack-sign-in.js';
+import { createCompleteLink } from './core/slack/complete-link.js';
+import { createReadSlackLink } from './core/slack/read-slack-link.js';
+import { createStartLink } from './core/slack/start-link.js';
+import { createStopSlackLink } from './core/slack/stop-slack-link.js';
+import { createUnlinkSlack } from './core/slack/unlink-slack.js';
+import { createSlackSignatures } from './adapters/crypto/slack-signatures.js';
+import { createSlackShips } from './adapters/fleet/slack-ships.js';
+import { createExposeShip } from './core/slack/expose-ship.js';
+import { createFollowExposedShips } from './core/slack/follow-exposed-ships.js';
+import { createListExposable } from './core/slack/list-exposable.js';
+import { createRemoveBot } from './core/slack/remove-bot.js';
+import { createTakeSlackEvent } from './core/slack/take-slack-event.js';
+import { createPrismaSlackApps, createPrismaSlackWorkspaces } from './adapters/prisma/slack-stores.js';
+import { createSlackTooling, SLACK_API_URL } from './adapters/slack/slack-tooling.js';
+import { createCompleteInstall } from './core/slack/complete-install.js';
+import { createConnectSlack } from './core/slack/connect-slack.js';
+import { createDisconnectSlack } from './core/slack/disconnect-slack.js';
+import type { ProxyShipKinds, ShipNames } from './core/slack/ports.js';
+import { createReadSlack } from './core/slack/read-slack.js';
+import { createRotateConfigurationTokens } from './core/slack/rotate-configuration-tokens.js';
+import { createStartInstall } from './core/slack/start-install.js';
+import { createTakeAccessToken } from './core/slack/take-access-token.js';
 import { createOpenRequest, type OpenRequest } from './core/requests/open-request.js';
 import { createReadWaiting } from './core/requests/read-waiting.js';
 import { createWatchWaiting } from './core/requests/watch-waiting.js';
@@ -156,6 +192,7 @@ import { createFleetNetwork } from './adapters/fleet/fleet-network.js';
 import { createPrismaOutsidePartySwitches } from './adapters/prisma/outside-party-switches.js';
 import { createReadOutsideParties, createSetOutsideParties, type SetOutsideParties } from './core/outside-parties/set-outside-parties.js';
 import { createConnect } from './core/connection/connect.js';
+import { createDeclareGatewayScopes } from './core/connection/declare-gateway-scopes.js';
 import { createAnswerPings } from './core/connection/answer-pings.js';
 import { createReadConnection, type ReadConnection } from './core/connection/read-connection.js';
 import { createDeleteFleet } from './core/installation/delete-fleet.js';
@@ -219,6 +256,8 @@ export interface GatewayAppOptions {
   emailWakeWindowMs?: number;
   /** The gateway's web app, answering the pages the server has none of: unset, an unknown page is answered as any unknown address. */
   web?: WebApp;
+  /** Slack's Web API: Slack's own unless set. Tests set it to their Slack double. */
+  slackApiUrl?: string;
 }
 
 /** Within the fleet's 10 minutes a handed delivery may wait for its confirmation (decision 0040). */
@@ -247,6 +286,12 @@ const BEARER = 'Bearer ';
 
 /** How often a proxy ship's worker looks again while the fleet hands it only what it holds, or does not answer. */
 const POLL_MS = 2_000;
+
+/** How often the gateway rotates the Slack configuration tokens due, well within the hour before one ends (gateway scopes 9.1). */
+const SLACK_TOKEN_ROUND_MS = 10 * 60_000;
+
+/** How often the gateway sends the kept Slack messages core has not taken, as while core does not answer (gateway scopes 9.4 step 7). */
+const SLACK_EVENT_ROUND_MS = 5_000;
 
 /** How often the gateway expires due requests and tells outcomes still to tell (P5-1 a). */
 const OUTCOME_ROUND_MS = 60_000;
@@ -336,6 +381,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const readFleet = createReadFleet({ isServed, connections });
   const deleteFleet = createDeleteFleet({ forgetter: createPrismaFleetForgetter(prisma), requests, hasher: sha256RequestHasher, clock });
   const connect = createConnect({ door, store: connections, clock });
+  const declareGatewayScopes = createDeclareGatewayScopes({ door, store: connections });
   const authenticateOperator = createAuthenticateOperator({ sessions: createFleetConsoleSessions(options.fleetUrl) });
   const parties = createPrismaPartyStore(prisma);
   // The OAuth server's clients and tokens: a client party's secret and tokens change as its proxy ship's crew does.
@@ -607,6 +653,14 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           }),
         ]),
   ];
+  // What waits for a linked person shows in Slack before anything wakes them (gateway scopes 9.5).
+  const slackApiUrl = options.slackApiUrl ?? SLACK_API_URL;
+  const slackApps = createPrismaSlackApps(prisma);
+  const slackLinks = createPrismaSlackLinks(prisma);
+  const slackPosts = createPrismaSlackPosts(prisma);
+  const slackMessages = createSlackMessages({ apiUrl: slackApiUrl });
+  const overviewUrlOf = (fleetId: FleetId): string => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`;
+  const showInSlack = createShowInSlack({ links: slackLinks, apps: slackApps, posts: slackPosts, slack: slackMessages, door: door.person, sleep, clock, overviewUrlOf });
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
   const personCrews = createPrismaPersonCrews(prisma);
   // A person's pages in focus, on every instance: while one is, what arrives is handed through it (wake a person, W6).
@@ -620,7 +674,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: door.person,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: door.person, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
+      wakePerson: createWakePerson({ door: door.person, shownElsewhere: { show: showInSlack }, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,
@@ -664,6 +718,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       readMeeting: createReadMeeting({ ...asCrew, door: door.meetings }),
       changeOwnMic: createChangeOwnMic({ ...asCrew, door: door.meetings }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
+      crewPersonShip: asCrew.crewPersonShip,
     };
   };
   const person = pagasae === undefined ? undefined : personToolsOf();
@@ -732,6 +787,60 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     intervalMs: OUTCOME_ROUND_MS,
     log: server.log,
   });
+  const slackWorkspaces = createPrismaSlackWorkspaces(prisma);
+  const slackTooling = createSlackTooling({ apiUrl: slackApiUrl });
+  const slackInstallStates = createSlackInstallSeals(options.gatewaySecret);
+  const installRedirectUrl = `${issuer}${SLACK_INSTALL_PATH}`;
+  const linkRedirectUrl = `${issuer}${SLACK_LINK_PATH}`;
+  const slackSignIn = createSlackSignIn({ apiUrl: slackApiUrl });
+  const slackLinkStates = createSlackLinkSeals(options.gatewaySecret);
+  const takeAccessToken = createTakeAccessToken({ slack: slackTooling, workspaces: slackWorkspaces, clock });
+  const shipNames: ShipNames = {
+    nameOf: async (fleetId, shipId) => {
+      const crew = await connections.find(fleetId);
+      const ship = crew === undefined ? undefined : await door.getShip(crew.crewToken, { shipId });
+      return ship?.isOk === true ? ship.value.name : undefined;
+    },
+  };
+  const slackShips = createSlackShips({ fleetUrl: options.fleetUrl, crewTokenOf: async (fleetId) => (await connections.find(fleetId))?.crewToken, ships: createFleetShips(options.fleetUrl), asActor: createProxyShipsAsActor(options.fleetUrl) });
+  // Which outside party a ship is the proxy ship of: a fleet has few parties.
+  const proxyShips: ProxyShipKinds = { kindOf: async (fleetId, shipId) => (await parties.list(fleetId)).find((party) => party.proxyShipId === shipId)?.kind };
+  const slackAddresses = { installRedirectUrl, eventsUrl: `${issuer}${SLACK_EVENTS_PATH}`, actionsUrl: `${issuer}${SLACK_ACTIONS_PATH}`, linkRedirectUrl };
+  const slack: Context['slack'] = {
+    readSlack: createReadSlack({ workspaces: slackWorkspaces, apps: slackApps, ships: slackShips }),
+    connectSlack: createConnectSlack({ slack: slackTooling, workspaces: slackWorkspaces, apps: slackApps, shipNames, clock, addresses: slackAddresses }),
+    startInstall: createStartInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, takeAccessToken, states: slackInstallStates, ships: slackShips, credentialOf: credentialOf, clock, addresses: slackAddresses }),
+    disconnectSlack: createDisconnectSlack({ slack: slackTooling, workspaces: slackWorkspaces, apps: slackApps, takeAccessToken }),
+    listExposable: createListExposable({ ships: slackShips, apps: slackApps, proxyShips, credentialOf: credentialOf }),
+    exposeShip: createExposeShip({ slack: slackTooling, apps: slackApps, ships: slackShips, proxyShips, takeAccessToken, credentialOf: credentialOf, clock, addresses: slackAddresses }),
+    removeBot: createRemoveBot({ slack: slackTooling, apps: slackApps, ships: slackShips, takeAccessToken, credentialOf: credentialOf }),
+    readSlackLink: createReadSlackLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks }),
+    // Where no pagasae is set no one signs in, so no account has a person ship to link.
+    startLink: createStartLink({ workspaces: slackWorkspaces, apps: slackApps, signIn: slackSignIn, states: slackLinkStates, crewPersonShip: person?.crewPersonShip ?? (() => Promise.resolve(err({ kind: 'noPersonShip' as const }))), clock, linkRedirectUrl }),
+    unlinkSlack: createUnlinkSlack({ links: slackLinks }),
+    showAllInSlack: createShowAllInSlack({ links: slackLinks }),
+  };
+  const slackEvents = createPrismaSlackEvents(prisma);
+  const slackSends = createSlackEventWorker({
+    send: createSendSlackEvents({ events: slackEvents, apps: slackApps, crews: personCrews, sender: door, door: door.person, posts: slackPosts, slack: slackMessages, clock }),
+    sleep,
+    intervalMs: SLACK_EVENT_ROUND_MS,
+    log: server.log,
+  });
+  registerSlackRoutes(server, {
+    completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
+    answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, slack: slackMessages, signatures: createSlackSignatures(), clock }),
+    completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl }),
+    takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, posts: slackPosts, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl: `${issuer}/slack/link` }),
+  });
+  const rotateConfigurationTokens = createRotateConfigurationTokens({ workspaces: slackWorkspaces, takeAccessToken });
+  const followExposedShips = createFollowExposedShips({ workspaces: slackWorkspaces, apps: slackApps, ships: slackShips, slack: slackTooling, takeAccessToken, addresses: slackAddresses });
+  const slackTokens = createSlackTokenWorker({
+    rotate: async () => {
+      await rotateConfigurationTokens();
+      await followExposedShips();
+    },
+    sleep, intervalMs: SLACK_TOKEN_ROUND_MS, log: server.log });
   const pings = createPingWorker({ answerPings: createAnswerPings({ connections, inbox: door.gatewayInbox }), sleep, intervalMs: POLL_MS, log: server.log });
   const decideRequestOnly = createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock });
   // A decided request's outcomes are told at once, not at the next round.
@@ -745,6 +854,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined; waitingSecret: string | undefined }): Context => ({
     ...sent,
     authenticateActor,
+    slack,
     changes: hub,
     accountInView,
     accountApps: signIns === undefined ? undefined : (signIn: string) => signIns.apps(signIn),
@@ -755,6 +865,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readFleet,
     deleteFleet,
     endSignIns: createEndSignIns({ grants, tokens: issuedTokens }),
+    stopSlackLink: createStopSlackLink({ links: slackLinks, clock }),
     readConnection,
     connect,
     approveParty,
@@ -830,10 +941,17 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     restoreConnections: async () => {
       const restored: { fleetId: FleetId; ship: string }[] = [];
       for (const crew of await connections.connected()) {
-        // A fleet that is off is not read.
-        const connection = (await isServed(crew.fleetId)) ? await readConnection(crew.fleetId) : await heldConnection(crew.fleetId);
+        // A fleet that is off is not read, nor declared to.
+        const isOn = await isServed(crew.fleetId);
+        const connection = isOn ? await readConnection(crew.fleetId) : await heldConnection(crew.fleetId);
         if (connection.state === 'connected') {
           restored.push({ fleetId: crew.fleetId, ship: connection.ship?.name ?? crew.name });
+        }
+        if (isOn && connection.state === 'connected') {
+          const declared = await declareGatewayScopes(crew.fleetId);
+          if (!declared.isOk) {
+            server.log.warn({ fleetId: crew.fleetId, reason: declared.error.message }, "the fleet did not take the gateway's scopes again");
+          }
         }
       }
       for (const party of await parties.crewed()) {
@@ -844,12 +962,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       outcomes.start();
       pings.start();
       personWaiters.start();
+      slackTokens.start();
+      slackSends.start();
       return restored;
     },
     close: async () => {
       await outcomes.stop();
       await pings.stop();
       await personWaiters.stop();
+      await slackTokens.stop();
+      await slackSends.stop();
       await workers.stop();
       await server.close();
     },

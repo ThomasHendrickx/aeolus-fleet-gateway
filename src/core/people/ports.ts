@@ -163,8 +163,28 @@ export interface OpenedDeliveries {
 /** The channels a person may turn on to be woken (wake a person, W1), as a hand-over names them. */
 export type WakeChannelName = 'email' | 'web-push';
 
-/** What a delivery is handed to the person through: a wake's channel, or a page of theirs in focus, which shows it (W6). */
-export type HandOverChannel = WakeChannelName | 'page';
+/**
+ * Outbound port: a place beyond the gateway's pages that shows the person's
+ * deliveries itself, as Slack does for a linked person (gateway scopes
+ * 9.5): it hands each one it shows, so no channel wakes for it (W3).
+ */
+export interface ShownElsewhere {
+  /**
+   * Finishes what an earlier wake left unfinished, then shows what it shows
+   * of the fresh deliveries: the ones it showed, and whether any is left
+   * unfinished, so the wake is tried again.
+   */
+  show(ship: PersonShip, wake: { crewToken: string; fresh: readonly PushedPersonDelivery[] }): Promise<Result<ShownThere, FleetRefusal>>;
+}
+
+/** What a place beyond the pages showed at a wake. */
+export interface ShownThere {
+  readonly shown: ReadonlySet<DeliveryId>;
+  readonly isAnyUnfinished: boolean;
+}
+
+/** What a delivery is handed to the person through: a wake's channel, a page of theirs in focus, which shows it (W6), or Slack, which shows it (gateway scopes 9.5). */
+export type HandOverChannel = WakeChannelName | 'page' | 'slack';
 
 /**
  * Outbound port: one way to wake a person (wake a person, W1, W4): it says

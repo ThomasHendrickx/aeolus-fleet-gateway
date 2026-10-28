@@ -37,6 +37,7 @@ const environmentSchema = z.object({
   PAGASAE_CLIENT_SECRET: z.string().min(1).optional(),
   PAGASAE_APP_CLIENT_ID: z.string().min(1).optional(),
   PAGASAE_APP_CLIENT_SECRET: z.string().min(1).optional(),
+  SLACK_API_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).default('https://slack.com/api'),
   OPENAI_APPS_CHALLENGE: z.string().min(1).optional(),
 });
 
@@ -95,6 +96,8 @@ export interface Config {
    * Unset, nobody signs in to them that way.
    */
   pagasaeApp: { clientId: string; clientSecret: string } | undefined;
+  /** Slack's Web API, where the gateway makes and installs Slack bots (gateway scopes, part B): Slack's own unless set. */
+  slackApiUrl: string;
   /**
    * The token OpenAI's plugin portal shows to prove the gateway's domain,
    * served at /.well-known/openai-apps-challenge (chatgpt-plugin design,
@@ -134,6 +137,7 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     webPushWakeWindowMs: variables.WEB_PUSH_WAKE_WINDOW_MINUTES * MINUTE_MS,
     pagasae: pagasaeOf(variables),
     pagasaeApp: pagasaeAppOf(variables),
+    slackApiUrl: variables.SLACK_API_URL.replace(/\/$/, ''),
     openAiAppsChallenge: variables.OPENAI_APPS_CHALLENGE,
   };
 }
