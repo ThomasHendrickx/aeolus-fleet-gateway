@@ -18,6 +18,7 @@ import { createPrismaConnectionStore } from './adapters/prisma/connection-store.
 import { createPrismaFleetForgetter } from './adapters/prisma/fleet-forgetter.js';
 import { createPrismaFleetSwitches } from './adapters/prisma/fleet-switches.js';
 import { createPrismaInstallationRequests } from './adapters/prisma/installation-requests.js';
+import { createPrismaPartyGrants } from './adapters/prisma/party-grants.js';
 import { createPrismaPartyStore } from './adapters/prisma/party-store.js';
 import { createPrismaScopeRequirements } from './adapters/prisma/scope-requirements.js';
 import { createPrismaToolMarks } from './adapters/prisma/tool-marks.js';
@@ -30,6 +31,7 @@ import { createCheckRequiredScopes } from './core/parties/check-required-scopes.
 import { createReadScopeRequirements } from './core/parties/read-scope-requirements.js';
 import { createSetScopeRequirements } from './core/parties/set-scope-requirements.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
+import { createListingConnectionOf } from './core/party-grants/listing-connection.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
 import { createHandA2aMessage } from './core/a2a-out/hand-a2a-message.js';
@@ -397,9 +399,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // A caller of a proxy ship waits and gives up as the gateway does with its server (interop 3.4, 5.3).
   const callTiming = { waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, deadlineMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS };
   const requirements = createPrismaScopeRequirements(prisma);
-  const stateParty = createStateParty({ parties, servers, door, marks, requirements, timing: callTiming });
+  const partyGrants = createPrismaPartyGrants(prisma);
+  // A server where each person signs in is listed under a person's grant (decision 0067, Q15).
+  const connectionOf = createListingConnectionOf({ grants: partyGrants, clock });
+  const stateParty = createStateParty({ parties, servers, connectionOf, door, marks, requirements, timing: callTiming });
   const markTool = createMarkTool({ parties, marks, stateParty });
-  const switchTools = createSwitchTools({ parties, servers, stateParty, connections, fleet: createProxyShipsAsActor(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const switchTools = createSwitchTools({ parties, servers, connectionOf, stateParty, connections, fleet: createProxyShipsAsActor(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
   const agentCards = createHttpAgentCards({ timeoutMs: AGENT_CARD_TIMEOUT_MS });
   const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, requirements, timing: callTiming });
   const checkScopes = createCheckRequiredScopes({ connections, door });
@@ -421,7 +426,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
   const checkServer = createCheckServer({ servers, servesOutsideParties });
-  const readPartyTools = createReadPartyTools({ parties, servers });
+  const readPartyTools = createReadPartyTools({ parties, servers, connectionOf });
   const pushStore = createPrismaPushStore(prisma);
   // A webhook is reached only at a public address, as its name resolves at the moment of connecting (slice 4).
   const webhookPoster = createWebhookPoster({ addressesOf: (host) => systemHostResolver.addressesOf(host), isAllowedAddress: isPublicAddress, timeoutMs: WEBHOOK_TIMEOUT_MS });

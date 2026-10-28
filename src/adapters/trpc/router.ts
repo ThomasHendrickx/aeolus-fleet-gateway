@@ -356,8 +356,9 @@ const CREW_CODES = {
 /** The refusals of reading an outside MCP server's tools, as the API states them. */
 const TOOLS_CODES = {
   NO_SUCH_PARTY: 'NOT_FOUND',
+  NOT_SIGNED_IN: 'PRECONDITION_FAILED',
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
-} as const satisfies Record<'NO_SUCH_PARTY' | 'SERVER_UNREACHABLE', TRPCError['code']>;
+} as const satisfies Record<'NO_SUCH_PARTY' | 'NOT_SIGNED_IN' | 'SERVER_UNREACHABLE', TRPCError['code']>;
 
 /** The refusals of reading the scopes the fleet lists, as the API states them. */
 const LISTED_SCOPES_CODES = {
@@ -374,6 +375,7 @@ const SWITCH_TOOLS_CODES = {
   NOT_REACHABLE: 'FORBIDDEN',
   NOT_CONNECTED: 'PRECONDITION_FAILED',
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+  NOT_SIGNED_IN: 'PRECONDITION_FAILED',
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
   NO_SUCH_TOOL: 'NOT_FOUND',
 } as const satisfies Record<SwitchToolsRefusal['kind'], TRPCError['code']>;

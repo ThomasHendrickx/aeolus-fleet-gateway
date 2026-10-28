@@ -2,6 +2,7 @@ import type { FleetId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { PartyStore, ScopeRequirementsStore } from '../parties/ports.js';
+import type { ListingConnectionOf } from '../party-grants/listing-connection.js';
 import { isToolOn } from '../parties/tool-switches.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
@@ -29,9 +30,18 @@ export type StateParty = (input: { fleetId: FleetId; name: string }) => Promise<
  * crew: the tools its server lists now that are switched on, with argo's
  * marks and the scopes each tool needs now. The whole statement replaces the one before, so a tool the server
  * dropped or an approver switched off is gone. A party with no switches kept
- * keeps every tool it lists on first (aeolus-fleet#1151).
+ * keeps every tool it lists on first (aeolus-fleet#1151). A server where each
+ * person signs in is listed under a person's grant (decision 0067).
  */
-export function createStateParty(deps: { parties: PartyStore; servers: McpServers; door: StatementDoor; marks: ToolMarks; requirements: ScopeRequirementsStore; timing: CallTiming }): StateParty {
+export function createStateParty(deps: {
+  parties: PartyStore;
+  servers: McpServers;
+  connectionOf: ListingConnectionOf;
+  door: StatementDoor;
+  marks: ToolMarks;
+  requirements: ScopeRequirementsStore;
+  timing: CallTiming;
+}): StateParty {
   return async ({ fleetId, name }) => {
     const party = await deps.parties.find(fleetId, name);
     if (party?.kind !== 'mcpServer') {
@@ -40,11 +50,11 @@ export function createStateParty(deps: { parties: PartyStore; servers: McpServer
     if (party.state !== 'crewed' || party.crewToken === null) {
       return refuse('NOT_CREWED', `The gateway does not crew the proxy ship of ${name} yet`);
     }
-    if (party.credential.kind === 'personSignIn') {
-      // Its tools are listed only under a person's grant (decision 0067), which no one holds yet.
-      return refuse('NOT_SIGNED_IN', `Nobody signed in to ${name} yet, so its tools cannot be listed`);
+    const connection = await deps.connectionOf(party);
+    if (connection === undefined) {
+      return refuse('NOT_SIGNED_IN', `Nobody holds a usable sign-in to ${name}, so its tools cannot be listed`);
     }
-    const listed = await deps.servers.listTools({ url: party.url, credential: party.credential });
+    const listed = await deps.servers.listTools(connection);
     if (!listed.isOk) {
       return refuse('SERVER_UNREACHABLE', `The MCP server of ${name} could not be listed: ${listed.error.reason}`);
     }
