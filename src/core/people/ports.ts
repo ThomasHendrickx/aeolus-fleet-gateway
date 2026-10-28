@@ -169,8 +169,18 @@ export type WakeChannelName = 'email' | 'web-push';
  * 9.5): it hands each one it shows, so no channel wakes for it (W3).
  */
 export interface ShownElsewhere {
-  /** Shows what it shows of the fresh deliveries: the ones it showed. */
-  show(ship: PersonShip, wake: { crewToken: string; fresh: readonly PushedPersonDelivery[] }): Promise<Result<ReadonlySet<DeliveryId>, FleetRefusal>>;
+  /**
+   * Finishes what an earlier wake left unfinished, then shows what it shows
+   * of the fresh deliveries: the ones it showed, and whether any is left
+   * unfinished, so the wake is tried again.
+   */
+  show(ship: PersonShip, wake: { crewToken: string; fresh: readonly PushedPersonDelivery[] }): Promise<Result<ShownThere, FleetRefusal>>;
+}
+
+/** What a place beyond the pages showed at a wake. */
+export interface ShownThere {
+  readonly shown: ReadonlySet<DeliveryId>;
+  readonly isAnyUnfinished: boolean;
 }
 
 /** What a delivery is handed to the person through: a wake's channel, a page of theirs in focus, which shows it (W6), or Slack, which shows it (gateway scopes 9.5). */

@@ -2,7 +2,7 @@ import type { DeliveryId, FleetId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Sleep } from '../mcp-out/run-party.js';
-import type { PersonDelivery, PersonShip, PersonShipDoor, PushedPersonDelivery } from '../people/ports.js';
+import type { PersonDelivery, PersonShip, PersonShipDoor, PushedPersonDelivery, ShownThere } from '../people/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { ok, type Result } from '../shared/result.js';
 import type { SlackApps, SlackButton, SlackLinks, SlackMessages, SlackPosts } from './ports.js';
@@ -19,7 +19,14 @@ const SECOND_MS = 1000;
 /** The number a delivery is handed with: the first hand-over, made again with the same number counts nothing (0040). */
 const FIRST_HAND_OVER = 1;
 
-export type ShowInSlack = (ship: PersonShip, wake: { crewToken: string; fresh: readonly PushedPersonDelivery[] }) => Promise<Result<ReadonlySet<DeliveryId>, FleetRefusal>>;
+export type ShowInSlack = (ship: PersonShip, wake: { crewToken: string; fresh: readonly PushedPersonDelivery[] }) => Promise<Result<ShownThere, FleetRefusal>>;
+
+/**
+ * What came of a kept post: in Slack and finished, in Slack but its
+ * acknowledgement refused, not shown and forgotten, or not yet in Slack
+ * and kept, its delivery waiting beyond the read.
+ */
+type Finished = 'shown' | 'unacknowledged' | 'notShown' | 'waiting';
 
 /** Where a delivery shows in Slack: through which bot, in which conversation and thread. */
 interface Where {
@@ -45,8 +52,9 @@ function isInSlack(app: SlackApp | undefined): app is Where['app'] {
  * limited: the post waits Retry-After and goes again with the same hand-over.
  * Slack refused the post: nothing is kept, and web push and email wake as
  * before. A post the gateway did not finish (it stopped, or core refused
- * the acknowledgement) is finished first, never posted twice once in Slack.
- * It answers the deliveries Slack showed, which no other channel wakes for.
+ * the acknowledgement) is finished first, at every wake, never posted twice
+ * once in Slack. It answers the deliveries Slack showed, which no other
+ * channel wakes for, and whether a post is left unfinished.
  */
 export function createShowInSlack(deps: {
   links: Pick<SlackLinks, 'ofPersonShip'>;
@@ -90,46 +98,51 @@ export function createShowInSlack(deps: {
   };
 
   /**
-   * Posts a kept post not yet in Slack, then acknowledges it unless a link:
-   * whether it is in Slack now. A delivery no longer waiting was
-   * acknowledged meanwhile: a post not yet in Slack is forgotten, one in
-   * Slack is finished.
+   * Posts a kept post not yet in Slack, then acknowledges it unless a link.
+   * A post not yet in Slack whose delivery the read did not hold is handed
+   * again with the same number, which counts nothing: still handed, it
+   * waits for a later read; acknowledged meanwhile, or undeliverable, it is
+   * forgotten. A post in Slack is acknowledged by core's ack alone, which
+   * takes a delivery acknowledged meanwhile as OK.
    */
-  const finish = async ({ crewToken, post, delivery }: { crewToken: string; post: SlackPost & { deliveryId: DeliveryId }; delivery: PersonDelivery | undefined }): Promise<boolean> => {
+  const finish = async ({ crewToken, post, delivery }: { crewToken: string; post: SlackPost & { deliveryId: DeliveryId }; delivery: PersonDelivery | undefined }): Promise<Finished> => {
     let current = post;
     if (current.ts === null) {
       if (delivery === undefined) {
+        const handed = await deps.door.handed(crewToken, { deliveryId: post.deliveryId, handOverNumber: FIRST_HAND_OVER, channel: 'slack' });
+        if (!handed.isOk || handed.value === 'handed') {
+          return 'waiting';
+        }
         await deps.posts.remove(post.fleetId, post);
-        return false;
+        return 'notShown';
       }
       const app = await deps.apps.find(post.fleetId, post.appId);
       const shown = slackPostOf(delivery, { overviewUrl: deps.overviewUrlOf(post.fleetId), isHeadedBySender: app?.shipId === null });
       const ts = isInSlack(app) ? await posted({ app, channel: post.channel, threadTs: post.threadTs }, shown.kind === 'shown' ? shown : { text: shown.text, buttons: [] }) : undefined;
       if (ts === undefined) {
         await deps.posts.remove(post.fleetId, post);
-        return false;
+        return 'notShown';
       }
       current = { ...current, ts };
       await deps.posts.save(current);
     }
-    if (delivery === undefined && !current.isLinkOnly) {
-      await deps.posts.save({ ...current, ackedAt: deps.clock.now() });
-      return true;
+    if (current.isLinkOnly || current.ackedAt !== null) {
+      return 'shown';
     }
-    if (!current.isLinkOnly && current.ackedAt === null) {
-      const acked = await deps.door.ack(crewToken, post.deliveryId);
-      if (acked.isOk) {
-        await deps.posts.save({ ...current, ackedAt: deps.clock.now() });
-      }
+    const acked = await deps.door.ack(crewToken, post.deliveryId);
+    if (!acked.isOk) {
+      return 'unacknowledged';
     }
-    return true;
+    await deps.posts.save({ ...current, ackedAt: deps.clock.now() });
+    return 'shown';
   };
 
   return async (ship, { crewToken, fresh }) => {
     const link = await deps.links.ofPersonShip(ship.fleetId, ship.shipId);
     const shownIds = new Set<DeliveryId>();
+    let isAnyUnfinished = false;
     if (link?.stoppedAt !== null) {
-      return ok(shownIds);
+      return ok({ shown: shownIds, isAnyUnfinished });
     }
     const unfinished = await deps.posts.unfinished(ship.fleetId, ship.shipId);
     if (unfinished.length > 0) {
@@ -141,7 +154,8 @@ export function createShowInSlack(deps: {
       for (const post of unfinished) {
         const { deliveryId } = post;
         if (deliveryId !== null) {
-          await finish({ crewToken, post: { ...post, deliveryId }, delivery: held.value.find((each) => each.deliveryId === deliveryId) });
+          const finished = await finish({ crewToken, post: { ...post, deliveryId }, delivery: held.value.find((each) => each.deliveryId === deliveryId) });
+          isAnyUnfinished ||= finished === 'unacknowledged' || finished === 'waiting';
         }
       }
     }
@@ -171,10 +185,12 @@ export function createShowInSlack(deps: {
         await deps.posts.remove(ship.fleetId, post);
         continue;
       }
-      if (await finish({ crewToken, post: { ...post, deliveryId: delivery.deliveryId }, delivery })) {
+      const finished = await finish({ crewToken, post: { ...post, deliveryId: delivery.deliveryId }, delivery });
+      if (finished === 'shown' || finished === 'unacknowledged') {
         shownIds.add(delivery.deliveryId);
       }
+      isAnyUnfinished ||= finished === 'unacknowledged';
     }
-    return ok(shownIds);
+    return ok({ shown: shownIds, isAnyUnfinished });
   };
 }

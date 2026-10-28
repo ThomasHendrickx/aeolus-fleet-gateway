@@ -99,13 +99,13 @@ function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[];
 }
 
 /** Slack, showing the deliveries given: it hands each with channel slack, as the gateway does once it posted one. */
-function slackShowing(ship: ReturnType<typeof aShip>, shown: readonly DeliveryId[], options: { isAnyUnfinished?: boolean } = {}): ShownElsewhere & { asked: DeliveryId[][] } {
+function slackShowing(ship: ReturnType<typeof aShip>, options: { shown?: readonly DeliveryId[]; isAnyUnfinished?: boolean } = {}): ShownElsewhere & { asked: DeliveryId[][] } {
   const asked: DeliveryId[][] = [];
   return {
     asked,
     show: async (_ship, { crewToken, fresh }) => {
       asked.push(fresh.map(({ deliveryId }) => deliveryId));
-      const taken = fresh.filter(({ deliveryId }) => shown.includes(deliveryId));
+      const taken = fresh.filter(({ deliveryId }) => options.shown?.includes(deliveryId) === true);
       for (const { deliveryId } of taken) {
         await ship.door.handed(crewToken, { deliveryId, handOverNumber: 1, channel: 'slack' });
       }
@@ -118,7 +118,7 @@ describe('waking a person', () => {
   it('wakes no one for what Slack showed, and wakes for the rest (gateway scopes 9.5 step 5)', async () => {
     const ship = aShip([aDelivery(1), aDelivery(2)]);
     const email = aChannel('email');
-    const slack = slackShowing(ship, ['dlv_01m3tbfspe96yf1rnr4ank0001']);
+    const slack = slackShowing(ship, { shown: ['dlv_01m3tbfspe96yf1rnr4ank0001'] });
 
     await waking({ ship, channels: [email.channel], shownElsewhere: slack })(SHIP, CREW_TOKEN);
 
@@ -132,14 +132,14 @@ describe('waking a person', () => {
     const ship = aShip([aDelivery(1)]);
     const email = aChannel('email');
 
-    const woken = await waking({ ship, channels: [email.channel], shownElsewhere: slackShowing(ship, ['dlv_01m3tbfspe96yf1rnr4ank0001']) })(SHIP, CREW_TOKEN);
+    const woken = await waking({ ship, channels: [email.channel], shownElsewhere: slackShowing(ship, { shown: ['dlv_01m3tbfspe96yf1rnr4ank0001'] }) })(SHIP, CREW_TOKEN);
 
     expect({ woken, emails: email.woken.length }).toEqual({ woken: ok({ kind: 'settled' }), emails: 0 });
   });
 
   it('asks Slack to finish what it left unfinished though nothing waits fresh, as after a restart', async () => {
     const ship = aShip([aDelivery(1, { handOverNumber: 1 })]);
-    const slack = slackShowing(ship, []);
+    const slack = slackShowing(ship);
 
     await waking({ ship, channels: [aChannel('email').channel], shownElsewhere: slack })(SHIP, CREW_TOKEN);
 
@@ -149,7 +149,7 @@ describe('waking a person', () => {
   it('says the wake failed while Slack left a post unfinished, so it is tried again', async () => {
     const ship = aShip([aDelivery(1, { handOverNumber: 1 })]);
 
-    const woken = await waking({ ship, channels: [aChannel('email').channel], shownElsewhere: slackShowing(ship, [], { isAnyUnfinished: true }) })(SHIP, CREW_TOKEN);
+    const woken = await waking({ ship, channels: [aChannel('email').channel], shownElsewhere: slackShowing(ship, { isAnyUnfinished: true }) })(SHIP, CREW_TOKEN);
 
     expect(woken).toEqual(ok({ kind: 'failed' }));
   });
@@ -158,7 +158,7 @@ describe('waking a person', () => {
     const ship = aShip([aDelivery(1, { handOverNumber: 1 }), aDelivery(2)]);
     const email = aChannel('email');
 
-    const woken = await waking({ ship, channels: [email.channel], shownElsewhere: slackShowing(ship, [], { isAnyUnfinished: true }) })(SHIP, CREW_TOKEN);
+    const woken = await waking({ ship, channels: [email.channel], shownElsewhere: slackShowing(ship, { isAnyUnfinished: true }) })(SHIP, CREW_TOKEN);
 
     expect({ woken, emails: email.woken.length, handOvers: ship.handOvers.map(({ channel }) => channel) }).toEqual({ woken: ok({ kind: 'failed' }), emails: 1, handOvers: ['email'] });
   });
@@ -167,7 +167,7 @@ describe('waking a person', () => {
     const ship = aShip([aDelivery(1)]);
     const focused = memoryFocusedPages();
     await focused.save({ ...SHIP, pageId: 'page-1', seenAt: NOW });
-    const slack = slackShowing(ship, ['dlv_01m3tbfspe96yf1rnr4ank0001']);
+    const slack = slackShowing(ship, { shown: ['dlv_01m3tbfspe96yf1rnr4ank0001'] });
 
     await waking({ ship, channels: [], focused, shownElsewhere: slack })(SHIP, CREW_TOKEN);
 
