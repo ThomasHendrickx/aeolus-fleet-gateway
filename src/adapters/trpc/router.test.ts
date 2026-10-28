@@ -228,6 +228,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ name: input.name, kind: 'mcpServer' as const, url: input.url, credentialKind: input.credential.kind, ownerShipId: input.ownerShipId, concurrencyLimit: input.concurrencyLimit, state: 'crewed' as const, proxyShipId: null }));
     },
     addSignInServer: unused,
+    partySignIn: { start: unused, readOwn: unused, removeOwn: unused },
     crewParty: ({ name }) =>
       Promise.resolve(
         name === 'agentcore'

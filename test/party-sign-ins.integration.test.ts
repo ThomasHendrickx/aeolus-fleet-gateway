@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
 import { createPrismaClient } from '../src/adapters/prisma/client.js';
+import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { startAttioDouble, type AttioDouble, type AttioDoubleOptions } from './fixtures/attio-double/attio-double.js';
 import { commission, register, signIn } from './support/argo.js';
@@ -199,6 +200,7 @@ describe('a person signs in to an outside MCP server for themselves', () => {
     const next = await signedIn(MATHILDE_BROWSER);
 
     expect(next.searchParams.get('sign-in')).toBe('signed-in');
+    await expect(createPrismaPartyStore(createPrismaClient(databaseUrl)).find(fleetId, 'attio')).resolves.toMatchObject({ credential: { client: { isIssuerInResponse: true } } });
   });
 
   it('revokes and drops the grant a person removes, leaving their page not signed in (scenario 24)', async () => {

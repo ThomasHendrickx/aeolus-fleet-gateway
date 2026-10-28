@@ -32,6 +32,13 @@ import { createReadScopeRequirements } from './core/parties/read-scope-requireme
 import { createSetScopeRequirements } from './core/parties/set-scope-requirements.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
 import { createListingConnectionOf } from './core/party-grants/listing-connection.js';
+import { createCompletePartySignIn } from './core/party-grants/complete-party-sign-in.js';
+import { createReadOwnGrant } from './core/party-grants/read-own-grant.js';
+import { createRemoveOwnGrant } from './core/party-grants/remove-own-grant.js';
+import { createStartPartySignIn } from './core/party-grants/start-party-sign-in.js';
+import { createPartySignIns } from './adapters/oauth/party-sign-ins.js';
+import { createPartySignInSeals } from './adapters/crypto/party-sign-in-seals.js';
+import { PARTY_SIGN_IN_DONE_PATH, registerPartySignInRoutes } from './adapters/http/party-sign-in-routes.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
 import { createHandA2aMessage } from './core/a2a-out/hand-a2a-message.js';
@@ -270,8 +277,6 @@ const TOOL_CALL_TIMEOUT_MS = 5 * 60_000;
 /** Where the gateway is reached unless told: this machine, at its default port. */
 const DEFAULT_PUBLIC_URL = 'http://127.0.0.1:4200';
 
-/** Where an outside authorization server sends a person back after they signed in to a server for themselves (decision 0067). */
-const PERSON_SIGN_IN_DONE_PATH = '/outside-parties/sign-in/done';
 
 /** How long a client's metadata document may take to answer. */
 const CLIENT_METADATA_TIMEOUT_MS = 5_000;
@@ -861,6 +866,19 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     }
     return decided;
   };
+  // A person's own sign-in to a server where each person signs in (decision 0067), sent back to the redirect URI every party's client was registered with.
+  const partySignInRedirectUri = `${issuer}${PARTY_SIGN_IN_DONE_PATH}`;
+  const partySignIns = createPartySignIns();
+  const partySignInSeals = createPartySignInSeals(options.gatewaySecret);
+  const partySignIn: Context['partySignIn'] = {
+    start: createStartPartySignIn({ parties, seals: partySignInSeals, signIns: partySignIns, secrets: oauthSecrets, clock, redirectUri: partySignInRedirectUri }),
+    readOwn: createReadOwnGrant({ parties, grants: partyGrants }),
+    removeOwn: createRemoveOwnGrant({ parties, grants: partyGrants, signIns: partySignIns }),
+  };
+  registerPartySignInRoutes(server, {
+    complete: createCompletePartySignIn({ parties, grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, accountOf, stateParty, clock, redirectUri: partySignInRedirectUri }),
+    log: server.log,
+  });
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined; waitingSecret: string | undefined }): Context => ({
     ...sent,
     authenticateActor,
@@ -879,7 +897,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readConnection,
     connect,
     approveParty,
-    addSignInServer: createAddSignInServer({ approveParty, parties, servers: createAuthorizationServers(), servesOutsideParties, redirectUri: `${issuer}${PERSON_SIGN_IN_DONE_PATH}` }),
+    partySignIn,
+    addSignInServer: createAddSignInServer({ approveParty, parties, servers: createAuthorizationServers(), servesOutsideParties, redirectUri: partySignInRedirectUri }),
     addClientParty: createAddClientParty({ parties, approveClientParty, clients: oauthClients, secrets: oauthSecrets }),
     addA2aClient,
     addA2aAgent,
