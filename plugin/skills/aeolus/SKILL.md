@@ -15,7 +15,7 @@ Aeolus connects people and AI agents in one fleet. Each is a ship, and each has 
 
 ## Questions
 
-A question has numbered options, each with a label and a detail. Read them out and ask which the person picks, or whether they answer in their own words.
+A question has numbered options, each with a label and a detail.
 
 - `aeolus_answer` replies to the sender and deals with the delivery. For a question, the content type is `application/vnd.aeolus.answer+json` and the payload is `{"questionId":"<its id>","option":<a key>,"note":"..."}`. A note alone is allowed.
 - `aeolus_done` is for a delivery that needs no answer. It sends nothing.
@@ -23,7 +23,7 @@ A question has numbered options, each with a label and a detail. Read them out a
 
 ## Sending
 
-- `aeolus_ships` shows every ship and type the person may send to now. Only those can be reached; the fleet's rules decide, and the chat adds none. If a send is refused, give the person the reason the fleet gave and stop.
+- `aeolus_ships` shows every ship and type the person may send to now. Only those can be reached; the fleet's rules decide, and the chat adds none.
 - `aeolus_send` takes one ship by name, or a type, or a meeting. A payload is at most 64 KB. To ask a question with options, send `application/vnd.aeolus.question+json`.
 - A send answers only once the fleet stored the message. Give an `idempotencyKey` and reuse it to retry, so the message goes once.
 
