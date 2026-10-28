@@ -30,6 +30,8 @@ export interface SignInClient {
   readonly tokenEndpoint: string;
   /** Where a grant is revoked, when the authorization server offers it. */
   readonly revocationEndpoint: string | null;
+  /** Whether the authorization server states its issuer in each authorization response (RFC 9207): a response without it is then refused. */
+  readonly isIssuerInResponse: boolean;
   readonly clientId: string;
   /** None when the authorization server registered a public client. */
   readonly clientSecret: string | null;

@@ -18,6 +18,7 @@ export const ATTIO_CLIENT: SignInClient = {
   authorizationEndpoint: 'https://app.attio.com/oidc/authorize',
   tokenEndpoint: 'https://app.attio.com/oidc/token',
   revocationEndpoint: null,
+  isIssuerInResponse: false,
   clientId: 'client-1',
   clientSecret: 'secret-1',
   registrationClientUri: null,
