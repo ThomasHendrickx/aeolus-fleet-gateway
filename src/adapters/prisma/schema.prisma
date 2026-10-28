@@ -572,3 +572,24 @@ model SlackPost {
   @@index([fleetId, appId, channel, threadTs])
   @@map("slack_posts")
 }
+
+/// A person's grant of an outside MCP server where each person signs in (decision 0067): their sign-in under the party's client, naming their outside account, with its tokens. One per person and party; one per outside account and party where the server named it (Q13).
+model PartyGrant {
+  fleetId            String    @map("fleet_id")
+  party              String
+  personShipId       String    @map("person_ship_id")
+  accountId          String    @map("account_id")
+  /// The outside account's OpenID Connect subject; none where the server gave no ID token.
+  subject            String?
+  /// The outside account's email or name, as its ID token stated it.
+  outsideAccountName String?   @map("outside_account_name")
+  accessToken        String    @map("access_token")
+  refreshToken       String?   @map("refresh_token")
+  accessTokenEndsAt  DateTime? @map("access_token_ends_at") @db.Timestamptz(3)
+  signedInAt         DateTime  @map("signed_in_at") @db.Timestamptz(3)
+  lastUsedAt         DateTime? @map("last_used_at") @db.Timestamptz(3)
+
+  @@id([fleetId, party, personShipId])
+  @@unique([fleetId, party, subject])
+  @@map("party_grants")
+}
