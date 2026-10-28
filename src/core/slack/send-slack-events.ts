@@ -61,14 +61,16 @@ export function createSendSlackEvents(deps: {
     const where = { channel: event.channel, threadTs: event.threadTs ?? event.ts };
     const sent = await deps.sender.send(crew.crewToken, { to: event.shipId, contentType: 'text/markdown', payload: event.markdown, idempotencyKey: `slack:${event.eventId}` });
     if (sent.isOk) {
-      await deps.slack.react(app.bot.token, { channel: event.channel, ts: event.ts, name: STORED_REACTION });
-      return 'taken';
+      // Without the reaction the person sees no sign and sends again: the event goes again, the same send by its key.
+      const reacted = await deps.slack.react(app.bot.token, { channel: event.channel, ts: event.ts, name: STORED_REACTION });
+      return reacted.isOk ? 'taken' : 'later';
     }
     if (NOT_ANSWERED.has(sent.error.code) || ENDED_CREW.has(sent.error.code)) {
       return 'later';
     }
-    await deps.slack.postInThread(app.bot.token, { ...where, text: refusalText(app.name, sent.error) });
-    return 'taken';
+    // A refusal is dropped only once the person was told it.
+    const told = await deps.slack.postInThread(app.bot.token, { ...where, text: refusalText(app.name, sent.error) });
+    return told.isOk ? 'taken' : 'later';
   };
 
   const tellNotReached = async (event: KeptSlackEvent): Promise<void> => {
