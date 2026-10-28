@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import type { McpServerParty } from '../../src/core/parties/party.js';
 import type { PartyGrant } from '../../src/core/party-grants/party-grant.js';
-import type { PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
+import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 import type { SignInClient } from '../../src/core/vault/credential.js';
 import { FLEET_ID } from './fleet-fakes.js';
@@ -119,13 +119,11 @@ export function plainPartySignInSeals(): PartySignInSeals {
   };
 }
 
+/** Mathilde's ID token from Attio, for the party's client. */
+export const MATHILDE_ID_TOKEN: IdTokenClaims = { issuer: 'https://app.attio.com', audiences: ['client-1'], subject: 'sub-1', name: 'mathilde@acme.example' };
+
 /** Attio's tokens for Mathilde's code, with her ID token. */
-export const MATHILDE_TOKENS: RedeemedTokens = {
-  accessToken: 'access-mathilde',
-  refreshToken: 'refresh-mathilde',
-  expiresInSeconds: 3600,
-  idToken: { issuer: 'https://app.attio.com', audiences: ['client-1'], subject: 'sub-1', name: 'mathilde@acme.example' },
-};
+export const MATHILDE_TOKENS: RedeemedTokens = { accessToken: 'access-mathilde', refreshToken: 'refresh-mathilde', expiresInSeconds: 3600, idToken: MATHILDE_ID_TOKEN };
 
 /** A party's authorization server in memory: each code it issued, with the tokens it redeems for, once, and each token revoked. */
 export function fakePartySignIns() {
