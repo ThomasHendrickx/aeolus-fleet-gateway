@@ -92,6 +92,33 @@ describe("a linked person's message from Slack into the fleet", () => {
     expect({ messages: fleet.state.messages.size, calls: fleet.state.calls, reactions: slack.state.reactions.length }).toEqual({ messages: 1, calls: 2, reactions: 1 });
   });
 
+  it("is sent again next round while Slack does not take the reaction, giving exactly one message and one reaction", async () => {
+    slack.state.refusal = { kind: 'unavailable', message: 'Slack did not answer' };
+    await sendRound();
+    const whileSlackDown = { reactions: slack.state.reactions.length, takenAt: events.held[0]?.takenAt };
+
+    slack.state.refusal = undefined;
+    await sendRound(new Date('2026-10-27T09:00:05.000Z'));
+    await sendRound(new Date('2026-10-27T09:00:10.000Z'));
+
+    expect(whileSlackDown).toEqual({ reactions: 0, takenAt: null });
+    expect({ messages: fleet.state.messages.size, reactions: slack.state.reactions.length, takenAt: events.held[0]?.takenAt }).toEqual({ messages: 1, reactions: 1, takenAt: new Date('2026-10-27T09:00:05.000Z') });
+  });
+
+  it("tells core's refusal in the thread next round while Slack does not take the post, the message dropped only once told", async () => {
+    fleet.state.refusal = { code: 'NOT_REACHABLE', message: 'No rule lets you reach this ship' };
+    slack.state.refusal = { kind: 'rateLimited', retryAfterSeconds: 1 };
+    await sendRound();
+    const whileSlackDown = { told: slack.state.inThread.length, takenAt: events.held[0]?.takenAt };
+
+    slack.state.refusal = undefined;
+    await sendRound(new Date('2026-10-27T09:00:05.000Z'));
+    await sendRound(new Date('2026-10-27T09:00:10.000Z'));
+
+    expect(whileSlackDown).toEqual({ told: 0, takenAt: null });
+    expect({ told: slack.state.inThread.map(({ text }) => text), takenAt: events.held[0]?.takenAt }).toEqual({ told: ['You may not message release-notes'], takenAt: new Date('2026-10-27T09:00:05.000Z') });
+  });
+
   it('answers in the thread that the person may not message the ship when no rule lets them', async () => {
     fleet.state.refusal = { code: 'NOT_REACHABLE', message: 'No rule lets you reach this ship' };
 
