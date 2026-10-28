@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
+import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, PLUGIN_RESOURCE, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { fakeWaitingSeals, memoryPendingRequests } from '../../../test/support/request-fakes.js';
 import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
@@ -43,7 +43,7 @@ async function startServer(isSigningPeopleIn: boolean) {
   const codes = memoryAuthorizationCodes();
   const secrets = fakeSecrets();
   const clock = { now: () => new Date('2026-10-19T09:00:00.000Z') };
-  const readAuthorization = createReadAuthorization({ clients, documents: fakeClientMetadataDocuments(), resource: RESOURCE });
+  const readAuthorization = createReadAuthorization({ clients, documents: fakeClientMetadataDocuments(), resources: [RESOURCE, PLUGIN_RESOURCE] });
   parties = memoryPartyStore();
   requests = memoryPendingRequests();
   served = [FLEET];
@@ -69,12 +69,13 @@ async function startServer(isSigningPeopleIn: boolean) {
   registerOAuthRoutes(server, {
     issuer: ISSUER,
     resource: RESOURCE,
+    pluginResource: PLUGIN_RESOURCE,
     readAuthorization,
     exchangeToken: createExchangeToken({ clients, codes, tokens: memoryIssuedTokens(), secrets, clock, resource: RESOURCE, parties, servesOutsideParties: () => Promise.resolve(isOn) }),
     ...(isSigningPeopleIn
       ? {
           signIn: {
-            start: createStartSignIn({ readAuthorization, seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }),
+            start: createStartSignIn({ readAuthorization, pluginResource: PLUGIN_RESOURCE, seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }),
             complete: (back) =>
               createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)), askForClient })(back),
             readWaiting: createReadWaiting({ waitings, readAuthorization, requests, parties, codes, secrets, clock, issuer: ISSUER }),
@@ -229,6 +230,50 @@ describe('a person comes to /authorize from an MCP client (Q1 a, decision 0054)'
     const answer = await signIn('argo');
 
     expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: '/authorize/failed?reason=noPick' });
+  });
+});
+
+describe('a person comes to /authorize from the plugin address (chatgpt-plugin design, 6)', () => {
+  const PLUGIN_REQUEST = { ...REQUEST, resource: PLUGIN_RESOURCE };
+
+  it('the plugin path has its own metadata: its resource is exactly the plugin address (RFC 9728, 3.3)', async () => {
+    const answer = await server.inject({ url: '/.well-known/oauth-protected-resource/plugin/mcp' });
+
+    expect(answer.json()).toEqual({ resource: PLUGIN_RESOURCE, authorization_servers: [ISSUER], bearer_methods_supported: ['header'] });
+  });
+
+  it("a person adding the plugin never sees the choice: they are sent straight to pagasae, signing in as themselves, the browser's secret in the callback's cookie", async () => {
+    const answer = await authorizePage(PLUGIN_REQUEST);
+
+    expect({ status: answer.statusCode, location: answer.headers.location, cookie: answer.headers['set-cookie'] }).toEqual({
+      status: 302,
+      location: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)`,
+      cookie: 'aeolus_sign_in=secret-2; Path=/pagasae/callback; Max-Age=600; HttpOnly; SameSite=Lax',
+    });
+    const back = await callback({ state: 'sealed-1', code: 'pagasae-code-1' });
+    expect(new URL(String(back.headers.location)).origin).toBe(new URL(CALLBACK).origin);
+    expect(requests.held).toEqual([]);
+  });
+
+  it('the plugin address is open to anyone and grants nothing: no code is issued without a signed-in account, and no outside-party request is made', async () => {
+    await authorizePage(PLUGIN_REQUEST);
+    const back = await callback({ state: 'sealed-1', error: 'access_denied' });
+
+    expect(new URL(String(back.headers.location)).searchParams.get('code')).toBeNull();
+    expect(requests.held).toEqual([]);
+  });
+
+  it('the plugin address cannot ask for access for the client: a pick of the client is sent back with an error, and no approver is asked', async () => {
+    const answer = await signIn('party', PLUGIN_REQUEST);
+
+    expect({ status: answer.statusCode, error: new URL(String(answer.headers.location)).searchParams.get('error') }).toEqual({ status: 302, error: 'invalid_request' });
+    expect(requests.held).toEqual([]);
+  });
+
+  it('a resource the gateway does not serve: the refusal goes back to the client and no sign-in starts', async () => {
+    const answer = await authorizePage({ ...REQUEST, resource: 'http://gateway.example.com/plugin/other' });
+
+    expect({ status: answer.statusCode, error: new URL(String(answer.headers.location)).searchParams.get('error'), cookie: answer.headers['set-cookie'] }).toEqual({ status: 302, error: 'invalid_target', cookie: undefined });
   });
 });
 
