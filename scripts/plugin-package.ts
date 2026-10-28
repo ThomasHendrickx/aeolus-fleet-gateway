@@ -47,12 +47,22 @@ const MOST_PROMPTS = 3;
 const URL_LIMIT = 1024;
 const POSITIVE_CASES = 5;
 const NEGATIVE_CASES = 3;
+const SKILL_NAME_LIMIT = 64;
 const LOGO_MIN_PIXELS = 48;
 const LOGO_MAX_PIXELS = 4096;
 const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 
 /** The three hints OpenAI requires on every tool, each an explicit boolean. */
 const HINTS = ['readOnlyHint', 'destructiveHint', 'openWorldHint'] as const;
+
+/** A skill's name: lowercase letters, digits and single hyphens, as the Agent Skills specification has it. */
+const skillSchema = z.object({
+  name: z
+    .string()
+    .max(SKILL_NAME_LIMIT, `must hold at most ${String(SKILL_NAME_LIMIT)} characters`)
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'must be lowercase letters and digits, joined by single hyphens'),
+  description: z.string().min(1).max(DESCRIPTION_LIMIT, `must hold at most ${String(DESCRIPTION_LIMIT)} characters`),
+});
 
 /** The package as plugin/ holds it: the two manifests, and the other files by their path inside the package. */
 export interface PluginSource {
@@ -240,6 +250,44 @@ function imageProblem(path: string, files: ReadonlyMap<string, Uint8Array>): str
 /** The tools each positive case names, as OpenAI takes them: comma-separated. */
 const toolsNamed = (toolsTriggered: string) => toolsTriggered.split(',').map((name) => name.trim());
 
+const SKILL_PATH = /^skills\/([^/]+)\/SKILL\.md$/;
+
+/** The fields of a skill's front matter, one `key: value` per line, or nothing when it has none. */
+function frontMatterOf(text: string): Record<string, string> | undefined {
+  const block = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(text)?.[1];
+  if (block === undefined) {
+    return undefined;
+  }
+  return Object.fromEntries(block.split(/\r?\n/).flatMap((line) => {
+    const match = /^([a-z-]+):\s*(.*)$/.exec(line);
+    return match?.[1] === undefined || match[2] === undefined ? [] : [[match[1], match[2].trim()]];
+  }));
+}
+
+/** Each problem with the package's skills: at least one, each in the Agent Skills format, naming only tools the gateway serves. */
+function skillProblems(files: ReadonlyMap<string, Uint8Array>, served: ReadonlySet<string>): string[] {
+  const skills = [...files].flatMap(([path, bytes]) => (SKILL_PATH.test(path) ? [{ path, folder: SKILL_PATH.exec(path)?.[1], text: new TextDecoder().decode(bytes) }] : []));
+  if (skills.length === 0) {
+    return ['skills: the package needs at least one skill, as skills/<name>/SKILL.md'];
+  }
+  return skills.flatMap(({ path, folder, text }) => {
+    const fields = frontMatterOf(text);
+    if (fields === undefined) {
+      return [`${path}: must start with front matter holding name and description`];
+    }
+    const parsed = skillSchema.safeParse(fields);
+    const problems = parsed.success ? [] : problemsOf(path, parsed.error.issues);
+    if (parsed.success && parsed.data.name !== folder) {
+      problems.push(`${path} name: is ${parsed.data.name}, it must be the folder's name ${String(folder)}`);
+    }
+    const named = new Set(text.match(/\baeolus_[a-z]+(?:_[a-z]+)*/g));
+    for (const tool of [...named].filter((each) => !served.has(each))) {
+      problems.push(`${path}: ${tool} is not a tool the gateway serves`);
+    }
+    return problems;
+  });
+}
+
 /** Each problem with the package, or none. */
 function problemsWith(source: PluginSource, context: PluginContext): { problems: string[]; plugin?: z.infer<typeof pluginSchema> } {
   const problems: string[] = [];
@@ -278,6 +326,7 @@ function problemsWith(source: PluginSource, context: PluginContext): { problems:
       problems.push(`plugin.json extensions.com.openai.review.test_cases.positive.${String(index)}.tools_triggered: ${name} is not a tool the gateway serves`);
     }
   });
+  problems.push(...skillProblems(source.files, served));
   return { problems, plugin };
 }
 
@@ -303,6 +352,7 @@ export function buildPlugin(source: PluginSource, context: PluginContext): Resul
       const bytes = source.files.get(path);
       return bytes === undefined ? [] : [[path, bytes]];
     }),
+    ...[...source.files].filter(([path]) => SKILL_PATH.test(path)),
   ]);
   return ok({ zip: writeZip(files), plugin: stamped });
 }

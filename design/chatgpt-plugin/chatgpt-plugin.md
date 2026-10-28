@@ -57,7 +57,7 @@ Thomas, 27 Oct. Purpose agreed as written. Each answer is recorded here and not 
 | Q1 Who is it for | The person with an account only. Outside parties still add the gateway by URL. |
 | Q2 Hosted only | Hosted Aeolus only; the listing's server address is `https://gateway.aeolus-fleet.dev/plugin/mcp` (Q8, section 6). |
 | Q3 Reviewer sign-in | A demo organisation in pagasae connected to a company sign-in provider with a password (decision 0054). No new gateway behaviour. |
-| Q4 What the package holds | The connection only. Thomas: "For now, just needs to be able to connect." |
+| Q4 What the package holds | The connection and one small skill, as OpenAI asks for at least one. Thomas: "Lets think on what the model needs to know of aeolus to be true and how it works. We can make that into the skill." (C1, option 1) |
 | Q5 Whose name | Not answered; see 5. |
 | Q6 The four pages | On Aeolus's own sites, outside this repository. Correction: the privacy notice and terms exist in pagasae (`content/privacy.tsx`, `content/terms.tsx`, at `https://pagasae.aeolus-fleet.dev/privacy` and `/terms`), the one-pager site exists (`https://aeolus-fleet.dev`); only the support page is missing. |
 | Q7 Where the package lives | In this repository, built by an npm script, versioned with the gateway. |
@@ -143,11 +143,11 @@ No new table, port or use case: the gateway's core is untouched. The one new rou
 
 `plugin.json` uses the Agent Plugins layout (`$schema`, `name`, `version`, `description`, `author`, `extensions.com.openai` with `interface` and `review`). `name` is `aeolus`. `version` is the gateway's `package.json` version, so one number names the ZIP and the release. `mcp.json` holds exactly one server, `type` `streamable-http`, url `https://gateway.aeolus-fleet.dev/plugin/mcp`, and under `extensions["com.openai"].auth` the type `oauth` with client mode `cimd`. It holds no `headers` and no `clientSecret`; neither exists to hold.
 
-The ZIP holds `plugin.json`, `mcp.json` and the logo, and nothing else: no skill (Q4), no hooks, no `test_credentials` or `reviewer_instructions` (OpenAI rejects them).
+The ZIP holds `plugin.json`, `mcp.json`, the logo and one skill, `skills/aeolus/SKILL.md` (Q4), and nothing else: no hooks, no `test_credentials` or `reviewer_instructions` (OpenAI rejects them).
 
 `review` holds exactly five positive and three negative cases (section 9), each with `description` and `prompt`; each positive also `tools_triggered` and `expected_behavior`. They are written in `plugin.json` itself, so a change to the cases is a change to the package.
 
-The package check refuses, with the field named: a `displayName` or `shortDescription` over 30 characters or on more than one line; a `longDescription` over 4000; a `category` outside OpenAI's 13; a URL that is not HTTPS or is over 1024 characters or holds credentials; a logo that is not square, under 48 px, over 5 MiB or not PNG, JPEG, WebP or SVG; more or fewer than five positive or three negative cases; a positive case naming a tool the gateway does not serve; a `name` that differs from the one the previous release shipped; a `version` that differs from the gateway's. The check reads the tool names from `person-tools.ts`, so a tool change and the cases that name it land in one pull request.
+The package check refuses, with the field named: a `displayName` or `shortDescription` over 30 characters or on more than one line; a `longDescription` over 4000; a `category` outside OpenAI's 13; a URL that is not HTTPS or is over 1024 characters or holds credentials; a logo that is not square, under 48 px, over 5 MiB or not PNG, JPEG, WebP or SVG; more or fewer than five positive or three negative cases; a positive case naming a tool the gateway does not serve; a `name` that differs from the one the previous release shipped; a `version` that differs from the gateway's; a package with no skill, a skill whose name differs from its folder or breaks the Agent Skills format, or one that names a tool the gateway does not serve. The check reads the tool names from `person-tools.ts`, so a tool change and the cases that name it land in one pull request.
 
 ### 7.3 The reviewer path (Q3)
 
@@ -316,10 +316,10 @@ Each scenario is one behaviour. The build is tested against them.
 ### The package
 
 ```
-Scenario: the package is the connection and nothing else
+Scenario: the package is the connection and one skill
   Given the gateway at version 0.33.0
   When npm run plugin:build runs
-  Then dist/aeolus-0.33.0.zip holds plugin.json, mcp.json and the logo, and no other file
+  Then dist/aeolus-0.33.0.zip holds plugin.json, mcp.json, the logo and skills/aeolus/SKILL.md, and no other file
   And mcp.json holds exactly one server, of type streamable-http, at https://gateway.aeolus-fleet.dev/plugin/mcp
   And it declares auth type oauth with client mode cimd, and holds no headers, no clientSecret and no hooks
 
