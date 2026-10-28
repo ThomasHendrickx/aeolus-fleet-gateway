@@ -1,6 +1,6 @@
 import type { FleetId, ShipId, VerifiedFact } from '@aeolus-fleet/common';
 
-import type { McpServerCredential } from '../vault/credential.js';
+import type { McpServerCredential, McpServerPartyCredential } from '../vault/credential.js';
 import type { ToolSwitches } from './tool-switches.js';
 
 /**
@@ -36,7 +36,7 @@ export interface McpServerParty extends PartyBase {
   readonly kind: 'mcpServer';
   /** The server's Streamable HTTP endpoint. */
   readonly url: string;
-  readonly credential: McpServerCredential;
+  readonly credential: McpServerPartyCredential;
   /** The most calls the gateway has in flight to the server at once. */
   readonly concurrencyLimit: number;
   /** Which of its tools the fleet may call; none kept yet means every tool it lists (aeolus-fleet#1151). */

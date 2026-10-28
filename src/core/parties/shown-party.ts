@@ -1,6 +1,6 @@
 import type { ShipId } from '@aeolus-fleet/common';
 
-import type { McpServerCredential } from '../vault/credential.js';
+import type { McpServerCredential, McpServerPartyCredential } from '../vault/credential.js';
 import type { Party, PartyState } from './party.js';
 
 interface ShownPartyBase {
@@ -11,7 +11,7 @@ interface ShownPartyBase {
 
 /** A party as the gateway keeps it, for any actor to read: never its credential, secret or crew token. */
 export type ShownParty =
-  | (ShownPartyBase & { kind: 'mcpServer'; url: string; credentialKind: McpServerCredential['kind']; concurrencyLimit: number })
+  | (ShownPartyBase & { kind: 'mcpServer'; url: string; credentialKind: McpServerPartyCredential['kind']; concurrencyLimit: number })
   | (ShownPartyBase & { kind: 'mcpClient'; clientId: string })
   | (ShownPartyBase & { kind: 'a2aClient' })
   | (ShownPartyBase & { kind: 'a2aAgent'; cardUrl: string; credentialKind: McpServerCredential['kind']; concurrencyLimit: number; isRepeatable: boolean });

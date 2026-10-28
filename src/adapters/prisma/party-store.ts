@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { Party } from '../../core/parties/party.js';
 import type { PartyStore } from '../../core/parties/ports.js';
 import type { ToolSwitches } from '../../core/parties/tool-switches.js';
-import type { McpServerCredential } from '../../core/vault/credential.js';
+import type { McpServerCredential, McpServerPartyCredential, SignInClient } from '../../core/vault/credential.js';
 import type { Db } from './client.js';
 import { Prisma } from './generated/client.js';
 
@@ -14,6 +14,27 @@ const credentialSchema: z.ZodType<McpServerCredential> = z.discriminatedUnion('k
   z.object({ kind: z.literal('bearer'), token: z.string() }),
   z.object({ kind: z.literal('clientCredentials'), clientId: z.string(), clientSecret: z.string(), issuer: z.string(), scope: z.string().optional() }),
 ]);
+
+const signInClientSchema: z.ZodType<SignInClient> = z.object({
+  issuer: z.string(),
+  authorizationEndpoint: z.string(),
+  tokenEndpoint: z.string(),
+  revocationEndpoint: z.string().nullable(),
+  clientId: z.string(),
+  clientSecret: z.string().nullable(),
+  registrationClientUri: z.string().nullable(),
+  registrationAccessToken: z.string().nullable(),
+  resource: z.string(),
+  scope: z.string(),
+});
+
+/** An outside MCP server's credential as the vault keeps it, read back: one of the gateway's own, or the party's sign-in client (decision 0067). */
+const serverCredentialSchema: z.ZodType<McpServerPartyCredential> = z.union([credentialSchema, z.object({ kind: z.literal('personSignIn'), client: signInClientSchema })]);
+
+/** A server's credential as JSON: a sign-in client's fields are all JSON values. */
+function credentialAsJson(credential: McpServerPartyCredential): Prisma.InputJsonObject {
+  return credential.kind === 'personSignIn' ? { kind: credential.kind, client: { ...credential.client } } : { ...credential };
+}
 
 /** A server's tool switches as the vault keeps them: a JSON object of each tool's switch, or none kept yet. */
 const toolSwitchesSchema = z.record(z.string(), z.boolean()).nullable();
@@ -64,7 +85,7 @@ function partyOf(row: Row): Party {
   const kind = kindSchema.parse(row.kind);
   switch (kind) {
     case 'mcpServer':
-      return { ...base, kind, url: z.string().parse(row.url), credential: credentialSchema.parse(row.credential), concurrencyLimit: z.int().parse(row.concurrencyLimit), toolSwitches: toolSwitchesOf(row.toolSwitches) };
+      return { ...base, kind, url: z.string().parse(row.url), credential: serverCredentialSchema.parse(row.credential), concurrencyLimit: z.int().parse(row.concurrencyLimit), toolSwitches: toolSwitchesOf(row.toolSwitches) };
     case 'mcpClient':
       return { ...base, kind, clientId: z.string().parse(row.clientId) };
     case 'a2aClient':
@@ -78,7 +99,7 @@ function partyOf(row: Row): Party {
 function outsideColumnsOf(party: Party) {
   switch (party.kind) {
     case 'mcpServer':
-      return { url: party.url, credential: { ...party.credential }, concurrencyLimit: party.concurrencyLimit, clientId: null, bearerHash: null, isRepeatable: null };
+      return { url: party.url, credential: credentialAsJson(party.credential), concurrencyLimit: party.concurrencyLimit, clientId: null, bearerHash: null, isRepeatable: null };
     case 'mcpClient':
       return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: party.clientId, bearerHash: null, isRepeatable: null };
     case 'a2aClient':

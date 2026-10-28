@@ -3,13 +3,13 @@
  * (interop 3.3, 5.2): its tools, and one call at a time.
  */
 import type { Result } from '../shared/result.js';
-import type { McpServerCredential } from '../vault/credential.js';
+import type { McpServerPartyCredential } from '../vault/credential.js';
 
 /** Where an outside MCP server is, and how the gateway signs in to it. */
 export interface McpServerConnection {
   /** Its Streamable HTTP endpoint. */
   readonly url: string;
-  readonly credential: McpServerCredential;
+  readonly credential: McpServerPartyCredential;
 }
 
 /** MCP's tool annotations (2026-07-28), as the server states them: hints, never trusted on their own. */
