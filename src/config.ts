@@ -37,6 +37,7 @@ const environmentSchema = z.object({
   PAGASAE_CLIENT_SECRET: z.string().min(1).optional(),
   PAGASAE_APP_CLIENT_ID: z.string().min(1).optional(),
   PAGASAE_APP_CLIENT_SECRET: z.string().min(1).optional(),
+  OPENAI_APPS_CHALLENGE: z.string().min(1).optional(),
 });
 
 /** What `aeolus-gateway migrate` reads: the database alone. */
@@ -94,6 +95,12 @@ export interface Config {
    * Unset, nobody signs in to them that way.
    */
   pagasaeApp: { clientId: string; clientSecret: string } | undefined;
+  /**
+   * The token OpenAI's plugin portal shows to prove the gateway's domain,
+   * served at /.well-known/openai-apps-challenge (chatgpt-plugin design,
+   * 7.5). Unset, there is no such address.
+   */
+  openAiAppsChallenge: string | undefined;
 }
 
 export class ConfigError extends Error {
@@ -127,6 +134,7 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     webPushWakeWindowMs: variables.WEB_PUSH_WAKE_WINDOW_MINUTES * MINUTE_MS,
     pagasae: pagasaeOf(variables),
     pagasaeApp: pagasaeAppOf(variables),
+    openAiAppsChallenge: variables.OPENAI_APPS_CHALLENGE,
   };
 }
 
