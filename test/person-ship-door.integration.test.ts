@@ -98,6 +98,31 @@ describe("a person ship sends the person's own message", () => {
     expect(sent).toMatchObject({ isOk: false, error: { message: 'The network rules do not allow this send' } });
   });
 
+  it('a payload of exactly 64 KB goes (chatgpt-plugin design, 9: the limits)', async () => {
+    const sent = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'x'.repeat(65_536), idempotencyKey: 'charlotte-64k' });
+
+    expect(sent.isOk).toBe(true);
+  });
+
+  it('a retried send with the same key is sent once: the receiver holds one message (chatgpt-plugin design, 9: the tools)', async () => {
+    const first = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'standup moved to 10:00', idempotencyKey: 'charlotte-retry' });
+    const again = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'standup moved to 10:00', idempotencyKey: 'charlotte-retry' });
+
+    expect({ first: first.isOk, again: again.isOk }).toEqual({ first: true, again: true });
+    await expect(trackerReceives()).resolves.toEqual([{ senderName: 'charlotte', contentType: 'text/plain', payload: 'standup moved to 10:00' }]);
+  });
+
+  it('no message is lost when the gateway restarts mid-send: the same send with the same key, from a new gateway, is told sent as the same message, and the receiver holds one', async () => {
+    const taken = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'standup moved to 10:00', idempotencyKey: 'charlotte-restart' });
+    // The gateway restarts before its tool answered: a new door, holding nothing of the first.
+    const restarted = createRestFleetDoor(fleet.url).person;
+
+    const again = await restarted.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'standup moved to 10:00', idempotencyKey: 'charlotte-restart' });
+
+    expect(again).toEqual(taken);
+    await expect(trackerReceives()).resolves.toEqual([{ senderName: 'charlotte', contentType: 'text/plain', payload: 'standup moved to 10:00' }]);
+  });
+
   it('is refused a payload over 64 KB, saying so', async () => {
     const sent = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'x'.repeat(65_537), idempotencyKey: 'charlotte-5' });
 
@@ -197,4 +222,38 @@ describe("a person ship's inbox, as the gateway's waiter asks it (wake a person,
       await core.$disconnect();
     }
   });
+});
+
+describe('how big: a large inbox (chatgpt-plugin design, 9)', () => {
+  /** How many deliveries wait, and how many the tracker sends at once to put them there. */
+  const WAITING = 10_000;
+  const AT_ONCE = 100;
+  /** What aeolus_inbox reads: the count, and a page of at most 10. */
+  const PAGE = 10;
+  const ANSWER_WITHIN_MS = 1000;
+
+  it(
+    'a person ship with 10,000 waiting deliveries: the inbox answers within 1 second with at most 10 deliveries and the total of 10,000',
+    async () => {
+      for (let sent = 0; sent < WAITING; sent += AT_ONCE) {
+        await Promise.all(
+          Array.from({ length: AT_ONCE }, async (_unused, index) => {
+            const response = await fetch(`${fleet.url}/api/v1/ship/send`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
+              body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType: 'text/plain', payload: 'Issue closed', idempotencyKey: `tracker-${String(sent + index)}` }),
+            });
+            expect(response.status).toBe(200);
+          }),
+        );
+      }
+
+      const started = performance.now();
+      const [counted, page] = await Promise.all([door.inbox(charlotte), door.pushReceive(charlotte, { max: PAGE })]);
+      const tookMs = performance.now() - started;
+
+      expect({ waiting: counted.isOk && counted.value.waiting, listed: page.isOk && page.value.length, isInTime: tookMs < ANSWER_WITHIN_MS }).toEqual({ waiting: WAITING, listed: PAGE, isInTime: true });
+    },
+    300_000,
+  );
 });
