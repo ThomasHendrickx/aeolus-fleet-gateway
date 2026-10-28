@@ -97,6 +97,30 @@ describe("Sign in with Slack's way back", () => {
     expect(answer.headers.location).toBe(`/overview?fleet=${FLEET_ID}&slack=slack-user-linked&name=joris`);
   });
 
+  it("completes the link with the shared sign-in the browser holds, so a link is bound to the account that started it", async () => {
+    const completing: unknown[] = [];
+    const { server } = await aServer((input) => {
+      completing.push(input);
+      return Promise.resolve(ok({ fleetId: FLEET_ID }));
+    });
+
+    await server.inject({ method: 'GET', url: `${SLACK_LINK_PATH}?code=code-1&state=sealed`, headers: { cookie: 'other=1; aeolus_account_session=sign-in-mathilde' } });
+
+    expect(completing).toEqual([{ code: 'code-1', state: 'sealed', signIn: 'sign-in-mathilde' }]);
+  });
+
+  it('completes the link with no sign-in when the browser holds none', async () => {
+    const completing: unknown[] = [];
+    const { server } = await aServer((input) => {
+      completing.push(input);
+      return Promise.resolve(ok({ fleetId: FLEET_ID }));
+    });
+
+    await server.inject({ method: 'GET', url: `${SLACK_LINK_PATH}?code=code-1&state=sealed` });
+
+    expect(completing).toEqual([{ code: 'code-1', state: 'sealed', signIn: undefined }]);
+  });
+
   it('says the person cancelled on Slack\'s screen', async () => {
     const { server } = await aServer();
 
