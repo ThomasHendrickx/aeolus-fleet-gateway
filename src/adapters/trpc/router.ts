@@ -32,6 +32,7 @@ import type { ListReachedShips, ListReachedShipsRefusal } from '../../core/a2a-i
 import type { AddA2aClient, AddA2aClientRefusal } from '../../core/parties/add-a2a-client.js';
 import type { AddA2aAgent, AddA2aAgentRefusal } from '../../core/parties/add-a2a-agent.js';
 import type { MarkA2aAgent, MarkA2aAgentRefusal } from '../../core/a2a-out/mark-a2a-agent.js';
+import type { AddSignInServer, AddSignInServerRefusal } from '../../core/parties/add-sign-in-server.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListOwnerChoices } from '../../core/parties/list-owner-choices.js';
@@ -119,6 +120,7 @@ export interface Context {
   readConnection: ReadConnection;
   connect: Connect;
   approveParty: ApproveParty;
+  addSignInServer: AddSignInServer;
   addClientParty: AddClientParty;
   crewParty: CrewParty;
   listParties: ListParties;
@@ -397,6 +399,16 @@ function scopeRequirementsOutputOf(requirements: ScopeRequirements): z.infer<typ
 }
 
 /** The refusals of checking an outside MCP server, as the API states them. */
+/** The refusals of adding a server where each person signs in, as the API states them: a fleet that does not answer is tried again with the same request id. */
+const ADD_SIGN_IN_SERVER_CODES = {
+  ...APPROVE_CODES,
+  SERVER_UNREACHABLE: 'BAD_GATEWAY',
+  NO_AUTHORIZATION_SERVER: 'BAD_REQUEST',
+  SIGN_IN_CHECK_FAILED: 'BAD_REQUEST',
+  NO_DYNAMIC_REGISTRATION: 'BAD_REQUEST',
+  REGISTRATION_REFUSED: 'BAD_GATEWAY',
+} as const satisfies Record<AddSignInServerRefusal['kind'], TRPCError['code']>;
+
 const CHECK_CODES = {
   OUTSIDE_PARTIES_OFF: 'PRECONDITION_FAILED',
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
@@ -438,6 +450,13 @@ const credentialInputSchema = z.discriminatedUnion('kind', [
     scope: z.string().min(1).optional(),
   }),
 ]);
+
+/**
+ * An outside MCP server's credential as the approver gives it: one of the
+ * vault's, or each person signing in, for which the gateway registers the
+ * party's client itself (decision 0067).
+ */
+const serverCredentialInputSchema = z.discriminatedUnion('kind', [...credentialInputSchema.options, z.strictObject({ kind: z.literal('personSignIn') })]);
 
 /** A party as any actor reads it: never its credential or its crew token. */
 const shownPartyBase = { name: z.string(), state: z.enum(['commissioning', 'awaitingCrew', 'crewed']), proxyShipId: z.string().nullable() };
@@ -787,7 +806,8 @@ export const gatewayRouter = t.router({
     /**
      * argo approves an outside MCP server as a party: the gateway commissions
      * its app proxy ship owned by the owner argo picked, crews it, and keeps
-     * the credential in its vault (interop I-5). A repeat with the same
+     * the credential in its vault (interop I-5); for a server where each
+     * person signs in, the client it registered for the party (0067). A repeat with the same
      * request id picks up where the last one stopped.
      */
     approve: managing(servedProcedure)
@@ -796,7 +816,7 @@ export const gatewayRouter = t.router({
           requestId: idempotencyKeySchema,
           name: shipHandleSchema,
           url: z.url({ protocol: /^https?$/ }),
-          credential: credentialInputSchema,
+          credential: serverCredentialInputSchema,
           ownerShipId: idSchema('ship'),
           concurrencyLimit: z.int().min(CONCURRENCY_LIMIT_MIN).max(CONCURRENCY_LIMIT_MAX).default(CONCURRENCY_LIMIT_DEFAULT),
           /** Each tool the check answered, switched on or off; none sent means every tool the server lists at its first statement is on. */
@@ -811,7 +831,15 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: 'FORBIDDEN', message: `Switching an outside party's tools needs ${APPROVING_SCOPE}` });
         }
         const toolSwitches = tools === undefined ? null : new Map(tools.map(({ name, isOn }) => [name, isOn]));
-        const approved = await ctx.approveParty({ operatorFleetId: ctx.fleetId, ...approval, scopes: [], toolSwitches });
+        const { credential, ...server } = approval;
+        if (credential.kind === 'personSignIn') {
+          const added = await ctx.addSignInServer({ operatorFleetId: ctx.fleetId, ...server, scopes: [], toolSwitches });
+          if (!added.isOk) {
+            throw new TRPCError({ code: ADD_SIGN_IN_SERVER_CODES[added.error.kind], message: added.error.message });
+          }
+          return added.value;
+        }
+        const approved = await ctx.approveParty({ operatorFleetId: ctx.fleetId, ...server, credential, scopes: [], toolSwitches });
         if (!approved.isOk) {
           throw new TRPCError({ code: APPROVE_CODES[approved.error.kind], message: approved.error.message });
         }

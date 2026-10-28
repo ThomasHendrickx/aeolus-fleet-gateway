@@ -86,6 +86,7 @@ import { createCallKeys } from './adapters/crypto/call-keys.js';
 import { createPrismaClientCalls } from './adapters/prisma/client-calls.js';
 import { createAuthenticateAccessToken } from './core/oauth/authenticate-access-token.js';
 import { oauthSecrets } from './adapters/crypto/oauth-secrets.js';
+import { createAuthorizationServers } from './adapters/oauth/authorization-servers.js';
 import { createClientMetadataDocuments } from './adapters/oauth/client-metadata-documents.js';
 import { createPrismaAuthorizationCodes, createPrismaIssuedTokens, createPrismaOAuthClients } from './adapters/prisma/oauth-stores.js';
 import { createExchangeToken } from './core/oauth/exchange-token.js';
@@ -201,6 +202,7 @@ import { createReadFleet } from './core/installation/read-fleet.js';
 import { createIsServed } from './core/installation/served.js';
 import { createSetFleetEnabled } from './core/installation/set-fleet-enabled.js';
 import { createAuthenticateOperator } from './core/operator/authenticate-operator.js';
+import { createAddSignInServer } from './core/parties/add-sign-in-server.js';
 import { createApproveClientParty, createApproveParty, type ApproveClientParty, type ApproveParty } from './core/parties/approve-party.js';
 import { createAddClientParty } from './core/parties/add-client-party.js';
 import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
@@ -265,6 +267,9 @@ const TOOL_CALL_TIMEOUT_MS = 5 * 60_000;
 
 /** Where the gateway is reached unless told: this machine, at its default port. */
 const DEFAULT_PUBLIC_URL = 'http://127.0.0.1:4200';
+
+/** Where an outside authorization server sends a person back after they signed in to a server for themselves (decision 0067). */
+const PERSON_SIGN_IN_DONE_PATH = '/outside-parties/sign-in/done';
 
 /** How long a client's metadata document may take to answer. */
 const CLIENT_METADATA_TIMEOUT_MS = 5_000;
@@ -869,6 +874,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readConnection,
     connect,
     approveParty,
+    addSignInServer: createAddSignInServer({ approveParty, parties, servers: createAuthorizationServers(), servesOutsideParties, redirectUri: `${issuer}${PERSON_SIGN_IN_DONE_PATH}` }),
     addClientParty: createAddClientParty({ parties, approveClientParty, clients: oauthClients, secrets: oauthSecrets }),
     addA2aClient,
     addA2aAgent,
