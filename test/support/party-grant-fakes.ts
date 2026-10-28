@@ -67,24 +67,24 @@ export function aPartyGrant(overrides: Partial<PartyGrant> = {}): PartyGrant {
 /** The grants in memory: one per person and party, and one per outside account and party. */
 export function memoryPartyGrants(): PartyGrants & { held: PartyGrant[] } {
   const held = new Array<PartyGrant>();
-  const isOf = (grant: PartyGrant, fleetId: FleetId, party: string) => grant.fleetId === fleetId && grant.party === party;
+  const isOf = (grant: PartyGrant, of: { fleetId: FleetId; party: string }) => grant.fleetId === of.fleetId && grant.party === of.party;
   const usedAt = (grant: PartyGrant) => grant.lastUsedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
   return {
     held,
-    ofPerson: (fleetId, { party, personShipId }) => Promise.resolve(held.find((grant) => isOf(grant, fleetId, party) && grant.personShipId === personShipId)),
-    ofSubject: (fleetId, { party, subject }) => Promise.resolve(held.find((grant) => isOf(grant, fleetId, party) && grant.outsideAccount.subject === subject)),
+    ofPerson: (fleetId, { party, personShipId }) => Promise.resolve(held.find((grant) => isOf(grant, { fleetId, party }) && grant.personShipId === personShipId)),
+    ofSubject: (fleetId, { party, subject }) => Promise.resolve(held.find((grant) => isOf(grant, { fleetId, party }) && grant.outsideAccount.subject === subject)),
     usable: (fleetId, { party, now }) =>
       Promise.resolve(
         held
-          .filter((grant) => isOf(grant, fleetId, party) && (grant.accessTokenEndsAt === null || grant.accessTokenEndsAt > now))
+          .filter((grant) => isOf(grant, { fleetId, party }) && (grant.accessTokenEndsAt === null || grant.accessTokenEndsAt > now))
           .sort((one, other) => usedAt(other) - usedAt(one) || other.signedInAt.getTime() - one.signedInAt.getTime())[0],
       ),
     keep: (grant) => {
       const { subject } = grant.outsideAccount;
-      if (subject !== null && held.some((other) => isOf(other, grant.fleetId, grant.party) && other.personShipId !== grant.personShipId && other.outsideAccount.subject === subject)) {
+      if (subject !== null && held.some((other) => isOf(other, grant) && other.personShipId !== grant.personShipId && other.outsideAccount.subject === subject)) {
         return Promise.resolve('subjectTaken');
       }
-      const earlier = held.findIndex((other) => isOf(other, grant.fleetId, grant.party) && other.personShipId === grant.personShipId);
+      const earlier = held.findIndex((other) => isOf(other, grant) && other.personShipId === grant.personShipId);
       if (earlier === -1) {
         held.push(grant);
       } else {
@@ -93,7 +93,7 @@ export function memoryPartyGrants(): PartyGrants & { held: PartyGrant[] } {
       return Promise.resolve('kept');
     },
     remove: (fleetId, { party, personShipId }) => {
-      const at = held.findIndex((grant) => isOf(grant, fleetId, party) && grant.personShipId === personShipId);
+      const at = held.findIndex((grant) => isOf(grant, { fleetId, party }) && grant.personShipId === personShipId);
       if (at !== -1) {
         held.splice(at, 1);
       }
@@ -128,12 +128,14 @@ export const MATHILDE_TOKENS: RedeemedTokens = {
 
 /** A party's authorization server in memory: each code it issued, with the tokens it redeems for, once, and each token revoked. */
 export function fakePartySignIns() {
+  const noFailure = (): TokenRequestFailure | undefined => undefined;
+  const revocation: Result<void, { reason: string }> = ok(undefined);
   const state = {
     codes: new Map<string, RedeemedTokens>([['code-mathilde', MATHILDE_TOKENS]]),
     redeemed: new Array<{ clientId: string; code: string; verifier: string; redirectUri: string }>(),
     revoked: new Array<{ revocationEndpoint: string; token: string }>(),
-    failure: undefined as TokenRequestFailure | undefined,
-    revocation: ok(undefined) as Result<void, { reason: string }>,
+    failure: noFailure(),
+    revocation,
   };
   const signIns: PartySignIns = {
     authorizeUrl: (client, { state: sealed, codeChallenge, redirectUri }) =>
