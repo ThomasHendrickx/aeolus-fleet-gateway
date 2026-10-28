@@ -194,6 +194,10 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
     },
     handed: (crewToken, handOver) => {
       calls.push(`handed(${handOver.deliveryId})`);
+      // An acknowledged delivery is handed no more: core answers it acknowledged.
+      if (acknowledged.some(({ deliveryId }) => deliveryId === handOver.deliveryId)) {
+        return crewed(crewToken, () => 'acknowledged' as const);
+      }
       return crewed(crewToken, () => {
         handOvers.push(handOver);
         return 'handed' as const;

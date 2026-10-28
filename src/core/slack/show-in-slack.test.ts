@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { aPersonDelivery, fakePersonShipDoor } from '../../../test/support/people-fakes.js';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackLinks, memorySlackPosts } from '../../../test/support/slack-fakes.js';
-import type { PersonDelivery } from '../people/ports.js';
+import type { PersonDelivery, PushedPersonDelivery } from '../people/ports.js';
 import { createShowInSlack } from './show-in-slack.js';
 
 // Each delivery to a linked person's person ship shows in Slack (gateway
@@ -45,9 +45,10 @@ function aShip(deliveries: PersonDelivery[]) {
   return fakePersonShipDoor({ crewToken: CREW, deliveries });
 }
 
-async function show(fleet: ReturnType<typeof aShip>) {
+/** Shows what is fresh: by default each delivery never handed, as the wake hands them. */
+async function show(fleet: ReturnType<typeof aShip>, freshGiven?: readonly PushedPersonDelivery[]) {
   const taken = await fleet.door.pushReceive(CREW, { max: 100 });
-  const fresh = taken.isOk ? taken.value.filter(({ handOverNumber }) => handOverNumber === null) : [];
+  const fresh = freshGiven ?? (taken.isOk ? taken.value.filter(({ handOverNumber }) => handOverNumber === null) : []);
   return createShowInSlack({
     links,
     apps,
@@ -69,7 +70,7 @@ describe('a delivery to a linked person, in Slack', () => {
 
     const shown = await show(fleet);
 
-    expect(shown.isOk && [...shown.value]).toEqual([FROM_RELEASE_NOTES.deliveryId]);
+    expect(shown.isOk && [...shown.value.shown]).toEqual([FROM_RELEASE_NOTES.deliveryId]);
     expect(fleet.handOvers).toEqual([{ deliveryId: FROM_RELEASE_NOTES.deliveryId, handOverNumber: 1, channel: 'slack' }]);
     expect(slack.state.posts.map(({ botToken, channel, threadTs, text }) => ({ botToken, channel, threadTs, text }))).toEqual([{ botToken: 'xoxb-2', channel: 'U0MATHILDE', threadTs: null, text: 'Friday' }]);
     expect(fleet.calls.filter((call) => !call.startsWith('pushReceive'))).toEqual([`handed(${FROM_RELEASE_NOTES.deliveryId})`, `ack(${FROM_RELEASE_NOTES.deliveryId})`]);
@@ -108,7 +109,7 @@ describe('a delivery to a linked person, in Slack', () => {
 
     const shown = await show(fleet);
 
-    expect({ shown: shown.isOk && [...shown.value], handOvers: fleet.handOvers, posts: slack.state.posts }).toEqual({ shown: [], handOvers: [], posts: [] });
+    expect({ shown: shown.isOk && [...shown.value.shown], handOvers: fleet.handOvers, posts: slack.state.posts }).toEqual({ shown: [], handOvers: [], posts: [] });
   });
 
   it('shows a question with one button per option', async () => {
@@ -124,7 +125,7 @@ describe('a delivery to a linked person, in Slack', () => {
 
     const shown = await show(fleet);
 
-    expect(shown.isOk && shown.value.size).toBe(1);
+    expect(shown.isOk && shown.value.shown.size).toBe(1);
     expect(fleet.handOvers.map(({ channel }) => channel)).toEqual(['slack']);
     expect(fleet.calls.some((call) => call.startsWith('ack('))).toBe(false);
     expect(slack.state.posts[0]?.text).toContain('open it in the gateway');
@@ -146,7 +147,7 @@ describe('a delivery to a linked person, in Slack', () => {
 
     const shown = await show(fleet);
 
-    expect({ shown: shown.isOk && shown.value.size, handOvers: fleet.handOvers.length }).toEqual({ shown: 0, handOvers: 0 });
+    expect({ shown: shown.isOk && shown.value.shown.size, handOvers: fleet.handOvers.length }).toEqual({ shown: 0, handOvers: 0 });
   });
 
   it("falls back to web push and email when Slack refuses the post, as for a deactivated Slack user", async () => {
@@ -155,7 +156,7 @@ describe('a delivery to a linked person, in Slack', () => {
 
     const shown = await show(fleet);
 
-    expect({ shown: shown.isOk && shown.value.size, acked: fleet.calls.some((call) => call.startsWith('ack(')), posts: posts.held }).toEqual({ shown: 0, acked: false, posts: [] });
+    expect({ shown: shown.isOk && shown.value.shown.size, acked: fleet.calls.some((call) => call.startsWith('ack(')), posts: posts.held }).toEqual({ shown: 0, acked: false, posts: [] });
   });
 
   it("waits Slack's Retry-After when rate limited, then posts once with the same hand-over", async () => {
@@ -190,12 +191,73 @@ describe('a delivery to a linked person, in Slack', () => {
     expect({ posts: slack.state.posts.length, acked: fleet.calls.includes(`ack(${FROM_RELEASE_NOTES.deliveryId})`) }).toEqual({ posts: 1, acked: true });
   });
 
+  it('says a post is left unfinished while core refuses its acknowledgement, so the wake is tried again', async () => {
+    const fleet = aShip([FROM_RELEASE_NOTES]);
+    fleet.door.ack = () => Promise.resolve({ isOk: false as const, error: { code: 'UNAVAILABLE', message: 'down' } });
+
+    const shown = await show(fleet);
+
+    expect(shown.isOk && { shown: [...shown.value.shown], isAnyUnfinished: shown.value.isAnyUnfinished }).toEqual({ shown: [FROM_RELEASE_NOTES.deliveryId], isAnyUnfinished: true });
+  });
+
+  it('says nothing is left unfinished once every post is in Slack and acknowledged', async () => {
+    const fleet = aShip([FROM_RELEASE_NOTES]);
+
+    const shown = await show(fleet);
+
+    expect(shown.isOk && shown.value.isAnyUnfinished).toBe(false);
+  });
+
+  it('acknowledges a post in Slack whose delivery the read did not hold, marking it acknowledged only once core took the ack', async () => {
+    const others = Array.from({ length: 3 }, (_, index) => aPersonDelivery({ deliveryId: `dlv_01m3tbfspe96yf1rnr4ank010${String(index)}`, messageId: `msg_01m3tbfspe96yf1rnr4ank010${String(index)}`, senderShipId: BUDGET_CHECK }));
+    const fleet = aShip([...others, FROM_RELEASE_NOTES]);
+    for (const other of others) {
+      await fleet.door.handed(CREW, { deliveryId: other.deliveryId, handOverNumber: 1, channel: 'email' });
+    }
+    await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: FROM_RELEASE_NOTES.messageId, deliveryId: FROM_RELEASE_NOTES.deliveryId, senderShipId: RELEASE_NOTES, appId: 'A02', channel: 'U0MATHILDE', ts: '1730020000.000001', threadTs: null, isLinkOnly: false, ackedAt: null });
+    fleet.door.ack = () => Promise.resolve({ isOk: false as const, error: { code: 'UNAVAILABLE', message: 'down' } });
+
+    const shown = await show(fleet, []);
+
+    expect({ ackedAt: posts.held[0]?.ackedAt, isAnyUnfinished: shown.isOk && shown.value.isAnyUnfinished, posted: slack.state.posts.length }).toEqual({ ackedAt: null, isAnyUnfinished: true, posted: 0 });
+  });
+
+  it('keeps a post not yet in Slack whose delivery the read did not hold while it still waits, posting it once the read holds it', async () => {
+    const others = Array.from({ length: 3 }, (_, index) => aPersonDelivery({ deliveryId: `dlv_01m3tbfspe96yf1rnr4ank010${String(index)}`, messageId: `msg_01m3tbfspe96yf1rnr4ank010${String(index)}`, senderShipId: BUDGET_CHECK }));
+    const fleet = aShip([...others, FROM_RELEASE_NOTES]);
+    for (const other of others) {
+      await fleet.door.handed(CREW, { deliveryId: other.deliveryId, handOverNumber: 1, channel: 'email' });
+    }
+    await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: FROM_RELEASE_NOTES.messageId, deliveryId: FROM_RELEASE_NOTES.deliveryId, senderShipId: RELEASE_NOTES, appId: 'A02', channel: 'U0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null });
+    await fleet.door.handed(CREW, { deliveryId: FROM_RELEASE_NOTES.deliveryId, handOverNumber: 1, channel: 'slack' });
+
+    const first = await show(fleet, []);
+    const keptPosts = posts.held.length;
+    for (const other of others) {
+      await fleet.door.ack(CREW, other.deliveryId);
+    }
+    await show(fleet, []);
+
+    expect({ isAnyUnfinished: first.isOk && first.value.isAnyUnfinished, keptPosts, posted: slack.state.posts.length, ackedAt: posts.held[0]?.ackedAt }).toEqual({ isAnyUnfinished: true, keptPosts: 1, posted: 1, ackedAt: new Date('2026-10-27T09:00:00.000Z') });
+  });
+
+  it('forgets a post not yet in Slack whose delivery was acknowledged meanwhile, posting nothing', async () => {
+    const fleet = aShip([FROM_RELEASE_NOTES]);
+    await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: FROM_RELEASE_NOTES.messageId, deliveryId: FROM_RELEASE_NOTES.deliveryId, senderShipId: RELEASE_NOTES, appId: 'A02', channel: 'U0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null });
+    await fleet.door.handed(CREW, { deliveryId: FROM_RELEASE_NOTES.deliveryId, handOverNumber: 1, channel: 'slack' });
+    await fleet.door.ack(CREW, FROM_RELEASE_NOTES.deliveryId);
+
+    const shown = await show(fleet, []);
+
+    expect({ posts: posts.held, posted: slack.state.posts.length, isAnyUnfinished: shown.isOk && shown.value.isAnyUnfinished }).toEqual({ posts: [], posted: 0, isAnyUnfinished: false });
+  });
+
   it('shows nothing to a person who did not link Slack, or whose link stopped', async () => {
     await links.stop(FLEET_ID, { accountId: 'acc-mathilde', at: new Date('2026-10-27T08:50:00.000Z') });
     const fleet = aShip([FROM_RELEASE_NOTES]);
 
     const shown = await show(fleet);
 
-    expect({ shown: shown.isOk && shown.value.size, handOvers: fleet.handOvers.length }).toEqual({ shown: 0, handOvers: 0 });
+    expect({ shown: shown.isOk && shown.value.shown.size, handOvers: fleet.handOvers.length }).toEqual({ shown: 0, handOvers: 0 });
   });
 });

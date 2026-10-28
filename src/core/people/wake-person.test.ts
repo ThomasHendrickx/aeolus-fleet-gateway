@@ -99,7 +99,7 @@ function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[];
 }
 
 /** Slack, showing the deliveries given: it hands each with channel slack, as the gateway does once it posted one. */
-function slackShowing(ship: ReturnType<typeof aShip>, shown: readonly DeliveryId[]): ShownElsewhere & { asked: DeliveryId[][] } {
+function slackShowing(ship: ReturnType<typeof aShip>, shown: readonly DeliveryId[], options: { isAnyUnfinished?: boolean } = {}): ShownElsewhere & { asked: DeliveryId[][] } {
   const asked: DeliveryId[][] = [];
   return {
     asked,
@@ -109,7 +109,7 @@ function slackShowing(ship: ReturnType<typeof aShip>, shown: readonly DeliveryId
       for (const { deliveryId } of taken) {
         await ship.door.handed(crewToken, { deliveryId, handOverNumber: 1, channel: 'slack' });
       }
-      return ok(new Set(taken.map(({ deliveryId }) => deliveryId)));
+      return ok({ shown: new Set(taken.map(({ deliveryId }) => deliveryId)), isAnyUnfinished: options.isAnyUnfinished ?? false });
     },
   };
 }
@@ -135,6 +135,32 @@ describe('waking a person', () => {
     const woken = await waking({ ship, channels: [email.channel], shownElsewhere: slackShowing(ship, ['dlv_01m3tbfspe96yf1rnr4ank0001']) })(SHIP, CREW_TOKEN);
 
     expect({ woken, emails: email.woken.length }).toEqual({ woken: ok({ kind: 'settled' }), emails: 0 });
+  });
+
+  it('asks Slack to finish what it left unfinished though nothing waits fresh, as after a restart', async () => {
+    const ship = aShip([aDelivery(1, { handOverNumber: 1 })]);
+    const slack = slackShowing(ship, []);
+
+    await waking({ ship, channels: [aChannel('email').channel], shownElsewhere: slack })(SHIP, CREW_TOKEN);
+
+    expect(slack.asked).toEqual([[]]);
+  });
+
+  it('says the wake failed while Slack left a post unfinished, so it is tried again', async () => {
+    const ship = aShip([aDelivery(1, { handOverNumber: 1 })]);
+
+    const woken = await waking({ ship, channels: [aChannel('email').channel], shownElsewhere: slackShowing(ship, [], { isAnyUnfinished: true }) })(SHIP, CREW_TOKEN);
+
+    expect(woken).toEqual(ok({ kind: 'failed' }));
+  });
+
+  it('wakes for the fresh deliveries Slack did not show though it left a post unfinished, and says the wake failed', async () => {
+    const ship = aShip([aDelivery(1, { handOverNumber: 1 }), aDelivery(2)]);
+    const email = aChannel('email');
+
+    const woken = await waking({ ship, channels: [email.channel], shownElsewhere: slackShowing(ship, [], { isAnyUnfinished: true }) })(SHIP, CREW_TOKEN);
+
+    expect({ woken, emails: email.woken.length, handOvers: ship.handOvers.map(({ channel }) => channel) }).toEqual({ woken: ok({ kind: 'failed' }), emails: 1, handOvers: ['email'] });
   });
 
   it('lets Slack show a delivery even while a page of the person is in focus', async () => {
