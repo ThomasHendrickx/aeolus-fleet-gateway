@@ -49,6 +49,7 @@ import { sleep } from './adapters/timers/sleep.js';
 import { createPartyWorkers } from './party-workers.js';
 import { gatewayRouter, WAITING_SECRET_HEADER, type Context, type GatewayRouter } from './adapters/trpc/router.js';
 import { registerFrontDoor, type WebApp } from './adapters/http/front-door.js';
+import { registerOpenAiAppsChallenge } from './adapters/http/openai-apps-challenge.js';
 import { createChangeHub } from './adapters/http/live.js';
 import { createPrismaInboxChanges, listenToChanges } from './adapters/prisma/changes.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
@@ -206,6 +207,8 @@ export interface GatewayAppOptions {
   pagasae?: { url: string; clientId: string; clientSecret: string };
   /** The gateway's pages as an app at pagasae, for the shared account sign-in (header design H5): unset, nobody signs in to the pages that way. */
   pagasaeApp?: { clientId: string; clientSecret: string };
+  /** The token OpenAI's plugin portal shows to prove the domain (chatgpt-plugin design, 7.5): unset, no such address is served. */
+  openAiAppsChallenge?: string;
   /** The gateway's push keys, which sign each web push wake, and the subject a push service may contact (wake a person, S3): unset, no one is offered web push. */
   webPush?: { publicKey: string; privateKey: string; subject: string };
   /** Which addresses web push may connect to: public ones unless set. Tests set it to reach their push service on this machine. */
@@ -809,6 +812,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     },
   };
   void server.register(fastifyTRPCPlugin, trpc);
+  registerOpenAiAppsChallenge(server, { challenge: options.openAiAppsChallenge });
   registerFrontDoor(server, options.web === undefined ? {} : { web: options.web });
   let changes: { close(): Promise<void> } | undefined;
   server.addHook('onReady', async () => {
