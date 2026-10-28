@@ -4,10 +4,25 @@ import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeMcpServers, fakeStatementDoor, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
 import { PROXY_SHIP_ID, memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
 import type { McpServerParty } from '../parties/party.js';
+import type { SignInClient } from '../vault/credential.js';
 import { createMarkTool } from './mark-tool.js';
 import { createStateParty } from './state-party.js';
 
 const AT = new Date('2026-10-18T14:00:00.000Z');
+
+/** A party's sign-in client, shaped as Attio's (oauth-servers L10). */
+const ATTIO_CLIENT: SignInClient = {
+  issuer: 'https://app.attio.com',
+  authorizationEndpoint: 'https://app.attio.com/oidc/authorize',
+  tokenEndpoint: 'https://app.attio.com/oidc/token',
+  revocationEndpoint: null,
+  clientId: 'client-1',
+  clientSecret: 'secret-1',
+  registrationClientUri: null,
+  registrationAccessToken: null,
+  resource: 'https://mcp.attio.com/mcp',
+  scope: 'mcp offline_access openid',
+};
 
 const CRM: McpServerParty = {
   fleetId: FLEET_ID,
@@ -47,6 +62,13 @@ beforeEach(async () => {
 });
 
 describe('the gateway states what a proxy ship offers, as its crew (decision 0047)', () => {
+  it('leaves the proxy ship of a server where each person signs in unstated while nobody signed in, listing nothing (decision 0067)', async () => {
+    await parties.save({ ...CRM, name: 'attio', credential: { kind: 'personSignIn', client: ATTIO_CLIENT }, toolSwitches: null });
+
+    await expect(stateParty({ fleetId: FLEET_ID, name: 'attio' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_SIGNED_IN' } });
+    expect({ listedWith: servers.listedWith, stated: door.stated }).toEqual({ listedWith: [], stated: [] });
+  });
+
   it("states the server's tools as the proxy ship, with its crew token", async () => {
     await expect(stateParty({ fleetId: FLEET_ID, name: 'crm' })).resolves.toEqual({ isOk: true, value: { capabilities: ['list_contacts', 'create_deal'] } });
     expect(door.stated.map(({ crewToken, statement }) => [crewToken, statement.capabilities.map((capability) => capability.name)])).toEqual([['aeolus_ct_v1_proxy', ['list_contacts', 'create_deal']]]);

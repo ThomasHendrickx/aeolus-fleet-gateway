@@ -21,7 +21,7 @@ export interface ToolMarks {
 }
 
 export type StateParty = (input: { fleetId: FleetId; name: string }) => Promise<
-  Result<{ capabilities: string[] }, DomainError<'NO_SUCH_PARTY' | 'NOT_CREWED' | 'SERVER_UNREACHABLE' | 'STATEMENT_REFUSED'>>
+  Result<{ capabilities: string[] }, DomainError<'NO_SUCH_PARTY' | 'NOT_CREWED' | 'NOT_SIGNED_IN' | 'SERVER_UNREACHABLE' | 'STATEMENT_REFUSED'>>
 >;
 
 /**
@@ -39,6 +39,10 @@ export function createStateParty(deps: { parties: PartyStore; servers: McpServer
     }
     if (party.state !== 'crewed' || party.crewToken === null) {
       return refuse('NOT_CREWED', `The gateway does not crew the proxy ship of ${name} yet`);
+    }
+    if (party.credential.kind === 'personSignIn') {
+      // Its tools are listed only under a person's grant (decision 0067), which no one holds yet.
+      return refuse('NOT_SIGNED_IN', `Nobody signed in to ${name} yet, so its tools cannot be listed`);
     }
     const listed = await deps.servers.listTools({ url: party.url, credential: party.credential });
     if (!listed.isOk) {

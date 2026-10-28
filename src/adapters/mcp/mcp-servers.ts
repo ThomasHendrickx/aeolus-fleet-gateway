@@ -69,6 +69,9 @@ function transportFor(connection: McpServerConnection): StreamableHTTPClientTran
           ...(credential.scope === undefined ? {} : { scope: credential.scope }),
         }),
       });
+    case 'personSignIn':
+      // Each person's own grant goes with the call; the party's client alone signs nobody in, so the server refuses the call unsent.
+      return new StreamableHTTPClientTransport(url);
   }
 }
 

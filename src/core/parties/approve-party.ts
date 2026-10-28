@@ -5,7 +5,7 @@ import type { RequestHasher } from '../installation/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import type { McpServerCredential } from '../vault/credential.js';
+import type { McpServerPartyCredential } from '../vault/credential.js';
 import { verifiedFactsOf, type McpClientParty, type McpServerParty, type Party } from './party.js';
 import type { PartyStore, ProxyShipDoor } from './ports.js';
 import { shownPartyOf, type ShownParty } from './shown-party.js';
@@ -30,7 +30,7 @@ export type ApproveParty = (input: {
   requestId: string;
   name: string;
   url: string;
-  credential: McpServerCredential;
+  credential: McpServerPartyCredential;
   ownerShipId: ShipId;
   /** The scopes granted its proxy ship beside the ones every app ship gets (decision 0046). */
   scopes: readonly string[];

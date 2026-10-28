@@ -3,7 +3,7 @@ import type { FleetId, ShipId, VerifiedFact } from '@aeolus-fleet/common';
 import type { FleetDoor, FleetRefusal } from '../../src/core/connection/ports.js';
 import type { Party } from '../../src/core/parties/party.js';
 import type { ActorCredential } from '../../src/core/actors/credential-of.js';
-import type { PartyStore, ProxyShipDoor, ProxyShipReads, ProxyShipsAsActor, ScopeRequirementsStore } from '../../src/core/parties/ports.js';
+import type { AuthorizationServers, DiscoveredSignIn, DiscoveryFailure, PartyStore, ProxyShipDoor, ProxyShipReads, ProxyShipsAsActor, ScopeRequirementsStore } from '../../src/core/parties/ports.js';
 import { changedRequirements, NO_SCOPE_REQUIREMENTS, type ScopeRequirements } from '../../src/core/parties/scope-requirements.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 import { FLEET_ID } from './fleet-fakes.js';
@@ -200,4 +200,34 @@ export function fakeProxyShipReads(
       return Promise.resolve(ok(reach.outsideReach.includes(shipId) ? { proxyShipName: ship.proxyShipName, ownerShipId: null, ownerName: null, scopes: null } : ship));
     },
   };
+}
+
+/** A sign-in shaped as Attio's metadata (oauth-servers L10): its issuer and scopes, dynamic registration, PKCE S256, no revocation. */
+export const ATTIO_SIGN_IN: DiscoveredSignIn = {
+  resource: 'https://mcp.attio.com/mcp',
+  challengeScope: null,
+  resourceScopes: ['mcp', 'offline_access', 'openid'],
+  issuer: 'https://app.attio.com',
+  authorizationEndpoint: 'https://app.attio.com/oidc/authorize',
+  tokenEndpoint: 'https://app.attio.com/oidc/token',
+  registrationEndpoint: 'https://app.attio.com/oauth/register',
+  revocationEndpoint: null,
+  codeChallengeMethods: ['S256'],
+  serverScopes: ['mcp', 'offline_access', 'openid'],
+};
+
+/** An authorization server double: answers the sign-in it is given, and registers a new client each time, counting them. */
+export function fakeAuthorizationServers(discovered: Result<DiscoveredSignIn, DiscoveryFailure> = ok(ATTIO_SIGN_IN), registration: Result<undefined, { reason: string }> = ok(undefined)) {
+  const registered: { registrationEndpoint: string; clientName: string; redirectUri: string; scope: string }[] = [];
+  const servers: AuthorizationServers = {
+    discover: () => Promise.resolve(discovered),
+    register: (registrationEndpoint, client) => {
+      if (!registration.isOk) {
+        return Promise.resolve(err(registration.error));
+      }
+      registered.push({ registrationEndpoint, ...client });
+      return Promise.resolve(ok({ clientId: `client-${String(registered.length)}`, clientSecret: `secret-${String(registered.length)}`, registrationClientUri: null, registrationAccessToken: null }));
+    },
+  };
+  return { servers, registered };
 }
