@@ -65,6 +65,8 @@ function anAccountToken(claims: Record<string, unknown>): string {
 
 export async function startFakePagasae(): Promise<FakePagasae> {
   const codes = new Map<string, { challenge: string; redirectUri: string }>();
+  /** How many codes it issued: each code is numbered by it, as a redeemed code leaves the map. */
+  let issued = 0;
   let claims: Record<string, unknown> = {};
   const signIns = new Map<string, Record<string, unknown>>();
   const listings = new Map<string, readonly { id: string; name: string }[] | 'unavailable'>();
@@ -76,7 +78,8 @@ export async function startFakePagasae(): Promise<FakePagasae> {
   const server: Server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://pagasae.test');
     if (request.method === 'GET' && url.pathname === '/oauth/authorize') {
-      const code = `code-${String(codes.size + 1)}`;
+      issued += 1;
+      const code = `code-${String(issued)}`;
       const redirectUri = url.searchParams.get('redirect_uri') ?? '';
       codes.set(code, { challenge: url.searchParams.get('code_challenge') ?? '', redirectUri });
       const back = new URL(redirectUri);

@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
+import { loadConfig } from '../src/config.js';
 import { commission, register, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { aBrowser, pickedAt } from './support/browser.js';
@@ -24,6 +25,8 @@ import { outsidePartiesOn } from './support/outside-parties.js';
 const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
 /** The hosting service's token (decision 0021), which pagasae presents when it tells the gateway an account was disabled. */
 const INSTALLATION_TOKEN = 'an-installation-token-of-at-least-32-characters';
+/** What a way around signing in would be named: a password, a test or reviewer account, a bypass. */
+const BYPASS = /password|reviewer|test.?account|bypass|demo/i;
 
 let setting: Setting;
 let app: GatewayApp;
@@ -162,6 +165,66 @@ describe('a person adds the plugin and signs in (chatgpt-plugin design, 6)', () 
     await auth(client.provider, { serverUrl, authorizationCode: z.string().parse(back.searchParams.get('code')), ...(iss === null ? {} : { iss }) });
 
     expect(await initializeStatus(client)).toBe(401);
+  });
+});
+
+describe('the plugin sign-in under load and across a restart (chatgpt-plugin design, 9)', () => {
+  /** How many people start the plugin sign-in at launch, and how long each may wait for its code once back from pagasae. */
+  const PEOPLE = 100;
+  const CODE_WITHIN_MS = 2000;
+
+  /** The plugin's authorization request of one person's ChatGPT, by its own state and challenge. */
+  function pluginAuthorize(client: { clientId: string }, person: number): string {
+    const request = new URLSearchParams({
+      response_type: 'code',
+      client_id: client.clientId,
+      redirect_uri: CALLBACK,
+      code_challenge: `challenge-of-person-${String(person)}-padded-to-forty-three-chars`,
+      code_challenge_method: 'S256',
+      resource: `${setting.address}/plugin/mcp`,
+      state: `state-${String(person)}`,
+    });
+    return `${setting.address}/authorize?${request.toString()}`;
+  }
+
+  it('how big: sign-ins at launch: 100 people start the plugin sign-in at once, and each gets a code within 2 seconds of returning', async () => {
+    pagasae.answer(charlotteIn(pagasae, fleetId));
+    const client = await aRegisteredClient(setting, false);
+
+    const returns = await Promise.all(
+      Array.from({ length: PEOPLE }, async (_unused, person) => {
+        const browser = aBrowser();
+        const atCallback = await browser.follow(pluginAuthorize(client, person), `${setting.address}/pagasae/callback`);
+        const started = performance.now();
+        const back = await browser.visit(z.string().parse(atCallback.headers.get('location')));
+        const tookMs = performance.now() - started;
+        return { hasCode: new URL(z.string().parse(back.headers.get('location'))).searchParams.get('code') !== null, isInTime: tookMs < CODE_WITHIN_MS };
+      }),
+    );
+
+    expect(returns.filter(({ hasCode, isInTime }) => !hasCode || !isInTime)).toEqual([]);
+  });
+
+  it('the sign-in survives a restart: the gateway restarts before the person returns from pagasae, and a code is issued', async () => {
+    pagasae.answer(charlotteIn(pagasae, fleetId));
+    const client = await aRegisteredClient(setting, false);
+    const browser = aBrowser();
+    const atCallback = await browser.follow(pluginAuthorize(client, 1), `${setting.address}/pagasae/callback`);
+    const { port } = new URL(setting.address);
+    await app.close();
+    app = createGatewayApp({ databaseUrl: setting.databaseUrl, fleetUrl: setting.fleet.url, logger: false, publicUrl: setting.address, gatewaySecret: TEST_GATEWAY_SECRET, pagasae: { url: pagasae.url, ...PAGASAE_CLIENT }, installationToken: INSTALLATION_TOKEN });
+    await app.server.listen({ host: '127.0.0.1', port: Number(port) });
+
+    const back = await browser.visit(z.string().parse(atCallback.headers.get('location')));
+
+    expect(new URL(z.string().parse(back.headers.get('location'))).searchParams.get('code')).not.toBeNull();
+  });
+
+  it('the reviewer never reaches the bypass: the routes and the configuration hold no password, test account or reviewer bypass', () => {
+    const configuration = Object.keys(loadConfig({ DATABASE_URL: setting.databaseUrl, FLEET_URL: setting.fleet.url, GATEWAY_SECRET: TEST_GATEWAY_SECRET }));
+    const routes = app.server.printRoutes({ commonPrefix: false });
+
+    expect({ configuration: configuration.filter((name) => BYPASS.test(name)), routes: routes.split('\n').filter((route) => BYPASS.test(route)) }).toEqual({ configuration: [], routes: [] });
   });
 });
 
