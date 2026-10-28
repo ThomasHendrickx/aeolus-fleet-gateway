@@ -1,3 +1,5 @@
+import type { FleetId } from '@aeolus-fleet/common';
+
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
@@ -11,7 +13,7 @@ import type { AuthorizationServers } from './ports.js';
 const AT = new Date('2026-10-28T13:00:00.000Z');
 const ATTIO_URL = 'https://mcp.attio.com/mcp';
 const REDIRECT_URI = 'https://gateway.example.com/outside-parties/sign-in/done';
-const OTHER_FLEET_ID = 'flt_01m3tbfspe96yf1rnr4ank9oth';
+const OTHER_FLEET_ID: FleetId = 'flt_01m3tbfspe96yf1rnr4ank9oth';
 
 let fleet: ReturnType<typeof fakeProxyShipFleet>;
 let parties: ReturnType<typeof memoryPartyStore>;
