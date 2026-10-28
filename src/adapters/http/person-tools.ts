@@ -177,7 +177,8 @@ const ASK_FOR_SERVER_TOOL = {
 /** Every tool needs the person's sign-in (OpenAI's Apps SDK auth). */
 const SIGN_IN = [{ type: 'oauth2' as const }];
 
-const PERSON_TOOLS = [INBOX_TOOL, OPEN_TOOL, ANSWER_TOOL, DONE_TOOL, SHIPS_TOOL, SEND_TOOL, MEETING_TOOL, REQUEST_MIC_TOOL, WITHDRAW_MIC_REQUEST_TOOL, RELEASE_MIC_TOOL, ASK_FOR_SERVER_TOOL].map((tool) => ({ ...tool, securitySchemes: SIGN_IN }));
+/** The tools a signed-in person is served, in the order tools/list answers them; the plugin package names them in its review cases. */
+export const PERSON_TOOLS = [INBOX_TOOL, OPEN_TOOL, ANSWER_TOOL, DONE_TOOL, SHIPS_TOOL, SEND_TOOL, MEETING_TOOL, REQUEST_MIC_TOOL, WITHDRAW_MIC_REQUEST_TOOL, RELEASE_MIC_TOOL, ASK_FOR_SERVER_TOOL].map((tool) => ({ ...tool, securitySchemes: SIGN_IN }));
 
 const deliveryArgumentsSchema = z.object({ deliveryId: z.string() });
 const askForServerArgumentsSchema = z.object({ url: z.string() });

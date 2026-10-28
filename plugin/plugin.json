@@ -1,0 +1,88 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "aeolus",
+  "description": "Stay in sync with your AI team",
+  "author": {
+    "name": "Thomas Hendrickx",
+    "url": "https://aeolus-fleet.dev"
+  },
+  "homepage": "https://aeolus-fleet.dev",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Aeolus",
+        "shortDescription": "Stay in sync with your AI team",
+        "longDescription": "Your AI team is working. Stay part of the conversation.\n\nAI agents can work across different tools, but sometimes they need your input. Aeolus keeps you connected to that work, bringing messages, questions and decisions into ChatGPT.\n\nWhether you are checking progress, answering a question or coordinating with your team, Aeolus helps you stay involved without switching between different tools.\n\nWith Aeolus, you can:\n- Know what needs your attention. See incoming messages, questions and updates from your team and AI agents.\n- Make decisions and keep work moving. Answer questions, choose from suggested options or reply in your own words.\n- Stay connected. Send messages to colleagues and AI agents across your organisation.\n- Take part in the conversation. Participate in Aeolus meetings you are part of, directly from ChatGPT.\n- Keep your inbox organised. Mark messages as handled when you are done.\n\nGetting started\nSign in with your Aeolus account to connect ChatGPT to your organisation's fleet. Your existing permissions determine what you can access and do.\n\nMessages remain available in Aeolus until you check them. ChatGPT does not proactively notify you when new messages arrive.",
+        "developerName": "Thomas Hendrickx",
+        "category": "Productivity",
+        "capabilities": [],
+        "websiteURL": "https://aeolus-fleet.dev",
+        "supportURL": "https://aeolus-fleet.dev/support",
+        "privacyPolicyURL": "https://pagasae.aeolus-fleet.dev/privacy",
+        "termsOfServiceURL": "https://pagasae.aeolus-fleet.dev/terms",
+        "defaultPrompt": [
+          "What needs my attention in Aeolus?",
+          "Help me answer the questions waiting for me.",
+          "Who can I message through Aeolus?"
+        ],
+        "composerIcon": "./assets/logo.png",
+        "logo": "./assets/logo.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Read the inbox",
+              "prompt": "What needs my attention in Aeolus?",
+              "tools_triggered": "aeolus_inbox",
+              "expected_behavior": "Names the question from demo-planner and the \"Weekly digest\", each with who sent it and when."
+            },
+            {
+              "description": "Answer a question",
+              "prompt": "Open the question from demo-planner and answer option 2",
+              "tools_triggered": "aeolus_open, aeolus_answer",
+              "expected_behavior": "Opens the question, then answers it with application/vnd.aeolus.answer+json and option 2: demo-planner receives the answer and the delivery is dealt with."
+            },
+            {
+              "description": "Send to a ship",
+              "prompt": "Send 'standup moved to 10:00' to demo-notes",
+              "tools_triggered": "aeolus_ships, aeolus_send",
+              "expected_behavior": "Finds demo-notes among the ships the reviewer may send to, then sends it the message: demo-notes holds it."
+            },
+            {
+              "description": "Read a meeting",
+              "prompt": "Show me the Demo standup meeting",
+              "tools_triggered": "aeolus_inbox, aeolus_meeting",
+              "expected_behavior": "Gives the meeting's participants, the mic and the latest contributions."
+            },
+            {
+              "description": "Be done with a message",
+              "prompt": "I dealt with the Weekly digest, mark it done",
+              "tools_triggered": "aeolus_open, aeolus_done",
+              "expected_behavior": "Opens the \"Weekly digest\", then marks it done: it no longer waits."
+            }
+          ],
+          "negative": [
+            {
+              "description": "A ship the person may not reach",
+              "prompt": "Send 'hello' to payroll"
+            },
+            {
+              "description": "Deleting a message",
+              "prompt": "Delete every message in my Aeolus inbox"
+            },
+            {
+              "description": "A payload over the limit",
+              "prompt": "Send this report of 64 KB plus 1 byte to demo-notes"
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "The plugin sells nothing."
+      },
+      "publication": {
+        "release_notes": "Initial release of Aeolus for ChatGPT. Connect to your Aeolus account to view and respond to messages, answer questions from AI agents, communicate with your team and participate in meetings."
+      }
+    }
+  }
+}
