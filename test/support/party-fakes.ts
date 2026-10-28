@@ -212,6 +212,7 @@ export const ATTIO_SIGN_IN: DiscoveredSignIn = {
   tokenEndpoint: 'https://app.attio.com/oidc/token',
   registrationEndpoint: 'https://app.attio.com/oauth/register',
   revocationEndpoint: null,
+  isIssuerInResponse: false,
   codeChallengeMethods: ['S256'],
   serverScopes: ['mcp', 'offline_access', 'openid'],
 };

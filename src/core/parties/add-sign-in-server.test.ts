@@ -53,11 +53,20 @@ describe('an approver adds an outside MCP server where each person signs in (dec
           authorizationEndpoint: ATTIO_SIGN_IN.authorizationEndpoint,
           tokenEndpoint: ATTIO_SIGN_IN.tokenEndpoint,
           revocationEndpoint: null,
+          isIssuerInResponse: false,
           resource: 'https://mcp.attio.com/mcp',
           scope: 'mcp offline_access openid',
         },
       },
     });
+  });
+
+  it('keeps that the authorization server states its issuer in each authorization response, so a response without it is refused (RFC 9207)', async () => {
+    const attio = fakeAuthorizationServers(ok({ ...ATTIO_SIGN_IN, isIssuerInResponse: true }));
+
+    await adding(attio.servers)(anAddition());
+
+    await expect(parties.find(FLEET_ID, 'attio')).resolves.toMatchObject({ credential: { client: { isIssuerInResponse: true } } });
   });
 
   it('is refused naming PKCE S256 when the authorization server does not state it, keeping nothing', async () => {
