@@ -86,3 +86,48 @@ export interface FleetShip {
 export interface FleetShips {
   list(as: ActorCredential): Promise<Result<FleetShip[], FleetRefusal>>;
 }
+
+/** What an outside MCP server says about its sign-in: its protected resource metadata (RFC 9728) and its authorization server's metadata (RFC 8414 or OpenID Connect). */
+export interface DiscoveredSignIn {
+  /** The resource indicator the server names itself by. */
+  readonly resource: string;
+  /** The scope its 401 named, if it named one. */
+  readonly challengeScope: string | null;
+  /** The scopes its protected resource metadata lists. */
+  readonly resourceScopes: readonly string[];
+  /** The authorization server's issuer, matching the one the server named. */
+  readonly issuer: string;
+  readonly authorizationEndpoint: string;
+  readonly tokenEndpoint: string;
+  readonly registrationEndpoint: string | null;
+  readonly revocationEndpoint: string | null;
+  readonly codeChallengeMethods: readonly string[];
+  /** The scopes the authorization server lists. */
+  readonly serverScopes: readonly string[];
+}
+
+/**
+ * Why a server's sign-in could not be found:
+ * - noAuthorizationServer: its 401 and its well-known address name no protected resource metadata;
+ * - noServerMetadata: the authorization server it names has no metadata, or metadata whose issuer is not the one named;
+ * - unreachable: the server or its authorization server did not answer.
+ */
+export interface DiscoveryFailure {
+  readonly kind: 'noAuthorizationServer' | 'noServerMetadata' | 'unreachable';
+  readonly reason: string;
+}
+
+/** What dynamic registration answered (RFC 7591, 7592). */
+export interface RegisteredClient {
+  readonly clientId: string;
+  readonly clientSecret: string | null;
+  readonly registrationClientUri: string | null;
+  readonly registrationAccessToken: string | null;
+}
+
+/** Outbound port: outside MCP servers' authorization servers, as the gateway, an OAuth client, reaches them. */
+export interface AuthorizationServers {
+  discover(serverUrl: string): Promise<Result<DiscoveredSignIn, DiscoveryFailure>>;
+  /** Registers a confidential client for the authorization code flow; the server's own error when it refuses or does not answer. */
+  register(registrationEndpoint: string, client: { clientName: string; redirectUri: string; scope: string }): Promise<Result<RegisteredClient, { readonly reason: string }>>;
+}
