@@ -38,6 +38,7 @@ async function start(): Promise<void> {
     ...(config.installationToken === undefined ? {} : { installationToken: config.installationToken }),
     ...(config.pagasae === undefined ? {} : { pagasae: config.pagasae }),
     ...(config.pagasaeApp === undefined ? {} : { pagasaeApp: config.pagasaeApp }),
+    ...(config.openAiAppsChallenge === undefined ? {} : { openAiAppsChallenge: config.openAiAppsChallenge }),
     web: web.handle,
     slackApiUrl: config.slackApiUrl,
   });

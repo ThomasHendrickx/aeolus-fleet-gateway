@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { fakeClientMetadataDocuments, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
+import { fakeClientMetadataDocuments, memoryOAuthClients, PLUGIN_RESOURCE, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { createReadAuthorization } from './read-authorization.js';
 
 const CIMD_CLIENT = 'https://claude.example.com/oauth/client.json';
@@ -20,7 +20,7 @@ beforeEach(async () => {
     [CIMD_CLIENT]: { client_id: CIMD_CLIENT, client_name: 'Claude', redirect_uris: [CALLBACK], token_endpoint_auth_method: 'none' },
     [NATIVE_CLIENT]: { client_id: NATIVE_CLIENT, client_name: 'Codex', redirect_uris: ['http://127.0.0.1/callback', 'http://localhost/callback', 'http://[::1]/callback'], token_endpoint_auth_method: 'none' },
   });
-  readAuthorization = createReadAuthorization({ clients, documents, resource: RESOURCE });
+  readAuthorization = createReadAuthorization({ clients, documents, resources: [RESOURCE, PLUGIN_RESOURCE] });
 });
 
 /** An authorization request as a client sends it to /authorize. */
@@ -85,7 +85,7 @@ describe('the gateway reads an authorization request (OAuth 2.1, MCP 2026-07-28)
 
   it('refuses a metadata document naming another client id', async () => {
     documents = fakeClientMetadataDocuments({ [CIMD_CLIENT]: { client_id: 'https://other.example.com/client.json', redirect_uris: [CALLBACK] } });
-    readAuthorization = createReadAuthorization({ clients, documents, resource: RESOURCE });
+    readAuthorization = createReadAuthorization({ clients, documents, resources: [RESOURCE, PLUGIN_RESOURCE] });
 
     await expect(readAuthorization(aRequest())).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
   });
@@ -98,5 +98,18 @@ describe('the gateway reads an authorization request (OAuth 2.1, MCP 2026-07-28)
     { what: 'another resource', overrides: { resource: 'https://other.example.com/mcp' }, error: 'invalid_target' },
   ])('sends the client back with an error for $what', async ({ overrides, error }) => {
     await expect(readAuthorization(aRequest(overrides))).resolves.toMatchObject({ isOk: false, error: { kind: 'redirect', redirectUri: CALLBACK, error, state: 'state-1' } });
+  });
+});
+
+describe('the plugin address (chatgpt-plugin design, 6)', () => {
+  it('a person adds the plugin and signs in: the request is read for the plugin address, so its token is bound to it', async () => {
+    await expect(readAuthorization(aRequest({ resource: PLUGIN_RESOURCE }))).resolves.toMatchObject({ isOk: true, value: { resource: PLUGIN_RESOURCE } });
+  });
+
+  it('a resource the gateway does not serve: the refusal goes back to the client', async () => {
+    await expect(readAuthorization(aRequest({ resource: 'http://gateway.example.com/plugin/other' }))).resolves.toMatchObject({
+      isOk: false,
+      error: { kind: 'redirect', redirectUri: CALLBACK, error: 'invalid_target', state: 'state-1' },
+    });
   });
 });

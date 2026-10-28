@@ -24,6 +24,7 @@ describe('the gateway configuration from the environment', () => {
       pagasae: undefined,
       pagasaeApp: undefined,
       slackApiUrl: 'https://slack.com/api',
+      openAiAppsChallenge: undefined,
     });
   });
 
@@ -49,6 +50,7 @@ describe('the gateway configuration from the environment', () => {
       pagasae: undefined,
       pagasaeApp: undefined,
       slackApiUrl: 'https://slack.com/api',
+      openAiAppsChallenge: undefined,
     });
   });
 
@@ -90,6 +92,10 @@ describe('the gateway configuration from the environment', () => {
     const environment = { DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' };
     expect(loadConfig({ ...environment, INSTALLATION_TOKEN: 'x'.repeat(32) }).installationToken).toBe('x'.repeat(32));
     expect(() => loadConfig({ ...environment, INSTALLATION_TOKEN: 'x'.repeat(31) })).toThrow('INSTALLATION_TOKEN: must hold at least 32 characters');
+  });
+
+  it("reads the token OpenAI's plugin portal shows to prove the domain (chatgpt-plugin design, 7.5)", () => {
+    expect(loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', OPENAI_APPS_CHALLENGE: 'portal-token-1' }).openAiAppsChallenge).toBe('portal-token-1');
   });
 
   it('reads pagasae, which signs people in (decision 0054): its URL without its trailing slash, and the gateway\'s client there', () => {

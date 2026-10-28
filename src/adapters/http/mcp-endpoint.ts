@@ -188,7 +188,7 @@ export function registerMcpEndpoint(server: FastifyInstance, deps: McpEndpointDe
       // An account's token is issued only where people sign in, so it finds their tools.
       return unauthorized(reply, 'invalid_token');
     } else {
-      serve = () => personServerFor({ fleetId: held.fleetId, grantId: held.grantId }, person);
+      serve = () => personServerFor({ caller: { fleetId: held.fleetId, grantId: held.grantId }, resourceMetadata }, person);
     }
     const handler = createMcpHandler(serve);
     return handler.fetch(webRequestOf(request), { parsedBody: request.body });

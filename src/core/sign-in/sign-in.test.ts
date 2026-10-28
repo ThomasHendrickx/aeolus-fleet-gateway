@@ -2,7 +2,7 @@ import type { FleetId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
+import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryOAuthClients, PLUGIN_RESOURCE, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createReadAuthorization } from '../oauth/read-authorization.js';
 import type { AskForClient } from '../requests/ask-for-client.js';
@@ -47,12 +47,12 @@ function readAuthorization() {
   return createReadAuthorization({
     clients,
     documents: fakeClientMetadataDocuments({ [CIMD_CLIENT]: { client_id: CIMD_CLIENT, client_name: 'Claude', redirect_uris: [CALLBACK] } }),
-    resource: RESOURCE,
+    resources: [RESOURCE, PLUGIN_RESOURCE],
   });
 }
 
 function startSignIn() {
-  return createStartSignIn({ readAuthorization: readAuthorization(), seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock: { now: () => now } });
+  return createStartSignIn({ readAuthorization: readAuthorization(), pluginResource: PLUGIN_RESOURCE, seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock: { now: () => now } });
 }
 
 /** Asks for a client as the gateway would, waiting on waiting-1; refused while outside parties are off. */
@@ -108,6 +108,22 @@ describe('a person starts signing in at /authorize', () => {
   it('is refused as /authorize refuses a request, keeping nothing', async () => {
     await expect(startSignIn()({ request: aRequest({ redirect_uri: 'https://evil.example.com/callback' }), holder: 'account' })).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidClient' } });
     await expect(startSignIn()({ request: aRequest({ code_challenge_method: 'plain' }), holder: 'account' })).resolves.toMatchObject({ isOk: false, error: { kind: 'redirect', error: 'invalid_request' } });
+    expect(seals.held.size).toBe(0);
+  });
+});
+
+describe('a person starts signing in from the plugin address (chatgpt-plugin design, 6)', () => {
+  it('a person adding the plugin never sees the choice: the sign-in is sealed as themselves', async () => {
+    await expect(startSignIn()({ request: aRequest({ resource: PLUGIN_RESOURCE }), holder: 'account' })).resolves.toMatchObject({ isOk: true });
+
+    expect([...seals.held.values()]).toMatchObject([{ request: { resource: PLUGIN_RESOURCE }, holder: 'account' }]);
+  });
+
+  it('the plugin address cannot ask for access for the client: the client is sent back with an error, keeping nothing', async () => {
+    await expect(startSignIn()({ request: aRequest({ resource: PLUGIN_RESOURCE }), holder: 'party' })).resolves.toMatchObject({
+      isOk: false,
+      error: { kind: 'redirect', redirectUri: CALLBACK, error: 'invalid_request', state: 'state-1' },
+    });
     expect(seals.held.size).toBe(0);
   });
 });

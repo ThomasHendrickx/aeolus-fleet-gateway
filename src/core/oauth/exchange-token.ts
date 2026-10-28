@@ -38,6 +38,7 @@ interface ExchangeTokenDeps {
   tokens: IssuedTokens;
   secrets: OAuthSecrets;
   clock: Clock;
+  /** The MCP endpoint a client signed in by client credentials is bound to; a code keeps the resource it was issued for. */
   resource: string;
   /** The parties argo's approvers added: a client signed in by client credentials is one. */
   parties: Pick<PartyStore, 'findByClient'>;
@@ -128,9 +129,6 @@ export function createExchangeToken(deps: ExchangeTokenDeps): ExchangeToken {
     if (code === undefined || verifier === undefined) {
       return refusal('invalid_request', 'A code and its PKCE verifier are required');
     }
-    if (request.resource !== undefined && request.resource !== deps.resource) {
-      return refusal('invalid_target', `The resource must be ${deps.resource}`);
-    }
     const taken = await deps.codes.take(deps.secrets.hashOf(code));
     if (!taken) {
       return refusal('invalid_grant', 'No such code');
@@ -140,6 +138,10 @@ export function createExchangeToken(deps: ExchangeTokenDeps): ExchangeToken {
       return refusal('invalid_grant', 'The code was used before; the tokens it gave are revoked');
     }
     const issued = taken.code;
+    // A code is taken for the resource it was issued for, one of the gateway's addresses (RFC 8707).
+    if (request.resource !== undefined && request.resource !== issued.resource) {
+      return refusal('invalid_target', `The resource must be ${issued.resource}`);
+    }
     const isValid =
       issued.expiresAt.getTime() > deps.clock.now().getTime() &&
       issued.clientId === request.client_id &&

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { fakeSecrets, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
+import { fakeSecrets, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, PLUGIN_RESOURCE, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { createAuthenticateAccessToken } from './authenticate-access-token.js';
 import { createExchangeToken } from './exchange-token.js';
@@ -27,6 +27,7 @@ beforeEach(async () => {
   await codes.save({ codeHash: 'hash(code-1)', fleetId: FLEET_ID, clientId: CIMD_CLIENT, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-1)', resource: RESOURCE, scope: null, kind: 'party', party: 'claude', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
   await codes.save({ codeHash: 'hash(code-2)', fleetId: FLEET_ID, clientId: 'client-cursor', redirectUri: 'https://cursor.example.com/callback', codeChallenge: 'S256(verifier-2)', resource: RESOURCE, scope: null, kind: 'party', party: 'cursor', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
   await codes.save({ codeHash: 'hash(code-3)', fleetId: FLEET_ID, clientId: CIMD_CLIENT, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-3)', resource: RESOURCE, scope: null, kind: 'account', grantId: 'grant-1', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
+  await codes.save({ codeHash: 'hash(code-4)', fleetId: FLEET_ID, clientId: CIMD_CLIENT, redirectUri: CALLBACK, codeChallenge: 'S256(verifier-4)', resource: PLUGIN_RESOURCE, scope: null, kind: 'account', grantId: 'grant-1', expiresAt: new Date('2026-10-19T09:01:00.000Z') });
   tokens = memoryIssuedTokens();
   exchangeToken = createExchangeToken({ clients, codes, tokens, secrets, clock, resource: RESOURCE, parties: memoryPartyStore(), servesOutsideParties: () => Promise.resolve(true) });
   authenticate = createAuthenticateAccessToken({ tokens, secrets, clock, resource: RESOURCE });
@@ -169,5 +170,30 @@ describe('the gateway knows the caller by its access token (RFC 8707: bound to t
     await exchangeToken({ grant_type: 'refresh_token', refresh_token: 'secret-2', client_id: CIMD_CLIENT });
 
     await expect(authenticate('secret-1')).resolves.toMatchObject({ isOk: false });
+  });
+});
+
+describe('the plugin address (chatgpt-plugin design, 6)', () => {
+  /** The token request for the plugin sign-in's code, code-4, issued for the plugin address. */
+  const aPluginCodeGrant = (overrides: Record<string, string | undefined> = {}) => aCodeGrant({ code: 'code-4', code_verifier: 'verifier-4', resource: PLUGIN_RESOURCE, ...overrides });
+
+  it('a person adds the plugin and signs in: the code issued for the plugin address answers tokens for it', async () => {
+    await expect(exchangeToken(aPluginCodeGrant())).resolves.toEqual({ isOk: true, value: FIRST_PAIR });
+    expect(tokens.held.map(({ resource }) => resource)).toEqual([PLUGIN_RESOURCE]);
+  });
+
+  it("refuses the plugin sign-in's code for the plain address, issuing nothing", async () => {
+    await expect(exchangeToken(aPluginCodeGrant({ resource: RESOURCE }))).resolves.toMatchObject({ isOk: false, error: { error: 'invalid_target' } });
+    expect(tokens.held).toEqual([]);
+  });
+
+  it('a token for one address is refused at the other', async () => {
+    const atPlugin = createAuthenticateAccessToken({ tokens, secrets: fakeSecrets(), clock: { now: () => now }, resource: PLUGIN_RESOURCE });
+    await exchangeToken(aPluginCodeGrant());
+    await exchangeToken(aCodeGrant({ code: 'code-3', code_verifier: 'verifier-3' }));
+
+    await expect(authenticate('secret-1')).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidToken' } });
+    await expect(atPlugin('secret-3')).resolves.toMatchObject({ isOk: false, error: { kind: 'invalidToken' } });
+    await expect(atPlugin('secret-1')).resolves.toMatchObject({ isOk: true, value: { kind: 'account', grantId: 'grant-1' } });
   });
 });

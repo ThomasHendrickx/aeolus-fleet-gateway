@@ -38,6 +38,7 @@ const environmentSchema = z.object({
   PAGASAE_APP_CLIENT_ID: z.string().min(1).optional(),
   PAGASAE_APP_CLIENT_SECRET: z.string().min(1).optional(),
   SLACK_API_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).default('https://slack.com/api'),
+  OPENAI_APPS_CHALLENGE: z.string().min(1).optional(),
 });
 
 /** What `aeolus-gateway migrate` reads: the database alone. */
@@ -97,6 +98,12 @@ export interface Config {
   pagasaeApp: { clientId: string; clientSecret: string } | undefined;
   /** Slack's Web API, where the gateway makes and installs Slack bots (gateway scopes, part B): Slack's own unless set. */
   slackApiUrl: string;
+  /**
+   * The token OpenAI's plugin portal shows to prove the gateway's domain,
+   * served at /.well-known/openai-apps-challenge (chatgpt-plugin design,
+   * 7.5). Unset, there is no such address.
+   */
+  openAiAppsChallenge: string | undefined;
 }
 
 export class ConfigError extends Error {
@@ -131,6 +138,7 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     pagasae: pagasaeOf(variables),
     pagasaeApp: pagasaeAppOf(variables),
     slackApiUrl: variables.SLACK_API_URL.replace(/\/$/, ''),
+    openAiAppsChallenge: variables.OPENAI_APPS_CHALLENGE,
   };
 }
 
