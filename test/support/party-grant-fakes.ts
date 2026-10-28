@@ -128,13 +128,13 @@ export const MATHILDE_TOKENS: RedeemedTokens = { accessToken: 'access-mathilde',
 /** A party's authorization server in memory: each code it issued, with the tokens it redeems for, once, and each token revoked. */
 export function fakePartySignIns() {
   const noFailure = (): TokenRequestFailure | undefined => undefined;
-  const revocation: Result<void, { reason: string }> = ok(undefined);
+  const revoking = (): Result<void, { reason: string }> => ok(undefined);
   const state = {
     codes: new Map<string, RedeemedTokens>([['code-mathilde', MATHILDE_TOKENS]]),
     redeemed: new Array<{ clientId: string; code: string; verifier: string; redirectUri: string }>(),
     revoked: new Array<{ revocationEndpoint: string; token: string }>(),
     failure: noFailure(),
-    revocation,
+    revocation: revoking(),
   };
   const signIns: PartySignIns = {
     authorizeUrl: (client, { state: sealed, codeChallenge, redirectUri }) =>

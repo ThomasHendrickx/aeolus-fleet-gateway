@@ -2,14 +2,14 @@ import type { Actor } from '../actors/authenticate-actor.js';
 import type { OAuthSecrets } from '../oauth/ports.js';
 import type { PartyStore } from '../parties/ports.js';
 import type { Clock } from '../shared/clock.js';
-import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { PartySignIns, PartySignInSeals } from './ports.js';
+import { signInPartyOf, type SignInPartyRefusal } from './sign-in-party.js';
 
 /** How long a sign-in the gateway started may take to come back from the outside authorization server. */
 export const PARTY_SIGN_IN_MS = 10 * 60 * 1000;
 
-export type StartPartySignInRefusal = DomainError<'NOT_A_PERSON' | 'NO_SUCH_PARTY' | 'NO_SIGN_IN'>;
+export type StartPartySignInRefusal = SignInPartyRefusal;
 
 export type StartPartySignIn = (input: { actor: Actor; name: string }) => Promise<Result<{ url: string }, StartPartySignInRefusal>>;
 
@@ -30,25 +30,20 @@ export function createStartPartySignIn(deps: {
   redirectUri: string;
 }): StartPartySignIn {
   return async ({ actor, name }) => {
-    if (actor.kind !== 'account' || actor.personShipId === null) {
-      return refuse('NOT_A_PERSON', 'Only a person signs in to an outside server, and your account has no person ship in this fleet');
+    const signingIn = await signInPartyOf(deps.parties, { actor, name });
+    if (!signingIn.isOk) {
+      return signingIn;
     }
-    const party = await deps.parties.find(actor.fleetId, name);
-    if (party?.kind !== 'mcpServer') {
-      return refuse('NO_SUCH_PARTY', `There is no outside MCP server ${name}`);
-    }
-    if (party.credential.kind !== 'personSignIn') {
-      return refuse('NO_SIGN_IN', `Nobody signs in to ${name} for themselves: the gateway calls it with its own credential`);
-    }
+    const { client, accountId, personShipId } = signingIn.value;
     const verifier = deps.secrets.newSecret();
     const state = deps.seals.seal({
       fleetId: actor.fleetId,
       party: name,
-      accountId: actor.accountId,
-      personShipId: actor.personShipId,
+      accountId,
+      personShipId,
       verifier,
       expiresAt: new Date(deps.clock.now().getTime() + PARTY_SIGN_IN_MS),
     });
-    return ok({ url: deps.signIns.authorizeUrl(party.credential.client, { state, codeChallenge: deps.secrets.challengeOf(verifier), redirectUri: deps.redirectUri }) });
+    return ok({ url: deps.signIns.authorizeUrl(client, { state, codeChallenge: deps.secrets.challengeOf(verifier), redirectUri: deps.redirectUri }) });
   };
 }
