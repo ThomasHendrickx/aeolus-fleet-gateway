@@ -1,3 +1,4 @@
+import { signInServersOf } from '../parties/sign-in-servers.js';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
@@ -47,7 +48,7 @@ beforeEach(async () => {
   door = fakeStatementDoor();
   const clock = { now: () => AT };
   const stateParty = createStateParty({ parties, servers, connectionOf: createListingConnectionOf({ grants, clock }), door, marks: memoryToolMarks(), requirements: memoryScopeRequirements(), timing: { waitMs: 10_000, deadlineMs: 300_000 } });
-  completing = createCompletePartySignIn({ parties, grants, seals, signIns: attio.signIns, accountOf, stateParty, clock, redirectUri: REDIRECT_URI });
+  completing = createCompletePartySignIn({ servers: signInServersOf(parties), grants, seals, signIns: attio.signIns, accountOf, stateParty, clock, redirectUri: REDIRECT_URI });
 });
 
 function back(overrides: Partial<Parameters<typeof completing>[0]> = {}): ReturnType<typeof completing> {

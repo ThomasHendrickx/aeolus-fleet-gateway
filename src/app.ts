@@ -36,6 +36,7 @@ import { createCompletePartySignIn } from './core/party-grants/complete-party-si
 import { createReadOwnGrant } from './core/party-grants/read-own-grant.js';
 import { createRemoveOwnGrant } from './core/party-grants/remove-own-grant.js';
 import { createStartPartySignIn } from './core/party-grants/start-party-sign-in.js';
+import { signInServersOf } from './core/parties/sign-in-servers.js';
 import { createPartySignIns } from './adapters/oauth/party-sign-ins.js';
 import { createPartySignInSeals } from './adapters/crypto/party-sign-in-seals.js';
 import { PARTY_SIGN_IN_DONE_PATH, registerPartySignInRoutes } from './adapters/http/party-sign-in-routes.js';
@@ -871,12 +872,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const partySignIns = createPartySignIns();
   const partySignInSeals = createPartySignInSeals(options.gatewaySecret);
   const partySignIn: Context['partySignIn'] = {
-    start: createStartPartySignIn({ parties, seals: partySignInSeals, signIns: partySignIns, secrets: oauthSecrets, clock, redirectUri: partySignInRedirectUri }),
-    readOwn: createReadOwnGrant({ parties, grants: partyGrants }),
-    removeOwn: createRemoveOwnGrant({ parties, grants: partyGrants, signIns: partySignIns }),
+    start: createStartPartySignIn({ servers: signInServersOf(parties), seals: partySignInSeals, signIns: partySignIns, secrets: oauthSecrets, clock, redirectUri: partySignInRedirectUri }),
+    readOwn: createReadOwnGrant({ servers: signInServersOf(parties), grants: partyGrants }),
+    removeOwn: createRemoveOwnGrant({ servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns }),
   };
   registerPartySignInRoutes(server, {
-    complete: createCompletePartySignIn({ parties, grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, accountOf, stateParty, clock, redirectUri: partySignInRedirectUri }),
+    complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, accountOf, stateParty, clock, redirectUri: partySignInRedirectUri }),
     log: server.log,
   });
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined; waitingSecret: string | undefined }): Context => ({

@@ -1,3 +1,4 @@
+import { signInServersOf } from '../parties/sign-in-servers.js';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
@@ -25,7 +26,7 @@ beforeEach(async () => {
 });
 
 describe('a person reads their own sign-in to an outside MCP server (Q12)', () => {
-  const reading = () => createReadOwnGrant({ parties, grants });
+  const reading = () => createReadOwnGrant({ servers: signInServersOf(parties), grants });
 
   it('answers their grant: the outside account, when they signed in and last used it, never a token (scenario 6)', async () => {
     await expect(reading()({ actor: MATHILDE, name: 'attio' })).resolves.toEqual({
@@ -51,7 +52,7 @@ describe('a person reads their own sign-in to an outside MCP server (Q12)', () =
 });
 
 describe('a person removes their own sign-in to an outside MCP server (Q6)', () => {
-  const removing = () => createRemoveOwnGrant({ parties, grants, signIns: attio.signIns });
+  const removing = () => createRemoveOwnGrant({ servers: signInServersOf(parties), grants, signIns: attio.signIns });
 
   it("revokes its refresh and access tokens where the server offers revocation, then drops it, leaving everyone else's (scenario 24)", async () => {
     await parties.save(anAttioParty({ credential: { kind: 'personSignIn', client: REVOKING_CLIENT } }));

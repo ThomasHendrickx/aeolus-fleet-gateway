@@ -1,3 +1,4 @@
+import { signInServersOf } from '../parties/sign-in-servers.js';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
@@ -18,7 +19,7 @@ let starting: ReturnType<typeof createStartPartySignIn>;
 beforeEach(async () => {
   parties = memoryPartyStore();
   await parties.save(anAttioParty());
-  starting = createStartPartySignIn({ parties, seals: plainPartySignInSeals(), signIns: fakePartySignIns().signIns, secrets: fakeSecrets(), clock: { now: () => AT }, redirectUri: REDIRECT_URI });
+  starting = createStartPartySignIn({ servers: signInServersOf(parties), seals: plainPartySignInSeals(), signIns: fakePartySignIns().signIns, secrets: fakeSecrets(), clock: { now: () => AT }, redirectUri: REDIRECT_URI });
 });
 
 describe('a person starts signing in to an outside MCP server for themselves (decision 0067)', () => {

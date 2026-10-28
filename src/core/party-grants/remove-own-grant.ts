@@ -1,8 +1,7 @@
 import type { Actor } from '../actors/authenticate-actor.js';
-import type { PartyStore } from '../parties/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import type { PartyGrants, PartySignIns } from './ports.js';
+import type { PartyGrants, PartySignIns, SignInServers } from './ports.js';
 import { signInPartyOf, type SignInPartyRefusal } from './sign-in-party.js';
 
 export type RemoveOwnGrant = (input: { actor: Actor; name: string }) => Promise<Result<{ /** Whether the authorization server revoked its tokens; false where it offers no revocation or did not answer. */ isRevoked: boolean }, SignInPartyRefusal | DomainError<'NOT_SIGNED_IN'>>>;
@@ -13,16 +12,16 @@ export type RemoveOwnGrant = (input: { actor: Actor; name: string }) => Promise<
  * (RFC 7009), the refresh token is revoked, then the access token; the grant
  * is dropped either way, so the person's ships call under it no more.
  */
-export function createRemoveOwnGrant(deps: { parties: Pick<PartyStore, 'find'>; grants: Pick<PartyGrants, 'ofPerson' | 'remove'>; signIns: Pick<PartySignIns, 'revoke'> }): RemoveOwnGrant {
+export function createRemoveOwnGrant(deps: { servers: SignInServers; grants: Pick<PartyGrants, 'ofPerson' | 'remove'>; signIns: Pick<PartySignIns, 'revoke'> }): RemoveOwnGrant {
   return async (input) => {
-    const signingIn = await signInPartyOf(deps.parties, input);
+    const signingIn = await signInPartyOf(deps.servers, input);
     if (!signingIn.isOk) {
       return signingIn;
     }
-    const { party, client, personShipId } = signingIn.value;
-    const grant = await deps.grants.ofPerson(party.fleetId, { party: party.name, personShipId });
+    const { server, client, personShipId } = signingIn.value;
+    const grant = await deps.grants.ofPerson(server.fleetId, { party: server.name, personShipId });
     if (grant === undefined) {
-      return refuse('NOT_SIGNED_IN', `You are not signed in to ${party.name}`);
+      return refuse('NOT_SIGNED_IN', `You are not signed in to ${server.name}`);
     }
     let isRevoked = false;
     const { revocationEndpoint } = client;
@@ -34,7 +33,7 @@ export function createRemoveOwnGrant(deps: { parties: Pick<PartyStore, 'find'>; 
       }
       isRevoked = revoked.every((each) => each.isOk);
     }
-    await deps.grants.remove(party.fleetId, { party: party.name, personShipId });
+    await deps.grants.remove(server.fleetId, { party: server.name, personShipId });
     return ok({ isRevoked });
   };
 }

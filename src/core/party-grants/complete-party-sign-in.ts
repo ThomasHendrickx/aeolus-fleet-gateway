@@ -1,14 +1,12 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
 import type { AccountOfSignIn } from '../account-sign-in/account-of-sign-in.js';
-import type { StateParty } from '../mcp-out/state-party.js';
-import type { PartyStore } from '../parties/ports.js';
 import type { Clock } from '../shared/clock.js';
 import type { DomainError, DomainErrorKind } from '../shared/errors.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { SignInClient } from '../vault/credential.js';
 import type { OutsideAccount } from './party-grant.js';
-import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals } from './ports.js';
+import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, SignInServers, StatesProxyShip } from './ports.js';
 
 const MS_PER_SECOND = 1000;
 
@@ -64,12 +62,12 @@ function outsideAccountOf(idToken: IdTokenClaims | null, client: SignInClient): 
  * from it (Q15). Nothing is kept on any refusal.
  */
 export function createCompletePartySignIn(deps: {
-  parties: Pick<PartyStore, 'find'>;
+  servers: SignInServers;
   grants: Pick<PartyGrants, 'ofSubject' | 'keep'>;
   seals: PartySignInSeals;
   signIns: Pick<PartySignIns, 'redeemCode'>;
   accountOf: (asked: Parameters<AccountOfSignIn>[0]) => ReturnType<AccountOfSignIn>;
-  stateParty: StateParty;
+  stateParty: StatesProxyShip;
   clock: Clock;
   redirectUri: string;
 }): CompletePartySignIn {
@@ -85,11 +83,11 @@ export function createCompletePartySignIn(deps: {
     if (signedIn === undefined || !signedIn.isOk || signedIn.value.accountId !== accountId) {
       return refused(at, { kind: 'SIGN_IN_FAILED', message: 'This sign-in was started by another account or browser: sign in and press Sign in again' });
     }
-    const party = await deps.parties.find(fleetId, name);
-    if (party?.kind !== 'mcpServer' || party.credential.kind !== 'personSignIn') {
+    const server = await deps.servers.find(fleetId, name);
+    if (server === undefined || server.client === null) {
       return refused(at, { kind: 'NO_SUCH_PARTY', message: `There is no outside MCP server ${name} to sign in to any more` });
     }
-    const { client } = party.credential;
+    const { client } = server;
     if (error !== undefined || code === undefined) {
       return refused(at, { kind: 'NOT_SIGNED_IN', message: `You are not signed in to ${name}: the sign-in was cancelled or refused there`, serverError: error ?? null });
     }

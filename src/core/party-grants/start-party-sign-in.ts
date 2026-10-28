@@ -1,9 +1,8 @@
 import type { Actor } from '../actors/authenticate-actor.js';
 import type { OAuthSecrets } from '../oauth/ports.js';
-import type { PartyStore } from '../parties/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { ok, type Result } from '../shared/result.js';
-import type { PartySignIns, PartySignInSeals } from './ports.js';
+import type { PartySignIns, PartySignInSeals, SignInServers } from './ports.js';
 import { signInPartyOf, type SignInPartyRefusal } from './sign-in-party.js';
 
 /** How long a sign-in the gateway started may take to come back from the outside authorization server. */
@@ -21,7 +20,7 @@ export type StartPartySignIn = (input: { actor: Actor; name: string }) => Promis
  * authorization server under the party's client.
  */
 export function createStartPartySignIn(deps: {
-  parties: Pick<PartyStore, 'find'>;
+  servers: SignInServers;
   seals: PartySignInSeals;
   signIns: Pick<PartySignIns, 'authorizeUrl'>;
   secrets: Pick<OAuthSecrets, 'newSecret' | 'challengeOf'>;
@@ -30,7 +29,7 @@ export function createStartPartySignIn(deps: {
   redirectUri: string;
 }): StartPartySignIn {
   return async ({ actor, name }) => {
-    const signingIn = await signInPartyOf(deps.parties, { actor, name });
+    const signingIn = await signInPartyOf(deps.servers, { actor, name });
     if (!signingIn.isOk) {
       return signingIn;
     }

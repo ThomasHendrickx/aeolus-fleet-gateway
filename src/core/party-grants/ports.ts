@@ -9,6 +9,22 @@ import type { Result } from '../shared/result.js';
 import type { SignInClient } from '../vault/credential.js';
 import type { PartyGrant } from './party-grant.js';
 
+/** An outside MCP server as a person's sign-in sees it: its sign-in client where each person signs in, none where the gateway calls it with its own credential. */
+export interface SignInServer {
+  readonly fleetId: FleetId;
+  readonly name: string;
+  readonly client: SignInClient | null;
+}
+
+/** Outbound port: the outside MCP servers of a fleet, by the name of their proxy ship. */
+export interface SignInServers {
+  /** The outside MCP server of this name; none when the name is no outside MCP server. */
+  find(fleetId: FleetId, name: string): Promise<SignInServer | undefined>;
+}
+
+/** Outbound port: states what a server's proxy ship offers, from the grants now kept (Q15); the refusal says why the statement waits. */
+export type StatesProxyShip = (input: { fleetId: FleetId; name: string }) => Promise<Result<unknown, { readonly message: string }>>;
+
 /** Outbound port: every person's grant of each party, in the gateway's database. */
 export interface PartyGrants {
   ofPerson(fleetId: FleetId, grant: { party: string; personShipId: ShipId }): Promise<PartyGrant | undefined>;
