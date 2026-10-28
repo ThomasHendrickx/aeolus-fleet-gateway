@@ -4,6 +4,8 @@ import { CARD_URL, anAgentParty, answeredCard, fakeAgentCards } from '../../../t
 import { fakeListedScopes, FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeMcpServers, fakeStatementDoor, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
 import { fakeProxyShipsAsActor, memoryPartyStore, memoryScopeRequirements, OWNER_SHIP_ID, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
+import { memoryPartyGrants } from '../../../test/support/party-grant-fakes.js';
+import { createListingConnectionOf } from '../party-grants/listing-connection.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import { createCredentialOf, type ActorCredential } from '../actors/credential-of.js';
 import { createStateA2aAgent } from '../a2a-out/state-a2a-agent.js';
@@ -53,7 +55,7 @@ beforeEach(async () => {
   await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: GATEWAY_CREW, crewedAt: new Date('2026-10-25T09:00:00.000Z') });
   door = fakeStatementDoor();
   const timing = { waitMs: 10_000, deadlineMs: 300_000 };
-  const stateParty = createStateParty({ parties, servers: fakeMcpServers(), door, marks: memoryToolMarks(), requirements, timing });
+  const stateParty = createStateParty({ parties, servers: fakeMcpServers(), door, marks: memoryToolMarks(), requirements, connectionOf: createListingConnectionOf({ grants: memoryPartyGrants(), clock: { now: () => new Date('2026-10-28T14:30:00.000Z') } }), timing });
   const stateA2aAgent = createStateA2aAgent({ parties, cards: fakeAgentCards({ [CARD_URL]: answeredCard() }), door, requirements, timing });
   const credentialOf = createCredentialOf({ connections });
   build = (asActor) => createSetScopeRequirements({ parties, requirements, connections, door: listed.door, stateParty, stateA2aAgent, fleet: asActor, credentialOf });

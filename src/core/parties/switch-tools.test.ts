@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeMcpServers, fakeStatementDoor, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
 import { OWNER_SHIP_ID, PROXY_SHIP_ID, fakeProxyShipsAsActor, memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
+import { anAttioParty, memoryPartyGrants } from '../../../test/support/party-grant-fakes.js';
+import { createListingConnectionOf } from '../party-grants/listing-connection.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import { createCredentialOf } from '../actors/credential-of.js';
 import { createStateParty } from '../mcp-out/state-party.js';
@@ -40,10 +42,11 @@ beforeEach(async () => {
   await parties.save(CRM);
   servers = fakeMcpServers();
   door = fakeStatementDoor();
-  const stateParty = createStateParty({ parties, servers, door, marks: memoryToolMarks(), requirements: memoryScopeRequirements(), timing: { waitMs: 10_000, deadlineMs: 300_000 } });
+  const connectionOf = createListingConnectionOf({ grants: memoryPartyGrants(), clock: { now: () => new Date('2026-10-28T14:30:00.000Z') } });
+  const stateParty = createStateParty({ parties, servers, door, marks: memoryToolMarks(), requirements: memoryScopeRequirements(), connectionOf, timing: { waitMs: 10_000, deadlineMs: 300_000 } });
   const connections = memoryConnectionStore();
   await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-25T09:00:00.000Z') });
-  build = (fleet) => createSwitchTools({ parties, servers, stateParty, connections, fleet, credentialOf: createCredentialOf({ connections }) });
+  build = (fleet) => createSwitchTools({ parties, servers, connectionOf, stateParty, connections, fleet, credentialOf: createCredentialOf({ connections }) });
   const fleet = fakeProxyShipsAsActor();
   switchTools = (input) => build(fleet)({ ...input, as: {} });
 });
@@ -55,6 +58,13 @@ const switchesOf = async (name: string) => {
 };
 
 describe("an approver switches tools of an outside MCP server on or off (aeolus-fleet#1151, gateway scopes 4.3)", () => {
+  it('refuses a server where each person signs in while nobody signed in, as its tools cannot be listed, keeping no switch', async () => {
+    await parties.save(anAttioParty({ fleetId: FLEET_ID }));
+
+    await expect(switchTools({ actor: APPROVER, name: 'attio', tools: ['create_deal'], isOn: false })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_SIGNED_IN' } });
+    expect(await switchesOf('attio')).toBeNull();
+  });
+
   it('switches a tool off, and the fleet sees it no more at once', async () => {
     await expect(switchTools({ actor: APPROVER, name: 'crm', tools: ['create_deal'], isOn: false })).resolves.toEqual({ isOk: true, value: { tools: ['create_deal'], isOn: false, statementRefusal: null } });
 

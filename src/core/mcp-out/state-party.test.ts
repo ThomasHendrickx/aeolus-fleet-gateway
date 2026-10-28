@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeMcpServers, fakeStatementDoor, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
 import { PROXY_SHIP_ID, memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
+import { aPartyGrant, memoryPartyGrants } from '../../../test/support/party-grant-fakes.js';
+import { createListingConnectionOf } from '../party-grants/listing-connection.js';
 import type { McpServerParty } from '../parties/party.js';
 import type { SignInClient } from '../vault/credential.js';
 import { createMarkTool } from './mark-tool.js';
@@ -49,6 +51,7 @@ let servers: ReturnType<typeof fakeMcpServers>;
 let door: ReturnType<typeof fakeStatementDoor>;
 let marks: ReturnType<typeof memoryToolMarks>;
 let requirements: ReturnType<typeof memoryScopeRequirements>;
+let grants: ReturnType<typeof memoryPartyGrants>;
 let stateParty: ReturnType<typeof createStateParty>;
 
 beforeEach(async () => {
@@ -58,7 +61,8 @@ beforeEach(async () => {
   door = fakeStatementDoor();
   marks = memoryToolMarks();
   requirements = memoryScopeRequirements();
-  stateParty = createStateParty({ parties, servers, door, marks, requirements, timing: { waitMs: 10_000, deadlineMs: 300_000 } });
+  grants = memoryPartyGrants();
+  stateParty = createStateParty({ parties, servers, door, marks, requirements, connectionOf: createListingConnectionOf({ grants, clock: { now: () => AT } }), timing: { waitMs: 10_000, deadlineMs: 300_000 } });
 });
 
 describe('the gateway states what a proxy ship offers, as its crew (decision 0047)', () => {
@@ -67,6 +71,22 @@ describe('the gateway states what a proxy ship offers, as its crew (decision 004
 
     await expect(stateParty({ fleetId: FLEET_ID, name: 'attio' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_SIGNED_IN' } });
     expect({ listedWith: servers.listedWith, stated: door.stated }).toEqual({ listedWith: [], stated: [] });
+  });
+
+  it("states a server where each person signs in from a person's grant, listing its tools under the grant's access token (Q15)", async () => {
+    await parties.save({ ...CRM, name: 'attio', credential: { kind: 'personSignIn', client: ATTIO_CLIENT }, toolSwitches: null });
+    await grants.keep(aPartyGrant({ fleetId: FLEET_ID, party: 'attio', accessToken: 'access-mathilde', accessTokenEndsAt: new Date('2026-10-18T15:00:00.000Z') }));
+
+    await expect(stateParty({ fleetId: FLEET_ID, name: 'attio' })).resolves.toEqual({ isOk: true, value: { capabilities: ['list_contacts', 'create_deal'] } });
+    expect(servers.listedWith).toEqual([{ url: 'https://crm.example.com/mcp', credential: { kind: 'bearer', token: 'access-mathilde' } }]);
+  });
+
+  it('leaves it unstated while the only grant has an access token that ended, listing nothing', async () => {
+    await parties.save({ ...CRM, name: 'attio', credential: { kind: 'personSignIn', client: ATTIO_CLIENT }, toolSwitches: null });
+    await grants.keep(aPartyGrant({ fleetId: FLEET_ID, party: 'attio', accessTokenEndsAt: AT }));
+
+    await expect(stateParty({ fleetId: FLEET_ID, name: 'attio' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_SIGNED_IN' } });
+    expect(servers.listedWith).toEqual([]);
   });
 
   it("states the server's tools as the proxy ship, with its crew token", async () => {
