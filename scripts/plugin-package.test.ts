@@ -6,7 +6,7 @@ import { readPluginSource } from './plugin-build.ts';
 import { readZip } from './zip.ts';
 
 // The ChatGPT plugin's package (chatgpt-plugin design, 7.2): the connection
-// and nothing else, refused with the field named when it breaks OpenAI's limits.
+// and the skill that teaches the model Aeolus, refused with the field named when it breaks OpenAI's limits.
 
 const PLUGIN_ADDRESS = 'https://gateway.aeolus-fleet.dev/plugin/mcp';
 
@@ -27,7 +27,7 @@ const aPositiveCase = (toolsTriggered = 'aeolus_inbox') => ({ description: 'Read
 const aNegativeCase = () => ({ description: 'Delete a message', prompt: 'Delete every message in my Aeolus inbox' });
 
 /** A valid package source, with what a test overrides. */
-function aSource(overrides: { interface?: Record<string, unknown>; positive?: unknown[]; negative?: unknown[]; name?: string; version?: string; server?: Record<string, unknown>; logo?: Uint8Array } = {}): PluginSource {
+function aSource(overrides: { skills?: ReadonlyMap<string, string>; interface?: Record<string, unknown>; positive?: unknown[]; negative?: unknown[]; name?: string; version?: string; server?: Record<string, unknown>; logo?: Uint8Array } = {}): PluginSource {
   return {
     pluginJson: {
       $schema: 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
@@ -61,8 +61,16 @@ function aSource(overrides: { interface?: Record<string, unknown>; positive?: un
       $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json',
       mcpServers: { aeolus: { type: 'streamable-http', url: PLUGIN_ADDRESS, extensions: { 'com.openai': { auth: { type: 'oauth', client: { mode: 'cimd' } } } }, ...overrides.server } },
     },
-    files: new Map([['assets/logo.png', overrides.logo ?? aPng({ width: 180, height: 180 })]]),
+    files: new Map<string, Uint8Array>([
+      ['assets/logo.png', overrides.logo ?? aPng({ width: 180, height: 180 })],
+      ...[...(overrides.skills ?? new Map([['skills/aeolus/SKILL.md', aSkill()]]))].map(([path, text]): [string, Uint8Array] => [path, new TextEncoder().encode(text)]),
+    ]),
   };
+}
+
+/** A skill file: its front matter and a body. */
+function aSkill(fields: { name?: string; description?: string; body?: string } = {}): string {
+  return `---\nname: ${fields.name ?? 'aeolus'}\ndescription: ${fields.description ?? 'How Aeolus works for a person.'}\n---\n\n${fields.body ?? 'Your inbox holds what waits for you.'}\n`;
 }
 
 const CONTEXT: PluginContext = { gatewayVersion: '0.33.0', tools: [A_TOOL], previousName: undefined };
@@ -74,7 +82,7 @@ function problemsOf(source: PluginSource, context: Partial<PluginContext> = {}):
 }
 
 describe('the package', () => {
-  it('the package is the connection and nothing else: plugin.json, mcp.json and the logo, one streamable-http server at the plugin address, oauth with cimd, no headers, secret or hooks', async () => {
+  it('the package is the connection and the skill: plugin.json, mcp.json, the logo and skills/aeolus/SKILL.md, one streamable-http server at the plugin address, oauth with cimd, no headers, secret or hooks', async () => {
     const built = buildPlugin(await readPluginSource(new URL('../plugin', import.meta.url)), { gatewayVersion: '0.33.0', tools: PERSON_TOOLS, previousName: 'aeolus' });
     if (!built.isOk) {
       throw new Error(built.error.join('\n'));
@@ -82,7 +90,7 @@ describe('the package', () => {
     const entries = readZip(built.value.zip);
     const mcp: unknown = JSON.parse(new TextDecoder().decode(entries.get('mcp.json')));
 
-    expect([...entries.keys()].toSorted()).toEqual(['assets/logo.png', 'mcp.json', 'plugin.json']);
+    expect([...entries.keys()].toSorted()).toEqual(['assets/logo.png', 'mcp.json', 'plugin.json', 'skills/aeolus/SKILL.md']);
     expect(mcp).toEqual({
       $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json',
       mcpServers: { aeolus: { type: 'streamable-http', url: PLUGIN_ADDRESS, extensions: { 'com.openai': { auth: { type: 'oauth', client: { mode: 'cimd' } } } } } },
@@ -173,6 +181,46 @@ describe('the package', () => {
     ['headers', { headers: { authorization: 'Bearer s' } }],
   ])('a secret in the package is refused, naming %s', (field, server) => {
     expect(problemsOf(aSource({ server }))).toEqual([expect.stringContaining(field)]);
+  });
+});
+
+describe('the skill', () => {
+  const skills = (text: string) => new Map([['skills/aeolus/SKILL.md', text]]);
+
+  it('a package with no skill is refused, naming skills: OpenAI asks for at least one', () => {
+    expect(problemsOf(aSource({ skills: new Map() }))).toEqual([expect.stringContaining('skills')]);
+  });
+
+  it('a skill whose name differs from its folder is refused, naming the skill', () => {
+    expect(problemsOf(aSource({ skills: skills(aSkill({ name: 'aeolus-fleet' })) }))).toEqual([expect.stringContaining('skills/aeolus/SKILL.md name')]);
+  });
+
+  it.each(['Aeolus', '-aeolus', 'a--b'])('a skill named %s is refused', (name) => {
+    expect(problemsOf(aSource({ skills: new Map([[`skills/${name}/SKILL.md`, aSkill({ name })]]) }))).toEqual([expect.stringContaining('name')]);
+  });
+
+  it('a skill without front matter is refused', () => {
+    expect(problemsOf(aSource({ skills: skills('Your inbox holds what waits.') }))).toEqual([expect.stringContaining('skills/aeolus/SKILL.md')]);
+  });
+
+  it('a description of 1024 characters builds, one over is refused, naming description', () => {
+    expect(problemsOf(aSource({ skills: skills(aSkill({ description: 'a'.repeat(1024) })) }))).toEqual([]);
+    expect(problemsOf(aSource({ skills: skills(aSkill({ description: 'a'.repeat(1025) })) }))).toEqual([expect.stringContaining('description')]);
+  });
+
+  it('a skill without a description is refused, naming description', () => {
+    expect(problemsOf(aSource({ skills: skills('---\nname: aeolus\n---\nBody.\n') }))).toEqual([expect.stringContaining('description')]);
+  });
+
+  it('a skill naming a tool the gateway does not serve is refused, naming the tool', () => {
+    expect(problemsOf(aSource({ skills: skills(aSkill({ body: 'Call aeolus_inbox, then aeolus_delete.' })) }))).toEqual([expect.stringContaining('aeolus_delete')]);
+  });
+
+  it('only the skill file goes in the package, not a file beside it', () => {
+    const source = aSource();
+    const built = buildPlugin({ ...source, files: new Map([...source.files, ['skills/aeolus/notes.txt', new Uint8Array([1])]]) }, CONTEXT);
+
+    expect(built.isOk && [...readZip(built.value.zip).keys()]).not.toContain('skills/aeolus/notes.txt');
   });
 });
 
