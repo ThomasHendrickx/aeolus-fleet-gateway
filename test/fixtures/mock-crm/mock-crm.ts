@@ -11,7 +11,8 @@
  * It signs callers in by a static bearer token, or by OAuth client
  * credentials: RFC 9728 protected resource metadata, RFC 8414 authorization
  * server metadata and a token endpoint taking `client_secret_basic`, for its
- * MCP endpoint as the `resource` (RFC 8707).
+ * MCP endpoint as the `resource` (RFC 8707). It refuses the call of a tool
+ * the test names 403 `insufficient_scope`, running nothing.
  */
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
@@ -27,6 +28,7 @@ const ISSUED_ACCESS_TOKEN = 'crm-issued-access-token';
 const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_BAD_REQUEST = 400;
+const HTTP_FORBIDDEN = 403;
 
 /** How much longer than the gateway's default wait the slow tool takes, so a client calling it through the gateway is answered a handle. */
 const SLOW_TOOL_PAST_WAIT_MS = 1_000;
@@ -36,6 +38,8 @@ export interface MockCrmOptions {
   slowToolMs?: number;
   /** Whether it asks for no credential, as a server reached only on a private network. */
   isOpen?: boolean;
+  /** Tools whose call it refuses 403 `insufficient_scope`, as a server whose credential lacks the tool's scope. */
+  insufficientScopeTools?: string[];
 }
 
 export interface Contact {
@@ -66,6 +70,9 @@ export interface MockCrm {
   addedTools: string[];
   close(): Promise<void>;
 }
+
+/** A JSON-RPC tools/call request, by the tool it names. */
+const toolCallSchema = z.object({ method: z.literal('tools/call'), params: z.object({ name: z.string() }) });
 
 const textOf = (value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }];
 
@@ -280,6 +287,10 @@ export async function startMockCrm(options: MockCrmOptions = {}): Promise<MockCr
         .code(HTTP_UNAUTHORIZED)
         .header('www-authenticate', `Bearer resource_metadata="${origin()}/.well-known/oauth-protected-resource/mcp"`)
         .send({ error: 'invalid_token' });
+    }
+    const called = toolCallSchema.safeParse(request.body);
+    if (called.success && (options.insufficientScopeTools ?? []).includes(called.data.params.name)) {
+      return reply.code(HTTP_FORBIDDEN).header('www-authenticate', 'Bearer error="insufficient_scope", scope="crm:write"').send({ error: 'insufficient_scope' });
     }
     const handler = createMcpHandler(() => crmServer(crm, options));
     return handler.fetch(webRequestOf(request), { parsedBody: request.body });
