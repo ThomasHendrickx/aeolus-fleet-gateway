@@ -5,6 +5,8 @@
  */
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
+import type { ActorCredential } from '../actors/credential-of.js';
+import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
 import type { SignInClient } from '../vault/credential.js';
 import type { PartyGrant } from './party-grant.js';
@@ -24,6 +26,11 @@ export interface SignInServers {
 
 /** Outbound port: states what a server's proxy ship offers, from the grants now kept (Q15); the refusal says why the statement waits. */
 export type StatesProxyShip = (input: { fleetId: FleetId; name: string }) => Promise<Result<unknown, { readonly message: string }>>;
+
+/** Outbound port: the names of the fleet's ships, as the actor reads them, in one read for a page of them; a ship the fleet does not answer is left out. */
+export interface ShipNames {
+  namesOf(as: ActorCredential, shipIds: readonly ShipId[]): Promise<Result<ReadonlyMap<ShipId, string>, FleetRefusal>>;
+}
 
 /** Outbound port: every person's grant of each party, in the gateway's database. */
 export interface PartyGrants {

@@ -20,11 +20,11 @@ export interface ApprovingDeps {
 
 /**
  * The outside MCP server or A2A agent an actor approves, with the gateway's
- * connection: the actor holds gateway:approve, and the fleet, asked as the
+ * connection and the actor's credential: the actor holds gateway:approve, and the fleet, asked as the
  * actor, answers that it manages the party's proxy ship (A2). The fleet
  * records a refusal.
  */
-export async function approvedParty(deps: ApprovingDeps, { actor, as, name }: Parameters<CheckApproving>[0]): Promise<Result<{ party: McpServerParty | A2aAgentParty; gateway: GatewayCrew }, ApprovingRefusal>> {
+export async function approvedParty(deps: ApprovingDeps, { actor, as, name }: Parameters<CheckApproving>[0]): Promise<Result<{ party: McpServerParty | A2aAgentParty; gateway: GatewayCrew; credential: ActorCredential }, ApprovingRefusal>> {
   if (!actor.scopes.includes(APPROVING_SCOPE)) {
     return refuse('NOT_AN_APPROVER', `Setting the scopes an outside party needs takes ${APPROVING_SCOPE}`);
   }
@@ -49,7 +49,7 @@ export async function approvedParty(deps: ApprovingDeps, { actor, as, name }: Pa
       ? refuse('FLEET_UNAVAILABLE', `The fleet did not say whether you manage ${name}: ${managed.error.message}`)
       : refuse('NOT_REACHABLE', managed.error.message);
   }
-  return ok({ party, gateway });
+  return ok({ party, gateway, credential: credential.value });
 }
 
 /**

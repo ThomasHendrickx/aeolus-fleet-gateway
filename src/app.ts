@@ -237,6 +237,7 @@ import { createChangePartyOwner, createChangePartyScopes } from './core/parties/
 import { logRefusedFacts } from './adapters/fleet/logged-verified-facts.js';
 import { createFleetShips } from './adapters/fleet/fleet-ships.js';
 import { createProxyShipReads } from './adapters/fleet/proxy-ship-reads.js';
+import { createShipNames } from './adapters/fleet/ship-names.js';
 import { createProxyShipsAsActor } from './adapters/fleet/proxy-ships-as-actor.js';
 import { createCredentialOf, type ActorCredential } from './core/actors/credential-of.js';
 import { createDecideRequest } from './core/requests/decide-request.js';
@@ -918,7 +919,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     start: createStartPartySignIn({ servers: signInServersOf(parties), seals: partySignInSeals, signIns: partySignIns, secrets: oauthSecrets, clock, redirectUri: partySignInRedirectUri }),
     readOwn: createReadOwnGrant({ servers: signInServersOf(parties), grants: partyGrants }),
     removeOwn: createRemoveOwnGrant({ servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns }),
-    list: createListGrants({ ...approvingDeps, grants: partyGrants }),
+    list: createListGrants({ ...approvingDeps, grants: partyGrants, ships: createShipNames(options.fleetUrl) }),
     remove: createRemoveGrant({ ...approvingDeps, grants: partyGrants, signIns: partySignIns }),
   };
   registerPartySignInRoutes(server, {
