@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import type { McpServerParty } from '../../src/core/parties/party.js';
 import type { PartyGrant } from '../../src/core/party-grants/party-grant.js';
-import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, SignInNotice, SignInNotices, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
+import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, RefreshedTokens, SignInNotice, SignInNotices, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 import type { SignInClient } from '../../src/core/vault/credential.js';
 import { FLEET_ID } from './fleet-fakes.js';
@@ -93,6 +93,23 @@ export function memoryPartyGrants(): PartyGrants & { held: PartyGrant[] } {
       }
       return Promise.resolve('kept');
     },
+    replaceTokens: (grant, tokens) => {
+      const at = held.findIndex((other) => isOf(other, grant) && other.personShipId === grant.personShipId && other.accessToken === grant.accessToken);
+      const kept = held[at];
+      if (kept === undefined) {
+        return Promise.resolve('replaced');
+      }
+      held[at] = { ...kept, ...tokens };
+      return Promise.resolve('kept');
+    },
+    markUsed: (grant, at) => {
+      const index = held.findIndex((other) => isOf(other, grant) && other.personShipId === grant.personShipId);
+      const kept = held[index];
+      if (kept !== undefined) {
+        held[index] = { ...kept, lastUsedAt: at };
+      }
+      return Promise.resolve();
+    },
     remove: (fleetId, { party, personShipId }) => {
       const at = held.findIndex((grant) => isOf(grant, { fleetId, party }) && grant.personShipId === personShipId);
       if (at !== -1) {
@@ -133,6 +150,9 @@ export function fakePartySignIns() {
     codes: new Map<string, RedeemedTokens>([['code-mathilde', MATHILDE_TOKENS]]),
     redeemed: new Array<{ clientId: string; code: string; verifier: string; redirectUri: string }>(),
     revoked: new Array<{ revocationEndpoint: string; token: string }>(),
+    /** The tokens each refresh token refreshes to; one not here is refused invalid_grant. */
+    refreshes: new Map<string, RefreshedTokens>(),
+    refreshed: new Array<{ clientId: string; refreshToken: string }>(),
     failure: noFailure(),
     revocation: revoking(),
   };
@@ -147,6 +167,14 @@ export function fakePartySignIns() {
       const tokens = state.codes.get(code);
       state.codes.delete(code);
       return Promise.resolve(tokens === undefined ? err({ kind: 'refused' as const, error: 'invalid_grant', reason: 'invalid_grant: the code is unknown or used' }) : ok(tokens));
+    },
+    refresh: (client, refreshToken) => {
+      if (state.failure !== undefined) {
+        return Promise.resolve(err(state.failure));
+      }
+      state.refreshed.push({ clientId: client.clientId, refreshToken });
+      const tokens = state.refreshes.get(refreshToken);
+      return Promise.resolve(tokens === undefined ? err({ kind: 'refused' as const, error: 'invalid_grant', reason: 'invalid_grant: the refresh token is unknown or used' }) : ok(tokens));
     },
     revoke: (client, token) => {
       state.revoked.push({ revocationEndpoint: client.revocationEndpoint, token });
