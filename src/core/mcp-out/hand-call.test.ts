@@ -69,10 +69,11 @@ beforeEach(async () => {
   attio = fakePartySignIns();
   sender = fakeCallSender();
   const clock = { now: () => NOW };
+  const tellSignInNeeded = createTellSignInNeeded({ notices: memorySignInNotices(), connections, sender, newNoticeId: () => 'notice-1', pageUrlOf });
   const grantCalls = createGrantCalls({
     callGrantOf: createCallGrantOf({ connections, door: ships.door, grants }),
-    refreshGrant: createRefreshGrant({ signIns: attio.signIns, grants, clock }),
-    tellSignInNeeded: createTellSignInNeeded({ notices: memorySignInNotices(), connections, sender, newNoticeId: () => 'notice-1', pageUrlOf }),
+    refreshGrant: createRefreshGrant({ signIns: attio.signIns, grants, tellSignInNeeded, clock }),
+    tellSignInNeeded,
     servers,
     grants,
     clock,
@@ -519,5 +520,83 @@ describe('a call to a server where each person signs in goes out under its askin
 
     expect(servers.called).toHaveLength(1);
     expect(repliedTexts()).toEqual([RECORDS]);
+  });
+
+  describe('keeping the grant alive at a call (Q7)', () => {
+    /** Five minutes before the access token ends: within the ten minutes a call refreshes ahead of. */
+    const ENDING_SOON = new Date('2026-10-28T14:35:00.000Z');
+    /** A minute after the access token ended. */
+    const ENDED = new Date('2026-10-28T14:29:00.000Z');
+    const SECOND_SEARCH = aPushedDelivery({ ...SEARCH, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d02', messageId: 'msg_01m3tbfspe96yf1rnr4ank9m02' });
+
+    it('refreshes ahead a grant whose access token ends within ten minutes, and calls with the new one', async () => {
+      mathildeOwns();
+      await grants.keep(aPartyGrant({ accessTokenEndsAt: ENDING_SOON }));
+
+      await expect(handCall({ party: ATTIO, delivery: SEARCH })).resolves.toEqual({ kind: 'handled' });
+
+      expect(attio.state.refreshed).toEqual([{ clientId: 'client-1', refreshToken: 'refresh-mathilde' }]);
+      expect(servers.called.map(({ connection }) => connection.credential)).toEqual([{ kind: 'bearer', token: 'access-2' }]);
+    });
+
+    it('refreshes a grant whose access token ended once for two calls handed over at once, and both go out with the new token (scenario 17)', async () => {
+      mathildeOwns();
+      await grants.keep(aPartyGrant({ accessTokenEndsAt: ENDED }));
+
+      await Promise.all([handCall({ party: ATTIO, delivery: SEARCH }), handCall({ party: ATTIO, delivery: SECOND_SEARCH })]);
+
+      expect(attio.state.refreshed).toEqual([{ clientId: 'client-1', refreshToken: 'refresh-mathilde' }]);
+      expect(servers.called.map(({ connection }) => connection.credential)).toEqual([
+        { kind: 'bearer', token: 'access-2' },
+        { kind: 'bearer', token: 'access-2' },
+      ]);
+    });
+
+    it("answers Q5's error result, reaching no server, when the refresh answers invalid_grant: the grant is lost and the owner told once (scenario 19)", async () => {
+      mathildeOwns();
+      await grants.keep(aPartyGrant({ accessTokenEndsAt: ENDED }));
+      attio.state.refreshes.clear();
+
+      await expect(handCall({ party: ATTIO, delivery: SEARCH })).resolves.toEqual({ kind: 'handled' });
+      await handCall({ party: ATTIO, delivery: SECOND_SEARCH });
+
+      expect(servers.called).toEqual([]);
+      expect(repliedTexts()).toEqual([noSignIn('mathilde'), noSignIn('mathilde')]);
+      expect(grants.held).toMatchObject([{ lost: { at: NOW } }]);
+      expect(sender.sent).toMatchObject([{ to: MATHILDE_SHIP_ID }]);
+      expect(sender.sent[0]?.payload).toContain('Your sign-in to attio ended');
+    });
+
+    it('hands the call again, keeping the grant, when the authorization server does not answer the refresh of an ended access token (scenario 20)', async () => {
+      mathildeOwns();
+      await grants.keep(aPartyGrant({ accessTokenEndsAt: ENDED }));
+      attio.state.failure = { kind: 'unreachable', reason: 'connect ECONNREFUSED' };
+
+      await expect(handCall({ party: ATTIO, delivery: SEARCH })).resolves.toEqual({ kind: 'again' });
+
+      expect(servers.called).toEqual([]);
+      expect(grants.held).toEqual([aPartyGrant({ accessTokenEndsAt: ENDED })]);
+      expect(crew.sent()).toEqual([]);
+    });
+
+    it('calls with the access token it holds when the refresh ahead is not answered and the token has not ended', async () => {
+      mathildeOwns();
+      await grants.keep(aPartyGrant({ accessTokenEndsAt: ENDING_SOON }));
+      attio.state.failure = { kind: 'unreachable', reason: 'connect ECONNREFUSED' };
+
+      await expect(handCall({ party: ATTIO, delivery: SEARCH })).resolves.toEqual({ kind: 'handled' });
+
+      expect(servers.called.map(({ connection }) => connection.credential)).toEqual([{ kind: 'bearer', token: 'access-mathilde' }]);
+    });
+
+    it("answers Q5's error result, reaching no server, for a grant whose access token ended and that holds no refresh token", async () => {
+      mathildeOwns();
+      await grants.keep(aPartyGrant({ accessTokenEndsAt: ENDED, refreshToken: null }));
+
+      await expect(handCall({ party: ATTIO, delivery: SEARCH })).resolves.toEqual({ kind: 'handled' });
+
+      expect(servers.called).toEqual([]);
+      expect(repliedTexts()).toEqual([noSignIn('mathilde')]);
+    });
   });
 });

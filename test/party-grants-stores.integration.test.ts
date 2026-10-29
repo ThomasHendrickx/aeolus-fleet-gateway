@@ -6,6 +6,7 @@ import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgett
 import { createPrismaPartyGrants } from '../src/adapters/prisma/party-grants.js';
 import { createPrismaSignInNotices } from '../src/adapters/prisma/sign-in-notices.js';
 import { migratedDatabase } from './support/database.js';
+import type { PartyGrant } from '../src/core/party-grants/party-grant.js';
 import { JORIS_SHIP_ID, MATHILDE_SHIP_ID, aPartyGrant } from './support/party-grant-fakes.js';
 
 // Each person's grant of a party where each person signs in (decision
@@ -16,11 +17,15 @@ import { JORIS_SHIP_ID, MATHILDE_SHIP_ID, aPartyGrant } from './support/party-gr
 const ACME: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const LABS: FleetId = 'flt_01m4ajt7abh4rypkmdnjene67g';
 const NOW = new Date('2026-10-28T14:30:00.000Z');
+/** How long each change holds the grant: long enough that the two overlap. */
+const CHANGE_WAIT_MS = 200;
 
+let databaseUrl: string;
 let prisma: PrismaClient;
 
 beforeAll(async () => {
-  prisma = createPrismaClient(await migratedDatabase(inject('postgresUrl')));
+  databaseUrl = await migratedDatabase(inject('postgresUrl'));
+  prisma = createPrismaClient(databaseUrl);
 });
 
 beforeEach(async () => {
@@ -81,6 +86,50 @@ describe("the party grants in the gateway's database", () => {
     await expect(grants.usable(LABS, { party: 'attio', now: NOW })).resolves.toBeUndefined();
   });
 
+  it('answers no lost grant as usable (Q5)', async () => {
+    const grants = createPrismaPartyGrants(prisma);
+    await grants.keep(aPartyGrant({ fleetId: ACME, accessTokenEndsAt: null, lost: { at: NOW, why: 'invalid_grant' } }));
+
+    await expect(grants.usable(ACME, { party: 'attio', now: NOW })).resolves.toBeUndefined();
+  });
+
+  it('keeps a lost grant with when and why, and a new sign-in in its place as not lost', async () => {
+    const grants = createPrismaPartyGrants(prisma);
+    const lost = aPartyGrant({ fleetId: ACME, lost: { at: NOW, why: 'invalid_grant: the refresh token is revoked' } });
+    await grants.keep(lost);
+
+    await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toEqual(lost);
+    await grants.keep(aPartyGrant({ fleetId: ACME, accessToken: 'access-again' }));
+    await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toEqual(aPartyGrant({ fleetId: ACME, accessToken: 'access-again' }));
+  });
+
+  it('answers the grants due for a refresh in every fleet: idle for longer than a day, or near their end, never a lost one or one without a refresh token (Q7)', async () => {
+    const grants = createPrismaPartyGrants(prisma);
+    const later = new Date('2026-10-29T20:00:00.000Z');
+    const at = new Date('2026-10-29T14:01:00.000Z');
+    const person = (n: number) => ({ personShipId: `shp_01m3tbfspe96yf1rnr4ank9p0${String(n)}` as const, accountId: `acc-${String(n)}`, outsideAccount: { subject: `sub-${String(n)}`, name: null } });
+    await grants.keep(aPartyGrant({ fleetId: ACME, ...person(1), accessToken: 'idle-since-sign-in', accessTokenEndsAt: later }));
+    await grants.keep(aPartyGrant({ fleetId: LABS, ...person(2), accessToken: 'idle-since-refresh', accessTokenEndsAt: null, refreshedAt: new Date('2026-10-28T14:00:00.000Z') }));
+    await grants.keep(aPartyGrant({ fleetId: ACME, ...person(3), accessToken: 'near-its-end', accessTokenEndsAt: new Date('2026-10-29T14:10:00.000Z'), refreshedAt: new Date('2026-10-29T13:10:00.000Z') }));
+    await grants.keep(aPartyGrant({ fleetId: ACME, ...person(4), accessToken: 'refreshed-lately', accessTokenEndsAt: later, refreshedAt: new Date('2026-10-29T09:00:00.000Z') }));
+    await grants.keep(aPartyGrant({ fleetId: ACME, ...person(5), accessToken: 'signed-in-lately', accessTokenEndsAt: later, signedInAt: new Date('2026-10-28T14:02:00.000Z') }));
+    await grants.keep(aPartyGrant({ fleetId: ACME, ...person(6), accessToken: 'lost', lost: { at: NOW, why: 'invalid_grant' } }));
+    await grants.keep(aPartyGrant({ fleetId: ACME, ...person(7), accessToken: 'no-refresh-token', refreshToken: null }));
+
+    const due = await grants.due({ now: at });
+
+    expect(due.map(({ accessToken }) => accessToken).sort()).toEqual(['idle-since-refresh', 'idle-since-sign-in', 'near-its-end']);
+  });
+
+  it('keeps when a grant was last refreshed', async () => {
+    const grants = createPrismaPartyGrants(prisma);
+    await grants.keep(aPartyGrant({ fleetId: ACME }));
+
+    await grants.change(aPartyGrant({ fleetId: ACME }), (held) => Promise.resolve({ ...held, refreshedAt: NOW }));
+
+    await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toEqual(aPartyGrant({ fleetId: ACME, refreshedAt: NOW }));
+  });
+
   it("removes a person's grant", async () => {
     const grants = createPrismaPartyGrants(prisma);
     await grants.keep(aPartyGrant({ fleetId: ACME }));
@@ -90,23 +139,40 @@ describe("the party grants in the gateway's database", () => {
     await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toBeUndefined();
   });
 
-  it("keeps refreshed tokens in place of the grant's", async () => {
+  it('keeps the grant a change answers', async () => {
     const grants = createPrismaPartyGrants(prisma);
     await grants.keep(aPartyGrant({ fleetId: ACME }));
-    const tokens = { accessToken: 'access-2', refreshToken: 'refresh-2', accessTokenEndsAt: new Date('2026-10-28T16:00:00.000Z') };
+    const refreshed = aPartyGrant({ fleetId: ACME, accessToken: 'access-2', refreshToken: 'refresh-2', accessTokenEndsAt: new Date('2026-10-28T16:00:00.000Z') });
 
-    await expect(grants.replaceTokens(aPartyGrant({ fleetId: ACME }), tokens)).resolves.toBe('kept');
+    await expect(grants.change(aPartyGrant({ fleetId: ACME }), () => Promise.resolve(refreshed))).resolves.toEqual(refreshed);
 
-    await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toEqual(aPartyGrant({ fleetId: ACME, ...tokens }));
+    await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toEqual(refreshed);
   });
 
-  it('keeps no refreshed tokens over a grant a new sign-in replaced', async () => {
+  it('changes nothing and answers none for a person who holds no grant of the party', async () => {
     const grants = createPrismaPartyGrants(prisma);
-    await grants.keep(aPartyGrant({ fleetId: ACME, accessToken: 'access-again' }));
 
-    await expect(grants.replaceTokens(aPartyGrant({ fleetId: ACME }), { accessToken: 'access-2', refreshToken: 'refresh-2', accessTokenEndsAt: null })).resolves.toBe('replaced');
+    await expect(grants.change(aPartyGrant({ fleetId: ACME }), () => Promise.resolve(aPartyGrant({ fleetId: ACME })))).resolves.toBeUndefined();
 
-    await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toEqual(aPartyGrant({ fleetId: ACME, accessToken: 'access-again' }));
+    await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toBeUndefined();
+  });
+
+  it('runs one change at a time on a grant, also from two gateway instances: the second reads what the first kept', async () => {
+    const other = createPrismaClient(databaseUrl);
+    const [one, two] = [createPrismaPartyGrants(prisma), createPrismaPartyGrants(other)];
+    await one.keep(aPartyGrant({ fleetId: ACME, accessToken: 'access-0' }));
+    const seen = new Array<string>();
+    const next = async (held: PartyGrant) => {
+      seen.push(held.accessToken);
+      await new Promise((resolve) => setTimeout(resolve, CHANGE_WAIT_MS));
+      return { ...held, accessToken: `access-${String(seen.length)}` };
+    };
+
+    await Promise.all([one.change(aPartyGrant({ fleetId: ACME }), next), two.change(aPartyGrant({ fleetId: ACME }), next)]);
+    await other.$disconnect();
+
+    expect(seen).toEqual(['access-0', 'access-1']);
+    await expect(one.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toMatchObject({ accessToken: 'access-2' });
   });
 
   it('sets when a grant last served a call, in its fleet only', async () => {

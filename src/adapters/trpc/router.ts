@@ -438,10 +438,13 @@ const PARTY_SIGN_IN_CODES = {
   NOT_SIGNED_IN: 'NOT_FOUND',
 } as const satisfies Record<string, TRPCError['code']>;
 
-/** A person's own sign-in to a party, as their page shows it: never a token. */
+const heldGrantShape = { outsideAccount: z.object({ subject: z.string().nullable(), name: z.string().nullable() }), signedInAt: z.string(), lastUsedAt: z.string().nullable() };
+
+/** A person's own sign-in to a party, as their page shows it: never a token. A lost one says when and why. */
 const ownSignInOutputSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('notSignedIn') }),
-  z.object({ state: z.literal('signedIn'), outsideAccount: z.object({ subject: z.string().nullable(), name: z.string().nullable() }), signedInAt: z.string(), lastUsedAt: z.string().nullable() }),
+  z.object({ state: z.literal('signedIn'), ...heldGrantShape }),
+  z.object({ state: z.literal('lost'), ...heldGrantShape, lost: z.object({ at: z.string(), why: z.string() }) }),
 ]);
 
 /** The longest name argo gives an MCP client. */
@@ -1019,7 +1022,7 @@ export const gatewayRouter = t.router({
         }
         return started.value;
       }),
-    /** A person's own sign-in to an outside MCP server where each person signs in: the outside account it names, when, and last used (Q12). */
+    /** A person's own sign-in to an outside MCP server where each person signs in: the outside account it names, when, last used, and whether it was lost (Q12). */
     ownSignIn: servedProcedure
       .input(z.strictObject({ name: shipHandleSchema }))
       .output(ownSignInOutputSchema)
@@ -1029,7 +1032,14 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: PARTY_SIGN_IN_CODES[read.error.kind], message: read.error.message });
         }
         const own = read.value;
-        return own.state === 'notSignedIn' ? own : { ...own, signedInAt: own.signedInAt.toISOString(), lastUsedAt: own.lastUsedAt?.toISOString() ?? null };
+        switch (own.state) {
+          case 'notSignedIn':
+            return own;
+          case 'signedIn':
+            return { ...own, signedInAt: own.signedInAt.toISOString(), lastUsedAt: own.lastUsedAt?.toISOString() ?? null };
+          case 'lost':
+            return { ...own, signedInAt: own.signedInAt.toISOString(), lastUsedAt: own.lastUsedAt?.toISOString() ?? null, lost: { at: own.lost.at.toISOString(), why: own.lost.why } };
+        }
       }),
     /** A person removes their own sign-in to an outside MCP server: revoked where the server offers it, then dropped (Q6). */
     removeOwnSignIn: servedProcedure

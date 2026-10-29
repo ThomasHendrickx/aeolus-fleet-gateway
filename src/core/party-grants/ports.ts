@@ -34,8 +34,15 @@ export interface PartyGrants {
   usable(fleetId: FleetId, asked: { party: string; now: Date }): Promise<PartyGrant | undefined>;
   /** Keeps the grant in place of the person's earlier one; none kept when another person's grant of the party names its outside account, as two sign-ins at once find. */
   keep(grant: PartyGrant): Promise<'kept' | 'subjectTaken'>;
-  /** Keeps refreshed tokens in place of the grant's, unless a new sign-in replaced it or it was removed meanwhile: the grant is found by the access token it held. */
-  replaceTokens(grant: PartyGrant, tokens: Pick<PartyGrant, 'accessToken' | 'refreshToken' | 'accessTokenEndsAt'>): Promise<'kept' | 'replaced'>;
+  /**
+   * Holds the person's grant while the change runs, so one change at a time
+   * runs on it, also across gateway instances, and keeps the grant it
+   * answers before another change reads it; none when the person holds no
+   * grant of the party.
+   */
+  change(grant: Pick<PartyGrant, 'fleetId' | 'party' | 'personShipId'>, change: (held: PartyGrant) => Promise<PartyGrant>): Promise<PartyGrant | undefined>;
+  /** The grants of every fleet the schedule refreshes now (Q7), at most a round's worth, those whose access token ends first first. */
+  due(asked: { now: Date }): Promise<PartyGrant[]>;
   /** Sets when the person's grant last served a call. */
   markUsed(grant: Pick<PartyGrant, 'fleetId' | 'party' | 'personShipId'>, at: Date): Promise<void>;
   remove(fleetId: FleetId, grant: { party: string; personShipId: ShipId }): Promise<void>;

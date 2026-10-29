@@ -2,7 +2,7 @@ import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
 import type { McpServerParty } from '../../src/core/parties/party.js';
-import type { PartyGrant } from '../../src/core/party-grants/party-grant.js';
+import { isDueForRefresh, isUsable, type PartyGrant } from '../../src/core/party-grants/party-grant.js';
 import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, RefreshedTokens, SignInNotice, SignInNotices, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 import type { SignInClient } from '../../src/core/vault/credential.js';
@@ -60,7 +60,9 @@ export function aPartyGrant(overrides: Partial<PartyGrant> = {}): PartyGrant {
     refreshToken: 'refresh-mathilde',
     accessTokenEndsAt: new Date('2026-10-28T15:00:00.000Z'),
     signedInAt: new Date('2026-10-28T14:00:00.000Z'),
+    refreshedAt: null,
     lastUsedAt: null,
+    lost: null,
     ...overrides,
   };
 }
@@ -68,6 +70,7 @@ export function aPartyGrant(overrides: Partial<PartyGrant> = {}): PartyGrant {
 /** The grants in memory: one per person and party, and one per outside account and party. */
 export function memoryPartyGrants(): PartyGrants & { held: PartyGrant[] } {
   const held = new Array<PartyGrant>();
+  const changing = new Map<string, Promise<void>>();
   const isOf = (grant: PartyGrant, of: { fleetId: FleetId; party: string }) => grant.fleetId === of.fleetId && grant.party === of.party;
   const usedAt = (grant: PartyGrant) => grant.lastUsedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
   return {
@@ -77,7 +80,7 @@ export function memoryPartyGrants(): PartyGrants & { held: PartyGrant[] } {
     usable: (fleetId, { party, now }) =>
       Promise.resolve(
         held
-          .filter((grant) => isOf(grant, { fleetId, party }) && (grant.accessTokenEndsAt === null || grant.accessTokenEndsAt > now))
+          .filter((grant) => isOf(grant, { fleetId, party }) && isUsable(grant, now))
           .sort((one, other) => usedAt(other) - usedAt(one) || other.signedInAt.getTime() - one.signedInAt.getTime())[0],
       ),
     keep: (grant) => {
@@ -93,15 +96,30 @@ export function memoryPartyGrants(): PartyGrants & { held: PartyGrant[] } {
       }
       return Promise.resolve('kept');
     },
-    replaceTokens: (grant, tokens) => {
-      const at = held.findIndex((other) => isOf(other, grant) && other.personShipId === grant.personShipId && other.accessToken === grant.accessToken);
-      const kept = held[at];
-      if (kept === undefined) {
-        return Promise.resolve('replaced');
+    change: async ({ fleetId, party, personShipId }, change) => {
+      // One change at a time per grant, as the database's row lock holds it.
+      const key = `${fleetId} ${party} ${personShipId}`;
+      const before = changing.get(key) ?? Promise.resolve();
+      let done = (): void => undefined;
+      const turn = new Promise<void>((resolve) => {
+        done = resolve;
+      });
+      changing.set(key, before.then(() => turn));
+      await before;
+      try {
+        const at = held.findIndex((grant) => isOf(grant, { fleetId, party }) && grant.personShipId === personShipId);
+        const kept = held[at];
+        if (kept === undefined) {
+          return undefined;
+        }
+        const changed = await change(kept);
+        held[at] = changed;
+        return changed;
+      } finally {
+        done();
       }
-      held[at] = { ...kept, ...tokens };
-      return Promise.resolve('kept');
     },
+    due: ({ now }) => Promise.resolve(held.filter((grant) => isDueForRefresh(grant, now))),
     markUsed: (grant, at) => {
       const index = held.findIndex((other) => isOf(other, grant) && other.personShipId === grant.personShipId);
       const kept = held[index];

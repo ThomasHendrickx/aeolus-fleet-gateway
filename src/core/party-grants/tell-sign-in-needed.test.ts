@@ -30,7 +30,7 @@ beforeEach(async () => {
   });
 });
 
-const tellJoris = () => tell({ fleetId: FLEET_ID, party: 'attio', personShipId: JORIS_SHIP_ID });
+const tellJoris = () => tell({ fleetId: FLEET_ID, party: 'attio', personShipId: JORIS_SHIP_ID, lost: null });
 
 describe('the person whose sign-in a call needs is told once per party (decision 0067, Q6, Q9)', () => {
   it('sends their person ship a text message from the gateway\'s ship with the page to sign in on', async () => {
@@ -43,6 +43,18 @@ describe('the person whose sign-in a call needs is told once per party (decision
         contentType: 'text/plain',
         payload: `A ship of yours called attio, which calls under each person's own sign-in, and you are not signed in to it. Sign in on ${PAGE}; until then your ships' calls to attio are refused.`,
         idempotencyKey: 'party-sign-in:notice-1',
+      },
+    ]);
+  });
+
+  it('tells them their sign-in ended, with why, when their grant was lost (scenario 19)', async () => {
+    await tell({ fleetId: FLEET_ID, party: 'attio', personShipId: JORIS_SHIP_ID, lost: { at: new Date('2026-10-28T16:00:00.000Z'), why: 'invalid_grant: the refresh token is revoked' } });
+
+    expect(sender.sent).toMatchObject([
+      {
+        to: JORIS_SHIP_ID,
+        contentType: 'text/plain',
+        payload: `Your sign-in to attio ended: attio refused to refresh it (invalid_grant: the refresh token is revoked). Sign in again on ${PAGE}; until then your ships' calls to attio are refused.`,
       },
     ]);
   });

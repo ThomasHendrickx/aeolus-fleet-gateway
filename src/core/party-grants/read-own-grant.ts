@@ -1,15 +1,21 @@
 import type { Actor } from '../actors/authenticate-actor.js';
 import { ok, type Result } from '../shared/result.js';
-import type { OutsideAccount } from './party-grant.js';
+import type { GrantLost, OutsideAccount } from './party-grant.js';
 import type { PartyGrants, SignInServers } from './ports.js';
 import { signInPartyOf, type SignInPartyRefusal } from './sign-in-party.js';
 
-/** A person's own sign-in to a party, as their page shows it: never a token. */
-export type OwnGrant = { readonly state: 'notSignedIn' } | { readonly state: 'signedIn'; readonly outsideAccount: OutsideAccount; readonly signedInAt: Date; readonly lastUsedAt: Date | null };
+interface HeldGrant {
+  readonly outsideAccount: OutsideAccount;
+  readonly signedInAt: Date;
+  readonly lastUsedAt: Date | null;
+}
+
+/** A person's own sign-in to a party, as their page shows it: never a token. A lost one says when and why (Q5). */
+export type OwnGrant = { readonly state: 'notSignedIn' } | ({ readonly state: 'signedIn' } & HeldGrant) | ({ readonly state: 'lost'; readonly lost: GrantLost } & HeldGrant);
 
 export type ReadOwnGrant = (input: { actor: Actor; name: string }) => Promise<Result<OwnGrant, SignInPartyRefusal>>;
 
-/** Use case: a person reads their own sign-in to an outside MCP server where each person signs in (decision 0067, Q12): the outside account it names, when they signed in, and when it was last used. */
+/** Use case: a person reads their own sign-in to an outside MCP server where each person signs in (decision 0067, Q12): the outside account it names, when they signed in, when it was last used, and whether it was lost. */
 export function createReadOwnGrant(deps: { servers: SignInServers; grants: Pick<PartyGrants, 'ofPerson'> }): ReadOwnGrant {
   return async (input) => {
     const signingIn = await signInPartyOf(deps.servers, input);
@@ -18,6 +24,10 @@ export function createReadOwnGrant(deps: { servers: SignInServers; grants: Pick<
     }
     const { server, personShipId } = signingIn.value;
     const grant = await deps.grants.ofPerson(server.fleetId, { party: server.name, personShipId });
-    return ok(grant === undefined ? { state: 'notSignedIn' } : { state: 'signedIn', outsideAccount: grant.outsideAccount, signedInAt: grant.signedInAt, lastUsedAt: grant.lastUsedAt });
+    if (grant === undefined) {
+      return ok({ state: 'notSignedIn' });
+    }
+    const { outsideAccount, signedInAt, lastUsedAt, lost } = grant;
+    return ok(lost === null ? { state: 'signedIn', outsideAccount, signedInAt, lastUsedAt } : { state: 'lost', outsideAccount, signedInAt, lastUsedAt, lost });
   };
 }
