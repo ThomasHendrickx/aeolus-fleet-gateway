@@ -2,7 +2,7 @@ import type { DeliveryId, MessageId, ShipId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aKeptSlackEvent, aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks, memorySlackPosts } from '../../../test/support/slack-fakes.js';
+import { aKeptSlackEvent, aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks, memorySlackPosts, savingAfterFirstRead } from '../../../test/support/slack-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { PersonCrew } from '../people/ports.js';
 import { err, ok, type Result } from '../shared/result.js';
@@ -124,6 +124,24 @@ describe("a linked person's message from Slack into the fleet", () => {
       whileWaiting: { sent: 0, takenAt: null },
       sent: [{ to: BUDGET_CHECK, inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0002', payload: 'Cut the travel' }],
       acked: ['dlv_01m3tbfspe96yf1rnr4ank0002'],
+      handled: ['dlv_01m3tbfspe96yf1rnr4ank0002'],
+    });
+  });
+
+  it("sends an answer kept unmatched in reply to its delivery, exactly once, when Slack answered the post between the gateway's reads", async () => {
+    const question = { fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null } as const;
+    await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
+    await events.remove(FLEET_ID, 'Ev01');
+    await events.keep(aKeptSlackEvent({ eventId: 'Ev02', appId: 'A01', shipId: null, threadTs: '1730020000.000001', ts: '1730020100.000002', markdown: 'Cut the travel', receivedAt: NOW }));
+    await posts.save(question);
+    posts = savingAfterFirstRead(posts, { ...question, ts: '1730020000.000001' });
+
+    await sendRound();
+    await sendRound();
+
+    expect({ calls: fleet.state.calls, sent: [...fleet.state.messages.values()].map(({ to, inReplyTo, payload }) => ({ to, inReplyTo, payload })), handled: fleet.state.handled }).toEqual({
+      calls: 1,
+      sent: [{ to: BUDGET_CHECK, inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0002', payload: 'Cut the travel' }],
       handled: ['dlv_01m3tbfspe96yf1rnr4ank0002'],
     });
   });

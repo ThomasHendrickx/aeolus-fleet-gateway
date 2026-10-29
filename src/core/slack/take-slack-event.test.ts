@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aKeptSlackEvent, aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks, memorySlackPosts } from '../../../test/support/slack-fakes.js';
+import { aKeptSlackEvent, aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks, memorySlackPosts, savingAfterFirstRead } from '../../../test/support/slack-fakes.js';
 import type { SlackEventFields } from './slack-event.js';
 import { createTakeSlackEvent } from './take-slack-event.js';
 
@@ -157,6 +157,21 @@ describe("a person's message to a bot, from Slack", () => {
     expect({ taken, kept: events.held.map(({ shipId, inReplyTo, deliveryId, threadTs }) => ({ shipId, inReplyTo, deliveryId, threadTs })) }).toEqual({
       taken: { isOk: true, value: { kind: 'kept' } },
       kept: [{ shipId: null, inReplyTo: null, deliveryId: null, threadTs: '1730020000.000001' }],
+    });
+  });
+
+  it("keeps an answer in a thread through the gateway's own bot in reply to its delivery when Slack answered the post between the gateway's reads", async () => {
+    await links.add(aSlackLink());
+    await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
+    const question = { fleetId: FLEET_ID, personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null } as const;
+    await posts.save(question);
+    posts = savingAfterFirstRead(posts, { ...question, ts: '1730020000.000001' });
+
+    const taken = await takeEvent({ type: 'message', appId: 'A01', fields: { ...MATHILDE_WRITES, text: 'Cut the travel', threadTs: '1730020000.000001' } });
+
+    expect({ taken, kept: events.held.map(({ shipId, inReplyTo, deliveryId }) => ({ shipId, inReplyTo, deliveryId })) }).toEqual({
+      taken: { isOk: true, value: { kind: 'kept' } },
+      kept: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002' }],
     });
   });
 
