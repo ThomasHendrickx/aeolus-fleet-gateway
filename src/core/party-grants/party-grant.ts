@@ -43,6 +43,14 @@ export function isUsable(grant: PartyGrant, now: Date): boolean {
   return grant.lost === null && (grant.accessTokenEndsAt === null || grant.accessTokenEndsAt.getTime() > now.getTime());
 }
 
+/** How long before its access token ends a grant is refreshed ahead (Q7): longer than the schedule's round, so the schedule finds it first. */
+export const REFRESH_AHEAD_MS = 10 * 60 * 1000;
+
+/** Whether the grant's access token ends within the time a grant is refreshed ahead of, or has ended. */
+export function isNearItsEnd(grant: PartyGrant, now: Date): boolean {
+  return grant.accessTokenEndsAt !== null && grant.accessTokenEndsAt.getTime() - now.getTime() <= REFRESH_AHEAD_MS;
+}
+
 const MS_PER_SECOND = 1000;
 
 /** When an access token issued now ends, from the seconds the authorization server said it lasts; none where it said nothing. */

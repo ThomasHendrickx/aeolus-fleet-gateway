@@ -555,6 +555,7 @@ describe('a call to a server where each person signs in goes out under its askin
     it("answers Q5's error result, reaching no server, when the refresh answers invalid_grant: the grant is lost and the owner told once (scenario 19)", async () => {
       mathildeOwns();
       await grants.keep(aPartyGrant({ accessTokenEndsAt: ENDED }));
+      attio.state.refreshes.clear();
 
       await expect(handCall({ party: ATTIO, delivery: SEARCH })).resolves.toEqual({ kind: 'handled' });
       await handCall({ party: ATTIO, delivery: SECOND_SEARCH });
