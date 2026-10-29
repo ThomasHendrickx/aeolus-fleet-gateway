@@ -2,155 +2,13 @@
 
 import { useActionState, useState } from 'react';
 
-import { FLEET_FIELD } from '../../forms/form-state';
-import { CredentialFields } from '../../forms/ui/credential-fields';
-import { BUTTONS, CARD, INPUT, LABEL } from '../../forms/ui/look';
-import { Outcome } from '../../forms/ui/outcome';
-import { OwnerField } from '../../forms/ui/owner-field';
-import { SubmitButton } from '../../forms/ui/submit-button';
-import { Switch } from '../../forms/ui/switch';
-import { ToolRow } from '../../outside-parties/ui/tool-row';
-import { approveServer, checkServer, type AddServerState, type ApproveState, type CheckedTool } from '../actions';
-import { addButtonLabel, suggestedName } from '../suggested-name';
-import { TOOL_ON_FIELD, TOOL_SHOWN_FIELD } from '../tool-choice';
+import { approveServer, checkServer } from '../actions';
+import { AddressStep } from './address-step';
+import { OwnerStep } from './owner-step';
+import { Steps } from './steps';
 
 /** The steps of adding a server, as the design numbers them. */
 const STEPS = ['Address', 'Check', 'Owner'] as const;
-
-const CONCURRENCY_LIMIT_DEFAULT = '4';
-
-/** The credential fields, carried on from the address step to the owner step. */
-const CARRIED_FIELDS = ['url', 'credentialKind', 'token', 'clientId', 'clientSecret', 'issuer', 'scope'] as const;
-
-function Steps({ at }: { at: number }) {
-  return (
-    <ol className="flex gap-4">
-      {STEPS.map((step, index) => (
-        <li key={step} aria-current={index === at ? 'step' : undefined} className={index <= at ? 'font-medium' : 'text-muted-foreground'}>
-          {index + 1} {step}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function Refused({ refusal }: { refusal: string | undefined }) {
-  return refusal === undefined ? null : <Outcome state={{ kind: 'refused', message: refusal }} />;
-}
-
-function AddressStep({ state, action, fleetId }: { state: Extract<AddServerState, { step: 'address' }> | { fields: Record<string, string>; refusal?: string }; action: (form: FormData) => void; fleetId: string }) {
-  return (
-    <form action={action} className={`${CARD} grid gap-3`} data-testid="add-server-address">
-      <input type="hidden" name={FLEET_FIELD} value={fleetId} />
-      <Refused refusal={state.refusal} />
-      <label className={LABEL}>
-        <span>Streamable HTTP address</span>
-        <input className={INPUT} type="url" name="url" defaultValue={state.fields.url ?? ''} placeholder="https://mcp.example.com/mcp" required />
-      </label>
-      <CredentialFields legend="The server's credential" fields={state.fields} noneHelp="The gateway sends no credential: for a server reached only on a private network." />
-      <div>
-        <SubmitButton pending="Checking the server…" testId="add-server-check">
-          Check the server
-        </SubmitButton>
-      </div>
-    </form>
-  );
-}
-
-/**
- * The tools the check answered, one row each. An approver switches each on
- * or off, all on to start; the fleet may call only those on (aeolus-fleet#1151).
- * Without gateway:approve they show without switches, and every tool starts on.
- */
-function ToolsSection({ tools, canSwitch }: { tools: CheckedTool[]; canSwitch: boolean }) {
-  const [off, setOff] = useState<ReadonlySet<string>>(new Set());
-  const onCount = tools.length - off.size;
-  const flip = (name: string) => {
-    setOff((current) => {
-      const next = new Set(current);
-      if (!next.delete(name)) {
-        next.add(name);
-      }
-      return next;
-    });
-  };
-  return (
-    <section className="grid gap-2" data-testid="add-server-tools">
-      <h2 className="flex flex-wrap justify-between gap-2 text-section font-semibold">
-        <span>
-          The server answers: {tools.length} {tools.length === 1 ? 'tool' : 'tools'}
-        </span>
-        {canSwitch ? (
-          <span role="status" className="font-normal text-muted-foreground" data-testid="add-server-tools-on">
-            {onCount} of {tools.length} on
-          </span>
-        ) : null}
-      </h2>
-      <p className="text-muted-foreground">{canSwitch ? 'The fleet may call only the tools switched on. A tool the server adds later starts off.' : 'Switching tools needs gateway:approve: every tool starts on, and an approver switches them on its page.'}</p>
-      <ul className="grid">
-        {tools.map((tool) => {
-          const isOn = !off.has(tool.name);
-          return (
-            <ToolRow
-              key={tool.name}
-              tool={tool}
-              testId="add-server-tool"
-              control={
-                canSwitch ? (
-                  <>
-                    <input type="hidden" name={TOOL_SHOWN_FIELD} value={tool.name} />
-                    {isOn ? <input type="hidden" name={TOOL_ON_FIELD} value={tool.name} /> : null}
-                    <Switch isOn={isOn} label={tool.name} onClick={() => { flip(tool.name); }} />
-                  </>
-                ) : null
-              }
-            />
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-function OwnerStep({ state, refused, action, onBack, fleetId, canSwitchTools }: { state: Extract<AddServerState, { step: 'owner' }>; refused: ApproveState; action: (form: FormData) => void; onBack: () => void; fleetId: string; canSwitchTools: boolean }) {
-  // A refused approval of this check shows what the browser sent, and why.
-  const isRefused = refused.kind === 'refused' && refused.requestId === state.requestId;
-  const fields = isRefused ? refused.fields : state.fields;
-  const url = fields.url ?? '';
-  const [name, setName] = useState(fields.name ?? suggestedName(url));
-  return (
-    <>
-      <form action={action} className={`${CARD} grid gap-3`} data-testid="add-server-owner">
-        <ToolsSection tools={state.tools} canSwitch={canSwitchTools} />
-        <h2 className="text-section font-semibold">Its owner</h2>
-        <Refused refusal={isRefused ? refused.message : undefined} />
-        <input type="hidden" name={FLEET_FIELD} value={fleetId} />
-        <input type="hidden" name="requestId" value={state.requestId} />
-        {CARRIED_FIELDS.map((field) => (
-          <input key={field} type="hidden" name={field} value={fields[field] ?? ''} />
-        ))}
-        <p className="font-mono text-muted-foreground">{url}</p>
-        <label className={LABEL}>
-          <span>Proxy ship&apos;s name</span>
-          <input className={INPUT} type="text" name="name" value={name} onChange={(event) => { setName(event.target.value); }} required />
-        </label>
-        <OwnerField choices={state.owners} current={state.owners.find((owner) => owner.shipId === fields.ownerShipId) ?? null} help="A person ship or argo. It answers for this server." />
-        <label className={LABEL}>
-          <span>Calls at once</span>
-          <input className={INPUT} type="number" name="concurrencyLimit" min={1} max={10} defaultValue={fields.concurrencyLimit ?? CONCURRENCY_LIMIT_DEFAULT} />
-        </label>
-        <div className="flex gap-2">
-          <SubmitButton pending="Adding…" testId="add-server-approve">
-            {addButtonLabel(name)}
-          </SubmitButton>
-          <button type="button" className={BUTTONS.secondary} onClick={onBack}>
-            Back to the address
-          </button>
-        </div>
-      </form>
-    </>
-  );
-}
 
 /**
  * Adding an outside MCP server in three steps: its address and credential,
@@ -166,7 +24,7 @@ export function AddServer({ fleetId, canSwitchTools }: { fleetId: string; canSwi
   return (
     <div className="grid gap-4">
       <h1 className="text-title font-semibold">Add MCP server</h1>
-      <Steps at={owner === undefined ? 0 : 2} />
+      <Steps names={STEPS} at={owner === undefined ? 0 : 2} />
       {owner === undefined ? (
         <AddressStep state={checked} action={check} fleetId={fleetId} />
       ) : (
