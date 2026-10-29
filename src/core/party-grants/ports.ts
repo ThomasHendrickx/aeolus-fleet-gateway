@@ -108,6 +108,8 @@ export interface PartySignIns {
   refresh(client: SignInClient, refreshToken: string): Promise<Result<RefreshedTokens, TokenRequestFailure>>;
   /** Revokes a token at the client's revocation endpoint (RFC 7009). */
   revoke(client: SignInClient & { revocationEndpoint: string }, token: string): Promise<Result<void, { reason: string }>>;
+  /** Deletes the client at its client configuration endpoint, with its registration access token (RFC 7592). */
+  deleteClient(client: SignInClient & { registrationClientUri: string; registrationAccessToken: string }): Promise<Result<void, { reason: string }>>;
 }
 
 /** The notice a person is told by when a call needs their sign-in to a party (Q6): its id keys the message, so one sent again is stored once. */

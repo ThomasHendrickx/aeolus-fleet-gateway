@@ -183,6 +183,7 @@ export function fakePartySignIns() {
     codes: new Map<string, RedeemedTokens>([['code-mathilde', MATHILDE_TOKENS]]),
     redeemed: new Array<{ clientId: string; code: string; verifier: string; redirectUri: string }>(),
     revoked: new Array<{ revocationEndpoint: string; token: string }>(),
+    deletedClients: new Array<{ registrationClientUri: string; registrationAccessToken: string }>(),
     /** The tokens each refresh token refreshes to; one not here is refused invalid_grant. */
     refreshes: new Map<string, RefreshedTokens>(),
     refreshed: new Array<{ clientId: string; refreshToken: string }>(),
@@ -212,6 +213,10 @@ export function fakePartySignIns() {
     revoke: (client, token) => {
       state.revoked.push({ revocationEndpoint: client.revocationEndpoint, token });
       return Promise.resolve(state.revocation);
+    },
+    deleteClient: ({ registrationClientUri, registrationAccessToken }) => {
+      state.deletedClients.push({ registrationClientUri, registrationAccessToken });
+      return Promise.resolve(ok(undefined));
     },
   };
   return { state, signIns };
