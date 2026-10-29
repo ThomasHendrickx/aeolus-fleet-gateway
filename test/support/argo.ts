@@ -84,3 +84,8 @@ export async function defineScope(fleet: FleetServer, argo: { cookie: string; sc
 export async function grantScopes(fleet: FleetServer, argo: { cookie: string; shipId: ShipId; grant: string[]; revoke: string[] }): Promise<void> {
   await argoMutates(fleet, { cookie: argo.cookie, procedure: 'grantScopes', input: { shipId: argo.shipId, grant: argo.grant, revoke: argo.revoke } });
 }
+
+/** argo makes a person ship, or argo itself, a ship's owner (fleet:owner, decision 0045). */
+export async function setOwner(fleet: FleetServer, argo: { cookie: string; shipId: ShipId; ownerShipId: ShipId }): Promise<void> {
+  await argoMutates(fleet, { cookie: argo.cookie, procedure: 'setOwner', input: { shipId: argo.shipId, ownerShipId: argo.ownerShipId } });
+}

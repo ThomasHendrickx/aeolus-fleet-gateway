@@ -9,9 +9,11 @@
  * names, or denies consent; its token endpoint redeems each code once for
  * the client that asked it, with the PKCE verifier of its challenge and the
  * MCP endpoint as resource, answering an unsigned ID token; it revokes
- * tokens where the test offers revocation. Its MCP endpoint lists and runs
- * search_records under an access token it issued and did not revoke,
- * recording each one it was called with.
+ * tokens where the test offers revocation. It refreshes a grant by its
+ * refresh token, rotating it. Its MCP endpoint lists and runs
+ * search_records under an access token it issued and did not revoke or
+ * end, recording each one it was called with and the outside account each
+ * call ran as; it refuses the tools the test names 403 `insufficient_scope`.
  */
 import { createHash } from 'node:crypto';
 
@@ -23,6 +25,7 @@ const HTTP_UNAUTHORIZED = 401;
 const HTTP_CREATED = 201;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_FOUND = 302;
+const HTTP_FORBIDDEN = 403;
 const SCOPES = ['mcp', 'offline_access', 'openid'];
 const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
 
@@ -59,6 +62,18 @@ export interface AttioDouble {
   revoked: string[];
   /** The Authorization header of each request to its MCP endpoint that it served. */
   authorizations: string[];
+  /** The outside account, by subject, each tool call ran as, in order. */
+  calledAs: string[];
+  /** The refresh tokens it refreshed a grant with, in order. */
+  refreshed: string[];
+  /** Ends every access token issued so far, as their lifetime passing does: the MCP endpoint refuses them 401. */
+  endAccessTokens(): void;
+  /** Whether the MCP endpoint refuses every access token 401, a refreshed one too. */
+  isRefusingEveryAccessToken: boolean;
+  /** The tools whose call it refuses 403 `insufficient_scope`. */
+  insufficientScopeTools: string[];
+  /** While true, search_records runs and never answers: a call the gateway sent and gets no answer to. */
+  isHoldingCalls: boolean;
   close(): Promise<void>;
 }
 
@@ -74,6 +89,8 @@ const authorizeSchema = z.object({
   scope: z.string(),
 });
 const redeemSchema = z.object({ grant_type: z.literal('authorization_code'), code: z.string(), redirect_uri: z.string(), client_id: z.string(), client_secret: z.string(), code_verifier: z.string(), resource: z.string() });
+const refreshSchema = z.object({ grant_type: z.literal('refresh_token'), refresh_token: z.string(), client_id: z.string(), client_secret: z.string(), resource: z.string() });
+const toolCallSchema = z.object({ method: z.literal('tools/call'), params: z.object({ name: z.string() }) });
 const revokeSchema = z.object({ token: z.string(), client_id: z.string(), client_secret: z.string() });
 
 interface IssuedCode {
@@ -88,9 +105,14 @@ function unsignedJwt(claims: Record<string, unknown>): string {
   return `${part({ alg: 'none', typ: 'JWT' })}.${part(claims)}.`;
 }
 
-function attioServer(): McpServer {
+function attioServer(double: AttioDouble): McpServer {
   const mcp = new McpServer({ name: 'attio-double', version: '1.0.0' }, { capabilities: { tools: {} } });
-  mcp.registerTool('search_records', { description: 'Search records in the workspace', inputSchema: z.object({ query: z.string() }), annotations: { readOnlyHint: true } }, ({ query }) => ({ content: [{ type: 'text', text: `records for ${query}` }] }));
+  mcp.registerTool('search_records', { description: 'Search records in the workspace', inputSchema: z.object({ query: z.string() }), annotations: { readOnlyHint: true } }, async ({ query }) => {
+    if (double.isHoldingCalls) {
+      await new Promise<never>(() => undefined);
+    }
+    return { content: [{ type: 'text', text: `records for ${query}` }] };
+  });
   return mcp;
 }
 
@@ -116,7 +138,9 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
   });
   const registered: RegisteredClient[] = [];
   const codes = new Map<string, IssuedCode>();
-  const accessTokens = new Set<string>();
+  /** The outside account each live access token and refresh token is for, by subject, with the client it was issued to. */
+  const accessTokens = new Map<string, string>();
+  const refreshTokens = new Map<string, { clientId: string; subject: string; email: string }>();
   let issued = 0;
   let origin = '';
   const double: AttioDouble = {
@@ -126,6 +150,14 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     signIn: { subject: 'attio-member-mathilde', email: 'mathilde@acme.example' },
     revoked: [],
     authorizations: [],
+    calledAs: [],
+    refreshed: [],
+    endAccessTokens: () => {
+      accessTokens.clear();
+    },
+    isRefusingEveryAccessToken: false,
+    insufficientScopeTools: [],
+    isHoldingCalls: false,
     close: () => server.close(),
   };
   const secretOf = (clientId: string) => `${clientId}-secret`;
@@ -133,11 +165,19 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
   server.all('/mcp', async (request, reply) => {
     const authorization = request.headers.authorization ?? '';
     const token = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : '';
-    if (!accessTokens.has(token) || double.revoked.includes(token)) {
+    const subject = accessTokens.get(token);
+    if (subject === undefined || double.revoked.includes(token) || double.isRefusingEveryAccessToken) {
       return reply.code(HTTP_UNAUTHORIZED).header('www-authenticate', `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`).send({ error: 'invalid_token' });
     }
+    const called = toolCallSchema.safeParse(request.body);
+    if (called.success && double.insufficientScopeTools.includes(called.data.params.name)) {
+      return reply.code(HTTP_FORBIDDEN).header('www-authenticate', 'Bearer error="insufficient_scope", scope="mcp records:write"').send({ error: 'insufficient_scope' });
+    }
     double.authorizations.push(authorization);
-    return createMcpHandler(() => attioServer()).fetch(webRequestOf(request), { parsedBody: request.body });
+    if (called.success) {
+      double.calledAs.push(subject);
+    }
+    return createMcpHandler(() => attioServer(double)).fetch(webRequestOf(request), { parsedBody: request.body });
   });
   server.get('/.well-known/oauth-protected-resource/mcp', () => ({ resource: `${origin}/mcp`, authorization_servers: [origin], scopes_supported: SCOPES, bearer_methods_supported: ['header'] }));
   server.get('/.well-known/oauth-authorization-server', () => ({
@@ -183,7 +223,27 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     }
     return reply.code(HTTP_FOUND).header('location', back.toString()).send();
   });
+  const issueTokens = (clientId: string, account: { subject: string; email: string }) => {
+    issued += 1;
+    const accessToken = `attio-access-${String(issued)}`;
+    const refreshToken = `attio-refresh-${String(issued)}`;
+    accessTokens.set(accessToken, account.subject);
+    refreshTokens.set(refreshToken, { clientId, ...account });
+    return { access_token: accessToken, token_type: 'Bearer', expires_in: ACCESS_TOKEN_LIFETIME_SECONDS, refresh_token: refreshToken };
+  };
   server.post('/oidc/token', (request, reply) => {
+    const refreshing = refreshSchema.safeParse(request.body);
+    if (refreshing.success) {
+      const { refresh_token: refreshToken, client_id: clientId, client_secret: clientSecret, resource } = refreshing.data;
+      const grant = refreshTokens.get(refreshToken);
+      if (grant?.clientId !== clientId || clientSecret !== secretOf(clientId) || resource !== double.url || double.revoked.includes(refreshToken)) {
+        return reply.code(HTTP_BAD_REQUEST).send({ error: 'invalid_grant', error_description: 'The refresh token is unknown, used or not this client\'s' });
+      }
+      // Rotated: the refresh token used is never taken again.
+      refreshTokens.delete(refreshToken);
+      double.refreshed.push(refreshToken);
+      return reply.send(issueTokens(clientId, grant));
+    }
     const asked = redeemSchema.safeParse(request.body);
     const code = asked.success ? codes.get(asked.data.code) : undefined;
     if (!asked.success || code === undefined) {
@@ -194,16 +254,7 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     if (clientId !== code.clientId || clientSecret !== secretOf(clientId) || redirectUri !== code.redirectUri || createHash('sha256').update(verifier).digest('base64url') !== code.challenge || resource !== double.url) {
       return reply.code(HTTP_BAD_REQUEST).send({ error: 'invalid_grant', error_description: 'The code was not issued for this client, verifier or resource' });
     }
-    issued += 1;
-    const accessToken = `attio-access-${String(issued)}`;
-    accessTokens.add(accessToken);
-    return reply.send({
-      access_token: accessToken,
-      token_type: 'Bearer',
-      expires_in: ACCESS_TOKEN_LIFETIME_SECONDS,
-      refresh_token: `attio-refresh-${String(issued)}`,
-      id_token: unsignedJwt({ iss: origin, aud: clientId, sub: code.account.subject, email: code.account.email }),
-    });
+    return reply.send({ ...issueTokens(clientId, code.account), id_token: unsignedJwt({ iss: origin, aud: clientId, sub: code.account.subject, email: code.account.email }) });
   });
   server.post('/oidc/revoke', (request, reply) => {
     const asked = revokeSchema.safeParse(request.body);
