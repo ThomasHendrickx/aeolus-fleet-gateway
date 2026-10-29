@@ -1,6 +1,6 @@
 import type { SignInClient } from '../vault/credential.js';
 import type { PartyGrant } from './party-grant.js';
-import type { PartyGrants, PartySignIns } from './ports.js';
+import type { PartyGrants, PartySignIns, SignInServers } from './ports.js';
 
 /**
  * Ends a person's grant of a party (decision 0067, Q6): where the
@@ -23,4 +23,14 @@ export async function endGrant(deps: { grants: Pick<PartyGrants, 'remove'>; sign
   }
   await deps.grants.remove(grant.fleetId, { party: grant.party, personShipId: grant.personShipId });
   return isRevoked;
+}
+
+/** Ends a grant with its party's client; a grant of a party the gateway no longer holds has no client left to revoke with, and is only dropped. */
+export async function endPartyGrant(deps: { servers: SignInServers; grants: Pick<PartyGrants, 'remove'>; signIns: Pick<PartySignIns, 'revoke'> }, grant: PartyGrant): Promise<void> {
+  const server = await deps.servers.find(grant.fleetId, grant.party);
+  if (server?.client === null || server?.client === undefined) {
+    await deps.grants.remove(grant.fleetId, grant);
+  } else {
+    await endGrant(deps, { client: server.client, grant });
+  }
 }

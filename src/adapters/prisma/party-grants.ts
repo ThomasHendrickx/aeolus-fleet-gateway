@@ -54,6 +54,15 @@ export function createPrismaPartyGrants(db: PrismaClient): PartyGrants {
       const rows = await db.partyGrant.findMany({ where: { fleetId, party, ...(after === null ? {} : { personShipId: { gt: after } }) }, orderBy: { personShipId: 'asc' }, take: limit });
       return rows.map(grantOf);
     },
+    // A round's read, off every request path: one row per person, across the fleets.
+    persons: async () => {
+      const rows = await db.partyGrant.findMany({ distinct: ['fleetId', 'personShipId'], select: { fleetId: true, personShipId: true }, orderBy: [{ fleetId: 'asc' }, { personShipId: 'asc' }] });
+      return rows.map(({ fleetId, personShipId }) => ({ fleetId: idSchema('fleet').parse(fleetId), personShipId: idSchema('ship').parse(personShipId) }));
+    },
+    ofPersonShip: async (fleetId, personShipId) => {
+      const rows = await db.partyGrant.findMany({ where: { fleetId, personShipId } });
+      return rows.map(grantOf);
+    },
     ofAccount: async (fleetId, accountId) => {
       const rows = await db.partyGrant.findMany({ where: { fleetId, accountId } });
       return rows.map(grantOf);

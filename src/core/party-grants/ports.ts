@@ -30,6 +30,10 @@ export interface PartyGrants {
   ofPerson(fleetId: FleetId, grant: { party: string; personShipId: ShipId }): Promise<PartyGrant | undefined>;
   /** The grants of the party, by person ship, after the person ship named, at most as many as asked. */
   ofParty(fleetId: FleetId, asked: { party: string; after: ShipId | null; limit: number }): Promise<PartyGrant[]>;
+  /** Every person holding a grant, in every fleet, each once. */
+  persons(): Promise<{ fleetId: FleetId; personShipId: ShipId }[]>;
+  /** Every grant of the person, one per party at most. */
+  ofPersonShip(fleetId: FleetId, personShipId: ShipId): Promise<PartyGrant[]>;
   /** Every grant of the account in the fleet, one per party at most. */
   ofAccount(fleetId: FleetId, accountId: string): Promise<PartyGrant[]>;
   /** The grant of the party that names this outside account, whoever holds it. */

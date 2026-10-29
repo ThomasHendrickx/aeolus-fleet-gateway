@@ -1,6 +1,6 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
-import { endGrant } from './end-grant.js';
+import { endPartyGrant } from './end-grant.js';
 import type { PartyGrants, PartySignIns, SignInServers } from './ports.js';
 
 export type EndAccountGrants = (account: { fleetId: FleetId; accountId: string }) => Promise<void>;
@@ -15,13 +15,7 @@ export type EndAccountGrants = (account: { fleetId: FleetId; accountId: string }
 export function createEndAccountGrants(deps: { servers: SignInServers; grants: Pick<PartyGrants, 'ofAccount' | 'remove'>; signIns: Pick<PartySignIns, 'revoke'> }): EndAccountGrants {
   return async ({ fleetId, accountId }) => {
     for (const grant of await deps.grants.ofAccount(fleetId, accountId)) {
-      const server = await deps.servers.find(fleetId, grant.party);
-      if (server?.client === null || server?.client === undefined) {
-        // No client left to revoke with: the grant is only dropped.
-        await deps.grants.remove(fleetId, grant);
-      } else {
-        await endGrant(deps, { client: server.client, grant });
-      }
+      await endPartyGrant(deps, grant);
     }
   };
 }
