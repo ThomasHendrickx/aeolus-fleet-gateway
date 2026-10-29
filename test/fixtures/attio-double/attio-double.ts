@@ -26,6 +26,7 @@ const HTTP_CREATED = 201;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_FOUND = 302;
 const HTTP_FORBIDDEN = 403;
+const HTTP_UNAVAILABLE = 503;
 const SCOPES = ['mcp', 'offline_access', 'openid'];
 const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
 
@@ -68,6 +69,12 @@ export interface AttioDouble {
   refreshed: string[];
   /** Ends every access token issued so far, as their lifetime passing does: the MCP endpoint refuses them 401. */
   endAccessTokens(): void;
+  /** Spends every refresh token issued so far, as a refresh whose rotated token never reached the gateway does: each is refused invalid_grant from now on. */
+  spendRefreshTokens(): void;
+  /** While true, its token endpoint answers 503, as an authorization server that is down does. */
+  isTokenEndpointDown: boolean;
+  /** How many token requests it answered 503 while down. */
+  tokenRequestsWhileDown: number;
   /** Whether the MCP endpoint refuses every access token 401, a refreshed one too. */
   isRefusingEveryAccessToken: boolean;
   /** The tools whose call it refuses 403 `insufficient_scope`. */
@@ -155,6 +162,11 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     endAccessTokens: () => {
       accessTokens.clear();
     },
+    spendRefreshTokens: () => {
+      refreshTokens.clear();
+    },
+    isTokenEndpointDown: false,
+    tokenRequestsWhileDown: 0,
     isRefusingEveryAccessToken: false,
     insufficientScopeTools: [],
     isHoldingCalls: false,
@@ -232,6 +244,10 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     return { access_token: accessToken, token_type: 'Bearer', expires_in: ACCESS_TOKEN_LIFETIME_SECONDS, refresh_token: refreshToken };
   };
   server.post('/oidc/token', (request, reply) => {
+    if (double.isTokenEndpointDown) {
+      double.tokenRequestsWhileDown += 1;
+      return reply.code(HTTP_UNAVAILABLE).send();
+    }
     const refreshing = refreshSchema.safeParse(request.body);
     if (refreshing.success) {
       const { refresh_token: refreshToken, client_id: clientId, client_secret: clientSecret, resource } = refreshing.data;

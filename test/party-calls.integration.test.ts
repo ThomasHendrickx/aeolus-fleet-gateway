@@ -2,8 +2,14 @@ import { FLEET_HEADER, idSchema, needsAttentionOutputSchema, type FleetId, type 
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
+import { createPartySignIns } from '../src/adapters/oauth/party-sign-ins.js';
 import { createPrismaClient } from '../src/adapters/prisma/client.js';
+import { createPrismaPartyGrants } from '../src/adapters/prisma/party-grants.js';
+import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
+import { signInServersOf } from '../src/core/parties/sign-in-servers.js';
+import { createKeepGrantsAlive } from '../src/core/party-grants/keep-grants-alive.js';
+import { createRefreshGrant } from '../src/core/party-grants/refresh-grant.js';
 import { startAttioDouble, type AttioDouble } from './fixtures/attio-double/attio-double.js';
 import { commission, register, setOwner, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
@@ -18,7 +24,9 @@ import { receiveOne, send } from './support/ship.js';
 // owner's grant (decision 0067, oauth-servers S4): the owner read from core
 // at hand-over, Q5's and Q10's error results, the person told once, a 401
 // refreshing the grant once, a 403 insufficient_scope, and a restart that
-// never calls again. The gateway, the fleet and the Attio double are real;
+// never calls again; and grants kept alive (S5): one refresh at a time, also
+// across two gateway instances, a refresh ahead and on a schedule, and a
+// grant lost at invalid_grant. The gateway, the fleet and the Attio double are real;
 // pagasae is its double.
 
 const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
@@ -26,6 +34,8 @@ const PUBLIC_URL = 'https://gateway.example.com';
 const MATHILDE_BROWSER = 'mathilde-shared-sign-in';
 const JORIS_BROWSER = 'joris-shared-sign-in';
 const TOOL_CALL_TIMEOUT_MS = 1_000;
+/** Two days: longer than a grant may go unrefreshed (Q7). */
+const IDLE_FOR_MS = 2 * 24 * 60 * 60 * 1000;
 /** How many times a test reads Needs attention, a tool call timeout apart, before it counts it empty. */
 const NEEDS_ATTENTION_TRIES = 10;
 
@@ -41,9 +51,13 @@ let address: string;
 const apps: GatewayApp[] = [];
 let proxyShipId: ShipId;
 
+/** How often the gateway's schedule looks for grants to keep alive in these tests. */
+const GRANT_ROUND_MS = 100;
+
 /** The gateway as it starts: its parties' proxy ships crewed again, its calls taken. */
 async function gatewayStarted(): Promise<void> {
   const app = createGatewayApp({
+    grantRoundMs: GRANT_ROUND_MS,
     gatewaySecret: TEST_GATEWAY_SECRET,
     databaseUrl,
     fleetUrl: fleet.url,
@@ -298,5 +312,126 @@ describe('a restart under a grant', () => {
 
     await expect(needsAttention().then((listed) => listed.map(({ state, ship }) => ({ state, shipId: ship.id })))).resolves.toEqual([{ state: 'notHandled', shipId: proxyShipId }]);
     expect(attio.calledAs).toEqual(['attio-member-mathilde']);
+  });
+});
+
+/** A person's own sign-in to Attio, as their page reads it. */
+async function ownSignIn(browser: string): Promise<unknown> {
+  const response = await fetch(`${address}/trpc/parties.ownSignIn?input=${encodeURIComponent(JSON.stringify({ name: 'attio' }))}`, { headers: { cookie: `aeolus_account_session=${browser}`, [FLEET_HEADER]: fleetId } });
+  expect(response.status, await response.clone().text()).toBe(200);
+  return z.object({ result: z.object({ data: z.unknown() }) }).parse(await response.json()).result.data;
+}
+
+/** Sets a person's grant as signed in two days ago and never refreshed since: idle for longer than the schedule lets a grant be. */
+async function grantIdle(personShipId: ShipId): Promise<void> {
+  const prisma = createPrismaClient(databaseUrl);
+  try {
+    await prisma.partyGrant.updateMany({ where: { personShipId }, data: { signedInAt: new Date(Date.now() - IDLE_FOR_MS), refreshedAt: null } });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+describe('keeping grants alive (Q7)', () => {
+  it('refreshes once for two calls Attio refuses at once, both answered under the new token, the old refresh token never used again (scenario 17)', async () => {
+    await attioAdded();
+    await signedIn(MATHILDE_BROWSER, MATHILDE_ACCOUNT);
+    const [leadScout, otherScout] = await Promise.all([aShip('lead-scout', mathilde.shipId), aShip('other-scout', mathilde.shipId)]);
+    attio.endAccessTokens();
+
+    await Promise.all([searchRecords(leadScout), searchRecords(otherScout)]);
+
+    await expect(Promise.all([replyTo(leadScout), replyTo(otherScout)])).resolves.toMatchObject([
+      { text: 'records for acme', isError: false },
+      { text: 'records for acme', isError: false },
+    ]);
+    expect(attio.refreshed).toEqual(['attio-refresh-2']);
+    expect(attio.authorizations.slice(-2)).toEqual(['Bearer attio-access-3', 'Bearer attio-access-3']);
+  });
+
+  it('refreshes a grant once when two gateway instances on one database keep it alive at once (scenario 17)', async () => {
+    await attioAdded();
+    await signedIn(MATHILDE_BROWSER, MATHILDE_ACCOUNT);
+    await gatewayStopped();
+    await grantIdle(mathilde.shipId);
+    const instances = [createPrismaClient(databaseUrl), createPrismaClient(databaseUrl)];
+    const rounds = instances.map((prisma) => {
+      const grants = createPrismaPartyGrants(prisma);
+      const clock = { now: () => new Date() };
+      const tellSignInNeeded = () => Promise.resolve();
+      return createKeepGrantsAlive({ grants, servers: signInServersOf(createPrismaPartyStore(prisma)), refreshGrant: createRefreshGrant({ signIns: createPartySignIns(), grants, tellSignInNeeded, clock }), clock });
+    });
+
+    try {
+      await Promise.all(rounds.map((round) => round()));
+    } finally {
+      await Promise.all(instances.map((prisma) => prisma.$disconnect()));
+    }
+
+    expect(attio.refreshed).toEqual(['attio-refresh-2']);
+    expect(await keptGrants()).toMatchObject([{ accessToken: 'attio-access-3', refreshToken: 'attio-refresh-3', lostAt: null }]);
+  });
+
+  it("loses the grant when Attio answers the refresh invalid_grant: the call gets Q5's error result, the owner is told once, and her page shows it lost (scenario 19)", async () => {
+    await attioAdded();
+    await signedIn(MATHILDE_BROWSER, MATHILDE_ACCOUNT);
+    const leadScout = await aShip('lead-scout', mathilde.shipId);
+    attio.endAccessTokens();
+    attio.spendRefreshTokens();
+
+    await searchRecords(leadScout);
+
+    await expect(replyTo(leadScout)).resolves.toMatchObject({ text: noSignIn('mathilde'), isError: true });
+    const told = await receiveOne(fleet, mathilde.crewToken);
+    expect(told?.payload).toContain('Your sign-in to attio ended');
+    expect(told?.payload).toContain(PAGE());
+    await expect(receiveOne(fleet, mathilde.crewToken)).resolves.toBeUndefined();
+    await expect(ownSignIn(MATHILDE_BROWSER)).resolves.toMatchObject({ state: 'lost', outsideAccount: { subject: 'attio-member-mathilde' }, lost: { why: expect.stringContaining('invalid_grant') as unknown } });
+  });
+
+  it('keeps the grant and hands the call again while Attio\'s authorization server is down, and the call goes out once it is back (scenario 20)', async () => {
+    await attioAdded();
+    await signedIn(MATHILDE_BROWSER, MATHILDE_ACCOUNT);
+    const leadScout = await aShip('lead-scout', mathilde.shipId);
+    attio.endAccessTokens();
+    attio.isTokenEndpointDown = true;
+    const request = await searchRecords(leadScout);
+    await expect.poll(() => attio.tokenRequestsWhileDown).toBeGreaterThan(0);
+    expect(await keptGrants()).toMatchObject([{ refreshToken: 'attio-refresh-2', lostAt: null }]);
+
+    attio.isTokenEndpointDown = false;
+
+    await expect(replyTo(leadScout)).resolves.toEqual({ inReplyTo: request, text: 'records for acme', isError: false });
+    expect(attio.refreshed).toEqual(['attio-refresh-2']);
+  });
+
+  it('refreshes a grant idle for longer than its schedule without a call, keeping the new refresh token (scenario 21)', async () => {
+    await attioAdded();
+    await signedIn(MATHILDE_BROWSER, MATHILDE_ACCOUNT);
+    await gatewayStopped();
+    await grantIdle(mathilde.shipId);
+
+    await gatewayStarted();
+
+    await expect.poll(() => attio.refreshed).toEqual(['attio-refresh-2']);
+    await expect.poll(async () => (await keptGrants()).map(({ refreshToken, refreshedAt }) => ({ refreshToken, isRefreshed: refreshedAt !== null }))).toEqual([{ refreshToken: 'attio-refresh-3', isRefreshed: true }]);
+    expect(attio.calledAs).toEqual([]);
+  });
+
+  it("loses the grant at the next refresh when the gateway stopped after Attio rotated its refresh token, tells the owner, and the next call gets Q5's error result (scenario 22)", async () => {
+    await attioAdded();
+    await signedIn(MATHILDE_BROWSER, MATHILDE_ACCOUNT);
+    const leadScout = await aShip('lead-scout', mathilde.shipId);
+    await gatewayStopped();
+    attio.spendRefreshTokens();
+    await grantIdle(mathilde.shipId);
+
+    await gatewayStarted();
+
+    await expect.poll(async () => (await keptGrants()).map(({ lostAt }) => lostAt !== null)).toEqual([true]);
+    await expect(receiveOne(fleet, mathilde.crewToken).then((told) => told?.payload)).resolves.toContain('Your sign-in to attio ended');
+    const request = await searchRecords(leadScout);
+    await expect(replyTo(leadScout)).resolves.toEqual({ inReplyTo: request, text: noSignIn('mathilde'), isError: true });
+    expect(attio.calledAs).toEqual([]);
   });
 });
