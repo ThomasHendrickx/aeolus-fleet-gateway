@@ -386,7 +386,7 @@ describe('keeping grants alive (Q7)', () => {
     expect(told?.payload).toContain('Your sign-in to attio ended');
     expect(told?.payload).toContain(PAGE());
     await expect(receiveOne(fleet, mathilde.crewToken)).resolves.toBeUndefined();
-    await expect(ownSignIn(MATHILDE_BROWSER)).resolves.toMatchObject({ state: 'lost', outsideAccount: { subject: 'attio-member-mathilde' }, lost: { why: expect.stringContaining('invalid_grant') as unknown } });
+    await expect(ownSignIn(MATHILDE_BROWSER)).resolves.toMatchObject({ state: 'lost', outsideAccount: { subject: 'attio-member-mathilde' }, lost: { why: "invalid_grant: The refresh token is unknown, used or not this client's" } });
   });
 
   it('keeps the grant and hands the call again while Attio\'s authorization server is down, and the call goes out once it is back (scenario 20)', async () => {

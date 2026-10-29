@@ -57,6 +57,7 @@ import { createGrantCalls } from './core/mcp-out/grant-calls.js';
 import { createHandCall } from './core/mcp-out/hand-call.js';
 import { createCallGrantOf } from './core/party-grants/call-grant.js';
 import { createRefreshGrant } from './core/party-grants/refresh-grant.js';
+import { createKeepGrantsAlive } from './core/party-grants/keep-grants-alive.js';
 import { createTellSignInNeeded } from './core/party-grants/tell-sign-in-needed.js';
 import { createRunParty } from './core/mcp-out/run-party.js';
 import { createPrismaCalls } from './adapters/prisma/calls.js';
@@ -120,6 +121,7 @@ import { createOutcomeWorker } from './outcome-worker.js';
 import { createPersonWaiters } from './person-waiters.js';
 import { createPingWorker } from './ping-worker.js';
 import { createSlackTokenWorker } from './slack-token-worker.js';
+import { createGrantWorker } from './grant-worker.js';
 import { createSlackEventWorker } from './slack-event-worker.js';
 import { createPrismaSlackEvents } from './adapters/prisma/slack-events.js';
 import { createSendSlackEvents } from './core/slack/send-slack-events.js';
@@ -275,6 +277,8 @@ export interface GatewayAppOptions {
   web?: WebApp;
   /** Slack's Web API: Slack's own unless set. Tests set it to their Slack double. */
   slackApiUrl?: string;
+  /** How often the gateway looks for grants to keep alive, idle or near their end (decision 0067, Q7): 5 minutes unless set. */
+  grantRoundMs?: number;
 }
 
 /** Within the fleet's 10 minutes a handed delivery may wait for its confirmation (decision 0040). */
@@ -307,6 +311,9 @@ const POLL_MS = 2_000;
 
 /** How often the gateway rotates the Slack configuration tokens due, well within the hour before one ends (gateway scopes 9.1). */
 const SLACK_TOKEN_ROUND_MS = 10 * 60_000;
+
+/** How often the gateway keeps grants alive unless told: well within the ten minutes a grant is refreshed ahead of its end. */
+const GRANT_ROUND_MS = 5 * 60_000;
 
 /** How often the gateway sends the kept Slack messages core has not taken, as while core does not answer (gateway scopes 9.4 step 7). */
 const SLACK_EVENT_ROUND_MS = 5_000;
@@ -437,9 +444,10 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // A call to a server where each person signs in goes out under its asking ship's owner's grant (decision 0067).
   const partyPageUrl = partyPageUrlOf(options.publicUrl ?? DEFAULT_PUBLIC_URL);
   const tellSignInNeeded = createTellSignInNeeded({ notices: signInNotices, connections, sender: door, newNoticeId: randomUUID, pageUrlOf: partyPageUrl });
+  const refreshGrant = createRefreshGrant({ signIns: partySignIns, grants: partyGrants, tellSignInNeeded, clock });
   const grantCalls = createGrantCalls({
     callGrantOf: createCallGrantOf({ connections, door, grants: partyGrants }),
-    refreshGrant: createRefreshGrant({ signIns: partySignIns, grants: partyGrants, tellSignInNeeded, clock }),
+    refreshGrant,
     tellSignInNeeded,
     servers,
     grants: partyGrants,
@@ -876,6 +884,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       await followExposedShips();
     },
     sleep, intervalMs: SLACK_TOKEN_ROUND_MS, log: server.log });
+  const grantKeeper = createGrantWorker({
+    keepAlive: createKeepGrantsAlive({ grants: partyGrants, servers: signInServersOf(parties), refreshGrant, clock }),
+    sleep,
+    intervalMs: options.grantRoundMs ?? GRANT_ROUND_MS,
+    log: server.log,
+  });
   const pings = createPingWorker({ answerPings: createAnswerPings({ connections, inbox: door.gatewayInbox }), sleep, intervalMs: POLL_MS, log: server.log });
   const decideRequestOnly = createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock });
   // A decided request's outcomes are told at once, not at the next round.
@@ -1013,6 +1027,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       personWaiters.start();
       slackTokens.start();
       slackSends.start();
+      grantKeeper.start();
       return restored;
     },
     close: async () => {
@@ -1021,6 +1036,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       await personWaiters.stop();
       await slackTokens.stop();
       await slackSends.stop();
+      await grantKeeper.stop();
       await workers.stop();
       await server.close();
     },
