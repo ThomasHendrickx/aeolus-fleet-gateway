@@ -9,8 +9,10 @@ import { EveryonesSignInsSkeleton, SignInsCard, type PersonSignIn } from './ever
 
 const NOW = '2026-10-29T10:47:00Z';
 
-/** A person's sign-in as the API answers it to an approver, with what a test changes. */
-function aPersonSignIn(changed: Partial<PersonSignIn> = {}): PersonSignIn {
+type SignedIn = Extract<PersonSignIn, { state: 'signedIn' }>;
+
+/** Joris's sign-in as the API answers it to an approver, with what a test changes. */
+function aPersonSignIn(changed: Partial<SignedIn> = {}): SignedIn {
   return {
     personShipId: 'shp_01m3tbfspe96yf1rnr4ank9jrs',
     personName: 'joris',
@@ -24,7 +26,7 @@ function aPersonSignIn(changed: Partial<PersonSignIn> = {}): PersonSignIn {
 }
 
 const MATHILDE = aPersonSignIn({ personShipId: 'shp_01m3tbfspe96yf1rnr4ank9mth', personName: 'mathilde', isYours: true, outsideAccount: { subject: 'sub-mathilde', name: 'mathilde@acme.com' } });
-const JORIS = aPersonSignIn({ state: 'lost', lastUsedAt: '2026-10-28T21:58:00Z', lost: { at: '2026-10-28T22:10:00Z', why: 'invalid_grant' } });
+const JORIS: PersonSignIn = { ...aPersonSignIn({ lastUsedAt: '2026-10-28T21:58:00Z' }), state: 'lost', lost: { at: '2026-10-28T22:10:00Z', why: 'invalid_grant' } };
 const SAM = aPersonSignIn({ personShipId: 'shp_01m3tbfspe96yf1rnr4ank9sam', personName: 'sam', outsideAccount: { subject: 'sub-sam', name: 'sam@acme.com' }, lastUsedAt: null });
 const PEOPLE = [MATHILDE, JORIS, SAM];
 
@@ -35,7 +37,7 @@ function textOf(markup: string): string {
 
 const NOTHING = () => undefined;
 
-function card(view: Partial<{ rows: PersonSignIn[]; refusal: string | null; hasMore: boolean; confirming: string | null; outcome: FormState }> = {}): string {
+function card(view: Partial<{ rows: PersonSignIn[]; refusal: string | null; hasMore: boolean; confirming: string | null; removing: string | null; outcome: FormState }> = {}): string {
   return renderToStaticMarkup(
     createElement(SignInsCard, {
       party: 'attio',
@@ -62,7 +64,7 @@ describe("everyone's sign-ins to a server where each person signs in, for approv
   it('shows each person, their outside account, state and when last used, with Remove, and how many', () => {
     const markup = card();
 
-    expect(textOf(markup.slice(0, markup.indexOf('<tbody')))).toBe("Everyone's sign-ins 3 Person Account State Last used");
+    expect(textOf(markup.slice(0, markup.indexOf('<tbody')))).toBe("Everyone's sign-ins 3 Person Account State Last used Remove");
     expect(rowsOf(markup)).toBe(3);
     expect(textOf(markup)).toContain('mathilde (you) mathilde@acme.com · last used 2 min ago Signed in 2 min ago Remove');
     expect(textOf(markup)).toContain('joris joris@acme.com · last used 28 Oct, 21:58 Lost 28 Oct, 21:58 Remove');
@@ -119,7 +121,7 @@ describe("everyone's sign-ins to a server where each person signs in, for approv
   it("shows skeleton rows under the heading while everyone's sign-ins are read", () => {
     const markup = renderToStaticMarkup(createElement(EveryonesSignInsSkeleton, { party: 'attio' }));
 
-    expect(textOf(markup)).toBe("Everyone's sign-ins Person Account State Last used");
+    expect(textOf(markup)).toBe("Everyone's sign-ins Person Account State Last used Remove");
     expect(markup).toContain('aria-busy="true"');
     expect(markup.split('animate-pulse').length - 1).toBeGreaterThanOrEqual(3);
   });

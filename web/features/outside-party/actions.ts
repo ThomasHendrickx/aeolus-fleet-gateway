@@ -4,7 +4,8 @@
  * One outside party's forms, as the account signed in (decision 0056):
  * changing its owner and scopes, switching a server's tools and setting the
  * scopes a party needs, marking an A2A agent repeatable or not, signing in
- * to a server for yourself and removing that sign-in (decision 0067), and retiring it. Each asks the API, which
+ * to a server for yourself and removing that sign-in, an approver reading
+ * and removing everyone's sign-ins (decision 0067), and retiring it. Each asks the API, which
  * checks the account's scopes; a refusal is said on the form.
  */
 import { revalidatePath } from 'next/cache';
@@ -17,6 +18,7 @@ import { OUTSIDE_PARTIES_PATH, partyPath } from '../outside-parties/paths';
 import { changesOf } from './scope-changes';
 import { markedMessageOf } from './marked-message';
 import { REMOVED, SIGN_IN_PARAMETER } from './own-sign-in';
+import type { PersonSignIn } from './ui/everyones-sign-ins';
 
 /** The field a party's form names it by. */
 const NAME_FIELD = 'name';
@@ -115,6 +117,33 @@ export async function removeOwnSignIn(_previous: FormState, form: FormData): Pro
     return { kind: 'refused', message: refusalMessageOf(error) };
   }
   redirect(inFleet(`${partyPath(name)}?${new URLSearchParams({ [SIGN_IN_PARAMETER]: REMOVED }).toString()}`, fleetId));
+}
+
+/** How an approver's removal of a person's sign-in ended: whether the server revoked it, or why the API refused it. */
+export type RemovedSignIn = { isOk: true; isRevoked: boolean } | { isOk: false; message: string };
+
+/** An approver removes a person's sign-in to a server: revoked where the server offers it, then dropped (Q6). */
+export async function removePersonSignIn(removal: { fleetId: string; name: string; personShipId: string }): Promise<RemovedSignIn> {
+  const { fleetId, ...input } = removal;
+  const api = await requestApi(fleetId);
+  try {
+    const { isRevoked } = await api.parties.removeSignIn.mutate(input);
+    revalidatePath(partyPath(input.name));
+    return { isOk: true, isRevoked };
+  } catch (error) {
+    return { isOk: false, message: refusalMessageOf(error) };
+  }
+}
+
+/** The next page of everyone's sign-ins to a server, after the last person shown, or why the API refused it. */
+export async function readMoreSignIns(page: { fleetId: string; name: string; after: string }): Promise<{ isOk: true; grants: PersonSignIn[]; next: string | null } | { isOk: false; message: string }> {
+  const { fleetId, ...input } = page;
+  const api = await requestApi(fleetId);
+  try {
+    return { isOk: true, ...(await api.parties.signIns.query(input)) };
+  } catch (error) {
+    return { isOk: false, message: refusalMessageOf(error) };
+  }
 }
 
 export async function retireParty(_previous: FormState, form: FormData): Promise<FormState> {
