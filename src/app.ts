@@ -40,7 +40,7 @@ import { createStartPartySignIn } from './core/party-grants/start-party-sign-in.
 import { signInServersOf } from './core/parties/sign-in-servers.js';
 import { createPartySignIns } from './adapters/oauth/party-sign-ins.js';
 import { createPartySignInSeals } from './adapters/crypto/party-sign-in-seals.js';
-import { PARTY_SIGN_IN_DONE_PATH, registerPartySignInRoutes } from './adapters/http/party-sign-in-routes.js';
+import { PARTY_SIGN_IN_DONE_PATH, partyPageUrlOf, registerPartySignInRoutes } from './adapters/http/party-sign-in-routes.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
 import { createHandA2aMessage } from './core/a2a-out/hand-a2a-message.js';
@@ -53,7 +53,11 @@ import { createAddA2aAgent, type AddA2aAgent } from './core/parties/add-a2a-agen
 import { createHttpAgentCards } from './adapters/a2a/agent-cards.js';
 import { createCheckServer } from './core/parties/check-server.js';
 import { createReadPartyTools } from './core/parties/read-party-tools.js';
+import { createGrantCalls } from './core/mcp-out/grant-calls.js';
 import { createHandCall } from './core/mcp-out/hand-call.js';
+import { createCallGrantOf } from './core/party-grants/call-grant.js';
+import { createRefreshGrant } from './core/party-grants/refresh-grant.js';
+import { createTellSignInNeeded } from './core/party-grants/tell-sign-in-needed.js';
 import { createRunParty } from './core/mcp-out/run-party.js';
 import { createPrismaCalls } from './adapters/prisma/calls.js';
 import { sleep } from './adapters/timers/sleep.js';
@@ -408,6 +412,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const requirements = createPrismaScopeRequirements(prisma);
   const partyGrants = createPrismaPartyGrants(prisma);
   const signInNotices = createPrismaSignInNotices(prisma);
+  const partySignIns = createPartySignIns();
   // A server where each person signs in is listed under a person's grant (decision 0067, Q15).
   const connectionOf = createListingConnectionOf({ grants: partyGrants, clock });
   const stateParty = createStateParty({ parties, servers, connectionOf, door, marks, requirements, timing: callTiming });
@@ -429,7 +434,18 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     fleet: createProxyShipsAsActor(options.fleetUrl),
     credentialOf: (actor, sent) => credentialOf(actor, sent),
   });
-  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, requirements, checkScopes, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
+  // A call to a server where each person signs in goes out under its asking ship's owner's grant (decision 0067).
+  const partyPageUrl = partyPageUrlOf(options.publicUrl ?? DEFAULT_PUBLIC_URL);
+  const grantCalls = createGrantCalls({
+    callGrantOf: createCallGrantOf({ connections, door, grants: partyGrants }),
+    refreshGrant: createRefreshGrant({ signIns: partySignIns, grants: partyGrants, clock }),
+    tellSignInNeeded: createTellSignInNeeded({ notices: signInNotices, connections, sender: door, newNoticeId: randomUUID, pageUrlOf: partyPageUrl }),
+    servers,
+    grants: partyGrants,
+    clock,
+    pageUrlOf: partyPageUrl,
+  });
+  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, requirements, checkScopes, grantCalls, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
   const clientCalls = createPrismaClientCalls(prisma);
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
@@ -871,7 +887,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   };
   // A person's own sign-in to a server where each person signs in (decision 0067), sent back to the redirect URI every party's client was registered with.
   const partySignInRedirectUri = `${issuer}${PARTY_SIGN_IN_DONE_PATH}`;
-  const partySignIns = createPartySignIns();
   const partySignInSeals = createPartySignInSeals(options.gatewaySecret);
   const partySignIn: Context['partySignIn'] = {
     start: createStartPartySignIn({ servers: signInServersOf(parties), seals: partySignInSeals, signIns: partySignIns, secrets: oauthSecrets, clock, redirectUri: partySignInRedirectUri }),

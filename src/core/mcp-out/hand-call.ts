@@ -8,7 +8,8 @@ import { scopesNeeded } from '../parties/scope-requirements.js';
 import { isToolOn, TOOL_NOT_ENABLED } from '../parties/tool-switches.js';
 import type { Result } from '../shared/result.js';
 import { toolCalledBy, toolInputType, toolResultType } from './content-types.js';
-import type { McpServers, ToolResult } from './ports.js';
+import type { GrantCalls } from './grant-calls.js';
+import type { McpServers, ToolCall, ToolCallOutcome, ToolResult } from './ports.js';
 import type { ToolMarks } from './state-party.js';
 
 /** A delivery to a proxy ship, as its pushReceive hands it: received, or handed before under this lease with its last number. */
@@ -136,7 +137,10 @@ function notACallReply(party: McpServerParty, delivery: PushedDelivery): Reply {
  * marked its tool repeatable; otherwise it is reported not handled. A call
  * to a tool not switched on is answered an error and reaches no server
  * (aeolus-fleet#1151); so is a call from a ship that lacks a scope the
- * tool needs (design gateway-scopes, 4.2).
+ * tool needs (design gateway-scopes, 4.2). A call to a server where each
+ * person signs in goes out under its asking ship's owner's grant, read at
+ * hand-over (decision 0067); one with no grant to go under is answered its
+ * error result, kept first, and reaches no server.
  */
 export function createHandCall(deps: {
   crew: ProxyShipCrew;
@@ -146,6 +150,7 @@ export function createHandCall(deps: {
   parties: PartyStore;
   requirements: ScopeRequirementsStore;
   checkScopes: CheckRequiredScopes;
+  grantCalls: GrantCalls;
   timeoutMs: number;
 }): HandCall {
   return async ({ party, delivery }) => {
@@ -208,6 +213,24 @@ export function createHandCall(deps: {
       case 'holds':
         break;
     }
+    // The grant as it is now, at hand-over: one removed while the call waited refuses it, one signed in lets it through.
+    let callTool = (call: ToolCall): Promise<ToolCallOutcome> => deps.servers.callTool({ url: party.url, credential: party.credential }, call);
+    const { credential } = party;
+    if (credential.kind === 'personSignIn') {
+      const found = await deps.grantCalls.grantOf({ server: { fleetId: party.fleetId, name: party.name, url: party.url, client: credential.client }, senderShipId: delivery.senderShipId });
+      switch (found.kind) {
+        case 'unread':
+          return AGAIN;
+        case 'refused': {
+          const reply = resultReply(delivery, { tool, result: found.result });
+          await deps.calls.save({ ...kept, state: 'answered', reply });
+          return finish(reply);
+        }
+        case 'granted':
+          callTool = (call) => deps.grantCalls.callUnder(found.granted, call);
+          break;
+      }
+    }
 
     const handed = await deps.crew.handed(crewToken, { deliveryId: delivery.deliveryId, handOverNumber: (delivery.handOverNumber ?? 0) + 1, channel: MCP_CHANNEL });
     if (!handed.isOk) {
@@ -217,7 +240,7 @@ export function createHandCall(deps: {
       return { kind: 'undeliverable' };
     }
     await deps.calls.save({ ...kept, state: 'calling', reply: null });
-    const outcome = await deps.servers.callTool({ url: party.url, credential: party.credential }, { name: tool, arguments: args, timeoutMs: deps.timeoutMs });
+    const outcome = await callTool({ name: tool, arguments: args, timeoutMs: deps.timeoutMs });
     switch (outcome.kind) {
       case 'answered': {
         const reply = resultReply(delivery, { tool, result: outcome.result });
