@@ -32,7 +32,7 @@ export function createSlackMessages(options: { apiUrl: string }): SlackMessages 
       const posted = await call({ method: 'chat.postEphemeral', form, token: botToken }, postedSchema);
       return posted.isOk ? ok(undefined) : posted;
     },
-    post: async (botToken, { channel, threadTs, text, buttons }) => {
+    post: async (botToken, { messageId, channel, threadTs, text, buttons }) => {
       const form: Record<string, string> = { channel, text };
       if (threadTs !== null) {
         form.thread_ts = threadTs;
@@ -40,7 +40,7 @@ export function createSlackMessages(options: { apiUrl: string }): SlackMessages 
       if (buttons.length > 0) {
         form.blocks = JSON.stringify([
           { type: 'section', text: { type: 'mrkdwn', text } },
-          { type: 'actions', elements: buttons.map(({ text: label, option }) => ({ type: 'button', action_id: `answer-${String(option)}`, text: { type: 'plain_text', text: label }, value: String(option) })) },
+          { type: 'actions', block_id: messageId, elements: buttons.map(({ text: label, option }) => ({ type: 'button', action_id: `answer-${String(option)}`, text: { type: 'plain_text', text: label }, value: String(option) })) },
         ]);
       }
       const posted = await call({ method: 'chat.postMessage', form, token: botToken }, postedMessageSchema);

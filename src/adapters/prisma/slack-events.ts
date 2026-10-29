@@ -16,7 +16,7 @@ function eventOf(row: SlackEventRow): KeptSlackEvent {
     fleetId: idSchema('fleet').parse(row.fleetId),
     eventId: row.eventId,
     appId: row.appId,
-    shipId: idSchema('ship').parse(row.shipId),
+    shipId: row.shipId === null ? null : idSchema('ship').parse(row.shipId),
     personShipId: idSchema('ship').parse(row.personShipId),
     channel: row.channel,
     ts: row.ts,

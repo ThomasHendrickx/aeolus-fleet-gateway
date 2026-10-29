@@ -11,6 +11,7 @@
  * of a button under a question it posted, each read as its raw body so its
  * signature can be checked.
  */
+import { idSchema } from '@aeolus-fleet/common';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
@@ -32,14 +33,14 @@ export const SLACK_ACTIONS_PATH = '/gw/slack/actions';
 /** Form posts, as Slack sends a press of a button. */
 const FORM_TYPE = 'application/x-www-form-urlencoded';
 
-/** A press of a button under a question the gateway posted: the app, who pressed it, the Slack message it is under, and the option. */
+/** A press of a button under a question the gateway posted: the app, who pressed it, the Slack message it is under, the fleet message its buttons name, and the option. */
 const blockActionsSchema = z.object({
   type: z.literal('block_actions'),
   api_app_id: z.string(),
   team: z.object({ id: z.string() }),
   user: z.object({ id: z.string() }),
   container: z.object({ channel_id: z.string(), message_ts: z.string() }),
-  actions: z.array(z.object({ value: z.string().regex(/^\d+$/) })).min(1),
+  actions: z.tuple([z.object({ block_id: idSchema('message'), value: z.string().regex(/^\d+$/) })]).rest(z.unknown()),
 });
 
 /** The Slack page of the web app (web/features/slack/paths.ts names the same). */
@@ -148,14 +149,15 @@ export function registerSlackRoutes(server: FastifyInstance, deps: { completeIns
         // Another interaction the gateway does not take: answered, so Slack shows no error.
         return reply.send();
       }
-      const { api_app_id: appId, team, user, container, actions } = press.data;
+      const { api_app_id: appId, team, user, container, actions: [action] } = press.data;
       const answered = await deps.answerInSlack({
         appId,
         teamId: team.id,
         userId: user.id,
         channel: container.channel_id,
         messageTs: container.message_ts,
-        option: Number(actions[0]?.value),
+        messageId: action.block_id,
+        option: Number(action.value),
         body,
         timestamp: headerOf(request.headers['x-slack-request-timestamp']),
         signature: headerOf(request.headers['x-slack-signature']),

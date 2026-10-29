@@ -86,15 +86,15 @@ describe("Slack's events door", () => {
 });
 
 describe("Slack's actions door", () => {
-  it('reads a press of an option\'s button under a question, with its raw body to check its signature', async () => {
+  it('reads a press of an option\'s button under a question, naming its fleet message, with its raw body to check its signature', async () => {
     const { server, pressed } = await aServer();
-    const payload = { type: 'block_actions', api_app_id: 'A01', team: { id: 'T0ACME' }, user: { id: 'U0MATHILDE' }, container: { type: 'message', channel_id: 'D0MATHILDE', message_ts: '1730020000.000001' }, actions: [{ action_id: 'answer-2', value: '2' }] };
+    const payload = { type: 'block_actions', api_app_id: 'A01', team: { id: 'T0ACME' }, user: { id: 'U0MATHILDE' }, container: { type: 'message', channel_id: 'D0MATHILDE', message_ts: '1730020000.000001' }, actions: [{ action_id: 'answer-2', block_id: 'msg_01m3tbfspe96yf1rnr4ank0002', value: '2' }] };
     const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
 
     const answer = await server.inject({ method: 'POST', url: SLACK_ACTIONS_PATH, headers: { ...signed(body, 'signing-A01'), 'content-type': 'application/x-www-form-urlencoded' }, payload: body });
 
     expect(answer.statusCode).toBe(200);
-    expect(pressed.map(({ appId, teamId, userId, channel, messageTs, option, body: raw }) => ({ appId, teamId, userId, channel, messageTs, option, raw }))).toEqual([{ appId: 'A01', teamId: 'T0ACME', userId: 'U0MATHILDE', channel: 'D0MATHILDE', messageTs: '1730020000.000001', option: 2, raw: body }]);
+    expect(pressed.map(({ appId, teamId, userId, channel, messageTs, messageId, option, body: raw }) => ({ appId, teamId, userId, channel, messageTs, messageId, option, raw }))).toEqual([{ appId: 'A01', teamId: 'T0ACME', userId: 'U0MATHILDE', channel: 'D0MATHILDE', messageTs: '1730020000.000001', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', option: 2, raw: body }]);
   });
 });
 

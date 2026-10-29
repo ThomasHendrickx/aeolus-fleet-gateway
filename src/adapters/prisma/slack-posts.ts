@@ -32,10 +32,6 @@ export function createPrismaSlackPosts(db: PrismaClient): SlackPosts {
       const row = await db.slackPost.findUnique({ where: { fleetId_personShipId_messageId: { fleetId, personShipId, messageId } } });
       return row === null ? undefined : postOf(row);
     },
-    atSlackMessage: async (fleetId, { personShipId, appId, channel, ts }) => {
-      const row = await db.slackPost.findFirst({ where: { fleetId, personShipId, appId, channel, ts, deliveryId: { not: null } } });
-      return row === null ? undefined : postOf(row);
-    },
     lastInThread: async (fleetId, { personShipId, appId, channel, threadTs }) => {
       const row = await db.slackPost.findFirst({ where: { fleetId, personShipId, appId, channel, deliveryId: { not: null }, OR: [{ threadTs }, { ts: threadTs }] }, orderBy: { ts: 'desc' } });
       return row === null ? undefined : postOf(row);

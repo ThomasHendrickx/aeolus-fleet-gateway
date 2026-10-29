@@ -54,8 +54,8 @@ describe("a bot's message only one person sees", () => {
     expect(slack.reactions).toEqual([{ botToken: 'xoxb-A02', form: { channel: 'D0MATHILDE', timestamp: '1730019600.000100', name: 'white_check_mark' } }]);
   });
 
-  it('posts in a conversation, with a button per option under a question, answering the Slack message it is', async () => {
-    const posted = await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A01', { channel: 'U0MATHILDE', threadTs: null, text: '*Cut travel?*\nOver by 10%', buttons: [{ text: 'Cut', option: 1 }, { text: 'Keep', option: 2 }] });
+  it('posts in a conversation, with a button per option under a question naming its fleet message, answering the Slack message it is', async () => {
+    const posted = await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'U0MATHILDE', threadTs: null, text: '*Cut travel?*\nOver by 10%', buttons: [{ text: 'Cut', option: 1 }, { text: 'Keep', option: 2 }] });
 
     expect(posted).toEqual({ isOk: true, value: { channel: 'U0MATHILDE', ts: '1730019600.000001' } });
     const form = slack.posted[0]?.form;
@@ -66,13 +66,13 @@ describe("a bot's message only one person sees", () => {
       text: '*Cut travel?*\nOver by 10%',
       blocks: [
         { type: 'section', text: { type: 'mrkdwn', text: '*Cut travel?*\nOver by 10%' } },
-        { type: 'actions', elements: [{ type: 'button', action_id: 'answer-1', text: { type: 'plain_text', text: 'Cut' }, value: '1' }, { type: 'button', action_id: 'answer-2', text: { type: 'plain_text', text: 'Keep' }, value: '2' }] },
+        { type: 'actions', block_id: 'msg_01m3tbfspe96yf1rnr4ank0002', elements: [{ type: 'button', action_id: 'answer-1', text: { type: 'plain_text', text: 'Cut' }, value: '1' }, { type: 'button', action_id: 'answer-2', text: { type: 'plain_text', text: 'Keep' }, value: '2' }] },
       ],
     });
   });
 
   it('posts text alone in a thread', async () => {
-    await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A02', { channel: 'C0LAUNCH', threadTs: '1730019600.000100', text: 'Friday', buttons: [] });
+    await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A02', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', channel: 'C0LAUNCH', threadTs: '1730019600.000100', text: 'Friday', buttons: [] });
 
     expect(slack.posted[0]?.form).toEqual({ channel: 'C0LAUNCH', thread_ts: '1730019600.000100', text: 'Friday' });
   });
@@ -80,6 +80,6 @@ describe("a bot's message only one person sees", () => {
   it("answers rate limited with Slack's Retry-After", async () => {
     slack.rateLimit('chat.postMessage', 7);
 
-    await expect(createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A02', { channel: 'U0MATHILDE', threadTs: null, text: 'Friday', buttons: [] })).resolves.toEqual({ isOk: false, error: { kind: 'rateLimited', retryAfterSeconds: 7 } });
+    await expect(createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A02', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', channel: 'U0MATHILDE', threadTs: null, text: 'Friday', buttons: [] })).resolves.toEqual({ isOk: false, error: { kind: 'rateLimited', retryAfterSeconds: 7 } });
   });
 });

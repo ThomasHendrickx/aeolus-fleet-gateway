@@ -1,4 +1,4 @@
-import type { DeliveryId, FleetId } from '@aeolus-fleet/common';
+import type { DeliveryId, FleetId, MessageId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Sleep } from '../mcp-out/run-party.js';
@@ -84,9 +84,9 @@ export function createShowInSlack(deps: {
   };
 
   /** Posts it, waiting out Slack's rate limits: the Slack message, or none when Slack refused it. */
-  const posted = async (where: Where, shown: { text: string; buttons: readonly SlackButton[] }): Promise<string | undefined> => {
+  const posted = async (where: Where, shown: { messageId: MessageId; text: string; buttons: readonly SlackButton[] }): Promise<string | undefined> => {
     for (let tried = 1; ; tried += 1) {
-      const answered = await deps.slack.post(where.app.bot.token, { channel: where.channel, threadTs: where.threadTs, text: shown.text, buttons: shown.buttons });
+      const answered = await deps.slack.post(where.app.bot.token, { messageId: shown.messageId, channel: where.channel, threadTs: where.threadTs, text: shown.text, buttons: shown.buttons });
       if (answered.isOk) {
         return answered.value.ts;
       }
@@ -118,7 +118,7 @@ export function createShowInSlack(deps: {
       }
       const app = await deps.apps.find(post.fleetId, post.appId);
       const shown = slackPostOf(delivery, { overviewUrl: deps.overviewUrlOf(post.fleetId), isHeadedBySender: app?.shipId === null });
-      const ts = isInSlack(app) ? await posted({ app, channel: post.channel, threadTs: post.threadTs }, shown.kind === 'shown' ? shown : { text: shown.text, buttons: [] }) : undefined;
+      const ts = isInSlack(app) ? await posted({ app, channel: post.channel, threadTs: post.threadTs }, { messageId: post.messageId, text: shown.text, buttons: shown.kind === 'shown' ? shown.buttons : [] }) : undefined;
       if (ts === undefined) {
         await deps.posts.remove(post.fleetId, post);
         return 'notShown';

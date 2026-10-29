@@ -36,15 +36,12 @@ afterAll(async () => {
 });
 
 describe("the fleet messages in Slack, in the gateway's database", () => {
-  it('keeps a post by its message, changed in place, and finds it by its message and by its Slack message', async () => {
+  it('keeps a post by its message, changed in place, and finds it by its message', async () => {
     const posts = createPrismaSlackPosts(prisma);
     await posts.save(aPost({ ts: null, ackedAt: null }));
     await posts.save(aPost());
 
-    await expect(Promise.all([
-      posts.ofMessage(ACME, { personShipId: MATHILDE_SHIP, messageId: 'msg_01m3tbfspe96yf1rnr4ank0001' }),
-      posts.atSlackMessage(ACME, { personShipId: MATHILDE_SHIP, appId: 'A02', channel: 'D0MATHILDE', ts: '1730020000.000001' }),
-    ])).resolves.toEqual([aPost(), aPost()]);
+    await expect(posts.ofMessage(ACME, { personShipId: MATHILDE_SHIP, messageId: 'msg_01m3tbfspe96yf1rnr4ank0001' })).resolves.toEqual(aPost());
   });
 
   it('finds the latest delivery in a thread, its first message included, for the person ship only', async () => {

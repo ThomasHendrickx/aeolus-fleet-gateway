@@ -29,6 +29,15 @@ export interface SlackPost {
   readonly ackedAt: Date | null;
 }
 
+/**
+ * Whether the post is a delivery not yet in Slack that starts a thread in
+ * the conversation: a reply in a thread there that matches no post may be
+ * under it, before the gateway keeps its Slack message.
+ */
+export function isAwaitingSlackIn(post: SlackPost, conversation: { appId: string; channel: string }): boolean {
+  return post.deliveryId !== null && post.ts === null && post.threadTs === null && post.appId === conversation.appId && post.channel === conversation.channel;
+}
+
 /** Whether the post is a delivery the gateway did not finish: not yet in Slack, or not yet acknowledged. */
 export function isUnfinished(post: SlackPost): boolean {
   return post.deliveryId !== null && (post.ts === null || (!post.isLinkOnly && post.ackedAt === null));

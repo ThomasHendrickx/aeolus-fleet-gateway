@@ -407,6 +407,24 @@ export function aKeptSlackEvent(overrides: Partial<KeptSlackEvent> = {}): KeptSl
   };
 }
 
+/** The posts, saving the post given once the first read of the thread or of the unfinished posts answered, as Slack's answer to the post lands between two reads. */
+export function savingAfterFirstRead(posts: ReturnType<typeof memorySlackPosts>, post: SlackPost): ReturnType<typeof memorySlackPosts> {
+  let isSaved = false;
+  const thenSave = async <T>(read: Promise<T>): Promise<T> => {
+    const answer = await read;
+    if (!isSaved) {
+      isSaved = true;
+      await posts.save(post);
+    }
+    return answer;
+  };
+  return {
+    ...posts,
+    lastInThread: (fleetId, thread) => thenSave(posts.lastInThread(fleetId, thread)),
+    unfinished: (fleetId, personShipId) => thenSave(posts.unfinished(fleetId, personShipId)),
+  };
+}
+
 /** The fleet messages in Slack, in memory, by fleet, person ship and message. */
 export function memorySlackPosts(): SlackPosts & { held: SlackPost[] } {
   const held = new Array<SlackPost>();
@@ -423,7 +441,6 @@ export function memorySlackPosts(): SlackPosts & { held: SlackPost[] } {
       return Promise.resolve();
     },
     ofMessage: (fleetId, post) => Promise.resolve(held[indexOf(fleetId, post)]),
-    atSlackMessage: (fleetId, { personShipId, appId, channel, ts }) => Promise.resolve(held.find((post) => post.fleetId === fleetId && post.personShipId === personShipId && post.deliveryId !== null && post.appId === appId && post.channel === channel && post.ts === ts)),
     lastInThread: (fleetId, { personShipId, appId, channel, threadTs }) =>
       Promise.resolve(held.filter((post) => post.fleetId === fleetId && post.personShipId === personShipId && post.deliveryId !== null && post.appId === appId && post.channel === channel && (post.threadTs === threadTs || post.ts === threadTs)).sort((a, b) => (a.ts ?? '').localeCompare(b.ts ?? '')).at(-1)),
     unfinished: (fleetId, personShipId) => Promise.resolve(held.filter((post) => post.fleetId === fleetId && post.personShipId === personShipId && isUnfinished(post))),

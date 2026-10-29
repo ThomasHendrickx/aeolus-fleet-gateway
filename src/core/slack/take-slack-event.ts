@@ -2,6 +2,7 @@ import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { SlackApps, SlackEvents, SlackLinks, SlackMessages, SlackPosts, SlackSignatures } from './ports.js';
 import { isRemovedEvent, personMessageOf, type SlackEventFields } from './slack-event.js';
+import { isAwaitingSlackIn } from './slack-post.js';
 import { markdownOf } from './slack-markdown.js';
 import { isSignedBy } from './slack-request.js';
 
@@ -31,13 +32,15 @@ export type TakeSlackEvent = (event: {
  * as, and sent now (9.4 step 3); a retry of a kept one changes nothing.
  * One in the thread under a delivery the gateway posted answers it: it goes
  * to that delivery's sender in reply to its message (9.5 step 4). Through
- * the gateway's own bot, only such an answer is sent.
+ * the gateway's own bot, only such an answer is sent. One in a thread that
+ * matches no post, while a delivery in that conversation is not yet in
+ * Slack, may be under it: it is kept, and matched as it is sent.
  */
 export function createTakeSlackEvent(deps: {
   apps: Pick<SlackApps, 'findByAppId' | 'save'>;
   links: Pick<SlackLinks, 'find'>;
   events: Pick<SlackEvents, 'keep'>;
-  posts: Pick<SlackPosts, 'lastInThread'>;
+  posts: Pick<SlackPosts, 'lastInThread' | 'unfinished'>;
   /** Sends the kept events now, not at the next round. */
   sendNow: () => void;
   slack: Pick<SlackMessages, 'postOnlyTo'>;
@@ -63,9 +66,12 @@ export function createTakeSlackEvent(deps: {
     const link = await deps.links.find(app.fleetId, { teamId: message.teamId, userId: message.userId });
     if (link?.stoppedAt === null) {
       const { eventId, channel, ts, threadTs, text, files } = message;
+      // Awaiting is read before the thread: a post Slack answers between the two reads is then found in the thread, never missed by both.
+      const isAwaiting = threadTs !== null && (await deps.posts.unfinished(app.fleetId, link.personShipId)).some((post) => isAwaitingSlackIn(post, { appId, channel }));
       const answered = threadTs === null ? undefined : await deps.posts.lastInThread(app.fleetId, { personShipId: link.personShipId, appId, channel, threadTs });
       const shipId = answered?.senderShipId ?? app.shipId;
-      if (shipId === null) {
+      const isToMatch = isAwaiting && answered === undefined;
+      if (shipId === null && !isToMatch) {
         return ok({ kind: 'ignored' });
       }
       const kept = await deps.events.keep({

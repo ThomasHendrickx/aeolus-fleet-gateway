@@ -3,6 +3,7 @@ import type { PersonCrews, PersonShipDoor } from '../people/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { TAKEN_KEPT_MS, UNTAKEN_KEPT_MS, type KeptSlackEvent } from './kept-slack-event.js';
 import type { SlackApps, SlackEvents, SlackMessages, SlackPosts } from './ports.js';
+import { isAwaitingSlackIn } from './slack-post.js';
 
 /** How many kept events a round sends at most. */
 const ROUND_LIMIT = 50;
@@ -37,7 +38,10 @@ function refusalText(ship: string, refusal: { code: string; message: string }): 
  * (gateway scopes 9.4 steps 5 to 7, P-B2). Each kept event goes as the
  * person ship, which the gateway crews, to the bot's ship by its id, as
  * Markdown, keyed by Slack's event id so a send tried again is the same
- * send. Core stored it: the gateway reacts to the person's Slack message.
+ * send. One in a thread kept unmatched is matched to the delivery the
+ * thread is under now: it waits while a delivery in that conversation is
+ * not yet in Slack, and through the gateway's own bot, answering none, it
+ * is not sent. Core stored it: the gateway reacts to the person's Slack message.
  * Core refused it: the reason goes in its thread. Core did not answer: it
  * goes again next round. Nothing builds up: a taken event's id goes an
  * hour after core took it, and an event core has not taken in 24 hours
@@ -48,17 +52,40 @@ export function createSendSlackEvents(deps: {
   apps: Pick<SlackApps, 'findByAppId'>;
   crews: Pick<PersonCrews, 'find'>;
   sender: Pick<CallSender, 'send'>;
-  door: Pick<PersonShipDoor, 'handled'>;
-  posts: Pick<SlackPosts, 'save'>;
+  door: Pick<PersonShipDoor, 'ack' | 'handled'>;
+  posts: Pick<SlackPosts, 'save' | 'lastInThread' | 'unfinished'>;
   slack: Pick<SlackMessages, 'postInThread' | 'react'>;
   clock: Clock;
 }): SendSlackEvents {
-  const send = async (event: KeptSlackEvent): Promise<'taken' | 'later'> => {
-    const app = await deps.apps.findByAppId(event.appId);
-    const crew = await deps.crews.find(event.fleetId, event.personShipId);
+  /** The event as it goes now: one in a thread kept unmatched answers the delivery the thread is under, if any; none while it may still be under one not yet in Slack. */
+  const matched = async (event: KeptSlackEvent): Promise<KeptSlackEvent | undefined> => {
+    const { fleetId, personShipId, appId, channel, threadTs } = event;
+    if (threadTs === null || event.inReplyTo !== null) {
+      return event;
+    }
+    // Awaiting is read before the thread: a post Slack answers between the two reads is then found in the thread, never missed by both.
+    const isAwaiting = (await deps.posts.unfinished(fleetId, personShipId)).some((post) => isAwaitingSlackIn(post, { appId, channel }));
+    const answered = await deps.posts.lastInThread(fleetId, { personShipId, appId, channel, threadTs });
+    if (answered !== undefined) {
+      return { ...event, shipId: answered.senderShipId ?? event.shipId, inReplyTo: answered.messageId, deliveryId: answered.deliveryId };
+    }
+    return isAwaiting ? undefined : event;
+  };
+
+  const send = async (kept: KeptSlackEvent): Promise<'taken' | 'later'> => {
+    const app = await deps.apps.findByAppId(kept.appId);
+    const crew = await deps.crews.find(kept.fleetId, kept.personShipId);
     if (app === undefined || app.bot === null || crew === undefined) {
       // No bot to answer with, or no crew to send as: the event waits, and goes after 24 hours told as not reached.
       return 'later';
+    }
+    const event = await matched(kept);
+    if (event === undefined) {
+      return 'later';
+    }
+    if (event.shipId === null) {
+      // Through the gateway's own bot only an answer goes, as a message there that answers none is not kept.
+      return 'taken';
     }
     const where = { channel: event.channel, threadTs: event.threadTs ?? event.ts };
     const message = { to: event.shipId, contentType: 'text/markdown', payload: event.markdown, idempotencyKey: `slack:${event.eventId}` };
@@ -67,7 +94,9 @@ export function createSendSlackEvents(deps: {
       const { fleetId, personShipId, appId, channel, ts, threadTs } = event;
       await deps.posts.save({ fleetId, personShipId, messageId: sent.value.messageId, deliveryId: null, senderShipId: null, appId, channel, ts, threadTs, isLinkOnly: false, ackedAt: null });
       if (event.deliveryId !== null) {
+        // Answered before the gateway acknowledged it, the person's answer acknowledges it, as core takes handled only then.
         // A refusal leaves the delivery acknowledged, as an answer on the gateway's page does when handled is refused.
+        await deps.door.ack(crew.crewToken, event.deliveryId);
         await deps.door.handled(crew.crewToken, event.deliveryId);
       }
       // Without the reaction the person sees no sign and sends again: the event goes again, the same send by its key.

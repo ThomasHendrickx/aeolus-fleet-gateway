@@ -7,7 +7,8 @@
  * press Allow; the code is good once for that app's bot token. Sign in with
  * Slack (/openid/connect/authorize) sends the person back the same way, as
  * the Slack user the test signs in as. The test refuses tokens, rate limits
- * a method, or reads what was asked and what was posted.
+ * a method, holds the answers to posts, or reads what was asked and what
+ * was posted.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
@@ -29,6 +30,8 @@ export interface FakeSlack {
   posted: { botToken: string; form: Record<string, string> }[];
   /** Each reaction added, with a bot token. */
   reactions: { botToken: string; form: Record<string, string> }[];
+  /** Holds the answer to each post, the post itself taken, until the function answered is called: Slack has the post, the gateway not yet its Slack message. */
+  holdPosts(): () => void;
   /** Answers the method 429 with this Retry-After, until cleared. */
   rateLimit(method: string, retryAfterSeconds: number | undefined): void;
   stop(): Promise<void>;
@@ -80,6 +83,7 @@ export async function startFakeSlack(): Promise<FakeSlack> {
   let signingInAs = { userId: 'U0MATHILDE', name: 'mathilde', teamId: SLACK_TEAM.id };
   let rotations = 0;
   let base = '';
+  let postsHeld: Promise<void> = Promise.resolve();
 
   const handle = async (request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? '/', base);
@@ -216,7 +220,9 @@ export async function startFakeSlack(): Promise<FakeSlack> {
           return;
         }
         posted.push({ botToken: bearer, form: Object.fromEntries(form) });
-        answer(response, { body: { ok: true, channel: form.get('channel'), ts: `1730019600.${String(posted.length).padStart(6, '0')}` } });
+        const ts = `1730019600.${String(posted.length).padStart(6, '0')}`;
+        await postsHeld;
+        answer(response, { body: { ok: true, channel: form.get('channel'), ts } });
         return;
       }
       case 'reactions.add': {
@@ -260,6 +266,13 @@ export async function startFakeSlack(): Promise<FakeSlack> {
     apps,
     get rotations() {
       return rotations;
+    },
+    holdPosts: () => {
+      let release = (): void => undefined;
+      postsHeld = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return release;
     },
     rateLimit: (method, retryAfterSeconds) => {
       if (retryAfterSeconds === undefined) {

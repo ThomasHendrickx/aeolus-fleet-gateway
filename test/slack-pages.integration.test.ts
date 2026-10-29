@@ -352,6 +352,14 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     await expect.poll(() => prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'U0CHARLOTTE', ts: { not: null }, ackedAt: { not: null } } }), { timeout: 30_000 }).toBe(count);
   }
 
+  /** Charlotte presses an option's button under a question release-notes-s7 asked, as Slack sends it: the button's block names the question's fleet message. */
+  async function press(pressed: { messageTs: string; messageId: string; option: number }): Promise<Response> {
+    const payload = { type: 'block_actions', api_app_id: releaseNotesAppId, team: { id: 'T0ACME' }, user: { id: 'U0CHARLOTTE' }, container: { type: 'message', channel_id: 'U0CHARLOTTE', message_ts: pressed.messageTs }, actions: [{ action_id: `answer-${String(pressed.option)}`, block_id: pressed.messageId, value: String(pressed.option) }] };
+    const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    return fetch(`${address}/gw/slack/actions`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-slack-request-timestamp': timestamp, 'x-slack-signature': `v0=${createHmac('sha256', `signing-${releaseNotesAppId}`).update(`v0:${timestamp}:${body}`).digest('hex')}` }, body });
+  }
+
   /** What release-notes-s7 received since, acknowledged. */
   async function releaseNotesReceives(): Promise<{ contentType: string; payload: string; inReplyTo: string | null }[]> {
     const received = await fetch(`${fleet.url}/api/v1/ship/receive`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${releaseNotesCrew}` }, body: JSON.stringify({ max: 10 }) });
@@ -373,14 +381,11 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     await waitForKeptPosts(kept + 1);
 
     const question = JSON.stringify({ id: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', title: 'Ship it?', context: 'Notes ready', options: [{ key: 1, label: 'Ship', detail: '' }, { key: 2, label: 'Wait', detail: '' }], pick: { option: 1, why: 'ready' } });
-    await releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: question });
+    const questionMessageId = await releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: question });
     await expect.poll(() => slack.posted.length, { timeout: 30_000 }).toBe(posted + 2);
     await waitForKeptPosts(kept + 2);
     const questionTs = `1730019600.${String(posted + 2).padStart(6, '0')}`;
-    const payload = { type: 'block_actions', api_app_id: releaseNotesAppId, team: { id: 'T0ACME' }, user: { id: 'U0CHARLOTTE' }, container: { type: 'message', channel_id: 'U0CHARLOTTE', message_ts: questionTs }, actions: [{ action_id: 'answer-2', value: '2' }] };
-    const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
-    const timestamp = String(Math.floor(Date.now() / 1000));
-    const pressed = await fetch(`${address}/gw/slack/actions`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-slack-request-timestamp': timestamp, 'x-slack-signature': `v0=${createHmac('sha256', `signing-${releaseNotesAppId}`).update(`v0:${timestamp}:${body}`).digest('hex')}` }, body });
+    const pressed = await press({ messageTs: questionTs, messageId: questionMessageId, option: 2 });
     expect(pressed.status).toBe(200);
 
     await slackEvent(releaseNotesAppId, { event: { type: 'message', channel_type: 'im', channel: 'U0CHARLOTTE', user: 'U0CHARLOTTE', text: 'Friday works', ts: '1730019900.000400', thread_ts: shownTs }, eventId: 'Ev-s9-thread' });
@@ -393,5 +398,32 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     expect(received.every(({ inReplyTo }) => inReplyTo !== null)).toBe(true);
     expect(slack.posted.length).toBe(posted + 2);
   }, 120_000);
-});
 
+  it('takes a press and a reply in the thread made before the gateway kept the Slack message of their question, each reaching the ship exactly once (aeolus-fleet#1382)', async () => {
+    await releaseNotesReceives();
+    const posted = slack.posted.length;
+    const releasePosts = slack.holdPosts();
+    const question = JSON.stringify({ id: '0b6f3c1e-2d7a-4c39-8e0b-7a1d5c3f9e22', title: 'Tag it?', context: 'Build green', options: [{ key: 1, label: 'Tag', detail: '' }, { key: 2, label: 'Hold', detail: '' }], pick: { option: 1, why: 'green' } });
+
+    const questionMessageId = await releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: question });
+    await expect.poll(() => slack.posted.length, { timeout: 30_000 }).toBe(posted + 1);
+    const questionTs = `1730019600.${String(posted + 1).padStart(6, '0')}`;
+    const pressed = await press({ messageTs: questionTs, messageId: questionMessageId, option: 1 });
+    const replied = await slackEvent(releaseNotesAppId, { event: { type: 'message', channel_type: 'im', channel: 'U0CHARLOTTE', user: 'U0CHARLOTTE', text: 'Tag it today', ts: '1730019950.000500', thread_ts: questionTs }, eventId: 'Ev-1382-thread' });
+    const isInSlackYet = (await prisma.slackPost.count({ where: { fleetId, messageId: questionMessageId, ts: { not: null } } })) > 0;
+    releasePosts();
+
+    let answers: Awaited<ReturnType<typeof releaseNotesReceives>> = [];
+    await expect.poll(async () => (answers = [...answers, ...(await releaseNotesReceives())]).length, { timeout: 30_000 }).toBe(2);
+    // A further event round, which would send a second time what it sent once.
+    await new Promise((resolve) => setTimeout(resolve, 6_000));
+    answers = [...answers, ...(await releaseNotesReceives())];
+
+    expect({ pressed: pressed.status, replied: replied.status, isInSlackYet }).toEqual({ pressed: 200, replied: 200, isInSlackYet: false });
+    expect(answers).toEqual(expect.arrayContaining([
+      { contentType: 'application/vnd.aeolus.answer+json', payload: '{"questionId":"0b6f3c1e-2d7a-4c39-8e0b-7a1d5c3f9e22","option":1}', inReplyTo: questionMessageId },
+      { contentType: 'text/markdown', payload: 'Tag it today', inReplyTo: questionMessageId },
+    ]));
+    expect(answers).toHaveLength(2);
+  }, 120_000);
+});
