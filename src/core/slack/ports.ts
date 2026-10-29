@@ -178,8 +178,13 @@ export interface SlackLinks {
 export interface SlackMessages {
   /** A message only one person sees, in a conversation (chat.postEphemeral), with a button that opens an address. */
   postOnlyTo(botToken: string, message: { channel: string; user: string; text: string; button?: { text: string; url: string } }): Promise<Result<undefined, SlackRefusal>>;
-  /** A message in a conversation, or a thread of it, with a button per option to answer (chat.postMessage): the Slack message it is. */
-  post(botToken: string, message: { channel: string; threadTs: string | null; text: string; buttons: readonly SlackButton[] }): Promise<Result<{ channel: string; ts: string }, SlackRefusal>>;
+  /**
+   * A message in a conversation, or a thread of it, with a button per option
+   * to answer (chat.postMessage): the Slack message it is. A press of a
+   * button names the fleet message it shows, so a press is matched before
+   * the gateway keeps the Slack message.
+   */
+  post(botToken: string, message: { messageId: MessageId; channel: string; threadTs: string | null; text: string; buttons: readonly SlackButton[] }): Promise<Result<{ channel: string; ts: string }, SlackRefusal>>;
   /** A message in a message's thread, everyone in the conversation sees (chat.postMessage). */
   postInThread(botToken: string, message: { channel: string; threadTs: string; text: string }): Promise<Result<undefined, SlackRefusal>>;
   /** A reaction on a message (reactions.add); one already there is no refusal. */
@@ -217,8 +222,6 @@ export interface SlackPosts {
   /** Keeps the post by its fleet, person ship and message, as it is now. */
   save(post: SlackPost): Promise<void>;
   ofMessage(fleetId: FleetId, post: { personShipId: ShipId; messageId: MessageId }): Promise<SlackPost | undefined>;
-  /** The delivery posted to the person ship as this Slack message. */
-  atSlackMessage(fleetId: FleetId, message: { personShipId: ShipId; appId: string; channel: string; ts: string }): Promise<SlackPost | undefined>;
   /** The latest delivery posted to the person ship in the thread, the thread's first message included. */
   lastInThread(fleetId: FleetId, thread: { personShipId: ShipId; appId: string; channel: string; threadTs: string }): Promise<SlackPost | undefined>;
   /** The person ship's posts of deliveries the gateway did not finish. */

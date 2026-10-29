@@ -423,7 +423,6 @@ export function memorySlackPosts(): SlackPosts & { held: SlackPost[] } {
       return Promise.resolve();
     },
     ofMessage: (fleetId, post) => Promise.resolve(held[indexOf(fleetId, post)]),
-    atSlackMessage: (fleetId, { personShipId, appId, channel, ts }) => Promise.resolve(held.find((post) => post.fleetId === fleetId && post.personShipId === personShipId && post.deliveryId !== null && post.appId === appId && post.channel === channel && post.ts === ts)),
     lastInThread: (fleetId, { personShipId, appId, channel, threadTs }) =>
       Promise.resolve(held.filter((post) => post.fleetId === fleetId && post.personShipId === personShipId && post.deliveryId !== null && post.appId === appId && post.channel === channel && (post.threadTs === threadTs || post.ts === threadTs)).sort((a, b) => (a.ts ?? '').localeCompare(b.ts ?? '')).at(-1)),
     unfinished: (fleetId, personShipId) => Promise.resolve(held.filter((post) => post.fleetId === fleetId && post.personShipId === personShipId && isUnfinished(post))),

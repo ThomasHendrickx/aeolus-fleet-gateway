@@ -93,6 +93,14 @@ describe("a press of a question's button in Slack", () => {
     expect(fleet.replies).toEqual([]);
   });
 
+  it('answers nothing for a press naming a question posted in another conversation', async () => {
+    await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: QUESTION.messageId, deliveryId: QUESTION.deliveryId, senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'C0LAUNCH', ts: '1730020000.000001', threadTs: null, isLinkOnly: false, ackedAt: NOW });
+
+    const answered = await press(1);
+
+    expect({ answered, replies: fleet.replies }).toEqual({ answered: { isOk: true, value: { kind: 'ignored' } }, replies: [] });
+  });
+
   it('answers nothing for a press by someone the question was not posted to', async () => {
     const answered = await press(1, { userId: 'U0JORIS' });
 
