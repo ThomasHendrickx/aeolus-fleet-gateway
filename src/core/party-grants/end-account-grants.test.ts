@@ -49,4 +49,12 @@ describe("a disabled account's grants (Q14)", () => {
 
     expect({ revoked: attio.state.revoked, held: grants.held }).toMatchObject({ revoked: { length: 2 }, held: { length: 2 } });
   });
+
+  it('drops a grant of a party the gateway no longer holds, asking no server', async () => {
+    await parties.remove(FLEET_ID, 'attio');
+
+    await createEndAccountGrants({ servers: signInServersOf(parties), grants, signIns: attio.signIns })({ fleetId: FLEET_ID, accountId: 'acc-mathilde' });
+
+    expect({ revoked: attio.state.revoked, held: grants.held }).toMatchObject({ revoked: [], held: { length: 2 } });
+  });
 });

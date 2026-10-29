@@ -83,6 +83,7 @@ export function memoryPartyGrants(): PartyGrants & { held: PartyGrant[] } {
           .sort((one, other) => one.personShipId.localeCompare(other.personShipId))
           .slice(0, limit),
       ),
+    ofAccount: (fleetId, accountId) => Promise.resolve(held.filter((grant) => grant.fleetId === fleetId && grant.accountId === accountId)),
     ofSubject: (fleetId, { party, subject }) => Promise.resolve(held.find((grant) => isOf(grant, { fleetId, party }) && grant.outsideAccount.subject === subject)),
     usable: (fleetId, { party, now }) =>
       Promise.resolve(

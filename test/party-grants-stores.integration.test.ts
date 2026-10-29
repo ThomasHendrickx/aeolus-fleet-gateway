@@ -82,6 +82,21 @@ describe("the party grants in the gateway's database", () => {
     ]);
   });
 
+  it("answers every grant of an account, in its fleet only", async () => {
+    const grants = createPrismaPartyGrants(prisma);
+    await grants.keep(aPartyGrant({ fleetId: ACME }));
+    await grants.keep(aPartyGrant({ fleetId: ACME, party: 'linear' }));
+    await grants.keep(aPartyGrant({ fleetId: ACME, personShipId: JORIS_SHIP_ID, accountId: 'acc-joris', outsideAccount: { subject: 'sub-2', name: null } }));
+    await grants.keep(aPartyGrant({ fleetId: LABS }));
+
+    const held = await grants.ofAccount(ACME, 'acc-mathilde');
+
+    expect(held.map(({ fleetId, party, accountId }) => ({ fleetId, party, accountId })).sort((one, other) => one.party.localeCompare(other.party))).toEqual([
+      { fleetId: ACME, party: 'attio', accountId: 'acc-mathilde' },
+      { fleetId: ACME, party: 'linear', accountId: 'acc-mathilde' },
+    ]);
+  });
+
   it('keeps two persons whose server gave no outside account', async () => {
     const grants = createPrismaPartyGrants(prisma);
     const unnamed = { subject: null, name: null };
