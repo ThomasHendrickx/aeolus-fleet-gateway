@@ -185,7 +185,9 @@ describe('grants as the fleet changes', () => {
   });
 
   it("ends every grant of the retired party and deletes its client at Attio (scenario 31)", async () => {
-    const retired = await mutate(address, { procedure: 'parties.retire', cookie, body: { name: 'attio' } });
+    const manager = await register(fleet, await commission(fleet, { cookie, ship: { name: 'manager', type: 'agent', scopes: ['fleet:read', 'fleet:manage'] } }));
+
+    const retired = await mutate(address, { procedure: 'parties.retire', crewToken: manager, body: { name: 'attio' } });
 
     expect(retired.status, await retired.clone().text()).toBe(200);
     expect({ grants: await keptGrants(), revoked: attio.revoked.length, deleted: attio.deletedClients }).toEqual({ grants: [], revoked: 4, deleted: ['attio-client-1'] });
