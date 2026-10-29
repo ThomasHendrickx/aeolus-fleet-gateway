@@ -147,6 +147,12 @@ describe('the parties pages, as the account signed in', () => {
     expect(bodies.map((body) => /<option value="none"[^>]*>No credential<\/option>/.test(body))).toEqual([true, true]);
   }, 60_000);
 
+  it('offers Each person signs in on the add page only, never on the Parties page, whose approval keeps a vault credential (decision 0067)', async () => {
+    const bodies = await Promise.all(['/outside-parties/add', '/parties'].map(async (path) => (await fetch(`${address}${path}?fleet=${FLEET}`, { headers: PAGE })).text()));
+
+    expect(bodies.map((body) => /<option value="personSignIn"[^>]*>Each person signs in<\/option>/.test(body))).toEqual([true, false]);
+  }, 60_000);
+
   it('shows the Parties page with the form that approves a server to an account holding fleet:manage, and not to one that only reads', async () => {
     const bodies = await Promise.all(
       [SIGN_IN, READER_SIGN_IN].map(async (signIn) => (await fetch(`${address}/parties?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${signIn}` } })).text()),
