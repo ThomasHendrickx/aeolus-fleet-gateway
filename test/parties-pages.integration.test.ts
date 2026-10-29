@@ -21,6 +21,7 @@ const APPROVER_SIGN_IN = 'charlotte-approves-shared-sign-in';
 const LABS = 'flt_01m4ajt7abh4rypkmdnjene67g';
 const SECOND_FLEET_SIGN_IN = 'charlotte-in-labs-first-shared-sign-in';
 const UNLISTED_SIGN_IN = 'charlotte-pagasae-lists-nothing-shared-sign-in';
+const PERSON_SIGN_IN = 'charlotte-with-her-person-ship-shared-sign-in';
 const STARTUP_MS = 60_000;
 const POLL_MS = 250;
 const PAGE = { accept: 'text/html', cookie: `aeolus_account_session=${SIGN_IN}` };
@@ -62,6 +63,7 @@ beforeAll(async () => {
     { id: FLEET, name: 'Acme' },
   ]);
   pagasae.sharedSignIn(UNLISTED_SIGN_IN, charlotteIn(pagasae, FLEET));
+  pagasae.sharedSignIn(PERSON_SIGN_IN, { ...charlotteIn(pagasae, FLEET), person_ship: 'shp_01m3tb1zgr5h2ffee12xnch8sw' });
   pagasae.listFor(UNLISTED_SIGN_IN, 'unavailable');
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
@@ -266,6 +268,53 @@ describe('the parties pages, as the account signed in', () => {
     await createPrismaScopeRequirements(prisma).change({ fleetId: FLEET, name: party.name }, { version: 0, ...party.requirements });
     await prisma.$disconnect();
   }
+
+  it("shows your sign-in between a sign-in server's facts and its tools, and how a sign-in went; an account with no person ship is told it needs one (decision 0067, M2)", async () => {
+    const prisma = createPrismaClient(gatewayDatabaseUrl);
+    await createPrismaPartyStore(prisma).save({
+      fleetId: FLEET,
+      name: 'attio',
+      kind: 'mcpServer',
+      url: 'https://mcp.attio.com/mcp',
+      credential: {
+        kind: 'personSignIn',
+        client: {
+          issuer: 'https://app.attio.com',
+          authorizationEndpoint: 'https://app.attio.com/oidc/authorize',
+          tokenEndpoint: 'https://app.attio.com/oidc/token',
+          revocationEndpoint: null,
+          isIssuerInResponse: false,
+          clientId: 'attio-client',
+          clientSecret: null,
+          registrationClientUri: null,
+          registrationAccessToken: null,
+          resource: 'https://mcp.attio.com/mcp',
+          scope: 'openid offline_access',
+        },
+      },
+      concurrencyLimit: 4,
+      toolSwitches: new Map(),
+      state: 'commissioning',
+      proxyShipId: null,
+      secret: null,
+      crewToken: null,
+      requestId: 'r-attio',
+      requestHash: 'h',
+      approvedAt: new Date('2026-10-29T10:00:00.000Z'),
+    });
+    await prisma.$disconnect();
+    const pageAs = async (signIn: string, said = '') => textOf(await (await fetch(`${address}/outside-parties/attio?fleet=${FLEET}${said}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${signIn}` } })).text());
+
+    const [person, turnedAway, noPerson] = await Promise.all([pageAs(PERSON_SIGN_IN), pageAs(PERSON_SIGN_IN, '&sign-in=turned-away'), pageAs(SIGN_IN)]);
+
+    expect(person).toContain('CredentialEach person signs in');
+    expect(person).toContain("Your sign-inNot signed inUntil you sign in, your ships&#x27; calls to attio are refused.Sign in");
+    expect(person.indexOf('Addresshttps://mcp.attio.com/mcp') < person.indexOf('Your sign-in') && person.indexOf('Your sign-in') < person.indexOf('Tools')).toBe(true);
+    expect(person).toContain('Nobody holds a usable sign-in to attio, so its tools cannot be listed');
+    expect(person).not.toContain('The server did not answer');
+    expect(turnedAway).toContain('Not signed inThat attio account is another person&#x27;s sign-in in this fleet: sign in as your own.');
+    expect(noPerson).toContain('Your sign-inSigning in needs a person ship in Acme.');
+  }, 60_000);
 
   const rowsOf = (body: string) => body.split('data-testid="tools-table-row"').length - 1;
 

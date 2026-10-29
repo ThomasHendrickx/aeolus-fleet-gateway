@@ -2,7 +2,7 @@ import { Suspense, type ReactNode } from 'react';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
-import { CREDENTIAL_KINDS } from '../../forms/server-credential';
+import { ADDED_CREDENTIAL_KINDS, SIGN_IN_CREDENTIAL } from '../../forms/server-credential';
 import { BUTTONS, CARD } from '../../forms/ui/look';
 import { outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } from '../../outside-parties/party-kinds';
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
@@ -11,6 +11,10 @@ import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
 import { AgentNeeds } from '../tools-table/ui/agent-needs';
 import { approvalOf, ToolsSection } from '../tools-table/ui/tools-section';
 import { ToolsSkeleton } from '../tools-table/ui/tools-skeleton';
+import { readOwnSignIn } from '../hooks/read-own-sign-in';
+import type { SignInOutcome } from '../own-sign-in';
+import { Fact } from './fact';
+import { OwnSignInCard } from './own-sign-in-card';
 import { RepeatableSwitch } from './repeatable-switch';
 
 /** The scopes that change a party's owner, its scopes, and retire it (0056). */
@@ -44,15 +48,6 @@ const ADDRESS_LABELS: Record<ListedParty['kind'], string> = { mcpServer: 'Addres
 
 const UNKNOWN = <span className="text-muted-foreground">Not known</span>;
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid gap-1 sm:grid-cols-[10rem_1fr]">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="flex flex-wrap items-center gap-2">{children}</dd>
-    </div>
-  );
-}
-
 /** The party's head: its name, protocol, side and state. */
 export function PartyHead({ party }: { party: ListedParty }) {
   const { protocol, side } = PARTY_KINDS[party.kind];
@@ -73,9 +68,11 @@ export function PartyHead({ party }: { party: ListedParty }) {
  * it lists now as a table, with the switch and the scopes each needs
  * (aeolus-fleet#1151, gateway scopes 4.3); for an A2A agent the scopes it
  * needs and its repeatable mark, a switch for an approver (A9). Each control shows only to an account holding
- * its scope; the API checks it again.
+ * its scope; the API checks it again. A server where each person signs in
+ * shows your own sign-in between its facts and its tools (decision 0067, M2),
+ * and how a sign-in went when the browser comes back.
  */
-export async function OutsideParty({ page, name }: { page: SignedInPage; name: string }) {
+export async function OutsideParty({ page, name, outcome }: { page: SignedInPage; name: string; outcome: SignInOutcome | null }) {
   const { api, fleetId, scopes } = page;
   const read = await readOf(api.parties.get.query({ name }));
   if (!read.isOk) {
@@ -89,9 +86,11 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
   const party = read.value;
   const address = outsideAddressOf(party);
   const isApprover = scopes.includes(APPROVING_SCOPE);
-  const [cards, agentNeeds] = await Promise.all([
+  const isSignIn = party.kind === 'mcpServer' && party.credentialKind === SIGN_IN_CREDENTIAL.kind;
+  const [cards, agentNeeds, ownSignIn] = await Promise.all([
     party.kind === 'a2aClient' ? readOf(api.parties.cardAddresses.query({ name })) : undefined,
     party.kind === 'a2aAgent' ? Promise.all([readOf(api.parties.scopeRequirements.query({ name })), isApprover ? approvalOf({ api, name }) : { canChange: false, listed: null, reason: null }]) : undefined,
+    isSignIn ? readOwnSignIn({ api, fleetId, name }) : undefined,
   ]);
   const change = (
     <a href={inFleet(partyPath(party.name, 'change'), fleetId)} className="text-primary hover:underline" data-testid="outside-party-change">
@@ -114,7 +113,7 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
             : party.scopes.map((scope) => <Tag key={scope}>{scopeWords(scope)}</Tag>)}
           {scopes.includes(GRANTING_SCOPE) ? change : null}
         </Fact>
-        {party.kind === 'mcpServer' || party.kind === 'a2aAgent' ? <Fact label="Credential">{CREDENTIAL_KINDS.find(({ kind }) => kind === party.credentialKind)?.label}</Fact> : null}
+        {party.kind === 'mcpServer' || party.kind === 'a2aAgent' ? <Fact label="Credential">{ADDED_CREDENTIAL_KINDS.find(({ kind }) => kind === party.credentialKind)?.label}</Fact> : null}
         {address === null ? null : (
           <Fact label={ADDRESS_LABELS[party.kind]}>
             <span className="font-mono">{address}</span>
@@ -136,6 +135,7 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
           </>
         ) : null}
       </dl>
+      {ownSignIn === undefined ? null : <OwnSignInCard fleetId={fleetId} party={party.name} read={ownSignIn} outcome={outcome} now={new Date()} />}
       {party.kind === 'mcpServer' ? (
         <section className={`${CARD} grid gap-3`} data-testid="outside-party-tools">
           <h2 className="text-section font-semibold">Tools</h2>
@@ -143,7 +143,7 @@ export async function OutsideParty({ page, name }: { page: SignedInPage; name: s
             The fleet may call only the tools switched on, and a calling ship must hold every scope a tool needs; every ship that may reach {party.name} reaches the same tools. {isApprover ? null : 'Changing them needs gateway:approve.'}
           </p>
           <Suspense fallback={<ToolsSkeleton party={party.name} />}>
-            <ToolsSection api={api} fleetId={fleetId} name={party.name} isApprover={isApprover} />
+            <ToolsSection api={api} fleetId={fleetId} name={party.name} isApprover={isApprover} isSignIn={isSignIn} />
           </Suspense>
         </section>
       ) : null}
