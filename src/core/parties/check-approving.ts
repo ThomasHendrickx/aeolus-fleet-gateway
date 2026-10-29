@@ -11,7 +11,7 @@ export type ApprovingRefusal = DomainError<'NOT_AN_APPROVER' | 'NO_SUCH_PARTY' |
 
 export type CheckApproving = (input: { actor: Actor; as: ActorCredential; name: string }) => Promise<Result<undefined, ApprovingRefusal>>;
 
-interface ApprovingDeps {
+export interface ApprovingDeps {
   parties: PartyStore;
   connections: Pick<ConnectionStore, 'find'>;
   fleet: Pick<ProxyShipsAsActor, 'checkManage'>;

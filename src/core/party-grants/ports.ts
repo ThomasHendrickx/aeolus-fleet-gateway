@@ -28,6 +28,14 @@ export type StatesProxyShip = (input: { fleetId: FleetId; name: string }) => Pro
 /** Outbound port: every person's grant of each party, in the gateway's database. */
 export interface PartyGrants {
   ofPerson(fleetId: FleetId, grant: { party: string; personShipId: ShipId }): Promise<PartyGrant | undefined>;
+  /** The grants of the party, by person ship, after the person ship named, at most as many as asked. */
+  ofParty(fleetId: FleetId, asked: { party: string; after: ShipId | null; limit: number }): Promise<PartyGrant[]>;
+  /** Every person holding a grant, in every fleet, each once. */
+  persons(): Promise<{ fleetId: FleetId; personShipId: ShipId }[]>;
+  /** Every grant of the person, one per party at most. */
+  ofPersonShip(fleetId: FleetId, personShipId: ShipId): Promise<PartyGrant[]>;
+  /** Every grant of the account in the fleet, one per party at most. */
+  ofAccount(fleetId: FleetId, accountId: string): Promise<PartyGrant[]>;
   /** The grant of the party that names this outside account, whoever holds it. */
   ofSubject(fleetId: FleetId, grant: { party: string; subject: string }): Promise<PartyGrant | undefined>;
   /** A grant of the party whose access token may still be sent, the most recently used first, then the most recently signed in (Q15). */
@@ -100,6 +108,8 @@ export interface PartySignIns {
   refresh(client: SignInClient, refreshToken: string): Promise<Result<RefreshedTokens, TokenRequestFailure>>;
   /** Revokes a token at the client's revocation endpoint (RFC 7009). */
   revoke(client: SignInClient & { revocationEndpoint: string }, token: string): Promise<Result<void, { reason: string }>>;
+  /** Deletes the client at its client configuration endpoint, with its registration access token (RFC 7592). */
+  deleteClient(client: SignInClient & { registrationClientUri: string; registrationAccessToken: string }): Promise<Result<void, { reason: string }>>;
 }
 
 /** The notice a person is told by when a call needs their sign-in to a party (Q6): its id keys the message, so one sent again is stored once. */

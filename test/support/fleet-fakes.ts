@@ -1,6 +1,6 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
-import type { ConnectionStore, FleetDoor, FleetRefusal, GatewayBinding, GatewayCrew } from '../../src/core/connection/ports.js';
+import type { ConnectionStore, FleetDoor, FleetShip, FleetRefusal, GatewayBinding, GatewayCrew } from '../../src/core/connection/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 export const SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9h1a';
@@ -110,7 +110,7 @@ export function memoryConnectionStore(): ConnectionStore & { held: Map<FleetId, 
  */
 export function fakeShipReads() {
   const state = {
-    ships: new Map<ShipId, { name: string; scopes: string[]; owner?: { shipId: ShipId; name: string } }>(),
+    ships: new Map<ShipId, { name: string; scopes: string[]; owner?: { shipId: ShipId; name: string }; status?: FleetShip['status'] }>(),
     isAnswering: true,
     /** Each read: by which crew token, of which ship, on whose behalf. */
     reads: new Array<{ crewToken: string; shipId: ShipId; onBehalfOf: ShipId | undefined }>(),
@@ -122,7 +122,7 @@ export function fakeShipReads() {
         return Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
       }
       const ship = state.ships.get(shipId);
-      return Promise.resolve(ship === undefined ? err({ code: 'NOT_FOUND', message: 'No such ship' }) : ok({ status: 'crewed' as const, name: ship.name, scopes: [...ship.scopes], owner: ship.owner ?? null }));
+      return Promise.resolve(ship === undefined ? err({ code: 'NOT_FOUND', message: 'No such ship' }) : ok({ status: ship.status ?? 'crewed', name: ship.name, scopes: [...ship.scopes], owner: ship.owner ?? null }));
     },
   };
   return { state, door };

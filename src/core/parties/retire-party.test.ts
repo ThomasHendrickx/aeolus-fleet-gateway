@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { memoryIssuedTokens } from '../../../test/support/oauth-fakes.js';
 import { fakeProxyShipsAsActor, memoryPartyStore, PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
+import { ATTIO_CLIENT, aPartyGrant, anAttioParty, fakePartySignIns, memoryPartyGrants } from '../../../test/support/party-grant-fakes.js';
+import { createEndPartyGrants } from '../party-grants/end-party-grants.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import type { ActorCredential } from '../actors/credential-of.js';
 import { err, ok } from '../shared/result.js';
@@ -37,11 +39,16 @@ const ORDERBOT: McpClientParty = { ...CRM, name: 'orderbot', kind: 'mcpClient', 
 
 let parties: ReturnType<typeof memoryPartyStore>;
 let tokens: ReturnType<typeof memoryIssuedTokens>;
+let grants: ReturnType<typeof memoryPartyGrants>;
+let attio: ReturnType<typeof fakePartySignIns>;
 
 beforeEach(async () => {
   parties = memoryPartyStore();
   await parties.save(CRM);
   tokens = memoryIssuedTokens();
+  grants = memoryPartyGrants();
+  await grants.keep(aPartyGrant());
+  attio = fakePartySignIns();
 });
 
 function retireParty(fleet = fakeProxyShipsAsActor()) {
@@ -51,6 +58,7 @@ function retireParty(fleet = fakeProxyShipsAsActor()) {
       parties,
       fleet,
       tokens,
+      endPartyGrants: createEndPartyGrants({ grants, signIns: attio.signIns }),
       credentialOf: (actor, sent) => Promise.resolve(ok(actor.kind === 'account' ? { crewToken: 'aeolus_ct_v1_gateway', accountToken: 'account-token-1' } : sent)),
     }),
   };
@@ -85,6 +93,27 @@ describe('retiring an outside party', () => {
       { party: 'orderbot', state: 'revoked' },
       { party: 'crm', state: 'active' },
     ]);
+  });
+
+  it("ends every person's grant of a server where each person signs in, and deletes its client where offered (decision 0067, scenario 31)", async () => {
+    const client = { ...ATTIO_CLIENT, registrationClientUri: 'https://app.attio.com/oauth/register/client-1', registrationAccessToken: 'registration-token-1' };
+    await parties.save(anAttioParty({ credential: { kind: 'personSignIn', client } }));
+
+    await expect(retireParty().retireParty({ actor: MANAGER, as: AS, name: 'attio' })).resolves.toEqual({ isOk: true, value: undefined });
+    expect({ grants: grants.held, deleted: attio.state.deletedClients.map(({ registrationClientUri }) => registrationClientUri), parties: [...parties.held.keys()] }).toEqual({
+      grants: [],
+      deleted: ['https://app.attio.com/oauth/register/client-1'],
+      parties: [`${FLEET_ID}/crm`],
+    });
+  });
+
+  it("keeps every grant when the fleet refuses to retire the server's proxy ship", async () => {
+    await parties.save(anAttioParty());
+    const { retireParty: retire } = retireParty(fakeProxyShipsAsActor(err({ code: 'FORBIDDEN', message: 'The network rules do not allow this manage' })));
+
+    await retire({ actor: MANAGER, as: AS, name: 'attio' });
+
+    expect(grants.held).toHaveLength(1);
   });
 
   it('refuses an actor without fleet:manage, asking the fleet nothing', async () => {

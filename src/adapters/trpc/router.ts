@@ -33,7 +33,11 @@ import type { AddA2aClient, AddA2aClientRefusal } from '../../core/parties/add-a
 import type { AddA2aAgent, AddA2aAgentRefusal } from '../../core/parties/add-a2a-agent.js';
 import type { MarkA2aAgent, MarkA2aAgentRefusal } from '../../core/a2a-out/mark-a2a-agent.js';
 import type { AddSignInServer, AddSignInServerRefusal } from '../../core/parties/add-sign-in-server.js';
+import type { ApprovedSignInPartyRefusal } from '../../core/party-grants/approved-sign-in-party.js';
+import type { EndAccountGrants } from '../../core/party-grants/end-account-grants.js';
+import type { ListGrants } from '../../core/party-grants/list-grants.js';
 import type { ReadOwnGrant } from '../../core/party-grants/read-own-grant.js';
+import type { RemoveGrant } from '../../core/party-grants/remove-grant.js';
 import type { RemoveOwnGrant } from '../../core/party-grants/remove-own-grant.js';
 import type { StartPartySignIn } from '../../core/party-grants/start-party-sign-in.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
@@ -119,13 +123,14 @@ export interface Context {
   readFleet: ReadFleet;
   deleteFleet: DeleteFleet;
   endSignIns: EndSignIns;
+  endAccountGrants: EndAccountGrants;
   stopSlackLink: StopSlackLink;
   readConnection: ReadConnection;
   connect: Connect;
   approveParty: ApproveParty;
   addSignInServer: AddSignInServer;
   /** A person's own sign-in to an outside MCP server where each person signs in (decision 0067). */
-  partySignIn: { start: StartPartySignIn; readOwn: ReadOwnGrant; removeOwn: RemoveOwnGrant };
+  partySignIn: { start: StartPartySignIn; readOwn: ReadOwnGrant; removeOwn: RemoveOwnGrant; list: ListGrants; remove: RemoveGrant };
   addClientParty: AddClientParty;
   crewParty: CrewParty;
   listParties: ListParties;
@@ -438,6 +443,18 @@ const PARTY_SIGN_IN_CODES = {
   NOT_SIGNED_IN: 'NOT_FOUND',
 } as const satisfies Record<string, TRPCError['code']>;
 
+/** The refusals of an approver's view and removal of everyone's sign-ins to a party, as the API states them. */
+const SIGN_INS_CODES = {
+  NOT_AN_APPROVER: 'FORBIDDEN',
+  NO_SUCH_PARTY: 'NOT_FOUND',
+  PARTY_NOT_COMMISSIONED: 'PRECONDITION_FAILED',
+  NOT_REACHABLE: 'FORBIDDEN',
+  NOT_CONNECTED: 'PRECONDITION_FAILED',
+  FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+  NO_SIGN_IN: 'BAD_REQUEST',
+  NOT_SIGNED_IN: 'NOT_FOUND',
+} as const satisfies Record<ApprovedSignInPartyRefusal['kind'] | 'NOT_SIGNED_IN', TRPCError['code']>;
+
 const heldGrantShape = { outsideAccount: z.object({ subject: z.string().nullable(), name: z.string().nullable() }), signedInAt: z.string(), lastUsedAt: z.string().nullable() };
 
 /** A person's own sign-in to a party, as their page shows it: never a token. A lost one says when and why. */
@@ -446,6 +463,17 @@ const ownSignInOutputSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('signedIn'), ...heldGrantShape }),
   z.object({ state: z.literal('lost'), ...heldGrantShape, lost: z.object({ at: z.string(), why: z.string() }) }),
 ]);
+
+/** Everyone's sign-ins to a party, a page at a time, as an approver sees them: never a token. */
+const signInsOutputSchema = z.object({
+  grants: z.array(
+    z.discriminatedUnion('state', [
+      z.object({ personShipId: z.string(), state: z.literal('signedIn'), ...heldGrantShape }),
+      z.object({ personShipId: z.string(), state: z.literal('lost'), ...heldGrantShape, lost: z.object({ at: z.string(), why: z.string() }) }),
+    ]),
+  ),
+  next: z.string().nullable(),
+});
 
 /** The longest name argo gives an MCP client. */
 const CLIENT_NAME_MAX_LENGTH = 200;
@@ -1052,6 +1080,38 @@ export const gatewayRouter = t.router({
         }
         return removed.value;
       }),
+    /**
+     * Every person's sign-in to an outside MCP server where each person
+     * signs in, 20 a page by person ship, for an actor holding
+     * gateway:approve within manage reach of its proxy ship (Q12).
+     */
+    signIns: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema, after: idSchema('ship').nullable() }))
+      .output(signInsOutputSchema)
+      .query(async ({ ctx, input }) => {
+        const listed = await ctx.partySignIn.list({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, ...input });
+        if (!listed.isOk) {
+          throw new TRPCError({ code: SIGN_INS_CODES[listed.error.kind], message: listed.error.message });
+        }
+        return {
+          grants: listed.value.grants.map((grant) => {
+            const shown = { ...grant, signedInAt: grant.signedInAt.toISOString(), lastUsedAt: grant.lastUsedAt?.toISOString() ?? null };
+            return grant.state === 'lost' ? { ...shown, state: grant.state, lost: { at: grant.lost.at.toISOString(), why: grant.lost.why } } : { ...shown, state: grant.state };
+          }),
+          next: listed.value.next,
+        };
+      }),
+    /** An actor holding gateway:approve within manage reach of the proxy ship removes any person's sign-in: revoked where the server offers it, then dropped (Q6). */
+    removeSignIn: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema, personShipId: idSchema('ship') }))
+      .output(z.object({ isRevoked: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        const removed = await ctx.partySignIn.remove({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, ...input });
+        if (!removed.isOk) {
+          throw new TRPCError({ code: SIGN_INS_CODES[removed.error.kind], message: removed.error.message });
+        }
+        return removed.value;
+      }),
     /** The gateway states the party's proxy ship anew, from what its server lists now, with argo's marks. */
     state: managing(servedProcedure)
       .input(z.strictObject({ name: shipHandleSchema }))
@@ -1442,13 +1502,14 @@ export const gatewayRouter = t.router({
         }
         return {};
       }),
-    /** pagasae disabled the account (decision 0055): every sign-in of it in the fleet ends, its clients' tokens are revoked, and its Slack link stops. Told again, it ends nothing more. */
+    /** pagasae disabled the account (decision 0055): every sign-in of it in the fleet ends, its clients' tokens are revoked, its Slack link stops, and its grants of outside servers end (decision 0067, Q14). Told again, it ends nothing more. */
     accountDisabled: installationProcedure
       .input(z.strictObject({ fleetId: idSchema('fleet'), accountId: z.string().min(1) }))
       .output(z.strictObject({}))
       .mutation(async ({ ctx, input }) => {
         await ctx.endSignIns(input);
         await ctx.stopSlackLink(input);
+        await ctx.endAccountGrants(input);
         return {};
       }),
   }),

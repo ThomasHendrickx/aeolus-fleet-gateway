@@ -5,7 +5,8 @@
  * PKCE S256 and the resource (RFC 8707), the code redeemed at the token
  * endpoint with the client's secret (client_secret_post, as the client was
  * registered), a grant refreshed (RFC 6749 6) with the same client and
- * resource, and a token revoked (RFC 7009). The ID token's claims are
+ * resource, a token revoked (RFC 7009), and the client deleted (RFC 7592).
+ * The ID token's claims are
  * read, not checked: the core checks they name the party's issuer and
  * client.
  */
@@ -148,6 +149,16 @@ export function createPartySignIns(): PartySignIns {
       }
       await answered.value.body?.cancel();
       return answered.value.ok ? ok(undefined) : err({ reason: `HTTP ${String(answered.value.status)}` });
+    },
+
+    async deleteClient({ registrationClientUri, registrationAccessToken }) {
+      try {
+        const answered = await fetch(registrationClientUri, { method: 'DELETE', headers: { authorization: `Bearer ${registrationAccessToken}` }, signal: AbortSignal.timeout(ANSWER_WAIT_MS) });
+        await answered.body?.cancel();
+        return answered.ok ? ok(undefined) : err({ reason: `HTTP ${String(answered.status)}` });
+      } catch (error) {
+        return err({ reason: reasonOf(error) });
+      }
     },
   };
 }

@@ -36,6 +36,11 @@ import { createListingConnectionOf } from './core/party-grants/listing-connectio
 import { createCompletePartySignIn } from './core/party-grants/complete-party-sign-in.js';
 import { createReadOwnGrant } from './core/party-grants/read-own-grant.js';
 import { createRemoveOwnGrant } from './core/party-grants/remove-own-grant.js';
+import { createEndAccountGrants } from './core/party-grants/end-account-grants.js';
+import { createEndPartyGrants } from './core/party-grants/end-party-grants.js';
+import { createEndRetiredPersonsGrants } from './core/party-grants/end-retired-persons-grants.js';
+import { createListGrants } from './core/party-grants/list-grants.js';
+import { createRemoveGrant } from './core/party-grants/remove-grant.js';
 import { createStartPartySignIn } from './core/party-grants/start-party-sign-in.js';
 import { signInServersOf } from './core/parties/sign-in-servers.js';
 import { createPartySignIns } from './adapters/oauth/party-sign-ins.js';
@@ -430,7 +435,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const checkScopes = createCheckRequiredScopes({ connections, door });
   const readScopeRequirements = createReadScopeRequirements({ parties, requirements });
   const readListedScopes = createReadListedScopes({ connections, door });
-  const checkApproving = createCheckApproving({ parties, connections, fleet: createProxyShipsAsActor(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const approvingDeps = { parties, connections, fleet: createProxyShipsAsActor(options.fleetUrl), credentialOf: (actor: Actor, sent: ActorCredential) => credentialOf(actor, sent) };
+  const checkApproving = createCheckApproving(approvingDeps);
   const setScopeRequirements = createSetScopeRequirements({
     parties,
     requirements,
@@ -554,7 +560,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const proxyShipsAsActor = createProxyShipsAsActor(options.fleetUrl);
   // Calls as an account need its account token, set up with the sign-in below.
   const asActor = { parties, fleet: proxyShipsAsActor, credentialOf: (actor: Actor, sent: ActorCredential) => credentialOf(actor, sent) };
-  const retireParty = createRetireParty({ ...asActor, tokens: issuedTokens });
+  const retireParty = createRetireParty({ ...asActor, tokens: issuedTokens, endPartyGrants: createEndPartyGrants({ grants: partyGrants, signIns: partySignIns }) });
   const changePartyOwner = createChangePartyOwner(asActor);
   const changePartyScopes = createChangePartyScopes(asActor);
   const proxyShipReads = createProxyShipReads(options.fleetUrl);
@@ -884,8 +890,13 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       await followExposedShips();
     },
     sleep, intervalMs: SLACK_TOKEN_ROUND_MS, log: server.log });
+  const keepGrantsAlive = createKeepGrantsAlive({ grants: partyGrants, servers: signInServersOf(parties), refreshGrant, clock });
+  const endRetiredPersonsGrants = createEndRetiredPersonsGrants({ connections, door, servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns });
   const grantKeeper = createGrantWorker({
-    keepAlive: createKeepGrantsAlive({ grants: partyGrants, servers: signInServersOf(parties), refreshGrant, clock }),
+    round: async () => {
+      await keepGrantsAlive();
+      await endRetiredPersonsGrants();
+    },
     sleep,
     intervalMs: options.grantRoundMs ?? GRANT_ROUND_MS,
     log: server.log,
@@ -907,6 +918,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     start: createStartPartySignIn({ servers: signInServersOf(parties), seals: partySignInSeals, signIns: partySignIns, secrets: oauthSecrets, clock, redirectUri: partySignInRedirectUri }),
     readOwn: createReadOwnGrant({ servers: signInServersOf(parties), grants: partyGrants }),
     removeOwn: createRemoveOwnGrant({ servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns }),
+    list: createListGrants({ ...approvingDeps, grants: partyGrants }),
+    remove: createRemoveGrant({ ...approvingDeps, grants: partyGrants, signIns: partySignIns }),
   };
   registerPartySignInRoutes(server, {
     complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, notices: signInNotices, accountOf, stateParty, clock, redirectUri: partySignInRedirectUri }),
@@ -927,6 +940,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     deleteFleet,
     endSignIns: createEndSignIns({ grants, tokens: issuedTokens }),
     stopSlackLink: createStopSlackLink({ links: slackLinks, clock }),
+    endAccountGrants: createEndAccountGrants({ servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns }),
     readConnection,
     connect,
     approveParty,

@@ -9,7 +9,8 @@
  * names, or denies consent; its token endpoint redeems each code once for
  * the client that asked it, with the PKCE verifier of its challenge and the
  * MCP endpoint as resource, answering an unsigned ID token; it revokes
- * tokens where the test offers revocation. It refreshes a grant by its
+ * tokens where the test offers revocation, and deletes a client by its
+ * registration access token where the test offers client management. It refreshes a grant by its
  * refresh token, rotating it. Its MCP endpoint lists and runs
  * search_records under an access token it issued and did not revoke or
  * end, recording each one it was called with and the outside account each
@@ -23,6 +24,7 @@ import { z } from 'zod';
 
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_CREATED = 201;
+const HTTP_NO_CONTENT = 204;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_FOUND = 302;
 const HTTP_FORBIDDEN = 403;
@@ -39,6 +41,8 @@ export interface AttioDoubleOptions {
   isRevoking?: boolean;
   /** Whether its authorization server states its issuer in each authorization response (RFC 9207); as Attio's, it does not by default. */
   isIssuerInResponse?: boolean;
+  /** Whether its registration answers where and with what each client is deleted (RFC 7592); as Attio's, it does not by default. */
+  isManagingClients?: boolean;
 }
 
 export interface RegisteredClient {
@@ -61,6 +65,8 @@ export interface AttioDouble {
   signIn: AttioSignIn;
   /** Every token revoked, in order. */
   revoked: string[];
+  /** Every client deleted, by its id, in order. */
+  deletedClients: string[];
   /** The Authorization header of each request to its MCP endpoint that it served. */
   authorizations: string[];
   /** The outside account, by subject, each tool call ran as, in order. */
@@ -156,6 +162,7 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     registered,
     signIn: { subject: 'attio-member-mathilde', email: 'mathilde@acme.example' },
     revoked: [],
+    deletedClients: [],
     authorizations: [],
     calledAs: [],
     refreshed: [],
@@ -212,7 +219,16 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     }
     const clientId = `attio-client-${String(registered.length + 1)}`;
     registered.push({ clientId, clientName: asked.data.client_name, redirectUris: asked.data.redirect_uris, scope: asked.data.scope });
-    return reply.code(HTTP_CREATED).send({ client_id: clientId, client_secret: secretOf(clientId), ...asked.data, token_endpoint_auth_method: 'client_secret_post' });
+    const management = options.isManagingClients === true ? { registration_client_uri: `${origin}/oauth/register/${clientId}`, registration_access_token: `${clientId}-registration` } : {};
+    return reply.code(HTTP_CREATED).send({ client_id: clientId, client_secret: secretOf(clientId), ...asked.data, token_endpoint_auth_method: 'client_secret_post', ...management });
+  });
+  server.delete('/oauth/register/:clientId', (request, reply) => {
+    const { clientId } = z.object({ clientId: z.string() }).parse(request.params);
+    if (options.isManagingClients !== true || request.headers.authorization !== `Bearer ${clientId}-registration`) {
+      return reply.code(HTTP_UNAUTHORIZED).send({ error: 'invalid_token' });
+    }
+    double.deletedClients.push(clientId);
+    return reply.code(HTTP_NO_CONTENT).send();
   });
   server.get('/oidc/authorize', (request, reply) => {
     const asked = authorizeSchema.safeParse(request.query);

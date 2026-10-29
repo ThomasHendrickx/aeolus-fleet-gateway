@@ -76,6 +76,21 @@ export function memoryPartyGrants(): PartyGrants & { held: PartyGrant[] } {
   return {
     held,
     ofPerson: (fleetId, { party, personShipId }) => Promise.resolve(held.find((grant) => isOf(grant, { fleetId, party }) && grant.personShipId === personShipId)),
+    ofParty: (fleetId, { party, after, limit }) =>
+      Promise.resolve(
+        held
+          .filter((grant) => isOf(grant, { fleetId, party }) && (after === null || grant.personShipId > after))
+          .sort((one, other) => one.personShipId.localeCompare(other.personShipId))
+          .slice(0, limit),
+      ),
+    persons: () =>
+      Promise.resolve(
+        held
+          .filter((grant, at) => held.findIndex((other) => other.fleetId === grant.fleetId && other.personShipId === grant.personShipId) === at)
+          .map(({ fleetId, personShipId }) => ({ fleetId, personShipId })),
+      ),
+    ofPersonShip: (fleetId, personShipId) => Promise.resolve(held.filter((grant) => grant.fleetId === fleetId && grant.personShipId === personShipId)),
+    ofAccount: (fleetId, accountId) => Promise.resolve(held.filter((grant) => grant.fleetId === fleetId && grant.accountId === accountId)),
     ofSubject: (fleetId, { party, subject }) => Promise.resolve(held.find((grant) => isOf(grant, { fleetId, party }) && grant.outsideAccount.subject === subject)),
     usable: (fleetId, { party, now }) =>
       Promise.resolve(
@@ -168,6 +183,7 @@ export function fakePartySignIns() {
     codes: new Map<string, RedeemedTokens>([['code-mathilde', MATHILDE_TOKENS]]),
     redeemed: new Array<{ clientId: string; code: string; verifier: string; redirectUri: string }>(),
     revoked: new Array<{ revocationEndpoint: string; token: string }>(),
+    deletedClients: new Array<{ registrationClientUri: string; registrationAccessToken: string }>(),
     /** The tokens each refresh token refreshes to; one not here is refused invalid_grant. */
     refreshes: new Map<string, RefreshedTokens>(),
     refreshed: new Array<{ clientId: string; refreshToken: string }>(),
@@ -197,6 +213,10 @@ export function fakePartySignIns() {
     revoke: (client, token) => {
       state.revoked.push({ revocationEndpoint: client.revocationEndpoint, token });
       return Promise.resolve(state.revocation);
+    },
+    deleteClient: ({ registrationClientUri, registrationAccessToken }) => {
+      state.deletedClients.push({ registrationClientUri, registrationAccessToken });
+      return Promise.resolve(ok(undefined));
     },
   };
   return { state, signIns };

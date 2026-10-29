@@ -600,6 +600,8 @@ model PartyGrant {
   // The schedule's round across fleets (Q7): grants near their end, and grants idle since their last refresh or sign-in.
   @@index([accessTokenEndsAt])
   @@index([refreshedAt, signedInAt])
+  // A disabled account's grants (Q14).
+  @@index([fleetId, accountId])
   @@map("party_grants")
 }
 

@@ -1,6 +1,6 @@
 import type { Actor } from '../actors/authenticate-actor.js';
 import { ok, type Result } from '../shared/result.js';
-import type { GrantLost, OutsideAccount } from './party-grant.js';
+import type { GrantLost, OutsideAccount, PartyGrant } from './party-grant.js';
 import type { PartyGrants, SignInServers } from './ports.js';
 import { signInPartyOf, type SignInPartyRefusal } from './sign-in-party.js';
 
@@ -27,7 +27,12 @@ export function createReadOwnGrant(deps: { servers: SignInServers; grants: Pick<
     if (grant === undefined) {
       return ok({ state: 'notSignedIn' });
     }
-    const { outsideAccount, signedInAt, lastUsedAt, lost } = grant;
-    return ok(lost === null ? { state: 'signedIn', outsideAccount, signedInAt, lastUsedAt } : { state: 'lost', outsideAccount, signedInAt, lastUsedAt, lost });
+    return ok(shownGrantOf(grant));
   };
+}
+
+/** A held grant as a page shows it: never a token. */
+export function shownGrantOf(grant: PartyGrant): Exclude<OwnGrant, { state: 'notSignedIn' }> {
+  const { outsideAccount, signedInAt, lastUsedAt, lost } = grant;
+  return lost === null ? { state: 'signedIn', outsideAccount, signedInAt, lastUsedAt } : { state: 'lost', outsideAccount, signedInAt, lastUsedAt, lost };
 }
