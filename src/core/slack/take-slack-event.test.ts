@@ -147,6 +147,19 @@ describe("a person's message to a bot, from Slack", () => {
     expect(events.held.map(({ shipId, inReplyTo, deliveryId, markdown }) => ({ shipId, inReplyTo, deliveryId, markdown }))).toEqual([{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', markdown: 'Cut the travel' }]);
   });
 
+  it("keeps an answer in a thread through the gateway's own bot while a delivery in that conversation waits for Slack, to match it once sent", async () => {
+    await links.add(aSlackLink());
+    await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
+    await posts.save({ fleetId: FLEET_ID, personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null });
+
+    const taken = await takeEvent({ type: 'message', appId: 'A01', fields: { ...MATHILDE_WRITES, text: 'Cut the travel', threadTs: '1730020000.000001' } });
+
+    expect({ taken, kept: events.held.map(({ shipId, inReplyTo, deliveryId, threadTs }) => ({ shipId, inReplyTo, deliveryId, threadTs })) }).toEqual({
+      taken: { isOk: true, value: { kind: 'kept' } },
+      kept: [{ shipId: null, inReplyTo: null, deliveryId: null, threadTs: '1730020000.000001' }],
+    });
+  });
+
   it("keeps nothing of a message to the gateway's own bot that answers no posted delivery", async () => {
     await links.add(aSlackLink());
     await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
