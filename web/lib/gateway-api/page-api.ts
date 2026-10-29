@@ -126,13 +126,13 @@ export async function gatewayOffPage(): Promise<{ kind: 'off'; fleetName: string
   }
 }
 
-/** What a page reads from the API, or why the API refused it, for the page to say in its place. */
-export type Read<T> = { isOk: true; value: T } | { isOk: false; refusal: string };
+/** What a page reads from the API, or why the API refused it, for the page to say in its place, with the code it refused with. */
+export type Read<T> = { isOk: true; value: T } | { isOk: false; refusal: string; code: string | undefined };
 
 export async function readOf<T>(call: Promise<T>): Promise<Read<T>> {
   try {
     return { isOk: true, value: await call };
   } catch (error) {
-    return { isOk: false, refusal: refusalMessageOf(error) };
+    return { isOk: false, refusal: refusalMessageOf(error), code: refusalCodeOf(error) };
   }
 }

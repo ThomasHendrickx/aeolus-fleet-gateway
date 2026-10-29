@@ -20,7 +20,7 @@ describe('the rows of a server\'s tools table (gateway scopes 4.3)', () => {
   });
 
   it('shows the requirements kept per tool name while the server does not answer, each switch unknown', () => {
-    expect(tableToolsOf({ read: { isOk: false, refusal: 'The MCP server of crm could not be listed: connect ECONNREFUSED' }, requirements: REQUIREMENTS })).toEqual([
+    expect(tableToolsOf({ read: { isOk: false, refusal: 'The MCP server of crm could not be listed: connect ECONNREFUSED', code: 'BAD_GATEWAY' }, requirements: REQUIREMENTS })).toEqual([
       { name: 'update_lead', isOn: null, isNew: false, scopes: ['crm:write-leads'] },
       { name: 'archived_tool', isOn: null, isNew: false, scopes: ['crm:admin'] },
     ]);
