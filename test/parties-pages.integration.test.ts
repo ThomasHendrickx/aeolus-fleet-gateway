@@ -22,6 +22,7 @@ const LABS = 'flt_01m4ajt7abh4rypkmdnjene67g';
 const SECOND_FLEET_SIGN_IN = 'charlotte-in-labs-first-shared-sign-in';
 const UNLISTED_SIGN_IN = 'charlotte-pagasae-lists-nothing-shared-sign-in';
 const PERSON_SIGN_IN = 'charlotte-with-her-person-ship-shared-sign-in';
+const APPROVING_PERSON_SIGN_IN = 'charlotte-approves-with-her-person-ship-shared-sign-in';
 const STARTUP_MS = 60_000;
 const POLL_MS = 250;
 const PAGE = { accept: 'text/html', cookie: `aeolus_account_session=${SIGN_IN}` };
@@ -64,6 +65,7 @@ beforeAll(async () => {
   ]);
   pagasae.sharedSignIn(UNLISTED_SIGN_IN, charlotteIn(pagasae, FLEET));
   pagasae.sharedSignIn(PERSON_SIGN_IN, { ...charlotteIn(pagasae, FLEET), person_ship: 'shp_01m3tb1zgr5h2ffee12xnch8sw' });
+  pagasae.sharedSignIn(APPROVING_PERSON_SIGN_IN, { ...charlotteIn(pagasae, FLEET), scope: 'fleet:read gateway:approve', person_ship: 'shp_01m3tb1zgr5h2ffee12xnch8sw' });
   pagasae.listFor(UNLISTED_SIGN_IN, 'unavailable');
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
@@ -269,9 +271,15 @@ describe('the parties pages, as the account signed in', () => {
     await prisma.$disconnect();
   }
 
-  it("shows your sign-in between a sign-in server's facts and its tools, and how a sign-in went; an account with no person ship is told it needs one (decision 0067, M2)", async () => {
+  /** Attio added as a server where each person signs in, its proxy ship not commissioned yet; kept once for every test that opens its page. */
+  async function attioSaved(): Promise<void> {
     const prisma = createPrismaClient(gatewayDatabaseUrl);
-    await createPrismaPartyStore(prisma).save({
+    const parties = createPrismaPartyStore(prisma);
+    if ((await parties.find(FLEET, 'attio')) !== undefined) {
+      await prisma.$disconnect();
+      return;
+    }
+    await parties.save({
       fleetId: FLEET,
       name: 'attio',
       kind: 'mcpServer',
@@ -303,6 +311,10 @@ describe('the parties pages, as the account signed in', () => {
       approvedAt: new Date('2026-10-29T10:00:00.000Z'),
     });
     await prisma.$disconnect();
+  }
+
+  it("shows your sign-in between a sign-in server's facts and its tools, and how a sign-in went; an account with no person ship is told it needs one (decision 0067, M2)", async () => {
+    await attioSaved();
     const pageAs = async (signIn: string, said = '') => textOf(await (await fetch(`${address}/outside-parties/attio?fleet=${FLEET}${said}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${signIn}` } })).text());
 
     const [person, turnedAway, noPerson] = await Promise.all([pageAs(PERSON_SIGN_IN), pageAs(PERSON_SIGN_IN, '&sign-in=turned-away'), pageAs(SIGN_IN)]);
@@ -314,6 +326,19 @@ describe('the parties pages, as the account signed in', () => {
     expect(person).not.toContain('The server did not answer');
     expect(turnedAway).toContain('Not signed inThat attio account is another person&#x27;s sign-in in this fleet: sign in as your own.');
     expect(noPerson).toContain('Your sign-inSigning in needs a person ship in Acme.');
+  }, 60_000);
+
+  it("shows an approver everyone's sign-ins between their own and the tools, and a person without gateway:approve only their own (decision 0067, M3, scenario 26)", async () => {
+    await attioSaved();
+    const pageAs = async (signIn: string) => (await fetch(`${address}/outside-parties/attio?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${signIn}` } })).text();
+
+    const [approver, person] = await Promise.all([pageAs(APPROVING_PERSON_SIGN_IN), pageAs(PERSON_SIGN_IN)]);
+    const approverText = textOf(approver);
+
+    expect(approver.indexOf('data-testid="outside-party-sign-ins-skeleton"') < approver.indexOf('data-testid="outside-party-sign-ins"')).toBe(true);
+    expect(approverText.indexOf('Your sign-in') < approverText.indexOf('Everyone&#x27;s sign-ins') && approverText.indexOf('Everyone&#x27;s sign-ins') < approverText.indexOf('Tools')).toBe(true);
+    expect(approverText).toContain("Everyone&#x27;s sign-insattio&#x27;s proxy ship is not commissioned yet");
+    expect(person).not.toContain('Everyone&#x27;s sign-ins');
   }, 60_000);
 
   const rowsOf = (body: string) => body.split('data-testid="tools-table-row"').length - 1;
