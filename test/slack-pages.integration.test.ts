@@ -347,6 +347,11 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     return z.object({ messageId: z.string() }).parse(await sent.json()).messageId;
   }
 
+  /** Waits until the gateway kept this many of the bot's posts to charlotte with their Slack message and acknowledged: Slack has the post before the gateway keeps its message, and a press or a reply before then finds no post. */
+  async function waitForKeptPosts(count: number): Promise<void> {
+    await expect.poll(() => prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'U0CHARLOTTE', ts: { not: null }, ackedAt: { not: null } } }), { timeout: 30_000 }).toBe(count);
+  }
+
   /** What release-notes-s7 received since, acknowledged. */
   async function releaseNotesReceives(): Promise<{ contentType: string; payload: string; inReplyTo: string | null }[]> {
     const received = await fetch(`${fleet.url}/api/v1/ship/receive`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${releaseNotesCrew}` }, body: JSON.stringify({ max: 10 }) });
@@ -360,14 +365,17 @@ describe('linking a Slack account (gateway scopes S7)', () => {
   it("shows a bot ship's message to a linked person in that bot's direct messages once, acknowledged, and their answers by button and in the thread reach the ship (gateway scopes S9)", async () => {
     await releaseNotesReceives();
     const posted = slack.posted.length;
+    const kept = await prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'U0CHARLOTTE' } });
 
     await releaseNotesSends({ contentType: 'text/markdown', payload: '**Friday**' });
     await expect.poll(() => slack.posted.slice(posted).map(({ botToken, form }) => ({ botToken, channel: form.channel, text: form.text })), { timeout: 30_000 }).toEqual([{ botToken: `xoxb-${releaseNotesAppId}`, channel: 'U0CHARLOTTE', text: '*Friday*' }]);
     const shownTs = `1730019600.${String(posted + 1).padStart(6, '0')}`;
+    await waitForKeptPosts(kept + 1);
 
     const question = JSON.stringify({ id: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', title: 'Ship it?', context: 'Notes ready', options: [{ key: 1, label: 'Ship', detail: '' }, { key: 2, label: 'Wait', detail: '' }], pick: { option: 1, why: 'ready' } });
     await releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: question });
     await expect.poll(() => slack.posted.length, { timeout: 30_000 }).toBe(posted + 2);
+    await waitForKeptPosts(kept + 2);
     const questionTs = `1730019600.${String(posted + 2).padStart(6, '0')}`;
     const payload = { type: 'block_actions', api_app_id: releaseNotesAppId, team: { id: 'T0ACME' }, user: { id: 'U0CHARLOTTE' }, container: { type: 'message', channel_id: 'U0CHARLOTTE', message_ts: questionTs }, actions: [{ action_id: 'answer-2', value: '2' }] };
     const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
