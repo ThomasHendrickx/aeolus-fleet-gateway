@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeProxyShipsAsActor, memoryPartyStore, OWNER_SHIP_ID } from '../../../test/support/party-fakes.js';
-import { JORIS_SHIP_ID, MATHILDE_SHIP_ID, aPartyGrant, anAttioParty, memoryPartyGrants } from '../../../test/support/party-grant-fakes.js';
+import { JORIS_SHIP_ID, MATHILDE_SHIP_ID, aPartyGrant, anAttioParty, fakeShipNames, memoryPartyGrants } from '../../../test/support/party-grant-fakes.js';
 import type { Actor } from '../actors/authenticate-actor.js';
 import { createCredentialOf } from '../actors/credential-of.js';
 import { err } from '../shared/result.js';
@@ -31,8 +31,14 @@ beforeEach(async () => {
   await grants.keep(aPartyGrant({ personShipId: JORIS_SHIP_ID, accountId: 'acc-joris', outsideAccount: { subject: 'sub-2', name: null }, lost: LOST }));
 });
 
-function listing(fleet = fakeProxyShipsAsActor()) {
-  return createListGrants({ parties, connections, fleet, credentialOf: createCredentialOf({ connections }), grants });
+/** The person ships' names as the fleet answers them. */
+const NAMES = new Map<ShipId, string>([
+  [MATHILDE_SHIP_ID, 'mathilde'],
+  [JORIS_SHIP_ID, 'joris'],
+]);
+
+function listing(fleet = fakeProxyShipsAsActor(), ships = fakeShipNames(NAMES)) {
+  return createListGrants({ parties, connections, fleet, credentialOf: createCredentialOf({ connections }), grants, ships });
 }
 
 /** Persons signed in to Attio: ships whose ids sort after Mathilde's and Joris's. */
@@ -50,12 +56,33 @@ describe("an approver sees every person's sign-in to an outside MCP server (Q12)
       isOk: true,
       value: {
         grants: [
-          { personShipId: JORIS_SHIP_ID, state: 'lost', outsideAccount: { subject: 'sub-2', name: null }, signedInAt: new Date('2026-10-28T14:00:00.000Z'), lastUsedAt: null, lost: LOST },
-          { personShipId: MATHILDE_SHIP_ID, state: 'signedIn', outsideAccount: { subject: 'sub-1', name: 'mathilde@acme.example' }, signedInAt: new Date('2026-10-28T14:00:00.000Z'), lastUsedAt: new Date('2026-10-28T14:30:00.000Z') },
+          { personShipId: JORIS_SHIP_ID, personName: 'joris', isYours: false, state: 'lost', outsideAccount: { subject: 'sub-2', name: null }, signedInAt: new Date('2026-10-28T14:00:00.000Z'), lastUsedAt: null, lost: LOST },
+          { personShipId: MATHILDE_SHIP_ID, personName: 'mathilde', isYours: false, state: 'signedIn', outsideAccount: { subject: 'sub-1', name: 'mathilde@acme.example' }, signedInAt: new Date('2026-10-28T14:00:00.000Z'), lastUsedAt: new Date('2026-10-28T14:30:00.000Z') },
         ],
         next: null,
       },
     });
+  });
+
+  it("says which sign-in is the approver's own", async () => {
+    const listed = await listing()({ actor: { ...APPROVER, personShipId: MATHILDE_SHIP_ID }, as: {}, name: 'attio', after: null });
+
+    expect(listed.isOk && listed.value.grants.map(({ personName, isYours }) => ({ personName, isYours }))).toEqual([
+      { personName: 'joris', isYours: false },
+      { personName: 'mathilde', isYours: true },
+    ]);
+  });
+
+  it('names a person the fleet does not answer a name for as not known', async () => {
+    const listed = await listing(fakeProxyShipsAsActor(), fakeShipNames(new Map([[MATHILDE_SHIP_ID, 'mathilde']])))({ actor: APPROVER, as: {}, name: 'attio', after: null });
+
+    expect(listed.isOk && listed.value.grants.map(({ personName }) => personName)).toEqual([null, 'mathilde']);
+  });
+
+  it("refuses when the fleet does not answer the persons' names", async () => {
+    const listed = await listing(fakeProxyShipsAsActor(), fakeShipNames(err({ code: 'UNAVAILABLE', message: 'fetch failed' })))({ actor: APPROVER, as: {}, name: 'attio', after: null });
+
+    expect(listed).toEqual({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE', message: 'The fleet did not answer: try again in a moment.' } });
   });
 
   it('answers 20 a page, and the next page after the last person of the one before', async () => {

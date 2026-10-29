@@ -1,9 +1,10 @@
 import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
+import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { McpServerParty } from '../../src/core/parties/party.js';
 import { isDueForRefresh, isUsable, type PartyGrant } from '../../src/core/party-grants/party-grant.js';
-import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, RefreshedTokens, SignInNotice, SignInNotices, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
+import type { IdTokenClaims, PartyGrants, ShipNames, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, RefreshedTokens, SignInNotice, SignInNotices, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 import type { SignInClient } from '../../src/core/vault/credential.js';
 import { FLEET_ID } from './fleet-fakes.js';
@@ -11,6 +12,21 @@ import { PROXY_SHIP_ID } from './party-fakes.js';
 
 export const MATHILDE_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9mth';
 export const JORIS_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9jrs';
+
+/** The fleet's ship names as an actor reads them: those the map names, or the refusal given. */
+export function fakeShipNames(answer: ReadonlyMap<ShipId, string> | Result<never, FleetRefusal>): ShipNames & { asked: ShipId[][] } {
+  const asked: ShipId[][] = [];
+  return {
+    asked,
+    namesOf: (_as, shipIds) => {
+      asked.push([...shipIds]);
+      if ('isOk' in answer) {
+        return Promise.resolve(answer);
+      }
+      return Promise.resolve(ok(new Map(shipIds.flatMap((shipId) => { const name = answer.get(shipId); return name === undefined ? [] : [[shipId, name] as const]; }))));
+    },
+  };
+}
 
 /** A party's sign-in client, shaped as Attio's (oauth-servers L10): no revocation, no issuer in its authorization response. */
 export const ATTIO_CLIENT: SignInClient = {
