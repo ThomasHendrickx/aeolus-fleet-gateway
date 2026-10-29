@@ -11,6 +11,7 @@ import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
 import { AgentNeeds } from '../tools-table/ui/agent-needs';
 import { approvalOf, ToolsSection } from '../tools-table/ui/tools-section';
 import { ToolsSkeleton } from '../tools-table/ui/tools-skeleton';
+import { Fact } from './fact';
 import { RepeatableSwitch } from './repeatable-switch';
 
 /** The scopes that change a party's owner, its scopes, and retire it (0056). */
@@ -43,15 +44,6 @@ export function Refusal({ children }: { children: ReactNode }) {
 const ADDRESS_LABELS: Record<ListedParty['kind'], string> = { mcpServer: 'Address', mcpClient: 'Client id', a2aClient: 'Address', a2aAgent: 'Card address' };
 
 const UNKNOWN = <span className="text-muted-foreground">Not known</span>;
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid gap-1 sm:grid-cols-[10rem_1fr]">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="flex flex-wrap items-center gap-2">{children}</dd>
-    </div>
-  );
-}
 
 /** The party's head: its name, protocol, side and state. */
 export function PartyHead({ party }: { party: ListedParty }) {

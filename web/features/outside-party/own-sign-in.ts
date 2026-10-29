@@ -6,10 +6,13 @@
  */
 import type { SearchParams } from '../../lib/gateway-api/page-api';
 
+/** What the address says once you removed your sign-in: the page's own outcome, never the gateway's. */
+export const REMOVED = 'removed';
+
 /** What the address back says of a sign-in, and what the page calls it. */
 const OUTCOMES = {
   'signed-in': 'signedIn',
-  removed: 'removed',
+  [REMOVED]: 'removed',
   failed: 'failed',
   'turned-away': 'turnedAway',
   'not-signed-in': 'cancelled',
@@ -50,15 +53,20 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 const twoDigits = (value: number) => String(value).padStart(2, '0');
 
-/** When something happened, in words: Just now, minutes ago within the hour, else the day and time in UTC, as the console's other times are. */
-export function whenWordsOf(at: string, now: Date): string {
+/** The day and time, in UTC as the console's other times are: 28 Oct, 22:10. */
+export function dayAndTimeOf(at: string): string {
   const time = new Date(at);
-  const ago = now.getTime() - time.getTime();
+  return `${String(time.getUTCDate())} ${MONTHS[time.getUTCMonth()] ?? ''}, ${twoDigits(time.getUTCHours())}:${twoDigits(time.getUTCMinutes())}`;
+}
+
+/** When something happened, in words: Just now, minutes ago within the hour, else the day and time. */
+export function whenWordsOf(at: string, now: Date): string {
+  const ago = now.getTime() - new Date(at).getTime();
   if (ago < MINUTE_MS) {
     return 'Just now';
   }
   if (ago < HOUR_MS) {
     return `${String(Math.floor(ago / MINUTE_MS))} min ago`;
   }
-  return `${String(time.getUTCDate())} ${MONTHS[time.getUTCMonth()] ?? ''}, ${twoDigits(time.getUTCHours())}:${twoDigits(time.getUTCMinutes())}`;
+  return dayAndTimeOf(at);
 }

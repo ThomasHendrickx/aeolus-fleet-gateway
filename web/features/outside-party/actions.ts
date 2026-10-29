@@ -4,7 +4,7 @@
  * One outside party's forms, as the account signed in (decision 0056):
  * changing its owner and scopes, switching a server's tools and setting the
  * scopes a party needs, marking an A2A agent repeatable or not, signing in
- * to a server for yourself (decision 0067), and retiring it. Each asks the API, which
+ * to a server for yourself and removing that sign-in (decision 0067), and retiring it. Each asks the API, which
  * checks the account's scopes; a refusal is said on the form.
  */
 import { revalidatePath } from 'next/cache';
@@ -16,6 +16,7 @@ import { FLEET_FIELD, fieldOf, fieldsOf, type FormState } from '../forms/form-st
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../outside-parties/paths';
 import { changesOf } from './scope-changes';
 import { markedMessageOf } from './marked-message';
+import { REMOVED, SIGN_IN_PARAMETER } from './own-sign-in';
 
 /** The field a party's form names it by. */
 const NAME_FIELD = 'name';
@@ -101,6 +102,19 @@ export async function signInToParty(_previous: FormState, form: FormData): Promi
     return { kind: 'refused', message: refusalMessageOf(error) };
   }
   redirect(url);
+}
+
+/** A person removes their own sign-in to a server: the page then says it is removed. */
+export async function removeOwnSignIn(_previous: FormState, form: FormData): Promise<FormState> {
+  const fleetId = fieldOf(form, FLEET_FIELD);
+  const name = fieldOf(form, NAME_FIELD);
+  const api = await requestApi(fleetId);
+  try {
+    await api.parties.removeOwnSignIn.mutate({ name });
+  } catch (error) {
+    return { kind: 'refused', message: refusalMessageOf(error) };
+  }
+  redirect(inFleet(`${partyPath(name)}?${new URLSearchParams({ [SIGN_IN_PARAMETER]: REMOVED }).toString()}`, fleetId));
 }
 
 export async function retireParty(_previous: FormState, form: FormData): Promise<FormState> {
