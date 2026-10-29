@@ -28,7 +28,7 @@ describe("a grant is refreshed with its party's client (decision 0067)", () => {
   it('answers and keeps the new access and refresh tokens, with when the access token ends', async () => {
     const refreshed = await refresh({ client: ATTIO_CLIENT, grant: aPartyGrant() });
 
-    const expected = aPartyGrant({ accessToken: 'access-2', refreshToken: 'refresh-2', accessTokenEndsAt: new Date('2026-10-28T17:00:00.000Z') });
+    const expected = aPartyGrant({ accessToken: 'access-2', refreshToken: 'refresh-2', accessTokenEndsAt: new Date('2026-10-28T17:00:00.000Z'), refreshedAt: AT });
     expect(refreshed).toEqual({ isOk: true, value: expected });
     expect(grants.held).toEqual([expected]);
   });
@@ -44,7 +44,7 @@ describe("a grant is refreshed with its party's client (decision 0067)", () => {
 
     await refresh({ client: ATTIO_CLIENT, grant: aPartyGrant() });
 
-    expect(grants.held).toEqual([aPartyGrant({ accessToken: 'access-2', refreshToken: 'refresh-mathilde', accessTokenEndsAt: null })]);
+    expect(grants.held).toEqual([aPartyGrant({ accessToken: 'access-2', refreshToken: 'refresh-mathilde', accessTokenEndsAt: null, refreshedAt: AT })]);
   });
 
   it('refreshes nothing for a grant the server issued no refresh token', async () => {
