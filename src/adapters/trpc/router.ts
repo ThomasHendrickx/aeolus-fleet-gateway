@@ -464,12 +464,15 @@ const ownSignInOutputSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('lost'), ...heldGrantShape, lost: z.object({ at: z.string(), why: z.string() }) }),
 ]);
 
+/** Whose sign-in an approver sees: the person ship, its name where the fleet answers one, and whether it is the approver's own. */
+const personShape = { personShipId: z.string(), personName: z.string().nullable(), isYours: z.boolean() };
+
 /** Everyone's sign-ins to a party, a page at a time, as an approver sees them: never a token. */
 const signInsOutputSchema = z.object({
   grants: z.array(
     z.discriminatedUnion('state', [
-      z.object({ personShipId: z.string(), state: z.literal('signedIn'), ...heldGrantShape }),
-      z.object({ personShipId: z.string(), state: z.literal('lost'), ...heldGrantShape, lost: z.object({ at: z.string(), why: z.string() }) }),
+      z.object({ ...personShape, state: z.literal('signedIn'), ...heldGrantShape }),
+      z.object({ ...personShape, state: z.literal('lost'), ...heldGrantShape, lost: z.object({ at: z.string(), why: z.string() }) }),
     ]),
   ),
   next: z.string().nullable(),

@@ -13,6 +13,8 @@ import { approvalOf, ToolsSection } from '../tools-table/ui/tools-section';
 import { ToolsSkeleton } from '../tools-table/ui/tools-skeleton';
 import { readOwnSignIn } from '../hooks/read-own-sign-in';
 import type { SignInOutcome } from '../own-sign-in';
+import { EveryonesSignInsSkeleton } from './everyones-sign-ins';
+import { EveryonesSignInsSection } from './everyones-sign-ins-section';
 import { Fact } from './fact';
 import { OwnSignInCard } from './own-sign-in-card';
 import { RepeatableSwitch } from './repeatable-switch';
@@ -70,7 +72,8 @@ export function PartyHead({ party }: { party: ListedParty }) {
  * needs and its repeatable mark, a switch for an approver (A9). Each control shows only to an account holding
  * its scope; the API checks it again. A server where each person signs in
  * shows your own sign-in between its facts and its tools (decision 0067, M2),
- * and how a sign-in went when the browser comes back.
+ * and how a sign-in went when the browser comes back; below it, for an
+ * account holding gateway:approve, everyone's sign-ins (M3).
  */
 export async function OutsideParty({ page, name, outcome }: { page: SignedInPage; name: string; outcome: SignInOutcome | null }) {
   const { api, fleetId, scopes } = page;
@@ -136,6 +139,11 @@ export async function OutsideParty({ page, name, outcome }: { page: SignedInPage
         ) : null}
       </dl>
       {ownSignIn === undefined ? null : <OwnSignInCard fleetId={fleetId} party={party.name} read={ownSignIn} outcome={outcome} now={new Date()} />}
+      {isSignIn && isApprover ? (
+        <Suspense fallback={<EveryonesSignInsSkeleton party={party.name} />}>
+          <EveryonesSignInsSection api={api} fleetId={fleetId} name={party.name} />
+        </Suspense>
+      ) : null}
       {party.kind === 'mcpServer' ? (
         <section className={`${CARD} grid gap-3`} data-testid="outside-party-tools">
           <h2 className="text-section font-semibold">Tools</h2>
