@@ -86,3 +86,18 @@ export interface PartySignIns {
   /** Revokes a token at the client's revocation endpoint (RFC 7009). */
   revoke(client: SignInClient & { revocationEndpoint: string }, token: string): Promise<Result<void, { reason: string }>>;
 }
+
+/** The notice a person is told by when a call needs their sign-in to a party (Q6): its id keys the message, so one sent again is stored once. */
+export interface SignInNotice {
+  readonly noticeId: string;
+  readonly isTold: boolean;
+}
+
+/** Outbound port: the notices of a missing sign-in, one per person and party while open. */
+export interface SignInNotices {
+  /** The person's open notice for the party, opened under this id unless one is open already, as two calls at once find. */
+  open(fleetId: FleetId, notice: { party: string; personShipId: ShipId; noticeId: string }): Promise<SignInNotice>;
+  markTold(fleetId: FleetId, notice: { party: string; personShipId: ShipId }): Promise<void>;
+  /** Closes it at a sign-in, so a later loss tells the person again (Q6). */
+  close(fleetId: FleetId, notice: { party: string; personShipId: ShipId }): Promise<void>;
+}
