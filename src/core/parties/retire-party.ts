@@ -1,6 +1,7 @@
 import type { Actor } from '../actors/authenticate-actor.js';
 import type { ActorCredential, CredentialOf } from '../actors/credential-of.js';
 import type { IssuedTokens } from '../oauth/ports.js';
+import type { EndPartyGrants } from '../party-grants/end-party-grants.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { PartyStore, ProxyShipsAsActor } from './ports.js';
@@ -20,11 +21,13 @@ export type RetireParty = (input: { actor: Actor; as: ActorCredential; name: str
  * 0056). Its proxy ship is retired in the fleet as the actor, so the fleet
  * checks its manage reach, and only then does the gateway forget the party
  * and revoke its client's tokens; its worker ends as the fleet ends the
- * proxy ship's crew. A proxy ship retired already is retired. A party whose
+ * proxy ship's crew. A server where each person signs in has every grant
+ * ended and its client deleted where offered (decision 0067) before it is
+ * forgotten. A proxy ship retired already is retired. A party whose
  * ship the gateway never learned asks the fleet nothing. Adding it again is
  * a new request.
  */
-export function createRetireParty(deps: { parties: PartyStore; fleet: ProxyShipsAsActor; tokens: Pick<IssuedTokens, 'revokeParty'>; credentialOf: CredentialOf }): RetireParty {
+export function createRetireParty(deps: { parties: PartyStore; fleet: ProxyShipsAsActor; tokens: Pick<IssuedTokens, 'revokeParty'>; endPartyGrants: EndPartyGrants; credentialOf: CredentialOf }): RetireParty {
   return async ({ actor, as, name }) => {
     if (!actor.scopes.includes(RETIRING_SCOPE)) {
       return refuse('NOT_A_MANAGER', `Retiring an outside party needs ${RETIRING_SCOPE}`);
@@ -45,6 +48,9 @@ export function createRetireParty(deps: { parties: PartyStore; fleet: ProxyShips
       if (!retired.isOk && retired.error.code !== RETIRED_ALREADY) {
         return refuse('RETIRE_REFUSED', retired.error.message);
       }
+    }
+    if (party.kind === 'mcpServer' && party.credential.kind === 'personSignIn') {
+      await deps.endPartyGrants({ fleetId: actor.fleetId, name, client: party.credential.client });
     }
     await deps.parties.remove(actor.fleetId, name);
     await deps.tokens.revokeParty(actor.fleetId, name);
