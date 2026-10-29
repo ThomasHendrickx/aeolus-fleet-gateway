@@ -418,20 +418,23 @@ describe('keeping grants alive (Q7)', () => {
     expect(attio.calledAs).toEqual([]);
   });
 
-  it("loses the grant at the next refresh when the gateway stopped after Attio rotated its refresh token, tells the owner, and the next call gets Q5's error result (scenario 22)", async () => {
+  it("loses the grant at the next refresh when the gateway stopped after Attio rotated its refresh token, tells the owner once, and a call gets Q5's error result: no call is lost (scenario 22)", async () => {
     await attioAdded();
     await signedIn(MATHILDE_BROWSER, MATHILDE_ACCOUNT);
     const leadScout = await aShip('lead-scout', mathilde.shipId);
     await gatewayStopped();
     attio.spendRefreshTokens();
+    attio.endAccessTokens();
     await grantIdle(mathilde.shipId);
+    // Sent while the gateway is down, so the fleet hands it to the gateway that starts again, never to the stopped one's receive.
+    const request = await searchRecords(leadScout);
 
     await gatewayStarted();
 
-    await expect.poll(async () => (await keptGrants()).map(({ lostAt }) => lostAt !== null)).toEqual([true]);
-    await expect(receiveOne(fleet, mathilde.crewToken).then((told) => told?.payload)).resolves.toContain('Your sign-in to attio ended');
-    const request = await searchRecords(leadScout);
     await expect(replyTo(leadScout)).resolves.toEqual({ inReplyTo: request, text: noSignIn('mathilde'), isError: true });
+    expect((await keptGrants()).map(({ lostAt }) => lostAt !== null)).toEqual([true]);
+    await expect(receiveOne(fleet, mathilde.crewToken).then((told) => told?.payload)).resolves.toContain('Your sign-in to attio ended');
+    await expect(receiveOne(fleet, mathilde.crewToken)).resolves.toBeUndefined();
     expect(attio.calledAs).toEqual([]);
   });
 });
