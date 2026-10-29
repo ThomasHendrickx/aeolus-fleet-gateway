@@ -17,6 +17,8 @@ export interface FleetShip {
   status: 'awaitingCrew' | 'crewed' | 'retired';
   name: string;
   scopes: string[];
+  /** Who owns it (decision 0045): a person ship or argo, by id and name; none for argo and the viewer. */
+  owner: { shipId: ShipId; name: string } | null;
 }
 
 /**
