@@ -3,7 +3,8 @@
 /**
  * One outside party's forms, as the account signed in (decision 0056):
  * changing its owner and scopes, switching a server's tools and setting the
- * scopes a party needs, marking an A2A agent repeatable or not, and retiring it. Each asks the API, which
+ * scopes a party needs, marking an A2A agent repeatable or not, signing in
+ * to a server for yourself (decision 0067), and retiring it. Each asks the API, which
  * checks the account's scopes; a refusal is said on the form.
  */
 import { revalidatePath } from 'next/cache';
@@ -88,6 +89,18 @@ export async function markA2aAgent(_previous: MarkState, form: FormData): Promis
   } catch (error) {
     return { kind: 'refused', message: refusalMessageOf(error) };
   }
+}
+
+/** A person signs in to a server where each person signs in, for themselves: their browser goes to its authorization server. */
+export async function signInToParty(_previous: FormState, form: FormData): Promise<FormState> {
+  const api = await requestApi(fieldOf(form, FLEET_FIELD));
+  let url: string;
+  try {
+    ({ url } = await api.parties.startSignIn.mutate({ name: fieldOf(form, NAME_FIELD) }));
+  } catch (error) {
+    return { kind: 'refused', message: refusalMessageOf(error) };
+  }
+  redirect(url);
 }
 
 export async function retireParty(_previous: FormState, form: FormData): Promise<FormState> {

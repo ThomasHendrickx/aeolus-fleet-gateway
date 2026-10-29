@@ -21,8 +21,9 @@ const OWNER: Extract<AddServerState, { step: 'owner' }> = {
 };
 const ignored = () => undefined;
 
+/** A step's text as a person reads it: React's form script, its tags and its escapes gone. */
 function textOf(markup: string): string {
-  return markup.replaceAll(/<[^>]*>/g, ' ').replaceAll(/\s+/g, ' ').trim();
+  return markup.replaceAll(/<script>.*?<\/script>/gs, '').replaceAll(/<[^>]*>/g, ' ').replaceAll('&#x27;', "'").replaceAll(/\s+/g, ' ').trim();
 }
 
 function addressStep(fields: Record<string, string>): string {
