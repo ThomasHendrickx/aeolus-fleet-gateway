@@ -8,6 +8,7 @@
 import {
   Client,
   ClientCredentialsProvider,
+  InsufficientScopeError,
   ProtocolError,
   SdkError,
   SdkErrorCode,
@@ -17,7 +18,7 @@ import {
 } from '@modelcontextprotocol/client';
 import { z } from 'zod';
 
-import type { McpServerConnection, McpServers, OutsideTool, ToolCall, ToolCallOutcome, ToolResult } from '../../core/mcp-out/ports.js';
+import type { CredentialRefusal, McpServerConnection, McpServers, OutsideTool, ToolCall, ToolCallOutcome, ToolResult } from '../../core/mcp-out/ports.js';
 import { err, ok } from '../../core/shared/result.js';
 
 /** How the gateway names itself to outside MCP servers. */
@@ -87,7 +88,7 @@ function reasonOf(error: unknown): string {
 
 /** The server refused the gateway's credential, or could not be reached: the request did not run. */
 function isNotSent(error: unknown): boolean {
-  if (error instanceof UnauthorizedError) {
+  if (error instanceof UnauthorizedError || error instanceof InsufficientScopeError) {
     return true;
   }
   if (error instanceof SdkHttpError) {
@@ -97,6 +98,23 @@ function isNotSent(error: unknown): boolean {
     return error.code === SdkErrorCode.SendFailed && isConnectionRefused(error.cause);
   }
   return error instanceof TypeError && isConnectionRefused(error.cause);
+}
+
+/** How the server refused the credential, where it did. */
+function refusalOf(error: unknown): CredentialRefusal | undefined {
+  if (error instanceof InsufficientScopeError) {
+    return 'insufficientScope';
+  }
+  if (error instanceof UnauthorizedError || (error instanceof SdkHttpError && error.status === HTTP_UNAUTHORIZED)) {
+    return 'unauthorized';
+  }
+  return undefined;
+}
+
+/** A call the gateway never sent, saying how the server refused its credential where it did. */
+function notSentOf(error: unknown): ToolCallOutcome {
+  const refusal = refusalOf(error);
+  return { kind: 'notSent', reason: reasonOf(error), ...(refusal === undefined ? {} : { refusal }) };
 }
 
 const systemError = z.object({ code: z.string() });
@@ -165,7 +183,7 @@ export function createMcpServers(): McpServers {
       try {
         client = await connected(connection);
       } catch (error) {
-        return { kind: 'notSent', reason: reasonOf(error) };
+        return notSentOf(error);
       }
       try {
         return await callOnce(client, call);
@@ -173,7 +191,7 @@ export function createMcpServers(): McpServers {
         if (error instanceof ProtocolError) {
           return { kind: 'answered', result: protocolErrorResult(error) };
         }
-        return isNotSent(error) ? { kind: 'notSent', reason: reasonOf(error) } : { kind: 'unanswered', reason: reasonOf(error) };
+        return isNotSent(error) ? notSentOf(error) : { kind: 'unanswered', reason: reasonOf(error) };
       } finally {
         await client.close();
       }
