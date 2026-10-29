@@ -1,0 +1,171 @@
+/*
+ * The gateway's theme, the console's own. tokens.css is the console's copy of
+ * the design tokens until @aeolus-fleet/common/header holds the single one
+ * (header design H2), light on :root and dark on .dark. It is imported unlayered, so its values win over
+ * Tailwind's theme layer at runtime.
+ *
+ * Tailwind makes utilities only for keys it knows. Colours are mapped onto its
+ * --color-* names. Every other token already has a Tailwind name (--text-*,
+ * --radius-*, --shadow-*, --font-*), so it is registered as a reference to
+ * itself: the utility reads the variable, and tokens.css sets it. No value is
+ * written twice.
+ */
+/* Tailwind scans the web app alone, not the gateway's server. */
+@import 'tailwindcss' source('..');
+@import 'tw-animate-css';
+@import './tokens.css';
+
+/* The header every Aeolus app shows and the atoms it stands on come from common (header design H2). */
+@source '../../node_modules/@aeolus-fleet/common/dist/header';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-highlight: var(--highlight);
+  --color-overlay: var(--overlay);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-text: var(--destructive-text);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-tone-waiting-bg: var(--tone-waiting-bg);
+  --color-tone-waiting-fg: var(--tone-waiting-fg);
+  --color-tone-waiting-border: var(--tone-waiting-border);
+  --color-tone-active-bg: var(--tone-active-bg);
+  --color-tone-active-fg: var(--tone-active-fg);
+  --color-tone-active-border: var(--tone-active-border);
+  --color-tone-ok-bg: var(--tone-ok-bg);
+  --color-tone-ok-fg: var(--tone-ok-fg);
+  --color-tone-ok-border: var(--tone-ok-border);
+  --color-tone-attention-bg: var(--tone-attention-bg);
+  --color-tone-attention-fg: var(--tone-attention-fg);
+  --color-tone-attention-border: var(--tone-attention-border);
+  --color-tone-ended-bg: var(--tone-ended-bg);
+  --color-tone-ended-fg: var(--tone-ended-fg);
+  --color-tone-ended-border: var(--tone-ended-border);
+}
+
+@theme {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --ease-standard: var(--ease-standard);
+  --ease-exit: var(--ease-exit);
+  --text-micro: var(--text-micro);
+  --text-micro--line-height: var(--text-micro--line-height);
+  --text-caption: var(--text-caption);
+  --text-caption--line-height: var(--text-caption--line-height);
+  --text-meta: var(--text-meta);
+  --text-meta--line-height: var(--text-meta--line-height);
+  --text-body: var(--text-body);
+  --text-body--line-height: var(--text-body--line-height);
+  --text-section: var(--text-section);
+  --text-section--line-height: var(--text-section--line-height);
+  --text-body-touch: var(--text-body-touch);
+  --text-body-touch--line-height: var(--text-body-touch--line-height);
+  --text-input-touch: var(--text-input-touch);
+  --text-input-touch--line-height: var(--text-input-touch--line-height);
+  --text-heading: var(--text-heading);
+  --text-heading--line-height: var(--text-heading--line-height);
+  --text-heading-touch: var(--text-heading-touch);
+  --text-heading-touch--line-height: var(--text-heading-touch--line-height);
+  --text-title: var(--text-title);
+  --text-title--line-height: var(--text-title--line-height);
+  --text-title-touch: var(--text-title-touch);
+  --text-title-touch--line-height: var(--text-title-touch--line-height);
+  --text-metric: var(--text-metric);
+  --text-metric--line-height: var(--text-metric--line-height);
+  --text-id: var(--text-id);
+  --text-id--line-height: var(--text-id--line-height);
+  --text-code: var(--text-code);
+  --text-code--line-height: var(--text-code--line-height);
+
+  /* A row that just appeared starts on --highlight and fades back (Table). */
+  --animate-highlight: highlight-fade var(--duration-highlight) var(--ease-standard);
+
+  @keyframes highlight-fade {
+    from {
+      background-color: var(--highlight);
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background font-sans text-body text-foreground antialiased;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+
+  /* Every clickable control shows the pointer, once, here (docs/design/conventions.md, "Stack"). */
+  button,
+  [role='button'],
+  [data-slot='button'],
+  [role='menuitem'],
+  [role='menuitemcheckbox'],
+  [role='menuitemradio'],
+  [role='option'],
+  [role='tab'],
+  [role='checkbox'],
+  [role='switch'] {
+    cursor: pointer;
+  }
+
+  /* A disabled control takes the default cursor. */
+  :is(
+      button,
+      [role='button'],
+      [data-slot='button'],
+      [role='menuitem'],
+      [role='menuitemcheckbox'],
+      [role='menuitemradio'],
+      [role='option'],
+      [role='tab'],
+      [role='checkbox'],
+      [role='switch']
+    ):is(:disabled, [aria-disabled='true'], [data-disabled]) {
+    cursor: default;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0ms !important;
+    }
+  }
+}

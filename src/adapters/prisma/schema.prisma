@@ -1,0 +1,618 @@
+// The gateway's tables, in its own database: core never reads them, and the
+// gateway never reads core's; it reaches the fleet only through core's public
+// API, as the ships it crews. Every table has fleet_id.
+//
+// Timestamps have no database default: the application's Clock port sets every
+// one of them, so tests control time.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "./generated"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+  runtime             = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// The crew token the gateway holds for each fleet's gateway ship, so a restart
+/// crews it again without a new secret. One row per fleet: one install serves
+/// many fleets.
+model Connection {
+  fleetId   String   @id @map("fleet_id")
+  shipId    String   @map("ship_id")
+  shipName  String   @map("ship_name")
+  /// Null while the gateway is not connected: the fleet and ship stay, as the last connection.
+  crewToken String?  @map("crew_token")
+  crewedAt  DateTime @map("crewed_at") @db.Timestamptz(3)
+
+  @@map("connections")
+}
+
+/// Whether the hosting service switched the gateway on for a fleet (decision
+/// 0021). None before the first switch.
+model FleetSwitch {
+  fleetId   String   @id @map("fleet_id")
+  enabled   Boolean
+  changedAt DateTime @map("changed_at") @db.Timestamptz(3)
+
+  @@map("fleet_switches")
+}
+
+/// Whether a fleet's outside parties are on (interop I-3); a fleet without a
+/// row has them off.
+model OutsidePartySwitch {
+  fleetId   String   @id @map("fleet_id")
+  isOn      Boolean  @map("is_on")
+  changedAt DateTime @map("changed_at") @db.Timestamptz(3)
+
+  @@map("outside_party_switches")
+}
+
+/// The installation's requests, by the caller's request id, so a replay answers
+/// what the first call answered. A switch names its fleet and goes with it; a
+/// delete keeps only the request's hash, so nothing of the deleted fleet stays.
+model InstallationRequest {
+  requestId   String   @id @map("request_id")
+  kind        String
+  requestHash String   @map("request_hash")
+  fleetId     String?  @map("fleet_id")
+  enabled     Boolean?
+  at          DateTime @db.Timestamptz(3)
+
+  @@index([fleetId])
+  @@map("installation_requests")
+}
+
+/// The outside parties argo approved (interop I-5): one app proxy ship each,
+/// known by its ship's name in the fleet. The vault: the credential the
+/// gateway calls the party with, kept as squadrons keeps crew tokens, and the
+/// proxy ship's crew token.
+model Party {
+  fleetId                  String   @map("fleet_id")
+  name                     String
+  kind                     String
+  /// An MCP server's: its URL, its credential as JSON (none, a static bearer, or OAuth client credentials), and its calls at once. An A2A agent's too, its card address as the URL.
+  url                      String?
+  credential               Json?
+  concurrencyLimit         Int?     @map("concurrency_limit")
+  /// An MCP server's tool switches, by tool name (aeolus-fleet#1151); none kept yet means every tool it lists is on.
+  toolSwitches             Json?    @map("tool_switches")
+  /// The scopes a calling ship needs (gateway scopes, 4.2): the party's set and each tool's, by scope text and tool name; none set yet needs nothing.
+  scopeRequirements        Json?    @map("scope_requirements")
+  /// The version the requirements were last changed to, so a change made on an older one is refused.
+  scopeRequirementsVersion Int      @default(0) @map("scope_requirements_version")
+  /// An MCP client's: its OAuth client id.
+  clientId                 String?  @map("client_id")
+  /// An A2A client's: the hash of the bearer it was shown once, which names it on every call; unique across fleets, as the bearer alone names the party (decision 0060).
+  bearerHash               String?  @unique @map("bearer_hash")
+  /// An A2A agent's: whether a message that died unconfirmed may be handed again, until an approver marks it not (A9).
+  isRepeatable             Boolean? @map("is_repeatable")
+  state                    String
+  proxyShipId              String?  @map("proxy_ship_id")
+  /// Kept only from the proxy ship's commission until the gateway crews it.
+  secret                   String?
+  crewToken                String?  @map("crew_token")
+  requestId                String   @map("request_id")
+  requestHash              String   @map("request_hash")
+  approvedAt               DateTime @map("approved_at") @db.Timestamptz(3)
+
+  @@id([fleetId, name])
+  @@unique([fleetId, clientId])
+  @@map("parties")
+}
+
+/// argo's repeatable marks: a tool of a party whose call may be handed again when it died unanswered (interop 5.2).
+model ToolMark {
+  fleetId String @map("fleet_id")
+  party   String
+  tool    String
+
+  @@id([fleetId, party, tool])
+  @@map("tool_marks")
+}
+
+/// The gateway's calls to outside MCP servers, by delivery: so a restart never calls again what may have run (interop 5.2).
+model Call {
+  deliveryId String @id @map("delivery_id")
+  fleetId    String @map("fleet_id")
+  party      String
+  state      String
+  /// The reply as JSON, kept from the server's answer until it is sent.
+  reply      Json?
+
+  @@index([fleetId])
+  @@map("calls")
+}
+
+/// The gateway's messages to outside A2A agents, by delivery (slice 6): so a restart sends nothing again that may have run, and follows on each task the agent took.
+model A2aAgentCall {
+  deliveryId   String   @map("delivery_id")
+  fleetId      String   @map("fleet_id")
+  party        String
+  messageId    String   @map("message_id")
+  senderShipId String   @map("sender_ship_id")
+  state        String
+  taskId       String?  @map("task_id")
+  contextId    String?  @map("context_id")
+  deadlineAt   DateTime @map("deadline_at") @db.Timestamptz(3)
+  /// The reply to the agent's message answer or refusal, kept before the ack.
+  answer       Json?
+  /// The identity of each event the follow replied, so a restart replies none again.
+  replied      String[] @default([])
+  /// Where the next chunk of each artifact goes, as the replies so far leave it.
+  chunkPlaces  Json     @default("{}") @map("chunk_places")
+
+  @@id([fleetId, deliveryId])
+  @@index([fleetId, party, state])
+  @@map("a2a_agent_calls")
+}
+
+/// Which task each reply the gateway sent for an outside A2A agent tells of, by the reply's message id: an answer to it continues the task (slice 6).
+model A2aAgentReply {
+  fleetId   String @map("fleet_id")
+  party     String
+  messageId String @map("message_id")
+  taskId    String @map("task_id")
+  contextId String @map("context_id")
+
+  @@id([fleetId, party, messageId])
+  @@map("a2a_agent_replies")
+}
+
+/// MCP clients argo pre-registered; a confidential one's secret kept only as its hash.
+model OAuthClient {
+  clientId     String   @id @map("client_id")
+  fleetId      String   @map("fleet_id")
+  name         String
+  redirectUris String[] @map("redirect_uris")
+  secretHash   String?  @map("secret_hash")
+  /// How it signs in: authorizationCode, or clientCredentials with no redirect URI (vendor platforms V4).
+  grant        String   @default("authorizationCode")
+
+  @@index([fleetId])
+  @@map("oauth_clients")
+}
+
+/// The codes argo's approvals issued, kept only as hashes; each taken once.
+model AuthorizationCode {
+  codeHash      String    @id @map("code_hash")
+  fleetId       String    @map("fleet_id")
+  clientId      String    @map("client_id")
+  redirectUri   String    @map("redirect_uri")
+  codeChallenge String    @map("code_challenge")
+  resource      String
+  scope         String?
+  /// The party it stands for, or else the account grant (decision 0054): exactly one of the two.
+  party         String?
+  grantId       String?   @map("grant_id")
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt        DateTime? @map("used_at") @db.Timestamptz(3)
+
+  @@index([fleetId])
+  @@map("authorization_codes")
+}
+
+/// The access and refresh tokens the gateway issued, kept only as hashes, a pair per row.
+model IssuedToken {
+  accessHash       String    @id @map("access_hash")
+  /// None for a client signed in by client credentials, which asks again.
+  refreshHash      String?   @unique @map("refresh_hash")
+  familyId         String    @map("family_id")
+  /// None for a token issued from client credentials.
+  codeHash         String?   @map("code_hash")
+  fleetId          String    @map("fleet_id")
+  clientId         String    @map("client_id")
+  resource         String
+  scope            String?
+  /// The party it stands for, or else the account grant (decision 0054): exactly one of the two.
+  party            String?
+  grantId          String?   @map("grant_id")
+  accessExpiresAt  DateTime  @map("access_expires_at") @db.Timestamptz(3)
+  refreshExpiresAt DateTime? @map("refresh_expires_at") @db.Timestamptz(3)
+  state            String
+
+  @@index([fleetId])
+  @@index([familyId])
+  @@index([codeHash])
+  @@map("issued_tokens")
+}
+
+/// Outside MCP clients' calls: the message each proxy ship sent, and the handle its client reads it by.
+model ClientCall {
+  fleetId           String    @map("fleet_id")
+  messageId         String    @map("message_id")
+  party             String
+  handle            String
+  shipId            String    @map("ship_id")
+  /// None when an A2A message matched no capability, and then its first reply answers it (decision 0060).
+  capability        String?
+  outputContentType String?   @map("output_content_type")
+  sentAt            DateTime  @map("sent_at")
+  deadlineAt        DateTime? @map("deadline_at")
+  /// Where its delivery stands, as the gateway last read it from the fleet's sentMessage.
+  deliveryState     String?   @map("delivery_state")
+  deliverySince     DateTime? @map("delivery_since")
+  /// An A2A call's task, and the client's message as A2A JSON; none for an MCP call.
+  taskId            String?   @map("task_id")
+  taskMessage       String?   @map("task_message")
+
+  @@id([fleetId, messageId])
+  @@unique([fleetId, handle])
+  @@index([fleetId, taskId])
+  @@map("client_calls")
+}
+
+/// An outside A2A client's task (decision 0060): its id, the HMAC of its first message, its party and its context.
+model A2aTask {
+  fleetId   String   @map("fleet_id")
+  taskId    String   @map("task_id")
+  party     String
+  contextId String   @map("context_id")
+  createdAt DateTime @map("created_at")
+
+  @@id([fleetId, taskId])
+  @@index([fleetId, party, createdAt(sort: Desc), taskId(sort: Desc)])
+  @@map("a2a_tasks")
+}
+
+/// A push config of an outside A2A client's task (slice 4): its webhook, and the vault of its token and authentication, never answered back; with the task as last noticed.
+model A2aPushConfig {
+  fleetId        String    @map("fleet_id")
+  taskId         String    @map("task_id")
+  id             String
+  party          String
+  url            String
+  token          String?
+  /// The scheme and credentials the webhook is called with, as JSON.
+  authentication Json?
+  createdAt      DateTime  @map("created_at")
+  noticedMark    String    @map("noticed_mark")
+  isFollowing    Boolean   @map("is_following")
+  pushes         A2aPush[]
+
+  @@id([fleetId, taskId, id])
+  @@index([fleetId, party, isFollowing])
+  @@map("a2a_push_configs")
+}
+
+/// A push of one event of a config's task to its webhook (slice 4): pending until delivered or given up, kept over a restart; its id is its order.
+model A2aPush {
+  pushId    Int           @id @default(autoincrement()) @map("push_id")
+  fleetId   String        @map("fleet_id")
+  taskId    String        @map("task_id")
+  configId  String        @map("config_id")
+  party     String
+  body      String
+  attempts  Int
+  nextAt    DateTime      @map("next_at")
+  state     String
+  reason    String?
+  settledAt DateTime?     @map("settled_at")
+  config    A2aPushConfig @relation(fields: [fleetId, taskId, configId], references: [fleetId, taskId, id], onDelete: Cascade)
+
+  @@index([fleetId, party, state, taskId, configId, pushId])
+  @@map("a2a_pushes")
+}
+
+/// The replies naming an outside client's call, each kept once per delivery before it is acknowledged.
+model ClientCallReply {
+  deliveryId    String   @id @map("delivery_id")
+  fleetId       String   @map("fleet_id")
+  callMessageId String   @map("call_message_id")
+  messageId     String   @map("message_id")
+  contentType   String   @map("content_type")
+  payload       String
+  receivedAt    DateTime @map("received_at")
+  /// The order kept in, as receivedAt may tie.
+  sequence      Int      @default(autoincrement())
+
+  @@index([fleetId, callMessageId])
+  @@map("client_call_replies")
+}
+
+/// A person's sign-in through pagasae, kept for their MCP client (decision 0054): the account in the fleet, and pagasae's tokens to act as it.
+model AccountGrant {
+  grantId               String   @id @map("grant_id")
+  fleetId               String   @map("fleet_id")
+  accountId             String   @map("account_id")
+  personShipId          String?  @map("person_ship_id")
+  /// The scopes its account token carries.
+  scopes                String[] @default([])
+  /// pagasae's refresh token, kept as crew tokens are.
+  refreshToken          String   @map("refresh_token")
+  accountToken          String   @map("account_token")
+  accountTokenExpiresAt DateTime @map("account_token_expires_at") @db.Timestamptz(3)
+
+  @@index([fleetId])
+  @@map("account_grants")
+}
+
+/// The crew token the gateway holds for a signed-in person's person ship (decision 0054): one crew, shared by every client of its person.
+model PersonCrew {
+  fleetId   String   @map("fleet_id")
+  shipId    String   @map("ship_id")
+  crewToken String   @map("crew_token")
+  crewedAt  DateTime @map("crewed_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId])
+  @@map("person_crews")
+}
+
+/// A person who turned email on to be woken for their person ship (wake a person, W8): a row while it is on; nothing is on by default.
+model EmailChannel {
+  fleetId    String   @map("fleet_id")
+  shipId     String   @map("ship_id")
+  turnedOnAt DateTime @map("turned_on_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId])
+  @@map("email_channels")
+}
+
+/// When a channel last woke a person ship, so it sends at most one wake per its window (wake a person, W3).
+model WakeSent {
+  fleetId String   @map("fleet_id")
+  shipId  String   @map("ship_id")
+  channel String
+  sentAt  DateTime @map("sent_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId, channel])
+  @@map("wakes_sent")
+}
+
+/// A delivery a person opened, kept until they deal with it, so their answer finds its message and sender and their inbox lists it (Q28 (a)).
+model OpenedDelivery {
+  fleetId      String   @map("fleet_id")
+  shipId       String   @map("ship_id")
+  deliveryId   String   @map("delivery_id")
+  messageId    String   @map("message_id")
+  senderShipId String   @map("sender_ship_id")
+  from         String
+  title        String
+  sentAt       DateTime @map("sent_at") @db.Timestamptz(3)
+  openedAt     DateTime @map("opened_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId, deliveryId])
+  @@map("opened_deliveries")
+}
+
+/// A pending request for an outside party (decision 0056): an outside MCP client's authorize request, or a person's request for an outside MCP server, kept 7 days.
+/// One open request per client or server in a fleet (partial unique index pending_requests_one_open, in its migration).
+model PendingRequest {
+  fleetId        String    @map("fleet_id")
+  requestId      String    @map("request_id")
+  /// client or server.
+  kind           String
+  /// What one open request is unique by: client:<client id> or server:<url>.
+  subjectKey     String    @map("subject_key")
+  clientId       String?   @map("client_id")
+  clientName     String?   @map("client_name")
+  url            String?
+  /// The accounts that asked, each with its person ship, as JSON.
+  requesters     Json
+  askedAt        DateTime  @map("asked_at") @db.Timestamptz(3)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(3)
+  /// pending, approving, approved, denied or expired.
+  state          String
+  decidedBy      Json?     @map("decided_by")
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(3)
+  /// The requesters told the request ended, by account id, as JSON, so their next try asks anew.
+  toldAccountIds Json      @default("[]") @map("told_account_ids")
+
+  @@id([fleetId, requestId])
+  @@index([fleetId, askedAt], map: "pending_requests_fleet_asked")
+  @@map("pending_requests")
+}
+
+/// The outcomes of requests for outside MCP servers still to tell, one per
+/// requester with a person ship, written with the decision or the expiry and
+/// ended once the fleet stored the message or refused it (decision 0056).
+model RequestOutcomeNotice {
+  fleetId      String    @map("fleet_id")
+  requestId    String    @map("request_id")
+  accountId    String    @map("account_id")
+  personShipId String    @map("person_ship_id")
+  url          String
+  /// approved, denied or expired.
+  outcome      String
+  partyName    String?   @map("party_name")
+  createdAt    DateTime  @map("created_at") @db.Timestamptz(3)
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  @@id([fleetId, requestId, accountId])
+  @@index([endedAt, createdAt], map: "request_outcome_notices_unended")
+  @@map("request_outcome_notices")
+}
+
+/// The gateway's question to its owner about one request (decision 0056):
+/// kept with its uuid before it is first sent, so a question sent again is the
+/// same question; withdrawn once the request ended.
+model OwnerQuestion {
+  fleetId     String    @map("fleet_id")
+  requestId   String    @map("request_id")
+  questionId  String    @map("question_id")
+  /// The ship asked; null before it is asked, or when the fleet refused it.
+  askedShipId String?   @map("asked_ship_id")
+  askedAt     DateTime? @map("asked_at") @db.Timestamptz(3)
+  withdrawnAt DateTime? @map("withdrawn_at") @db.Timestamptz(3)
+
+  @@id([fleetId, requestId])
+  @@map("owner_questions")
+}
+
+/// A page of a person in focus, on any gateway instance, with when it was last seen so (wake a person, W6).
+model FocusedPage {
+  fleetId String   @map("fleet_id")
+  pageId  String   @map("page_id")
+  shipId  String   @map("ship_id")
+  seenAt  DateTime @map("seen_at") @db.Timestamptz(3)
+
+  @@id([fleetId, pageId])
+  @@index([fleetId, shipId, seenAt])
+  @@map("focused_pages")
+}
+
+/// A browser a person turned web push on in (wake a person, W8): its push service's endpoint and keys, and the fleet's name its wakes say. Gone once its push service answered 404 or 410.
+model WebPushSubscription {
+  fleetId   String    @map("fleet_id")
+  shipId    String    @map("ship_id")
+  endpoint  String
+  p256dh    String
+  auth      String
+  browser   String
+  fleetName String    @map("fleet_name")
+  addedAt   DateTime  @map("added_at") @db.Timestamptz(3)
+  goneAt    DateTime? @map("gone_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId, endpoint])
+  @@map("web_push_subscriptions")
+}
+
+/// A fleet's Slack workspace (gateway scopes 9.1): one per fleet, with Slack's app configuration token, which the gateway rotates before its 12 hours end.
+model SlackWorkspace {
+  fleetId            String   @id @map("fleet_id")
+  teamId             String   @map("team_id")
+  /// Known once Slack named the workspace, at the gateway's bot's install.
+  teamName           String?  @map("team_name")
+  connectedByShipId  String   @map("connected_by_ship_id")
+  connectedByName    String   @map("connected_by_name")
+  connectedAt        DateTime @map("connected_at") @db.Timestamptz(3)
+  configAccessToken  String   @map("config_access_token")
+  /// Single use: each rotation spends it for the next.
+  configRefreshToken String   @map("config_refresh_token")
+  configExpiresAt    DateTime @map("config_expires_at") @db.Timestamptz(3)
+  isConfigRefused    Boolean  @map("is_config_refused")
+
+  @@map("slack_workspaces")
+}
+
+/// A Slack app the gateway made in a fleet's workspace, with its secrets, and its bot token once installed; no ship for the gateway's own bot.
+model SlackApp {
+  fleetId       String   @map("fleet_id")
+  appId         String   @map("app_id")
+  shipId        String?  @map("ship_id")
+  clientId      String   @map("client_id")
+  clientSecret  String   @map("client_secret")
+  signingSecret String   @map("signing_secret")
+  installUrl       String    @map("install_url")
+  /// The bot's name in Slack as last made or renamed.
+  name             String
+  madeAt           DateTime  @map("made_at") @db.Timestamptz(3)
+  installStartedAt DateTime? @map("install_started_at") @db.Timestamptz(3)
+  botToken         String?   @map("bot_token")
+  botUserId        String?   @map("bot_user_id")
+  removedInSlackAt DateTime? @map("removed_in_slack_at") @db.Timestamptz(3)
+
+  @@id([fleetId, appId])
+  @@unique([appId])
+  @@map("slack_apps")
+}
+
+/// A person's Slack account linked to their account in a fleet (gateway scopes 9.3): one Slack user to one account, one Slack user per account.
+model SlackLink {
+  fleetId      String    @map("fleet_id")
+  teamId       String    @map("team_id")
+  slackUserId  String    @map("slack_user_id")
+  slackName    String    @map("slack_name")
+  accountId    String    @map("account_id")
+  personShipId String    @map("person_ship_id")
+  linkedAt     DateTime  @map("linked_at") @db.Timestamptz(3)
+  /// When the account was disabled (0055), its link stopped.
+  stoppedAt    DateTime? @map("stopped_at") @db.Timestamptz(3)
+  /// Show everything that waits in Slack (B5), off until turned on.
+  isShowingAll Boolean   @default(false) @map("is_showing_all")
+
+  @@id([fleetId, teamId, slackUserId])
+  @@unique([fleetId, accountId])
+  @@index([fleetId, personShipId])
+  @@map("slack_links")
+}
+
+/// A linked person's Slack message, kept by Slack's event id until core takes it (gateway scopes 9.4 step 3); then only its id, for an hour.
+model SlackEvent {
+  fleetId      String    @map("fleet_id")
+  eventId      String    @map("event_id")
+  appId        String    @map("app_id")
+  shipId       String    @map("ship_id")
+  personShipId String    @map("person_ship_id")
+  channel      String
+  ts           String
+  threadTs     String?   @map("thread_ts")
+  /// What is sent to the fleet; emptied once core took it.
+  markdown     String
+  inReplyTo    String?   @map("in_reply_to")
+  deliveryId   String?   @map("delivery_id")
+  receivedAt   DateTime  @map("received_at") @db.Timestamptz(3)
+  takenAt      DateTime? @map("taken_at") @db.Timestamptz(3)
+
+  @@id([fleetId, eventId])
+  @@index([takenAt, receivedAt])
+  @@map("slack_events")
+}
+
+/// A fleet message as it is in Slack, for a person ship (gateway scopes 9.5): a delivery posted there, or the person's own message sent from there.
+model SlackPost {
+  fleetId      String    @map("fleet_id")
+  personShipId String    @map("person_ship_id")
+  messageId    String    @map("message_id")
+  deliveryId   String?   @map("delivery_id")
+  senderShipId String?   @map("sender_ship_id")
+  appId        String    @map("app_id")
+  channel      String
+  /// The Slack message, once Slack accepted the post.
+  ts           String?
+  threadTs     String?   @map("thread_ts")
+  isLinkOnly   Boolean   @map("is_link_only")
+  ackedAt      DateTime? @map("acked_at") @db.Timestamptz(3)
+
+  @@id([fleetId, personShipId, messageId])
+  @@index([fleetId, appId, channel, ts])
+  @@index([fleetId, appId, channel, threadTs])
+  @@map("slack_posts")
+}
+
+/// A person's grant of an outside MCP server where each person signs in (decision 0067): their sign-in under the party's client, naming their outside account, with its tokens. One per person and party; one per outside account and party where the server named it (Q13).
+model PartyGrant {
+  fleetId            String    @map("fleet_id")
+  party              String
+  personShipId       String    @map("person_ship_id")
+  accountId          String    @map("account_id")
+  /// The outside account's OpenID Connect subject; none where the server gave no ID token.
+  subject            String?
+  /// The outside account's email or name, as its ID token stated it.
+  outsideAccountName String?   @map("outside_account_name")
+  accessToken        String    @map("access_token")
+  refreshToken       String?   @map("refresh_token")
+  accessTokenEndsAt  DateTime? @map("access_token_ends_at") @db.Timestamptz(3)
+  signedInAt         DateTime  @map("signed_in_at") @db.Timestamptz(3)
+  /// When it was last refreshed; none until its first refresh.
+  refreshedAt        DateTime? @map("refreshed_at") @db.Timestamptz(3)
+  lastUsedAt         DateTime? @map("last_used_at") @db.Timestamptz(3)
+  /// When a refresh answered invalid_grant lost the grant (Q5); none while it holds.
+  lostAt             DateTime? @map("lost_at") @db.Timestamptz(3)
+  /// Why it was lost, as the authorization server said it.
+  lostWhy            String?   @map("lost_why")
+
+  @@id([fleetId, party, personShipId])
+  @@unique([fleetId, party, subject])
+  // The schedule's round across fleets (Q7): grants near their end, and grants idle since their last refresh or sign-in.
+  @@index([accessTokenEndsAt])
+  @@index([refreshedAt, signedInAt])
+  // A disabled account's grants (Q14).
+  @@index([fleetId, accountId])
+  @@map("party_grants")
+}
+
+/// The notice that told a person a call needed their sign-in to a party where each person signs in (decision 0067, Q6): one per person and party while open, its id keying the message; a sign-in closes it.
+model PartySignInNotice {
+  fleetId      String    @map("fleet_id")
+  party        String
+  personShipId String    @map("person_ship_id")
+  noticeId     String    @map("notice_id")
+  isTold       Boolean   @default(false) @map("is_told")
+
+  @@id([fleetId, party, personShipId])
+  @@map("party_sign_in_notices")
+}

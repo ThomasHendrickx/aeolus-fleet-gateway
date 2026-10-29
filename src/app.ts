@@ -1,0 +1,1058 @@
+/**
+ * The gateway wired to its own database and to the fleet's public API. Its
+ * API is the console's server's and its page's, with the console's session
+ * cookie, and the hosting service's, with the installation token.
+ */
+import { randomUUID } from 'node:crypto';
+
+import { FLEET_HEADER, idSchema, type FleetId } from '@aeolus-fleet/common';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+
+import { sha256RequestHasher } from './adapters/crypto/request-hasher.js';
+import { createFleetConsoleSessions } from './adapters/fleet/console-sessions.js';
+import { createRestFleetDoor } from './adapters/fleet/rest-fleet-door.js';
+import { runningVersion } from './adapters/http/version.js';
+import { checkDatabase, createPrismaClient } from './adapters/prisma/client.js';
+import { createPrismaConnectionStore } from './adapters/prisma/connection-store.js';
+import { createPrismaFleetForgetter } from './adapters/prisma/fleet-forgetter.js';
+import { createPrismaFleetSwitches } from './adapters/prisma/fleet-switches.js';
+import { createPrismaInstallationRequests } from './adapters/prisma/installation-requests.js';
+import { createPrismaPartyGrants } from './adapters/prisma/party-grants.js';
+import { createPrismaSignInNotices } from './adapters/prisma/sign-in-notices.js';
+import { createPrismaPartyStore } from './adapters/prisma/party-store.js';
+import { createPrismaScopeRequirements } from './adapters/prisma/scope-requirements.js';
+import { createPrismaToolMarks } from './adapters/prisma/tool-marks.js';
+import { createMcpServers } from './adapters/mcp/mcp-servers.js';
+import { createMarkTool } from './core/mcp-out/mark-tool.js';
+import { createSwitchTools } from './core/parties/switch-tools.js';
+import { createCheckApproving } from './core/parties/check-approving.js';
+import { createReadListedScopes } from './core/parties/read-listed-scopes.js';
+import { createCheckRequiredScopes } from './core/parties/check-required-scopes.js';
+import { createReadScopeRequirements } from './core/parties/read-scope-requirements.js';
+import { createSetScopeRequirements } from './core/parties/set-scope-requirements.js';
+import { createStateParty } from './core/mcp-out/state-party.js';
+import { createListingConnectionOf } from './core/party-grants/listing-connection.js';
+import { createCompletePartySignIn } from './core/party-grants/complete-party-sign-in.js';
+import { createReadOwnGrant } from './core/party-grants/read-own-grant.js';
+import { createRemoveOwnGrant } from './core/party-grants/remove-own-grant.js';
+import { createEndAccountGrants } from './core/party-grants/end-account-grants.js';
+import { createEndPartyGrants } from './core/party-grants/end-party-grants.js';
+import { createEndRetiredPersonsGrants } from './core/party-grants/end-retired-persons-grants.js';
+import { createListGrants } from './core/party-grants/list-grants.js';
+import { createRemoveGrant } from './core/party-grants/remove-grant.js';
+import { createStartPartySignIn } from './core/party-grants/start-party-sign-in.js';
+import { signInServersOf } from './core/parties/sign-in-servers.js';
+import { createPartySignIns } from './adapters/oauth/party-sign-ins.js';
+import { createPartySignInSeals } from './adapters/crypto/party-sign-in-seals.js';
+import { PARTY_SIGN_IN_DONE_PATH, partyPageUrlOf, registerPartySignInRoutes } from './adapters/http/party-sign-in-routes.js';
+import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
+import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
+import { createHandA2aMessage } from './core/a2a-out/hand-a2a-message.js';
+import { createRunA2aAgent } from './core/a2a-out/run-a2a-agent.js';
+import { createA2aAgents, gatewayStatuses } from './adapters/a2a/a2a-agents.js';
+import { createAgentKeys } from './adapters/crypto/agent-keys.js';
+import { createPrismaAgentCalls } from './adapters/prisma/agent-calls.js';
+import { createMarkA2aAgent } from './core/a2a-out/mark-a2a-agent.js';
+import { createAddA2aAgent, type AddA2aAgent } from './core/parties/add-a2a-agent.js';
+import { createHttpAgentCards } from './adapters/a2a/agent-cards.js';
+import { createCheckServer } from './core/parties/check-server.js';
+import { createReadPartyTools } from './core/parties/read-party-tools.js';
+import { createGrantCalls } from './core/mcp-out/grant-calls.js';
+import { createHandCall } from './core/mcp-out/hand-call.js';
+import { createCallGrantOf } from './core/party-grants/call-grant.js';
+import { createRefreshGrant } from './core/party-grants/refresh-grant.js';
+import { createKeepGrantsAlive } from './core/party-grants/keep-grants-alive.js';
+import { createTellSignInNeeded } from './core/party-grants/tell-sign-in-needed.js';
+import { createRunParty } from './core/mcp-out/run-party.js';
+import { createPrismaCalls } from './adapters/prisma/calls.js';
+import { sleep } from './adapters/timers/sleep.js';
+import { createPartyWorkers } from './party-workers.js';
+import { gatewayRouter, WAITING_SECRET_HEADER, type Context, type GatewayRouter } from './adapters/trpc/router.js';
+import { registerFrontDoor, type WebApp } from './adapters/http/front-door.js';
+import { registerOpenAiAppsChallenge } from './adapters/http/openai-apps-challenge.js';
+import { createChangeHub } from './adapters/http/live.js';
+import { createPrismaInboxChanges, listenToChanges } from './adapters/prisma/changes.js';
+import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
+import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
+import { registerA2aEndpoint } from './adapters/http/a2a-endpoint.js';
+import { a2aCardAddressOf } from './adapters/http/a2a-cards.js';
+import { createAddA2aClient, type AddA2aClient } from './core/parties/add-a2a-client.js';
+import { createAuthenticateA2aClient } from './core/a2a-in/authenticate-a2a-client.js';
+import { createFindReachedShip } from './core/a2a-in/find-reached-ship.js';
+import { createFollowA2aTask } from './core/a2a-in/follow-a2a-task.js';
+import { createDeliverPushes } from './core/a2a-in/deliver-pushes.js';
+import { createListPushConfigs } from './core/a2a-in/list-push-configs.js';
+import { createNoticeTaskChanges } from './core/a2a-in/notice-task-changes.js';
+import { createPushToWebhooks } from './core/a2a-in/push-to-webhooks.js';
+import { createReadPushConfig } from './core/a2a-in/read-push-config.js';
+import { createRemovePushConfig } from './core/a2a-in/remove-push-config.js';
+import { createSetPushConfig } from './core/a2a-in/set-push-config.js';
+import { isPublicAddress } from './core/a2a-in/webhook.js';
+import { a2aPushEvents } from './adapters/http/a2a-streams.js';
+import { createPrismaPushStore } from './adapters/prisma/push-store.js';
+import { systemHostResolver } from './adapters/webhooks/host-resolver.js';
+import { createWebhookPoster } from './adapters/webhooks/webhook-poster.js';
+import { createListA2aTasks } from './core/a2a-in/list-a2a-tasks.js';
+import { createReadA2aTask } from './core/a2a-in/read-a2a-task.js';
+import { createSendA2aMessage } from './core/a2a-in/send-a2a-message.js';
+import { createSubscribeToA2aTask } from './core/a2a-in/subscribe-to-a2a-task.js';
+import { createListReachedShips } from './core/a2a-in/list-reached-ships.js';
+import { createShipAliases } from './adapters/crypto/ship-aliases.js';
+import { createListTools } from './core/mcp-in/list-tools.js';
+import { createCallTool } from './core/mcp-in/call-tool.js';
+import { createCollectReplies } from './core/mcp-in/collect-replies.js';
+import { createReadClientCall } from './core/mcp-in/read-client-call.js';
+import { createCallKeys } from './adapters/crypto/call-keys.js';
+import { createPrismaClientCalls } from './adapters/prisma/client-calls.js';
+import { createAuthenticateAccessToken } from './core/oauth/authenticate-access-token.js';
+import { oauthSecrets } from './adapters/crypto/oauth-secrets.js';
+import { createAuthorizationServers } from './adapters/oauth/authorization-servers.js';
+import { createClientMetadataDocuments } from './adapters/oauth/client-metadata-documents.js';
+import { createPrismaAuthorizationCodes, createPrismaIssuedTokens, createPrismaOAuthClients } from './adapters/prisma/oauth-stores.js';
+import { createExchangeToken } from './core/oauth/exchange-token.js';
+import { createSignInSeals } from './adapters/crypto/sign-in-seals.js';
+import { createWaitingSeals } from './adapters/crypto/waiting-seals.js';
+import { createRequestIds } from './adapters/crypto/request-ids.js';
+import { createAskForClient } from './core/requests/ask-for-client.js';
+import { createAskForServer } from './core/requests/ask-for-server.js';
+import { createExpireRequests } from './core/requests/expire-requests.js';
+import { createTellOutcomes } from './core/requests/tell-outcomes.js';
+import { createAskOwners } from './core/requests/ask-owners.js';
+import { createPrismaOwnerQuestions } from './adapters/prisma/owner-questions.js';
+import type { DecideRequest } from './core/requests/decide-request.js';
+import { createPrismaOutcomeNotices } from './adapters/prisma/outcome-notices.js';
+import { createOutcomeWorker } from './outcome-worker.js';
+import { createPersonWaiters } from './person-waiters.js';
+import { createPingWorker } from './ping-worker.js';
+import { createSlackTokenWorker } from './slack-token-worker.js';
+import { createGrantWorker } from './grant-worker.js';
+import { createSlackEventWorker } from './slack-event-worker.js';
+import { createPrismaSlackEvents } from './adapters/prisma/slack-events.js';
+import { createSendSlackEvents } from './core/slack/send-slack-events.js';
+import { createSlackInstallSeals } from './adapters/crypto/slack-install-seals.js';
+import { createSlackLinkSeals } from './adapters/crypto/slack-link-seals.js';
+import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_INSTALL_PATH, SLACK_LINK_PATH } from './adapters/http/slack-routes.js';
+import { createPrismaSlackPosts } from './adapters/prisma/slack-posts.js';
+import { createAnswerInSlack } from './core/slack/answer-in-slack.js';
+import { createShowAllInSlack } from './core/slack/show-all-in-slack.js';
+import { createShowInSlack } from './core/slack/show-in-slack.js';
+import { createPrismaSlackLinks } from './adapters/prisma/slack-links.js';
+import { createSlackMessages } from './adapters/slack/slack-messages.js';
+import { createSlackSignIn } from './adapters/slack/slack-sign-in.js';
+import { createCompleteLink } from './core/slack/complete-link.js';
+import { createReadSlackLink } from './core/slack/read-slack-link.js';
+import { createStartLink } from './core/slack/start-link.js';
+import { createStopSlackLink } from './core/slack/stop-slack-link.js';
+import { createUnlinkSlack } from './core/slack/unlink-slack.js';
+import { createSlackSignatures } from './adapters/crypto/slack-signatures.js';
+import { createSlackShips } from './adapters/fleet/slack-ships.js';
+import { createExposeShip } from './core/slack/expose-ship.js';
+import { createFollowExposedShips } from './core/slack/follow-exposed-ships.js';
+import { createListExposable } from './core/slack/list-exposable.js';
+import { createRemoveBot } from './core/slack/remove-bot.js';
+import { createTakeSlackEvent } from './core/slack/take-slack-event.js';
+import { createPrismaSlackApps, createPrismaSlackWorkspaces } from './adapters/prisma/slack-stores.js';
+import { createSlackTooling, SLACK_API_URL } from './adapters/slack/slack-tooling.js';
+import { createCompleteInstall } from './core/slack/complete-install.js';
+import { createConnectSlack } from './core/slack/connect-slack.js';
+import { createDisconnectSlack } from './core/slack/disconnect-slack.js';
+import type { ProxyShipKinds, ShipNames } from './core/slack/ports.js';
+import { createReadSlack } from './core/slack/read-slack.js';
+import { createRotateConfigurationTokens } from './core/slack/rotate-configuration-tokens.js';
+import { createStartInstall } from './core/slack/start-install.js';
+import { createTakeAccessToken } from './core/slack/take-access-token.js';
+import { createOpenRequest, type OpenRequest } from './core/requests/open-request.js';
+import { createReadWaiting } from './core/requests/read-waiting.js';
+import { createWatchWaiting } from './core/requests/watch-waiting.js';
+import { createPagasae } from './adapters/pagasae/pagasae-client.js';
+import { createSharedSignIn } from './adapters/pagasae/shared-sign-in.js';
+import { createAccountSignInSeals } from './adapters/crypto/account-sign-in-seals.js';
+import { cookieValueOf, registerAccountSignIn } from './adapters/http/account-sign-in-routes.js';
+import { createAccountInView } from './core/account-sign-in/account-in-view.js';
+import { createAccountOfSignIn, type AccountOfSignIn } from './core/account-sign-in/account-of-sign-in.js';
+import { createCompleteAccountSignIn } from './core/account-sign-in/complete-account-sign-in.js';
+import { SHARED_SIGN_IN_COOKIE } from './core/account-sign-in/ports.js';
+import { createSignOutAccount } from './core/account-sign-in/sign-out-account.js';
+import { createStartAccountSignIn } from './core/account-sign-in/start-account-sign-in.js';
+import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
+import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
+import { createExchangeIdJag } from './core/oauth/exchange-id-jag.js';
+import { createStartSignIn } from './core/sign-in/start-sign-in.js';
+import { createAccountTokenOf, type AccountTokenOf } from './core/sign-in/account-token.js';
+import { err } from './core/shared/result.js';
+import { createEndSignIns } from './core/sign-in/end-sign-ins.js';
+import { createAnswerDelivery } from './core/people/answer-delivery.js';
+import { createCrewPersonShip } from './core/people/crew-person-ship.js';
+import { createDoneDelivery } from './core/people/done-delivery.js';
+import { createListShips } from './core/people/list-ships.js';
+import { createOpenDelivery } from './core/people/open-delivery.js';
+import { createReadInbox } from './core/people/read-inbox.js';
+import { createReadWakeChannels } from './core/people/read-wake-channels.js';
+import { createTurnEmailChannel } from './core/people/turn-email-channel.js';
+import type { PersonCrews, WakeChannel } from './core/people/ports.js';
+import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
+import { createReadMeeting } from './core/meetings/read-meeting.js';
+import { createSendMessage } from './core/people/send-message.js';
+import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
+import { createWakePerson } from './core/people/wake-person.js';
+import { createFocusPage } from './core/people/focus-page.js';
+import { createEmailChannel } from './adapters/pagasae/email-channel.js';
+import { createPrismaEmailChannels } from './adapters/prisma/email-channels.js';
+import { createPrismaWakesSent } from './adapters/prisma/wakes-sent.js';
+import { createPrismaFocusedPages } from './adapters/prisma/focused-pages.js';
+import { createPrismaWebPushSubscriptions } from './adapters/prisma/web-push-subscriptions.js';
+import { createWebPush } from './adapters/web-push/web-push.js';
+import { createWebPushChannel } from './core/people/web-push-channel.js';
+import { createTurnOffWebPush } from './core/people/turn-off-web-push.js';
+import { createTurnOnWebPush } from './core/people/turn-on-web-push.js';
+import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
+import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
+import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
+import { createReadAuthorization } from './core/oauth/read-authorization.js';
+import { createRegisterClient } from './core/oauth/register-client.js';
+import { createFleetNetwork } from './adapters/fleet/fleet-network.js';
+import { createPrismaOutsidePartySwitches } from './adapters/prisma/outside-party-switches.js';
+import { createReadOutsideParties, createSetOutsideParties, type SetOutsideParties } from './core/outside-parties/set-outside-parties.js';
+import { createConnect } from './core/connection/connect.js';
+import { createDeclareGatewayScopes } from './core/connection/declare-gateway-scopes.js';
+import { createAnswerPings } from './core/connection/answer-pings.js';
+import { createReadConnection, type ReadConnection } from './core/connection/read-connection.js';
+import { createDeleteFleet } from './core/installation/delete-fleet.js';
+import type { InstallationMode } from './core/installation/ports.js';
+import { createReadFleet } from './core/installation/read-fleet.js';
+import { createIsServed } from './core/installation/served.js';
+import { createSetFleetEnabled } from './core/installation/set-fleet-enabled.js';
+import { createAuthenticateOperator } from './core/operator/authenticate-operator.js';
+import { createAddSignInServer } from './core/parties/add-sign-in-server.js';
+import { createApproveClientParty, createApproveParty, type ApproveClientParty, type ApproveParty } from './core/parties/approve-party.js';
+import { createAddClientParty } from './core/parties/add-client-party.js';
+import { createCrewParty, type CrewParty } from './core/parties/crew-party.js';
+import { createListOwnerChoices } from './core/parties/list-owner-choices.js';
+import { createListParties, createReadParty } from './core/parties/list-parties.js';
+import type { Clock } from './core/shared/clock.js';
+import { createAuthenticateActor, type Actor } from './core/actors/authenticate-actor.js';
+import { createRetireParty } from './core/parties/retire-party.js';
+import { createChangePartyOwner, createChangePartyScopes } from './core/parties/change-party.js';
+import { logRefusedFacts } from './adapters/fleet/logged-verified-facts.js';
+import { createFleetShips } from './adapters/fleet/fleet-ships.js';
+import { createProxyShipReads } from './adapters/fleet/proxy-ship-reads.js';
+import { createProxyShipsAsActor } from './adapters/fleet/proxy-ships-as-actor.js';
+import { createCredentialOf, type ActorCredential } from './core/actors/credential-of.js';
+import { createDecideRequest } from './core/requests/decide-request.js';
+import { createListMine } from './core/requests/list-mine.js';
+import { createListToDecide } from './core/requests/list-to-decide.js';
+import { createPrismaPendingRequests } from './adapters/prisma/pending-requests.js';
+
+export const systemClock: Clock = { now: () => new Date() };
+
+/** The status Fastify answers while the database does not. */
+const HTTP_SERVICE_UNAVAILABLE = 503;
+
+export interface GatewayAppOptions {
+  databaseUrl: string;
+  fleetUrl: string;
+  clock?: Clock;
+  logger?: FastifyServerOptions['logger'];
+  /** The installation token (decision 0021): unset, the installation is open and every fleet is served. */
+  installationToken?: string;
+  /** Where outside MCP clients reach the gateway: the OAuth issuer, with the MCP endpoint at /mcp. */
+  publicUrl?: string;
+  /** Keys ship aliases, result handles and idempotency keys: the same secret keeps every ship's alias across restarts. */
+  gatewaySecret: string;
+  /** How long an outside MCP client's call waits for its answer before it is answered its handle: 10 seconds unless set. */
+  mcpWaitMaxMs?: number;
+  /** How long the gateway waits for an outside tool's answer before the call counts as unanswered: 5 minutes unless set. */
+  toolCallTimeoutMs?: number;
+  /** pagasae, where people sign in, and the gateway's client there (decision 0054): unset, people do not sign in. */
+  pagasae?: { url: string; clientId: string; clientSecret: string };
+  /** The gateway's pages as an app at pagasae, for the shared account sign-in (header design H5): unset, nobody signs in to the pages that way. */
+  pagasaeApp?: { clientId: string; clientSecret: string };
+  /** The token OpenAI's plugin portal shows to prove the domain (chatgpt-plugin design, 7.5): unset, no such address is served. */
+  openAiAppsChallenge?: string;
+  /** The gateway's push keys, which sign each web push wake, and the subject a push service may contact (wake a person, S3): unset, no one is offered web push. */
+  webPush?: { publicKey: string; privateKey: string; subject: string };
+  /** Which addresses web push may connect to: public ones unless set. Tests set it to reach their push service on this machine. */
+  isAllowedPushAddress?: (address: string) => boolean;
+  /** The least time between two wakes web push sends one person ship (wake a person, W10): 10 minutes unless set. */
+  webPushWakeWindowMs?: number;
+  /** The least time between two wakes the email channel sends one person ship (wake a person, W10): 60 minutes unless set. */
+  emailWakeWindowMs?: number;
+  /** The gateway's web app, answering the pages the server has none of: unset, an unknown page is answered as any unknown address. */
+  web?: WebApp;
+  /** Slack's Web API: Slack's own unless set. Tests set it to their Slack double. */
+  slackApiUrl?: string;
+  /** How often the gateway looks for grants to keep alive, idle or near their end (decision 0067, Q7): 5 minutes unless set. */
+  grantRoundMs?: number;
+}
+
+/** Within the fleet's 10 minutes a handed delivery may wait for its confirmation (decision 0040). */
+const TOOL_CALL_TIMEOUT_MS = 5 * 60_000;
+
+/** Where the gateway is reached unless told: this machine, at its default port. */
+const DEFAULT_PUBLIC_URL = 'http://127.0.0.1:4200';
+
+
+/** How long a client's metadata document may take to answer. */
+const CLIENT_METADATA_TIMEOUT_MS = 5_000;
+
+/** How long pagasae's token endpoint may take to answer. */
+const PAGASAE_TIMEOUT_MS = 10_000;
+
+/** Web push's window unless told (wake a person, W10). */
+const WEB_PUSH_WAKE_WINDOW_MS = 10 * 60_000;
+
+/** How long a push service may take to take a wake. */
+const WEB_PUSH_TIMEOUT_MS = 10_000;
+
+/** The email channel's window unless told (wake a person, W10). */
+const EMAIL_WAKE_WINDOW_MS = 60 * 60_000;
+
+/** How a ship sends its own crew token to the gateway's API: as a bearer token (decision 0057). */
+const BEARER = 'Bearer ';
+
+/** How often a proxy ship's worker looks again while the fleet hands it only what it holds, or does not answer. */
+const POLL_MS = 2_000;
+
+/** How often the gateway rotates the Slack configuration tokens due, well within the hour before one ends (gateway scopes 9.1). */
+const SLACK_TOKEN_ROUND_MS = 10 * 60_000;
+
+/** How often the gateway keeps grants alive unless told: well within the ten minutes a grant is refreshed ahead of its end. */
+const GRANT_ROUND_MS = 5 * 60_000;
+
+/** How often the gateway sends the kept Slack messages core has not taken, as while core does not answer (gateway scopes 9.4 step 7). */
+const SLACK_EVENT_ROUND_MS = 5_000;
+
+/** How often the gateway expires due requests and tells outcomes still to tell (P5-1 a). */
+const OUTCOME_ROUND_MS = 60_000;
+
+
+/** The most an outside MCP client's call waits for its answer, whatever its capability states (interop 5.3). */
+const MCP_WAIT_MAX_MS = 10_000;
+
+/** How long an outside A2A client's webhook may take to answer a push. */
+const WEBHOOK_TIMEOUT_MS = 10_000;
+/** The longest the gateway waits to read an outside A2A agent's card (slice 5). */
+const AGENT_CARD_TIMEOUT_MS = 10_000;
+/** How long an outside A2A agent's worker waits to read its card again while it names no interface the gateway calls (slice 6). */
+const AGENT_CARD_WAIT_MS = 60_000;
+
+/** How often a waiting call is read for its answer. */
+const MCP_WAIT_POLL_MS = 200;
+
+/** How often an instance looks for person ships whose waiter no instance runs, as when the instance waiting on them stopped (wake a person, W9). */
+const WAITER_ROUND_MS = 10_000;
+
+/** How long a person ship's waiter waits while the fleet does not answer, each longer than the last. */
+const WAITER_AGAIN_WAITS_MS = [1_000, 5_000, 30_000];
+
+/** How often a page in focus is seen again, so one whose gateway instance stopped stops counting soon after (wake a person, W6). */
+const FOCUS_SEEN_EVERY_MS = 20_000;
+
+/** How long a page counts in focus since it was last seen so: three times as long as it is seen again. */
+const FOCUS_FRESH_MS = 3 * FOCUS_SEEN_EVERY_MS;
+
+/** How long a wake that no channel sent waits before it is tried again, each longer than the last (wake a person, W3). */
+const WAKE_AGAIN_WAITS_MS = [60_000, 300_000, 900_000];
+
+/** How long a delivery answered again waits before it is handed with the next number, each longer than the last. */
+const AGAIN_WAITS_MS = [1_000, 10_000, 60_000, 300_000];
+
+export interface GatewayApp {
+  /** The HTTP server: `/api/health` and `/api/version` for whoever operates the installation, and `/trpc`. */
+  server: FastifyInstance;
+  /**
+   * At start: reads every served fleet's kept connection, dropping a crew
+   * token its fleet no longer takes, and starts taking the calls of each
+   * crewed party of a served fleet; answers each fleet still connected, as
+   * which ship.
+   */
+  restoreConnections: () => Promise<{ fleetId: FleetId; ship: string }[]>;
+  /** Stops taking calls, once those in flight ended, then stops the server and disconnects the database. */
+  close(): Promise<void>;
+}
+
+export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
+  const prisma = createPrismaClient(options.databaseUrl);
+  const server = Fastify({ logger: options.logger ?? true });
+  const connections = createPrismaConnectionStore(prisma);
+  const installation: InstallationMode = options.installationToken === undefined ? 'open' : 'enabled';
+  const switches = createPrismaFleetSwitches(prisma);
+  const isServed = createIsServed({ installation, switches });
+
+  // Only the version this process runs: no authentication, so nothing about its database or fleets.
+  const version = runningVersion();
+  server.get('/api/version', () => ({ gateway: version }));
+
+  // Up and its database reachable; nothing about its installation or fleets.
+  server.get('/api/health', async (_request, reply) => {
+    try {
+      await checkDatabase(prisma);
+      return { status: 'ok' };
+    } catch (error) {
+      server.log.error({ err: error }, 'database unreachable');
+      return reply.code(HTTP_SERVICE_UNAVAILABLE).send({ status: 'unavailable' });
+    }
+  });
+
+  const clock = options.clock ?? systemClock;
+  const door = createRestFleetDoor(options.fleetUrl);
+  const readConnection = createReadConnection({ door, store: connections });
+  // A fleet's connection as the gateway holds it, asking the fleet nothing: what a fleet that is off reads.
+  const heldConnection: ReadConnection = async (fleetId) => {
+    const crew = await connections.find(fleetId);
+    if (crew) {
+      return { state: 'connected', ship: { shipId: crew.shipId, name: crew.name }, lastShipId: crew.shipId };
+    }
+    return { state: 'not-connected', ship: null, lastShipId: (await connections.binding(fleetId))?.shipId ?? null };
+  };
+  const requests = createPrismaInstallationRequests(prisma);
+  const setFleetEnabled = createSetFleetEnabled({ switches, requests, hasher: sha256RequestHasher, clock });
+  const readFleet = createReadFleet({ isServed, connections });
+  const deleteFleet = createDeleteFleet({ forgetter: createPrismaFleetForgetter(prisma), requests, hasher: sha256RequestHasher, clock });
+  const connect = createConnect({ door, store: connections, clock });
+  const declareGatewayScopes = createDeclareGatewayScopes({ door, store: connections });
+  const authenticateOperator = createAuthenticateOperator({ sessions: createFleetConsoleSessions(options.fleetUrl) });
+  const parties = createPrismaPartyStore(prisma);
+  // The OAuth server's clients and tokens: a client party's secret and tokens change as its proxy ship's crew does.
+  const oauthClients = createPrismaOAuthClients(prisma);
+  const issuedTokens = createPrismaIssuedTokens(prisma);
+  const marks = createPrismaToolMarks(prisma);
+  const servers = createMcpServers();
+  // A caller of a proxy ship waits and gives up as the gateway does with its server (interop 3.4, 5.3).
+  const callTiming = { waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, deadlineMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS };
+  const requirements = createPrismaScopeRequirements(prisma);
+  const partyGrants = createPrismaPartyGrants(prisma);
+  const signInNotices = createPrismaSignInNotices(prisma);
+  const partySignIns = createPartySignIns();
+  // A server where each person signs in is listed under a person's grant (decision 0067, Q15).
+  const connectionOf = createListingConnectionOf({ grants: partyGrants, clock });
+  const stateParty = createStateParty({ parties, servers, connectionOf, door, marks, requirements, timing: callTiming });
+  const markTool = createMarkTool({ parties, marks, stateParty });
+  const switchTools = createSwitchTools({ parties, servers, connectionOf, stateParty, connections, fleet: createProxyShipsAsActor(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const agentCards = createHttpAgentCards({ timeoutMs: AGENT_CARD_TIMEOUT_MS });
+  const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, requirements, timing: callTiming });
+  const checkScopes = createCheckRequiredScopes({ connections, door });
+  const readScopeRequirements = createReadScopeRequirements({ parties, requirements });
+  const readListedScopes = createReadListedScopes({ connections, door });
+  const approvingDeps = { parties, connections, fleet: createProxyShipsAsActor(options.fleetUrl), credentialOf: (actor: Actor, sent: ActorCredential) => credentialOf(actor, sent) };
+  const checkApproving = createCheckApproving(approvingDeps);
+  const setScopeRequirements = createSetScopeRequirements({
+    parties,
+    requirements,
+    connections,
+    door,
+    stateParty,
+    stateA2aAgent,
+    fleet: createProxyShipsAsActor(options.fleetUrl),
+    credentialOf: (actor, sent) => credentialOf(actor, sent),
+  });
+  // A call to a server where each person signs in goes out under its asking ship's owner's grant (decision 0067).
+  const partyPageUrl = partyPageUrlOf(options.publicUrl ?? DEFAULT_PUBLIC_URL);
+  const tellSignInNeeded = createTellSignInNeeded({ notices: signInNotices, connections, sender: door, newNoticeId: randomUUID, pageUrlOf: partyPageUrl });
+  const refreshGrant = createRefreshGrant({ signIns: partySignIns, grants: partyGrants, tellSignInNeeded, clock });
+  const grantCalls = createGrantCalls({
+    callGrantOf: createCallGrantOf({ connections, door, grants: partyGrants }),
+    refreshGrant,
+    tellSignInNeeded,
+    servers,
+    grants: partyGrants,
+    clock,
+    pageUrlOf: partyPageUrl,
+  });
+  const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, requirements, checkScopes, grantCalls, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
+  const clientCalls = createPrismaClientCalls(prisma);
+  const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
+  const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
+  const checkServer = createCheckServer({ servers, servesOutsideParties });
+  const readPartyTools = createReadPartyTools({ parties, servers, connectionOf });
+  const pushStore = createPrismaPushStore(prisma);
+  // A webhook is reached only at a public address, as its name resolves at the moment of connecting (slice 4).
+  const webhookPoster = createWebhookPoster({ addressesOf: (host) => systemHostResolver.addressesOf(host), isAllowedAddress: isPublicAddress, timeoutMs: WEBHOOK_TIMEOUT_MS });
+  const pushToWebhooks = createPushToWebhooks({
+    notice: createNoticeTaskChanges({ calls: clientCalls, configs: pushStore, events: a2aPushEvents, clock }),
+    deliver: createDeliverPushes({ pushes: pushStore, resolver: systemHostResolver, poster: webhookPoster, clock, againWaitsMs: AGAIN_WAITS_MS }),
+    sleep,
+    pollMs: POLL_MS,
+    failed: (error) => {
+      server.log.error({ err: error }, 'pushing to webhooks failed: tried again next round');
+    },
+  });
+  // An outside agent's message is answered within the deadline a caller of its proxy ship waits for (slice 6, flow 4.2).
+  const agentCallDeps = {
+    crew: door,
+    agents: createA2aAgents({ timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS }),
+    calls: createPrismaAgentCalls(prisma),
+    keys: createAgentKeys(options.gatewaySecret),
+    statuses: gatewayStatuses,
+    clock,
+    deadlineMs: callTiming.deadlineMs,
+  };
+  const followAgentTask = createFollowAgentTask({ ...agentCallDeps, sleep, pollMs: POLL_MS });
+  const workers = createPartyWorkers({
+    parties,
+    stateParty,
+    stateA2aAgent,
+    runParty: createRunParty({ crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
+    runA2aAgent: createRunA2aAgent({
+      cards: agentCards,
+      crew: door,
+      hand: createHandA2aMessage({ ...agentCallDeps, parties, requirements, checkScopes, follow: followAgentTask }),
+      follow: followAgentTask,
+      calls: agentCallDeps.calls,
+      sleep,
+      pollMs: POLL_MS,
+      againWaitsMs: AGAIN_WAITS_MS,
+      cardWaitMs: AGENT_CARD_WAIT_MS,
+    }),
+    collectReplies: createCollectReplies({ crew: door, replies: door, sent: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
+    pushToWebhooks,
+    servesOutsideParties,
+    log: server.log,
+  });
+  // The approval goes on without facts the fleet refuses; the log shows them (decision 0059).
+  const approvalDoor = { ...door, ...logRefusedFacts(door, server.log) };
+  const approvePartyOnly = createApproveParty({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock });
+  const crewPartyOnly = createCrewParty({ parties, door, clients: oauthClients, secrets: oauthSecrets, tokens: issuedTokens });
+  // A party crewed by approving it, or by a new secret, has its calls taken at once.
+  const approveParty: ApproveParty = async (input) => {
+    const approved = await approvePartyOnly(input);
+    if (approved.isOk) {
+      await workers.start({ fleetId: input.operatorFleetId, name: approved.value.name });
+    }
+    return approved;
+  };
+  const crewParty: CrewParty = async (input) => {
+    const crewed = await crewPartyOnly(input);
+    if (crewed.isOk) {
+      await workers.start({ fleetId: input.operatorFleetId, name: crewed.value.party.name });
+    }
+    return crewed;
+  };
+  const approveClientPartyOnly = createApproveClientParty({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock });
+  // A client party crewed at its first approval has the replies to its calls taken at once.
+  const approveClientParty: ApproveClientParty = async (input) => {
+    const approved = await approveClientPartyOnly(input);
+    if (approved.isOk) {
+      await workers.start({ fleetId: input.operatorFleetId, name: approved.value.name });
+    }
+    return approved;
+  };
+  const addA2aClientOnly = createAddA2aClient({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock, secrets: oauthSecrets });
+  // An A2A client crewed once it is added has the replies to its calls taken at once.
+  const addA2aClient: AddA2aClient = async (input) => {
+    const added = await addA2aClientOnly(input);
+    if (added.isOk) {
+      await workers.start({ fleetId: input.actor.fleetId, name: added.value.party.name });
+    }
+    return added;
+  };
+  const addA2aAgentOnly = createAddA2aAgent({ connections, parties, door: approvalDoor, hasher: sha256RequestHasher, servesOutsideParties, clock, cards: agentCards, timing: callTiming });
+  // An A2A agent crewed once it is added has its proxy ship stated at once.
+  const addA2aAgent: AddA2aAgent = async (input) => {
+    const added = await addA2aAgentOnly(input);
+    if (added.isOk) {
+      await workers.start({ fleetId: input.actor.fleetId, name: added.value.name });
+    }
+    return added;
+  };
+  const markA2aAgent = createMarkA2aAgent({ parties, stateA2aAgent });
+  const proxyShipsAsActor = createProxyShipsAsActor(options.fleetUrl);
+  // Calls as an account need its account token, set up with the sign-in below.
+  const asActor = { parties, fleet: proxyShipsAsActor, credentialOf: (actor: Actor, sent: ActorCredential) => credentialOf(actor, sent) };
+  const retireParty = createRetireParty({ ...asActor, tokens: issuedTokens, endPartyGrants: createEndPartyGrants({ grants: partyGrants, signIns: partySignIns }) });
+  const changePartyOwner = createChangePartyOwner(asActor);
+  const changePartyScopes = createChangePartyScopes(asActor);
+  const proxyShipReads = createProxyShipReads(options.fleetUrl);
+  const listParties = createListParties({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const readParty = createReadParty({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const listOwnerChoices = createListOwnerChoices({ ships: createFleetShips(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  // An account's credential needs its account token, set up with the sign-in below.
+  const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock, credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  // Off stops the fleet's workers; on starts its crewed parties' workers again.
+  const setOutsideParties: SetOutsideParties = async (input) => {
+    const set = await setOutsidePartiesOnly(input);
+    if (set.isOk && !set.value.isOn) {
+      await workers.stopFleet(input.actor.fleetId);
+    }
+    if (set.isOk && set.value.isOn) {
+      for (const party of await parties.crewed()) {
+        if (party.fleetId === input.actor.fleetId) {
+          await workers.start(party);
+        }
+      }
+    }
+    return set;
+  };
+
+  // The OAuth server for outside MCP clients: the issuer is the public URL, and every token is bound to the MCP address it was asked for (RFC 8707).
+  // The plugin's address serves the same tools; a person signs in there as themselves with no pick (chatgpt-plugin design, 6).
+  const issuer = options.publicUrl ?? DEFAULT_PUBLIC_URL;
+  const resource = `${issuer}/mcp`;
+  const pluginResource = `${issuer}/plugin/mcp`;
+  const authorizationCodes = createPrismaAuthorizationCodes(prisma);
+  const readAuthorization = createReadAuthorization({ clients: oauthClients, documents: createClientMetadataDocuments({ timeoutMs: CLIENT_METADATA_TIMEOUT_MS }), resources: [resource, pluginResource] });
+  const registerClient = createRegisterClient({ clients: oauthClients, secrets: oauthSecrets });
+  const seals = createSignInSeals(options.gatewaySecret);
+  // People sign in through pagasae where it is set (decision 0054); else no client connects, as only an account asks for one (A a).
+  const pagasae = options.pagasae === undefined ? undefined : createPagasae({ ...options.pagasae, redirectUri: `${issuer}/pagasae/callback`, timeoutMs: PAGASAE_TIMEOUT_MS });
+  const grants = createPrismaAccountGrants(prisma);
+  const pendingRequests = createPrismaPendingRequests(prisma);
+  const waitings = createWaitingSeals(options.gatewaySecret);
+  const issuing = { codes: authorizationCodes, secrets: oauthSecrets, clock, issuer };
+  const openRequestOnly = createOpenRequest({ requests: pendingRequests, ids: createRequestIds(), clock });
+  // A request opened has the gateway's owner asked at once, not at the next round.
+  const openRequest: OpenRequest = async (asked) => {
+    const opened = await openRequestOnly(asked);
+    outcomes.tellNow();
+    return opened;
+  };
+  // The web app's pages and the waiting page hear each committed change to the fleet's requests, from whichever gateway made it.
+  const hub = createChangeHub();
+  const signIn =
+    pagasae === undefined
+      ? undefined
+      : {
+          start: createStartSignIn({ readAuthorization, pluginResource, seals, pagasae, secrets: oauthSecrets, clock }),
+          complete: createCompleteSignIn({
+            readAuthorization,
+            seals,
+            pagasae,
+            grants,
+            codes: authorizationCodes,
+            secrets: oauthSecrets,
+            clock,
+            issuer,
+            servesFleet: async (fleetId) => (await connections.find(fleetId)) !== undefined && (await isServed(fleetId)),
+            askForClient: createAskForClient({
+              parties,
+              requests: pendingRequests,
+              openRequest,
+              servesOutsideParties,
+              waitings,
+              ...issuing,
+            }),
+          }),
+          readWaiting: createReadWaiting({ waitings, readAuthorization, requests: pendingRequests, parties, ...issuing }),
+          watchWaiting: createWatchWaiting({ waitings, requests: pendingRequests, parties, clock }),
+          hub,
+          clock,
+        };
+  registerOAuthRoutes(server, {
+    ...(signIn === undefined ? {} : { signIn }),
+    issuer,
+    resource,
+    pluginResource,
+    readAuthorization,
+    exchangeToken: createExchangeToken({
+      clients: oauthClients,
+      codes: authorizationCodes,
+      tokens: issuedTokens,
+      secrets: oauthSecrets,
+      clock,
+      resource,
+      parties,
+      servesOutsideParties,
+      // A client's ID-JAG, handed to pagasae, where people sign in there (company sign-in design, slice 6).
+      ...(pagasae === undefined
+        ? {}
+        : {
+            exchangeIdJag: createExchangeIdJag({
+              clients: oauthClients,
+              tokens: issuedTokens,
+              secrets: oauthSecrets,
+              clock,
+              resource,
+              pagasae,
+              grants,
+              servesFleet: async (fleetId) => (await connections.find(fleetId)) !== undefined && (await isServed(fleetId)),
+            }),
+          }),
+    }),
+  });
+  // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
+  const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });
+  // pagasae sends the email, asked with the gateway's installation token (wake a person, W2); without either, email wakes no one.
+  const emailChannels = createPrismaEmailChannels(prisma);
+  // The browsers people turned web push on in (wake a person, W8).
+  const webPushSubscriptions = createPrismaWebPushSubscriptions(prisma);
+  const wakeChannels: WakeChannel[] = [
+    ...(options.pagasae === undefined || options.installationToken === undefined
+      ? []
+      : [
+          createEmailChannel({
+            url: options.pagasae.url,
+            installationToken: options.installationToken,
+            timeoutMs: PAGASAE_TIMEOUT_MS,
+            windowMs: options.emailWakeWindowMs ?? EMAIL_WAKE_WINDOW_MS,
+            emailChannels,
+          }),
+        ]),
+    // Web push, where the gateway holds push keys: a wake to each browser the person turned it on in (wake a person, S3).
+    ...(options.webPush === undefined
+      ? []
+      : [
+          createWebPushChannel({
+            subscriptions: webPushSubscriptions,
+            // A push service is reached at public addresses only, checked as its host resolves at each send.
+            webPush: createWebPush({ ...options.webPush, timeoutMs: WEB_PUSH_TIMEOUT_MS, addressesOf: (host) => systemHostResolver.addressesOf(host), isAllowedAddress: options.isAllowedPushAddress ?? isPublicAddress }),
+            clock,
+            windowMs: options.webPushWakeWindowMs ?? WEB_PUSH_WAKE_WINDOW_MS,
+            overviewUrlOf: (fleetId) => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`,
+          }),
+        ]),
+  ];
+  // What waits for a linked person shows in Slack before anything wakes them (gateway scopes 9.5).
+  const slackApiUrl = options.slackApiUrl ?? SLACK_API_URL;
+  const slackApps = createPrismaSlackApps(prisma);
+  const slackLinks = createPrismaSlackLinks(prisma);
+  const slackPosts = createPrismaSlackPosts(prisma);
+  const slackMessages = createSlackMessages({ apiUrl: slackApiUrl });
+  const overviewUrlOf = (fleetId: FleetId): string => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`;
+  const showInSlack = createShowInSlack({ links: slackLinks, apps: slackApps, posts: slackPosts, slack: slackMessages, door: door.person, sleep, clock, overviewUrlOf });
+  // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
+  const personCrews = createPrismaPersonCrews(prisma);
+  // A person's pages in focus, on every instance: while one is, what arrives is handed through it (wake a person, W6).
+  const focusedPages = createPrismaFocusedPages(prisma);
+  const inboxChanges = createPrismaInboxChanges(prisma);
+  const waiterLocks = createPostgresWaiterLocks(options.databaseUrl);
+  const personWaiters = createPersonWaiters({
+    crews: personCrews,
+    locks: waiterLocks,
+    waitOnPersonShip: createWaitOnPersonShip({
+      crews: personCrews,
+      door: door.person,
+      changes: inboxChanges,
+      wakePerson: createWakePerson({ door: door.person, shownElsewhere: { show: showInSlack }, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
+      clock,
+      sleep,
+      againWaitsMs: WAITER_AGAIN_WAITS_MS,
+      wakeAgainWaitsMs: WAKE_AGAIN_WAITS_MS,
+    }),
+    sleep,
+    roundMs: WAITER_ROUND_MS,
+    log: server.log,
+  });
+  // A signed-in person's messaging, as the crew of their person ship (decision 0057).
+  const personToolsOf = () => {
+    // A ship crewed has its waiter at once, not at the next round.
+    const crews: PersonCrews = {
+      ...personCrews,
+      save: async (crew) => {
+        await personCrews.save(crew);
+        personWaiters.wake(crew);
+      },
+    };
+    const opened = createPrismaOpenedDeliveries(prisma);
+    const changes = inboxChanges;
+    const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
+    return {
+      readInbox: createReadInbox({ ...asCrew, opened }),
+      openDelivery: createOpenDelivery({ ...asCrew, opened, changes, clock }),
+      answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes }),
+      doneDelivery: createDoneDelivery({ ...asCrew, opened, changes }),
+      readWakeChannels: createReadWakeChannels({
+        crewPersonShip: asCrew.crewPersonShip,
+        emailChannels,
+        isEmailOffered: wakeChannels.some(({ name }) => name === 'email'),
+        subscriptions: webPushSubscriptions,
+        webPushKey: options.webPush?.publicKey ?? null,
+      }),
+      turnEmailChannel: createTurnEmailChannel({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), clock }),
+      turnOnWebPush: createTurnOnWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions, resolver: systemHostResolver, isWebPushOffered: options.webPush !== undefined, clock }),
+      turnOffWebPush: createTurnOffWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions }),
+      focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
+      listShips: createListShips(asCrew),
+      sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
+      readMeeting: createReadMeeting({ ...asCrew, door: door.meetings }),
+      changeOwnMic: createChangeOwnMic({ ...asCrew, door: door.meetings }),
+      askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
+      crewPersonShip: asCrew.crewPersonShip,
+    };
+  };
+  const person = pagasae === undefined ? undefined : personToolsOf();
+  const aliases = createShipAliases(options.gatewaySecret);
+  const listTools = createListTools({ parties, discovery: door, aliases });
+  const callTool = createCallTool({ parties, listTools, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, sleep, waitMaxMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS });
+  const readClientCall = createReadClientCall({ calls: clientCalls, clock });
+  // The same tools at each address, each taking only the tokens issued for it.
+  for (const address of [resource, pluginResource]) {
+    registerMcpEndpoint(server, {
+      resource: address,
+      authenticateAccessToken: createAuthenticateAccessToken({ tokens: issuedTokens, secrets: oauthSecrets, clock, resource: address }),
+      listTools,
+      callTool,
+      readClientCall,
+      servesOutsideParties,
+      ...(person === undefined ? {} : { person }),
+    });
+  }
+  // Outside A2A clients call the ships their proxy ship reaches, by alias, with the bearer they were shown (decision 0060).
+  // A blocking send waits as its capability states, at most the gateway's own most, as an MCP call does (I-9).
+  const listReachedShips = createListReachedShips({ parties, discovery: door, aliases });
+  const findReachedShip = createFindReachedShip({ listReachedShips });
+  const followA2aTask = createFollowA2aTask({ calls: clientCalls, clock, sleep, pollMs: MCP_WAIT_POLL_MS });
+  registerA2aEndpoint(server, {
+    issuer,
+    authenticate: createAuthenticateA2aClient({ parties, secrets: oauthSecrets, servesOutsideParties }),
+    findReachedShip,
+    sendMessage: createSendA2aMessage({ parties, findReachedShip, sender: door, calls: clientCalls, keys: createCallKeys(options.gatewaySecret), clock, sleep, waitMaxMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, waitPollMs: MCP_WAIT_POLL_MS }),
+    readTask: createReadA2aTask({ calls: clientCalls, clock }),
+    listTasks: createListA2aTasks({ calls: clientCalls, clock }),
+    followTask: followA2aTask,
+    subscribeToTask: createSubscribeToA2aTask({ calls: clientCalls, clock, follow: followA2aTask }),
+    setPushConfig: createSetPushConfig({ calls: clientCalls, configs: pushStore, resolver: systemHostResolver, ids: { newId: () => crypto.randomUUID() }, clock }),
+    readPushConfig: createReadPushConfig({ calls: clientCalls, configs: pushStore }),
+    listPushConfigs: createListPushConfigs({ calls: clientCalls, configs: pushStore }),
+    removePushConfig: createRemovePushConfig({ calls: clientCalls, configs: pushStore }),
+  });
+
+  // What every call of the API reads, from the request's console session and installation token.
+  // The pages' shared account sign-in, where the gateway is an app at pagasae (header design H5); else no shared sign-in names anyone.
+  const signIns =
+    options.pagasae === undefined || options.pagasaeApp === undefined
+      ? undefined
+      : createSharedSignIn({ url: options.pagasae.url, ...options.pagasaeApp, redirectUri: `${issuer}/sign-in/done`, timeoutMs: PAGASAE_TIMEOUT_MS });
+  const accountOf: AccountOfSignIn =
+    signIns === undefined ? Object.assign(() => Promise.resolve(err({ kind: 'signedOut' as const })), { forget: () => undefined }) : createAccountOfSignIn({ signIns, clock });
+  const accountInView = signIns === undefined ? undefined : createAccountInView({ signIns, accountOf, isServed });
+  if (signIns !== undefined) {
+    const accountSeals = createAccountSignInSeals(options.gatewaySecret);
+    registerAccountSignIn(server, {
+      issuer,
+      start: createStartAccountSignIn({ seals: accountSeals, signIns, secrets: oauthSecrets, clock }),
+      complete: createCompleteAccountSignIn({ seals: accountSeals, signIns, clock }),
+      signOut: createSignOutAccount({ signIns, accountOf }),
+    });
+  }
+
+  const credentialOf = createCredentialOf({ connections });
+  const authenticateActor = createAuthenticateActor({ authenticateOperator, door, connections, accountOf });
+  const outcomes = createOutcomeWorker({
+    expireRequests: createExpireRequests({ requests: pendingRequests, clock }),
+    tellOutcomes: createTellOutcomes({ notices: createPrismaOutcomeNotices(prisma), requests: pendingRequests, connections, sender: door }),
+    askOwners: createAskOwners({ questions: createPrismaOwnerQuestions(prisma), connections, owners: door, sender: door, newQuestionId: randomUUID, clock, overviewUrl: `${issuer}/overview` }),
+    sleep,
+    intervalMs: OUTCOME_ROUND_MS,
+    log: server.log,
+  });
+  const slackWorkspaces = createPrismaSlackWorkspaces(prisma);
+  const slackTooling = createSlackTooling({ apiUrl: slackApiUrl });
+  const slackInstallStates = createSlackInstallSeals(options.gatewaySecret);
+  const installRedirectUrl = `${issuer}${SLACK_INSTALL_PATH}`;
+  const linkRedirectUrl = `${issuer}${SLACK_LINK_PATH}`;
+  const slackSignIn = createSlackSignIn({ apiUrl: slackApiUrl });
+  const slackLinkStates = createSlackLinkSeals(options.gatewaySecret);
+  const takeAccessToken = createTakeAccessToken({ slack: slackTooling, workspaces: slackWorkspaces, clock });
+  const shipNames: ShipNames = {
+    nameOf: async (fleetId, shipId) => {
+      const crew = await connections.find(fleetId);
+      const ship = crew === undefined ? undefined : await door.getShip(crew.crewToken, { shipId });
+      return ship?.isOk === true ? ship.value.name : undefined;
+    },
+  };
+  const slackShips = createSlackShips({ fleetUrl: options.fleetUrl, crewTokenOf: async (fleetId) => (await connections.find(fleetId))?.crewToken, ships: createFleetShips(options.fleetUrl), asActor: createProxyShipsAsActor(options.fleetUrl) });
+  // Which outside party a ship is the proxy ship of: a fleet has few parties.
+  const proxyShips: ProxyShipKinds = { kindOf: async (fleetId, shipId) => (await parties.list(fleetId)).find((party) => party.proxyShipId === shipId)?.kind };
+  const slackAddresses = { installRedirectUrl, eventsUrl: `${issuer}${SLACK_EVENTS_PATH}`, actionsUrl: `${issuer}${SLACK_ACTIONS_PATH}`, linkRedirectUrl };
+  const slack: Context['slack'] = {
+    readSlack: createReadSlack({ workspaces: slackWorkspaces, apps: slackApps, ships: slackShips }),
+    connectSlack: createConnectSlack({ slack: slackTooling, workspaces: slackWorkspaces, apps: slackApps, shipNames, clock, addresses: slackAddresses }),
+    startInstall: createStartInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, takeAccessToken, states: slackInstallStates, ships: slackShips, credentialOf: credentialOf, clock, addresses: slackAddresses }),
+    disconnectSlack: createDisconnectSlack({ slack: slackTooling, workspaces: slackWorkspaces, apps: slackApps, takeAccessToken }),
+    listExposable: createListExposable({ ships: slackShips, apps: slackApps, proxyShips, credentialOf: credentialOf }),
+    exposeShip: createExposeShip({ slack: slackTooling, apps: slackApps, ships: slackShips, proxyShips, takeAccessToken, credentialOf: credentialOf, clock, addresses: slackAddresses }),
+    removeBot: createRemoveBot({ slack: slackTooling, apps: slackApps, ships: slackShips, takeAccessToken, credentialOf: credentialOf }),
+    readSlackLink: createReadSlackLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks }),
+    // Where no pagasae is set no one signs in, so no account has a person ship to link.
+    startLink: createStartLink({ workspaces: slackWorkspaces, apps: slackApps, signIn: slackSignIn, states: slackLinkStates, crewPersonShip: person?.crewPersonShip ?? (() => Promise.resolve(err({ kind: 'noPersonShip' as const }))), clock, linkRedirectUrl }),
+    unlinkSlack: createUnlinkSlack({ links: slackLinks }),
+    showAllInSlack: createShowAllInSlack({ links: slackLinks }),
+  };
+  const slackEvents = createPrismaSlackEvents(prisma);
+  const slackSends = createSlackEventWorker({
+    send: createSendSlackEvents({ events: slackEvents, apps: slackApps, crews: personCrews, sender: door, door: door.person, posts: slackPosts, slack: slackMessages, clock }),
+    sleep,
+    intervalMs: SLACK_EVENT_ROUND_MS,
+    log: server.log,
+  });
+  registerSlackRoutes(server, {
+    completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
+    answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, slack: slackMessages, signatures: createSlackSignatures(), clock }),
+    completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl }),
+    takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, posts: slackPosts, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl: `${issuer}/slack/link` }),
+  });
+  const rotateConfigurationTokens = createRotateConfigurationTokens({ workspaces: slackWorkspaces, takeAccessToken });
+  const followExposedShips = createFollowExposedShips({ workspaces: slackWorkspaces, apps: slackApps, ships: slackShips, slack: slackTooling, takeAccessToken, addresses: slackAddresses });
+  const slackTokens = createSlackTokenWorker({
+    rotate: async () => {
+      await rotateConfigurationTokens();
+      await followExposedShips();
+    },
+    sleep, intervalMs: SLACK_TOKEN_ROUND_MS, log: server.log });
+  const keepGrantsAlive = createKeepGrantsAlive({ grants: partyGrants, servers: signInServersOf(parties), refreshGrant, clock });
+  const endRetiredPersonsGrants = createEndRetiredPersonsGrants({ connections, door, servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns });
+  const grantKeeper = createGrantWorker({
+    round: async () => {
+      await keepGrantsAlive();
+      await endRetiredPersonsGrants();
+    },
+    sleep,
+    intervalMs: options.grantRoundMs ?? GRANT_ROUND_MS,
+    log: server.log,
+  });
+  const pings = createPingWorker({ answerPings: createAnswerPings({ connections, inbox: door.gatewayInbox }), sleep, intervalMs: POLL_MS, log: server.log });
+  const decideRequestOnly = createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock });
+  // A decided request's outcomes are told at once, not at the next round.
+  const decideRequest: DecideRequest = async (input) => {
+    const decided = await decideRequestOnly(input);
+    if (decided.isOk) {
+      outcomes.tellNow();
+    }
+    return decided;
+  };
+  // A person's own sign-in to a server where each person signs in (decision 0067), sent back to the redirect URI every party's client was registered with.
+  const partySignInRedirectUri = `${issuer}${PARTY_SIGN_IN_DONE_PATH}`;
+  const partySignInSeals = createPartySignInSeals(options.gatewaySecret);
+  const partySignIn: Context['partySignIn'] = {
+    start: createStartPartySignIn({ servers: signInServersOf(parties), seals: partySignInSeals, signIns: partySignIns, secrets: oauthSecrets, clock, redirectUri: partySignInRedirectUri }),
+    readOwn: createReadOwnGrant({ servers: signInServersOf(parties), grants: partyGrants }),
+    removeOwn: createRemoveOwnGrant({ servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns }),
+    list: createListGrants({ ...approvingDeps, grants: partyGrants }),
+    remove: createRemoveGrant({ ...approvingDeps, grants: partyGrants, signIns: partySignIns }),
+  };
+  registerPartySignInRoutes(server, {
+    complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, notices: signInNotices, accountOf, stateParty, clock, redirectUri: partySignInRedirectUri }),
+    log: server.log,
+  });
+  const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined; waitingSecret: string | undefined }): Context => ({
+    ...sent,
+    authenticateActor,
+    slack,
+    changes: hub,
+    accountInView,
+    accountApps: signIns === undefined ? undefined : (signIn: string) => signIns.apps(signIn),
+    isServed,
+    heldConnection,
+    installation: { mode: installation, token: options.installationToken },
+    setFleetEnabled,
+    readFleet,
+    deleteFleet,
+    endSignIns: createEndSignIns({ grants, tokens: issuedTokens }),
+    stopSlackLink: createStopSlackLink({ links: slackLinks, clock }),
+    endAccountGrants: createEndAccountGrants({ servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns }),
+    readConnection,
+    connect,
+    approveParty,
+    partySignIn,
+    addSignInServer: createAddSignInServer({ approveParty, parties, servers: createAuthorizationServers(), servesOutsideParties, redirectUri: partySignInRedirectUri }),
+    addClientParty: createAddClientParty({ parties, approveClientParty, clients: oauthClients, secrets: oauthSecrets }),
+    addA2aClient,
+    addA2aAgent,
+    markA2aAgent,
+    listReachedShips,
+    cardAddressOf: (alias) => a2aCardAddressOf(issuer, alias),
+    crewParty,
+    listParties,
+    retireParty,
+    changePartyOwner,
+    changePartyScopes,
+    readParty,
+    listOwnerChoices,
+    checkServer,
+    readPartyTools,
+    stateParty,
+    markTool,
+    switchTools,
+    readScopeRequirements,
+    readListedScopes,
+    checkApproving,
+    setScopeRequirements,
+    readOutsideParties: createReadOutsideParties({ switches: outsidePartySwitches }),
+    setOutsideParties,
+    registerClient,
+    listToDecide: createListToDecide({ requests: pendingRequests, clock }),
+    listMine: createListMine({ requests: pendingRequests, clock }),
+    decideRequest,
+    ...(person === undefined ? {} : { person }),
+    // Only a gateway that signs people in connects MCP clients, so only it shows their authorize pages.
+    ...(signIn === undefined ? {} : { readAuthorization, watchWaiting: signIn.watchWaiting }),
+  });
+
+  const trpc: FastifyTRPCPluginOptions<GatewayRouter> = {
+    prefix: '/trpc',
+    trpcOptions: {
+      router: gatewayRouter,
+      onError: ({ error, path }) => {
+        if (error.code === 'INTERNAL_SERVER_ERROR') {
+          server.log.error({ err: error.cause ?? error, path }, 'procedure failed');
+        }
+      },
+      createContext: ({ req }) =>
+        contextFor({
+          cookie: req.headers.cookie,
+          crewToken: req.headers.authorization?.startsWith(BEARER) === true ? req.headers.authorization.slice(BEARER.length) : undefined,
+          signIn: cookieValueOf(SHARED_SIGN_IN_COOKIE, req.headers.cookie),
+          fleetInView: idSchema('fleet').safeParse(req.headers[FLEET_HEADER]).data,
+          installationTokenSent: typeof req.headers['x-aeolus-installation-token'] === 'string' ? req.headers['x-aeolus-installation-token'] : undefined,
+          waitingSecret: typeof req.headers[WAITING_SECRET_HEADER] === 'string' ? req.headers[WAITING_SECRET_HEADER] : undefined,
+        }),
+    },
+  };
+  void server.register(fastifyTRPCPlugin, trpc);
+  registerOpenAiAppsChallenge(server, { challenge: options.openAiAppsChallenge });
+  registerFrontDoor(server, options.web === undefined ? {} : { web: options.web });
+  let changes: { close(): Promise<void> } | undefined;
+  server.addHook('onReady', async () => {
+    changes = await listenToChanges(options.databaseUrl, { onChange: hub.publish, onResync: hub.resync });
+  });
+
+  server.addHook('onClose', async () => {
+    await changes?.close();
+    await waiterLocks.close();
+    await prisma.$disconnect();
+  });
+
+  return {
+    server,
+    restoreConnections: async () => {
+      const restored: { fleetId: FleetId; ship: string }[] = [];
+      for (const crew of await connections.connected()) {
+        // A fleet that is off is not read, nor declared to.
+        const isOn = await isServed(crew.fleetId);
+        const connection = isOn ? await readConnection(crew.fleetId) : await heldConnection(crew.fleetId);
+        if (connection.state === 'connected') {
+          restored.push({ fleetId: crew.fleetId, ship: connection.ship?.name ?? crew.name });
+        }
+        if (isOn && connection.state === 'connected') {
+          const declared = await declareGatewayScopes(crew.fleetId);
+          if (!declared.isOk) {
+            server.log.warn({ fleetId: crew.fleetId, reason: declared.error.message }, "the fleet did not take the gateway's scopes again");
+          }
+        }
+      }
+      for (const party of await parties.crewed()) {
+        if (await isServed(party.fleetId)) {
+          await workers.start(party);
+        }
+      }
+      outcomes.start();
+      pings.start();
+      personWaiters.start();
+      slackTokens.start();
+      slackSends.start();
+      grantKeeper.start();
+      return restored;
+    },
+    close: async () => {
+      await outcomes.stop();
+      await pings.stop();
+      await personWaiters.stop();
+      await slackTokens.stop();
+      await slackSends.stop();
+      await grantKeeper.stop();
+      await workers.stop();
+      await server.close();
+    },
+  };
+}

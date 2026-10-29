@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // The scripts run as .ts files straight under Node, so they import each other by their .ts names.
+    "allowImportingTsExtensions": true
+  },
+  "include": ["*.ts", "scripts", "src", "test"]
+}

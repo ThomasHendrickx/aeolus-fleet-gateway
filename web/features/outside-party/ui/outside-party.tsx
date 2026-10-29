@@ -1,0 +1,181 @@
+import { Suspense, type ReactNode } from 'react';
+
+import { inFleet } from '../../../lib/gateway-api/page-account';
+import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
+import { ADDED_CREDENTIAL_KINDS, SIGN_IN_CREDENTIAL } from '../../forms/server-credential';
+import { BUTTONS, CARD } from '../../forms/ui/look';
+import { outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } from '../../outside-parties/party-kinds';
+import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
+import { scopeWords } from '../../outside-parties/scope-words';
+import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
+import { AgentNeeds } from '../tools-table/ui/agent-needs';
+import { approvalOf, ToolsSection } from '../tools-table/ui/tools-section';
+import { ToolsSkeleton } from '../tools-table/ui/tools-skeleton';
+import { readOwnSignIn } from '../hooks/read-own-sign-in';
+import type { SignInOutcome } from '../own-sign-in';
+import { Fact } from './fact';
+import { OwnSignInCard } from './own-sign-in-card';
+import { RepeatableSwitch } from './repeatable-switch';
+
+/** The scopes that change a party's owner, its scopes, and retire it (0056). */
+export const OWNING_SCOPE = 'fleet:owner';
+export const GRANTING_SCOPE = 'scopes:grant';
+export const RETIRING_SCOPE = 'fleet:manage';
+
+/** The scope that switches a server's tools (aeolus-fleet#1151) and marks an A2A agent (A9). */
+export const APPROVING_SCOPE = 'gateway:approve';
+
+/** The way back to the list, in the page's fleet. */
+export function Back({ fleetId }: { fleetId: string }) {
+  return (
+    <a href={inFleet(OUTSIDE_PARTIES_PATH, fleetId)} className="text-muted-foreground hover:text-foreground">
+      ← Outside parties
+    </a>
+  );
+}
+
+/** Why the API refused: said in place of the page. */
+export function Refusal({ children }: { children: ReactNode }) {
+  return (
+    <p role="alert" className="rounded-md border border-tone-attention-border bg-tone-attention-bg px-3 py-2 text-tone-attention-fg">
+      {children}
+    </p>
+  );
+}
+
+/** What a party's outside address is called on its page. */
+const ADDRESS_LABELS: Record<ListedParty['kind'], string> = { mcpServer: 'Address', mcpClient: 'Client id', a2aClient: 'Address', a2aAgent: 'Card address' };
+
+const UNKNOWN = <span className="text-muted-foreground">Not known</span>;
+
+/** The party's head: its name, protocol, side and state. */
+export function PartyHead({ party }: { party: ListedParty }) {
+  const { protocol, side } = PARTY_KINDS[party.kind];
+  const state = PARTY_STATES[party.state];
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <h1 className="text-title font-semibold">{party.name}</h1>
+      <Tag>{protocol}</Tag>
+      <Tag>{SIDES[side].one}</Tag>
+      <StatusBadge tone={state.tone} label={state.label} />
+    </div>
+  );
+}
+
+/**
+ * One outside party (design B, screens 12 and 14): its proxy ship's state,
+ * then its facts as the fleet holds them, and for an MCP server the tools
+ * it lists now as a table, with the switch and the scopes each needs
+ * (aeolus-fleet#1151, gateway scopes 4.3); for an A2A agent the scopes it
+ * needs and its repeatable mark, a switch for an approver (A9). Each control shows only to an account holding
+ * its scope; the API checks it again. A server where each person signs in
+ * shows your own sign-in between its facts and its tools (decision 0067, M2),
+ * and how a sign-in went when the browser comes back.
+ */
+export async function OutsideParty({ page, name, outcome }: { page: SignedInPage; name: string; outcome: SignInOutcome | null }) {
+  const { api, fleetId, scopes } = page;
+  const read = await readOf(api.parties.get.query({ name }));
+  if (!read.isOk) {
+    return (
+      <div className="grid gap-4">
+        <Back fleetId={fleetId} />
+        <Refusal>{read.refusal}</Refusal>
+      </div>
+    );
+  }
+  const party = read.value;
+  const address = outsideAddressOf(party);
+  const isApprover = scopes.includes(APPROVING_SCOPE);
+  const isSignIn = party.kind === 'mcpServer' && party.credentialKind === SIGN_IN_CREDENTIAL.kind;
+  const [cards, agentNeeds, ownSignIn] = await Promise.all([
+    party.kind === 'a2aClient' ? readOf(api.parties.cardAddresses.query({ name })) : undefined,
+    party.kind === 'a2aAgent' ? Promise.all([readOf(api.parties.scopeRequirements.query({ name })), isApprover ? approvalOf({ api, name }) : { canChange: false, listed: null, reason: null }]) : undefined,
+    isSignIn ? readOwnSignIn({ api, fleetId, name }) : undefined,
+  ]);
+  const change = (
+    <a href={inFleet(partyPath(party.name, 'change'), fleetId)} className="text-primary hover:underline" data-testid="outside-party-change">
+      Change
+    </a>
+  );
+  return (
+    <div className="grid gap-4">
+      <Back fleetId={fleetId} />
+      <PartyHead party={party} />
+      <dl className={`${CARD} grid gap-3`}>
+        <Fact label="Proxy ship">{party.proxyShipName ?? UNKNOWN}</Fact>
+        <Fact label="Owner">
+          {party.ownerName ?? UNKNOWN}
+          {scopes.includes(OWNING_SCOPE) ? change : null}
+        </Fact>
+        <Fact label="Scopes">
+          {party.scopes === null
+            ? UNKNOWN
+            : party.scopes.map((scope) => <Tag key={scope}>{scopeWords(scope)}</Tag>)}
+          {scopes.includes(GRANTING_SCOPE) ? change : null}
+        </Fact>
+        {party.kind === 'mcpServer' || party.kind === 'a2aAgent' ? <Fact label="Credential">{ADDED_CREDENTIAL_KINDS.find(({ kind }) => kind === party.credentialKind)?.label}</Fact> : null}
+        {address === null ? null : (
+          <Fact label={ADDRESS_LABELS[party.kind]}>
+            <span className="font-mono">{address}</span>
+          </Fact>
+        )}
+        {party.kind === 'a2aAgent' ? (
+          <>
+            <Fact label="Messages at once">{party.concurrencyLimit}</Fact>
+            <Fact label="Needs">
+              {agentNeeds === undefined ? null : agentNeeds[0].isOk ? (
+                <AgentNeeds fleetId={fleetId} party={party.name} version={agentNeeds[0].value.version} scopes={agentNeeds[0].value.party} listed={agentNeeds[1].listed} canChange={agentNeeds[1].canChange} />
+              ) : (
+                <span className="text-muted-foreground">{agentNeeds[0].refusal}</span>
+              )}
+            </Fact>
+            <Fact label="Repeatable">
+              {scopes.includes(APPROVING_SCOPE) ? <RepeatableSwitch fleetId={fleetId} party={party.name} isRepeatable={party.isRepeatable} /> : <Tag>{party.isRepeatable ? 'Repeatable' : 'Not repeatable'}</Tag>}
+            </Fact>
+          </>
+        ) : null}
+      </dl>
+      {ownSignIn === undefined ? null : <OwnSignInCard fleetId={fleetId} party={party.name} read={ownSignIn} outcome={outcome} now={new Date()} />}
+      {party.kind === 'mcpServer' ? (
+        <section className={`${CARD} grid gap-3`} data-testid="outside-party-tools">
+          <h2 className="text-section font-semibold">Tools</h2>
+          <p className="text-muted-foreground">
+            The fleet may call only the tools switched on, and a calling ship must hold every scope a tool needs; every ship that may reach {party.name} reaches the same tools. {isApprover ? null : 'Changing them needs gateway:approve.'}
+          </p>
+          <Suspense fallback={<ToolsSkeleton party={party.name} />}>
+            <ToolsSection api={api} fleetId={fleetId} name={party.name} isApprover={isApprover} isSignIn={isSignIn} />
+          </Suspense>
+        </section>
+      ) : null}
+      {cards === undefined ? null : (
+        <section className={`${CARD} grid gap-2`} data-testid="outside-party-cards">
+          <h2 className="flex justify-between text-section font-semibold">
+            <span>Card addresses</span>
+            {cards.isOk ? <span>{cards.value.addresses.length}</span> : null}
+          </h2>
+          <p className="text-muted-foreground">One per ship its proxy ship reaches now. Its owner hands them to the client.</p>
+          {!cards.isOk ? (
+            <p className="text-muted-foreground">{cards.refusal}</p>
+          ) : cards.value.addresses.length === 0 ? (
+            <p className="text-muted-foreground">It reaches no ship now.</p>
+          ) : (
+            <ul className="grid gap-1">
+              {cards.value.addresses.map((address) => (
+                <li key={address} className="break-all font-mono text-code">
+                  {address}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+      {scopes.includes(RETIRING_SCOPE) ? (
+        <div>
+          <a className={BUTTONS.secondary} href={inFleet(partyPath(party.name, 'retire'), fleetId)} data-testid="outside-party-retire">
+            Retire {party.name}…
+          </a>
+        </div>
+      ) : null}
+    </div>
+  );
+}

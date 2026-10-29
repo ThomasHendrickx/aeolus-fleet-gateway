@@ -1,0 +1,31 @@
+import { refuse, type DomainError } from '../shared/errors.js';
+import { ok, type Result } from '../shared/result.js';
+import type { ConsoleSession, ConsoleSessions } from './ports.js';
+
+export type AuthenticateOperator = (cookie: string | undefined) => Promise<Result<ConsoleSession, DomainError<'NOT_THE_OPERATOR'>>>;
+
+/**
+ * Use case: whether a request comes from argo. The gateway has no login of
+ * its own: its page and the console's server forward the console session
+ * cookie, and the fleet says whose session it is (decision 0043). The gateway
+ * serves every fleet at its FLEET_URL, each with its own connection, so any
+ * signed-in operator there is let through as the operator of their own
+ * fleet. A viewer session is let through as a viewer, with the viewer ship's
+ * scopes, which the fleet answers; what each may call is the API's to check
+ * (decision 0022). An account signed in to the console as itself is let
+ * through as that account, with its account token's scopes: a human acts as
+ * their account (decisions 0053 and 0057).
+ */
+export function createAuthenticateOperator(deps: { sessions: ConsoleSessions }): AuthenticateOperator {
+  const refusal = refuse('NOT_THE_OPERATOR', 'Sign in to the console of your fleet');
+  return async (cookie) => {
+    if (cookie === undefined) {
+      return refusal;
+    }
+    const session = await deps.sessions.check(cookie);
+    if (!session.isOk) {
+      return refusal;
+    }
+    return ok(session.value);
+  };
+}

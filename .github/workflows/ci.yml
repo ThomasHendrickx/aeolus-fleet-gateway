@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A later push to a pull request cancels its earlier run; a push to main never
+# cancels another, so every commit on main keeps its own CI result.
+concurrency:
+  group: ci-${{ github.event_name == 'push' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+jobs:
+  checks:
+    name: Typecheck, lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:unit
+
+  integration:
+    name: Integration tests (Postgres in Testcontainers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      # The images Testcontainers starts, from the Actions cache.
+      - uses: ./.github/actions/test-images
+      - run: npm run test:integration
+
+  publish-dry-run:
+    name: Publish dry run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      # The same steps as release.yml, with a throwaway prerelease version:
+      # npm requires a tag for a prerelease.
+      - run: npm version "0.0.0-ci.${{ github.run_id }}" --no-git-tag-version
+      - run: npm run build
+      - run: npm publish --dry-run --access public --tag dry-run
