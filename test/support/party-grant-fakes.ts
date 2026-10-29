@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import type { McpServerParty } from '../../src/core/parties/party.js';
 import type { PartyGrant } from '../../src/core/party-grants/party-grant.js';
-import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
+import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, SignInNotice, SignInNotices, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 import type { SignInClient } from '../../src/core/vault/credential.js';
 import { FLEET_ID } from './fleet-fakes.js';
@@ -154,4 +154,37 @@ export function fakePartySignIns() {
     },
   };
   return { state, signIns };
+}
+
+/** The notices in memory: one per person and party while open. */
+export function memorySignInNotices(): SignInNotices & { held: (SignInNotice & { fleetId: FleetId; party: string; personShipId: ShipId })[] } {
+  const held = new Array<SignInNotice & { fleetId: FleetId; party: string; personShipId: ShipId }>();
+  const indexOf = (fleetId: FleetId, { party, personShipId }: { party: string; personShipId: ShipId }) =>
+    held.findIndex((notice) => notice.fleetId === fleetId && notice.party === party && notice.personShipId === personShipId);
+  return {
+    held,
+    open: (fleetId, { party, personShipId, noticeId }) => {
+      const at = indexOf(fleetId, { party, personShipId });
+      if (at === -1) {
+        held.push({ fleetId, party, personShipId, noticeId, isTold: false });
+        return Promise.resolve({ noticeId, isTold: false });
+      }
+      const { noticeId: openId, isTold } = held[at] ?? { noticeId, isTold: false };
+      return Promise.resolve({ noticeId: openId, isTold });
+    },
+    markTold: (fleetId, of) => {
+      const notice = held[indexOf(fleetId, of)];
+      if (notice !== undefined) {
+        held[indexOf(fleetId, of)] = { ...notice, isTold: true };
+      }
+      return Promise.resolve();
+    },
+    close: (fleetId, of) => {
+      const at = indexOf(fleetId, of);
+      if (at !== -1) {
+        held.splice(at, 1);
+      }
+      return Promise.resolve();
+    },
+  };
 }
