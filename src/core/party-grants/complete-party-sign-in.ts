@@ -6,7 +6,7 @@ import type { DomainError, DomainErrorKind } from '../shared/errors.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { SignInClient } from '../vault/credential.js';
 import type { OutsideAccount } from './party-grant.js';
-import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, SignInServers, StatesProxyShip } from './ports.js';
+import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, SignInNotices, SignInServers, StatesProxyShip } from './ports.js';
 
 const MS_PER_SECOND = 1000;
 
@@ -58,14 +58,16 @@ function outsideAccountOf(idToken: IdTokenClaims | null, client: SignInClient): 
  * redeemed. A person who denied consent is not signed in. Where the ID
  * token names an outside account another person's grant already names, the
  * person is turned away and the tokens are dropped (Q13). Else the grant is
- * kept in place of the person's earlier one, and the proxy ship is stated
- * from it (Q15). Nothing is kept on any refusal.
+ * kept in place of the person's earlier one, the notice that told them a
+ * call needed it is closed, so a later loss tells them again (Q6), and the
+ * proxy ship is stated from it (Q15). Nothing is kept on any refusal.
  */
 export function createCompletePartySignIn(deps: {
   servers: SignInServers;
   grants: Pick<PartyGrants, 'ofSubject' | 'keep'>;
   seals: PartySignInSeals;
   signIns: Pick<PartySignIns, 'redeemCode'>;
+  notices: Pick<SignInNotices, 'close'>;
   accountOf: (asked: Parameters<AccountOfSignIn>[0]) => ReturnType<AccountOfSignIn>;
   stateParty: StatesProxyShip;
   clock: Clock;
@@ -127,6 +129,7 @@ export function createCompletePartySignIn(deps: {
       // Another person signed in as the same outside account meanwhile.
       return turnedAway();
     }
+    await deps.notices.close(fleetId, { party: name, personShipId });
     const stated = await deps.stateParty({ fleetId, name });
     return ok({ ...at, statementRefusal: stated.isOk ? null : stated.error.message });
   };

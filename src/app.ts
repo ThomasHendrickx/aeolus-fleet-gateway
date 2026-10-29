@@ -19,6 +19,7 @@ import { createPrismaFleetForgetter } from './adapters/prisma/fleet-forgetter.js
 import { createPrismaFleetSwitches } from './adapters/prisma/fleet-switches.js';
 import { createPrismaInstallationRequests } from './adapters/prisma/installation-requests.js';
 import { createPrismaPartyGrants } from './adapters/prisma/party-grants.js';
+import { createPrismaSignInNotices } from './adapters/prisma/sign-in-notices.js';
 import { createPrismaPartyStore } from './adapters/prisma/party-store.js';
 import { createPrismaScopeRequirements } from './adapters/prisma/scope-requirements.js';
 import { createPrismaToolMarks } from './adapters/prisma/tool-marks.js';
@@ -406,6 +407,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const callTiming = { waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, deadlineMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS };
   const requirements = createPrismaScopeRequirements(prisma);
   const partyGrants = createPrismaPartyGrants(prisma);
+  const signInNotices = createPrismaSignInNotices(prisma);
   // A server where each person signs in is listed under a person's grant (decision 0067, Q15).
   const connectionOf = createListingConnectionOf({ grants: partyGrants, clock });
   const stateParty = createStateParty({ parties, servers, connectionOf, door, marks, requirements, timing: callTiming });
@@ -877,7 +879,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     removeOwn: createRemoveOwnGrant({ servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns }),
   };
   registerPartySignInRoutes(server, {
-    complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, accountOf, stateParty, clock, redirectUri: partySignInRedirectUri }),
+    complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, notices: signInNotices, accountOf, stateParty, clock, redirectUri: partySignInRedirectUri }),
     log: server.log,
   });
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined; waitingSecret: string | undefined }): Context => ({
