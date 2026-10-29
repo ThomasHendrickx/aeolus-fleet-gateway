@@ -4,6 +4,7 @@ import { fakeShipReads, FLEET_ID, memoryConnectionStore, OTHER_FLEET_ID, SHIP_ID
 import { memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { ATTIO_CLIENT, JORIS_SHIP_ID, MATHILDE_SHIP_ID, aPartyGrant, anAttioParty, fakePartySignIns, memoryPartyGrants } from '../../../test/support/party-grant-fakes.js';
 import { signInServersOf } from '../parties/sign-in-servers.js';
+import { err } from '../shared/result.js';
 import { createEndRetiredPersonsGrants } from './end-retired-persons-grants.js';
 
 // A person's grants go when their person ship is retired (decision 0067,
@@ -45,6 +46,23 @@ describe("a retired person ship's grants (Q6)", () => {
       revoked: ['refresh-mathilde', 'access-mathilde'],
       held: [{ party: 'attio', personShipId: JORIS_SHIP_ID }],
     });
+  });
+
+  it('ends the grants of a person ship the fleet answers it has not, as it answers a retired one read on its behalf', async () => {
+    ships.state.ships.delete(MATHILDE_SHIP_ID);
+
+    await endRetiredPersonsGrants();
+
+    expect(heldBy()).toEqual([{ party: 'attio', personShipId: JORIS_SHIP_ID }]);
+  });
+
+  it('keeps the grants of a person ship the fleet refuses to read for another reason', async () => {
+    const reading = ships.door.getShip;
+    ships.door.getShip = (crewToken, ship) => (ship.shipId === MATHILDE_SHIP_ID ? Promise.resolve(err({ code: 'FORBIDDEN', message: 'outside the read reach' })) : reading(crewToken, ship));
+
+    await endRetiredPersonsGrants();
+
+    expect(grants.held).toHaveLength(3);
   });
 
   it('reads each person ship once a round, as the gateway on its behalf', async () => {
