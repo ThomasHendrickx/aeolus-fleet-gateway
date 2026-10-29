@@ -35,6 +35,16 @@ describe('a person reads their own sign-in to an outside MCP server (Q12)', () =
     });
   });
 
+  it('answers their lost grant: the outside account, and when and why it was lost (Q5, Q12)', async () => {
+    const lost = { at: new Date('2026-10-28T16:00:00.000Z'), why: 'invalid_grant: the refresh token is revoked' };
+    await grants.keep(aPartyGrant({ lost }));
+
+    await expect(reading()({ actor: MATHILDE, name: 'attio' })).resolves.toEqual({
+      isOk: true,
+      value: { state: 'lost', outsideAccount: { subject: 'sub-1', name: 'mathilde@acme.example' }, signedInAt: new Date('2026-10-28T14:00:00.000Z'), lastUsedAt: null, lost },
+    });
+  });
+
   it('answers not signed in for a person who holds no grant of the party', async () => {
     await grants.remove(FLEET_ID, { party: 'attio', personShipId: MATHILDE_SHIP_ID });
 
