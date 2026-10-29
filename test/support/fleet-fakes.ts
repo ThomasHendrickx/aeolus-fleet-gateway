@@ -59,7 +59,7 @@ export function fakeGatewayFleet() {
       if (!state.isAnswering) {
         return unavailable();
       }
-      return state.liveTokens.has(crewToken) ? Promise.resolve(ok({ status: 'crewed' as const, name: 'gateway', scopes: [...state.scopes] })) : released();
+      return state.liveTokens.has(crewToken) ? Promise.resolve(ok({ status: 'crewed' as const, name: 'gateway', scopes: [...state.scopes], owner: null })) : released();
     },
     deregister: (crewToken) => {
       state.deregistered.push(crewToken);
@@ -110,7 +110,7 @@ export function memoryConnectionStore(): ConnectionStore & { held: Map<FleetId, 
  */
 export function fakeShipReads() {
   const state = {
-    ships: new Map<ShipId, { name: string; scopes: string[] }>(),
+    ships: new Map<ShipId, { name: string; scopes: string[]; owner?: { shipId: ShipId; name: string } }>(),
     isAnswering: true,
     /** Each read: by which crew token, of which ship, on whose behalf. */
     reads: new Array<{ crewToken: string; shipId: ShipId; onBehalfOf: ShipId | undefined }>(),
@@ -122,7 +122,7 @@ export function fakeShipReads() {
         return Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }));
       }
       const ship = state.ships.get(shipId);
-      return Promise.resolve(ship === undefined ? err({ code: 'NOT_FOUND', message: 'No such ship' }) : ok({ status: 'crewed' as const, name: ship.name, scopes: [...ship.scopes] }));
+      return Promise.resolve(ship === undefined ? err({ code: 'NOT_FOUND', message: 'No such ship' }) : ok({ status: 'crewed' as const, name: ship.name, scopes: [...ship.scopes], owner: ship.owner ?? null }));
     },
   };
   return { state, door };
