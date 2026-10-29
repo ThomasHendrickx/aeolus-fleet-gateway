@@ -20,6 +20,7 @@ const signInClientSchema: z.ZodType<SignInClient> = z.object({
   authorizationEndpoint: z.string(),
   tokenEndpoint: z.string(),
   revocationEndpoint: z.string().nullable(),
+  isIssuerInResponse: z.boolean(),
   clientId: z.string(),
   clientSecret: z.string().nullable(),
   registrationClientUri: z.string().nullable(),

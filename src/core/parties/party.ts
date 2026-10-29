@@ -86,6 +86,7 @@ function tlsHostOf(address: string): string | undefined {
  * 0059): the host it reached an MCP server at over TLS, and the domain of the
  * metadata document it read an MCP client's id from over TLS. A client argo
  * registered has no document, and an address without TLS proves no host.
+ * A server where each person signs in: the issuer of the party's client.
  * The domain an A2A agent's card was read from over TLS. The gateway checks
  * nothing about an A2A client: an approver names it.
  */
@@ -93,7 +94,9 @@ export function verifiedFactsOf(party: Party): VerifiedFact[] {
   switch (party.kind) {
     case 'mcpServer': {
       const host = tlsHostOf(party.url);
-      return host === undefined ? [] : [{ checked: 'tlsHost', value: host }];
+      const reached: VerifiedFact[] = host === undefined ? [] : [{ checked: 'tlsHost', value: host }];
+      // Where each person signs in, the issuer only (decision 0067): the subject it issued the party's client to, never a person's outside account.
+      return party.credential.kind === 'personSignIn' ? [...reached, { checked: 'oauthSubject', issuer: party.credential.client.issuer, value: party.credential.client.clientId }] : reached;
     }
     case 'mcpClient': {
       const host = tlsHostOf(party.clientId);

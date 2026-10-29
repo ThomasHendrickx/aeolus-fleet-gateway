@@ -90,6 +90,7 @@ export function createAuthorizationServers(): AuthorizationServers {
         tokenEndpoint: serverMetadata.token_endpoint,
         registrationEndpoint: serverMetadata.registration_endpoint ?? null,
         revocationEndpoint: 'revocation_endpoint' in serverMetadata ? (serverMetadata.revocation_endpoint ?? null) : null,
+        isIssuerInResponse: serverMetadata.authorization_response_iss_parameter_supported === true,
         codeChallengeMethods: serverMetadata.code_challenge_methods_supported ?? [],
         serverScopes: serverMetadata.scopes_supported ?? [],
       };

@@ -18,6 +18,7 @@ import { createPrismaConnectionStore } from './adapters/prisma/connection-store.
 import { createPrismaFleetForgetter } from './adapters/prisma/fleet-forgetter.js';
 import { createPrismaFleetSwitches } from './adapters/prisma/fleet-switches.js';
 import { createPrismaInstallationRequests } from './adapters/prisma/installation-requests.js';
+import { createPrismaPartyGrants } from './adapters/prisma/party-grants.js';
 import { createPrismaPartyStore } from './adapters/prisma/party-store.js';
 import { createPrismaScopeRequirements } from './adapters/prisma/scope-requirements.js';
 import { createPrismaToolMarks } from './adapters/prisma/tool-marks.js';
@@ -30,6 +31,15 @@ import { createCheckRequiredScopes } from './core/parties/check-required-scopes.
 import { createReadScopeRequirements } from './core/parties/read-scope-requirements.js';
 import { createSetScopeRequirements } from './core/parties/set-scope-requirements.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
+import { createListingConnectionOf } from './core/party-grants/listing-connection.js';
+import { createCompletePartySignIn } from './core/party-grants/complete-party-sign-in.js';
+import { createReadOwnGrant } from './core/party-grants/read-own-grant.js';
+import { createRemoveOwnGrant } from './core/party-grants/remove-own-grant.js';
+import { createStartPartySignIn } from './core/party-grants/start-party-sign-in.js';
+import { signInServersOf } from './core/parties/sign-in-servers.js';
+import { createPartySignIns } from './adapters/oauth/party-sign-ins.js';
+import { createPartySignInSeals } from './adapters/crypto/party-sign-in-seals.js';
+import { PARTY_SIGN_IN_DONE_PATH, registerPartySignInRoutes } from './adapters/http/party-sign-in-routes.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
 import { createHandA2aMessage } from './core/a2a-out/hand-a2a-message.js';
@@ -268,8 +278,6 @@ const TOOL_CALL_TIMEOUT_MS = 5 * 60_000;
 /** Where the gateway is reached unless told: this machine, at its default port. */
 const DEFAULT_PUBLIC_URL = 'http://127.0.0.1:4200';
 
-/** Where an outside authorization server sends a person back after they signed in to a server for themselves (decision 0067). */
-const PERSON_SIGN_IN_DONE_PATH = '/outside-parties/sign-in/done';
 
 /** How long a client's metadata document may take to answer. */
 const CLIENT_METADATA_TIMEOUT_MS = 5_000;
@@ -397,9 +405,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // A caller of a proxy ship waits and gives up as the gateway does with its server (interop 3.4, 5.3).
   const callTiming = { waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, deadlineMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS };
   const requirements = createPrismaScopeRequirements(prisma);
-  const stateParty = createStateParty({ parties, servers, door, marks, requirements, timing: callTiming });
+  const partyGrants = createPrismaPartyGrants(prisma);
+  // A server where each person signs in is listed under a person's grant (decision 0067, Q15).
+  const connectionOf = createListingConnectionOf({ grants: partyGrants, clock });
+  const stateParty = createStateParty({ parties, servers, connectionOf, door, marks, requirements, timing: callTiming });
   const markTool = createMarkTool({ parties, marks, stateParty });
-  const switchTools = createSwitchTools({ parties, servers, stateParty, connections, fleet: createProxyShipsAsActor(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const switchTools = createSwitchTools({ parties, servers, connectionOf, stateParty, connections, fleet: createProxyShipsAsActor(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
   const agentCards = createHttpAgentCards({ timeoutMs: AGENT_CARD_TIMEOUT_MS });
   const stateA2aAgent = createStateA2aAgent({ parties, cards: agentCards, door, requirements, timing: callTiming });
   const checkScopes = createCheckRequiredScopes({ connections, door });
@@ -421,7 +432,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
   const checkServer = createCheckServer({ servers, servesOutsideParties });
-  const readPartyTools = createReadPartyTools({ parties, servers });
+  const readPartyTools = createReadPartyTools({ parties, servers, connectionOf });
   const pushStore = createPrismaPushStore(prisma);
   // A webhook is reached only at a public address, as its name resolves at the moment of connecting (slice 4).
   const webhookPoster = createWebhookPoster({ addressesOf: (host) => systemHostResolver.addressesOf(host), isAllowedAddress: isPublicAddress, timeoutMs: WEBHOOK_TIMEOUT_MS });
@@ -856,6 +867,19 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     }
     return decided;
   };
+  // A person's own sign-in to a server where each person signs in (decision 0067), sent back to the redirect URI every party's client was registered with.
+  const partySignInRedirectUri = `${issuer}${PARTY_SIGN_IN_DONE_PATH}`;
+  const partySignIns = createPartySignIns();
+  const partySignInSeals = createPartySignInSeals(options.gatewaySecret);
+  const partySignIn: Context['partySignIn'] = {
+    start: createStartPartySignIn({ servers: signInServersOf(parties), seals: partySignInSeals, signIns: partySignIns, secrets: oauthSecrets, clock, redirectUri: partySignInRedirectUri }),
+    readOwn: createReadOwnGrant({ servers: signInServersOf(parties), grants: partyGrants }),
+    removeOwn: createRemoveOwnGrant({ servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns }),
+  };
+  registerPartySignInRoutes(server, {
+    complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, accountOf, stateParty, clock, redirectUri: partySignInRedirectUri }),
+    log: server.log,
+  });
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined; waitingSecret: string | undefined }): Context => ({
     ...sent,
     authenticateActor,
@@ -874,7 +898,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readConnection,
     connect,
     approveParty,
-    addSignInServer: createAddSignInServer({ approveParty, parties, servers: createAuthorizationServers(), servesOutsideParties, redirectUri: `${issuer}${PERSON_SIGN_IN_DONE_PATH}` }),
+    partySignIn,
+    addSignInServer: createAddSignInServer({ approveParty, parties, servers: createAuthorizationServers(), servesOutsideParties, redirectUri: partySignInRedirectUri }),
     addClientParty: createAddClientParty({ parties, approveClientParty, clients: oauthClients, secrets: oauthSecrets }),
     addA2aClient,
     addA2aAgent,

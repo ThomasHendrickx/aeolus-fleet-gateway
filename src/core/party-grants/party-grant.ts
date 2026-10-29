@@ -1,0 +1,36 @@
+import type { FleetId, ShipId } from '@aeolus-fleet/common';
+
+/** The outside account a grant names, as the outside service's OpenID Connect ID token stated it; none of it where the server gave no ID token. */
+export interface OutsideAccount {
+  /** The `sub` the outside issuer named the account by: no two persons' grants of a party name the same one (Q13). */
+  readonly subject: string | null;
+  /** The account as a person reads it, its email or name, when the ID token named one. */
+  readonly name: string | null;
+}
+
+/**
+ * One person's sign-in to one party (decision 0067): the outside account it
+ * names and its access and refresh tokens, kept by the gateway alone, under
+ * the party's client. A person holds one grant per party; a new sign-in
+ * replaces it.
+ */
+export interface PartyGrant {
+  readonly fleetId: FleetId;
+  readonly party: string;
+  /** The person: their person ship, which owns itself, and the ships it owns call under this grant. */
+  readonly personShipId: ShipId;
+  readonly accountId: string;
+  readonly outsideAccount: OutsideAccount;
+  readonly accessToken: string;
+  /** None when the authorization server issued none: the grant then ends with its access token. */
+  readonly refreshToken: string | null;
+  /** None when the authorization server did not say when the access token ends. */
+  readonly accessTokenEndsAt: Date | null;
+  readonly signedInAt: Date;
+  readonly lastUsedAt: Date | null;
+}
+
+/** Whether the grant's access token may still be sent: its end not reached, or never stated. */
+export function isUsable(grant: PartyGrant, now: Date): boolean {
+  return grant.accessTokenEndsAt === null || grant.accessTokenEndsAt.getTime() > now.getTime();
+}

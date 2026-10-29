@@ -101,6 +101,8 @@ export interface DiscoveredSignIn {
   readonly tokenEndpoint: string;
   readonly registrationEndpoint: string | null;
   readonly revocationEndpoint: string | null;
+  /** Whether it states its issuer in each authorization response (RFC 9207). */
+  readonly isIssuerInResponse: boolean;
   readonly codeChallengeMethods: readonly string[];
   /** The scopes the authorization server lists. */
   readonly serverScopes: readonly string[];

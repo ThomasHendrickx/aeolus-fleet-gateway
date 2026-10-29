@@ -84,6 +84,7 @@ export function createAddSignInServer(deps: {
       authorizationEndpoint: signIn.authorizationEndpoint,
       tokenEndpoint: signIn.tokenEndpoint,
       revocationEndpoint: signIn.revocationEndpoint,
+      isIssuerInResponse: signIn.isIssuerInResponse,
       ...registered.value,
       resource: signIn.resource,
       scope,

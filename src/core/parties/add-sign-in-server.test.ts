@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { plainHasher } from '../../../test/support/memory-installation.js';
-import { ATTIO_SIGN_IN, OWNER_SHIP_ID, fakeAuthorizationServers, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { ATTIO_SIGN_IN, OWNER_SHIP_ID, PROXY_SHIP_ID, fakeAuthorizationServers, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { err, ok } from '../shared/result.js';
 import { createAddSignInServer } from './add-sign-in-server.js';
 import { createApproveParty } from './approve-party.js';
@@ -53,11 +53,31 @@ describe('an approver adds an outside MCP server where each person signs in (dec
           authorizationEndpoint: ATTIO_SIGN_IN.authorizationEndpoint,
           tokenEndpoint: ATTIO_SIGN_IN.tokenEndpoint,
           revocationEndpoint: null,
+          isIssuerInResponse: false,
           resource: 'https://mcp.attio.com/mcp',
           scope: 'mcp offline_access openid',
         },
       },
     });
+  });
+
+  it("writes the issuer beside the server's host as the proxy ship's verified facts, naming the party's client and no person (decision 0067)", async () => {
+    const attio = fakeAuthorizationServers();
+
+    await adding(attio.servers)(anAddition());
+
+    expect(fleet.state.verified.get(PROXY_SHIP_ID)?.facts).toEqual([
+      { checked: 'tlsHost', value: 'mcp.attio.com' },
+      { checked: 'oauthSubject', issuer: 'https://app.attio.com', value: 'client-1' },
+    ]);
+  });
+
+  it('keeps that the authorization server states its issuer in each authorization response, so a response without it is refused (RFC 9207)', async () => {
+    const attio = fakeAuthorizationServers(ok({ ...ATTIO_SIGN_IN, isIssuerInResponse: true }));
+
+    await adding(attio.servers)(anAddition());
+
+    await expect(parties.find(FLEET_ID, 'attio')).resolves.toMatchObject({ credential: { client: { isIssuerInResponse: true } } });
   });
 
   it('is refused naming PKCE S256 when the authorization server does not state it, keeping nothing', async () => {

@@ -33,6 +33,9 @@ import type { AddA2aClient, AddA2aClientRefusal } from '../../core/parties/add-a
 import type { AddA2aAgent, AddA2aAgentRefusal } from '../../core/parties/add-a2a-agent.js';
 import type { MarkA2aAgent, MarkA2aAgentRefusal } from '../../core/a2a-out/mark-a2a-agent.js';
 import type { AddSignInServer, AddSignInServerRefusal } from '../../core/parties/add-sign-in-server.js';
+import type { ReadOwnGrant } from '../../core/party-grants/read-own-grant.js';
+import type { RemoveOwnGrant } from '../../core/party-grants/remove-own-grant.js';
+import type { StartPartySignIn } from '../../core/party-grants/start-party-sign-in.js';
 import type { ApproveParty } from '../../core/parties/approve-party.js';
 import type { CrewParty } from '../../core/parties/crew-party.js';
 import type { ListOwnerChoices } from '../../core/parties/list-owner-choices.js';
@@ -121,6 +124,8 @@ export interface Context {
   connect: Connect;
   approveParty: ApproveParty;
   addSignInServer: AddSignInServer;
+  /** A person's own sign-in to an outside MCP server where each person signs in (decision 0067). */
+  partySignIn: { start: StartPartySignIn; readOwn: ReadOwnGrant; removeOwn: RemoveOwnGrant };
   addClientParty: AddClientParty;
   crewParty: CrewParty;
   listParties: ListParties;
@@ -356,8 +361,9 @@ const CREW_CODES = {
 /** The refusals of reading an outside MCP server's tools, as the API states them. */
 const TOOLS_CODES = {
   NO_SUCH_PARTY: 'NOT_FOUND',
+  NOT_SIGNED_IN: 'PRECONDITION_FAILED',
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
-} as const satisfies Record<'NO_SUCH_PARTY' | 'SERVER_UNREACHABLE', TRPCError['code']>;
+} as const satisfies Record<'NO_SUCH_PARTY' | 'NOT_SIGNED_IN' | 'SERVER_UNREACHABLE', TRPCError['code']>;
 
 /** The refusals of reading the scopes the fleet lists, as the API states them. */
 const LISTED_SCOPES_CODES = {
@@ -374,6 +380,7 @@ const SWITCH_TOOLS_CODES = {
   NOT_REACHABLE: 'FORBIDDEN',
   NOT_CONNECTED: 'PRECONDITION_FAILED',
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
+  NOT_SIGNED_IN: 'PRECONDITION_FAILED',
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
   NO_SUCH_TOOL: 'NOT_FOUND',
 } as const satisfies Record<SwitchToolsRefusal['kind'], TRPCError['code']>;
@@ -422,6 +429,20 @@ const STATE_CODES = {
   SERVER_UNREACHABLE: 'BAD_GATEWAY',
   STATEMENT_REFUSED: 'BAD_REQUEST',
 } as const satisfies Record<string, TRPCError['code']>;
+
+/** The refusals of a person's own sign-in to an outside MCP server, as the API states them. */
+const PARTY_SIGN_IN_CODES = {
+  NOT_A_PERSON: 'FORBIDDEN',
+  NO_SUCH_PARTY: 'NOT_FOUND',
+  NO_SIGN_IN: 'BAD_REQUEST',
+  NOT_SIGNED_IN: 'NOT_FOUND',
+} as const satisfies Record<string, TRPCError['code']>;
+
+/** A person's own sign-in to a party, as their page shows it: never a token. */
+const ownSignInOutputSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('notSignedIn') }),
+  z.object({ state: z.literal('signedIn'), outsideAccount: z.object({ subject: z.string().nullable(), name: z.string().nullable() }), signedInAt: z.string(), lastUsedAt: z.string().nullable() }),
+]);
 
 /** The longest name argo gives an MCP client. */
 const CLIENT_NAME_MAX_LENGTH = 200;
@@ -981,6 +1002,45 @@ export const gatewayRouter = t.router({
           throw new TRPCError({ code: CREW_CODES[crewed.error.kind], message: crewed.error.message });
         }
         return { ...crewed.value.party, clientSecret: crewed.value.clientSecret };
+      }),
+    /**
+     * A person presses Sign in on an outside MCP server's page, for
+     * themselves (decision 0067): the address of the party's authorization
+     * server to send their browser to. Every account of the fleet with a
+     * person ship may.
+     */
+    startSignIn: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema }))
+      .output(z.object({ url: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const started = await ctx.partySignIn.start({ actor: ctx.actor, ...input });
+        if (!started.isOk) {
+          throw new TRPCError({ code: PARTY_SIGN_IN_CODES[started.error.kind], message: started.error.message });
+        }
+        return started.value;
+      }),
+    /** A person's own sign-in to an outside MCP server where each person signs in: the outside account it names, when, and last used (Q12). */
+    ownSignIn: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema }))
+      .output(ownSignInOutputSchema)
+      .query(async ({ ctx, input }) => {
+        const read = await ctx.partySignIn.readOwn({ actor: ctx.actor, ...input });
+        if (!read.isOk) {
+          throw new TRPCError({ code: PARTY_SIGN_IN_CODES[read.error.kind], message: read.error.message });
+        }
+        const own = read.value;
+        return own.state === 'notSignedIn' ? own : { ...own, signedInAt: own.signedInAt.toISOString(), lastUsedAt: own.lastUsedAt?.toISOString() ?? null };
+      }),
+    /** A person removes their own sign-in to an outside MCP server: revoked where the server offers it, then dropped (Q6). */
+    removeOwnSignIn: servedProcedure
+      .input(z.strictObject({ name: shipHandleSchema }))
+      .output(z.object({ isRevoked: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        const removed = await ctx.partySignIn.removeOwn({ actor: ctx.actor, ...input });
+        if (!removed.isOk) {
+          throw new TRPCError({ code: PARTY_SIGN_IN_CODES[removed.error.kind], message: removed.error.message });
+        }
+        return removed.value;
       }),
     /** The gateway states the party's proxy ship anew, from what its server lists now, with argo's marks. */
     state: managing(servedProcedure)

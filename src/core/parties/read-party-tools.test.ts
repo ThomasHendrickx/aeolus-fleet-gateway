@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeMcpServers } from '../../../test/support/mcp-out-fakes.js';
 import { PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { aPartyGrant, anAttioParty, memoryPartyGrants } from '../../../test/support/party-grant-fakes.js';
+import { createListingConnectionOf } from '../party-grants/listing-connection.js';
 import type { McpServerParty } from './party.js';
 import { createReadPartyTools } from './read-party-tools.js';
 
@@ -25,6 +27,7 @@ const LINEAR: McpServerParty = {
 
 let parties: ReturnType<typeof memoryPartyStore>;
 let servers: ReturnType<typeof fakeMcpServers>;
+let grants: ReturnType<typeof memoryPartyGrants>;
 let readPartyTools: ReturnType<typeof createReadPartyTools>;
 
 beforeEach(async () => {
@@ -35,7 +38,8 @@ beforeEach(async () => {
     { name: 'get_issue', inputSchema: { type: 'object' } },
     { name: 'delete_issue', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false, destructiveHint: true } },
   ]);
-  readPartyTools = createReadPartyTools({ parties, servers });
+  grants = memoryPartyGrants();
+  readPartyTools = createReadPartyTools({ parties, servers, connectionOf: createListingConnectionOf({ grants, clock: { now: () => new Date('2026-10-28T14:30:00.000Z') } }) });
 });
 
 describe("an outside MCP server's tools, as it lists them now", () => {
@@ -65,6 +69,21 @@ describe("an outside MCP server's tools, as it lists them now", () => {
       { name: 'get_issue', isOn: false, isNew: true },
       { name: 'delete_issue', isOn: false, isNew: true },
     ]);
+  });
+
+  it("lists a server where each person signs in under a person's grant (Q15)", async () => {
+    await parties.save(anAttioParty({ fleetId: FLEET_ID }));
+    await grants.keep(aPartyGrant({ fleetId: FLEET_ID }));
+
+    await expect(readPartyTools({ fleetId: FLEET_ID, name: 'attio' })).resolves.toMatchObject({ isOk: true });
+    expect(servers.listedWith).toEqual([{ url: 'https://mcp.attio.com/mcp', credential: { kind: 'bearer', token: 'access-mathilde' } }]);
+  });
+
+  it('says nobody signed in to a server where each person signs in, listing nothing', async () => {
+    await parties.save(anAttioParty({ fleetId: FLEET_ID }));
+
+    await expect(readPartyTools({ fleetId: FLEET_ID, name: 'attio' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_SIGNED_IN' } });
+    expect(servers.listedWith).toEqual([]);
   });
 
   it('says the server could not be listed, and why', async () => {

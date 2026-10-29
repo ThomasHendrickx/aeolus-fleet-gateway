@@ -3,12 +3,13 @@ import type { ActorCredential, CredentialOf } from '../actors/credential-of.js';
 import type { ConnectionStore } from '../connection/ports.js';
 import type { McpServers } from '../mcp-out/ports.js';
 import type { StateParty } from '../mcp-out/state-party.js';
+import type { ListingConnectionOf } from '../party-grants/listing-connection.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import { approvedParty, type ApprovingRefusal } from './check-approving.js';
 import type { PartyStore, ProxyShipsAsActor } from './ports.js';
 
-export type SwitchToolsRefusal = ApprovingRefusal | DomainError<'SERVER_UNREACHABLE' | 'NO_SUCH_TOOL'>;
+export type SwitchToolsRefusal = ApprovingRefusal | DomainError<'NOT_SIGNED_IN' | 'SERVER_UNREACHABLE' | 'NO_SUCH_TOOL'>;
 
 export type SwitchTools = (input: { actor: Actor; as: ActorCredential; name: string; tools: readonly string[]; isOn: boolean }) => Promise<
   Result<{ tools: string[]; isOn: boolean; /** Why the proxy ship's statement waits for its next one; none when the fleet sees the switches now. */ statementRefusal: string | null }, SwitchToolsRefusal>
@@ -27,6 +28,7 @@ export type SwitchTools = (input: { actor: Actor; as: ActorCredential; name: str
 export function createSwitchTools(deps: {
   parties: PartyStore;
   servers: McpServers;
+  connectionOf: ListingConnectionOf;
   stateParty: StateParty;
   connections: Pick<ConnectionStore, 'find'>;
   fleet: Pick<ProxyShipsAsActor, 'checkManage'>;
@@ -41,7 +43,11 @@ export function createSwitchTools(deps: {
     if (party.kind !== 'mcpServer') {
       return refuse('NO_SUCH_PARTY', `There is no outside MCP server ${name}`);
     }
-    const listed = await deps.servers.listTools({ url: party.url, credential: party.credential });
+    const connection = await deps.connectionOf(party);
+    if (connection === undefined) {
+      return refuse('NOT_SIGNED_IN', `Nobody holds a usable sign-in to ${name}, so its tools cannot be listed`);
+    }
+    const listed = await deps.servers.listTools(connection);
     if (!listed.isOk) {
       return refuse('SERVER_UNREACHABLE', `The MCP server of ${name} could not be listed: ${listed.error.reason}`);
     }
