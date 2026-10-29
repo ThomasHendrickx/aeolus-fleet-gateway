@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeMcpServers, fakeStatementDoor, memoryToolMarks } from '../../../test/support/mcp-out-fakes.js';
 import { memoryPartyStore, memoryScopeRequirements } from '../../../test/support/party-fakes.js';
-import { ATTIO_CLIENT, JORIS_SHIP_ID, MATHILDE_ID_TOKEN, MATHILDE_SHIP_ID, MATHILDE_TOKENS, aPartyGrant, anAttioParty, fakePartySignIns, memoryPartyGrants, plainPartySignInSeals } from '../../../test/support/party-grant-fakes.js';
+import { ATTIO_CLIENT, JORIS_SHIP_ID, MATHILDE_ID_TOKEN, MATHILDE_SHIP_ID, MATHILDE_TOKENS, aPartyGrant, anAttioParty, fakePartySignIns, memoryPartyGrants, memorySignInNotices, plainPartySignInSeals } from '../../../test/support/party-grant-fakes.js';
 import type { SharedAccountToken } from '../account-sign-in/ports.js';
 import { createStateParty } from '../mcp-out/state-party.js';
 import { err, ok } from '../shared/result.js';
@@ -37,18 +37,20 @@ let grants: ReturnType<typeof memoryPartyGrants>;
 let attio: ReturnType<typeof fakePartySignIns>;
 let servers: ReturnType<typeof fakeMcpServers>;
 let door: ReturnType<typeof fakeStatementDoor>;
+let notices: ReturnType<typeof memorySignInNotices>;
 let completing: ReturnType<typeof createCompletePartySignIn>;
 
 beforeEach(async () => {
   parties = memoryPartyStore();
   await parties.save(anAttioParty());
   grants = memoryPartyGrants();
+  notices = memorySignInNotices();
   attio = fakePartySignIns();
   servers = fakeMcpServers();
   door = fakeStatementDoor();
   const clock = { now: () => AT };
   const stateParty = createStateParty({ parties, servers, connectionOf: createListingConnectionOf({ grants, clock }), door, marks: memoryToolMarks(), requirements: memoryScopeRequirements(), timing: { waitMs: 10_000, deadlineMs: 300_000 } });
-  completing = createCompletePartySignIn({ servers: signInServersOf(parties), grants, seals, signIns: attio.signIns, accountOf, stateParty, clock, redirectUri: REDIRECT_URI });
+  completing = createCompletePartySignIn({ servers: signInServersOf(parties), grants, seals, signIns: attio.signIns, notices, accountOf, stateParty, clock, redirectUri: REDIRECT_URI });
 });
 
 function back(overrides: Partial<Parameters<typeof completing>[0]> = {}): ReturnType<typeof completing> {
@@ -105,6 +107,15 @@ describe('a person comes back from signing in to an outside MCP server (decision
 
     expect(grants.held).toMatchObject([{ personShipId: MATHILDE_SHIP_ID, accessToken: 'access-mathilde', refreshToken: 'refresh-mathilde' }]);
   });
+
+  it('closes the notice that told them a call needed their sign-in, so a later loss tells them again (Q6, scenario 9)', async () => {
+    await notices.open(FLEET_ID, { party: 'attio', personShipId: MATHILDE_SHIP_ID, noticeId: 'notice-1' });
+    await notices.markTold(FLEET_ID, { party: 'attio', personShipId: MATHILDE_SHIP_ID });
+
+    await back();
+
+    expect(notices.held).toEqual([]);
+  });
 });
 
 describe('a sign-in that is turned away keeps nothing', () => {
@@ -135,6 +146,15 @@ describe('a sign-in that is turned away keeps nothing', () => {
   it('never redeems the code of a sign-in that took longer than ten minutes', async () => {
     await expect(back({ state: aSignIn({ expiresAt: AT }) })).resolves.toMatchObject({ isOk: false, error: { kind: 'SIGN_IN_FAILED', at: null } });
     expect(attio.state.redeemed).toEqual([]);
+  });
+
+  it('keeps the notice of a person turned away open, so they are not told again', async () => {
+    await grants.keep(aPartyGrant({ personShipId: JORIS_SHIP_ID, accountId: 'acc-joris', accessToken: 'access-joris' }));
+    await notices.open(FLEET_ID, { party: 'attio', personShipId: MATHILDE_SHIP_ID, noticeId: 'notice-1' });
+
+    await back();
+
+    expect(notices.held).toMatchObject([{ personShipId: MATHILDE_SHIP_ID, noticeId: 'notice-1' }]);
   });
 
   it('says the person is not signed in when they denied consent, keeping nothing (scenario 10)', async () => {

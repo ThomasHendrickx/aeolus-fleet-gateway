@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import type { McpServerParty } from '../../src/core/parties/party.js';
 import type { PartyGrant } from '../../src/core/party-grants/party-grant.js';
-import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
+import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, RefreshedTokens, SignInNotice, SignInNotices, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 import type { SignInClient } from '../../src/core/vault/credential.js';
 import { FLEET_ID } from './fleet-fakes.js';
@@ -93,6 +93,23 @@ export function memoryPartyGrants(): PartyGrants & { held: PartyGrant[] } {
       }
       return Promise.resolve('kept');
     },
+    replaceTokens: (grant, tokens) => {
+      const at = held.findIndex((other) => isOf(other, grant) && other.personShipId === grant.personShipId && other.accessToken === grant.accessToken);
+      const kept = held[at];
+      if (kept === undefined) {
+        return Promise.resolve('replaced');
+      }
+      held[at] = { ...kept, ...tokens };
+      return Promise.resolve('kept');
+    },
+    markUsed: (grant, at) => {
+      const index = held.findIndex((other) => isOf(other, grant) && other.personShipId === grant.personShipId);
+      const kept = held[index];
+      if (kept !== undefined) {
+        held[index] = { ...kept, lastUsedAt: at };
+      }
+      return Promise.resolve();
+    },
     remove: (fleetId, { party, personShipId }) => {
       const at = held.findIndex((grant) => isOf(grant, { fleetId, party }) && grant.personShipId === personShipId);
       if (at !== -1) {
@@ -133,6 +150,9 @@ export function fakePartySignIns() {
     codes: new Map<string, RedeemedTokens>([['code-mathilde', MATHILDE_TOKENS]]),
     redeemed: new Array<{ clientId: string; code: string; verifier: string; redirectUri: string }>(),
     revoked: new Array<{ revocationEndpoint: string; token: string }>(),
+    /** The tokens each refresh token refreshes to; one not here is refused invalid_grant. */
+    refreshes: new Map<string, RefreshedTokens>(),
+    refreshed: new Array<{ clientId: string; refreshToken: string }>(),
     failure: noFailure(),
     revocation: revoking(),
   };
@@ -148,10 +168,51 @@ export function fakePartySignIns() {
       state.codes.delete(code);
       return Promise.resolve(tokens === undefined ? err({ kind: 'refused' as const, error: 'invalid_grant', reason: 'invalid_grant: the code is unknown or used' }) : ok(tokens));
     },
+    refresh: (client, refreshToken) => {
+      if (state.failure !== undefined) {
+        return Promise.resolve(err(state.failure));
+      }
+      state.refreshed.push({ clientId: client.clientId, refreshToken });
+      const tokens = state.refreshes.get(refreshToken);
+      return Promise.resolve(tokens === undefined ? err({ kind: 'refused' as const, error: 'invalid_grant', reason: 'invalid_grant: the refresh token is unknown or used' }) : ok(tokens));
+    },
     revoke: (client, token) => {
       state.revoked.push({ revocationEndpoint: client.revocationEndpoint, token });
       return Promise.resolve(state.revocation);
     },
   };
   return { state, signIns };
+}
+
+/** The notices in memory: one per person and party while open. */
+export function memorySignInNotices(): SignInNotices & { held: (SignInNotice & { fleetId: FleetId; party: string; personShipId: ShipId })[] } {
+  const held = new Array<SignInNotice & { fleetId: FleetId; party: string; personShipId: ShipId }>();
+  const indexOf = (fleetId: FleetId, { party, personShipId }: { party: string; personShipId: ShipId }) =>
+    held.findIndex((notice) => notice.fleetId === fleetId && notice.party === party && notice.personShipId === personShipId);
+  return {
+    held,
+    open: (fleetId, { party, personShipId, noticeId }) => {
+      const at = indexOf(fleetId, { party, personShipId });
+      if (at === -1) {
+        held.push({ fleetId, party, personShipId, noticeId, isTold: false });
+        return Promise.resolve({ noticeId, isTold: false });
+      }
+      const { noticeId: openId, isTold } = held[at] ?? { noticeId, isTold: false };
+      return Promise.resolve({ noticeId: openId, isTold });
+    },
+    markTold: (fleetId, of) => {
+      const notice = held[indexOf(fleetId, of)];
+      if (notice !== undefined) {
+        held[indexOf(fleetId, of)] = { ...notice, isTold: true };
+      }
+      return Promise.resolve();
+    },
+    close: (fleetId, of) => {
+      const at = indexOf(fleetId, of);
+      if (at !== -1) {
+        held.splice(at, 1);
+      }
+      return Promise.resolve();
+    },
+  };
 }

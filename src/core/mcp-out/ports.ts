@@ -40,15 +40,19 @@ export interface ToolResult {
   readonly isError: boolean;
 }
 
+/** How a server refused the credential a call went with (RFC 6750 3.1): not taken (401), or lacking a scope the call needs (403 `insufficient_scope`). */
+export type CredentialRefusal = 'unauthorized' | 'insufficientScope';
+
 /**
  * How one `tools/call` ended (5.2):
  * - answered: the server's answer, which confirms the hand-over;
  * - notSent: the gateway never sent it (the server was unreachable, or refused the gateway's credential), so it did not run;
+ *   a refusal says how the server refused the credential: 401 (unauthorized), or 403 `insufficient_scope` for this call;
  * - unanswered: sent, and no answer came (a broken stream, a timeout): whether the server ran it is unknown.
  */
 export type ToolCallOutcome =
   | { readonly kind: 'answered'; readonly result: ToolResult }
-  | { readonly kind: 'notSent'; readonly reason: string }
+  | { readonly kind: 'notSent'; readonly reason: string; readonly refusal?: CredentialRefusal }
   | { readonly kind: 'unanswered'; readonly reason: string };
 
 export interface ToolCall {

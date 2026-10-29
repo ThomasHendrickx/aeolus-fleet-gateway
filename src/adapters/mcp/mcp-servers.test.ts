@@ -133,6 +133,24 @@ describe('calling a tool of an outside MCP server (interop 5.2)', () => {
     expect({ kind: outcome.kind, ran: crm.calls.get('create_contact') }).toEqual({ kind: 'notSent', ran: undefined });
   });
 
+  it('says the server refused the credential 401, so a grant may be refreshed', async () => {
+    const outcome = await servers.callTool(withBearer('not-the-token'), { name: 'list_contacts', arguments: {}, timeoutMs: TIMEOUT_MS });
+    expect(outcome).toMatchObject({ kind: 'notSent', refusal: 'unauthorized' });
+  });
+
+  it('answers notSent saying the credential lacks a scope when the server refuses the call 403 insufficient_scope, and nothing ran', async () => {
+    await crm.close();
+    crm = await startMockCrm({ insufficientScopeTools: ['create_contact'] });
+    const outcome = await servers.callTool(withBearer(), { name: 'create_contact', arguments: { name: 'X', email: 'x@example.com' }, timeoutMs: TIMEOUT_MS });
+    expect({ outcome, ran: crm.calls.get('create_contact') }).toMatchObject({ outcome: { kind: 'notSent', refusal: 'insufficientScope' }, ran: undefined });
+  });
+
+  it('answers notSent naming no refusal when nothing listens', async () => {
+    await crm.close();
+    const outcome = await servers.callTool(withBearer(), { name: 'list_contacts', arguments: {}, timeoutMs: TIMEOUT_MS });
+    expect(outcome).not.toHaveProperty('refusal');
+  });
+
   it('answers notSent when the client credentials are refused', async () => {
     const outcome = await servers.callTool(withClientCredentials('wrong-secret'), { name: 'list_contacts', arguments: {}, timeoutMs: TIMEOUT_MS });
     expect(outcome.kind).toBe('notSent');

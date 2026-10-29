@@ -13,6 +13,7 @@ import { z } from 'zod';
 
 import { SHARED_SIGN_IN_COOKIE } from '../../core/account-sign-in/ports.js';
 import type { CompletePartySignIn, CompletePartySignInRefusal } from '../../core/party-grants/complete-party-sign-in.js';
+import type { PageUrlOf } from '../../core/party-grants/tell-sign-in-needed.js';
 import { cookieValueOf } from './account-sign-in-routes.js';
 
 export const PARTY_SIGN_IN_DONE_PATH = '/outside-parties/sign-in/done';
@@ -21,6 +22,11 @@ export const PARTY_SIGN_IN_DONE_PATH = '/outside-parties/sign-in/done';
 const OUTSIDE_PARTIES_PATH = '/outside-parties';
 
 const HTTP_FOUND = 302;
+
+/** The page of an outside party in a fleet at the gateway's public address, where each person signs in to it. */
+export function partyPageUrlOf(publicUrl: string): PageUrlOf {
+  return (fleetId, party) => `${publicUrl}${OUTSIDE_PARTIES_PATH}/${encodeURIComponent(party)}?${new URLSearchParams({ fleet: fleetId }).toString()}`;
+}
 
 /** An OAuth error code as RFC 6749 spells one: anything else the address does not carry. */
 const ERROR_CODE = /^[\w.-]{1,64}$/;

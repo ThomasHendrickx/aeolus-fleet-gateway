@@ -593,3 +593,15 @@ model PartyGrant {
   @@unique([fleetId, party, subject])
   @@map("party_grants")
 }
+
+/// The notice that told a person a call needed their sign-in to a party where each person signs in (decision 0067, Q6): one per person and party while open, its id keying the message; a sign-in closes it.
+model PartySignInNotice {
+  fleetId      String    @map("fleet_id")
+  party        String
+  personShipId String    @map("person_ship_id")
+  noticeId     String    @map("notice_id")
+  isTold       Boolean   @default(false) @map("is_told")
+
+  @@id([fleetId, party, personShipId])
+  @@map("party_sign_in_notices")
+}

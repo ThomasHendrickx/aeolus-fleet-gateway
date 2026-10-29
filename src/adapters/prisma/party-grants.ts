@@ -60,6 +60,13 @@ export function createPrismaPartyGrants(db: PrismaClient): PartyGrants {
       }
       return 'kept';
     },
+    replaceTokens: async ({ fleetId, party, personShipId, accessToken: held }, tokens) => {
+      const { count } = await db.partyGrant.updateMany({ where: { fleetId, party, personShipId, accessToken: held }, data: tokens });
+      return count === 0 ? 'replaced' : 'kept';
+    },
+    markUsed: async ({ fleetId, party, personShipId }, at) => {
+      await db.partyGrant.updateMany({ where: { fleetId, party, personShipId }, data: { lastUsedAt: at } });
+    },
     remove: async (fleetId, { party, personShipId }) => {
       await db.partyGrant.deleteMany({ where: { fleetId, party, personShipId } });
     },

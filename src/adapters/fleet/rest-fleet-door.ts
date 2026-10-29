@@ -224,8 +224,8 @@ export function createRestFleetDoor(
       if ('isInReadReach' in read.value) {
         return err({ code: 'FORBIDDEN', message: `${read.value.name} is outside the read reach` });
       }
-      const { status, name, scopes } = read.value;
-      return ok({ status, name, scopes });
+      const { status, name, scopes, owner } = read.value;
+      return ok({ status, name, scopes, owner: owner === null ? null : { shipId: owner.id, name: owner.name } });
     },
     // An app ship owned by the owner argo picked (decision 0045).
     commissionAppShip: async (crewToken, { name, type, owner, idempotencyKey, scopes }) => {

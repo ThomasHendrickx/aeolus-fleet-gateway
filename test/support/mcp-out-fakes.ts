@@ -15,7 +15,8 @@ export const CRM_TOOLS: OutsideTool[] = [
 
 /** An outside MCP server that lists its tools while reachable, and ends each call as set; it records each connection it was listed with, and each call. */
 export function fakeMcpServers(tools: OutsideTool[] = CRM_TOOLS) {
-  const state: { isReachable: boolean; outcome: ToolCallOutcome } = { isReachable: true, outcome: { kind: 'answered', result: { content: [], isError: false } } };
+  /** The outcome of each call: the next one queued in outcomes, else outcome. */
+  const state: { isReachable: boolean; outcome: ToolCallOutcome; outcomes: ToolCallOutcome[] } = { isReachable: true, outcome: { kind: 'answered', result: { content: [], isError: false } }, outcomes: [] };
   const listedWith: McpServerConnection[] = [];
   const called: { connection: McpServerConnection; call: ToolCall }[] = [];
   const servers: McpServers & { state: typeof state; listedWith: McpServerConnection[]; called: typeof called } = {
@@ -28,7 +29,7 @@ export function fakeMcpServers(tools: OutsideTool[] = CRM_TOOLS) {
     },
     callTool: (connection, call) => {
       called.push({ connection, call });
-      return Promise.resolve(state.outcome);
+      return Promise.resolve(state.outcomes.shift() ?? state.outcome);
     },
   };
   return servers;
