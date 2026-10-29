@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup</title>
+<style>
+/* Aeolus design tokens, exported from the Claude Design system page. Light on :root, dark on .dark. */
+:root {
+  --background:oklch(0.99 0.002 247);
+  --card:oklch(1 0 0);
+  --popover:oklch(1 0 0);
+  --muted:oklch(0.967 0.005 247);
+  --secondary:oklch(0.955 0.007 247);
+  --accent:oklch(0.95 0.009 247);
+  --sidebar:oklch(0.976 0.004 247);
+  --highlight:oklch(0.95 0.035 250);
+  --overlay:oklch(0.2 0.02 257 / 0.42);
+  --foreground:oklch(0.22 0.02 257);
+  --muted-foreground:oklch(0.5 0.02 257);
+  --destructive-text:oklch(0.53 0.2 27);
+  --border:oklch(0.912 0.008 247);
+  --input:oklch(0.885 0.01 247);
+  --ring:oklch(0.56 0.12 257);
+  --primary:oklch(0.34 0.08 257);
+  --primary-hover:oklch(0.29 0.075 257);
+  --primary-foreground:oklch(0.985 0.003 247);
+  --destructive:oklch(0.53 0.2 27);
+  --destructive-foreground:oklch(0.99 0 0);
+  --tone-waiting-bg:oklch(0.965 0.045 85);
+  --tone-waiting-fg:oklch(0.47 0.1 62);
+  --tone-waiting-border:oklch(0.87 0.08 80);
+  --tone-active-bg:oklch(0.955 0.03 250);
+  --tone-active-fg:oklch(0.45 0.14 257);
+  --tone-active-border:oklch(0.86 0.06 252);
+  --tone-ok-bg:oklch(0.96 0.04 155);
+  --tone-ok-fg:oklch(0.44 0.1 155);
+  --tone-ok-border:oklch(0.86 0.07 155);
+  --tone-attention-bg:oklch(0.957 0.028 25);
+  --tone-attention-fg:oklch(0.5 0.19 27);
+  --tone-attention-border:oklch(0.86 0.07 25);
+  --tone-ended-bg:oklch(0.957 0.005 247);
+  --tone-ended-fg:oklch(0.47 0.015 257);
+  --tone-ended-border:oklch(0.87 0.01 247);
+  --card-foreground:var(--foreground);
+  --popover-foreground:var(--foreground);
+  --secondary-foreground:var(--foreground);
+  --accent-foreground:var(--foreground);
+  --sidebar-foreground:var(--foreground);
+  --font-sans:var(--font-geist-sans, "Geist"), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:var(--font-geist-mono, "Geist Mono"), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --shadow-sm:0 1px 2px oklch(0.2 0.02 257 / 0.06);
+  --shadow-md:0 2px 6px oklch(0.2 0.02 257 / 0.08);
+  --shadow-lg:0 16px 40px oklch(0.2 0.02 257 / 0.16), 0 2px 8px oklch(0.2 0.02 257 / 0.08);
+  --radius:8px;
+  --radius-xs:4px;
+  --radius-sm:6px;
+  --radius-md:8px;
+  --radius-lg:10px;
+  --radius-xl:12px;
+  --radius-2xl:18px;
+  --radius-full:9999px;
+  --spacing:4px;
+  --text-micro:11px;
+  --text-micro--line-height:14px;
+  --text-caption:12px;
+  --text-caption--line-height:16px;
+  --text-meta:13px;
+  --text-meta--line-height:18px;
+  --text-body:14px;
+  --text-body--line-height:20px;
+  --text-section:15px;
+  --text-section--line-height:20px;
+  --text-body-touch:15px;
+  --text-body-touch--line-height:22px;
+  --text-input-touch:16px;
+  --text-input-touch--line-height:24px;
+  --text-heading:18px;
+  --text-heading--line-height:24px;
+  --text-heading-touch:20px;
+  --text-heading-touch--line-height:26px;
+  --text-title:22px;
+  --text-title--line-height:28px;
+  --text-title-touch:24px;
+  --text-title-touch--line-height:30px;
+  --text-metric:28px;
+  --text-metric--line-height:32px;
+  --text-id:12px;
+  --text-id--line-height:16px;
+  --text-code:13px;
+  --text-code--line-height:20px;
+  --size-control-xs:28px;
+  --size-control-sm:32px;
+  --size-control:36px;
+  --size-control-touch:44px;
+  --size-row-header:40px;
+  --size-row:48px;
+  --size-sidebar:256px;
+  --size-rail:64px;
+  --size-header:56px;
+  --size-tabbar:68px;
+  --size-dialog-sm:512px;
+  --size-dialog-md:560px;
+  --size-palette:600px;
+  --size-sheet:560px;
+  --size-toast:380px;
+  --size-icon-sm:14px;
+  --size-icon:16px;
+  --size-icon-lg:20px;
+  --size-icon-tab:22px;
+  --size-icon-xl:24px;
+  --duration-fast:150ms;
+  --duration-base:200ms;
+  --duration-slow:300ms;
+  --duration-highlight:600ms;
+  --duration-pulse:1800ms;
+  --ease-standard:cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit:cubic-bezier(0.4, 0, 1, 1);
+}
+
+.dark {
+  color-scheme:dark;
+  --background:oklch(0.172 0.012 257);
+  --card:oklch(0.2 0.013 257);
+  --popover:oklch(0.215 0.013 257);
+  --muted:oklch(0.228 0.012 257);
+  --secondary:oklch(0.255 0.013 257);
+  --accent:oklch(0.26 0.014 257);
+  --sidebar:oklch(0.19 0.012 257);
+  --highlight:oklch(0.27 0.045 255);
+  --overlay:oklch(0.08 0.01 257 / 0.62);
+  --foreground:oklch(0.955 0.005 247);
+  --muted-foreground:oklch(0.72 0.016 257);
+  --destructive-text:oklch(0.7 0.16 25);
+  --border:oklch(0.29 0.014 257);
+  --input:oklch(0.34 0.015 257);
+  --ring:oklch(0.7 0.1 252);
+  --primary:oklch(0.86 0.055 250);
+  --primary-hover:oklch(0.92 0.035 250);
+  --primary-foreground:oklch(0.21 0.035 257);
+  --destructive:oklch(0.56 0.19 25);
+  --destructive-foreground:oklch(0.99 0 0);
+  --tone-waiting-bg:oklch(0.29 0.055 72);
+  --tone-waiting-fg:oklch(0.87 0.11 82);
+  --tone-waiting-border:oklch(0.41 0.075 72);
+  --tone-active-bg:oklch(0.29 0.06 257);
+  --tone-active-fg:oklch(0.85 0.08 252);
+  --tone-active-border:oklch(0.42 0.09 257);
+  --tone-ok-bg:oklch(0.29 0.05 155);
+  --tone-ok-fg:oklch(0.86 0.1 155);
+  --tone-ok-border:oklch(0.41 0.07 155);
+  --tone-attention-bg:oklch(0.3 0.07 25);
+  --tone-attention-fg:oklch(0.84 0.09 25);
+  --tone-attention-border:oklch(0.45 0.11 25);
+  --tone-ended-bg:oklch(0.255 0.01 257);
+  --tone-ended-fg:oklch(0.78 0.015 257);
+  --tone-ended-border:oklch(0.36 0.012 257);
+  --shadow-sm:0 1px 2px oklch(0 0 0 / 0.3);
+  --shadow-md:0 2px 6px oklch(0 0 0 / 0.35);
+  --shadow-lg:0 16px 40px oklch(0 0 0 / 0.55), 0 2px 8px oklch(0 0 0 / 0.3);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #e9ebef; color: #1d2330; font: 14px/20px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+.sheet-head { padding: 24px 32px 8px; max-width: 1100px; }
+.sheet-head h1 { font-size: 22px; line-height: 28px; margin: 0 0 4px; }
+.sheet-head p { margin: 4px 0; color: #4b5568; }
+.sheet-head label { display: inline-flex; gap: 6px; align-items: center; margin-top: 8px; color: #4b5568; }
+.group { padding: 8px 32px 24px; }
+.group > h2 { font-size: 18px; line-height: 24px; margin: 24px 0 4px; }
+.group > p { margin: 0 0 8px; color: #4b5568; max-width: 900px; }
+.state { margin: 16px 0 32px; }
+.state > h3 { font-size: 15px; margin: 0 0 8px; }
+.state > h3 .ref { font-weight: 400; color: #4b5568; margin-left: 8px; }
+.frames { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.frame-box > .cap { font-size: 12px; color: #4b5568; margin-bottom: 4px; }
+.frame { --card-foreground: var(--foreground); --popover-foreground: var(--foreground); --secondary-foreground: var(--foreground); --accent-foreground: var(--foreground); --sidebar-foreground: var(--foreground); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.15); background: var(--background); color: var(--foreground); font-family: var(--font-sans); font-size: var(--text-body); line-height: var(--text-body--line-height); }
+.frame.desktop { width: 1024px; min-height: 640px; zoom: .7; }
+.frame.phone { width: 390px; min-height: 780px; zoom: .75; }
+
+/* The page frame: the header every Aeolus app shows, then the page. */
+.hdr { height: var(--size-header); display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--background); }
+.mark { width: 24px; height: 24px; border-radius: 6px; background: var(--primary); color: var(--primary-foreground); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+.switcher { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+.switcher .sep { color: var(--muted-foreground); font-weight: 400; }
+.tabs { display: flex; gap: 4px; overflow: hidden; min-width: 0; }
+.tabs span { white-space: nowrap; border-radius: 8px; padding: 4px 8px; color: var(--muted-foreground); font-size: 14px; }
+.tabs span.cur { background: var(--accent); color: var(--foreground); font-weight: 600; }
+.grow { flex: 1; }
+.avatar { width: 28px; height: 28px; border-radius: 9999px; background: var(--secondary); border: 1px solid var(--border); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.main { max-width: 1024px; margin: 0 auto; padding: 24px 16px; }
+
+/* The page's parts, on the console's classes (web/features/forms/ui/look.ts). */
+.stack { display: grid; gap: 16px; }
+.stack3 { display: grid; gap: 12px; }
+.stack2 { display: grid; gap: 8px; }
+.stack1 { display: grid; gap: 4px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.between { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
+.card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); color: var(--card-foreground); padding: 24px; box-shadow: var(--shadow-sm); }
+.title { font-size: var(--text-title); line-height: var(--text-title--line-height); font-weight: 600; margin: 0; }
+.section { font-size: var(--text-section); line-height: var(--text-section--line-height); font-weight: 600; margin: 0; }
+.muted { color: var(--muted-foreground); }
+.mono { font-family: var(--font-mono); font-size: var(--text-code); }
+.medium { font-weight: 500; }
+.back { color: var(--muted-foreground); }
+.link { color: var(--primary); }
+.btn { height: var(--size-control); display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: var(--radius-md); padding: 0 16px; font-weight: 500; white-space: nowrap; }
+.btn.primary { background: var(--primary); color: var(--primary-foreground); }
+.btn.secondary { border: 1px solid var(--border); background: var(--card); }
+.btn.destructive { background: var(--destructive); color: var(--destructive-foreground); }
+.btn.pending { opacity: .6; }
+.field { display: grid; gap: 4px; }
+.input { height: var(--size-control); width: 100%; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--background); padding: 0 12px; font-family: var(--font-mono); font-size: var(--text-code); display: flex; align-items: center; justify-content: space-between; }
+.input .ph { color: var(--muted-foreground); }
+.listbox { margin-top: 4px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); box-shadow: var(--shadow-md); padding: 4px; font-family: var(--font-mono); font-size: var(--text-code); }
+.listbox div { padding: 6px 8px; border-radius: 6px; }
+.listbox div.on { background: var(--highlight); }
+.badge { display: inline-flex; align-items: center; border-radius: 9999px; border: 1px solid; padding: 0 8px; font-size: var(--text-caption); line-height: var(--text-caption--line-height); white-space: nowrap; }
+.tag { display: inline-flex; align-items: center; border-radius: var(--radius-md); border: 1px solid var(--border); padding: 0 8px; font-size: var(--text-caption); line-height: var(--text-caption--line-height); white-space: nowrap; }
+.t-waiting { border-color: var(--tone-waiting-border); background: var(--tone-waiting-bg); color: var(--tone-waiting-fg); }
+.t-active { border-color: var(--tone-active-border); background: var(--tone-active-bg); color: var(--tone-active-fg); }
+.t-ok { border-color: var(--tone-ok-border); background: var(--tone-ok-bg); color: var(--tone-ok-fg); }
+.t-attention { border-color: var(--tone-attention-border); background: var(--tone-attention-bg); color: var(--tone-attention-fg); }
+.t-ended { border-color: var(--tone-ended-border); background: var(--tone-ended-bg); color: var(--tone-ended-fg); }
+.note { border: 1px solid; border-radius: var(--radius-md); padding: 8px 12px; }
+.facts { display: grid; gap: 12px; margin: 0; }
+.fact { display: grid; grid-template-columns: 10rem 1fr; gap: 4px; }
+.phone .fact { grid-template-columns: 1fr; }
+.fact dt { color: var(--muted-foreground); }
+.fact dd { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.steps { display: flex; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.steps li { color: var(--muted-foreground); }
+.steps li.done, .steps li.cur { color: var(--foreground); font-weight: 500; }
+.tools { list-style: none; margin: 0; padding: 0; }
+.tools li { border-bottom: 1px solid var(--border); padding: 8px 0; display: grid; gap: 4px; }
+.tools li:last-child { border-bottom: 0; }
+.switch { width: 32px; height: 18px; border-radius: 9999px; background: var(--input); position: relative; display: inline-block; flex-shrink: 0; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 9999px; background: var(--card); }
+.switch.on { background: var(--primary); }
+.switch.on::after { left: 16px; }
+.table { width: 100%; border-collapse: collapse; }
+.table th { text-align: left; font-weight: 500; color: var(--muted-foreground); height: var(--size-row-header); border-bottom: 1px solid var(--border); padding: 0 8px; }
+.table td { height: var(--size-row); border-bottom: 1px solid var(--border); padding: 0 8px; }
+.table tr:last-child td { border-bottom: 0; }
+.people { list-style: none; margin: 0; padding: 0; }
+.people li { border-bottom: 1px solid var(--border); padding: 12px 0; display: grid; gap: 4px; }
+.people li:last-child { border-bottom: 0; }
+.confirm { background: var(--muted); border-radius: var(--radius-md); padding: 12px; display: grid; gap: 8px; }
+.skel { height: 14px; border-radius: 6px; background: var(--muted); display: inline-block; }
+.dashed { border-style: dashed; }
+
+/* What changed, marked on the after sheets while the box above is ticked. */
+body.marks .chg { outline: 2px dashed oklch(0.65 0.2 300); outline-offset: 3px; border-radius: 6px; }
+
+</style>
+</head>
+<body>
+<script>
+// The parts every sheet draws with, as the console's components draw them.
+const TABS = ['Overview', 'Outside parties', 'Parties', 'Slack'];
+
+const ui = {
+  header: (v) =>
+    v.phone
+      ? `<div class="hdr"><span class="switcher">acme ▾</span><div class="tabs">${TABS.map((t) => `<span class="${t === 'Outside parties' ? 'cur' : ''}">${t}</span>`).join('')}</div><span class="grow"></span><span class="avatar">${v.me[0].toUpperCase()}</span></div>`
+      : `<div class="hdr"><span class="mark">A</span><span class="switcher">Gateway <span class="sep">/</span> acme ▾</span><div class="tabs">${TABS.map((t) => `<span class="${t === 'Outside parties' ? 'cur' : ''}">${t}</span>`).join('')}</div><span class="grow"></span><span class="avatar">${v.me[0].toUpperCase()}</span></div>`,
+  back: () => `<span class="back">← Outside parties</span>`,
+  card: (body, cls = '') => `<section class="card ${cls}">${body}</section>`,
+  btn: (label, kind = 'primary', cls = '') => `<span class="btn ${kind} ${cls}">${label}</span>`,
+  badge: (tone, label, cls = '') => `<span class="badge t-${tone} ${cls}">${label}</span>`,
+  tag: (label, cls = '') => `<span class="tag ${cls}">${label}</span>`,
+  alert: (text, cls = '') => `<p class="note t-attention ${cls}" style="margin:0">${text}</p>`,
+  done: (text, cls = '') => `<p class="note t-ok ${cls}" style="margin:0">${text}</p>`,
+  field: (label, value, { ph = false, caret = false, cls = '' } = {}) =>
+    `<label class="field ${cls}"><span>${label}</span><span class="input">${ph ? `<span class="ph">${value}</span>` : `<span>${value}</span>`}${caret ? '<span class="ph">▾</span>' : ''}</span></label>`,
+  listbox: (options, on, cls = '') => `<div class="listbox ${cls}">${options.map((o) => `<div class="${o === on ? 'on' : ''}">${o}</div>`).join('')}</div>`,
+  fact: (label, value, cls = '') => `<div class="fact ${cls}"><dt>${label}</dt><dd>${value}</dd></div>`,
+  steps: (names, at) => `<ol class="steps">${names.map((n, i) => `<li class="${i < at ? 'done' : i === at ? 'cur' : ''}">${i + 1} ${n}</li>`).join('')}</ol>`,
+  tool: (name, description, { readOnly = false, control = '' } = {}) =>
+    `<li><div class="row">${control}<span class="mono">${name}</span>${readOnly ? ui.tag('reads only') : ''}</div><p class="muted" style="margin:0">${description}</p></li>`,
+};
+
+function frame(v, render) {
+  return `<div class="frame ${v.phone ? 'phone' : 'desktop'} ${v.dark ? 'dark' : ''}">${ui.header(v)}<main class="main">${render(v)}</main></div>`;
+}
+
+const VIEWS = [
+  { cap: 'Desktop, light', phone: false, dark: false },
+  { cap: 'Desktop, dark', phone: false, dark: true },
+  { cap: 'Phone, light', phone: true, dark: false },
+  { cap: 'Phone, dark', phone: true, dark: true },
+];
+
+function draw(screen) {
+  document.title = screen.title;
+  const groups = screen.groups
+    .map(
+      (group) =>
+        `<section class="group"><h2>${group.heading}</h2>${group.note ? `<p>${group.note}</p>` : ''}${group.states
+          .map(
+            (state) =>
+              `<div class="state"><h3>${state.name}${state.ref ? `<span class="ref">${state.ref}</span>` : ''}</h3><div class="frames">${VIEWS.map(
+                (view) => `<div class="frame-box"><div class="cap">${view.cap}</div>${frame({ ...view, me: state.me ?? screen.me }, state.render)}</div>`,
+              ).join('')}</div></div>`,
+          )
+          .join('')}</section>`,
+    )
+    .join('');
+  document.body.innerHTML = `<header class="sheet-head"><h1>${screen.title}</h1>${screen.intro.map((line) => `<p>${line}</p>`).join('')}<label><input type="checkbox" id="marks" checked> Mark what changed</label></header>${groups}`;
+  document.body.classList.add('marks');
+  document.getElementById('marks').addEventListener('change', (event) => document.body.classList.toggle('marks', event.target.checked));
+}
+
+// M1: adding an outside MCP server where each person signs in (decision 0067, S7).
+const URL_ = 'https://mcp.attio.com/mcp';
+const ISSUER = 'https://app.attio.com';
+const KINDS_BEFORE = ['No credential', 'Bearer token', 'OAuth client credentials'];
+const KINDS_AFTER = [...KINDS_BEFORE, 'Each person signs in'];
+const STEPS_BEFORE = ['Address', 'Check', 'Owner'];
+const STEPS_SIGN_IN = ['Address', 'Owner', 'Sign in'];
+
+const page = (body) => `<div class="stack">${ui.back()}<div class="stack"><h1 class="title">Add MCP server</h1>${body}</div></div>`;
+
+function addressStep({ kinds, kind, help, stepNames, button, open = true, changed = false }) {
+  const c = changed ? 'chg' : '';
+  return page(`${ui.steps(stepNames, 0).replace('<ol class="steps">', `<ol class="steps ${stepNames === STEPS_SIGN_IN ? 'chg' : ''}">`)}
+    ${ui.card(`<div class="stack3">
+      ${ui.field('Streamable HTTP address', URL_)}
+      <fieldset class="stack3" style="border:0;padding:0;margin:0"><legend class="medium" style="padding:0;margin-bottom:12px">The server's credential</legend>
+        <div>${ui.field('Credential', kind, { caret: true })}${open ? ui.listbox(kinds, kind, c) : ''}</div>
+        <p class="muted ${c}" style="margin:0">${help}</p>
+      </fieldset>
+      <div>${ui.btn(button, 'primary', c)}</div>
+    </div>`)}`);
+}
+
+function ownerStep({ refusal = null, pending = false } = {}) {
+  return page(`${ui.steps(STEPS_SIGN_IN, 1).replace('<ol class="steps">', '<ol class="steps chg">')}
+    ${ui.card(`<div class="stack3">
+      <h2 class="section">Its owner</h2>
+      ${refusal === null ? '' : ui.alert(refusal, 'chg')}
+      <p class="mono muted" style="margin:0">${URL_}</p>
+      ${ui.field("Proxy ship's name", 'attio')}
+      <div class="stack1">${ui.field('Owner', 'mathilde', { caret: true })}<span class="muted">A person ship or argo. It answers for this server.</span></div>
+      ${ui.field('Calls at once', '4')}
+      <p class="muted chg" style="margin:0">Its tools show once someone signs in.</p>
+      <div class="row">${pending ? ui.btn('Checking the sign-in…', 'primary', 'pending chg') : ui.btn('Add attio')}${ui.btn('Back to the address', 'secondary')}</div>
+    </div>`)}`);
+}
+
+const SCREEN = {
+  title: 'M1 · Add a server: each person signs in',
+  me: 'mathilde',
+  intro: [
+    '<code>/outside-parties/add</code>, for an account with fleet:manage. Decision 0067, slice S7; the API is S2.',
+    'A server where each person signs in has no tools to check before someone signs in, so its steps are Address, Owner, Sign in. The gateway checks the sign-in (PKCE S256, dynamic registration) when Add is pressed, and says a refusal in place.',
+  ],
+  groups: [
+    {
+      heading: 'Before',
+      states: [
+        {
+          name: 'Address, credential picked',
+          render: () => addressStep({ kinds: KINDS_BEFORE, kind: 'Bearer token', help: '', stepNames: STEPS_BEFORE, button: 'Check the server' }).replace('<p class="muted " style="margin:0"></p>', `${ui.field('Bearer token', '••••••••')}`),
+        },
+        {
+          name: 'Check and owner',
+          render: () =>
+            page(`${ui.steps(STEPS_BEFORE, 2)}${ui.card(`<div class="stack3">
+              <div class="stack2"><h2 class="section between"><span>The server answers: 2 tools</span><span class="muted" style="font-weight:400">2 of 2 on</span></h2>
+              <p class="muted" style="margin:0">The fleet may call only the tools switched on. A tool the server adds later starts off.</p>
+              <ul class="tools">${ui.tool('search_records', 'Search records of an object.', { readOnly: true, control: '<span class="switch on"></span>' })}${ui.tool('create_record', 'Create a record.', { control: '<span class="switch on"></span>' })}</ul></div>
+              <h2 class="section">Its owner</h2>
+              <p class="mono muted" style="margin:0">${URL_}</p>
+              ${ui.field("Proxy ship's name", 'attio')}
+              <div class="stack1">${ui.field('Owner', 'mathilde', { caret: true })}<span class="muted">A person ship or argo. It answers for this server.</span></div>
+              ${ui.field('Calls at once', '4')}
+              <div class="row">${ui.btn('Add attio')}${ui.btn('Back to the address', 'secondary')}</div>
+            </div>`)}`),
+        },
+      ],
+    },
+    {
+      heading: 'After',
+      states: [
+        {
+          name: 'Address, each person signs in',
+          render: () => addressStep({ kinds: KINDS_AFTER, kind: 'Each person signs in', help: "Each person signs in for themselves. A ship calls under its owner's sign-in.", stepNames: STEPS_SIGN_IN, button: 'Next', changed: true }),
+        },
+        { name: 'Owner', render: () => ownerStep() },
+        { name: 'Adding: the gateway checks the sign-in', render: () => ownerStep({ pending: true }) },
+        { name: 'Refused: no PKCE S256', ref: 'scenario 2', render: () => ownerStep({ refusal: `The authorization server ${ISSUER} does not state PKCE S256` }) },
+        { name: 'Refused: no dynamic registration', ref: 'scenario 3, Q17', render: () => ownerStep({ refusal: `The authorization server ${ISSUER} offers no dynamic registration` }) },
+        { name: 'Refused: no authorization server', render: () => ownerStep({ refusal: 'The server states no authorization server: no resource metadata at /.well-known/oauth-protected-resource' }) },
+        { name: 'Refused: registration refused', render: () => ownerStep({ refusal: `The authorization server ${ISSUER} refused the registration: invalid_redirect_uri` }) },
+        { name: 'Refused: server unreachable', render: () => ownerStep({ refusal: 'The MCP server could not be reached: connect ETIMEDOUT' }) },
+        {
+          name: 'Added: your sign-in is next',
+          ref: 'scenario 1, Q15',
+          render: () =>
+            page(`${ui.steps(STEPS_SIGN_IN, 2).replace('<ol class="steps">', '<ol class="steps chg">')}${ui.card(
+              `<div class="stack3">${ui.done('attio is added.')}
+              <p style="margin:0">Sign in to attio for yourself. Its tools show after the first sign-in.</p>
+              <div class="row">${ui.btn('Sign in to attio')}${ui.btn('Later', 'secondary')}</div></div>`,
+              'chg',
+            )}`),
+        },
+        {
+          name: 'Sign in pressed',
+          render: () =>
+            page(`${ui.steps(STEPS_SIGN_IN, 2).replace('<ol class="steps">', '<ol class="steps chg">')}${ui.card(
+              `<div class="stack3">${ui.done('attio is added.')}
+              <p style="margin:0">Sign in to attio for yourself. Its tools show after the first sign-in.</p>
+              <div class="row">${ui.btn('Opening attio…', 'primary', 'pending')}${ui.btn('Later', 'secondary')}</div></div>`,
+              'chg',
+            )}`),
+        },
+      ],
+    },
+  ],
+};
+
+draw(SCREEN);
+</script>
+</body>
+</html>
