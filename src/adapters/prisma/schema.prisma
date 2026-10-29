@@ -535,7 +535,8 @@ model SlackEvent {
   fleetId      String    @map("fleet_id")
   eventId      String    @map("event_id")
   appId        String    @map("app_id")
-  shipId       String    @map("ship_id")
+  /// None through the gateway's own bot for an answer in a thread not matched yet.
+  shipId       String?   @map("ship_id")
   personShipId String    @map("person_ship_id")
   channel      String
   ts           String

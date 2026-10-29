@@ -6,14 +6,16 @@ import type { DeliveryId, FleetId, MessageId, ShipId } from '@aeolus-fleet/commo
  * the ship it goes to, the person ship it is sent as, where it was written
  * in Slack, and the Markdown it is sent as. An answer in the thread under a
  * posted delivery goes to its sender in reply to its message, and hands the
- * delivery (9.5 step 4). Once core took it, only its event id stays,
- * for an hour, to answer Slack's retries.
+ * delivery (9.5 step 4); one written before the gateway kept that
+ * delivery's Slack message is matched to it as it is sent. Once core took
+ * it, only its event id stays, for an hour, to answer Slack's retries.
  */
 export interface KeptSlackEvent {
   readonly fleetId: FleetId;
   readonly eventId: string;
   readonly appId: string;
-  readonly shipId: ShipId;
+  /** None through the gateway's own bot for an answer in a thread not matched yet: it goes only as an answer. */
+  readonly shipId: ShipId | null;
   readonly personShipId: ShipId;
   readonly channel: string;
   readonly ts: string;
