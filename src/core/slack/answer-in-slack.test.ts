@@ -54,7 +54,7 @@ function press(option: number, sent: { signature?: string; userId?: string } = {
     slack: slack.messages,
     signatures,
     clock: { now: () => NOW },
-  })({ appId: 'A01', teamId: 'T0ACME', userId: sent.userId ?? 'U0MATHILDE', channel: 'D0MATHILDE', messageTs: '1730020000.000001', option, body, timestamp: NOW_SECONDS, signature: sent.signature ?? `signing-A01:${NOW_SECONDS}:${body}` });
+  })({ appId: 'A01', teamId: 'T0ACME', userId: sent.userId ?? 'U0MATHILDE', channel: 'D0MATHILDE', messageTs: '1730020000.000001', messageId: QUESTION.messageId, option, body, timestamp: NOW_SECONDS, signature: sent.signature ?? `signing-A01:${NOW_SECONDS}:${body}` });
 }
 
 describe("a press of a question's button in Slack", () => {
@@ -65,6 +65,19 @@ describe("a press of a question's button in Slack", () => {
     expect(fleet.replies).toEqual([{ to: BUDGET_CHECK, inReplyTo: QUESTION.messageId, contentType: 'application/vnd.aeolus.answer+json', payload: '{"questionId":"5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11","option":1}', idempotencyKey: `answer-${QUESTION.deliveryId}` }]);
     expect(fleet.calls).toContain(`handled(${QUESTION.deliveryId})`);
     expect(slack.state.reactions).toEqual([{ botToken: 'xoxb-1', channel: 'D0MATHILDE', ts: '1730020000.000001', name: 'white_check_mark' }]);
+  });
+
+  it('answers a question pressed before Slack answered its post, acknowledging the delivery first', async () => {
+    fleet = fakePersonShipDoor({ crewToken: 'crew-mathilde', deliveries: [QUESTION] });
+    await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: QUESTION.messageId, deliveryId: QUESTION.deliveryId, senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null });
+
+    const answered = await press(2);
+
+    expect({ answered, replies: fleet.replies.map(({ inReplyTo, payload }) => ({ inReplyTo, payload })), isHandled: fleet.calls.includes(`handled(${QUESTION.deliveryId})`) }).toEqual({
+      answered: { isOk: true, value: { kind: 'answered' } },
+      replies: [{ inReplyTo: QUESTION.messageId, payload: '{"questionId":"5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11","option":2}' }],
+      isHandled: true,
+    });
   });
 
   it("says in the thread why core did not take the answer", async () => {
