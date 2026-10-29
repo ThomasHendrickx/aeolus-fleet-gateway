@@ -121,6 +121,7 @@ export function createCompletePartySignIn(deps: {
       refreshToken: tokens.refreshToken,
       accessTokenEndsAt: accessTokenEndsAtOf(now, tokens.expiresInSeconds),
       signedInAt: now,
+      refreshedAt: null,
       lastUsedAt: null,
       lost: null,
     });

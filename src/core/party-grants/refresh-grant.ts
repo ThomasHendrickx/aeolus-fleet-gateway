@@ -57,7 +57,8 @@ export function createRefreshGrant(deps: { signIns: Pick<PartySignIns, 'refresh'
         return held;
       }
       const { accessToken, refreshToken, expiresInSeconds } = answered.value;
-      return { ...held, accessToken, refreshToken: refreshToken ?? held.refreshToken, accessTokenEndsAt: accessTokenEndsAtOf(deps.clock.now(), expiresInSeconds) };
+      const now = deps.clock.now();
+      return { ...held, accessToken, refreshToken: refreshToken ?? held.refreshToken, accessTokenEndsAt: accessTokenEndsAtOf(now, expiresInSeconds), refreshedAt: now };
     };
     const kept = await deps.grants.change(grant, refreshed);
     if (kept === undefined) {

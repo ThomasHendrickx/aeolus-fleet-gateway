@@ -33,6 +33,8 @@ export interface PartyGrant {
   /** None when the authorization server did not say when the access token ends. */
   readonly accessTokenEndsAt: Date | null;
   readonly signedInAt: Date;
+  /** When it was last refreshed; none until its first refresh. */
+  readonly refreshedAt: Date | null;
   readonly lastUsedAt: Date | null;
   /** None while the grant holds; a lost grant serves no call until the person signs in again in its place. */
   readonly lost: GrantLost | null;
@@ -49,6 +51,18 @@ export const REFRESH_AHEAD_MS = 10 * 60 * 1000;
 /** Whether the grant's access token ends within the time a grant is refreshed ahead of, or has ended. */
 export function isNearItsEnd(grant: PartyGrant, now: Date): boolean {
   return grant.accessTokenEndsAt !== null && grant.accessTokenEndsAt.getTime() - now.getTime() <= REFRESH_AHEAD_MS;
+}
+
+/** How long a grant goes unrefreshed before the schedule refreshes it while idle (Q7, L20): its refresh token used often enough that no idle policy ends it. */
+export const IDLE_REFRESH_MS = 24 * 60 * 60 * 1000;
+
+/** Whether the schedule refreshes the grant now (Q7): not lost, holding a refresh token, and near its access token's end or unrefreshed since its sign-in or last refresh for longer than the idle time. */
+export function isDueForRefresh(grant: PartyGrant, now: Date): boolean {
+  if (grant.lost !== null || grant.refreshToken === null) {
+    return false;
+  }
+  const refreshedLast = grant.refreshedAt ?? grant.signedInAt;
+  return isNearItsEnd(grant, now) || now.getTime() - refreshedLast.getTime() > IDLE_REFRESH_MS;
 }
 
 const MS_PER_SECOND = 1000;

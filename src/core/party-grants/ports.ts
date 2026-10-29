@@ -41,6 +41,8 @@ export interface PartyGrants {
    * grant of the party.
    */
   change(grant: Pick<PartyGrant, 'fleetId' | 'party' | 'personShipId'>, change: (held: PartyGrant) => Promise<PartyGrant>): Promise<PartyGrant | undefined>;
+  /** The grants of every fleet the schedule refreshes now (Q7), at most a round's worth, those whose access token ends first first. */
+  due(asked: { now: Date }): Promise<PartyGrant[]>;
   /** Sets when the person's grant last served a call. */
   markUsed(grant: Pick<PartyGrant, 'fleetId' | 'party' | 'personShipId'>, at: Date): Promise<void>;
   remove(fleetId: FleetId, grant: { party: string; personShipId: ShipId }): Promise<void>;

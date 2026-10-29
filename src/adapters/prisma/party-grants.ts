@@ -1,12 +1,15 @@
 import { idSchema } from '@aeolus-fleet/common';
 
-import type { PartyGrant } from '../../core/party-grants/party-grant.js';
+import { IDLE_REFRESH_MS, REFRESH_AHEAD_MS, type PartyGrant } from '../../core/party-grants/party-grant.js';
 import type { PartyGrants } from '../../core/party-grants/ports.js';
 import type { PrismaClient } from './client.js';
 import { Prisma, type PartyGrant as PartyGrantRow } from './generated/client.js';
 
 /** Prisma's code for a row a unique key already holds. */
 const UNIQUE_VIOLATION = 'P2002';
+
+/** The most grants one round of the schedule refreshes; the rest wait for the next round. */
+const DUE_PER_ROUND = 100;
 
 /** How long a change holding a grant may take: a refresh waits on the authorization server, at most its answer wait. */
 const CHANGE_TIMEOUT_MS = 30_000;
@@ -22,6 +25,7 @@ function grantOf(row: PartyGrantRow): PartyGrant {
     refreshToken: row.refreshToken,
     accessTokenEndsAt: row.accessTokenEndsAt,
     signedInAt: row.signedInAt,
+    refreshedAt: row.refreshedAt,
     lastUsedAt: row.lastUsedAt,
     lost: row.lostAt === null || row.lostWhy === null ? null : { at: row.lostAt, why: row.lostWhy },
   };
@@ -29,8 +33,8 @@ function grantOf(row: PartyGrantRow): PartyGrant {
 
 /** The grant's fields a row keeps beside its key. */
 function rowOf(grant: PartyGrant) {
-  const { accountId, outsideAccount, accessToken, refreshToken, accessTokenEndsAt, signedInAt, lastUsedAt, lost } = grant;
-  return { accountId, subject: outsideAccount.subject, outsideAccountName: outsideAccount.name, accessToken, refreshToken, accessTokenEndsAt, signedInAt, lastUsedAt, lostAt: lost?.at ?? null, lostWhy: lost?.why ?? null };
+  const { accountId, outsideAccount, accessToken, refreshToken, accessTokenEndsAt, signedInAt, refreshedAt, lastUsedAt, lost } = grant;
+  return { accountId, subject: outsideAccount.subject, outsideAccountName: outsideAccount.name, accessToken, refreshToken, accessTokenEndsAt, signedInAt, refreshedAt, lastUsedAt, lostAt: lost?.at ?? null, lostWhy: lost?.why ?? null };
 }
 
 /**
@@ -85,6 +89,19 @@ export function createPrismaPartyGrants(db: PrismaClient): PartyGrants {
         },
         { timeout: CHANGE_TIMEOUT_MS },
       ),
+    due: async ({ now }) => {
+      const idleSince = new Date(now.getTime() - IDLE_REFRESH_MS);
+      const rows = await db.partyGrant.findMany({
+        where: {
+          lostAt: null,
+          refreshToken: { not: null },
+          OR: [{ accessTokenEndsAt: { lte: new Date(now.getTime() + REFRESH_AHEAD_MS) } }, { refreshedAt: { lt: idleSince } }, { refreshedAt: null, signedInAt: { lt: idleSince } }],
+        },
+        orderBy: { accessTokenEndsAt: { sort: 'asc', nulls: 'last' } },
+        take: DUE_PER_ROUND,
+      });
+      return rows.map(grantOf);
+    },
     markUsed: async ({ fleetId, party, personShipId }, at) => {
       await db.partyGrant.updateMany({ where: { fleetId, party, personShipId }, data: { lastUsedAt: at } });
     },

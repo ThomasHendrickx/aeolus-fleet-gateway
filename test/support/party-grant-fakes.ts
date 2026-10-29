@@ -2,7 +2,7 @@ import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
 import type { McpServerParty } from '../../src/core/parties/party.js';
-import { isUsable, type PartyGrant } from '../../src/core/party-grants/party-grant.js';
+import { isDueForRefresh, isUsable, type PartyGrant } from '../../src/core/party-grants/party-grant.js';
 import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, RefreshedTokens, SignInNotice, SignInNotices, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 import type { SignInClient } from '../../src/core/vault/credential.js';
@@ -60,6 +60,7 @@ export function aPartyGrant(overrides: Partial<PartyGrant> = {}): PartyGrant {
     refreshToken: 'refresh-mathilde',
     accessTokenEndsAt: new Date('2026-10-28T15:00:00.000Z'),
     signedInAt: new Date('2026-10-28T14:00:00.000Z'),
+    refreshedAt: null,
     lastUsedAt: null,
     lost: null,
     ...overrides,
@@ -118,6 +119,7 @@ export function memoryPartyGrants(): PartyGrants & { held: PartyGrant[] } {
         done();
       }
     },
+    due: ({ now }) => Promise.resolve(held.filter((grant) => isDueForRefresh(grant, now))),
     markUsed: (grant, at) => {
       const index = held.findIndex((other) => isOf(other, grant) && other.personShipId === grant.personShipId);
       const kept = held[index];
