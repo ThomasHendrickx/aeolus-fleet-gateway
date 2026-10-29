@@ -89,3 +89,8 @@ export async function grantScopes(fleet: FleetServer, argo: { cookie: string; sh
 export async function setOwner(fleet: FleetServer, argo: { cookie: string; shipId: ShipId; ownerShipId: ShipId }): Promise<void> {
   await argoMutates(fleet, { cookie: argo.cookie, procedure: 'setOwner', input: { shipId: argo.shipId, ownerShipId: argo.ownerShipId } });
 }
+
+/** argo retires a ship (fleet:manage): it stays retired (decision 0056). */
+export async function retire(fleet: FleetServer, argo: { cookie: string; shipId: ShipId }): Promise<void> {
+  await argoMutates(fleet, { cookie: argo.cookie, procedure: 'retire', input: { shipId: argo.shipId } });
+}
