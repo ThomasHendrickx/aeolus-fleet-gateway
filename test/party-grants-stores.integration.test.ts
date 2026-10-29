@@ -67,6 +67,21 @@ describe("the party grants in the gateway's database", () => {
     await expect(prisma.partyGrant.count()).resolves.toBe(1);
   });
 
+  it("answers a party's grants by person ship, after the one named, at most as many as asked, in its fleet only", async () => {
+    const grants = createPrismaPartyGrants(prisma);
+    await grants.keep(aPartyGrant({ fleetId: ACME }));
+    await grants.keep(aPartyGrant({ fleetId: ACME, personShipId: JORIS_SHIP_ID, accountId: 'acc-joris', outsideAccount: { subject: 'sub-2', name: null } }));
+    await grants.keep(aPartyGrant({ fleetId: ACME, party: 'linear' }));
+    await grants.keep(aPartyGrant({ fleetId: LABS }));
+
+    const pages = await Promise.all([grants.ofParty(ACME, { party: 'attio', after: null, limit: 1 }), grants.ofParty(ACME, { party: 'attio', after: JORIS_SHIP_ID, limit: 2 })]);
+
+    expect(pages.map((page) => page.map(({ fleetId, party, personShipId }) => ({ fleetId, party, personShipId })))).toEqual([
+      [{ fleetId: ACME, party: 'attio', personShipId: JORIS_SHIP_ID }],
+      [{ fleetId: ACME, party: 'attio', personShipId: MATHILDE_SHIP_ID }],
+    ]);
+  });
+
   it('keeps two persons whose server gave no outside account', async () => {
     const grants = createPrismaPartyGrants(prisma);
     const unnamed = { subject: null, name: null };

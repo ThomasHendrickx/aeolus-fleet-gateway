@@ -28,6 +28,8 @@ export type StatesProxyShip = (input: { fleetId: FleetId; name: string }) => Pro
 /** Outbound port: every person's grant of each party, in the gateway's database. */
 export interface PartyGrants {
   ofPerson(fleetId: FleetId, grant: { party: string; personShipId: ShipId }): Promise<PartyGrant | undefined>;
+  /** The grants of the party, by person ship, after the person ship named, at most as many as asked. */
+  ofParty(fleetId: FleetId, asked: { party: string; after: ShipId | null; limit: number }): Promise<PartyGrant[]>;
   /** The grant of the party that names this outside account, whoever holds it. */
   ofSubject(fleetId: FleetId, grant: { party: string; subject: string }): Promise<PartyGrant | undefined>;
   /** A grant of the party whose access token may still be sent, the most recently used first, then the most recently signed in (Q15). */
