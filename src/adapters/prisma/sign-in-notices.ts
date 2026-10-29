@@ -9,7 +9,9 @@ import type { PrismaClient } from './client.js';
 export function createPrismaSignInNotices(db: PrismaClient): SignInNotices {
   return {
     open: async (fleetId, { party, personShipId, noticeId }) => {
-      const row = await db.partySignInNotice.upsert({ where: { fleetId_party_personShipId: { fleetId, party, personShipId } }, create: { fleetId, party, personShipId, noticeId }, update: {} });
+      // ON CONFLICT DO NOTHING: of two calls opening it at once, both read the one row the first inserted.
+      await db.partySignInNotice.createMany({ data: [{ fleetId, party, personShipId, noticeId }], skipDuplicates: true });
+      const row = await db.partySignInNotice.findUniqueOrThrow({ where: { fleetId_party_personShipId: { fleetId, party, personShipId } } });
       return { noticeId: row.noticeId, isTold: row.isTold };
     },
     markTold: async (fleetId, { party, personShipId }) => {
