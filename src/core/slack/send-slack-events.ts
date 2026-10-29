@@ -63,11 +63,12 @@ export function createSendSlackEvents(deps: {
     if (threadTs === null || event.inReplyTo !== null) {
       return event;
     }
+    // Awaiting is read before the thread: a post Slack answers between the two reads is then found in the thread, never missed by both.
+    const isAwaiting = (await deps.posts.unfinished(fleetId, personShipId)).some((post) => isAwaitingSlackIn(post, { appId, channel }));
     const answered = await deps.posts.lastInThread(fleetId, { personShipId, appId, channel, threadTs });
     if (answered !== undefined) {
       return { ...event, shipId: answered.senderShipId ?? event.shipId, inReplyTo: answered.messageId, deliveryId: answered.deliveryId };
     }
-    const isAwaiting = (await deps.posts.unfinished(fleetId, personShipId)).some((post) => isAwaitingSlackIn(post, { appId, channel }));
     return isAwaiting ? undefined : event;
   };
 

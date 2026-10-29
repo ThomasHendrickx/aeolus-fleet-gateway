@@ -66,9 +66,11 @@ export function createTakeSlackEvent(deps: {
     const link = await deps.links.find(app.fleetId, { teamId: message.teamId, userId: message.userId });
     if (link?.stoppedAt === null) {
       const { eventId, channel, ts, threadTs, text, files } = message;
+      // Awaiting is read before the thread: a post Slack answers between the two reads is then found in the thread, never missed by both.
+      const isAwaiting = threadTs !== null && (await deps.posts.unfinished(app.fleetId, link.personShipId)).some((post) => isAwaitingSlackIn(post, { appId, channel }));
       const answered = threadTs === null ? undefined : await deps.posts.lastInThread(app.fleetId, { personShipId: link.personShipId, appId, channel, threadTs });
       const shipId = answered?.senderShipId ?? app.shipId;
-      const isToMatch = threadTs !== null && answered === undefined && (await deps.posts.unfinished(app.fleetId, link.personShipId)).some((post) => isAwaitingSlackIn(post, { appId, channel }));
+      const isToMatch = isAwaiting && answered === undefined;
       if (shipId === null && !isToMatch) {
         return ok({ kind: 'ignored' });
       }
