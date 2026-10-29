@@ -588,6 +588,10 @@ model PartyGrant {
   accessTokenEndsAt  DateTime? @map("access_token_ends_at") @db.Timestamptz(3)
   signedInAt         DateTime  @map("signed_in_at") @db.Timestamptz(3)
   lastUsedAt         DateTime? @map("last_used_at") @db.Timestamptz(3)
+  /// When a refresh answered invalid_grant lost the grant (Q5); none while it holds.
+  lostAt             DateTime? @map("lost_at") @db.Timestamptz(3)
+  /// Why it was lost, as the authorization server said it.
+  lostWhy            String?   @map("lost_why")
 
   @@id([fleetId, party, personShipId])
   @@unique([fleetId, party, subject])

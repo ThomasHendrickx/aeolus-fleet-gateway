@@ -2,7 +2,7 @@ import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
 import type { McpServerParty } from '../../src/core/parties/party.js';
-import type { PartyGrant } from '../../src/core/party-grants/party-grant.js';
+import { isUsable, type PartyGrant } from '../../src/core/party-grants/party-grant.js';
 import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, PartySignInUnderWay, RedeemedTokens, RefreshedTokens, SignInNotice, SignInNotices, TokenRequestFailure } from '../../src/core/party-grants/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 import type { SignInClient } from '../../src/core/vault/credential.js';
@@ -61,6 +61,7 @@ export function aPartyGrant(overrides: Partial<PartyGrant> = {}): PartyGrant {
     accessTokenEndsAt: new Date('2026-10-28T15:00:00.000Z'),
     signedInAt: new Date('2026-10-28T14:00:00.000Z'),
     lastUsedAt: null,
+    lost: null,
     ...overrides,
   };
 }
@@ -78,7 +79,7 @@ export function memoryPartyGrants(): PartyGrants & { held: PartyGrant[] } {
     usable: (fleetId, { party, now }) =>
       Promise.resolve(
         held
-          .filter((grant) => isOf(grant, { fleetId, party }) && (grant.accessTokenEndsAt === null || grant.accessTokenEndsAt > now))
+          .filter((grant) => isOf(grant, { fleetId, party }) && isUsable(grant, now))
           .sort((one, other) => usedAt(other) - usedAt(one) || other.signedInAt.getTime() - one.signedInAt.getTime())[0],
       ),
     keep: (grant) => {

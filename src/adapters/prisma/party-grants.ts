@@ -23,13 +23,14 @@ function grantOf(row: PartyGrantRow): PartyGrant {
     accessTokenEndsAt: row.accessTokenEndsAt,
     signedInAt: row.signedInAt,
     lastUsedAt: row.lastUsedAt,
+    lost: row.lostAt === null || row.lostWhy === null ? null : { at: row.lostAt, why: row.lostWhy },
   };
 }
 
 /** The grant's fields a row keeps beside its key. */
 function rowOf(grant: PartyGrant) {
-  const { accountId, outsideAccount, accessToken, refreshToken, accessTokenEndsAt, signedInAt, lastUsedAt } = grant;
-  return { accountId, subject: outsideAccount.subject, outsideAccountName: outsideAccount.name, accessToken, refreshToken, accessTokenEndsAt, signedInAt, lastUsedAt };
+  const { accountId, outsideAccount, accessToken, refreshToken, accessTokenEndsAt, signedInAt, lastUsedAt, lost } = grant;
+  return { accountId, subject: outsideAccount.subject, outsideAccountName: outsideAccount.name, accessToken, refreshToken, accessTokenEndsAt, signedInAt, lastUsedAt, lostAt: lost?.at ?? null, lostWhy: lost?.why ?? null };
 }
 
 /**
@@ -51,7 +52,7 @@ export function createPrismaPartyGrants(db: PrismaClient): PartyGrants {
     },
     usable: async (fleetId, { party, now }) => {
       const row = await db.partyGrant.findFirst({
-        where: { fleetId, party, OR: [{ accessTokenEndsAt: null }, { accessTokenEndsAt: { gt: now } }] },
+        where: { fleetId, party, lostAt: null, OR: [{ accessTokenEndsAt: null }, { accessTokenEndsAt: { gt: now } }] },
         orderBy: [{ lastUsedAt: { sort: 'desc', nulls: 'last' } }, { signedInAt: 'desc' }],
       });
       return row === null ? undefined : grantOf(row);

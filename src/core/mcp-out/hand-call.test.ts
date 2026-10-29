@@ -69,10 +69,11 @@ beforeEach(async () => {
   attio = fakePartySignIns();
   sender = fakeCallSender();
   const clock = { now: () => NOW };
+  const tellSignInNeeded = createTellSignInNeeded({ notices: memorySignInNotices(), connections, sender, newNoticeId: () => 'notice-1', pageUrlOf });
   const grantCalls = createGrantCalls({
     callGrantOf: createCallGrantOf({ connections, door: ships.door, grants }),
-    refreshGrant: createRefreshGrant({ signIns: attio.signIns, grants, clock }),
-    tellSignInNeeded: createTellSignInNeeded({ notices: memorySignInNotices(), connections, sender, newNoticeId: () => 'notice-1', pageUrlOf }),
+    refreshGrant: createRefreshGrant({ signIns: attio.signIns, grants, tellSignInNeeded, clock }),
+    tellSignInNeeded,
     servers,
     grants,
     clock,

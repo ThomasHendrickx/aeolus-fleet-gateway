@@ -66,7 +66,7 @@ export function createGrantCalls(deps: {
   pageUrlOf: PageUrlOf;
 }): GrantCalls {
   const noWorkingSignIn = async (server: SignInServerCalled, person: CallPerson): Promise<ToolResult> => {
-    await deps.tellSignInNeeded({ fleetId: server.fleetId, party: server.name, personShipId: person.shipId });
+    await deps.tellSignInNeeded({ fleetId: server.fleetId, party: server.name, personShipId: person.shipId, lost: null });
     return errorResult(`${person.name}, who owns the calling ship, has no working sign-in to ${server.name}: sign in on ${deps.pageUrlOf(server.fleetId, server.name)}, then call again.`);
   };
   const answered = (result: ToolResult): ToolCallOutcome => ({ kind: 'answered', result });
@@ -111,6 +111,7 @@ export function createGrantCalls(deps: {
             return { kind: 'notSent', reason: `The grant was not refreshed: ${refreshed.error.reason}` };
           case 'noRefreshToken':
           case 'refused':
+          case 'lost':
           case 'removed':
             return answered(await noWorkingSignIn(granted.server, granted.person));
         }

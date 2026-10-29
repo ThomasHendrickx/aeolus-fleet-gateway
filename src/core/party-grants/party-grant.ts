@@ -8,6 +8,12 @@ export interface OutsideAccount {
   readonly name: string | null;
 }
 
+/** A grant the authorization server would no longer refresh (Q5): when, and why as the server said it. */
+export interface GrantLost {
+  readonly at: Date;
+  readonly why: string;
+}
+
 /**
  * One person's sign-in to one party (decision 0067): the outside account it
  * names and its access and refresh tokens, kept by the gateway alone, under
@@ -28,11 +34,13 @@ export interface PartyGrant {
   readonly accessTokenEndsAt: Date | null;
   readonly signedInAt: Date;
   readonly lastUsedAt: Date | null;
+  /** None while the grant holds; a lost grant serves no call until the person signs in again in its place. */
+  readonly lost: GrantLost | null;
 }
 
-/** Whether the grant's access token may still be sent: its end not reached, or never stated. */
+/** Whether the grant's access token may still be sent: the grant not lost, and the token's end not reached, or never stated. */
 export function isUsable(grant: PartyGrant, now: Date): boolean {
-  return grant.accessTokenEndsAt === null || grant.accessTokenEndsAt.getTime() > now.getTime();
+  return grant.lost === null && (grant.accessTokenEndsAt === null || grant.accessTokenEndsAt.getTime() > now.getTime());
 }
 
 const MS_PER_SECOND = 1000;

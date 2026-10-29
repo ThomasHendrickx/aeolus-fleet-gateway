@@ -16,7 +16,7 @@ export interface CallPerson {
 /**
  * Whose grant a call goes out under:
  * - grant: the person who owns the asking ship holds one for the party;
- * - notSignedIn: they hold none (Q5);
+ * - notSignedIn: they hold none, or a lost one (Q5);
  * - noPerson: argo owns the asking ship, or it is argo, so no person can sign in for it (Q10);
  * - unread: core did not answer the owner read, so the call waits and is tried again, never made without its person's grant.
  */
@@ -51,6 +51,7 @@ export function createCallGrantOf(deps: { connections: Pick<ConnectionStore, 'fi
     }
     const person = { shipId: owner.shipId, name: owner.name };
     const grant = await deps.grants.ofPerson(fleetId, { party, personShipId: owner.shipId });
-    return grant === undefined ? { kind: 'notSignedIn', person } : { kind: 'grant', grant, person };
+    // None, or a lost one, alike.
+    return grant?.lost !== null ? { kind: 'notSignedIn', person } : { kind: 'grant', grant, person };
   };
 }

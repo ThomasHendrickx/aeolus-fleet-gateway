@@ -436,10 +436,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
   // A call to a server where each person signs in goes out under its asking ship's owner's grant (decision 0067).
   const partyPageUrl = partyPageUrlOf(options.publicUrl ?? DEFAULT_PUBLIC_URL);
+  const tellSignInNeeded = createTellSignInNeeded({ notices: signInNotices, connections, sender: door, newNoticeId: randomUUID, pageUrlOf: partyPageUrl });
   const grantCalls = createGrantCalls({
     callGrantOf: createCallGrantOf({ connections, door, grants: partyGrants }),
-    refreshGrant: createRefreshGrant({ signIns: partySignIns, grants: partyGrants, clock }),
-    tellSignInNeeded: createTellSignInNeeded({ notices: signInNotices, connections, sender: door, newNoticeId: randomUUID, pageUrlOf: partyPageUrl }),
+    refreshGrant: createRefreshGrant({ signIns: partySignIns, grants: partyGrants, tellSignInNeeded, clock }),
+    tellSignInNeeded,
     servers,
     grants: partyGrants,
     clock,

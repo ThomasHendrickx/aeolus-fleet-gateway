@@ -122,6 +122,7 @@ export function createCompletePartySignIn(deps: {
       accessTokenEndsAt: accessTokenEndsAtOf(now, tokens.expiresInSeconds),
       signedInAt: now,
       lastUsedAt: null,
+      lost: null,
     });
     if (kept === 'subjectTaken') {
       // Another person signed in as the same outside account meanwhile.
