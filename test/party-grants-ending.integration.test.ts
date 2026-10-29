@@ -112,10 +112,10 @@ async function keptGrants(): Promise<{ personShipId: string; subject: string | n
   }
 }
 
-const signInsSchema = z.object({ result: z.object({ data: z.object({ grants: z.array(z.object({ personShipId: z.string(), state: z.string(), outsideAccount: z.object({ subject: z.string().nullable() }) })), next: z.string().nullable() }) }) });
+const signInsSchema = z.object({ result: z.object({ data: z.object({ grants: z.array(z.object({ personShipId: z.string(), personName: z.string().nullable(), isYours: z.boolean(), state: z.string(), outsideAccount: z.object({ subject: z.string().nullable() }) })), next: z.string().nullable() }) }) });
 
 describe("an approver sees and removes everyone's sign-ins (Q6, Q12)", () => {
-  it('lists every person signed in, with their outside account, never a token', async () => {
+  it("lists every person signed in by their person ship's name, with their outside account, never a token", async () => {
     const listed = await query(address, { procedure: 'parties.signIns', crewToken: approver, input: { name: 'attio', after: null } });
 
     expect(listed.status, await listed.clone().text()).toBe(200);
@@ -124,7 +124,7 @@ describe("an approver sees and removes everyone's sign-ins (Q6, Q12)", () => {
     expect(signInsSchema.parse(body).result.data).toEqual({
       grants: [mathilde, joris]
         .sort()
-        .map((personShipId) => ({ personShipId, state: 'signedIn', outsideAccount: { subject: personShipId === mathilde ? 'attio-member-mathilde' : 'attio-member-joris' } })),
+        .map((personShipId) => ({ personShipId, personName: personShipId === mathilde ? 'mathilde' : 'joris', isYours: false, state: 'signedIn', outsideAccount: { subject: personShipId === mathilde ? 'attio-member-mathilde' : 'attio-member-joris' } })),
       next: null,
     });
   });
