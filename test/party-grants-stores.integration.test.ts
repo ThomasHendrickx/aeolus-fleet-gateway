@@ -86,6 +86,23 @@ describe("the party grants in the gateway's database", () => {
     await expect(grants.usable(LABS, { party: 'attio', now: NOW })).resolves.toBeUndefined();
   });
 
+  it('answers no lost grant as usable (Q5)', async () => {
+    const grants = createPrismaPartyGrants(prisma);
+    await grants.keep(aPartyGrant({ fleetId: ACME, accessTokenEndsAt: null, lost: { at: NOW, why: 'invalid_grant' } }));
+
+    await expect(grants.usable(ACME, { party: 'attio', now: NOW })).resolves.toBeUndefined();
+  });
+
+  it('keeps a lost grant with when and why, and a new sign-in in its place as not lost', async () => {
+    const grants = createPrismaPartyGrants(prisma);
+    const lost = aPartyGrant({ fleetId: ACME, lost: { at: NOW, why: 'invalid_grant: the refresh token is revoked' } });
+    await grants.keep(lost);
+
+    await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toEqual(lost);
+    await grants.keep(aPartyGrant({ fleetId: ACME, accessToken: 'access-again' }));
+    await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toEqual(aPartyGrant({ fleetId: ACME, accessToken: 'access-again' }));
+  });
+
   it("removes a person's grant", async () => {
     const grants = createPrismaPartyGrants(prisma);
     await grants.keep(aPartyGrant({ fleetId: ACME }));

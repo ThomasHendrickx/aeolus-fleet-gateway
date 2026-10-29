@@ -46,6 +46,13 @@ describe('the grant a call goes out under: its asking ship\'s owner\'s (decision
     await expect(ofLeadScout()).resolves.toEqual({ kind: 'notSignedIn', person: JORIS });
   });
 
+  it('names the owner whose grant was lost: it serves no call (Q5, scenario 19)', async () => {
+    ships.state.ships.set(LEAD_SCOUT, { name: 'lead-scout', scopes: [], owner: MATHILDE });
+    await grants.keep(aPartyGrant({ lost: { at: new Date('2026-10-28T16:00:00.000Z'), why: 'invalid_grant: the refresh token is revoked' } }));
+
+    await expect(ofLeadScout()).resolves.toEqual({ kind: 'notSignedIn', person: MATHILDE });
+  });
+
   it('reads the owner at each call, so a new owner\'s grant serves the next one (Q11, scenario 27)', async () => {
     await grants.keep(aPartyGrant());
     ships.state.ships.set(LEAD_SCOUT, { name: 'lead-scout', scopes: [], owner: MATHILDE });
