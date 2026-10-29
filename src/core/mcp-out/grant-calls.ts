@@ -49,9 +49,9 @@ function errorResult(text: string): ToolResult {
  * (Q1, Q11). A person with no grant gets Q5's error result naming the page
  * to sign in on, and is told once (Q6, Q9); a ship argo owns gets Q10's. A
  * call the server refuses 401 refreshes the grant once and goes out again;
- * a second 401, or a refresh refused, answers Q5's error result and tells
- * the person. A refresh the authorization server did not answer, or one a
- * new sign-in overtook, leaves the call unsent, to be handed again. A call
+ * a second 401, a refresh refused, or a grant removed meanwhile, answers
+ * Q5's error result and tells the person. A refresh the authorization
+ * server did not answer leaves the call unsent, to be handed again. A call
  * refused 403 `insufficient_scope` answers an error result naming the page
  * to sign in again on, keeping the grant (Q8). A call the server answered
  * sets when the grant was last used.
@@ -108,10 +108,10 @@ export function createGrantCalls(deps: {
       if (!refreshed.isOk) {
         switch (refreshed.error.kind) {
           case 'unreachable':
-          case 'replaced':
-            return { kind: 'notSent', reason: `The grant was not refreshed: ${refreshed.error.kind === 'unreachable' ? refreshed.error.reason : 'a new sign-in replaced it'}` };
+            return { kind: 'notSent', reason: `The grant was not refreshed: ${refreshed.error.reason}` };
           case 'noRefreshToken':
           case 'refused':
+          case 'removed':
             return answered(await noWorkingSignIn(granted.server, granted.person));
         }
       }

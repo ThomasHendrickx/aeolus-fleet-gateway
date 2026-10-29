@@ -8,6 +8,9 @@ import { Prisma, type PartyGrant as PartyGrantRow } from './generated/client.js'
 /** Prisma's code for a row a unique key already holds. */
 const UNIQUE_VIOLATION = 'P2002';
 
+/** How long a change holding a grant may take: a refresh waits on the authorization server, at most its answer wait. */
+const CHANGE_TIMEOUT_MS = 30_000;
+
 function grantOf(row: PartyGrantRow): PartyGrant {
   return {
     fleetId: idSchema('fleet').parse(row.fleetId),
@@ -23,11 +26,18 @@ function grantOf(row: PartyGrantRow): PartyGrant {
   };
 }
 
+/** The grant's fields a row keeps beside its key. */
+function rowOf(grant: PartyGrant) {
+  const { accountId, outsideAccount, accessToken, refreshToken, accessTokenEndsAt, signedInAt, lastUsedAt } = grant;
+  return { accountId, subject: outsideAccount.subject, outsideAccountName: outsideAccount.name, accessToken, refreshToken, accessTokenEndsAt, signedInAt, lastUsedAt };
+}
+
 /**
  * Each party's grants, one row per person and party: a new sign-in
  * overwrites the person's row in one statement, and the database keeps one
  * of two persons' grants naming the same outside account, by its unique key
- * on the subject (Q13).
+ * on the subject (Q13). A change holds the grant's row (FOR UPDATE) until it
+ * is kept, so two gateway instances refresh a grant one at a time.
  */
 export function createPrismaPartyGrants(db: PrismaClient): PartyGrants {
   return {
@@ -47,8 +57,8 @@ export function createPrismaPartyGrants(db: PrismaClient): PartyGrants {
       return row === null ? undefined : grantOf(row);
     },
     keep: async (grant) => {
-      const { fleetId, party, personShipId, outsideAccount, ...tokens } = grant;
-      const fields = { ...tokens, subject: outsideAccount.subject, outsideAccountName: outsideAccount.name };
+      const { fleetId, party, personShipId } = grant;
+      const fields = rowOf(grant);
       try {
         await db.partyGrant.upsert({ where: { fleetId_party_personShipId: { fleetId, party, personShipId } }, create: { fleetId, party, personShipId, ...fields }, update: fields });
       } catch (error) {
@@ -60,10 +70,20 @@ export function createPrismaPartyGrants(db: PrismaClient): PartyGrants {
       }
       return 'kept';
     },
-    replaceTokens: async ({ fleetId, party, personShipId, accessToken: held }, tokens) => {
-      const { count } = await db.partyGrant.updateMany({ where: { fleetId, party, personShipId, accessToken: held }, data: tokens });
-      return count === 0 ? 'replaced' : 'kept';
-    },
+    change: ({ fleetId, party, personShipId }, change) =>
+      db.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT 1 FROM "party_grants" WHERE "fleet_id" = ${fleetId} AND "party" = ${party} AND "person_ship_id" = ${personShipId} FOR UPDATE`;
+          const row = await tx.partyGrant.findUnique({ where: { fleetId_party_personShipId: { fleetId, party, personShipId } } });
+          if (row === null) {
+            return undefined;
+          }
+          const changed = await change(grantOf(row));
+          await tx.partyGrant.update({ where: { fleetId_party_personShipId: { fleetId, party, personShipId } }, data: rowOf(changed) });
+          return changed;
+        },
+        { timeout: CHANGE_TIMEOUT_MS },
+      ),
     markUsed: async ({ fleetId, party, personShipId }, at) => {
       await db.partyGrant.updateMany({ where: { fleetId, party, personShipId }, data: { lastUsedAt: at } });
     },
