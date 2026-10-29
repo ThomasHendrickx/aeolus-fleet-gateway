@@ -34,6 +34,10 @@ export interface PartyGrants {
   usable(fleetId: FleetId, asked: { party: string; now: Date }): Promise<PartyGrant | undefined>;
   /** Keeps the grant in place of the person's earlier one; none kept when another person's grant of the party names its outside account, as two sign-ins at once find. */
   keep(grant: PartyGrant): Promise<'kept' | 'subjectTaken'>;
+  /** Keeps refreshed tokens in place of the grant's, unless a new sign-in replaced it or it was removed meanwhile: the grant is found by the access token it held. */
+  replaceTokens(grant: PartyGrant, tokens: Pick<PartyGrant, 'accessToken' | 'refreshToken' | 'accessTokenEndsAt'>): Promise<'kept' | 'replaced'>;
+  /** Sets when the person's grant last served a call. */
+  markUsed(grant: Pick<PartyGrant, 'fleetId' | 'party' | 'personShipId'>, at: Date): Promise<void>;
   remove(fleetId: FleetId, grant: { party: string; personShipId: ShipId }): Promise<void>;
 }
 
@@ -71,6 +75,9 @@ export interface RedeemedTokens {
   readonly idToken: IdTokenClaims | null;
 }
 
+/** The token endpoint's answer to a refresh (RFC 6749 6): a new refresh token only where the server rotates them. */
+export type RefreshedTokens = Omit<RedeemedTokens, 'idToken'>;
+
 /**
  * Why a token request gave no tokens: the authorization server answered an
  * OAuth error (refused, with its error code), or did not answer
@@ -83,6 +90,7 @@ export interface PartySignIns {
   /** The authorize address a person's browser goes to: the code flow with PKCE S256, the client's scope and resource (RFC 8707). */
   authorizeUrl(client: SignInClient, asked: { state: string; codeChallenge: string; redirectUri: string }): string;
   redeemCode(client: SignInClient, asked: { code: string; verifier: string; redirectUri: string }): Promise<Result<RedeemedTokens, TokenRequestFailure>>;
+  refresh(client: SignInClient, refreshToken: string): Promise<Result<RefreshedTokens, TokenRequestFailure>>;
   /** Revokes a token at the client's revocation endpoint (RFC 7009). */
   revoke(client: SignInClient & { revocationEndpoint: string }, token: string): Promise<Result<void, { reason: string }>>;
 }

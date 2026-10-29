@@ -5,10 +5,8 @@ import type { Clock } from '../shared/clock.js';
 import type { DomainError, DomainErrorKind } from '../shared/errors.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { SignInClient } from '../vault/credential.js';
-import type { OutsideAccount } from './party-grant.js';
+import { accessTokenEndsAtOf, type OutsideAccount } from './party-grant.js';
 import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, SignInNotices, SignInServers, StatesProxyShip } from './ports.js';
-
-const MS_PER_SECOND = 1000;
 
 /** The party's page a refusal goes back to: none when the state names no sign-in the gateway started. */
 export interface SignInPage {
@@ -121,7 +119,7 @@ export function createCompletePartySignIn(deps: {
       outsideAccount,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
-      accessTokenEndsAt: tokens.expiresInSeconds === null ? null : new Date(now.getTime() + tokens.expiresInSeconds * MS_PER_SECOND),
+      accessTokenEndsAt: accessTokenEndsAtOf(now, tokens.expiresInSeconds),
       signedInAt: now,
       lastUsedAt: null,
     });

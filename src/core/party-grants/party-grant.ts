@@ -34,3 +34,10 @@ export interface PartyGrant {
 export function isUsable(grant: PartyGrant, now: Date): boolean {
   return grant.accessTokenEndsAt === null || grant.accessTokenEndsAt.getTime() > now.getTime();
 }
+
+const MS_PER_SECOND = 1000;
+
+/** When an access token issued now ends, from the seconds the authorization server said it lasts; none where it said nothing. */
+export function accessTokenEndsAtOf(now: Date, expiresInSeconds: number | null): Date | null {
+  return expiresInSeconds === null ? null : new Date(now.getTime() + expiresInSeconds * MS_PER_SECOND);
+}

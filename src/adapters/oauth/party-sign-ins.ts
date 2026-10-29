@@ -4,7 +4,8 @@
  * 2026-07-28, decision 0067): the authorize address of the code flow with
  * PKCE S256 and the resource (RFC 8707), the code redeemed at the token
  * endpoint with the client's secret (client_secret_post, as the client was
- * registered), and a token revoked (RFC 7009). The ID token's claims are
+ * registered), a grant refreshed (RFC 6749 6) with the same client and
+ * resource, and a token revoked (RFC 7009). The ID token's claims are
  * read, not checked: the core checks they name the party's issuer and
  * client.
  */
@@ -70,6 +71,19 @@ function clientAuthenticationOf(client: SignInClient): Record<string, string> {
   return client.clientSecret === null ? { client_id: client.clientId } : { client_id: client.clientId, client_secret: client.clientSecret };
 }
 
+/** The token endpoint's answer to a token request: the tokens it issued, its OAuth error, or no answer. */
+async function tokensOf(response: Response): Promise<Result<z.infer<typeof tokensSchema>, TokenRequestFailure>> {
+  const body: unknown = await response.json().catch(() => undefined);
+  if (!response.ok) {
+    const refusal = tokenErrorSchema.safeParse(body);
+    return refusal.success
+      ? err({ kind: 'refused', error: refusal.data.error, reason: [refusal.data.error, refusal.data.error_description].filter((part) => part !== undefined).join(': ') })
+      : err({ kind: 'unreachable', reason: `HTTP ${String(response.status)}` });
+  }
+  const tokens = tokensSchema.safeParse(body);
+  return tokens.success ? ok(tokens.data) : err({ kind: 'refused', error: 'invalid_response', reason: 'the token endpoint answered no bearer access token' });
+}
+
 async function posted(url: string, form: Record<string, string>): Promise<Result<Response, TokenRequestFailure>> {
   try {
     return ok(await fetch(url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body: new URLSearchParams(form), signal: AbortSignal.timeout(ANSWER_WAIT_MS) }));
@@ -102,24 +116,29 @@ export function createPartySignIns(): PartySignIns {
       if (!answered.isOk) {
         return answered;
       }
-      const response = answered.value;
-      const body: unknown = await response.json().catch(() => undefined);
-      if (!response.ok) {
-        const refusal = tokenErrorSchema.safeParse(body);
-        return refusal.success
-          ? err({ kind: 'refused', error: refusal.data.error, reason: [refusal.data.error, refusal.data.error_description].filter((part) => part !== undefined).join(': ') })
-          : err({ kind: 'unreachable', reason: `HTTP ${String(response.status)}` });
+      const tokens = await tokensOf(answered.value);
+      if (!tokens.isOk) {
+        return tokens;
       }
-      const tokens = tokensSchema.safeParse(body);
-      if (!tokens.success) {
-        return err({ kind: 'refused', error: 'invalid_response', reason: 'the token endpoint answered no bearer access token' });
-      }
-      const { access_token: accessToken, refresh_token: refreshToken, expires_in: expiresInSeconds, id_token: idToken } = tokens.data;
+      const { access_token: accessToken, refresh_token: refreshToken, expires_in: expiresInSeconds, id_token: idToken } = tokens.value;
       const claims = idToken === undefined ? null : idTokenClaimsOf(idToken);
       if (claims === undefined) {
         return err({ kind: 'refused', error: 'invalid_response', reason: 'the token endpoint answered an ID token that could not be read' });
       }
       return ok({ accessToken, refreshToken: refreshToken ?? null, expiresInSeconds: expiresInSeconds ?? null, idToken: claims });
+    },
+
+    async refresh(client, refreshToken) {
+      const answered = await posted(client.tokenEndpoint, { grant_type: 'refresh_token', refresh_token: refreshToken, resource: client.resource, ...clientAuthenticationOf(client) });
+      if (!answered.isOk) {
+        return answered;
+      }
+      const tokens = await tokensOf(answered.value);
+      if (!tokens.isOk) {
+        return tokens;
+      }
+      const { access_token: accessToken, refresh_token: rotated, expires_in: expiresInSeconds } = tokens.value;
+      return ok({ accessToken, refreshToken: rotated ?? null, expiresInSeconds: expiresInSeconds ?? null });
     },
 
     async revoke(client, token) {

@@ -90,6 +90,37 @@ describe("the party grants in the gateway's database", () => {
     await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toBeUndefined();
   });
 
+  it("keeps refreshed tokens in place of the grant's", async () => {
+    const grants = createPrismaPartyGrants(prisma);
+    await grants.keep(aPartyGrant({ fleetId: ACME }));
+    const tokens = { accessToken: 'access-2', refreshToken: 'refresh-2', accessTokenEndsAt: new Date('2026-10-28T16:00:00.000Z') };
+
+    await expect(grants.replaceTokens(aPartyGrant({ fleetId: ACME }), tokens)).resolves.toBe('kept');
+
+    await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toEqual(aPartyGrant({ fleetId: ACME, ...tokens }));
+  });
+
+  it('keeps no refreshed tokens over a grant a new sign-in replaced', async () => {
+    const grants = createPrismaPartyGrants(prisma);
+    await grants.keep(aPartyGrant({ fleetId: ACME, accessToken: 'access-again' }));
+
+    await expect(grants.replaceTokens(aPartyGrant({ fleetId: ACME }), { accessToken: 'access-2', refreshToken: 'refresh-2', accessTokenEndsAt: null })).resolves.toBe('replaced');
+
+    await expect(grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID })).resolves.toEqual(aPartyGrant({ fleetId: ACME, accessToken: 'access-again' }));
+  });
+
+  it('sets when a grant last served a call, in its fleet only', async () => {
+    const grants = createPrismaPartyGrants(prisma);
+    await Promise.all([grants.keep(aPartyGrant({ fleetId: ACME })), grants.keep(aPartyGrant({ fleetId: LABS }))]);
+
+    await grants.markUsed({ fleetId: ACME, party: 'attio', personShipId: MATHILDE_SHIP_ID }, NOW);
+
+    await expect(Promise.all([grants.ofPerson(ACME, { party: 'attio', personShipId: MATHILDE_SHIP_ID }), grants.ofPerson(LABS, { party: 'attio', personShipId: MATHILDE_SHIP_ID })])).resolves.toEqual([
+      aPartyGrant({ fleetId: ACME, lastUsedAt: NOW }),
+      aPartyGrant({ fleetId: LABS }),
+    ]);
+  });
+
   it("forgets a forgotten fleet's grants", async () => {
     await createPrismaPartyGrants(prisma).keep(aPartyGrant({ fleetId: ACME }));
 
