@@ -54,34 +54,34 @@ function channel(options: { url?: string; isOn?: boolean } = {}) {
 
 describe('the email channel, through pagasae (wake a person, W2)', () => {
   it("asks pagasae to wake the person ship's account, naming the ship, with the gateway's installation token", async () => {
-    const woken = await channel().wake(SHIP);
+    const woken = await channel().wake(SHIP, { key: 'window-1' });
 
     expect(woken).toEqual(ok(undefined));
     expect(received.map(({ method, url, headers, body }) => ({ method, url, authorization: headers.authorization, body }))).toEqual([
-      { method: 'POST', url: '/api/wakes', authorization: `Bearer ${INSTALLATION_TOKEN}`, body: { fleetId: SHIP.fleetId, shipId: SHIP.shipId } },
+      { method: 'POST', url: '/api/wakes', authorization: `Bearer ${INSTALLATION_TOKEN}`, body: { fleetId: SHIP.fleetId, shipId: SHIP.shipId, key: 'window-1' } },
     ]);
   });
 
   it('says the wake did not go out when pagasae refuses it', async () => {
     answer = { status: 404, body: '{"error":"unknown_person_ship"}' };
 
-    await expect(channel().wake(SHIP)).resolves.toEqual(err({ kind: 'refused', reason: 'pagasae answered 404: unknown_person_ship' }));
+    await expect(channel().wake(SHIP, { key: 'window-1' })).resolves.toEqual(err({ kind: 'refused', reason: 'pagasae answered 404: unknown_person_ship' }));
   });
 
   it('says the wake is refused for good when pagasae does not know the caller', async () => {
     answer = { status: 401, body: '{"error":"unauthorized"}' };
 
-    await expect(channel().wake(SHIP)).resolves.toEqual(err({ kind: 'refused', reason: 'pagasae answered 401: unauthorized' }));
+    await expect(channel().wake(SHIP, { key: 'window-1' })).resolves.toEqual(err({ kind: 'refused', reason: 'pagasae answered 401: unauthorized' }));
   });
 
   it('says the wake did not go out when pagasae could not mail', async () => {
     answer = { status: 503, body: '{"error":"not_mailed"}' };
 
-    await expect(channel().wake(SHIP)).resolves.toEqual(err({ kind: 'unavailable', reason: 'pagasae answered 503: not_mailed' }));
+    await expect(channel().wake(SHIP, { key: 'window-1' })).resolves.toEqual(err({ kind: 'unavailable', reason: 'pagasae answered 503: not_mailed' }));
   });
 
   it('says the wake did not go out when pagasae does not answer', async () => {
-    await expect(channel({ url: 'http://127.0.0.1:9' }).wake(SHIP)).resolves.toEqual(err({ kind: 'unavailable', reason: 'pagasae did not answer' }));
+    await expect(channel({ url: 'http://127.0.0.1:9' }).wake(SHIP, { key: 'window-1' })).resolves.toEqual(err({ kind: 'unavailable', reason: 'pagasae did not answer' }));
   });
 
   it('is on where the person turned email on, with its window from the configuration', async () => {
