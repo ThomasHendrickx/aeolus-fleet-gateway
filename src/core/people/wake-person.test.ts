@@ -364,13 +364,37 @@ describe('waking a person', () => {
     const email = aChannel('email', { isRefusing: true });
     const push = aChannel('web-push', { isFailing: true });
     let emailAsked = 0;
-    const countingEmail: WakeChannel = { ...email.channel, wake: (asked) => ((emailAsked += 1), email.channel.wake(asked)) };
+    const countingEmail: WakeChannel = { ...email.channel, wake: (asked, window) => ((emailAsked += 1), email.channel.wake(asked, window)) };
     const wakePerson = waking({ ship, channels: [countingEmail, push.channel] });
 
     const first = await wakePerson(SHIP, CREW_TOKEN);
     const retry = await wakePerson(SHIP, CREW_TOKEN);
 
     expect({ first, retry, emailAsked }).toEqual({ first: ok({ kind: 'failed' }), retry: ok({ kind: 'failed' }), emailAsked: 1 });
+  });
+
+  it('asks a retry of the same window with the same key, and the next window with another', async () => {
+    const keys: string[] = [];
+    let isFailing = true;
+    const email: WakeChannel = {
+      ...aChannel('email').channel,
+      wake: (_ship, window) => {
+        keys.push(window.key);
+        return Promise.resolve(isFailing ? err({ kind: 'unavailable' as const, reason: 'pagasae did not answer' }) : ok(undefined));
+      },
+    };
+    const sent: { channel: WakeChannelName; at: Date }[] = [];
+    const wakePerson = waking({ ship: aShip([aDelivery(1)]), channels: [email], wakesSent: memoryWakesSent(sent) });
+
+    await wakePerson(SHIP, CREW_TOKEN);
+    isFailing = false;
+    await wakePerson(SHIP, CREW_TOKEN);
+    sent.splice(0, sent.length, { channel: 'email', at: new Date(NOW.getTime() - HOUR_MS) });
+    await waking({ ship: aShip([aDelivery(2)]), channels: [email], wakesSent: memoryWakesSent(sent) })(SHIP, CREW_TOKEN);
+
+    expect(keys).toHaveLength(3);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
   });
 
   it('says what the fleet refused, waking no one', async () => {

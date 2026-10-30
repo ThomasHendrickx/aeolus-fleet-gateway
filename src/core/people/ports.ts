@@ -186,6 +186,11 @@ export interface ShownThere {
 /** What a delivery is handed to the person through: a wake's channel, a page of theirs in focus, which shows it (W6), or Slack, which shows it (gateway scopes 9.5). */
 export type HandOverChannel = WakeChannelName | 'page' | 'slack';
 
+/** The window a wake belongs to: its key holds until a wake of the channel is recorded, so a retry asks again with it. */
+export interface WakeWindow {
+  readonly key: string;
+}
+
 /**
  * Outbound port: one way to wake a person (wake a person, W1, W4): it says
  * only that something waits in the fleet, with the overview's link, and
@@ -197,8 +202,11 @@ export interface WakeChannel {
   readonly windowMs: number;
   /** Whether the person turned it on (W8): nothing is on by default. */
   isOn(ship: PersonShip): Promise<boolean>;
-  /** Sends the wake: whether it went out. A refusal for good (refused) cannot be fixed by trying again; unavailable can succeed later. */
-  wake(ship: PersonShip): Promise<Result<undefined, { kind: 'refused' | 'unavailable'; reason: string }>>;
+  /**
+   * Sends the wake: whether it went out. A refusal for good (refused) cannot be fixed by trying again; unavailable can succeed later.
+   * The window's key is the same for every try of one window, so a channel can send it once however often it is asked.
+   */
+  wake(ship: PersonShip, window: WakeWindow): Promise<Result<undefined, { kind: 'refused' | 'unavailable'; reason: string }>>;
 }
 
 /** Outbound port: when each channel last woke each person ship, so the window holds across restarts and instances (W3). */
