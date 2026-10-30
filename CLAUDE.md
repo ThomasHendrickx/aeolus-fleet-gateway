@@ -33,7 +33,7 @@ If the docs do not answer a behaviour question, stop and ask. Never decide produ
 - @aeolus-fleet/common comes from npm at a stated version; ids and the fleet's schemas come from it.
 - Policy stays in core: the gateway shows and allows exactly what core answers for the proxy ship.
 - Before 1.0.0 breaking changes are allowed (decision 0013). Keep designs minimal: no compatibility layers, no backward-compatibility work and no paid-product polish for zero customers. Flag such a request as overengineering.
-- Payloads are at most 64 KB. A message is the travelling ticket; the reference is where the content lives.
+- Payloads are at most 256 KB (aeolus-fleet decision 0006). A message is the travelling ticket; the reference is where the content lives.
 
 ## Skills
 

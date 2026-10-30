@@ -1,3 +1,4 @@
+import { PAYLOAD_MAX_BYTES } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
@@ -15,8 +16,6 @@ const CRM_ALIAS = `a${CRM_SHIP_ID.slice(-4)}`;
 const NOW = new Date('2026-10-23T12:00:00.000Z');
 const WAIT_POLL_MS = 250;
 const TASK_ID = `handle(${FLEET_ID}:${MESSAGE_ID})`;
-/** The most a 64 KB payload holds. */
-const PAYLOAD_MAX_BYTES = 65_536;
 
 let now: Date;
 const clock: Clock = { now: () => now };
@@ -111,7 +110,7 @@ describe("an outside A2A client's message is a message its proxy ship sends (dec
     expect(sender.sent).toEqual([]);
   });
 
-  it('sends a payload of exactly 64 KB, and refuses one byte more, sending nothing', async () => {
+  it("sends a payload of exactly the fleet's limit, and refuses one byte more, sending nothing", async () => {
     const [atLimit, over] = [await sending(aMessage({ parts: [{ kind: 'text', text: 'x'.repeat(PAYLOAD_MAX_BYTES) }] })), await sending(aMessage({ messageId: 'm-2', parts: [{ kind: 'text', text: 'x'.repeat(PAYLOAD_MAX_BYTES + 1) }] }))];
 
     expect({ atLimit: atLimit.isOk, over: over.isOk ? undefined : over.error.kind, sent: sender.sent.length }).toEqual({ atLimit: true, over: 'PAYLOAD_TOO_LARGE', sent: 1 });
