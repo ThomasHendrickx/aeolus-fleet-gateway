@@ -1,4 +1,4 @@
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import { PAYLOAD_MAX_BYTES, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { TRPCError } from '@trpc/server';
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { describe, expect, it } from 'vitest';
@@ -874,6 +874,14 @@ describe("a person reads and deals with their person ship's deliveries through t
     ]);
   });
 
+  it("refuses an answer over the fleet's payload limit in UTF-8 bytes, though under it in characters, sending nothing", async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+    const overInBytes = 'é'.repeat(PAYLOAD_MAX_BYTES / 2 + 1);
+
+    await expect(gatewayRouter.createCaller(context).people.answer({ deliveryId: DELIVERY, contentType: 'text/plain', payload: overInBytes })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(answers).toEqual([]);
+  });
+
   it('says a delivery that no longer waits is not found', async () => {
     const { context } = aContext(PERSON_COOKIE);
 
@@ -989,6 +997,14 @@ describe("a person takes part in a meeting through the gateway's API, signed in 
     await gatewayRouter.createCaller(context).people.contribute({ meetingId: HEADS_MEETING_ID, payload: 'Marketing is on track', idempotencyKey: 'page-1' });
 
     expect(answers).toEqual([{ grantId: PERSON_TOKEN, to: JSON.stringify({ kind: 'meeting', meetingId: HEADS_MEETING_ID }), contentType: 'text/plain', payload: 'Marketing is on track', idempotencyKey: 'page-1' }]);
+  });
+
+  it("refuses a contribution over the fleet's payload limit in UTF-8 bytes, though under it in characters, sending nothing", async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+    const overInBytes = 'é'.repeat(PAYLOAD_MAX_BYTES / 2 + 1);
+
+    await expect(gatewayRouter.createCaller(context).people.contribute({ meetingId: HEADS_MEETING_ID, payload: overInBytes, idempotencyKey: 'page-1' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(answers).toEqual([]);
   });
 
   it('requests the mic as their own account', async () => {

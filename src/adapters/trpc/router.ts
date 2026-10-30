@@ -11,7 +11,7 @@
  */
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
-import { idempotencyKeySchema, idSchema, scopeNameSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
+import { idempotencyKeySchema, idSchema, payloadSchema, scopeNameSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
 import { initTRPC, TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
@@ -591,9 +591,6 @@ const decisionSchema = z.discriminatedUnion('kind', [
     server: z.strictObject({ credential: credentialInputSchema, concurrencyLimit: z.int().min(CONCURRENCY_LIMIT_MIN).max(CONCURRENCY_LIMIT_MAX) }).optional(),
   }),
 ]);
-
-/** The largest payload a message carries. */
-const PAYLOAD_MAX_BYTES = 64 * 1024;
 
 /** The refusals of a person's own deliveries, as the API states them. */
 const PERSON_CODES = {
@@ -1216,7 +1213,7 @@ export const gatewayRouter = t.router({
     open: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.openDelivery({ caller: ctx.caller, ...input }))),
     /** Answers a delivery they opened, to its sender. */
     answer: personProcedure
-      .input(z.strictObject({ deliveryId: z.string().min(1), contentType: z.string().min(1), payload: z.string().max(PAYLOAD_MAX_BYTES) }))
+      .input(z.strictObject({ deliveryId: z.string().min(1), contentType: z.string().min(1), payload: payloadSchema }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.answerDelivery({ caller: ctx.caller, ...input }))),
     /** Is done with a delivery they opened, with no answer. */
     done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, ...input }))),
@@ -1261,7 +1258,7 @@ export const gatewayRouter = t.router({
       .query(async ({ ctx, input: { meetingId, cursor } }) => meetingViewOf(personAnswerOf(await ctx.person.readMeeting({ caller: ctx.caller, meetingId, ...(cursor === undefined ? {} : { cursor }) })))),
     /** Contributes to a meeting, once under the page's key; the fleet takes it while they hold the mic or moderate. */
     contribute: personProcedure
-      .input(z.strictObject({ meetingId: idSchema('meeting'), payload: z.string().min(1).max(PAYLOAD_MAX_BYTES), idempotencyKey: z.string().min(1) }))
+      .input(z.strictObject({ meetingId: idSchema('meeting'), payload: payloadSchema.min(1), idempotencyKey: z.string().min(1) }))
       .mutation(async ({ ctx, input: { meetingId, payload, idempotencyKey } }) =>
         personAnswerOf(await ctx.person.sendMessage({ caller: ctx.caller, to: { kind: 'meeting', meetingId }, contentType: CONTRIBUTION_CONTENT_TYPE, payload, idempotencyKey })),
       ),

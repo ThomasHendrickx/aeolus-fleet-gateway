@@ -11,7 +11,7 @@
  * the gateway's own most (interop 5.3); else the task is answered as it
  * stands.
  */
-import type { MessageId } from '@aeolus-fleet/common';
+import { PAYLOAD_MAX_BYTES, payloadBytes, type MessageId } from '@aeolus-fleet/common';
 
 import type { ClientCall } from '../mcp-in/client-call.js';
 import type { CallKeys, CallSender, ClientCalls, StoredTask } from '../mcp-in/ports.js';
@@ -25,8 +25,7 @@ import type { FindReachedShip, FindReachedShipRefusal } from './find-reached-shi
 import { capabilityFor, contentOf, type InboundMessage } from './inbound-message.js';
 import { isTerminal, taskViewOf, type TaskView } from './task-view.js';
 
-/** The most a payload holds (decision 0006). */
-export const PAYLOAD_MAX_BYTES = 65_536;
+const BYTES_PER_KB = 1024;
 
 export type SendA2aMessageRefusal =
   | FindReachedShipRefusal
@@ -109,8 +108,8 @@ export function createSendA2aMessage(deps: SendA2aMessageDeps): SendA2aMessage {
       return ship;
     }
     const content = contentOf(message);
-    if (new TextEncoder().encode(content.payload).length > PAYLOAD_MAX_BYTES) {
-      return refuse('PAYLOAD_TOO_LARGE', 'The message is over 64 KB: send where its content lives instead');
+    if (payloadBytes(content.payload) > PAYLOAD_MAX_BYTES) {
+      return refuse('PAYLOAD_TOO_LARGE', `The message is over ${String(PAYLOAD_MAX_BYTES / BYTES_PER_KB)} KB: send where its content lives instead`);
     }
     const task = await continued(caller, { message, shipId: ship.value.shipId });
     if (!task.isOk) {

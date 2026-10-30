@@ -9,7 +9,7 @@
  * sign-in, as ChatGPT's plugin directory reads them (chatgpt-plugin design,
  * 7.4).
  */
-import { idSchema } from '@aeolus-fleet/common';
+import { idSchema, PAYLOAD_MAX_BYTES } from '@aeolus-fleet/common';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
@@ -25,6 +25,9 @@ import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { SendMessage } from '../../core/people/send-message.js';
 import type { AskForServer } from '../../core/requests/ask-for-server.js';
 import { runningVersion } from './version.js';
+
+/** The fleet's payload limit, in KB, as the tools state it. */
+const PAYLOAD_LIMIT_KB = String(PAYLOAD_MAX_BYTES / 1024);
 
 export interface PersonToolsDeps {
   readInbox: ReadInbox;
@@ -70,7 +73,7 @@ const ANSWER_TOOL = {
   description: [
     'Answers a delivery you opened, by its deliveryId: your answer goes to its sender, in reply to it, and the delivery is dealt with.',
     'Give the payload and its content type, such as text/plain. A question (application/vnd.aeolus.question+json) is answered with',
-    'application/vnd.aeolus.answer+json and the payload {"questionId":"<its id>","option":<a key>,"note":"..."}, or a note alone. At most 64 KB.',
+    `application/vnd.aeolus.answer+json and the payload {"questionId":"<its id>","option":<a key>,"note":"..."}, or a note alone. At most ${PAYLOAD_LIMIT_KB} KB.`,
   ].join(' '),
   inputSchema: {
     type: 'object' as const,
@@ -104,7 +107,7 @@ const SEND_TOOL = {
     'Sends a message as your person ship to one ship by its name, or to any ship of a type, as aeolus_ships lists them,',
     'or contributes to a meeting you take part in by its meetingId: every other participant gets it, and the fleet takes it only while you hold the mic or moderate.',
     'Give one of ship, type or meeting, the payload and its content type, such as text/plain. To ask a question with numbered options, send application/vnd.aeolus.question+json with the payload',
-    '{"id":"<a new uuid>","title":"...","context":"...","options":[{"key":1,"label":"...","detail":"..."}]}. At most 64 KB.',
+    `{"id":"<a new uuid>","title":"...","context":"...","options":[{"key":1,"label":"...","detail":"..."}]}. At most ${PAYLOAD_LIMIT_KB} KB.`,
     'Give an idempotencyKey of your own to send it once when you try again. The fleet decides whether it may go and says why when it may not.',
   ].join(' '),
   inputSchema: {

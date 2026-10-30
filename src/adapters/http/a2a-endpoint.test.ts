@@ -1,3 +1,4 @@
+import { PAYLOAD_MAX_BYTES } from '@aeolus-fleet/common';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -243,8 +244,8 @@ describe('SendMessage over JSON-RPC (decision 0060)', () => {
     expect(calls.tasks).toEqual([]);
   });
 
-  it('refuses a payload over 64 KB as invalid params, sending nothing', async () => {
-    const answered = await rpc('SendMessage', { message: { ...A_MESSAGE, parts: [{ text: 'x'.repeat(65_537) }] } });
+  it("refuses a payload over the fleet's limit as invalid params, sending nothing", async () => {
+    const answered = await rpc('SendMessage', { message: { ...A_MESSAGE, parts: [{ text: 'x'.repeat(PAYLOAD_MAX_BYTES + 1) }] } });
 
     expect(answered.json()).toMatchObject({ id: 7, error: { code: -32602 } });
     expect(sender.sent).toEqual([]);
