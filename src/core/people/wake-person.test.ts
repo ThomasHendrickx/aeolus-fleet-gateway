@@ -364,7 +364,7 @@ describe('waking a person', () => {
     const email = aChannel('email', { isRefusing: true });
     const push = aChannel('web-push', { isFailing: true });
     let emailAsked = 0;
-    const countingEmail: WakeChannel = { ...email.channel, wake: (asked) => ((emailAsked += 1), email.channel.wake(asked)) };
+    const countingEmail: WakeChannel = { ...email.channel, wake: (asked, window) => ((emailAsked += 1), email.channel.wake(asked, window)) };
     const wakePerson = waking({ ship, channels: [countingEmail, push.channel] });
 
     const first = await wakePerson(SHIP, CREW_TOKEN);

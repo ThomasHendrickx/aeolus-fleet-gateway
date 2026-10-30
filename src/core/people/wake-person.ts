@@ -206,7 +206,9 @@ export function createWakePerson(deps: {
     const wentOut: WakeChannelName[] = [];
     let isRetryable = false;
     for (const channel of due) {
-      const woken = await channel.wake(ship);
+      // The channel's last recorded wake names the window: every try before the next one is recorded asks with the same key.
+      const lastSentAt = windows.find((window) => window.channel === channel)?.lastSentAt;
+      const woken = await channel.wake(ship, { key: `${channel.name}:${lastSentAt === undefined ? 'first' : lastSentAt.toISOString()}` });
       if (woken.isOk) {
         wentOut.push(channel.name);
       } else if (woken.error.kind === "refused") {
