@@ -71,7 +71,9 @@ import type { MeetingRead } from '../../core/meetings/ports.js';
 import type { PersonMeeting, ReadMeeting } from '../../core/meetings/read-meeting.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { SendMessage } from '../../core/people/send-message.js';
+import type { ReadBridgeHome } from '../../core/people/read-bridge-home.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
+import type { ReadRecord } from '../../core/people/read-record.js';
 import type { ReadWakeChannels } from '../../core/people/read-wake-channels.js';
 import type { FocusPage } from '../../core/people/focus-page.js';
 import type { TurnOffWebPush } from '../../core/people/turn-off-web-push.js';
@@ -168,6 +170,8 @@ export interface Context {
   /** A person's own person ship's deliveries; unset where no pagasae signs anyone in. */
   person?: {
     readInbox: ReadInbox;
+    readBridgeHome: ReadBridgeHome;
+    readRecord: ReadRecord;
     openDelivery: OpenDelivery;
     answerDelivery: AnswerDelivery;
     doneDelivery: DoneDelivery;
@@ -1210,6 +1214,12 @@ export const gatewayRouter = t.router({
   people: t.router({
     /** What waits for the person's own ship, by titles only (Q20). */
     inbox: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readInbox(ctx.caller))),
+    /** Bridge home (CC18): what waits on the person with its count, decide and do, and the stay-aware feed. */
+    home: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readBridgeHome(ctx.caller))),
+    /** A page of the person ship's record (CC12), newest first, after the cursor the last page answered. */
+    record: personProcedure
+      .input(z.strictObject({ cursor: idSchema('delivery').nullable() }))
+      .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readRecord({ caller: ctx.caller, cursor: input.cursor }))),
     /** Opens one delivery, whole; the gateway acknowledges it for them. */
     open: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.openDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
     /** Answers a delivery they opened, to its sender. */

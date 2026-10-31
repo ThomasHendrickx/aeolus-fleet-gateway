@@ -187,6 +187,8 @@ import { createCrewPersonShip } from './core/people/crew-person-ship.js';
 import { createDoneDelivery } from './core/people/done-delivery.js';
 import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
+import { createReadBridgeHome } from './core/people/read-bridge-home.js';
+import { createReadRecord } from './core/people/read-record.js';
 import { createReadInbox } from './core/people/read-inbox.js';
 import { createReadWakeChannels } from './core/people/read-wake-channels.js';
 import { createTurnEmailChannel } from './core/people/turn-email-channel.js';
@@ -751,6 +753,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
       readInbox: createReadInbox({ ...asCrew, opened }),
+      readBridgeHome: createReadBridgeHome({ ...asCrew, opened }),
+      readRecord: createReadRecord({ ...asCrew, outcomes }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes, outcomes, clock }),
