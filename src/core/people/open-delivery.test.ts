@@ -89,7 +89,7 @@ describe('a person opens a delivery that waits for their person ship', () => {
   it('refuses an account with no person ship, asking the fleet nothing', async () => {
     const { openDelivery, calls } = opening([QUESTION]);
 
-    await expect(openDelivery({ caller: { fleetId: FLEET_ID, grantId: 'grant-2' }, deliveryId: QUESTION.deliveryId })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_A_PERSON' } });
+    await expect(openDelivery({ caller: { fleetId: FLEET_ID, grantId: 'grant-2' }, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_A_PERSON' } });
     expect(calls).toEqual([]);
   });
 

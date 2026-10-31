@@ -91,12 +91,12 @@ describe('a person answers a delivery they opened', () => {
   ])('refuses $what, sending nothing', async ({ deliveryId }) => {
     await opened.save({ ...OPENED, shipId: 'shp_01m3tbfspe96yf1rnr4ank9dk1', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003' });
 
-    await expect(answerDelivery({ caller: CALLER, deliveryId, ...ANSWER })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
+    await expect(answerDelivery({ caller: CALLER, place: 'chat', deliveryId, ...ANSWER })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
     expect(ship.calls).toEqual([]);
   });
 
   it('refuses an account with no person ship, sending nothing', async () => {
-    await expect(answerDelivery({ caller: { fleetId: FLEET_ID, grantId: 'grant-2' }, deliveryId: OPENED.deliveryId, ...ANSWER })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_A_PERSON' } });
+    await expect(answerDelivery({ caller: { fleetId: FLEET_ID, grantId: 'grant-2' }, place: 'chat', deliveryId: OPENED.deliveryId, ...ANSWER })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_A_PERSON' } });
     expect(ship.calls).toEqual([]);
   });
 });
@@ -122,7 +122,7 @@ describe('a person is done with a delivery they opened, with no answer', () => {
   });
 
   it('refuses an account with no person ship', async () => {
-    await expect(doneDelivery({ caller: { fleetId: FLEET_ID, grantId: 'grant-2' }, deliveryId: OPENED.deliveryId })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_A_PERSON' } });
+    await expect(doneDelivery({ caller: { fleetId: FLEET_ID, grantId: 'grant-2' }, place: 'chat', deliveryId: OPENED.deliveryId })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_A_PERSON' } });
   });
 });
 

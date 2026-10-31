@@ -18,6 +18,7 @@ import type { OwnMicChange } from '../../core/meetings/ports.js';
 import type { ReadMeeting } from '../../core/meetings/read-meeting.js';
 import type { AnswerDelivery } from '../../core/people/answer-delivery.js';
 import type { DoneDelivery } from '../../core/people/done-delivery.js';
+import type { Place } from '../../core/people/item-outcome.js';
 import type { ListShips } from '../../core/people/list-ships.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { GrantCaller } from '../../core/people/person-crew.js';
@@ -28,6 +29,9 @@ import { runningVersion } from './version.js';
 
 /** The fleet's payload limit, in KB, as the tools state it. */
 const PAYLOAD_LIMIT_KB = String(PAYLOAD_MAX_BYTES / 1024);
+
+/** Where a person acts through these tools: a chat, an MCP client of the gateway (Bridge, CC4). */
+const CHAT: Place = 'chat';
 
 export interface PersonToolsDeps {
   readInbox: ReadInbox;
@@ -244,7 +248,7 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
         if (!sent.success) {
           return toolError(`${params.name} takes the deliveryId your inbox lists`);
         }
-        const asked = { caller, deliveryId: sent.data.deliveryId };
+        const asked = { caller, place: CHAT, deliveryId: sent.data.deliveryId };
         const dealt = params.name === OPEN_TOOL.name ? await deps.openDelivery(asked) : await deps.doneDelivery(asked);
         return dealt.isOk ? answered(dealt.value) : refused(dealt.error);
       }
@@ -253,7 +257,7 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
         if (!sent.success) {
           return toolError(`${ANSWER_TOOL.name} takes the deliveryId, a contentType and a payload`);
         }
-        const dealt = await deps.answerDelivery({ caller, ...sent.data });
+        const dealt = await deps.answerDelivery({ caller, place: CHAT, ...sent.data });
         return dealt.isOk ? answered(dealt.value) : refused(dealt.error);
       }
       case SHIPS_TOOL.name: {

@@ -1211,13 +1211,13 @@ export const gatewayRouter = t.router({
     /** What waits for the person's own ship, by titles only (Q20). */
     inbox: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readInbox(ctx.caller))),
     /** Opens one delivery, whole; the gateway acknowledges it for them. */
-    open: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.openDelivery({ caller: ctx.caller, ...input }))),
+    open: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.openDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
     /** Answers a delivery they opened, to its sender. */
     answer: personProcedure
       .input(z.strictObject({ deliveryId: z.string().min(1), contentType: z.string().min(1), payload: payloadSchema }))
-      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.answerDelivery({ caller: ctx.caller, ...input }))),
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.answerDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
     /** Is done with a delivery they opened, with no answer. */
-    done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, ...input }))),
+    done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
     /** The channels that wake them when something waits for their person ship, each offered or not and on or not (wake a person, W8). */
     wakeChannels: personProcedure.query(async ({ ctx }) => {
       const { email, webPush } = personAnswerOf(await ctx.person.readWakeChannels(ctx.caller));
