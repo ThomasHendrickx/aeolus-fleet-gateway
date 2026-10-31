@@ -3,7 +3,7 @@ import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
-import type { AccountDoor, EmailChannels, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor } from '../../src/core/people/ports.js';
+import type { AccountDoor, EmailChannels, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -132,16 +132,17 @@ export const SENT_MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank0sen';
  * waiting for it, each push receive handing the oldest again, up to max,
  * with the last number the gateway handed it with;
  * the ones it acknowledged, read again until handled; what its discover
- * answers; the crew token it takes, and the calls the gateway made.
+ * answers; its record, newest first by delivery id; the crew token it
+ * takes, and the calls the gateway made.
  */
-export function fakePersonShipDoor(ship: { crewToken: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery }) {
+export function fakePersonShipDoor(ship: { crewToken: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[] }) {
   const calls: string[] = [];
   /** The replies the fleet took, as sent. */
   const replies: Parameters<PersonShipDoor['reply']>[1][] = [];
   /** The messages the fleet took, as sent. */
   const sent: Parameters<PersonShipDoor['send']>[1][] = [];
   /** The fleet's answers to come for each call, before it takes them. */
-  const refusals: { pushReceive: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[] } = { pushReceive: [], reply: [], handled: [], discover: [], send: [], delivery: [] };
+  const refusals: { pushReceive: FleetRefusal[]; record: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[] } = { pushReceive: [], record: [], reply: [], handled: [], discover: [], send: [], delivery: [] };
   /** The hand-overs the gateway reported, in order. */
   const handOvers: Parameters<PersonShipDoor['handed']>[1][] = [];
   /** The deliveries the ship acknowledged and has not handled yet. */
@@ -160,6 +161,18 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
         return Promise.resolve(err(refused));
       }
       return crewed(crewToken, () => ship.deliveries.slice(0, max).map((delivery) => ({ ...delivery, handOverNumber: handOvers.findLast(({ deliveryId }) => deliveryId === delivery.deliveryId)?.handOverNumber ?? null })));
+    },
+    record: (crewToken, { cursor, limit }) => {
+      calls.push(`record(${cursor ?? 'newest'})`);
+      const refused = refusals.record.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
+      return crewed(crewToken, () => {
+        const newestFirst = [...(ship.record ?? [])].sort((a, b) => b.deliveryId.localeCompare(a.deliveryId)).filter(({ deliveryId }) => cursor === null || deliveryId < cursor);
+        const items = newestFirst.slice(0, limit);
+        return { items, nextCursor: newestFirst.length > limit ? (items.at(-1)?.deliveryId ?? null) : null };
+      });
     },
     ack: (crewToken, deliveryId) => {
       calls.push(`ack(${deliveryId})`);

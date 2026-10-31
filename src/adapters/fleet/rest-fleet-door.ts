@@ -180,6 +180,16 @@ function questionOf(payload: string) {
   return parsedOf(questionSchema, payload);
 }
 
+/**
+ * A page of `ship.record` (core's release after 0.35.0, Bridge B1), as
+ * common words it there: until common carries recordOutputSchema, the
+ * gateway reads it with this one, which moves to common's then.
+ */
+const recordOutputSchema = z.object({
+  items: z.array(deliveryOutputSchema.extend({ isPayloadUnreadable: z.boolean() })),
+  nextCursor: idSchema('delivery').nullable(),
+});
+
 /** What a step's title, or an alert's or a notice's headline, is read from: nothing else of its payload is read here. */
 const titledSchema = z.object({ title: z.string().min(1) }).transform(({ title }) => title);
 const headedSchema = z.object({ headline: z.string().min(1) }).transform(({ headline }) => headline);
@@ -335,6 +345,10 @@ export function createRestFleetDoor(
       pushReceive: async (crewToken, { max, shouldSkipHanded }) => {
         const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max, waker: 'gateway', ...(shouldSkipHanded === undefined ? {} : { shouldSkipHanded }) }, answers: pushReceiveOutputSchema });
         return taken.isOk ? ok(taken.value.deliveries.map((delivery) => ({ ...personDeliveryOf(delivery), handOverNumber: delivery.handOverNumber }))) : taken;
+      },
+      record: async (crewToken, { cursor, limit }) => {
+        const page = await call({ path: '/ship/record', method: 'POST', crewToken, body: { ...(cursor === null ? {} : { cursor }), limit }, answers: recordOutputSchema });
+        return page.isOk ? ok({ items: page.value.items.map((entry) => ({ ...personDeliveryOf(entry), state: entry.state, isPayloadUnreadable: entry.isPayloadUnreadable })), nextCursor: page.value.nextCursor }) : page;
       },
       ack: (crewToken, deliveryId) => done(crewToken, { path: '/ship/ack', body: { deliveryId } }),
       delivery: async (crewToken, deliveryId) => {
