@@ -125,6 +125,14 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
     expect(calls).toEqual([]);
   });
 
+  it('says the message is sealed and the key not reachable when the fleet cannot unseal what waits, keeping the crew', async () => {
+    const { readInbox: read, refusals } = readInbox([aPersonDelivery()]);
+    refusals.pushReceive.push({ code: 'KEY_UNAVAILABLE', message: "The fleet's company key is not reachable: access denied" });
+
+    await expect(read(CHARLOTTE_GRANT)).resolves.toMatchObject({ isOk: false, error: { kind: 'KEY_UNAVAILABLE' } });
+    expect(crews.held).toHaveLength(1);
+  });
+
   it('says the fleet did not answer when it refuses the person ship even crewed again', async () => {
     await expect(readInbox([], 'aeolus_ct_v1_other').readInbox(CHARLOTTE_GRANT)).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
   });

@@ -5,7 +5,7 @@ import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import { inboxEntryOf, titleOf, type InboxEntry } from './inbox-entry.js';
-import { asPersonCrew, withOwnRefusal, type PersonCaller, type PersonCrewError, type PersonCrewToken } from './person-crew.js';
+import { asPersonCrew, KEY_UNAVAILABLE, SEALED_MESSAGE, withOwnRefusal, type PersonCaller, type PersonCrewError, type PersonCrewToken } from './person-crew.js';
 import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonDelivery, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
 
@@ -81,6 +81,9 @@ async function openedAgain(deps: OpenDeps, asked: { caller: PersonCaller; crew: 
     return reread;
   }
   const delivery = reread.value.value;
+  if (!delivery.isOk && delivery.error.code === KEY_UNAVAILABLE) {
+    return refuse('KEY_UNAVAILABLE', SEALED_MESSAGE);
+  }
   return delivery.isOk ? ok(viewOf(delivery.value)) : refuse('NO_SUCH_DELIVERY', `The fleet no longer holds it opened: ${delivery.error.message}`);
 }
 

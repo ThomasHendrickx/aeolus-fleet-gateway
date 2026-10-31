@@ -67,6 +67,18 @@ describe("a press of a question's button in Slack", () => {
     expect(slack.state.reactions).toEqual([{ botToken: 'xoxb-1', channel: 'D0MATHILDE', ts: '1730020000.000001', name: 'white_check_mark' }]);
   });
 
+  it("says in the question's thread that the message is sealed and the key not reachable, answering nothing, when the fleet cannot unseal the question", async () => {
+    fleet.refusals.delivery.push({ code: 'KEY_UNAVAILABLE', message: "The fleet's company key is not reachable: access denied" });
+
+    const answered = await press(1);
+
+    expect({ answered, replies: fleet.replies, thread: slack.state.inThread }).toEqual({
+      answered: { isOk: true, value: { kind: 'refused' } },
+      replies: [],
+      thread: [{ botToken: 'xoxb-1', channel: 'D0MATHILDE', threadTs: '1730020000.000001', text: "The message is sealed and the fleet's company key is not reachable: try again later. Nothing is lost; it waits." }],
+    });
+  });
+
   it('answers a question pressed before Slack answered its post, acknowledging the delivery first', async () => {
     fleet = fakePersonShipDoor({ crewToken: 'crew-mathilde', deliveries: [QUESTION] });
     await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: QUESTION.messageId, deliveryId: QUESTION.deliveryId, senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null });

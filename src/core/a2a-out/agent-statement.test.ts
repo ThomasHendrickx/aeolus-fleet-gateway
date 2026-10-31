@@ -86,7 +86,7 @@ describe("an outside A2A agent's statement, written from its card (slice 5)", ()
     { refused: 'a skill id over 128 characters', card: aCard({ skills: [{ ...QUOTE, id: 'q'.repeat(129) }] }), reason: 'capability name' },
     { refused: 'two skills with one id', card: aCard({ skills: [QUOTE, { ...QUOTE, name: 'Quote again' }] }), reason: 'each capability once' },
     { refused: 'no mode for a skill', card: aCard({ defaultInputModes: [] }), reason: 'media type' },
-    { refused: 'a statement over 64 KB', card: aCard({ skills: Array.from({ length: 40 }, (_, at) => ({ ...QUOTE, id: `quote-${String(at)}`, description: 'd'.repeat(2_000) })) }), reason: '64 KB' },
+    { refused: 'a statement over 256 KB', card: aCard({ skills: Array.from({ length: 140 }, (_, at) => ({ ...QUOTE, id: `quote-${String(at)}`, description: 'd'.repeat(2_000) })) }), reason: '256 KB' },
   ])('refuses a card with $refused, saying why', ({ card, reason }) => {
     const statement = stated(card);
 

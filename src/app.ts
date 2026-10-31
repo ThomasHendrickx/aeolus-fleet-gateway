@@ -506,7 +506,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       againWaitsMs: AGAIN_WAITS_MS,
       cardWaitMs: AGENT_CARD_WAIT_MS,
     }),
-    collectReplies: createCollectReplies({ crew: door, replies: door, sent: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS }),
+    collectReplies: createCollectReplies({ crew: door, replies: door, sent: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
     pushToWebhooks,
     servesOutsideParties,
     log: server.log,

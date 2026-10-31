@@ -31,6 +31,8 @@ function aListedShip(id: string, name: string) {
     awaitingCrewSince: null,
     retiredAt: null,
     ownerShipId: null,
+    openAlertCount: 0,
+    activity: null,
   };
 }
 

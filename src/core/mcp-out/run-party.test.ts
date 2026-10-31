@@ -146,6 +146,19 @@ describe('the gateway takes the calls of a proxy ship, as its crew (interop 5.2)
     expect(handed).toEqual([ONE]);
   });
 
+  it("waits longer each time while the fleet's company key is not reachable, and goes on once it is (decision 0068)", async () => {
+    crew.state.receiveRefusal = { code: 'KEY_UNAVAILABLE', message: "The fleet's company key is not reachable: access denied" };
+    crew.state.waiting = [aPushedDelivery({ deliveryId: ONE })];
+    const running = run();
+    while (sleeps.length < 4) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    crew.state.receiveRefusal = undefined;
+
+    await expect(running).resolves.toEqual({ ended: 'stopped' });
+    expect({ waits: sleeps.slice(0, 4), handed }).toEqual({ waits: [1_000, 5_000, 30_000, 30_000], handed: [ONE] });
+  });
+
   it('takes up first what it resumes at its start, in flight as any delivery, and hands no delivery it resumed', async () => {
     const resumed: DeliveryId[] = [];
     crew.state.waiting = [aPushedDelivery({ deliveryId: ONE }), aPushedDelivery({ deliveryId: TWO })];

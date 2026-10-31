@@ -39,10 +39,12 @@ let fleet: ReturnType<typeof fakeReplyReceiver>;
 let calls: ReturnType<typeof memoryClientCalls>;
 let stop: AbortController;
 let sleeps: number;
+let slept: number[];
 
 /** Each sleep lets the fleet move on; the run stops after a few. */
-const sleep: Sleep = async () => {
+const sleep: Sleep = async (ms) => {
   sleeps += 1;
+  slept.push(ms);
   await new Promise((resolve) => setImmediate(resolve));
   if (sleeps >= 6) {
     stop.abort();
@@ -56,6 +58,7 @@ beforeEach(async () => {
   await calls.save(aClientCall());
   stop = new AbortController();
   sleeps = 0;
+  slept = [];
   const ack = crew.ack.bind(crew);
   crew.ack = async (crewToken, deliveryId) => {
     const acked = await ack(crewToken, deliveryId);
@@ -66,7 +69,7 @@ beforeEach(async () => {
   };
 });
 
-const collect = (party: McpClientParty | A2aClientParty = CLAUDE) => createCollectReplies({ crew, replies: fleet.receiver, sent: fleet.sent, calls, clock, sleep, pollMs: 2000 })({ party, signal: stop.signal });
+const collect = (party: McpClientParty | A2aClientParty = CLAUDE) => createCollectReplies({ crew, replies: fleet.receiver, sent: fleet.sent, calls, clock, sleep, pollMs: 2000, againWaitsMs: [1000, 5000, 30000] })({ party, signal: stop.signal });
 
 /** A call of the party's, sent under its own message. */
 const aCallOf = (messageId: MessageId, overrides: Parameters<typeof aClientCall>[0] = {}) => aClientCall({ messageId, handle: `handle-${messageId}`, ...overrides });
@@ -144,6 +147,16 @@ describe("the gateway takes the replies to an outside client's calls with receiv
     fleet.state.refusal = { code: 'LEASE_ENDED', message: 'The lease ended' };
 
     await expect(collect()).resolves.toEqual({ ended: 'crewRefused' });
+  });
+});
+
+describe("the gateway waits while a sealed fleet's company key is not reachable (decision 0068)", () => {
+  it('waits longer each time, keeps the crew and keeps no reply, never ending the run', async () => {
+    fleet.state.replies.set(MESSAGE_ID, [REPLY]);
+    fleet.state.refusal = { code: 'KEY_UNAVAILABLE', message: "The fleet's company key is not reachable: access denied" };
+
+    await expect(collect()).resolves.toEqual({ ended: 'stopped' });
+    expect({ waits: slept, reply: (await calls.findByMessage(FLEET_ID, MESSAGE_ID))?.replies }).toEqual({ waits: [2000, 1000, 5000, 30000, 30000, 30000], reply: [] });
   });
 });
 

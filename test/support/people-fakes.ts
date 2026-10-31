@@ -141,7 +141,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
   /** The messages the fleet took, as sent. */
   const sent: Parameters<PersonShipDoor['send']>[1][] = [];
   /** The fleet's answers to come for each call, before it takes them. */
-  const refusals: { reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[] } = { reply: [], handled: [], discover: [], send: [], delivery: [] };
+  const refusals: { pushReceive: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[] } = { pushReceive: [], reply: [], handled: [], discover: [], send: [], delivery: [] };
   /** The hand-overs the gateway reported, in order. */
   const handOvers: Parameters<PersonShipDoor['handed']>[1][] = [];
   /** The deliveries the ship acknowledged and has not handled yet. */
@@ -155,6 +155,10 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
     },
     pushReceive: (crewToken, { max }) => {
       calls.push(`pushReceive(${String(max)})`);
+      const refused = refusals.pushReceive.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
       return crewed(crewToken, () => ship.deliveries.slice(0, max).map((delivery) => ({ ...delivery, handOverNumber: handOvers.findLast(({ deliveryId }) => deliveryId === delivery.deliveryId)?.handOverNumber ?? null })));
     },
     ack: (crewToken, deliveryId) => {

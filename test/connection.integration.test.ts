@@ -185,7 +185,7 @@ describe("an account signed in to the console as itself sees the console's Gatew
     const argo = session.parse(await (await fetch(`${fleet.url}/trpc/console.session`, { headers: { cookie } })).json()).result.data;
     front = createServer((request, response) => {
       if (request.url === '/trpc/console.session' && request.headers.cookie === ACCOUNT_COOKIE) {
-        const account = { ...argo, kind: 'account', accountId: 'acc-charlotte', scopes: ['fleet:read'] };
+        const account = { ...argo, kind: 'account', accountId: 'acc-charlotte', scopes: ['fleet:read'], featureFlags: [] };
         response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ result: { data: account } }));
         return;
       }
