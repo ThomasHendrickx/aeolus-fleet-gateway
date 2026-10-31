@@ -26,7 +26,6 @@ import {
   deliveryOutputSchema,
   receiveOutputSchema,
   sentMessageOutputSchema,
-  QUESTION_CONTENT_TYPE,
   questionSchema,
   sendOutputSchema,
   shipDetailOutputSchema,
@@ -44,6 +43,7 @@ import type { MeetingRead, MeetingShip, OwnMicChange, PersonMeetingDoor } from '
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
+import { jobOf } from '../../core/people/item-job.js';
 import type { AccountDoor, PersonDelivery, PersonShipDoor } from '../../core/people/ports.js';
 import type { Owners } from '../../core/requests/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
@@ -132,7 +132,7 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     senderName,
     contentType,
     payload,
-    headline: contentType === QUESTION_CONTENT_TYPE ? (questionOf(payload)?.title ?? null) : null,
+    headline: headlineOf({ contentType, payload }),
     sentAt: new Date(sentAt),
     inReplyTo,
     meetingId,
@@ -177,8 +177,31 @@ function meetingReadOf(read: MeetingOutput): MeetingRead {
 
 /** A question's payload, if it parses as one. */
 function questionOf(payload: string) {
+  return parsedOf(questionSchema, payload);
+}
+
+/** What a step's title, or an alert's or a notice's headline, is read from: nothing else of its payload is read here. */
+const titledSchema = z.object({ title: z.string().min(1) }).transform(({ title }) => title);
+const headedSchema = z.object({ headline: z.string().min(1) }).transform(({ headline }) => headline);
+
+/** The headline of a question, a step, an alert or a notice (Bridge, CC10); none for any other message, or one whose payload does not read. */
+function headlineOf({ contentType, payload }: { contentType: string; payload: string }): string | null {
+  const job = jobOf(contentType);
+  switch (job) {
+    case 'decide':
+      return questionOf(payload)?.title ?? null;
+    case 'do':
+      return parsedOf(titledSchema, payload) ?? null;
+    case 'stay-aware':
+      return parsedOf(headedSchema, payload) ?? null;
+    case 'everything-else':
+      return null;
+  }
+}
+
+function parsedOf<T>(schema: z.ZodType<T>, payload: string): T | undefined {
   try {
-    return questionSchema.safeParse(JSON.parse(payload)).data;
+    return schema.safeParse(JSON.parse(payload)).data;
   } catch {
     return undefined;
   }
