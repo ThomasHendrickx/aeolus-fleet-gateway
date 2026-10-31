@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
-import { CHARLOTTE_GRANT, aPersonDelivery, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { CHARLOTTE_GRANT, aPersonDelivery, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import type { PersonDelivery } from './ports.js';
 import { createOpenDelivery } from './open-delivery.js';
 
@@ -17,16 +17,18 @@ const NOTE = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', mes
 let crews: ReturnType<typeof memoryPersonCrews>;
 let opened: ReturnType<typeof memoryOpenedDeliveries>;
 let changes: ReturnType<typeof memoryInboxChanges>;
+let outcomes: ReturnType<typeof memoryItemOutcomes>;
 
 beforeEach(() => {
   crews = memoryPersonCrews();
   opened = memoryOpenedDeliveries();
   changes = memoryInboxChanges();
+  outcomes = memoryItemOutcomes();
 });
 
 function opening(deliveries: PersonDelivery[]) {
   const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries });
-  return { ...ship, openDelivery: createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, changes, clock: { now: () => AT } }) };
+  return { ...ship, openDelivery: createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, changes, outcomes, clock: { now: () => AT } }) };
 }
 
 const CALLER = CHARLOTTE_GRANT;
@@ -35,7 +37,7 @@ describe('a person opens a delivery that waits for their person ship', () => {
   it('shows it whole: who sent it, when, its title, content type and payload', async () => {
     const { openDelivery } = opening([NOTE, QUESTION]);
 
-    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toEqual({
+    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toEqual({
       isOk: true,
       value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null },
     });
@@ -45,13 +47,13 @@ describe('a person opens a delivery that waits for their person ship', () => {
     const contribution = aPersonDelivery({ ...NOTE, payload: 'Marketing is on track', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
     const { openDelivery } = opening([contribution]);
 
-    await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
+    await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
   });
 
   it('acknowledges it for the person, once it kept what an answer and the inbox need: its message, its sender, title, content type and when it was sent, never its payload', async () => {
     const { openDelivery, calls } = opening([QUESTION]);
 
-    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' });
 
     expect(calls).toEqual(['inbox', 'pushReceive(10)', `ack(${QUESTION.deliveryId})`]);
     expect([...opened.held.values()]).toEqual([
@@ -73,14 +75,14 @@ describe('a person opens a delivery that waits for their person ship', () => {
   it('refuses a delivery that does not wait for the person, acknowledging nothing', async () => {
     const { openDelivery, calls } = opening([NOTE]);
 
-    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
+    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
     expect({ calls, opened: opened.held.size }).toEqual({ calls: ['inbox', 'pushReceive(10)'], opened: 0 });
   });
 
   it('refuses at once while nothing waits', async () => {
     const { openDelivery, calls } = opening([]);
 
-    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
+    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
     expect(calls).toEqual(['inbox']);
   });
 
@@ -94,16 +96,16 @@ describe('a person opens a delivery that waits for their person ship', () => {
   it('says the fleet did not answer when it refuses the acknowledgement, keeping what it opened so a second open goes on', async () => {
     const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [QUESTION] });
     const door = { ...ship.door, ack: () => Promise.resolve({ isOk: false as const, error: { code: 'UNAVAILABLE', message: 'The fleet did not answer' } }) };
-    const openDelivery = createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, opened, changes, clock: { now: () => AT } });
+    const openDelivery = createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, opened, changes, outcomes, clock: { now: () => AT } });
 
-    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
+    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
     expect(opened.held.size).toBe(1);
   });
 
   it("tells the person's pages their inbox changed once it acknowledged it (wake a person, #1014)", async () => {
     const { openDelivery } = opening([QUESTION]);
 
-    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' });
 
     expect(changes.told).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }]);
   });
@@ -111,9 +113,9 @@ describe('a person opens a delivery that waits for their person ship', () => {
   it('tells nothing when the fleet refused the acknowledgement', async () => {
     const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [QUESTION] });
     const door = { ...ship.door, ack: () => Promise.resolve({ isOk: false as const, error: { code: 'UNAVAILABLE', message: 'The fleet did not answer' } }) };
-    const openDelivery = createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, opened, changes, clock: { now: () => AT } });
+    const openDelivery = createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, opened, changes, outcomes, clock: { now: () => AT } });
 
-    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' });
 
     expect(changes.told).toEqual([]);
   });
@@ -126,7 +128,7 @@ describe('a person opens a delivery of a sealed fleet whose company key is not r
     const { openDelivery, calls, refusals } = opening([QUESTION]);
     refusals.pushReceive.push(KEY_UNAVAILABLE);
 
-    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toEqual({
+    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toEqual({
       isOk: false,
       error: { kind: 'KEY_UNAVAILABLE', message: "The message is sealed and the fleet's company key is not reachable: try again later. Nothing is lost; it waits." },
     });
@@ -135,19 +137,19 @@ describe('a person opens a delivery of a sealed fleet whose company key is not r
 
   it('says so too when it opens again a delivery it opened before', async () => {
     const { openDelivery, refusals } = opening([QUESTION]);
-    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' });
     refusals.delivery.push(KEY_UNAVAILABLE);
 
-    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toMatchObject({ isOk: false, error: { kind: 'KEY_UNAVAILABLE' } });
+    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: false, error: { kind: 'KEY_UNAVAILABLE' } });
   });
 });
 
 describe('a person opens again a delivery they opened, from any client (aeolus-fleet #1046)', () => {
   it('shows it whole again, as the fleet reads it again, acknowledging it once only', async () => {
     const { openDelivery, calls } = opening([QUESTION]);
-    const first = await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+    const first = await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' });
 
-    const again = await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+    const again = await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' });
 
     expect({ again, isSame: JSON.stringify(again) === JSON.stringify(first) }).toEqual({
       again: {
@@ -162,28 +164,52 @@ describe('a person opens again a delivery they opened, from any client (aeolus-f
   it('says again the meeting a contribution was made to, so the person can go back to it', async () => {
     const contribution = aPersonDelivery({ ...NOTE, payload: 'Marketing is on track', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
     const { openDelivery } = opening([contribution]);
-    await openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId });
+    await openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId, place: 'chat' });
 
-    await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
+    await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
   });
 
   it('keeps no payload of it: the second open reads it from the fleet', async () => {
     const { openDelivery, calls } = opening([QUESTION]);
-    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' });
 
-    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' });
 
     expect({ isPayloadKept: JSON.stringify([...opened.held.values()]).includes('All checks are green'), lastCall: calls.at(-1) }).toEqual({ isPayloadKept: false, lastCall: `delivery(${QUESTION.deliveryId})` });
   });
 
   it('says why when the fleet no longer holds it opened', async () => {
     const { openDelivery, refusals } = opening([QUESTION]);
-    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' });
     refusals.delivery.push({ code: 'DELIVERY_NOT_ACKNOWLEDGED', message: `Delivery ${QUESTION.deliveryId} is handled, not acknowledged` });
 
-    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toEqual({
+    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toEqual({
       isOk: false,
       error: { kind: 'NO_SUCH_DELIVERY', message: `The fleet no longer holds it opened: Delivery ${QUESTION.deliveryId} is handled, not acknowledged` },
     });
+  });
+});
+
+describe('a person sees an alert or a notice: seeing it is all it asks (Bridge, CC16)', () => {
+  const ALERT = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003', messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', senderName: 'watch', contentType: 'application/vnd.aeolus.alert+json', payload: '{}', headline: 'builder-gateway: no report change for 2 h' });
+
+  it('acknowledges it and reports it handled at once, keeping nothing opened', async () => {
+    const { openDelivery, calls } = opening([ALERT]);
+
+    await openDelivery({ caller: CALLER, deliveryId: ALERT.deliveryId, place: 'bridge' });
+
+    expect({ calls: calls.filter((call) => call !== 'inbox' && !call.startsWith('pushReceive')), opened: [...opened.held.values()] }).toEqual({ calls: [`ack(${ALERT.deliveryId})`, `handled(${ALERT.deliveryId})`], opened: [] });
+  });
+
+  it('keeps it seen in the place the person saw it', async () => {
+    await opening([ALERT]).openDelivery({ caller: CALLER, deliveryId: ALERT.deliveryId, place: 'bridge' });
+
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: ALERT.deliveryId, place: 'bridge', kind: 'seen', option: null, at: AT }]);
+  });
+
+  it('keeps nothing of a question opened: it still waits on the person', async () => {
+    await opening([QUESTION]).openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'bridge' });
+
+    expect(outcomes.held).toEqual([]);
   });
 });
