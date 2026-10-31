@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgetter.js';
+import { createPrismaItemOutcomes } from '../src/adapters/prisma/item-outcomes.js';
 import { createPrismaPersonCrews } from '../src/adapters/prisma/person-crews.js';
 import { migratedDatabase } from './support/database.js';
 
@@ -72,5 +73,29 @@ describe("person ships' crews in Postgres (decision 0054)", () => {
     await createPrismaFleetForgetter(prisma).forget(OTHER_FLEET);
 
     await expect(crews.find(OTHER_FLEET, PERSON_SHIP)).resolves.toBeUndefined();
+  });
+});
+
+describe("what came of a person ship's items, in Postgres (Bridge, CC4)", () => {
+  const outcome = { fleetId: FLEET, shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch801', place: 'slack', kind: 'answered', option: 2, at: AT } as const;
+
+  it('keeps the first outcome of a delivery: a later one changes nothing', async () => {
+    const outcomes = createPrismaItemOutcomes(prisma);
+    await outcomes.save(outcome);
+
+    await outcomes.save({ ...outcome, place: 'bridge', kind: 'done', option: null, at: new Date('2026-10-19T10:00:00.000Z') });
+
+    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [outcome.deliveryId] })).resolves.toEqual([outcome]);
+  });
+
+  it('finds only the deliveries asked, of the person ship asked, in its fleet', async () => {
+    const outcomes = createPrismaItemOutcomes(prisma);
+    const asked = { ...outcome, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch802', place: 'bridge', kind: 'seen', option: null } as const;
+    await outcomes.save(asked);
+    await outcomes.save({ ...asked, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch803' });
+    await outcomes.save({ ...asked, fleetId: OTHER_FLEET });
+    await outcomes.save({ ...asked, shipId: 'shp_01m3tb1zgr5h2ffee12xnch8pq' });
+
+    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [asked.deliveryId] })).resolves.toEqual([asked]);
   });
 });
