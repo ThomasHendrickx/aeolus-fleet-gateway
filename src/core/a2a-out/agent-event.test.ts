@@ -26,10 +26,10 @@ describe("an outside A2A agent's event, as the reply its sender gets (slice 6, 2
   });
 
   it('replies an event too large for a message as text saying so', () => {
-    const reply = replyContentOf({ kind: 'artifact', artifactId: 'a-1', isAppended: false, parts: [{ kind: 'text', text: 'x'.repeat(70_000), mediaType: 'text/plain' }], json: '{}' });
+    const reply = replyContentOf({ kind: 'artifact', artifactId: 'a-1', isAppended: false, parts: [{ kind: 'text', text: 'x'.repeat(270_000), mediaType: 'text/plain' }], json: '{}' });
 
     expect(reply.contentType).toBe('text/plain');
-    expect(reply.payload).toContain('over the 65536');
+    expect(reply.payload).toContain('over the 262144');
   });
 
   it.each(['completed', 'failed', 'canceled', 'rejected', 'inputRequired', 'authRequired'] as const)('stops following at %s', (state) => {

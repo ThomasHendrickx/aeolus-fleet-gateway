@@ -325,11 +325,11 @@ describe('a message that is no call the server can take', () => {
   });
 
   it('replies an error result in place of a result too large for a message', async () => {
-    servers.state.outcome = { kind: 'answered', result: { content: [{ type: 'text', text: 'x'.repeat(70_000) }], isError: false } };
+    servers.state.outcome = { kind: 'answered', result: { content: [{ type: 'text', text: 'x'.repeat(270_000) }], isError: false } };
 
     await expect(handCall({ party: CRM, delivery: aPushedDelivery() })).resolves.toEqual({ kind: 'handled' });
     expect(crew.sent().map((sent) => parsed(sent.payload))).toEqual([
-      { content: [{ type: 'text', text: 'The tool result is 70055 bytes as JSON, over the 65536 a message holds.' }], isError: true },
+      { content: [{ type: 'text', text: 'The tool result is 270055 bytes as JSON, over the 262144 a message holds.' }], isError: true },
     ]);
   });
 });

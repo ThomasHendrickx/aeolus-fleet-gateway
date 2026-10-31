@@ -98,8 +98,8 @@ describe("a person ship sends the person's own message", () => {
     expect(sent).toMatchObject({ isOk: false, error: { message: 'The network rules do not allow this send' } });
   });
 
-  it('a payload of exactly 64 KB goes (chatgpt-plugin design, 9: the limits)', async () => {
-    const sent = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'x'.repeat(65_536), idempotencyKey: 'charlotte-64k' });
+  it('a payload of exactly 256 KB goes (chatgpt-plugin design, 9: the limits)', async () => {
+    const sent = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'x'.repeat(262_144), idempotencyKey: 'charlotte-256k' });
 
     expect(sent.isOk).toBe(true);
   });
@@ -123,10 +123,10 @@ describe("a person ship sends the person's own message", () => {
     await expect(trackerReceives()).resolves.toEqual([{ senderName: 'charlotte', contentType: 'text/plain', payload: 'standup moved to 10:00' }]);
   });
 
-  it('is refused a payload over 64 KB, saying so', async () => {
-    const sent = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'x'.repeat(65_537), idempotencyKey: 'charlotte-5' });
+  it('is refused a payload over 256 KB, saying so', async () => {
+    const sent = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'x'.repeat(262_145), idempotencyKey: 'charlotte-5' });
 
-    expect(!sent.isOk && sent.error.message).toContain('64 KB');
+    expect(!sent.isOk && sent.error.message).toContain('256 KB');
   });
 });
 
