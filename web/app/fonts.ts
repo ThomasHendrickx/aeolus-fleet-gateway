@@ -2,7 +2,7 @@ import localFont from 'next/font/local';
 
 /**
  * Geist and Geist Mono, self-hosted (SIL Open Font License, fonts/OFL.txt).
- * tokens.css reads the two variables first in --font-sans and --font-mono.
+ * common's tokens.css reads the two variables first in --font-sans and --font-mono.
  */
 export const geistSans = localFont({
   src: './fonts/geist-variable.woff2',

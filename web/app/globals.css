@@ -1,19 +1,18 @@
 /*
- * The gateway's theme, the console's own. tokens.css is the console's copy of
- * the design tokens until @aeolus-fleet/common/header holds the single one
- * (header design H2), light on :root and dark on .dark. It is imported unlayered, so its values win over
- * Tailwind's theme layer at runtime.
+ * The gateway's theme. The design tokens come from @aeolus-fleet/common/header,
+ * light on :root and dark on .dark. They are imported unlayered, so their values
+ * win over Tailwind's theme layer at runtime.
  *
  * Tailwind makes utilities only for keys it knows. Colours are mapped onto its
  * --color-* names. Every other token already has a Tailwind name (--text-*,
  * --radius-*, --shadow-*, --font-*), so it is registered as a reference to
- * itself: the utility reads the variable, and tokens.css sets it. No value is
+ * itself: the utility reads the variable, and common's tokens set it. No value is
  * written twice.
  */
 /* Tailwind scans the web app alone, not the gateway's server. */
 @import 'tailwindcss' source('..');
 @import 'tw-animate-css';
-@import './tokens.css';
+@import '@aeolus-fleet/common/header/tokens.css';
 
 /* The header every Aeolus app shows and the atoms it stands on come from common (header design H2). */
 @source '../../node_modules/@aeolus-fleet/common/dist/header';

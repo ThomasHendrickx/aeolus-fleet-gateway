@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- The app mark (Avatar, kind app): the Ship glyph on the primary colour, light and dark, from app/tokens.css in sRGB. -->
+  <!-- The app mark (Avatar, kind app): the Ship glyph on the primary colour, light and dark, from common/header/tokens.css in sRGB. -->
   <style>
     .tile { fill: #1a3860; }
     .ship { stroke: #f8fafc; }
