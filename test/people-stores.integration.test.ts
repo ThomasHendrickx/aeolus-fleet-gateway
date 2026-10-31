@@ -98,4 +98,14 @@ describe("what came of a person ship's items, in Postgres (Bridge, CC4)", () => 
 
     await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [asked.deliveryId] })).resolves.toEqual([asked]);
   });
+
+  it('forgets a fleet with what came of its items (decision 0021)', async () => {
+    const outcomes = createPrismaItemOutcomes(prisma);
+    const forgotten = { ...outcome, fleetId: OTHER_FLEET, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch804' } as const;
+    await outcomes.save(forgotten);
+
+    await createPrismaFleetForgetter(prisma).forget(OTHER_FLEET);
+
+    await expect(outcomes.findMany(OTHER_FLEET, { shipId: PERSON_SHIP, deliveryIds: [forgotten.deliveryId] })).resolves.toEqual([]);
+  });
 });
