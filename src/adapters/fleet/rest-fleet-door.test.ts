@@ -183,6 +183,49 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     ]);
   });
 
+  it("reads a page of the person ship's record after a cursor, each delivery with its state (Bridge, CC12)", async () => {
+    const entry = {
+      deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002',
+      messageId: 'msg_01m3tbfspe96yf1rnr4ank0002',
+      senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderName: 'tracker',
+      senderType: 'tracker',
+      recipient: { kind: 'ship', shipId: 'shp_01m3tbfspe96yf1rnr4ank0per' },
+      model: null,
+      contentType: 'text/plain',
+      payload: 'The build is red',
+      sentAt: '2026-10-19T08:00:00.000Z',
+      inReplyTo: null,
+      attempts: 1,
+      isForced: false,
+      meetingId: null,
+      scheduleId: null,
+      sendTime: null,
+      state: 'handled',
+      isPayloadUnreadable: false,
+    };
+    answer = { status: 200, body: { items: [entry, { ...entry, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', state: 'acknowledged', payload: '', isPayloadUnreadable: true }], nextCursor: 'dlv_01m3tbfspe96yf1rnr4ank0001' } };
+
+    const page = await createRestFleetDoor(base).person.record('aeolus_ct_v1_charlotte', { cursor: 'dlv_01m3tbfspe96yf1rnr4ank0003', limit: 20 });
+
+    expect(page.isOk ? { items: page.value.items.map(({ deliveryId, state, isPayloadUnreadable, headline }) => ({ deliveryId, state, isPayloadUnreadable, headline })), nextCursor: page.value.nextCursor } : page).toEqual({
+      items: [
+        { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', state: 'handled', isPayloadUnreadable: false, headline: null },
+        { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', state: 'acknowledged', isPayloadUnreadable: true, headline: null },
+      ],
+      nextCursor: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+    });
+    expect(sent().map(({ url, body }) => ({ url, body }))).toEqual([{ url: '/api/v1/ship/record', body: { cursor: 'dlv_01m3tbfspe96yf1rnr4ank0003', limit: 20 } }]);
+  });
+
+  it('reads the newest page of the record when no cursor is given', async () => {
+    answer = { status: 200, body: { items: [], nextCursor: null } };
+
+    await createRestFleetDoor(base).person.record('aeolus_ct_v1_charlotte', { cursor: null, limit: 20 });
+
+    expect(sent().map(({ body }) => body)).toEqual([{ limit: 20 }]);
+  });
+
   it('forwards shouldSkipHanded to the push receive of a person ship, and leaves it out when not asked', async () => {
     answer = { status: 200, body: { deliveries: [] } };
 
