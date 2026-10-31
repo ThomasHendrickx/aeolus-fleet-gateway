@@ -1,5 +1,6 @@
 import { ANSWER_CONTENT_TYPE, questionSchema, type MessageId } from '@aeolus-fleet/common';
 
+import type { ItemOutcomes } from '../people/item-outcome.js';
 import { KEY_UNAVAILABLE, SEALED_MESSAGE } from '../people/person-crew.js';
 import type { PersonCrews, PersonShipDoor } from '../people/ports.js';
 import type { Clock } from '../shared/clock.js';
@@ -25,8 +26,8 @@ function questionIdOf(payload: string): string | undefined {
  * gateway posted to them in Slack (gateway scopes 9.5 step 2). Signed as an
  * event is, by the person the question was posted to, the press sends the
  * answer as their person ship, to the question's sender in reply to it,
- * keyed as an answer on the gateway's page is; then the delivery is handled
- * and the question reacted to, as a message core stored is. Core's refusal
+ * keyed as an answer on the gateway's page is; then the delivery is handled,
+ * kept answered in Slack (Bridge, CC4), and the question reacted to, as a message core stored is. Core's refusal
  * is said in the question's thread. The press names the question's fleet
  * message, as its button carries it, so a press that comes before the
  * gateway kept the post's Slack message is answered too; the delivery not
@@ -38,6 +39,7 @@ export function createAnswerInSlack(deps: {
   posts: Pick<SlackPosts, 'ofMessage'>;
   crews: Pick<PersonCrews, 'find'>;
   door: Pick<PersonShipDoor, 'ack' | 'delivery' | 'reply' | 'handled'>;
+  outcomes: Pick<ItemOutcomes, 'save'>;
   slack: Pick<SlackMessages, 'react' | 'postInThread'>;
   signatures: SlackSignatures;
   clock: Clock;
@@ -72,7 +74,10 @@ export function createAnswerInSlack(deps: {
       await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: `${delivery.value.senderName} did not take your answer: ${replied.error.message}` });
       return ok({ kind: 'refused' });
     }
-    await deps.door.handled(crew.crewToken, post.deliveryId);
+    const handled = await deps.door.handled(crew.crewToken, post.deliveryId);
+    if (handled.isOk) {
+      await deps.outcomes.save({ fleetId: app.fleetId, shipId: post.personShipId, deliveryId: post.deliveryId, place: 'slack', kind: 'answered', option, at: deps.clock.now() });
+    }
     await deps.slack.react(app.bot.token, { channel, ts: messageTs, name: STORED_REACTION });
     return ok({ kind: 'answered' });
   };
