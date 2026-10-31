@@ -6,7 +6,9 @@ import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgett
 import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
 import { createPrismaScopeRequirements } from '../src/adapters/prisma/scope-requirements.js';
 import type { McpServerParty } from '../src/core/parties/party.js';
+import { createPrismaSignInNotices } from '../src/adapters/prisma/sign-in-notices.js';
 import { migratedDatabase } from './support/database.js';
+import { MATHILDE_SHIP_ID } from './support/party-grant-fakes.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OTHER_FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8zz';
@@ -193,6 +195,22 @@ describe("each party's required scopes in Postgres (design gateway-scopes, 4.2)"
     await store.change({ fleetId: OTHER_FLEET, name: 'shared-req' }, { version: 0, party: ['crm:use'], tools: new Map() });
 
     await expect(store.find(REQUIRING_FLEET, 'shared-req')).resolves.toEqual({ version: 0, party: [], tools: new Map() });
+  });
+
+  it('removes the open sign-in notices of a retired party, so the same name added again opens its notice afresh', async () => {
+    const fleetId: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sx';
+    const parties = createPrismaPartyStore(prisma);
+    const notices = createPrismaSignInNotices(prisma);
+    await parties.save(aParty({ fleetId, name: 'attio' }));
+    await notices.open(fleetId, { party: 'attio', personShipId: MATHILDE_SHIP_ID, noticeId: 'ntc-1' });
+    await notices.markTold(fleetId, { party: 'attio', personShipId: MATHILDE_SHIP_ID });
+    await notices.open(fleetId, { party: 'crm', personShipId: MATHILDE_SHIP_ID, noticeId: 'ntc-other' });
+
+    await parties.remove(fleetId, 'attio');
+    await parties.save(aParty({ fleetId, name: 'attio' }));
+
+    await expect(notices.open(fleetId, { party: 'attio', personShipId: MATHILDE_SHIP_ID, noticeId: 'ntc-2' })).resolves.toEqual({ noticeId: 'ntc-2', isTold: false });
+    await expect(notices.open(fleetId, { party: 'crm', personShipId: MATHILDE_SHIP_ID, noticeId: 'ntc-x' })).resolves.toEqual({ noticeId: 'ntc-other', isTold: false });
   });
 
   it('keeps the requirements when the party is saved again, and removes them with the party', async () => {
