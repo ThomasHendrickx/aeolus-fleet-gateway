@@ -118,6 +118,29 @@ describe('a person opens a delivery that waits for their person ship', () => {
   });
 });
 
+describe('a person opens a delivery of a sealed fleet whose company key is not reachable (decision 0068)', () => {
+  const KEY_UNAVAILABLE = { code: 'KEY_UNAVAILABLE', message: "The fleet's company key is not reachable: access denied" };
+
+  it('says the message is sealed and the key not reachable, acknowledging nothing and keeping the crew', async () => {
+    const { openDelivery, calls, refusals } = opening([QUESTION]);
+    refusals.pushReceive.push(KEY_UNAVAILABLE);
+
+    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toEqual({
+      isOk: false,
+      error: { kind: 'KEY_UNAVAILABLE', message: "The message is sealed and the fleet's company key is not reachable: try again later. Nothing is lost; it waits." },
+    });
+    expect({ calls, crew: crews.held.length, opened: opened.held.size }).toEqual({ calls: ['inbox', 'pushReceive(10)'], crew: 1, opened: 0 });
+  });
+
+  it('says so too when it opens again a delivery it opened before', async () => {
+    const { openDelivery, refusals } = opening([QUESTION]);
+    await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
+    refusals.delivery.push(KEY_UNAVAILABLE);
+
+    await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId })).resolves.toMatchObject({ isOk: false, error: { kind: 'KEY_UNAVAILABLE' } });
+  });
+});
+
 describe('a person opens again a delivery they opened, from any client (aeolus-fleet #1046)', () => {
   it('shows it whole again, as the fleet reads it again, acknowledging it once only', async () => {
     const { openDelivery, calls } = opening([QUESTION]);
