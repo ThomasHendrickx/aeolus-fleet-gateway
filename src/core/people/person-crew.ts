@@ -27,7 +27,7 @@ export interface PersonCrewToken {
   readonly crewToken: string;
 }
 
-export type PersonCrewError = DomainError<'NOT_A_PERSON' | 'SIGNED_OUT' | 'FLEET_UNAVAILABLE'>;
+export type PersonCrewError = DomainError<'NOT_A_PERSON' | 'SIGNED_OUT' | 'FLEET_UNAVAILABLE' | 'KEY_UNAVAILABLE'>;
 
 /** The fleet's codes for a crew token that no longer works: its lease ended, or it is unknown. */
 const ENDED_CREW = new Set(['LEASE_ENDED', 'UNAUTHORIZED']);
@@ -87,7 +87,16 @@ export async function asPersonCrew<T>(
   return retried.isOk ? ok({ crew: again.value, value: retried.value }) : fleetDidNotAnswer(retried.error);
 }
 
+/** The fleet's code for a sealed fleet whose company key core cannot reach (decision 0068): nothing was claimed, so the message waits. */
+export const KEY_UNAVAILABLE = 'KEY_UNAVAILABLE';
+
+/** What a person is told when the fleet cannot unseal a message now. */
+export const SEALED_MESSAGE = "The message is sealed and the fleet's company key is not reachable: try again later. Nothing is lost; it waits.";
+
 function fleetDidNotAnswer(refusal: FleetRefusal): Result<never, PersonCrewError> {
+  if (refusal.code === KEY_UNAVAILABLE) {
+    return refuse('KEY_UNAVAILABLE', SEALED_MESSAGE);
+  }
   return refuse('FLEET_UNAVAILABLE', `The fleet did not answer: ${refusal.message}`);
 }
 
