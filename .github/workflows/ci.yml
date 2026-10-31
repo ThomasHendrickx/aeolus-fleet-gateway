@@ -3,13 +3,13 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'hotfix/**']
 
 permissions:
   contents: read
 
-# A later push to a pull request cancels its earlier run; a push to main never
-# cancels another, so every commit on main keeps its own CI result.
+# A later push to a pull request cancels its earlier run; a push to main or a hotfix branch never
+# cancels another, so every commit there keeps its own CI result.
 concurrency:
   group: ci-${{ github.event_name == 'push' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
