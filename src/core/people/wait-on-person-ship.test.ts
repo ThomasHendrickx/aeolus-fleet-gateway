@@ -210,6 +210,20 @@ describe('the waiter of a person ship', () => {
     expect(waiter.woken.map(({ at: wokenAt }) => wokenAt.toISOString())).toEqual(['2026-10-23T12:00:00.000Z', '2026-10-23T12:01:00.000Z', '2026-10-23T12:06:00.000Z', '2026-10-23T12:11:00.000Z']);
   });
 
+  it("waits for the company key of a sealed fleet when the fleet refuses its wake as KEY_UNAVAILABLE: it keeps the crew and wakes again after a wait (decision 0068)", async () => {
+    const at = (time: string) => (): InboxAnswer => {
+      clock.at = new Date(time);
+      return ok({ waiting: 1 });
+    };
+    const waiter = await waiting([at('2026-10-23T12:00:00.000Z'), at('2026-10-23T12:00:59.000Z'), at('2026-10-23T12:01:00.000Z')], {
+      wakes: [err({ code: 'KEY_UNAVAILABLE', message: "The fleet's company key is not reachable: access denied" })],
+    });
+
+    await runUntilIdle(waiter);
+
+    expect({ woken: waiter.woken.map(({ at: wokenAt }) => wokenAt.toISOString()), held: waiter.crews.held.length }).toEqual({ woken: ['2026-10-23T12:00:00.000Z', '2026-10-23T12:01:00.000Z'], held: 1 });
+  });
+
   it('stops and drops the crew when the fleet refuses its wake because the lease ended', async () => {
     const waiter = await waiting([ok({ waiting: 1 })], { wakes: [err({ code: 'LEASE_ENDED', message: 'The lease ended' })] });
 
