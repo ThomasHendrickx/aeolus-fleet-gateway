@@ -149,7 +149,8 @@ export function createPrismaPartyStore(db: Db): PartyStore & { crewed(): Promise
       await db.$executeRaw`UPDATE "parties" SET "tool_switches" = COALESCE("tool_switches", ${everyListedOn}::jsonb) || ${JSON.stringify(asJson(switched))}::jsonb WHERE "fleet_id" = ${fleetId} AND "name" = ${name} AND "kind" = 'mcpServer'`;
     },
     remove: async (fleetId, name) => {
-      await db.party.deleteMany({ where: { fleetId, name } });
+      // One transaction: a party added again under the name finds no notice of the earlier one.
+      await db.$transaction([db.party.deleteMany({ where: { fleetId, name } }), db.partySignInNotice.deleteMany({ where: { fleetId, party: name } })]);
     },
   };
 }
