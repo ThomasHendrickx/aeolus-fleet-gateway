@@ -121,11 +121,66 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
 
     const taken = await createRestFleetDoor(base).person.pushReceive('aeolus_ct_v1_charlotte', { max: 10 });
 
-    expect(taken.isOk ? taken.value.map(({ questionTitle, sentAt }) => ({ questionTitle, sentAt })) : taken).toEqual([
-      { questionTitle: 'Go for release 1.4?', sentAt: new Date('2026-10-19T08:00:00.000Z') },
-      { questionTitle: null, sentAt: new Date('2026-10-19T08:00:00.000Z') },
+    expect(taken.isOk ? taken.value.map(({ headline, sentAt }) => ({ headline, sentAt })) : taken).toEqual([
+      { headline: 'Go for release 1.4?', sentAt: new Date('2026-10-19T08:00:00.000Z') },
+      { headline: null, sentAt: new Date('2026-10-19T08:00:00.000Z') },
     ]);
     expect(sent().map(({ url, body }) => ({ url, body }))).toEqual([{ url: '/api/v1/ship/pushReceive', body: { max: 10, waker: 'gateway' } }]);
+  });
+
+  it("reads the headline of a step, an alert and a notice from its payload, and none from one it cannot read (Bridge, CC14, CC15)", async () => {
+    const delivery = {
+      deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+      messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+      senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderName: 'watch',
+      senderType: 'watch',
+      recipient: { kind: 'ship', shipId: 'shp_01m3tbfspe96yf1rnr4ank0per' },
+      model: null,
+      sentAt: '2026-10-31T19:47:00.000Z',
+      inReplyTo: null,
+      attempts: 0,
+      isForced: false,
+      meetingId: null,
+      scheduleId: null,
+      sendTime: null,
+      state: 'received',
+      handOverNumber: null,
+    };
+    const step = { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Create the GitHub repository aeolus-fleet-memory-plugin', why: 'The plugin needs its own repository.' };
+    const alert = {
+      alertId: 'alr_01m3tbfspe96yf1rnr4ank0alr',
+      headline: 'builder-gateway: no report change for 2 h',
+      body: 'Its last report, 17:46.',
+      ship: { id: 'shp_01m3tbfspe96yf1rnr4ank9bgw', name: 'builder-gateway' },
+      fleetId: 'flt_01m3tbfspe96yf1rnr4ank0flt',
+      toldAs: 'owner',
+      since: '2026-10-31T17:46:00.000Z',
+      raisedAt: '2026-10-31T19:46:00.000Z',
+      signal: 'report-unchanged',
+      facts: { reportedAt: '2026-10-31T17:46:00.000Z', expectedWithinMinutes: 45 },
+    };
+    const notice = { headline: 'PR #1497 opened: Bridge mockups', body: 'Ready for review.' };
+    answer = {
+      status: 200,
+      body: {
+        deliveries: [
+          { ...delivery, contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(step) },
+          { ...delivery, contentType: 'application/vnd.aeolus.alert+json', payload: JSON.stringify(alert) },
+          { ...delivery, contentType: 'application/vnd.aeolus.notice+json', payload: JSON.stringify(notice) },
+          { ...delivery, contentType: 'application/vnd.aeolus.notice+json', payload: '{"body":"no headline"}' },
+        ],
+      },
+    };
+
+    const taken = await createRestFleetDoor(base).person.pushReceive('aeolus_ct_v1_charlotte', { max: 10 });
+
+    expect(taken.isOk ? taken.value.map(({ headline }) => headline) : taken).toEqual([
+      'Create the GitHub repository aeolus-fleet-memory-plugin',
+      'builder-gateway: no report change for 2 h',
+      'PR #1497 opened: Bridge mockups',
+      null,
+    ]);
   });
 
   it('forwards shouldSkipHanded to the push receive of a person ship, and leaves it out when not asked', async () => {
@@ -185,7 +240,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         senderName: 'tracker',
         contentType: 'application/vnd.aeolus.question+json',
         payload: JSON.stringify(QUESTION),
-        questionTitle: 'Go for release 1.4?',
+        headline: 'Go for release 1.4?',
         sentAt: new Date('2026-10-19T08:00:00.000Z'),
         inReplyTo: null,
         meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',

@@ -11,7 +11,7 @@ import { createOpenDelivery } from './open-delivery.js';
 
 const AT = new Date('2026-10-19T09:00:00.000Z');
 const QUESTION = aPersonDelivery();
-const NOTE = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', contentType: 'text/plain', payload: 'The build is red', questionTitle: null });
+const NOTE = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', contentType: 'text/plain', payload: 'The build is red', headline: null });
 
 
 let crews: ReturnType<typeof memoryPersonCrews>;

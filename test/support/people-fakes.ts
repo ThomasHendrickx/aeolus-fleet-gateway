@@ -116,7 +116,7 @@ export function aPersonDelivery(overrides: Partial<PersonDelivery> = {}): Person
     senderName: 'tracker',
     contentType: 'application/vnd.aeolus.question+json',
     payload: '{"id":"9b2f","title":"Go for release 1.4?","context":"All checks are green.","options":[{"key":1,"label":"Go"}]}',
-    questionTitle: 'Go for release 1.4?',
+    headline: 'Go for release 1.4?',
     sentAt: new Date('2026-10-19T08:00:00.000Z'),
     inReplyTo: null,
     meetingId: null,

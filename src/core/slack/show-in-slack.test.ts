@@ -21,8 +21,8 @@ const BUDGET_CHECK: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9bdg';
 const SHIP = { fleetId: FLEET_ID, shipId: MATHILDE_SHIP };
 const CREW = 'crew-mathilde';
 
-const FROM_RELEASE_NOTES = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', messageId: 'msg_01m3tbfspe96yf1rnr4ank0001', senderShipId: RELEASE_NOTES, senderName: 'release-notes', contentType: 'text/plain', payload: 'Friday', questionTitle: null });
-const FROM_BUDGET_CHECK = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', senderShipId: BUDGET_CHECK, senderName: 'budget-check', contentType: 'text/plain', payload: 'Over budget', questionTitle: null });
+const FROM_RELEASE_NOTES = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', messageId: 'msg_01m3tbfspe96yf1rnr4ank0001', senderShipId: RELEASE_NOTES, senderName: 'release-notes', contentType: 'text/plain', payload: 'Friday', headline: null });
+const FROM_BUDGET_CHECK = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', senderShipId: BUDGET_CHECK, senderName: 'budget-check', contentType: 'text/plain', payload: 'Over budget', headline: null });
 
 let apps: ReturnType<typeof memorySlackApps>;
 let links: ReturnType<typeof memorySlackLinks>;

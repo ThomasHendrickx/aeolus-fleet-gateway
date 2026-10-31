@@ -132,7 +132,7 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     senderName,
     contentType,
     payload,
-    questionTitle: contentType === QUESTION_CONTENT_TYPE ? (questionOf(payload)?.title ?? null) : null,
+    headline: contentType === QUESTION_CONTENT_TYPE ? (questionOf(payload)?.title ?? null) : null,
     sentAt: new Date(sentAt),
     inReplyTo,
     meetingId,

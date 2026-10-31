@@ -79,8 +79,8 @@ export interface PersonDelivery {
   readonly senderName: string;
   readonly contentType: string;
   readonly payload: string;
-  /** The title of a question (the question content type), read at the edge; none for any other message. */
-  readonly questionTitle: string | null;
+  /** The headline of a question (its title), a step (its title), an alert or a notice, read at the edge; none for any other message. */
+  readonly headline: string | null;
   readonly sentAt: Date;
   readonly inReplyTo: MessageId | null;
   /** The meeting its message was contributed to or tells of; none outside a meeting (decision 0061). */

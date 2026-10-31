@@ -22,7 +22,7 @@ const MEETING_NOTICE_TITLES = new Map([
 
 /** A question's own title; a meeting notice's in words; any other message's first line, cut to the longest title. */
 export function titleOf(delivery: PersonDelivery): string {
-  const title = delivery.questionTitle ?? MEETING_NOTICE_TITLES.get(delivery.contentType) ?? delivery.payload.split('\n', 1)[0] ?? '';
+  const title = delivery.headline ?? MEETING_NOTICE_TITLES.get(delivery.contentType) ?? delivery.payload.split('\n', 1)[0] ?? '';
   return title.length > TITLE_MAX_LENGTH ? `${title.slice(0, TITLE_MAX_LENGTH - 1)}…` : title;
 }
 
