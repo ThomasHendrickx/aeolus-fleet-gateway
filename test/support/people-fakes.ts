@@ -2,6 +2,7 @@ import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
+import type { ItemOutcome, ItemOutcomes } from '../../src/core/people/item-outcome.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
 import type { AccountDoor, EmailChannels, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
@@ -267,6 +268,21 @@ export function memoryOpenedDeliveries(): OpenedDeliveries & { held: Map<string,
       held.delete(key(fleetId, opened));
       return Promise.resolve();
     },
+  };
+}
+
+/** The outcomes of items the gateway kept, in memory, the first per delivery staying. */
+export function memoryItemOutcomes(): ItemOutcomes & { held: ItemOutcome[] } {
+  const held: ItemOutcome[] = [];
+  return {
+    held,
+    save: (outcome) => {
+      if (!held.some((kept) => kept.fleetId === outcome.fleetId && kept.shipId === outcome.shipId && kept.deliveryId === outcome.deliveryId)) {
+        held.push(outcome);
+      }
+      return Promise.resolve();
+    },
+    findMany: (fleetId, { shipId, deliveryIds }) => Promise.resolve(held.filter((kept) => kept.fleetId === fleetId && kept.shipId === shipId && deliveryIds.includes(kept.deliveryId))),
   };
 }
 
