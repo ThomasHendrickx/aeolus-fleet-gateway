@@ -159,6 +159,8 @@ export interface OpenedDelivery {
   readonly senderShipId: ShipId;
   readonly from: string;
   readonly title: string;
+  /** Its content type, which names its job (Bridge, CC10); none for one opened before the gateway kept it. */
+  readonly contentType: string | null;
   readonly sentAt: Date;
   readonly openedAt: Date;
 }

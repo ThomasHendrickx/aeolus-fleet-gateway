@@ -48,7 +48,7 @@ describe('a person opens a delivery that waits for their person ship', () => {
     await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
   });
 
-  it('acknowledges it for the person, once it kept what an answer and the inbox need: its message, its sender, title and when it was sent, never its payload', async () => {
+  it('acknowledges it for the person, once it kept what an answer and the inbox need: its message, its sender, title, content type and when it was sent, never its payload', async () => {
     const { openDelivery, calls } = opening([QUESTION]);
 
     await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId });
@@ -63,6 +63,7 @@ describe('a person opens a delivery that waits for their person ship', () => {
         senderShipId: QUESTION.senderShipId,
         from: 'tracker',
         title: 'Go for release 1.4?',
+        contentType: 'application/vnd.aeolus.question+json',
         sentAt: QUESTION.sentAt,
         openedAt: AT,
       },

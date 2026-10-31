@@ -371,6 +371,8 @@ model OpenedDelivery {
   senderShipId String   @map("sender_ship_id")
   from         String
   title        String
+  /// Its content type, which names its job (Bridge, CC10); null for one opened before the gateway kept it.
+  contentType  String?  @map("content_type")
   sentAt       DateTime @map("sent_at") @db.Timestamptz(3)
   openedAt     DateTime @map("opened_at") @db.Timestamptz(3)
 

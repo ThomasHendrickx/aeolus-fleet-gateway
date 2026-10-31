@@ -24,6 +24,7 @@ const OPENED: OpenedDelivery = {
   senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
   from: 'tracker',
   title: 'Go for release 1.4?',
+  contentType: 'application/vnd.aeolus.question+json',
   sentAt: new Date('2026-10-19T08:00:00.000Z'),
   openedAt: AT,
 };

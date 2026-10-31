@@ -14,6 +14,7 @@ function openedOf(row: OpenedDeliveryRow): OpenedDelivery {
     senderShipId: idSchema('ship').parse(row.senderShipId),
     from: row.from,
     title: row.title,
+    contentType: row.contentType,
     sentAt: row.sentAt,
     openedAt: row.openedAt,
   };

@@ -32,6 +32,7 @@ const OPENED: OpenedDelivery = {
   senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
   from: 'tracker',
   title: 'The build is red',
+  contentType: 'text/plain',
   sentAt: new Date('2026-10-19T07:00:00.000Z'),
   openedAt: new Date('2026-10-19T07:30:00.000Z'),
 };

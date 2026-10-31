@@ -36,6 +36,7 @@ function anOpenedDelivery(overrides: Partial<OpenedDelivery> = {}): OpenedDelive
     senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
     from: 'tracker',
     title: 'Go for release 1.4?',
+    contentType: 'application/vnd.aeolus.question+json',
     sentAt: new Date('2026-10-19T08:00:00.000Z'),
     openedAt: AT,
     ...overrides,
@@ -54,6 +55,13 @@ describe('the deliveries people opened, in Postgres', () => {
     ]);
 
     expect(found).toEqual([anOpenedDelivery(), undefined, undefined]);
+  });
+
+  it('reads one opened before the gateway kept its content type with none (Bridge, CC10)', async () => {
+    const opened = createPrismaOpenedDeliveries(prisma);
+    await opened.save(anOpenedDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0bef', contentType: null }));
+
+    await expect(opened.find(FLEET, { shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0bef' })).resolves.toMatchObject({ contentType: null });
   });
 
   it('keeps a delivery opened again once, as last opened', async () => {
