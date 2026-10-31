@@ -12,7 +12,9 @@
  * with sentMessage and keeps it, so the call's state follows interop 3.4: a
  * delivery the fleet gave up fails the call, and it is waited on no more.
  * At most a few calls wait at once, each in its turn. An A2A client's calls
- * are taken the same way (decision 0060).
+ * are taken the same way (decision 0060). While core cannot reach the
+ * fleet's company key (KEY_UNAVAILABLE), nothing was claimed: it looks again
+ * after a longer wait each time, and keeps the crew.
  */
 import type { MessageId } from '@aeolus-fleet/common';
 
@@ -25,6 +27,9 @@ import type { ClientCalls, ReplyReceiver, SentMessages } from './ports.js';
 
 /** The fleet's codes for a crew token it no longer takes. */
 const CREW_REFUSED = new Set(['UNAUTHORIZED', 'LEASE_ENDED']);
+
+/** The fleet's code for a sealed fleet whose company key core cannot reach (decision 0068): nothing was claimed, the reply waits. */
+const KEY_UNAVAILABLE = 'KEY_UNAVAILABLE';
 
 /** The most calls whose reply the gateway waits on at once, for one party. */
 const WAITING_MAX = 10;
@@ -40,6 +45,8 @@ interface CollectRepliesDeps {
   sleep: Sleep;
   /** How long it waits before it looks again for calls to wait on. */
   pollMs: number;
+  /** How long it waits before it looks again after each look in a row that the company key was not reachable; the last repeats. */
+  againWaitsMs: readonly number[];
 }
 
 /** Whether the call still waits for its answer: neither completed nor failed at its deadline. */
@@ -60,7 +67,8 @@ export function createCollectReplies(deps: CollectRepliesDeps): CollectReplies {
     const askedAt = new Map<MessageId, number>();
     let asks = 0;
     /** Whether the fleet refused the crew token: set by a wait, read by the run. */
-    const run = { isCrewRefused: false };
+    const run = { isCrewRefused: false, isKeyUnavailable: false };
+    let keyUnavailableInARow = 0;
 
     /** Asks the fleet once for the call's reply, and keeps it, then confirms it. */
     const waitOn = async (call: ClientCall): Promise<void> => {
@@ -75,6 +83,7 @@ export function createCollectReplies(deps: CollectRepliesDeps): CollectReplies {
         if (CREW_REFUSED.has(received.error.code)) {
           run.isCrewRefused = true;
         }
+        run.isKeyUnavailable ||= received.error.code === KEY_UNAVAILABLE;
         return;
       }
       const reply = received.value;
@@ -106,7 +115,10 @@ export function createCollectReplies(deps: CollectRepliesDeps): CollectReplies {
             .finally(() => waiting.delete(call.messageId)),
         );
       }
-      await deps.sleep(deps.pollMs, signal);
+      keyUnavailableInARow = run.isKeyUnavailable ? keyUnavailableInARow + 1 : 0;
+      run.isKeyUnavailable = false;
+      const waitMs = keyUnavailableInARow === 0 ? deps.pollMs : (deps.againWaitsMs[Math.min(keyUnavailableInARow, deps.againWaitsMs.length) - 1] ?? deps.pollMs);
+      await deps.sleep(waitMs, signal);
     }
     await Promise.all([...waiting.values(), ...failed]);
     return { ended: run.isCrewRefused ? 'crewRefused' : 'stopped' };

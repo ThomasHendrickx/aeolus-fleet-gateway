@@ -9,6 +9,9 @@ export type Sleep = (ms: number, signal: AbortSignal) => Promise<void>;
 /** The fleet's codes for a crew token it no longer takes: the gateway does not crew the proxy ship any more. */
 const CREW_REFUSED = new Set(['UNAUTHORIZED', 'LEASE_ENDED']);
 
+/** The fleet's code for a sealed fleet whose company key core cannot reach (decision 0068): nothing was claimed, the delivery waits. */
+const KEY_UNAVAILABLE = 'KEY_UNAVAILABLE';
+
 /** A party whose proxy ship's deliveries the gateway takes: its crew token, and the most it takes at once. */
 interface TakingParty {
   readonly crewToken: string | null;
@@ -28,7 +31,9 @@ export type RunParty = RunPartyOf<McpServerParty>;
  * attempt and stops at the fifth. While the fleet answers only what the
  * gateway already holds, or does not answer, it looks again after a while.
  * What the party took up before it stopped is taken up first, in flight as
- * any delivery.
+ * any delivery. While core cannot reach the fleet's company key
+ * (KEY_UNAVAILABLE), nothing was claimed: it waits longer each time and goes
+ * on once the key is back, never taking the proxy ship's crew as ended.
  */
 export function createRunParty<P extends TakingParty = McpServerParty>(deps: {
   crew: Pick<ProxyShipCrew, 'pushReceive'>;
@@ -47,6 +52,7 @@ export function createRunParty<P extends TakingParty = McpServerParty>(deps: {
     const max = party.concurrencyLimit;
     const inFlight = new Map<DeliveryId, Promise<void>>();
     const agains = new Map<DeliveryId, number>();
+    let keyUnavailableInARow = 0;
 
     const hand = async (deliveryId: DeliveryId, handOnce: () => Promise<HandOutcome>): Promise<void> => {
       let outcome: HandOutcome;
@@ -88,10 +94,12 @@ export function createRunParty<P extends TakingParty = McpServerParty>(deps: {
         await Promise.all(inFlight.values());
         return { ended: 'crewRefused' };
       }
+      keyUnavailableInARow = !received.isOk && received.error.code === KEY_UNAVAILABLE ? keyUnavailableInARow + 1 : 0;
       const fresh = received.isOk ? received.value.filter((delivery) => !inFlight.has(delivery.deliveryId)).slice(0, max - inFlight.size) : [];
       fresh.forEach(start);
       if (fresh.length === 0) {
-        await Promise.race([deps.sleep(deps.pollMs, signal), ...inFlight.values()]);
+        const waitMs = keyUnavailableInARow === 0 ? deps.pollMs : (deps.againWaitsMs[Math.min(keyUnavailableInARow, deps.againWaitsMs.length) - 1] ?? deps.pollMs);
+        await Promise.race([deps.sleep(waitMs, signal), ...inFlight.values()]);
       }
     }
     await Promise.all(inFlight.values());

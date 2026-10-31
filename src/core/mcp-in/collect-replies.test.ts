@@ -156,7 +156,7 @@ describe("the gateway waits while a sealed fleet's company key is not reachable 
     fleet.state.refusal = { code: 'KEY_UNAVAILABLE', message: "The fleet's company key is not reachable: access denied" };
 
     await expect(collect()).resolves.toEqual({ ended: 'stopped' });
-    expect({ waits: slept, reply: (await calls.findByMessage(FLEET_ID, MESSAGE_ID))?.replies }).toEqual({ waits: [1000, 5000, 30000, 30000, 30000, 30000], reply: [] });
+    expect({ waits: slept, reply: (await calls.findByMessage(FLEET_ID, MESSAGE_ID))?.replies }).toEqual({ waits: [2000, 1000, 5000, 30000, 30000, 30000], reply: [] });
   });
 });
 
