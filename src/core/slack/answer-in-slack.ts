@@ -1,5 +1,6 @@
 import { ANSWER_CONTENT_TYPE, questionSchema, type MessageId } from '@aeolus-fleet/common';
 
+import { KEY_UNAVAILABLE, SEALED_MESSAGE } from '../people/person-crew.js';
 import type { PersonCrews, PersonShipDoor } from '../people/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
@@ -58,6 +59,10 @@ export function createAnswerInSlack(deps: {
       await deps.door.ack(crew.crewToken, post.deliveryId);
     }
     const delivery = await deps.door.delivery(crew.crewToken, post.deliveryId);
+    if (!delivery.isOk && delivery.error.code === KEY_UNAVAILABLE) {
+      await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: SEALED_MESSAGE });
+      return ok({ kind: 'refused' });
+    }
     const questionId = delivery.isOk ? questionIdOf(delivery.value.payload) : undefined;
     if (!delivery.isOk || questionId === undefined) {
       return ok({ kind: 'ignored' });
