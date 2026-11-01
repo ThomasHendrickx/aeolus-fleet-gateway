@@ -61,6 +61,12 @@ describe('the email channel, through pagasae (wake a person, W2)', () => {
     ]);
   });
 
+  it('asks pagasae for a wake for argo saying it waits at argo, with its own key', async () => {
+    await channel().wake(SHIP, { key: 'argo:email:first', waitsAt: 'argo' });
+
+    expect(received.map(({ body }) => body)).toEqual([{ fleetId: SHIP.fleetId, shipId: SHIP.shipId, key: 'argo:email:first', waitsAt: 'argo' }]);
+  });
+
   it('says the wake did not go out when pagasae refuses it', async () => {
     answer = { status: 404, body: '{"error":"unknown_person_ship"}' };
 
