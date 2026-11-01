@@ -81,6 +81,20 @@ describe('the deliveries people opened, in Postgres', () => {
     await expect(opened.find(FLEET, { shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0rep' })).resolves.toEqual(replacement);
   });
 
+  it('keeps the step a step replacement asks and the one it replaces, so a stale step is known once the replacement is opened (Bridge, CC14)', async () => {
+    const opened = createPrismaOpenedDeliveries(prisma);
+    const replacement = anOpenedDelivery({
+      deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0rps',
+      contentType: 'application/vnd.aeolus.step-replacement+json',
+      askedQuestionId: null,
+      stepId: '7a2d3b51-6e2c-4c9f-8b62-1d9f4a3b8e21',
+      withdrawnStepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10',
+    });
+    await opened.save(replacement);
+
+    await expect(opened.find(FLEET, { shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0rps' })).resolves.toEqual(replacement);
+  });
+
   it('keeps the uuid of the step a step asks, so its outcome names it once the step is acknowledged (Bridge, CC14)', async () => {
     const opened = createPrismaOpenedDeliveries(prisma);
     const step = anOpenedDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0stp', contentType: 'application/vnd.aeolus.step+json', askedQuestionId: null, stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10' });
