@@ -1,0 +1,360 @@
+{
+  "question-posted": {
+    "channel": "D1",
+    "attachments": [
+      {
+        "color": "#4a6fa5",
+        "fallback": "Question from orchestrator-1: Which goes first: the Compact look (U4) or Harbour?",
+        "blocks": [
+          {
+            "type": "context",
+            "block_id": "from:orchestrator-1",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "Question from orchestrator-1 · Decide"
+              }
+            ]
+          },
+          {
+            "type": "section",
+            "block_id": "title",
+            "text": {
+              "type": "mrkdwn",
+              "text": "*Which goes first: the Compact look (U4) or Harbour?*"
+            }
+          },
+          {
+            "type": "section",
+            "block_id": "body",
+            "text": {
+              "type": "mrkdwn",
+              "text": "Both are approved and touch the same parts in @aeolus-fleet/ui. Building them in one order saves a rebase of every tile; the other order shows Harbour a week sooner."
+            }
+          },
+          {
+            "type": "context",
+            "block_id": "aside",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "orchestrator-1 picks 1: Harbour is drawn on Compact already."
+              }
+            ]
+          },
+          {
+            "type": "actions",
+            "block_id": "msg_q",
+            "elements": [
+              {
+                "type": "button",
+                "action_id": "answer-1",
+                "text": {
+                  "type": "plain_text",
+                  "text": "1. Compact first"
+                },
+                "value": "1",
+                "style": "primary"
+              },
+              {
+                "type": "button",
+                "action_id": "answer-2",
+                "text": {
+                  "type": "plain_text",
+                  "text": "2. Harbour first"
+                },
+                "value": "2"
+              },
+              {
+                "type": "button",
+                "action_id": "answer-3",
+                "text": {
+                  "type": "plain_text",
+                  "text": "3. Both in one PR"
+                },
+                "value": "3"
+              }
+            ]
+          },
+          {
+            "type": "context",
+            "block_id": "footer",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "<https://gateway.aeolus-fleet.dev/bridge|Open in Bridge> · reply in the thread to add a note"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "question-edited": {
+    "channel": "D1",
+    "ts": "1.1",
+    "text": "",
+    "blocks": [],
+    "attachments": [
+      {
+        "color": "#2eb67d",
+        "fallback": "Question from orchestrator-1: Which goes first: the Compact look (U4) or Harbour?",
+        "blocks": [
+          {
+            "type": "context",
+            "block_id": "from:orchestrator-1",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "Question from orchestrator-1 · Decide"
+              }
+            ]
+          },
+          {
+            "type": "section",
+            "block_id": "title",
+            "text": {
+              "type": "mrkdwn",
+              "text": "*Which goes first: the Compact look (U4) or Harbour?*"
+            }
+          },
+          {
+            "type": "section",
+            "block_id": "body",
+            "text": {
+              "type": "mrkdwn",
+              "text": "✅ You answered at <!date^1793476680^{time}|19:58 UTC>: *2. Harbour first*, sent to orchestrator-1"
+            }
+          },
+          {
+            "type": "context",
+            "block_id": "footer",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "Bridge and the chat show it answered in Slack · <https://gateway.aeolus-fleet.dev/bridge|Open in Bridge>"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "alert-posted": {
+    "channel": "D1",
+    "attachments": [
+      {
+        "color": "#9a9b9e",
+        "fallback": "Alert from watch: builder-gateway: no report change for 2 h",
+        "blocks": [
+          {
+            "type": "context",
+            "block_id": "from:watch",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "Alert from watch · Stay aware"
+              }
+            ]
+          },
+          {
+            "type": "section",
+            "block_id": "title",
+            "text": {
+              "type": "mrkdwn",
+              "text": "*builder-gateway: no report change for 2 h*"
+            }
+          },
+          {
+            "type": "actions",
+            "block_id": "msg_a",
+            "elements": [
+              {
+                "type": "button",
+                "action_id": "seen",
+                "text": {
+                  "type": "plain_text",
+                  "text": "Seen"
+                },
+                "value": "seen"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "alert-edited": {
+    "channel": "D1",
+    "ts": "1.1",
+    "text": "",
+    "blocks": [],
+    "attachments": [
+      {
+        "color": "#2eb67d",
+        "fallback": "Alert from watch: builder-gateway: no report change for 2 h",
+        "blocks": [
+          {
+            "type": "context",
+            "block_id": "from:watch",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "Alert from watch · Stay aware"
+              }
+            ]
+          },
+          {
+            "type": "section",
+            "block_id": "title",
+            "text": {
+              "type": "mrkdwn",
+              "text": "*builder-gateway: no report change for 2 h*"
+            }
+          },
+          {
+            "type": "section",
+            "block_id": "body",
+            "text": {
+              "type": "mrkdwn",
+              "text": "✅ Seen at <!date^1793476860^{time}|20:01 UTC>"
+            }
+          },
+          {
+            "type": "context",
+            "block_id": "footer",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "Seen in Bridge · <https://gateway.aeolus-fleet.dev/bridge|Open in Bridge>"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "step-posted": {
+    "channel": "D1",
+    "attachments": [
+      {
+        "color": "#4a6fa5",
+        "fallback": "Step from orchestrator-1: Create the GitHub repository aeolus-fleet-memory-plugin",
+        "blocks": [
+          {
+            "type": "context",
+            "block_id": "from:orchestrator-1",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "Step from orchestrator-1 · Do"
+              }
+            ]
+          },
+          {
+            "type": "section",
+            "block_id": "title",
+            "text": {
+              "type": "mrkdwn",
+              "text": "*Create the GitHub repository aeolus-fleet-memory-plugin*"
+            }
+          },
+          {
+            "type": "section",
+            "block_id": "body",
+            "text": {
+              "type": "mrkdwn",
+              "text": "The memory plugin needs its own repository; only you can create it under your account."
+            }
+          },
+          {
+            "type": "actions",
+            "block_id": "msg_s",
+            "elements": [
+              {
+                "type": "button",
+                "action_id": "open",
+                "text": {
+                  "type": "plain_text",
+                  "text": "Open github.com"
+                },
+                "url": "https://github.com/new",
+                "value": "open",
+                "style": "primary"
+              },
+              {
+                "type": "button",
+                "action_id": "done",
+                "text": {
+                  "type": "plain_text",
+                  "text": "Done"
+                },
+                "value": "done"
+              }
+            ]
+          },
+          {
+            "type": "context",
+            "block_id": "footer",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "<https://gateway.aeolus-fleet.dev/bridge|Open in Bridge>"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "step-edited": {
+    "channel": "D1",
+    "ts": "1.1",
+    "text": "",
+    "blocks": [],
+    "attachments": [
+      {
+        "color": "#2eb67d",
+        "fallback": "Step from orchestrator-1: Create the GitHub repository aeolus-fleet-memory-plugin",
+        "blocks": [
+          {
+            "type": "context",
+            "block_id": "from:orchestrator-1",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "Step from orchestrator-1 · Do"
+              }
+            ]
+          },
+          {
+            "type": "section",
+            "block_id": "title",
+            "text": {
+              "type": "mrkdwn",
+              "text": "*Create the GitHub repository aeolus-fleet-memory-plugin*"
+            }
+          },
+          {
+            "type": "section",
+            "block_id": "body",
+            "text": {
+              "type": "mrkdwn",
+              "text": "✅ Done at <!date^1793477100^{time}|20:05 UTC>, sent to orchestrator-1"
+            }
+          },
+          {
+            "type": "context",
+            "block_id": "footer",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "Bridge and the chat show it done in Slack · <https://gateway.aeolus-fleet.dev/bridge|Open in Bridge>"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
