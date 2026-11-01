@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import { createReadInbox } from './read-inbox.js';
+import { ITEM_JOBS, routingDefaultsOf, type Route } from './routing.js';
 
 // A person reads their own person ship's inbox from their MCP client, which
 // holds no crew token: the gateway crews the ship for them (decisions 0054,
@@ -18,9 +19,16 @@ beforeEach(() => {
   opened = memoryOpenedDeliveries();
 });
 
-function readInbox(deliveries: PersonDelivery[], crewToken = 'aeolus_ct_v1_charlotte') {
+/** A chat on for every job, as the gateway's defaults have it (Bridge, CC19). */
+const CHAT_ON = routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' as const })));
+
+function readInbox(deliveries: PersonDelivery[], crewToken = 'aeolus_ct_v1_charlotte', routes: Route[] = []) {
   const ship = fakePersonShipDoor({ crewToken, deliveries });
-  return { ...ship, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened }) };
+  return { ...ship, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, routes: memoryRoutes(routes), defaults: CHAT_ON }) };
+}
+
+function aChatRoute(overrides: Partial<Route>): Route {
+  return { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, job: 'decide', place: 'chat', isOn: false, changedAt: new Date('2026-10-19T09:00:00.000Z'), ...overrides };
 }
 
 /** The issue tracker's note, as Charlotte opened it from one of her clients. */
@@ -139,5 +147,29 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
 
   it('says the fleet did not answer when it refuses the person ship even crewed again', async () => {
     await expect(readInbox([], 'aeolus_ct_v1_other').readInbox(CHARLOTTE_GRANT)).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
+  });
+});
+
+describe('a chat lists only the jobs on for it (Bridge, section 8)', () => {
+  const PLAIN = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', contentType: 'text/plain', payload: 'Release 1.4 is out', headline: null, askedQuestionId: null });
+
+  it('leaves out what waits of a job a chat is off for, counting only what it lists', async () => {
+    const read = await readInbox([aPersonDelivery(), PLAIN], undefined, [aChatRoute({ job: 'decide' })]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk && { waiting: read.value.waiting, listed: read.value.deliveries.map(({ deliveryId }) => deliveryId) }).toEqual({ waiting: 1, listed: [PLAIN.deliveryId] });
+  });
+
+  it('leaves out what was opened of a job a chat is off for', async () => {
+    await opened.save(OPENED);
+
+    const read = await readInbox([], undefined, [aChatRoute({ job: 'everything-else' })]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk && read.value.opened).toEqual([]);
+  });
+
+  it('lists every item of a job not done once a chat is turned on for it, whenever it arrived (CC20)', async () => {
+    const read = await readInbox([aPersonDelivery()], undefined, [aChatRoute({ job: 'decide', isOn: true })]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk && read.value.deliveries.map(({ deliveryId }) => deliveryId)).toEqual([aPersonDelivery().deliveryId]);
   });
 });
