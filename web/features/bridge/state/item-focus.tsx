@@ -59,18 +59,18 @@ export interface ItemOpening {
  * any ship one (aeolus-fleet #1547). The open item shows beside its list on
  * a desktop, and on its own screen on a phone (aeolus-fleet#1538).
  */
-export function ItemFocus({ fleetId, decidePlaces, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; children: (opening: ItemOpening) => ReactNode }) {
+export function ItemFocus({ fleetId, decidePlaces, consoleUrl, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; /** The fleet's console, where an opened alert's ship shows its Health. */ consoleUrl?: string; children: (opening: ItemOpening) => ReactNode }) {
   return (
     <SendMessageProvider fleetId={fleetId}>
       <Toast.Provider>
-        <FocusedItems fleetId={fleetId} decidePlaces={decidePlaces}>{children}</FocusedItems>
+        <FocusedItems fleetId={fleetId} decidePlaces={decidePlaces} consoleUrl={consoleUrl}>{children}</FocusedItems>
         <BasketToasts />
       </Toast.Provider>
     </SendMessageProvider>
   );
 }
 
-function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; children: (opening: ItemOpening) => ReactNode }) {
+function FocusedItems({ fleetId, decidePlaces, consoleUrl, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; consoleUrl?: string; children: (opening: ItemOpening) => ReactNode }) {
   const toasts = Toast.useToastManager();
   const sendMessage = useSendMessage();
   const [focus, setFocus] = useState<{ delivery: FocusedDelivery; opened: Opened; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
@@ -151,6 +151,7 @@ function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; de
         delivery={delivery}
         opened={opened}
         meetingHref={delivery.meetingId === undefined ? undefined : meetingPathOf({ fleetId, meetingId: delivery.meetingId })}
+        consoleUrl={consoleUrl}
         basketHref={inFleet(BRIDGE_BASKET_PATH, fleetId)}
         inBasket={inBasket}
         finished={finished}
