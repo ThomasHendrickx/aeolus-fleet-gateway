@@ -23,7 +23,7 @@ const QUESTION = {
 };
 
 function aQuestion(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
-  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, step: undefined, meetingId: undefined, stale: null, ...overrides };
+  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, step: undefined, alert: undefined, meetingId: undefined, stale: null, ...overrides };
 }
 
 /** How an item was opened: its job, whether an alert, and whether it was new; a step's, a question's or an alert's by default. */
@@ -43,6 +43,7 @@ function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number 
       opened,
       timeZone: 'UTC',
       meetingHref: undefined,
+      consoleUrl: 'https://fleet.aeolus-fleet.dev',
       basketHref: '/bridge/basket?fleet=flt_01',
       inBasket,
       finished,
@@ -250,7 +251,7 @@ describe('a step opened in Bridge (CC14)', () => {
   const STEP = { title: 'Create the GitHub repository aeolus-fleet-memory-plugin', why: 'No ship can create a repository under your account.', link: { href: 'https://github.com/new', address: 'github.com/new', isOutside: true } };
 
   function aStep(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
-    return { deliveryId: 'dlv_03', from: 'orchestrator-1', title: STEP.title, sentAt: '2026-10-31T20:00:00.000Z', payload: '{}', body: '{}', question: undefined, step: STEP, meetingId: undefined, stale: null, ...overrides };
+    return { deliveryId: 'dlv_03', from: 'orchestrator-1', title: STEP.title, sentAt: '2026-10-31T20:00:00.000Z', payload: '{}', body: '{}', question: undefined, step: STEP, alert: undefined, meetingId: undefined, stale: null, ...overrides };
   }
 
   it('shows why, and the link in its box: where it is done, its host and path, that it opens outside Aeolus, and Open, opened only by the person', () => {
@@ -376,7 +377,7 @@ describe('an opened item’s heading, text and screen (aeolus-fleet#1538)', () =
   const ALERT_BODY = 'Its last report, 17:46: *Working: slice W9, the waiter’s restart test.* You expect a report change within 45 min.';
 
   function anAlert(): FocusedDelivery {
-    return { deliveryId: 'dlv_05', from: 'watch', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-31T19:47:00.000Z', payload: '{}', body: ALERT_BODY, question: undefined, step: undefined, meetingId: undefined, stale: null };
+    return { deliveryId: 'dlv_05', from: 'watch', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-31T19:47:00.000Z', payload: '{}', body: ALERT_BODY, question: undefined, step: undefined, alert: undefined, meetingId: undefined, stale: null };
   }
 
   /** The heading line above the title, as text. */
@@ -453,6 +454,7 @@ describe('an alert opened in Bridge offers to send its ship a message (aeolus-fl
         opened: { job: 'stay-aware', isAlert: true, wasNew: true },
         timeZone: 'UTC',
         meetingHref: undefined,
+        consoleUrl: undefined,
         basketHref: '/bridge/basket?fleet=flt_01',
         inBasket: null,
         finished: null,
@@ -479,5 +481,26 @@ describe('an alert opened in Bridge offers to send its ship a message (aeolus-fl
 
   it('offers no such button for a notice, which is about no ship', () => {
     expect(renderSeen({ ...alert, alertShip: undefined }, () => undefined)).not.toContain('data-testid="bridge-send-alert-ship"');
+  });
+});
+
+describe('an alert or a notice opened in Bridge (stay-aware.html)', () => {
+  const ship = { id: 'shp_01m6bw3rg8n3xmqe91x19xm3y7', name: 'builder-gateway' };
+
+  it("shows an alert's ship as the alert left it, its Health in the console and what clears it", () => {
+    const markup = render(aQuestion({ from: 'watch', title: 'builder-gateway: no report change for 2 h', question: undefined, alert: { ship, signal: 'report-unchanged' } }));
+
+    expect({
+      tile: markup.includes('data-testid="bridge-alert-tile"'),
+      health: markup.includes('href="https://fleet.aeolus-fleet.dev/ships/shp_01m6bw3rg8n3xmqe91x19xm3y7"'),
+      clears: markup.includes('The alert clears when builder-gateway reports again'),
+      answer: markup.includes('data-testid="bridge-note"'),
+    }).toEqual({ tile: true, health: true, clears: true, answer: false });
+  });
+
+  it('shows a notice with no ship, Health or info line', () => {
+    const markup = render(aQuestion({ from: 'trierarch', title: 'trierarch plugin 0.35.1 released', question: undefined }), { opened: { job: 'stay-aware', isAlert: false, wasNew: true } });
+
+    expect({ tile: markup.includes('data-testid="bridge-alert-tile"'), health: markup.includes('Health'), clears: markup.includes('data-testid="bridge-alert-clears"') }).toEqual({ tile: false, health: false, clears: false });
   });
 });

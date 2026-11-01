@@ -9,6 +9,8 @@ import { clockTimeOf, fromWordsOf, jobWordOf, screenTitleOf, seenWordsOf, type H
 import { ActionButton } from './action-button';
 import { jobLookOf } from './job-looks';
 import { Markdown } from './markdown';
+import { healthHrefOf } from '../services/stay-aware';
+import { AlertShip } from './alert-ship';
 import { Notice } from './notice';
 import { StaleIcon } from './stale-icon';
 
@@ -324,6 +326,7 @@ export function DeliveryCard({
   opened,
   timeZone,
   meetingHref,
+  consoleUrl,
   basketHref,
   inBasket,
   finished,
@@ -348,6 +351,8 @@ export function DeliveryCard({
   timeZone?: string;
   /** The page of the meeting it belongs to, if it belongs to one. */
   meetingHref: string | undefined;
+  /** The fleet's console, where an alert's ship shows its Health; none when the fleet names no console. */
+  consoleUrl: string | undefined;
   /** Bridge's basket. */
   basketHref: string;
   /** The answer to the question in the basket, if any. */
@@ -381,6 +386,7 @@ export function DeliveryCard({
   const infoLines = question === undefined ? undefined : infoLinesOf({ chosen, pick: question.pick.option, inBasket, isStale: stale !== null });
   // Seeing an alert or a notice was all it asked, so it is done (CC16).
   const isDoneOnSeeing = opened.job === 'stay-aware';
+  const sendShip = delivery.alertShip !== undefined && onSendMessage !== undefined ? <SendShipButton ship={delivery.alertShip} onSendMessage={onSendMessage} /> : null;
   return (
     <section data-testid="bridge-delivery" className="grid min-w-0 content-start gap-3 text-card-foreground md:p-5">
       <ScreenBar opened={opened} isWorking={isWorking} onBack={onBack} />
@@ -410,7 +416,11 @@ export function DeliveryCard({
       )}
       {stale === null ? null : <StaleNotice stale={stale} from={delivery.from} isStep={step !== undefined} timeZone={timeZone} onOpen={onOpen} />}
       {inBasket === null || stale !== null ? null : <InBasketNotice inBasket={inBasket} basketHref={basketHref} isRemoving={working?.kind === 'remove'} isWorking={isWorking} onRemove={onRemove} />}
-      {isDoneOnSeeing && delivery.alertShip !== undefined && onSendMessage !== undefined ? <SendShipButton ship={delivery.alertShip} onSendMessage={onSendMessage} /> : null}
+      {isDoneOnSeeing && delivery.alert !== undefined ? (
+        <AlertShip alert={delivery.alert} healthHref={consoleUrl === undefined ? undefined : healthHrefOf({ consoleUrl, shipId: delivery.alert.ship.id })} send={sendShip} />
+      ) : isDoneOnSeeing ? (
+        sendShip
+      ) : null}
       {isDoneOnSeeing ? null : stale !== null ? null : step !== undefined ? (
         finished === null ? <StepControls from={delivery.from} note={note} working={working} failure={failure} onNoteChange={onNoteChange} onFinish={onFinishStep} /> : <StepOutcomeNotice from={delivery.from} finished={finished} timeZone={timeZone} />
       ) : question === undefined ? (
