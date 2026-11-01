@@ -6,8 +6,9 @@ import type { FocusedDelivery } from '../services/deliveries';
 import { DeliveryCard } from './delivery-card';
 
 // A question opened in Bridge (CC11): the asker's pick preselected, one
-// button naming what it sends; one its asker withdrew or replaced is stale,
-// with nothing to send, a replaced one linked to its replacement.
+// button putting it in the basket (CC24), naming the option; one its asker
+// withdrew or replaced is stale, with nothing to send, a replaced one linked
+// to its replacement. One in the basket says so (section 9, rule 1).
 
 const QUESTION = {
   id: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e',
@@ -24,34 +25,64 @@ function aQuestion(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, meetingId: undefined, stale: null, ...overrides };
 }
 
-function render(delivery: FocusedDelivery): string {
+function render(delivery: FocusedDelivery, inBasket: { option: number; note: string | null } | null = null): string {
   const noop = () => undefined;
   return renderToStaticMarkup(
-    createElement(DeliveryCard, { delivery, isDoneOnSeeing: false, meetingHref: undefined, note: '', working: undefined, failure: undefined, onNoteChange: noop, onAnswer: noop, onDone: noop, onOpen: noop, onBack: noop }),
+    createElement(DeliveryCard, {
+      delivery,
+      isDoneOnSeeing: false,
+      meetingHref: undefined,
+      basketHref: '/bridge/basket?fleet=flt_01',
+      inBasket,
+      note: '',
+      working: undefined,
+      failure: undefined,
+      onNoteChange: noop,
+      onAnswer: noop,
+      onPut: noop,
+      onRemove: noop,
+      onDone: noop,
+      onOpen: noop,
+      onBack: noop,
+    }),
   );
 }
 
 describe('a question opened in Bridge (CC11)', () => {
-  it("opens with the asker's pick preselected, and one button naming the option it sends", () => {
+  it("opens with the asker's pick preselected, and one button putting that option in the basket, sending nothing (CC24)", () => {
     const markup = render(aQuestion());
 
     expect({
       choices: (markup.match(/type="radio"/g) ?? []).length,
       picked: markup.includes('checked="" value="2"') && !markup.includes('checked="" value="1"'),
       theirPick: markup.includes('Their pick'),
-      send: markup.includes('>Send option 2<'),
-    }).toEqual({ choices: 2, picked: true, theirPick: true, send: true });
+      put: markup.includes('>Put option 2 in the basket<'),
+      said: markup.includes('Nothing is sent yet. orchestrator-1 receives this answer when you send the basket.'),
+      sendsAtOnce: markup.includes('Send option') || markup.includes('Send the note alone'),
+    }).toEqual({ choices: 2, picked: true, theirPick: true, put: true, said: true, sendsAtOnce: false });
+  });
+
+  it('says a question whose answer is in the basket is in it, not sent, with its note, its option picked, the basket and Remove beside it', () => {
+    const markup = render(aQuestion(), { option: 1, note: 'U4 first, then Harbour.' });
+
+    expect({
+      inBasket: markup.includes('In the basket: option 1, not sent'),
+      note: markup.includes('“U4 first, then Harbour.”'),
+      picked: markup.includes('checked="" value="1"'),
+      basket: markup.includes('href="/bridge/basket?fleet=flt_01"'),
+      remove: markup.includes('data-testid="bridge-basket-remove"'),
+    }).toEqual({ inBasket: true, note: true, picked: true, basket: true, remove: true });
   });
 
   it('shows a withdrawn question stale: nothing to choose or send', () => {
     const markup = render(aQuestion({ stale: { kind: 'withdrawn', replacementId: null } }));
 
-    expect({ stale: markup.includes('Withdrawn by orchestrator-1. Nothing to answer: it is done.'), send: markup.includes('Send option'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, send: false, note: false });
+    expect({ stale: markup.includes('Withdrawn by orchestrator-1. Nothing to answer: it is done.'), send: markup.includes('in the basket'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, send: false, note: false });
   });
 
   it('links a replaced question to its replacement', () => {
     const markup = render(aQuestion({ stale: { kind: 'replaced', replacementId: 'dlv_02' } }));
 
-    expect({ stale: markup.includes('Replaced by orchestrator-1. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('Send option') }).toEqual({ stale: true, link: true, send: false });
+    expect({ stale: markup.includes('Replaced by orchestrator-1. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('in the basket') }).toEqual({ stale: true, link: true, send: false });
   });
 });
