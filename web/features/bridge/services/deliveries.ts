@@ -30,6 +30,8 @@ export interface FocusedDelivery {
   readonly meetingId: string | undefined;
   /** Whether its asker withdrew or replaced the question or step it asks, with the replacement, a new item. */
   readonly stale: Stale | null;
+  /** The ship an alert is about, by name, for the person to send it a message (aeolus-fleet #1547). */
+  readonly alertShip?: string | undefined;
 }
 
 /** A question or step its asker withdrew or replaced (decision 0038, CC14), as the API says it: when, and the replacement with its title. */

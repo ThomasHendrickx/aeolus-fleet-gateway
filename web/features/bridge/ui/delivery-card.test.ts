@@ -236,3 +236,41 @@ describe('a step opened in Bridge (CC14)', () => {
     expect({ stale: markup.includes('Replaced by orchestrator-1 at 21:11 UTC with “Sign in to attio with the team account”. Do the new step.'), icon: markup.includes('aria-label="Replaced"'), link: markup.includes('Open the new step'), done: markup.includes('data-testid="bridge-step-done"') }).toEqual({ stale: true, icon: true, link: true, done: false });
   });
 });
+
+describe('an alert opened in Bridge offers to send its ship a message (aeolus-fleet #1547)', () => {
+  const alert = aQuestion({ from: 'watch', title: 'builder-gateway: no report change for 2 h', question: undefined, body: 'Its last report, 17:46.', alertShip: 'builder-gateway' });
+
+  function renderSeen(delivery: FocusedDelivery, onSendMessage: ((ship: string) => void) | undefined): string {
+    const noop = () => undefined;
+    return renderToStaticMarkup(
+      createElement(DeliveryCard, {
+        delivery,
+        isDoneOnSeeing: true,
+        meetingHref: undefined,
+        basketHref: '/bridge/basket?fleet=flt_01',
+        inBasket: null,
+        finished: null,
+        note: '',
+        working: undefined,
+        failure: undefined,
+        onNoteChange: noop,
+        onAnswer: noop,
+        onPut: noop,
+        onRemove: noop,
+        onDone: noop,
+        onFinishStep: noop,
+        onOpen: noop,
+        onSendMessage,
+        onBack: noop,
+      }),
+    );
+  }
+
+  it("names the alert's ship on the button", () => {
+    expect(renderSeen(alert, () => undefined)).toContain('Send builder-gateway a message');
+  });
+
+  it('offers no such button for a notice, which is about no ship', () => {
+    expect(renderSeen({ ...alert, alertShip: undefined }, () => undefined)).not.toContain('data-testid="bridge-send-alert-ship"');
+  });
+});
