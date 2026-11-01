@@ -1,4 +1,5 @@
 import { ANSWER_CONTENT_TYPE, questionSchema, type FleetId } from '@aeolus-fleet/common';
+import type { z } from 'zod';
 
 import type { ItemOutcomes } from '../people/item-outcome.js';
 import { alreadyTextOf } from '../people/opened-of.js';
@@ -7,7 +8,7 @@ import { KEY_UNAVAILABLE, SEALED_MESSAGE } from '../people/person-crew.js';
 import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from '../people/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { ok, type Result } from '../shared/result.js';
-import { editedPostOf } from './edited-post-of.js';
+import { editedPostOf, fullOptionTextOf } from './edited-post-of.js';
 import type { SlackApps, SlackLinks, SlackMessage, SlackMessages, SlackPosts, SlackSignatures } from './ports.js';
 import { notSentPostOf, sendingPostOf, type ItemPost } from './pressed-post-of.js';
 import { slackPostOf } from './slack-post-of.js';
@@ -15,11 +16,11 @@ import { pressedOf, type SlackPress } from './slack-press.js';
 
 export type AnswerInSlack = (press: SlackPress & { option: number }) => Promise<Result<{ kind: 'answered' | 'answeredElsewhere' | 'refused' | 'ignored' }, { kind: 'notSigned' }>>;
 
-/** The question's id in a delivery's payload; none when it is no question. */
-function questionIdOf(payload: string): string | undefined {
+/** The question in a delivery's payload; none when it is no question. */
+function questionOf(payload: string): z.infer<typeof questionSchema> | undefined {
   try {
     const parsed: unknown = JSON.parse(payload);
-    return questionSchema.safeParse(parsed).data?.id;
+    return questionSchema.safeParse(parsed).data;
   } catch {
     return undefined;
   }
@@ -33,8 +34,9 @@ function questionIdOf(payload: string): string | undefined {
  * keyed as an answer on the gateway's page is; then the delivery is handled
  * and kept answered in Slack (Bridge, CC4). The post shows it as it goes
  * (aeolus-fleet#1573): the option it sends and to whom, its buttons gone;
- * then the answer as views.html draws it; or, when core refused it, why,
- * its buttons back to press again. Slack refusing an edit leaves the post
+ * then the answer as views.html draws it, the option named in full; or,
+ * when core refused it or could not read the question, why, its buttons
+ * back to press again. Slack refusing an edit leaves the post
  * as it is: view sync edits it once the answer is kept. The press names the
  * question's fleet message, as its button carries it, so a press that comes
  * before the gateway kept the post's Slack message is answered too. The
@@ -55,7 +57,7 @@ export function createAnswerInSlack(deps: {
   outcomes: ItemOutcomes;
   opened: Pick<OpenedDeliveries, 'remove'>;
   changes: InboxChanges;
-  slack: Pick<SlackMessages, 'update' | 'postInThread'>;
+  slack: Pick<SlackMessages, 'update' | 'postInThread' | 'messageOf'>;
   signatures: SlackSignatures;
   clock: Clock;
   bridgeUrlOf: (fleetId: FleetId) => string;
@@ -75,34 +77,45 @@ export function createAnswerInSlack(deps: {
       await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: alreadyTextOf(earlier) });
       return ok({ kind: 'answeredElsewhere' });
     }
-    // The press, the person's own act, acknowledges it (Bridge, CC6); core reads a delivery again only once acknowledged, so a refusal leaves it unread, and the press ignored.
+    // The press, the person's own act, acknowledges it (Bridge, CC6); core reads a delivery again only once acknowledged.
     await deps.door.ack(crew.crewToken, post.deliveryId);
     const delivery = await deps.door.delivery(crew.crewToken, post.deliveryId);
     if (!delivery.isOk && delivery.error.code === KEY_UNAVAILABLE) {
       await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: SEALED_MESSAGE });
       return ok({ kind: 'refused' });
     }
-    const questionId = delivery.isOk ? questionIdOf(delivery.value.payload) : undefined;
-    if (!delivery.isOk || questionId === undefined) {
-      return ok({ kind: 'ignored' });
-    }
-    const bridgeUrl = deps.bridgeUrlOf(app.fleetId);
-    const posted = slackPostOf(delivery.value, { bridgeUrl, isHeadedBySender: app.shipId === null });
-    // A question too long for Slack is posted as a link, with no item to show it on.
-    const shown: ItemPost | undefined = posted.item === null ? undefined : { ...posted, item: posted.item };
     const edit = async (message: SlackMessage | undefined): Promise<void> => {
       if (message !== undefined) {
         await deps.slack.update(app.bot.token, { channel, ts: messageTs, messageId: post.messageId, message });
       }
     };
-    await edit(shown && sendingPostOf(shown, option));
+    if (!delivery.isOk) {
+      // Nothing to rebuild the post from: it is read back from Slack, its buttons still there to press again.
+      const read = await deps.slack.messageOf(app.bot.token, { channel, ts: messageTs, threadTs: post.threadTs });
+      const { item } = read.isOk ? read.value : { item: null };
+      await edit(read.isOk && item !== null ? notSentPostOf({ ...read.value, item }, delivery.error.message) : undefined);
+      return ok({ kind: 'refused' });
+    }
+    const question = questionOf(delivery.value.payload);
+    const pressedOption = question?.options.find(({ key }) => key === option);
+    if (question === undefined || pressedOption === undefined) {
+      return ok({ kind: 'ignored' });
+    }
+    const questionId = question.id;
+    // Named in full: a button cuts a long label.
+    const optionText = fullOptionTextOf(pressedOption);
+    const bridgeUrl = deps.bridgeUrlOf(app.fleetId);
+    const posted = slackPostOf(delivery.value, { bridgeUrl, isHeadedBySender: app.shipId === null });
+    // A question too long for Slack is posted as a link, with no item to show it on.
+    const shown: ItemPost | undefined = posted.item === null ? undefined : { ...posted, item: posted.item };
+    await edit(shown && sendingPostOf(shown, optionText));
     const replied = await deps.door.reply(crew.crewToken, { to: post.senderShipId, inReplyTo: post.messageId, contentType: ANSWER_CONTENT_TYPE, payload: JSON.stringify({ questionId, option }), idempotencyKey: answerKeyOf({ questionId }) });
     if (!replied.isOk) {
       await edit(shown && notSentPostOf(shown, replied.error.message));
       return ok({ kind: 'refused' });
     }
     const at = deps.clock.now();
-    await edit(shown && editedPostOf(shown, { outcome: { place: 'slack', kind: 'answered', option, at }, bridgeUrl }));
+    await edit(shown && editedPostOf(shown, { outcome: { place: 'slack', kind: 'answered', option, at }, bridgeUrl, optionText }));
     const handled = await deps.door.handled(crew.crewToken, post.deliveryId);
     if (handled.isOk) {
       await deps.outcomes.save({ fleetId: app.fleetId, shipId: post.personShipId, deliveryId: post.deliveryId, place: 'slack', kind: 'answered', option, at });
