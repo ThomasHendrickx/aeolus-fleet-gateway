@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 
 import { FLEET_HEADER, idSchema, type FleetId } from '@aeolus-fleet/common';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
@@ -345,7 +345,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
 
   /** Sends as release-notes-s7 to charlotte, through the fleet. */
   async function releaseNotesSends(message: { contentType: string; payload: string; inReplyTo?: string }): Promise<string> {
-    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${releaseNotesCrew}` }, body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, idempotencyKey: `s9-${String(Date.now())}`, model: 'test-model', ...message }) });
+    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${releaseNotesCrew}` }, body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, idempotencyKey: `s9-${randomUUID()}`, model: 'test-model', ...message }) });
     expect(sent.status, await sent.clone().text()).toBe(200);
     return z.object({ messageId: z.string() }).parse(await sent.json()).messageId;
   }
@@ -428,6 +428,24 @@ describe('linking a Slack account (gateway scopes S7)', () => {
       { contentType: 'text/markdown', payload: 'Tag it today', inReplyTo: questionMessageId },
     ]));
     expect(answers).toHaveLength(2);
+  }, 120_000);
+
+  it('posts every question sent at once, each with its pick, one with options longer than a button shows among them (aeolus-fleet#1574)', async () => {
+    await releaseNotesReceives();
+    const posted = slack.posted.length;
+    const questionOf = (id: string, labels: readonly string[]) => JSON.stringify({ id, title: `Which, ${id.slice(0, 4)}?`, context: 'Asked at once', options: labels.map((label, at) => ({ key: at + 1, label, detail: '' })), pick: { option: 1, why: `the first, ${id.slice(0, 4)}` } });
+
+    await Promise.all([
+      releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: questionOf('a1b2c3d4-0000-4000-8000-000000000001', ['Now', 'Later']) }),
+      releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: questionOf('b1b2c3d4-0000-4000-8000-000000000002', ["Nothing changes there: the console's count stays as it is, and argo sees the same count", 'Count again']) }),
+      releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: questionOf('c1b2c3d4-0000-4000-8000-000000000003', ['Yes', 'No']) }),
+    ]);
+
+    const asideOf = ({ form }: { form: Record<string, string> }) => {
+      const [attachment] = z.array(z.object({ blocks: z.array(z.object({ block_id: z.string().optional(), elements: z.array(z.object({ text: z.unknown() })).optional() })) })).parse(JSON.parse(form.attachments ?? '[]'));
+      return z.object({ text: z.string() }).safeParse(attachment?.blocks.find(({ block_id: blockId }) => blockId === 'aside')?.elements?.[0]).data?.text;
+    };
+    await expect.poll(() => slack.posted.slice(posted).map(asideOf).sort(), { timeout: 30_000 }).toEqual(['release-notes-s7 picks 1: the first, a1b2', 'release-notes-s7 picks 1: the first, b1b2', 'release-notes-s7 picks 1: the first, c1b2']);
   }, 120_000);
 
   describe('view sync (Bridge B8)', () => {

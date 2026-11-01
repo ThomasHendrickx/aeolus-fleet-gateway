@@ -12,6 +12,21 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
+import { z } from 'zod';
+
+
+/** The most characters Slack takes in a button's text: one longer refuses the whole post. */
+const BUTTON_TEXT_MAX_LENGTH = 75;
+
+const buttonsSchema = z.array(z.object({ blocks: z.array(z.object({ elements: z.array(z.object({ text: z.unknown() })).optional() })).optional() }));
+
+/** Whether Slack takes every button of a post, in its blocks or its attachments' blocks. */
+function areButtonsShown(form: URLSearchParams): boolean {
+  const attachments = buttonsSchema.parse(JSON.parse(form.get('attachments') ?? '[]'));
+  const blocks = buttonsSchema.element.shape.blocks.unwrap().parse(JSON.parse(form.get('blocks') ?? '[]'));
+  const texts = [...blocks, ...attachments.flatMap((attachment) => attachment.blocks ?? [])].flatMap((block) => (block.elements ?? []).map(({ text }) => z.object({ text: z.string() }).safeParse(text).data?.text ?? ''));
+  return texts.every((text) => text.length <= BUTTON_TEXT_MAX_LENGTH);
+}
 
 /** The conversation a post to the channel goes into, as Slack answers it: a person's user id names their direct messages with the bot. */
 function conversationOf(channel: string): string {
@@ -234,6 +249,10 @@ export async function startFakeSlack(): Promise<FakeSlack> {
       case 'chat.postMessage': {
         if (!bearer.startsWith('xoxb-')) {
           answer(response, { body: { ok: false, error: 'invalid_auth' } });
+          return;
+        }
+        if (!areButtonsShown(form)) {
+          answer(response, { body: { ok: false, error: 'invalid_blocks' } });
           return;
         }
         posted.push({ botToken: bearer, form: Object.fromEntries(form) });
