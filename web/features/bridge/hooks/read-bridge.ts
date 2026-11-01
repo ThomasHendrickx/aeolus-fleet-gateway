@@ -17,8 +17,11 @@ import type { WakeChannels } from '../services/deliveries';
 import type { BasketView } from '../services/basket';
 import type { BridgeHome, RecordPage } from '../services/items';
 import type { ShownRequest } from '../services/requests';
-import { decidePlacesOf, type RoutedPlace, type RoutingView } from '../services/routing';
+import { decidePlacesOf, waitingByJobOf, type RoutedPlace, type RoutingView, type WaitingByJob } from '../services/routing';
 import { shellCountsOf, type ShellCounts } from '../services/shell';
+
+/** What waits of each job while Bridge home cannot be read: no count is said. */
+const NOTHING_KNOWN_WAITING: WaitingByJob = { decide: undefined, do: undefined, 'stay-aware': undefined, 'everything-else': undefined };
 
 /**
  * What Bridge read of the person ship: what it answered; none, for an account
@@ -39,6 +42,10 @@ export interface BridgeRoutingParts {
   readonly wakeChannels: WakeChannels | undefined;
   /** The person's Slack link (gateway scopes 9.6); none while the fleet's own bot is not in Slack. */
   readonly slackLink: SlackLink | null | undefined;
+  /** The chats connected through the gateway as the person ship, by name. */
+  readonly chats: readonly string[];
+  /** What already waits of each job, for the toast after a change; none known while Bridge home cannot be read. */
+  readonly waitingByJob: WaitingByJob;
 }
 
 /** Why Slack shows the person nothing now, as the gateway answers it: the fleet's own bot, by its name, was removed in Slack. */
@@ -137,8 +144,15 @@ export async function readBridgeSettings(api: GatewayApi): Promise<BridgeSetting
 }
 
 export async function readBridgeRouting(api: GatewayApi): Promise<BridgeRoutingParts> {
-  const [routing, wakeChannels, slackLink] = await Promise.all([unlessForbidden(api.people.routing.query()), unlessForbidden(api.people.wakeChannels.query()), unlessForbidden(api.slack.link.query())]);
-  return { routing, wakeChannels, slackLink };
+  const [routing, wakeChannels, slackLink, chats, home] = await Promise.all([
+    unlessForbidden(api.people.routing.query()),
+    unlessForbidden(api.people.wakeChannels.query()),
+    unlessForbidden(api.slack.link.query()),
+    unlessForbidden(api.people.chats.query()),
+    readBridgeHome(api),
+  ]);
+  const waitingByJob = home.kind === 'read' ? waitingByJobOf({ waiting: home.value.waiting.items, stayAware: home.value.stayAware.length }) : NOTHING_KNOWN_WAITING;
+  return { routing, wakeChannels, slackLink, chats: chats?.names ?? [], waitingByJob };
 }
 
 /** One request to decide, undefined once it no longer waits, and the queue beside it. */

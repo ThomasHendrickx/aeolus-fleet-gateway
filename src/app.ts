@@ -208,6 +208,7 @@ import type { ItemJob } from './core/people/item-job.js';
 import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/routing.js';
 import { createPrismaRoutes } from './adapters/prisma/routes.js';
 import { createReadWakeChannels } from './core/people/read-wake-channels.js';
+import { createReadChats } from './core/people/read-chats.js';
 import { createReadRouting } from './core/people/read-routing.js';
 import { createReadSlackDroppedOut } from './core/slack/read-slack-dropped-out.js';
 import { createTurnRoute } from './core/people/turn-route.js';
@@ -223,6 +224,7 @@ import { createEmailChannel } from './adapters/pagasae/email-channel.js';
 import { createPrismaWakesSent } from './adapters/prisma/wakes-sent.js';
 import { createPrismaFocusedPages } from './adapters/prisma/focused-pages.js';
 import { createPrismaWebPushSubscriptions } from './adapters/prisma/web-push-subscriptions.js';
+import { createPrismaConnectedChats } from './adapters/prisma/connected-chats.js';
 import { createWebPush } from './adapters/web-push/web-push.js';
 import { createWebPushChannel } from './core/people/web-push-channel.js';
 import { createTurnOffWebPush } from './core/people/turn-off-web-push.js';
@@ -827,6 +829,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
         subscriptions: webPushSubscriptions,
         webPushKey: options.webPush?.publicKey ?? null,
       }),
+      readChats: createReadChats({ crewPersonShip: asCrew.crewPersonShip, chats: createPrismaConnectedChats(prisma), clock }),
       readRouting: createReadRouting({ crewPersonShip: asCrew.crewPersonShip, routes, defaults: routingDefaults, ...placesOffered }),
       turnRoute: createTurnRoute({ crewPersonShip: asCrew.crewPersonShip, routes, defaults: routingDefaults, ...placesOffered, clock }),
       turnOnWebPush: createTurnOnWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions, resolver: systemHostResolver, isWebPushOffered: options.webPush !== undefined, clock }),
