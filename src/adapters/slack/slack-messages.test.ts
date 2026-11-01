@@ -71,6 +71,16 @@ describe("a bot's message only one person sees", () => {
     });
   });
 
+  it('posts a Seen button under an item with no other, naming its fleet message', async () => {
+    await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'U0MATHILDE', threadTs: null, text: 'Release 0.36 is out', buttons: [{ text: 'Seen', seen: true }] });
+
+    const blocks: unknown = JSON.parse(slack.posted[0]?.form.blocks ?? 'null');
+    expect(blocks).toEqual([
+      { type: 'section', text: { type: 'mrkdwn', text: 'Release 0.36 is out' } },
+      { type: 'actions', block_id: 'msg_01m3tbfspe96yf1rnr4ank0002', elements: [{ type: 'button', action_id: 'seen', text: { type: 'plain_text', text: 'Seen' }, value: 'seen' }] },
+    ]);
+  });
+
   it('posts text alone in a thread', async () => {
     await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A02', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', channel: 'C0LAUNCH', threadTs: '1730019600.000100', text: 'Friday', buttons: [] });
 
