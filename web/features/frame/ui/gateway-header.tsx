@@ -1,26 +1,11 @@
 'use client';
 
 import type { Theme } from '@aeolus-fleet/common';
-import { AppHeader, AppSwitcher, AvatarMenuSheet, type AppSwitcherModel, type AvatarMenuProps } from '@aeolus-fleet/common/header';
+import { AppHeader, AppSwitcher, AvatarMenuSheet, type AppSwitcherModel } from '@aeolus-fleet/common/header';
 import { useSearchParams } from 'next/navigation';
-import { useRef, useState } from 'react';
 
-import { setTheme } from '../actions';
-import { THEMES } from '../theme';
+import { useAccountMenu } from '../hooks/use-account-menu';
 import { GatewayTabs } from './gateway-tabs';
-
-/** Where the avatar menu's Help leads, as in the console. */
-const HELP_URL = 'https://github.com/ThomasHendrickx/aeolus-fleet';
-
-/** The gateway's server ends the shared sign-in here, in every app at once, for a form sent from its own pages. */
-const SIGN_OUT_PATH = '/sign-in/end';
-
-/** Applies a theme at once, as the root layout's script does on the next load. */
-function applyTheme(theme: Theme): void {
-  document.documentElement.dataset.theme = theme;
-  const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  document.documentElement.classList.toggle('dark', isDark);
-}
 
 interface GatewayHeaderProps {
   /** One per fleet the account may open, with it in view; the address picks one. */
@@ -43,33 +28,10 @@ interface GatewayHeaderProps {
 export function GatewayHeader({ switchers, email, accountUrl, theme }: GatewayHeaderProps) {
   const requested = useSearchParams().get('fleet');
   const switcher = switchers.find(({ fleet }) => fleet.id === requested) ?? switchers[0];
-  const [shownTheme, setShownTheme] = useState(theme);
-  const [isSigningOut, setIsSigningOut] = useState(false);
-  const signOutForm = useRef<HTMLFormElement>(null);
-
-  const account: AvatarMenuProps = {
-    name: email,
-    signedInAs: 'account',
-    accountUrl,
-    theme: shownTheme,
-    themes: THEMES,
-    hasTheme: true,
-    onThemeChange: (next) => {
-      setShownTheme(next);
-      applyTheme(next);
-      void setTheme(next);
-    },
-    shortcuts: [],
-    helpUrl: HELP_URL,
-    onSignOut: () => {
-      setIsSigningOut(true);
-      signOutForm.current?.requestSubmit();
-    },
-    isSigningOut,
-  };
+  const { account, signOutForm } = useAccountMenu({ email, accountUrl, theme });
   return (
     <>
-      <form ref={signOutForm} method="post" action={SIGN_OUT_PATH} hidden />
+      {signOutForm}
       <AppHeader switcher={switcher} account={account} className="max-sm:hidden">
         {switcher === undefined ? null : <GatewayTabs fleetId={switcher.fleet.id} />}
       </AppHeader>
