@@ -12,6 +12,7 @@ import { useFocusReport } from '../hooks/use-focus-report';
 import { useLiveRefresh } from '../hooks/use-live-refresh';
 import { BRIDGE_ROUTING_PATH } from '../paths';
 import type { BridgeScreen } from '../services/shell';
+import { phoneAppEntries } from '../ui/phone-app-entries';
 import { BridgeTopBar } from '../ui/bridge-top-bar';
 import { OpenedItemProvider } from './opened-item';
 
@@ -43,12 +44,13 @@ export function SidebarPerson({ account: { email, accountUrl, theme }, fleetName
 }
 
 /** The phone's avatar: its sheet carries the settings the tab bar lacks (header design H6). */
-function PhoneAvatar({ fleetId, account: { email, accountUrl, theme } }: { fleetId: string; account: ShellAccount }) {
+function PhoneAvatar({ fleetId, switcher, account: { email, accountUrl, theme } }: { fleetId: string; switcher?: AppSwitcherModel; account: ShellAccount }) {
   const { account, signOutForm } = useAccountMenu({
     email,
     accountUrl,
     theme,
     entries: [
+      ...phoneAppEntries(switcher),
       { key: 'routing', label: 'Where things show', icon: <Route aria-hidden />, href: inFleet(BRIDGE_ROUTING_PATH, fleetId), isPhoneOnly: true },
       { key: 'outside-parties', label: 'Outside parties', icon: <Globe aria-hidden />, href: inFleet(OUTSIDE_PARTIES_PATH, fleetId), isPhoneOnly: true },
       ...(accountUrl === undefined ? [] : [{ key: 'fleets-and-account', label: 'Fleets and account', icon: <SlidersHorizontal aria-hidden />, href: accountUrl, isPhoneOnly: true }]),
@@ -75,7 +77,7 @@ export function ShellFrame({ fleetId, fleetName, screen, account, switcher, chil
     <OpenedItemProvider>
       {(opened) => (
         <>
-          <BridgeTopBar switcher={switcher} fleetId={fleetId} fleetName={fleetName} screen={screen} isLive={isLive} opened={opened} avatar={account === undefined ? null : <PhoneAvatar fleetId={fleetId} account={account} />} />
+          <BridgeTopBar fleetId={fleetId} fleetName={fleetName} screen={screen} isLive={isLive} opened={opened} avatar={account === undefined ? null : <PhoneAvatar fleetId={fleetId} switcher={switcher} account={account} />} />
           <main className="w-full max-w-5xl flex-1 px-4 py-5 sm:px-6">{children}</main>
         </>
       )}
