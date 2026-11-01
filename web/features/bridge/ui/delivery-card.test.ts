@@ -290,6 +290,20 @@ describe('an opened item’s heading, text and screen (aeolus-fleet#1538)', () =
     expect({ context: /<code[^>]*>@aeolus-fleet\/ui<\/code>/.test(question), why: /<code[^>]*>main<\/code>/.test(step) }).toEqual({ context: true, why: true });
   });
 
+  it('shows only the first paragraph of a question’s context and a step’s why on a phone, as the sheets draw them', () => {
+    const question = render(aQuestion({ question: { ...QUESTION, context: 'One.\n\nTwo.' } }));
+    const step = render(aQuestion({ question: undefined, step: { title: 'Create the repository', why: 'One.\n\nTwo.', link: undefined } }));
+    const firstOnly = /<div class="[^"]*max-md:\[&amp;_p\+p\]:hidden[^"]*"><div[^>]*><p[^>]*>One\.<\/p>/;
+
+    expect({ context: firstOnly.test(question), why: firstOnly.test(step) }).toEqual({ context: true, why: true });
+  });
+
+  it('shows a question’s options by their labels alone on a phone, their details from a desktop up', () => {
+    const detail = /<span class="([^"]*)">Harbour is built once\.<\/span>/.exec(render(aQuestion()))?.[1] ?? '';
+
+    expect(detail.split(' ')).toContain('max-md:hidden');
+  });
+
   it('is its own screen on a phone, titled by its job, back to the list by its chevron, and has no Back beside the list on a desktop', () => {
     const markup = render(aQuestion());
     const screenBar = /<div data-testid="bridge-item-screen-bar" class="([^"]*)"[^>]*>(.*?)<\/div>/.exec(markup);

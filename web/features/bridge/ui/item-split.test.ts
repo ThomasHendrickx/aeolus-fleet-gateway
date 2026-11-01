@@ -21,7 +21,7 @@ describe('the split of a list and its open item (aeolus-fleet#1538)', () => {
     const list = (/<div data-testid="bridge-split-list" class="([^"]*)"/.exec(markup)?.[1] ?? '').split(' ');
 
     expect({
-      beside: split.some((name) => name.startsWith('md:grid-cols-')),
+      beside: split.includes('md:grid-cols-[340px_minmax(0,1fr)]'),
       listOnPhone: list.includes('hidden') && list.includes('md:block'),
       order: markup.indexOf('id="the-list"') < markup.indexOf('id="the-item"'),
     }).toEqual({ beside: true, listOnPhone: true, order: true });

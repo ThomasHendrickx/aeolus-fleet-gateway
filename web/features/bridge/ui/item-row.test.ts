@@ -37,15 +37,15 @@ describe('the open item’s row, in the list beside it (decide.html, aeolus-flee
     );
   }
 
-  it('marks the open item, on the active tone with a bar at its side, as the current one', () => {
+  it('marks the open item, on the highlight with an inset bar in the primary colour, as the current one', () => {
     const row = /<li[^>]*>/.exec(render(true))?.[0] ?? '';
 
-    expect({ current: row.includes('aria-current="true"'), ground: row.includes('bg-tone-active-bg'), bar: row.includes('border-l-tone-active-fg') }).toEqual({ current: true, ground: true, bar: true });
+    expect({ current: row.includes('aria-current="true"'), ground: row.includes('bg-highlight'), bar: row.includes('shadow-[inset_2px_0_0_var(--primary)]') }).toEqual({ current: true, ground: true, bar: true });
   });
 
   it('marks no other row', () => {
     const row = /<li[^>]*>/.exec(render(false))?.[0] ?? '';
 
-    expect({ current: row.includes('aria-current'), ground: row.includes('bg-tone-active-bg') }).toEqual({ current: false, ground: false });
+    expect({ current: row.includes('aria-current'), ground: row.includes('bg-highlight') }).toEqual({ current: false, ground: false });
   });
 });
