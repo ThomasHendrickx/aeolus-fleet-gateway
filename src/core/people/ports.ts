@@ -81,6 +81,10 @@ export interface PersonDelivery {
   readonly payload: string;
   /** The headline of a question (its title), a step (its title), an alert or a notice, read at the edge; none for any other message. */
   readonly headline: string | null;
+  /** The uuid of the question it asks (decision 0038): a question's own, a replacement's new one; none for any other message. */
+  readonly askedQuestionId: string | null;
+  /** The uuid of the question it withdraws or replaces, from the same asker; none for any other message. */
+  readonly withdrawnQuestionId: string | null;
   readonly sentAt: Date;
   readonly inReplyTo: MessageId | null;
   /** The meeting its message was contributed to or tells of; none outside a meeting (decision 0061). */
