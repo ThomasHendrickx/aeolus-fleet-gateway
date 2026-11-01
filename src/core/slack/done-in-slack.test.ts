@@ -86,7 +86,7 @@ describe("a press of a step's Done in Slack", () => {
     await pressDone();
 
     expect({ outcomes: outcomes.held, opened: opened.held.size, told: changes.told }).toEqual({
-      outcomes: [{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: STEP.deliveryId, place: 'slack', kind: 'done', option: null, at: NOW }],
+      outcomes: [{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: STEP.deliveryId, place: 'slack', kind: 'done', option: null, note: null, seen: null, at: NOW }],
       opened: 0,
       told: [{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP }],
     });

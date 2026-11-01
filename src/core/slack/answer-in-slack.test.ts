@@ -79,7 +79,7 @@ describe("a press of a question's button in Slack", () => {
   it('keeps it answered in Slack with the option pressed, so Bridge says where it was answered (Bridge, CC4)', async () => {
     await press(2);
 
-    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, place: 'slack', kind: 'answered', option: 2, at: NOW }]);
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, place: 'slack', kind: 'answered', option: 2, note: null, seen: null, at: NOW }]);
   });
 
   it("tells the person's pages their inbox changed, so an open Bridge page shows it answered in Slack without a reload", async () => {

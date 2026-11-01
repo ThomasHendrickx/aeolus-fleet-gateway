@@ -90,7 +90,7 @@ describe('a step the gateway sees complete is done with no press (Bridge, CC14)'
 
     expect({ calls: ship.calls, kept: outcomes.held }).toEqual({
       calls: [`ack(${STEP_DELIVERY_ID})`, `handled(${STEP_DELIVERY_ID})`],
-      kept: [{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: STEP_DELIVERY_ID, place: 'gateway', kind: 'done', option: null, at: AT }],
+      kept: [{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: STEP_DELIVERY_ID, place: 'gateway', kind: 'done', option: null, note: null, seen: null, at: AT }],
     });
   });
 

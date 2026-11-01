@@ -228,7 +228,7 @@ describe('a person sees an alert or a notice: seeing it is all it asks (Bridge, 
   it('keeps it seen in the place the person saw it', async () => {
     await opening([ALERT]).openDelivery({ caller: CALLER, deliveryId: ALERT.deliveryId, place: 'bridge' });
 
-    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: ALERT.deliveryId, place: 'bridge', kind: 'seen', option: null, at: AT }]);
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: ALERT.deliveryId, place: 'bridge', kind: 'seen', option: null, note: null, seen: { place: 'bridge', at: AT }, at: AT }]);
   });
 
   it('keeps nothing of a question opened: it still waits on the person', async () => {
@@ -284,8 +284,8 @@ describe('a person opens a question its asker withdrew or replaced: their look a
     await opening([ASKING, WITHDRAWAL]).openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'chat' });
 
     expect(outcomes.held).toEqual([
-      { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: ASKING.deliveryId, place: 'chat', kind: 'withdrawn', option: null, at: AT },
-      { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: WITHDRAWAL.deliveryId, place: 'chat', kind: 'seen', option: null, at: AT },
+      { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: ASKING.deliveryId, place: 'chat', kind: 'withdrawn', option: null, note: null, seen: { place: 'chat', at: AT }, at: AT },
+      { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: WITHDRAWAL.deliveryId, place: 'chat', kind: 'seen', option: null, note: null, seen: { place: 'chat', at: AT }, at: AT },
     ]);
   });
 
