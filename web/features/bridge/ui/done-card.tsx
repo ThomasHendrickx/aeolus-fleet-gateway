@@ -7,14 +7,17 @@ import { endedOf, endedTitleOf, historyOf, type RecordItem } from '../services/i
 import { ItemHeading, PROSE, ScreenBar, StepAsked } from './delivery-card';
 import { Markdown } from './markdown';
 
-/** A done question's options as they stood: the one answered marked, the asker's pick named, none to choose. */
+/** A done question's options as they stood: each with its radio, filled on the one answered, framed by the ring; the asker's pick named; none to choose. */
 function AnsweredOptions({ question, answered }: { question: Question; answered: number | null }) {
   return (
     <ul className="grid gap-2" aria-label="Options">
       {question.options.map((option) => {
         const isAnswered = option.key === answered;
         return (
-          <li key={option.key} data-answered={isAnswered} className={`flex items-start gap-3 rounded-md border p-3 ${isAnswered ? 'border-ring bg-accent' : 'border-border text-muted-foreground'}`}>
+          <li key={option.key} data-answered={isAnswered} className={`flex items-start gap-3 rounded-md border p-3 ${isAnswered ? 'border-ring ring-1 ring-ring' : 'border-border text-muted-foreground'}`}>
+            <span data-testid="bridge-done-radio" data-filled={isAnswered} aria-hidden="true" className={`mt-1 grid size-4 shrink-0 place-items-center rounded-full border ${isAnswered ? 'border-primary' : 'border-border'}`}>
+              {isAnswered ? <span className="size-2 rounded-full bg-primary" /> : null}
+            </span>
             <span className="grid flex-1 gap-0.5">
               <span className="font-medium">
                 {option.key}. {option.label}

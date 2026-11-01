@@ -157,9 +157,26 @@ function isSentAsPerson(outcome: Outcome): boolean {
  * What came of a done item opened from Done, where and at what time, with
  * the option's label (decide.html: "Answered in Slack at 19:58: option 2,
  * Harbour first"), and what was sent to its asker as the person, the note
- * quoted; none for one the fleet ended with no outcome kept.
+ * quoted, with the places that show the same answer; none for one the
+ * fleet ended with no outcome kept.
  */
-export function endedOf(item: Pick<RecordItem, 'from' | 'outcome'>, timeZone?: string): { readonly isOk: boolean; readonly text: string; readonly sent: string | undefined } | undefined {
+/** The places besides Bridge that show an answer once given, by what each shows: Slack its post, a chat the item (CC9, view sync). */
+const ANSWER_SHOWN_IN: Partial<Record<RecordItem['places'][number], string>> = {
+  slack: "Slack's post",
+  chat: 'the chat',
+};
+
+/** The places that show the same answer, as the opened item says it: "Slack's post and the chat show the same answer."; nothing when only Bridge showed it. */
+function sameAnswerOf(places: RecordItem['places']): string {
+  const shown = places.flatMap((place) => ANSWER_SHOWN_IN[place] ?? []);
+  if (shown.length === 0) {
+    return '';
+  }
+  const named = shown.length === 1 ? `${shown.join('')} shows` : `${shown.slice(0, -1).join(', ')} and ${shown.at(-1) ?? ''} show`;
+  return ` ${named.charAt(0).toUpperCase()}${named.slice(1)} the same answer.`;
+}
+
+export function endedOf(item: Pick<RecordItem, 'from' | 'outcome' | 'places'>, timeZone?: string): { readonly isOk: boolean; readonly text: string; readonly sent: string | undefined } | undefined {
   const { outcome } = item;
   if (outcome === null) {
     return undefined;
@@ -169,7 +186,8 @@ export function endedOf(item: Pick<RecordItem, 'from' | 'outcome'>, timeZone?: s
   const option = outcome.option === null ? '' : `: option ${String(outcome.option)}${labelOf(outcome)}`;
   const text = outcome.kind === 'done' && outcome.place === 'gateway' ? `Done by the gateway${time}: it saw it complete` : `${said}${time}${option}`;
   const note = outcome.note === null ? '' : `“${outcome.note}” `;
-  return { isOk: isEndedWell(outcome.kind), text, sent: isSentAsPerson(outcome) ? `${note}Sent to ${item.from} as you.` : undefined };
+  const sameAnswer = outcome.kind === 'answered' ? sameAnswerOf(item.places) : '';
+  return { isOk: isEndedWell(outcome.kind), text, sent: isSentAsPerson(outcome) ? `${note}Sent to ${item.from} as you.${sameAnswer}` : undefined };
 }
 
 const ENDED_TITLES: Record<Outcome['kind'], string> = {

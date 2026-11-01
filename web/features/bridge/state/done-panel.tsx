@@ -102,7 +102,7 @@ export function DonePanel({ fleetId, first, now }: { fleetId: string; first: Rec
           ) : (
             byDay(items, { now: readAt, timeZone }).map(({ day, items: ofDay }) => (
               <div key={day} className="grid gap-1.5">
-                <h2 className="text-caption text-muted-foreground">{day}</h2>
+                <h2 className={`text-caption text-muted-foreground ${open === undefined ? '' : 'md:px-3'}`}>{day}</h2>
                 <ul className="overflow-hidden rounded-lg border border-border bg-card">
                   {ofDay.map((item) => (
                     <ItemRow
