@@ -7,7 +7,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
 
 import type { GatewayRouter } from '../../../../src/adapters/trpc/router.js';
-import { clockTimeOf } from './clock-time';
 
 export type ArgoSection = NonNullable<inferRouterOutputs<GatewayRouter>['people']['argoSection']>;
 
@@ -19,10 +18,16 @@ export function argoActionOf({ kind }: Pick<ArgoSection['items'][number], 'kind'
   return kind === 'question' ? 'Answer in the console as argo' : 'Open in the console as argo';
 }
 
-/** What the section says of the newest message done at argo: by whom, where, when and what; shorter on a phone. */
+/** A done message's title as the done line says it, as the mockup draws it: what comes before its first colon, the whole title when it has none. */
+function doneTitleOf(title: string): string {
+  const [subject = title] = title.split(':', 1);
+  return subject.trim() === '' ? title : subject.trim();
+}
+
+/** What the section says of the newest message done at argo: by whom, where, when (its time of day, in UTC, as the mockup says it) and what; shorter on a phone. */
 export function doneLineOf({ title, at, by, isInConsole }: NonNullable<ArgoSection['done']>, { isPhone }: { isPhone: boolean }): string {
   const who = by === null ? '' : ` by ${by}`;
   const where = isInConsole && !isPhone ? ' in the console' : '';
-  const line = `Done at argo${who}${where}, ${clockTimeOf(at)}: ${title}.`;
+  const line = `Done at argo${who}${where}, ${new Date(at).toISOString().slice(11, 16)}: ${doneTitleOf(title)}.`;
   return isPhone ? line : `${line} Gone from this list for everyone allowed as argo.`;
 }
