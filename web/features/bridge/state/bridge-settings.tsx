@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { NoSignIn } from '../../sign-in/ui/no-sign-in';
-import { readBridgeSettings } from '../hooks/read-bridge';
+import { readBasketCount, readBridgeSettings } from '../hooks/read-bridge';
 import { BRIDGE_SETTINGS_PATH } from '../paths';
 import { slackLinkOutcomeOf } from '../services/slack-link-outcomes';
 import { BridgeNav } from '../ui/bridge-nav';
@@ -55,7 +55,7 @@ export async function BridgeSettingsPage({ searchParams }: { searchParams: Searc
   return (
     <div className="grid gap-6">
       <LiveRefresh fleetId={page.fleetId} />
-      <BridgeNav fleetId={page.fleetId} current="settings" />
+      <BridgeNav fleetId={page.fleetId} current="settings" basketCount={await readBasketCount(page.api)} />
       <h1 className="text-heading font-semibold">Settings</h1>
       {said === undefined ? null : <Notice message={said} isFailure={false} />}
       {linked === undefined ? null : <Notice message={linked.message} isFailure={linked.isFailure} />}

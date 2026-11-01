@@ -46,6 +46,8 @@ export type DomainErrorKind =
   | 'NOT_A_PERSON'
   | 'SIGNED_OUT'
   | 'NO_SUCH_DELIVERY'
+  | 'NOT_A_QUESTION'
+  | 'NOT_IN_BASKET'
   | 'NOT_A_NETWORKER'
   | 'OPEN_NETWORK'
   | 'OUTSIDE_PARTIES_OFF'

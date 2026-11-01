@@ -9,8 +9,12 @@ import type { DeliveryId, FleetId, ShipId } from '@aeolus-fleet/common';
 /** Where the person acted: Bridge, a chat (an MCP client of the gateway), or Slack. */
 export type Place = 'bridge' | 'chat' | 'slack';
 
-/** What the person did: saw it, answered it (with the option they picked, if any), or marked it done; or saw a question its asker withdrew or replaced. */
-export type OutcomeKind = 'seen' | 'answered' | 'done' | 'withdrawn' | 'replaced';
+/**
+ * What the person did: saw it, answered it (with the option they picked, if
+ * any), or marked it done; saw a question its asker withdrew or replaced; or
+ * removed an answer from the basket the fleet refused, so it was not sent.
+ */
+export type OutcomeKind = 'seen' | 'answered' | 'done' | 'withdrawn' | 'replaced' | 'notSent';
 
 export interface ItemOutcome {
   readonly fleetId: FleetId;

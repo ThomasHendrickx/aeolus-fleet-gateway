@@ -9,6 +9,7 @@
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { refusalCodeOf, refusalMessageOf } from '../../../lib/gateway-api/page-api';
 import type { WakeChannels } from '../services/deliveries';
+import type { BasketView } from '../services/basket';
 import type { BridgeHome, RecordPage } from '../services/items';
 import type { ShownRequest } from '../services/requests';
 
@@ -60,6 +61,16 @@ async function personRead<T>(call: Promise<T>): Promise<BridgeRead<T>> {
 
 export function readBridgeHome(api: GatewayApi): Promise<BridgeRead<BridgeHome>> {
   return personRead(api.people.home.query());
+}
+
+export function readBasket(api: GatewayApi): Promise<BridgeRead<BasketView>> {
+  return personRead(api.people.basket.query());
+}
+
+/** How many answers the basket holds, for the navigation: none for an account with no person ship, or while it cannot be read now. */
+export async function readBasketCount(api: GatewayApi): Promise<number> {
+  const read = await personRead(api.people.basketCount.query());
+  return read.kind === 'read' ? read.value.count : 0;
 }
 
 export function readRecordPage(api: GatewayApi, cursor: string | null): Promise<BridgeRead<RecordPage>> {

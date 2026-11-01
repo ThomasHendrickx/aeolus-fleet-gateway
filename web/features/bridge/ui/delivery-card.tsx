@@ -6,8 +6,33 @@ import type { FocusedDelivery, Stale } from '../services/deliveries';
 import { ActionButton } from './action-button';
 import { Notice } from './notice';
 
-/** Which of the card's controls is working: an option of the question, the note alone, or done. */
-export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'note' } | { kind: 'done' };
+/** Which of the card's controls is working: an option of the question put in the basket, its entry removed, the note alone, or done. */
+export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'remove' } | { kind: 'note' } | { kind: 'done' };
+
+/** The answer to a question in the basket (Bridge, section 9): its option and its note, none when the person wrote none. */
+export interface InBasket {
+  readonly option: number;
+  readonly note: string | null;
+}
+
+/** What a question in the basket says: in it, not sent, with its note; picking another option changes it. */
+function InBasketNotice({ inBasket, basketHref, isRemoving, isWorking, onRemove }: { inBasket: InBasket; basketHref: string; isRemoving: boolean; isWorking: boolean; onRemove: () => void }) {
+  return (
+    <div data-testid="bridge-in-basket" className="grid gap-2 rounded-md border border-border bg-muted p-3">
+      <span className="font-medium">In the basket: option {inBasket.option}, not sent</span>
+      {inBasket.note === null ? null : <span className="text-caption">“{inBasket.note}”</span>}
+      <span className="text-caption text-muted-foreground">Pick another option to change it.</span>
+      <div className="flex flex-wrap gap-2">
+        <a data-testid="bridge-basket-open" href={basketHref} className="inline-flex h-9 items-center rounded-md border border-border px-4 hover:bg-accent">
+          Open the basket
+        </a>
+        <ActionButton data-testid="bridge-basket-remove" isPending={isRemoving} pendingLabel="Removing..." disabled={isWorking} onClick={onRemove}>
+          Remove
+        </ActionButton>
+      </div>
+    </div>
+  );
+}
 
 /** The options of a question, one to choose, the asker's pick marked; none to choose once it is stale. */
 function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Question; chosen: number | undefined; isStale: boolean; onChoose: (option: number) => void }) {
@@ -47,8 +72,9 @@ function StaleNotice({ stale, from, onOpen }: { stale: Stale; from: string; onOp
 
 /**
  * One item in focus (design B, Signal). A question opens with the asker's
- * pick chosen (CC11); one button names the option it sends, and a note may
- * go with it or alone. Any other item may get a note as its answer, and may
+ * pick chosen (CC11), or the option in the basket; its one button puts that
+ * option in the basket with the note, if any, and sends nothing (CC24): the
+ * person sends the basket. Any other item may get a note as its answer, and may
  * be done with; one of a meeting leads to the meeting. An alert or a notice
  * is done once seen (Bridge, CC16): it asks nothing more. So is a question
  * its asker withdrew or replaced: stale, nothing to send, a replaced one
@@ -58,11 +84,15 @@ export function DeliveryCard({
   delivery,
   isDoneOnSeeing,
   meetingHref,
+  basketHref,
+  inBasket,
   note,
   working,
   failure,
   onNoteChange,
   onAnswer,
+  onPut,
+  onRemove,
   onDone,
   onOpen,
   onBack,
@@ -72,18 +102,27 @@ export function DeliveryCard({
   isDoneOnSeeing: boolean;
   /** The page of the meeting it belongs to, if it belongs to one. */
   meetingHref: string | undefined;
+  /** Bridge's basket. */
+  basketHref: string;
+  /** The answer to the question in the basket, if any. */
+  inBasket: InBasket | null;
   note: string;
   working: DeliveryControl | undefined;
   failure: string | undefined;
   onNoteChange: (note: string) => void;
+  /** Answers any item but a question with the note. */
   onAnswer: (option: number | undefined) => void;
+  /** Puts the option chosen of a question in the basket, with the note. */
+  onPut: (option: number) => void;
+  /** Takes the question's answer out of the basket. */
+  onRemove: () => void;
   onDone: () => void;
   /** Opens another item: a replaced question's replacement. */
   onOpen: (deliveryId: string) => void;
   onBack: () => void;
 }) {
   const { question, stale } = delivery;
-  const [chosen, setChosen] = useState(question?.pick.option);
+  const [chosen, setChosen] = useState(inBasket?.option ?? question?.pick.option);
   const isWorking = working !== undefined;
   return (
     <section data-testid="bridge-delivery" className="grid gap-3 rounded-lg border border-border bg-card p-6 text-card-foreground shadow-sm">
@@ -108,6 +147,7 @@ export function DeliveryCard({
         </>
       )}
       {stale === null ? null : <StaleNotice stale={stale} from={delivery.from} onOpen={onOpen} />}
+      {inBasket === null || stale !== null ? null : <InBasketNotice inBasket={inBasket} basketHref={basketHref} isRemoving={working?.kind === 'remove'} isWorking={isWorking} onRemove={onRemove} />}
       {isDoneOnSeeing ? (
         <p data-testid="bridge-seen-done" className="text-muted-foreground">
           Seen now, so done: it asks nothing more.
@@ -121,26 +161,28 @@ export function DeliveryCard({
               rows={2}
               value={note}
               onChange={(event) => { onNoteChange(event.target.value); }}
-              placeholder={question === undefined ? '' : 'Optional, sent with your answer'}
+              placeholder={question === undefined ? '' : 'Optional, goes with the answer'}
               className="rounded-md border border-input bg-background p-2"
             />
           </label>
           {failure === undefined ? null : <Notice message={failure} isFailure />}
-          <div className="flex flex-wrap gap-2">
-            {question === undefined || chosen === undefined ? null : (
-              <ActionButton data-testid="bridge-send-option" variant="primary" isPending={working?.kind === 'option'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onAnswer(chosen); }}>
-                Send option {chosen}
+          {question === undefined ? (
+            <div className="flex flex-wrap gap-2">
+              <ActionButton data-testid="bridge-answer" variant="primary" isPending={working?.kind === 'note'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onAnswer(undefined); }}>
+                Answer
               </ActionButton>
-            )}
-            <ActionButton data-testid="bridge-answer" variant={question === undefined ? 'primary' : 'secondary'} isPending={working?.kind === 'note'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onAnswer(undefined); }}>
-              {question === undefined ? 'Answer' : 'Send the note alone'}
-            </ActionButton>
-            {question === undefined ? (
               <ActionButton data-testid="bridge-done" isPending={working?.kind === 'done'} pendingLabel="Marking done..." disabled={isWorking} onClick={onDone}>
                 Done
               </ActionButton>
-            ) : null}
-          </div>
+            </div>
+          ) : chosen === undefined ? null : (
+            <div className="grid gap-1">
+              <ActionButton data-testid="bridge-put-in-basket" variant="primary" className="justify-self-start" isPending={working?.kind === 'option'} pendingLabel="Putting in the basket..." disabled={isWorking} onClick={() => { onPut(chosen); }}>
+                Put option {chosen} in the basket
+              </ActionButton>
+              <span className="text-caption text-muted-foreground">Nothing is sent yet. {delivery.from} receives this answer when you send the basket.</span>
+            </div>
+          )}
         </>
       )}
       <div className="flex flex-wrap gap-2">

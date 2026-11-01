@@ -128,6 +128,7 @@ import { createPingWorker } from './ping-worker.js';
 import { createSlackTokenWorker } from './slack-token-worker.js';
 import { createGrantWorker } from './grant-worker.js';
 import { createSlackEventWorker } from './slack-event-worker.js';
+import { createBasketWorker } from './basket-worker.js';
 import { createPrismaSlackEvents } from './adapters/prisma/slack-events.js';
 import { createSendSlackEvents } from './core/slack/send-slack-events.js';
 import { createSlackInstallSeals } from './adapters/crypto/slack-install-seals.js';
@@ -184,7 +185,13 @@ import { err } from './core/shared/result.js';
 import { createEndSignIns } from './core/sign-in/end-sign-ins.js';
 import { createAnswerDelivery } from './core/people/answer-delivery.js';
 import { createCrewPersonShip } from './core/people/crew-person-ship.js';
+import { createCountBasket } from './core/people/count-basket.js';
 import { createDoneDelivery } from './core/people/done-delivery.js';
+import { createPutInBasket } from './core/people/put-in-basket.js';
+import { createReadBasket } from './core/people/read-basket.js';
+import { createRemoveFromBasket } from './core/people/remove-from-basket.js';
+import { createSendBasket } from './core/people/send-basket.js';
+import { createSendStoredAnswers } from './core/people/send-stored-answers.js';
 import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadBridgeHome } from './core/people/read-bridge-home.js';
@@ -209,6 +216,7 @@ import { createWebPushChannel } from './core/people/web-push-channel.js';
 import { createTurnOffWebPush } from './core/people/turn-off-web-push.js';
 import { createTurnOnWebPush } from './core/people/turn-on-web-push.js';
 import { createPrismaItemOutcomes } from './adapters/prisma/item-outcomes.js';
+import { createPrismaBasketEntries } from './adapters/prisma/basket-entries.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
@@ -326,6 +334,9 @@ const GRANT_ROUND_MS = 5 * 60_000;
 
 /** How often the gateway sends the kept Slack messages core has not taken, as while core does not answer (gateway scopes 9.4 step 7). */
 const SLACK_EVENT_ROUND_MS = 5_000;
+
+/** How often the gateway sends again the basket's answers stored as sending, as while core does not answer (Bridge, section 9). */
+const BASKET_ROUND_MS = 5_000;
 
 /** How often the gateway expires due requests and tells outcomes still to tell (P5-1 a). */
 const OUTCOME_ROUND_MS = 60_000;
@@ -737,6 +748,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     roundMs: WAITER_ROUND_MS,
     log: server.log,
   });
+  // The basket's answers stored as sending, sent by the gateway on its own, after a restart too (Bridge, section 9).
+  const openedDeliveries = createPrismaOpenedDeliveries(prisma);
+  const itemOutcomes = createPrismaItemOutcomes(prisma);
+  const basketEntries = createPrismaBasketEntries(prisma);
+  const basketSends = createBasketWorker({
+    send: createSendStoredAnswers({ entries: basketEntries, crews: personCrews, door: door.person, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock }),
+    sleep,
+    intervalMs: BASKET_ROUND_MS,
+    log: server.log,
+  });
   // A signed-in person's messaging, as the crew of their person ship (decision 0057).
   const personToolsOf = () => {
     // A ship crewed has its waiter at once, not at the next round.
@@ -747,17 +768,23 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
         personWaiters.wake(crew);
       },
     };
-    const opened = createPrismaOpenedDeliveries(prisma);
-    const outcomes = createPrismaItemOutcomes(prisma);
+    const opened = openedDeliveries;
+    const outcomes = itemOutcomes;
+    const entries = basketEntries;
     const changes = inboxChanges;
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
       readInbox: createReadInbox({ ...asCrew, opened }),
-      readBridgeHome: createReadBridgeHome({ ...asCrew, opened }),
+      readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries }),
       readRecord: createReadRecord({ ...asCrew, outcomes }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes, outcomes, clock }),
+      readBasket: createReadBasket({ ...asCrew, opened, entries, outcomes }),
+      countBasket: createCountBasket({ crewPersonShip: asCrew.crewPersonShip, entries }),
+      putInBasket: createPutInBasket({ crewPersonShip: asCrew.crewPersonShip, opened, entries, changes, clock }),
+      removeFromBasket: createRemoveFromBasket({ ...asCrew, opened, entries, outcomes, changes, clock }),
+      sendBasket: createSendBasket({ ...asCrew, opened, entries, outcomes, changes, clock, sendNow: () => { basketSends.wake(); } }),
       readWakeChannels: createReadWakeChannels({
         crewPersonShip: asCrew.crewPersonShip,
         emailChannels,
@@ -1048,6 +1075,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       personWaiters.start();
       slackTokens.start();
       slackSends.start();
+      basketSends.start();
       grantKeeper.start();
       return restored;
     },
@@ -1057,6 +1085,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       await personWaiters.stop();
       await slackTokens.stop();
       await slackSends.stop();
+      await basketSends.stop();
       await grantKeeper.stop();
       await workers.stop();
       await server.close();

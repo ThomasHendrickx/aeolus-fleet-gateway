@@ -6,7 +6,7 @@ import type { BridgeHome, HomeItem } from '../services/items';
 import { HomePanel } from './home-panel';
 
 function anItem(overrides: Partial<HomeItem> = {}): HomeItem {
-  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', state: 'new', stale: null, ...overrides };
+  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', state: 'new', stale: null, inBasket: null, ...overrides };
 }
 
 function render(home: BridgeHome): string {
@@ -63,5 +63,11 @@ describe('Bridge home (CC18)', () => {
     });
 
     expect({ stale: markup.includes('Replaced by orchestrator-1 with “Which goes first, now that U4 slipped?”'), link: (markup.match(/data-testid="bridge-replacement"/g) ?? []).length }).toEqual({ stale: true, link: 1 });
+  });
+
+  it('says on its row that a question is in the basket with its option, still counted (section 9, rule 1)', () => {
+    const markup = render({ waiting: { count: 1, items: [anItem({ state: 'seen', inBasket: { option: 2, note: null } })] }, stayAware: [] });
+
+    expect({ inBasket: markup.includes('In the basket: option 2'), seen: markup.includes('Seen, not done yet'), count: markup.includes('data-testid="bridge-count" class="text-tone-waiting-fg">1<') }).toEqual({ inBasket: true, seen: false, count: true });
   });
 });

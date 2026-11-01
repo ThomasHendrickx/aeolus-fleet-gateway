@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { NoSignIn } from '../../sign-in/ui/no-sign-in';
-import { readBridgeHome } from '../hooks/read-bridge';
+import { readBasketCount, readBridgeHome } from '../hooks/read-bridge';
 import { BRIDGE_PATH } from '../paths';
 import { BridgeNav } from '../ui/bridge-nav';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
@@ -41,7 +41,7 @@ export async function BridgeHomePage({ searchParams }: { searchParams: SearchPar
   return (
     <div className="grid gap-6">
       <LiveRefresh fleetId={page.fleetId} />
-      <BridgeNav fleetId={page.fleetId} current="home" />
+      <BridgeNav fleetId={page.fleetId} current="home" basketCount={await readBasketCount(page.api)} />
       <Suspense fallback={<BridgeSkeleton />}>
         <HomeParts api={page.api} fleetId={page.fleetId} />
       </Suspense>

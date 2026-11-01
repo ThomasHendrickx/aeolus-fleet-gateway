@@ -1,6 +1,7 @@
 import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
+import type { BasketEntries, BasketEntry } from '../../src/core/people/basket.js';
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { ItemOutcome, ItemOutcomes } from '../../src/core/people/item-outcome.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
@@ -269,6 +270,61 @@ export function memoryOpenedDeliveries(): OpenedDeliveries & { held: Map<string,
     remove: (fleetId, opened) => {
       held.delete(key(fleetId, opened));
       return Promise.resolve();
+    },
+  };
+}
+
+/** An entry of Charlotte's basket: option 2 to orchestrator-1's question, waiting for Send. */
+export function aBasketEntry(overrides: Partial<BasketEntry> = {}): BasketEntry {
+  return {
+    fleetId: FLEET_ID,
+    shipId: PERSON_SHIP_ID,
+    questionId: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e',
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+    messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+    senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9qrc',
+    from: 'orchestrator-1',
+    title: 'Which goes first: the Compact look (U4) or Harbour?',
+    sentAt: new Date('2026-10-31T19:41:00.000Z'),
+    option: 2,
+    note: 'Harbour first: the demo on 12 Nov needs it.',
+    addedAt: new Date('2026-10-31T19:53:00.000Z'),
+    state: 'waiting',
+    refusal: null,
+    ...overrides,
+  };
+}
+
+/** The basket of each person ship, in memory, by fleet, person ship and question. */
+export function memoryBasketEntries(): BasketEntries & { held: Map<string, BasketEntry> } {
+  const held = new Map<string, BasketEntry>();
+  const key = (fleetId: FleetId, { shipId, questionId }: { shipId: string; questionId: string }) => `${fleetId}/${shipId}/${questionId}`;
+  const ofShip = (fleetId: FleetId, shipId: ShipId) => [...held.values()].filter((entry) => entry.fleetId === fleetId && entry.shipId === shipId).sort((a, b) => a.addedAt.getTime() - b.addedAt.getTime());
+  return {
+    held,
+    save: (entry) => {
+      held.set(key(entry.fleetId, entry), entry);
+      return Promise.resolve();
+    },
+    find: (fleetId, asked) => Promise.resolve(held.get(key(fleetId, asked))),
+    list: (fleetId, shipId) => Promise.resolve(ofShip(fleetId, shipId)),
+    count: (fleetId, shipId) => Promise.resolve(ofShip(fleetId, shipId).length),
+    remove: (fleetId, removed) => {
+      held.delete(key(fleetId, removed));
+      return Promise.resolve();
+    },
+    sendingShips: ({ after, limit }) => {
+      const ships = [...new Set([...held.values()].filter(({ state }) => state === 'sending').map(({ fleetId, shipId }) => `${fleetId}/${shipId}`))].sort();
+      const from = after === null ? ships : ships.filter((ship) => ship > `${after.fleetId}/${after.shipId}`);
+      return Promise.resolve(
+        from.slice(0, limit).map((ship) => {
+          const sending = [...held.values()].find(({ fleetId, shipId }) => `${fleetId}/${shipId}` === ship);
+          if (sending === undefined) {
+            throw new Error(`No entry of ${ship}`);
+          }
+          return { fleetId: sending.fleetId, shipId: sending.shipId };
+        }),
+      );
     },
   };
 }
