@@ -34,6 +34,12 @@ describe('Your fleet beside Bridge home', () => {
     expect([markup.includes('href="/bridge/fleet?fleet=flt_01"'), markup.includes('>4 ships<')]).toEqual([true, true]);
   });
 
+  it('centres each number and its word on the phone, and never cuts the word (states.html, Harbour\'s phone)', () => {
+    const markup = panel({ kind: 'read', value: FLEET });
+
+    expect([markup.includes('max-sm:justify-items-center'), markup.includes('max-sm:justify-center'), markup.includes('truncate">Working')]).toEqual([true, true, false]);
+  });
+
   it('shows the four numbers, each with its word', () => {
     const markup = panel({ kind: 'read', value: FLEET });
 
@@ -73,14 +79,19 @@ describe('Your fleet beside Bridge home', () => {
 });
 
 describe("the phone's Fleet tab", () => {
-  it('leads with the summary and five numbers: the ships, then each state', () => {
+  it('is headed Fleet on the phone, straight to the numbers, as Harbour\'s phone; the lead line only on a wider screen', () => {
+    const markup = renderToStaticMarkup(createElement(FleetPage, { read: { kind: 'read', value: FLEET } }));
+
+    expect([markup.includes('<span class="sm:hidden">Fleet</span>'), markup.includes('<span class="max-sm:hidden">Your fleet</span>'), markup.includes('<p class="max-sm:hidden text-muted-foreground">4 ships:')]).toEqual([true, true, true]);
+  });
+
+  it('shows five numbers, the ships then each state, and the tiles', () => {
     const markup = renderToStaticMarkup(createElement(FleetPage, { read: { kind: 'read', value: FLEET } }));
 
     expect({
-      summary: markup.includes('4 ships: 1 working, 1 idle, 1 waiting, 1 with an alert'),
       numbers: ['ships', 'alert', 'waiting', 'working', 'idle'].map((number) => markup.includes(`data-testid="fleet-number-${number}"`)),
       tiles: (markup.match(/data-testid="fleet-tile"/g) ?? []).length,
-    }).toEqual({ summary: true, numbers: [true, true, true, true, true], tiles: 4 });
+    }).toEqual({ numbers: [true, true, true, true, true], tiles: 4 });
   });
 
   it('says the account may not read the fleet when the fleet does not let it', () => {
