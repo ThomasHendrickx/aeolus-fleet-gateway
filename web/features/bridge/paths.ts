@@ -3,6 +3,5 @@ export const BRIDGE_PATH = '/bridge';
 export const BRIDGE_BASKET_PATH = '/bridge/basket';
 export const BRIDGE_STAY_AWARE_PATH = '/bridge/stay-aware';
 export const BRIDGE_DONE_PATH = '/bridge/done';
-export const BRIDGE_FLEET_PATH = '/bridge/fleet';
 export const BRIDGE_SETTINGS_PATH = '/bridge/settings';
 export const BRIDGE_ROUTING_PATH = '/bridge/settings/routing';

@@ -3,7 +3,8 @@ import type { ReactNode } from 'react';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { OUTSIDE_PARTIES_PATH } from '../../outside-parties/paths';
-import { BRIDGE_BASKET_PATH, BRIDGE_DONE_PATH, BRIDGE_FLEET_PATH, BRIDGE_PATH, BRIDGE_ROUTING_PATH, BRIDGE_SETTINGS_PATH, BRIDGE_STAY_AWARE_PATH } from '../paths';
+import { BRIDGE_FLEET_PATH } from '../fleet/paths';
+import { BRIDGE_BASKET_PATH, BRIDGE_DONE_PATH, BRIDGE_PATH, BRIDGE_ROUTING_PATH, BRIDGE_SETTINGS_PATH, BRIDGE_STAY_AWARE_PATH } from '../paths';
 import type { BridgeScreen } from '../services/shell';
 import { ShellCount, type CountTone } from './shell-count';
 
