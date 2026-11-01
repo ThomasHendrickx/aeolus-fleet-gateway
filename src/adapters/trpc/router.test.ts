@@ -305,6 +305,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     listParties: () => Promise.resolve([]),
     listOwnerChoices: () => Promise.resolve(ok([])),
     readYourFleet: () => Promise.resolve(ok(YOUR_FLEET)),
+    readArgoInboxNotice: ({ accountId }) => Promise.resolve(accountId === 'acc-charlotte' ? { kind: 'notLetRead' as const, gatewayShip: { shipId: MANAGER, name: 'gateway' } } : { kind: 'none' as const }),
     retireParty: unused,
     changePartyOwner: unused,
     changePartyScopes: unused,
@@ -1051,6 +1052,20 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("an account reads the overview's notice of argo's read rule through the gateway's API (argo's inbox, section 4)", () => {
+  it('tells the account allowed as argo what the gateway answers for it', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.argoInboxNotice()).resolves.toEqual({ kind: 'notLetRead', gatewayShip: { shipId: MANAGER, name: 'gateway' } });
+  });
+
+  it('tells any actor but an account nothing, as only an account is allowed as argo', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.argoInboxNotice()).resolves.toEqual({ kind: 'none' });
   });
 });
 
