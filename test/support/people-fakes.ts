@@ -293,6 +293,7 @@ export function aBasketEntry(overrides: Partial<BasketEntry> = {}): BasketEntry 
     sentAt: new Date('2026-10-31T19:41:00.000Z'),
     option: 2,
     note: 'Harbour first: the demo on 12 Nov needs it.',
+    optionLabel: "Harbour first, on today's look",
     addedAt: new Date('2026-10-31T19:53:00.000Z'),
     state: 'waiting',
     refusal: null,
