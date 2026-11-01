@@ -1,4 +1,4 @@
-import { Bell, CircleQuestionMark, Hand, Hash, Mail, MessageCircleQuestionMark, Ship, Sparkle, type LucideIcon } from 'lucide-react';
+import { Bell, CircleQuestionMark, Hand, Hash, Mail, MessageCircleQuestionMark, Ship, Sparkles, type LucideIcon } from 'lucide-react';
 
 import type { RoutedJob, RoutedPlace } from '../services/routing';
 
@@ -14,4 +14,4 @@ export const JOB_ICONS: Readonly<Record<RoutedJob, { readonly Icon: LucideIcon; 
 export const BRIDGE_ICON: LucideIcon = Ship;
 
 /** Each place's icon, as the routing mockup draws it. */
-export const PLACE_ICONS: Readonly<Record<RoutedPlace, LucideIcon>> = { slack: Hash, chat: Sparkle, 'web-push': Bell, email: Mail };
+export const PLACE_ICONS: Readonly<Record<RoutedPlace, LucideIcon>> = { slack: Hash, chat: Sparkles, 'web-push': Bell, email: Mail };
