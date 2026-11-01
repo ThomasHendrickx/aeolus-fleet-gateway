@@ -36,7 +36,7 @@ describe('the phone title of an opened item', () => {
     expect([openedScreenOf('decide'), openedScreenOf('do')]).toEqual(['Question', 'Step']);
   });
 
-  it('says Stay aware for an alert or a notice', () => {
-    expect(openedScreenOf('stay-aware')).toBe('Stay aware');
+  it('says Stay aware for an alert or a notice, and Message for anything else', () => {
+    expect([openedScreenOf('stay-aware'), openedScreenOf('everything-else')]).toEqual(['Stay aware', 'Message']);
   });
 });
