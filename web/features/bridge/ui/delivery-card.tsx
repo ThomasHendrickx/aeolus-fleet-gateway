@@ -86,12 +86,12 @@ function StaleNotice({ stale, from, isStep, onOpen }: { stale: Stale; from: stri
   );
 }
 
-/** What a step asks: why, and the link where it is done, shown with its host and opened only by the person's own press (Bridge, section 9). */
-function StepAsked({ step }: { step: StepView }) {
+/** What a step asks: why, and the link where it is done, shown with its host and opened only by the person's own press; gone once the step is stale (Bridge, section 9). */
+function StepAsked({ step, isStale }: { step: StepView; isStale: boolean }) {
   return (
     <>
       <p className="whitespace-pre-wrap">{step.why}</p>
-      {step.link === undefined ? null : (
+      {step.link === undefined || isStale ? null : (
         <a data-testid="bridge-step-link" href={step.link.href} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center justify-self-start rounded-md border border-border px-4 hover:bg-accent">
           Open on {step.link.host}
         </a>
@@ -204,7 +204,7 @@ export function DeliveryCard({
         </a>
       )}
       {step !== undefined ? (
-        <StepAsked step={step} />
+        <StepAsked step={step} isStale={stale !== null} />
       ) : question === undefined ? (
         <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-caption">{delivery.body}</pre>
       ) : (
