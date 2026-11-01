@@ -6,7 +6,7 @@ import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { ItemOutcome, ItemOutcomes } from '../../src/core/people/item-outcome.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
 import type { Route, Routes } from '../../src/core/people/routing.js';
-import type { AccountDoor, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
+import type { AccountDoor, ConnectedChat, ConnectedChats, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -454,5 +454,16 @@ export function memoryRoutes(held: Route[] = []): Routes & { held: Route[] } {
       held.splice(index < 0 ? held.length : index, index < 0 ? 0 : 1, route);
       return Promise.resolve();
     },
+  };
+}
+
+/** A chat signed in as a person ship, kept in memory with the fleet and person ship it is signed in as. */
+type HeldChat = ConnectedChat & { readonly fleetId: FleetId; readonly shipId: ShipId };
+
+/** The MCP clients signed in as each person ship, in memory: each token pair still active, with its client's name and until when it lives. */
+export function memoryConnectedChats(held: HeldChat[] = []): ConnectedChats & { held: HeldChat[] } {
+  return {
+    held,
+    list: (fleetId, shipId) => Promise.resolve(held.filter((chat) => chat.fleetId === fleetId && chat.shipId === shipId).map(({ name, liveUntil }) => ({ name, liveUntil }))),
   };
 }

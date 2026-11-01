@@ -317,3 +317,14 @@ export interface WebPush {
 export interface ActiveShips {
   list(as: ActorCredential): Promise<Result<ListedShip[], FleetRefusal>>;
 }
+
+/** An MCP client signed in through the gateway as a person ship: its client's name, and until when its sign-in lives. */
+export interface ConnectedChat {
+  readonly name: string;
+  readonly liveUntil: Date;
+}
+
+/** Outbound port: the MCP clients signed in as a person ship, one per token pair still active. */
+export interface ConnectedChats {
+  list(fleetId: FleetId, shipId: ShipId): Promise<ConnectedChat[]>;
+}
