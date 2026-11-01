@@ -13,9 +13,9 @@ const NUMBER_TONES: Record<ShipState, string> = {
 
 function FleetNumber({ testId, tone, value, children }: { testId: string; tone: string; value: number; children: React.ReactNode }) {
   return (
-    <div data-testid={testId} className={`grid min-w-0 gap-0.5 rounded-md border px-2 py-1.5 max-sm:px-1.5 ${tone}`}>
+    <div data-testid={testId} className={`grid min-w-0 gap-0.5 rounded-md border px-2 py-1.5 max-sm:justify-items-center max-sm:px-0.5 ${tone}`}>
       <span className="text-xl leading-6 font-semibold">{value}</span>
-      <span className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground max-sm:gap-0.5 max-sm:text-[10px]">{children}</span>
+      <span className="flex min-w-0 items-center gap-1 whitespace-nowrap text-[11px] text-muted-foreground max-sm:justify-center max-sm:gap-0.5 max-sm:text-[10px]">{children}</span>
     </div>
   );
 }
@@ -31,13 +31,13 @@ export function FleetNumbers({ fleet, isShipCountShown }: { fleet: YourFleet; is
       {isShipCountShown ? (
         <FleetNumber testId="fleet-number-ships" tone="border-border bg-card text-card-foreground" value={fleet.shipCount}>
           <Ship aria-hidden="true" className="size-3 shrink-0" />
-          <span className="truncate">Ships</span>
+          <span>Ships</span>
         </FleetNumber>
       ) : null}
       {SHIP_STATES.map((state) => (
         <FleetNumber key={state} testId={`fleet-number-${state}`} tone={NUMBER_TONES[state]} value={fleet.counts[state]}>
           <StateIcon state={state} />
-          <span className="truncate">{STATE_LABELS[state]}</span>
+          <span>{STATE_LABELS[state]}</span>
         </FleetNumber>
       ))}
     </div>

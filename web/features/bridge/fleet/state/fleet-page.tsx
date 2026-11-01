@@ -6,17 +6,20 @@ import { FleetWall } from '../ui/fleet-wall';
 
 /**
  * The phone's Fleet tab, and where Your fleet's heading leads on any screen,
- * as Harbour draws it (docs/design/fleet-overview): the lead line, the ships
- * and the four numbers, then a tile per ship in its group.
+ * as Harbour draws it (docs/design/fleet-overview): on the phone headed
+ * Fleet, straight to the ships and the four numbers; on a wider screen
+ * headed Your fleet with Harbour's lead line; then a tile per ship in its
+ * group.
  */
 export function FleetPage({ read }: { read: FleetRead }) {
   return (
     <section className="grid gap-4" aria-labelledby="bridge-fleet-heading">
       <div>
         <h1 id="bridge-fleet-heading" className="text-heading font-semibold">
-          Your fleet
+          <span className="sm:hidden">Fleet</span>
+          <span className="max-sm:hidden">Your fleet</span>
         </h1>
-        {read.kind === 'read' ? <p className="text-muted-foreground">{summaryOf(read.value)}</p> : null}
+        {read.kind === 'read' ? <p className="max-sm:hidden text-muted-foreground">{summaryOf(read.value)}</p> : null}
       </div>
       {read.kind === 'read' ? (
         <>

@@ -9,6 +9,7 @@ import { readBasketCount, readBridgeHome } from '../hooks/read-bridge';
 import { BRIDGE_PATH } from '../paths';
 import { BridgeNav } from '../ui/bridge-nav';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
+import { HomeColumns } from '../ui/home-columns';
 import { HomePanel } from './home-panel';
 import { LiveRefresh } from './live-refresh';
 import { RecordUnreadable } from './record-unreadable';
@@ -19,13 +20,13 @@ const NOTHING = { waiting: { count: 0, items: [] }, stayAware: [] };
 /** Your fleet beside home once both are read; the fleet was asked for at the same time as home, so neither waits on the other. */
 async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: string; fleet: Promise<FleetRead> }) {
   const [read, fleetRead] = await Promise.all([readBridgeHome(api), fleet]);
-  const home = read.kind === 'unreadable' ? <RecordUnreadable message={read.message} /> : <HomePanel fleetId={fleetId} home={read.kind === 'read' ? read.value : NOTHING} />;
   const isNothingWaiting = read.kind !== 'unreadable' && (read.kind === 'none' || read.value.waiting.items.length === 0);
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <div className="min-w-0">{home}</div>
-      <YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} />
-    </div>
+    <HomeColumns
+      banner={read.kind === 'unreadable' ? <RecordUnreadable message={read.message} /> : undefined}
+      main={read.kind === 'unreadable' ? null : <HomePanel fleetId={fleetId} home={read.kind === 'read' ? read.value : NOTHING} />}
+      aside={<YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} />}
+    />
   );
 }
 
