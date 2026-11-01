@@ -128,6 +128,50 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     expect(sent().map(({ url, body }) => ({ url, body }))).toEqual([{ url: '/api/v1/ship/pushReceive', body: { max: 10, waker: 'gateway' } }]);
   });
 
+  it("reads the question a question asks, and the one a withdrawal or a replacement names, a replacement headed by its new question (Bridge, CC11)", async () => {
+    const delivery = {
+      deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+      messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+      senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderName: 'orchestrator-1',
+      senderType: 'orchestrator',
+      recipient: { kind: 'ship', shipId: 'shp_01m3tbfspe96yf1rnr4ank0per' },
+      model: null,
+      sentAt: '2026-10-31T19:41:00.000Z',
+      inReplyTo: null,
+      attempts: 0,
+      isForced: false,
+      meetingId: null,
+      scheduleId: null,
+      sendTime: null,
+      state: 'received',
+      handOverNumber: null,
+    };
+    const replacing = { ...QUESTION, id: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f', title: 'Go for release 1.4 after #1488?' };
+    answer = {
+      status: 200,
+      body: {
+        deliveries: [
+          { ...delivery, contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify(QUESTION) },
+          { ...delivery, contentType: 'application/vnd.aeolus.question-withdrawal+json', payload: JSON.stringify({ questionId: QUESTION.id }) },
+          { ...delivery, contentType: 'application/vnd.aeolus.question-replacement+json', payload: JSON.stringify({ questionId: QUESTION.id, question: replacing }) },
+          { ...delivery, contentType: 'application/vnd.aeolus.question-withdrawal+json', payload: '{"questionId":"not a uuid"}' },
+          { ...delivery, contentType: 'text/plain', payload: 'The build is red' },
+        ],
+      },
+    };
+
+    const taken = await createRestFleetDoor(base).person.pushReceive('aeolus_ct_v1_charlotte', { max: 10 });
+
+    expect(taken.isOk ? taken.value.map(({ headline, askedQuestionId, withdrawnQuestionId }) => ({ headline, askedQuestionId, withdrawnQuestionId })) : taken).toEqual([
+      { headline: 'Go for release 1.4?', askedQuestionId: QUESTION.id, withdrawnQuestionId: null },
+      { headline: null, askedQuestionId: null, withdrawnQuestionId: QUESTION.id },
+      { headline: 'Go for release 1.4 after #1488?', askedQuestionId: replacing.id, withdrawnQuestionId: QUESTION.id },
+      { headline: null, askedQuestionId: null, withdrawnQuestionId: null },
+      { headline: null, askedQuestionId: null, withdrawnQuestionId: null },
+    ]);
+  });
+
   it("reads the headline of a step, an alert and a notice from its payload, and none from one it cannot read (Bridge, CC14, CC15)", async () => {
     const delivery = {
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
