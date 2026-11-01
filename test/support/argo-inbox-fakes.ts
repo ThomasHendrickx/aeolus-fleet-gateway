@@ -24,9 +24,9 @@ export function memoryArgoAccounts(): ArgoAccounts & { held: Map<FleetId, Map<st
 
 /** argo's ship in a test fleet. */
 export const ARGO_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9arg';
-/** The trierarch, which sends argo its biggest problems. */
+/** The trierarch of thomas-mac, named for its computer, which sends argo its biggest problems. */
 const TRIERARCH_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9trr';
-export const TRIERARCH = { shipId: TRIERARCH_SHIP_ID, name: 'trierarch' };
+export const TRIERARCH = { shipId: TRIERARCH_SHIP_ID, name: 'thomas-mac' };
 
 /** A message to argo, numbered, from the trierarch unless told otherwise. */
 export function anArgoEntry(number: number, overrides: Partial<ArgoMessageRead> = {}): ArgoMessageRead {
@@ -60,6 +60,10 @@ export function fakeArgoInboxFleet() {
     events: new Array<ArgoInboxChange>(),
     /** How many times every message to argo was read whole. */
     wholeReads: 0,
+    /** Each ship's type as the fleet answers it. */
+    types: new Map<ShipId, string>([[TRIERARCH_SHIP_ID, 'trierarch']]),
+    /** Each ship whose type was read, in order. */
+    typeReads: new Array<ShipId>(),
   };
   const change = (entry: ArgoMessageRead, by: Omit<ArgoInboxChange, 'messageId'>) => {
     state.entries.set(entry.messageId, entry);
@@ -75,6 +79,11 @@ export function fakeArgoInboxFleet() {
         return state.isReadRuleOn ? [...state.entries.values()] : [];
       }),
     entry: (_crewToken, { messageId }) => refusedUnlessAnswering(() => (state.isReadRuleOn ? (state.entries.get(messageId) ?? null) : null)),
+    shipType: (_crewToken, shipId) =>
+      refusedUnlessAnswering(() => {
+        state.typeReads.push(shipId);
+        return state.types.get(shipId) ?? 'agent';
+      }),
     changes: (_crewToken, { afterSeq }) => refusedUnlessAnswering(() => ({ changes: state.isReadRuleOn ? state.events.slice(afterSeq) : [], lastSeq: state.events.length })),
   };
   return {

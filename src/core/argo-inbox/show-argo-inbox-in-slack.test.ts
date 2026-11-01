@@ -105,8 +105,8 @@ describe("what waits at argo, in Slack's post", () => {
     expect(slack.state.posts[0]).toMatchObject({
       text: 'Waits at argo, not you: thomas-mac is low on disk: 4% free',
       item: {
-        asker: 'trierarch',
-        heading: '*Waits at argo*, not you · Report from trierarch',
+        asker: 'thomas-mac',
+        heading: '*Waits at argo*, not you · Report from trierarch thomas-mac',
         title: 'thomas-mac is low on disk: 4% free',
         body: null,
         aside: 'For everyone allowed as argo. Acting signs you in to the console as argo.',
@@ -123,8 +123,19 @@ describe("what waits at argo, in Slack's post", () => {
     await aGateway().round();
 
     expect(slack.state.posts.map(({ item, buttons }) => ({ heading: item?.heading, buttons }))).toEqual([
-      { heading: '*Waits at argo*, not you · Question from trierarch', buttons: [{ text: 'Open in the console as argo', url: `https://fleet.acme.test/inbox?message=${anArgoEntry(1).deliveryId}`, isPlain: true }] },
+      { heading: '*Waits at argo*, not you · Question from trierarch thomas-mac', buttons: [{ text: 'Open in the console as argo', url: `https://fleet.acme.test/inbox?message=${anArgoEntry(1).deliveryId}`, isPlain: true }] },
     ]);
+  });
+
+  it("reads each sender's type once, not once a post", async () => {
+    fleet.send(anArgoEntry(1));
+    const gateway = aGateway();
+    await gateway.round();
+
+    fleet.send(anArgoEntry(2));
+    await gateway.round();
+
+    expect({ posts: slack.state.posts.length, typeReads: fleet.state.typeReads }).toEqual({ posts: 4, typeReads: [anArgoEntry(1).sender.shipId] });
   });
 
   it('edits the post once done at argo to say by whom and when, in the console, its button gone', async () => {
