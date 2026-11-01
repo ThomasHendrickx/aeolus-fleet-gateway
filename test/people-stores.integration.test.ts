@@ -85,7 +85,35 @@ describe("what came of a person ship's items, in Postgres (Bridge, CC4)", () => 
 
     await outcomes.save({ ...outcome, place: 'bridge', kind: 'done', option: null, at: new Date('2026-10-19T10:00:00.000Z') });
 
-    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [outcome.deliveryId] })).resolves.toEqual([outcome]);
+    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [outcome.deliveryId] })).resolves.toEqual([{ ...outcome, note: null, seen: null }]);
+  });
+
+  it('keeps the note the person sent with the outcome, and where and when they saw the item first (Bridge, Done)', async () => {
+    const outcomes = createPrismaItemOutcomes(prisma);
+    const cannot = { ...outcome, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch811', place: 'bridge', kind: 'cannot', option: null, note: 'The name is taken by an archived repository of mine.', seen: { place: 'bridge', at: new Date('2026-10-19T08:55:00.000Z') } } as const;
+    await outcomes.save(cannot);
+
+    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [cannot.deliveryId] })).resolves.toEqual([cannot]);
+  });
+
+  it('keeps an item seen as seen where and when it was seen', async () => {
+    const outcomes = createPrismaItemOutcomes(prisma);
+    const seen = { ...outcome, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch812', place: 'slack', kind: 'seen', option: null } as const;
+    await outcomes.save(seen);
+
+    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [seen.deliveryId] })).resolves.toEqual([{ ...seen, note: null, seen: { place: 'slack', at: AT } }]);
+  });
+
+  it('keeps what came of an item seen before in place of seen, still saying where and when it was seen (Bridge, Done)', async () => {
+    const outcomes = createPrismaItemOutcomes(prisma);
+    const seen = { ...outcome, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch813', place: 'slack', kind: 'seen', option: null, at: new Date('2026-10-19T08:57:00.000Z') } as const;
+    await outcomes.save(seen);
+
+    await outcomes.save({ ...outcome, deliveryId: seen.deliveryId, place: 'slack', kind: 'answered', option: 2, at: new Date('2026-10-19T08:58:00.000Z') });
+
+    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [seen.deliveryId] })).resolves.toEqual([
+      { ...outcome, deliveryId: seen.deliveryId, place: 'slack', kind: 'answered', option: 2, at: new Date('2026-10-19T08:58:00.000Z'), note: null, seen: { place: 'slack', at: new Date('2026-10-19T08:57:00.000Z') } },
+    ]);
   });
 
   it('finds only the deliveries asked, of the person ship asked, in its fleet', async () => {
@@ -96,7 +124,7 @@ describe("what came of a person ship's items, in Postgres (Bridge, CC4)", () => 
     await outcomes.save({ ...asked, fleetId: OTHER_FLEET });
     await outcomes.save({ ...asked, shipId: 'shp_01m3tb1zgr5h2ffee12xnch8pq' });
 
-    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [asked.deliveryId] })).resolves.toEqual([asked]);
+    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [asked.deliveryId] })).resolves.toEqual([{ ...asked, note: null, seen: { place: 'bridge', at: AT } }]);
   });
 
   it('keeps a question its asker withdrew or replaced as withdrawn or replaced (Bridge, CC11)', async () => {
@@ -106,7 +134,7 @@ describe("what came of a person ship's items, in Postgres (Bridge, CC4)", () => 
     await outcomes.save(withdrawn);
     await outcomes.save(replaced);
 
-    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [withdrawn.deliveryId, replaced.deliveryId] })).resolves.toEqual(expect.arrayContaining([withdrawn, replaced]));
+    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [withdrawn.deliveryId, replaced.deliveryId] })).resolves.toEqual(expect.arrayContaining([{ ...withdrawn, note: null, seen: null }, { ...replaced, note: null, seen: null }]));
   });
 
   it('keeps a step the person cannot do as cannot, and one of the gateway it saw complete as done by the gateway (Bridge, CC14)', async () => {
@@ -116,7 +144,7 @@ describe("what came of a person ship's items, in Postgres (Bridge, CC4)", () => 
     await outcomes.save(cannot);
     await outcomes.save(doneByGateway);
 
-    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [cannot.deliveryId, doneByGateway.deliveryId] })).resolves.toEqual(expect.arrayContaining([cannot, doneByGateway]));
+    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [cannot.deliveryId, doneByGateway.deliveryId] })).resolves.toEqual(expect.arrayContaining([{ ...cannot, note: null, seen: null }, { ...doneByGateway, note: null, seen: null }]));
   });
 
   it('forgets a fleet with what came of its items (decision 0021)', async () => {

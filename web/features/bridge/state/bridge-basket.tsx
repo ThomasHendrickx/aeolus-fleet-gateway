@@ -13,7 +13,7 @@ async function BasketParts({ api, fleetId }: { api: GatewayApi; fleetId: string 
   const read = await readBasket(api);
   return (
     <PageAsLastRead read={read}>
-      {read.kind === 'unreadable' ? null : <BasketPanel fleetId={fleetId} basket={read.kind === 'read' ? read.value : { toSend: 0, entries: [] }} />}
+      {read.kind === 'unreadable' ? null : <BasketPanel fleetId={fleetId} basket={read.kind === 'read' ? read.value : { count: 0, toSend: 0, entries: [] }} />}
     </PageAsLastRead>
   );
 }

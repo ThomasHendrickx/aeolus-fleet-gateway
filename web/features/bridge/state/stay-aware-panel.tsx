@@ -1,17 +1,16 @@
 'use client';
 
 import type { HomeItem } from '../services/items';
-import { ActionButton } from '../ui/action-button';
-import { ItemRow } from '../ui/item-row';
+import { StayAwareRows } from './home-panel';
 import { ItemFocus } from './item-focus';
 
 /**
  * Stay aware (stay-aware.html): the alerts and notices that reached the
- * person and they have not seen, with their count, outside what waits.
- * Opening one is all it asks (CC16). Slice 7 of aeolus-fleet#1533 draws
- * the page whole.
+ * person, a dot on those not seen, with the unseen count, outside what
+ * waits. Opening one is all it asks (CC16). Slice 7 of aeolus-fleet#1533
+ * draws the page whole.
  */
-export function StayAwarePanel({ fleetId, stayAware }: { fleetId: string; stayAware: readonly HomeItem[] }) {
+export function StayAwarePanel({ fleetId, stayAware, now }: { fleetId: string; stayAware: readonly HomeItem[]; now: string }) {
   return (
     <ItemFocus fleetId={fleetId}>
       {(opening) => (
@@ -21,7 +20,7 @@ export function StayAwarePanel({ fleetId, stayAware }: { fleetId: string; stayAw
               Stay aware
             </h1>
             <p data-testid="bridge-stay-aware-count" className="text-muted-foreground">
-              {stayAware.length} unseen, outside the count
+              {stayAware.filter(({ state }) => state === 'new').length} unseen, outside the count
             </p>
           </div>
           {stayAware.length === 0 ? (
@@ -29,15 +28,7 @@ export function StayAwarePanel({ fleetId, stayAware }: { fleetId: string; stayAw
               Nothing new. What you saw is in Done.
             </p>
           ) : (
-            <ul className="grid gap-2">
-              {stayAware.map((item) => (
-                <ItemRow key={item.deliveryId} item={item} isNew outcome={undefined} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}>
-                  <ActionButton data-testid="bridge-open" isPending={opening.openingId === item.deliveryId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open(item); }}>
-                    Open
-                  </ActionButton>
-                </ItemRow>
-              ))}
-            </ul>
+            <StayAwareRows items={stayAware} readAt={new Date(now)} opening={opening} />
           )}
         </section>
       )}

@@ -124,6 +124,8 @@ export function aPersonDelivery(overrides: Partial<PersonDelivery> = {}): Person
     withdrawnQuestionId: null,
     stepId: null,
     withdrawnStepId: null,
+    pick: null,
+    stepLink: null,
     sentAt: new Date('2026-10-19T08:00:00.000Z'),
     inReplyTo: null,
     meetingId: null,
@@ -140,17 +142,17 @@ export const SENT_MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank0sen';
  * past the ones it is told to leave out unless it keeps no exclusions, as a
  * core before excluding does, with the last number the gateway handed it with;
  * the ones it acknowledged, read again until handled; what its discover
- * answers; its record, newest first by delivery id; the crew token it
- * takes, and the calls the gateway made.
+ * answers; its record, newest first by delivery id; its name, as whoami
+ * answers it; the crew token it takes, and the calls the gateway made.
  */
-export function fakePersonShipDoor(ship: { crewToken: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[]; isExcludingIgnored?: boolean }) {
+export function fakePersonShipDoor(ship: { crewToken: string; name?: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[]; isExcludingIgnored?: boolean }) {
   const calls: string[] = [];
   /** The replies the fleet took, as sent. */
   const replies: Parameters<PersonShipDoor['reply']>[1][] = [];
   /** The messages the fleet took, as sent. */
   const sent: Parameters<PersonShipDoor['send']>[1][] = [];
   /** The fleet's answers to come for each call, before it takes them. */
-  const refusals: { pushReceive: FleetRefusal[]; record: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[] } = { pushReceive: [], record: [], reply: [], handled: [], discover: [], send: [], delivery: [] };
+  const refusals: { inbox: FleetRefusal[]; pushReceive: FleetRefusal[]; record: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[]; whoami: FleetRefusal[] } = { inbox: [], pushReceive: [], record: [], reply: [], handled: [], discover: [], send: [], delivery: [], whoami: [] };
   /** The hand-overs the gateway reported, in order. */
   const handOvers: Parameters<PersonShipDoor['handed']>[1][] = [];
   /** The deliveries the ship acknowledged and has not handled yet. */
@@ -160,6 +162,10 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
   const door: PersonShipDoor = {
     inbox: (crewToken) => {
       calls.push('inbox');
+      const refused = refusals.inbox.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
       return crewed(crewToken, () => ({ waiting: ship.deliveries.length }));
     },
     pushReceive: (crewToken, { max, excluding = [] }) => {
@@ -229,6 +235,11 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
         return 'handed' as const;
       });
     },
+    whoami: (crewToken) => {
+      calls.push('whoami');
+      const refused = refusals.whoami.shift();
+      return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => ({ name: ship.name ?? 'charlotte' }));
+    },
     discover: (crewToken) => {
       calls.push('discover');
       const refused = refusals.discover.shift();
@@ -293,9 +304,12 @@ export function aBasketEntry(overrides: Partial<BasketEntry> = {}): BasketEntry 
     sentAt: new Date('2026-10-31T19:41:00.000Z'),
     option: 2,
     note: 'Harbour first: the demo on 12 Nov needs it.',
+    optionLabel: "Harbour first, on today's look",
     addedAt: new Date('2026-10-31T19:53:00.000Z'),
     state: 'waiting',
     refusal: null,
+    isUnanswered: false,
+    storedAt: null,
     ...overrides,
   };
 }
@@ -313,7 +327,6 @@ export function memoryBasketEntries(): BasketEntries & { held: Map<string, Baske
     },
     find: (fleetId, asked) => Promise.resolve(held.get(key(fleetId, asked))),
     list: (fleetId, shipId) => Promise.resolve(ofShip(fleetId, shipId)),
-    count: (fleetId, shipId) => Promise.resolve(ofShip(fleetId, shipId).length),
     remove: (fleetId, removed) => {
       held.delete(key(fleetId, removed));
       return Promise.resolve();
@@ -339,9 +352,14 @@ export function memoryItemOutcomes(): ItemOutcomes & { held: ItemOutcome[] } {
   const held: ItemOutcome[] = [];
   return {
     held,
-    save: (outcome) => {
-      if (!held.some((kept) => kept.fleetId === outcome.fleetId && kept.shipId === outcome.shipId && kept.deliveryId === outcome.deliveryId)) {
-        held.push(outcome);
+    save: ({ note = null, seen = null, ...outcome }) => {
+      const kept = held.findIndex((each) => each.fleetId === outcome.fleetId && each.shipId === outcome.shipId && each.deliveryId === outcome.deliveryId);
+      const sighting = outcome.kind === 'seen' ? { place: outcome.place, at: outcome.at } : seen;
+      if (kept === -1) {
+        held.push({ ...outcome, note, seen: sighting });
+      } else if (held[kept]?.kind === 'seen' && outcome.kind !== 'seen') {
+        // What came of an item seen before takes the place of seen, still saying where and when it was seen.
+        held[kept] = { ...outcome, note, seen: held[kept].seen };
       }
       return Promise.resolve();
     },

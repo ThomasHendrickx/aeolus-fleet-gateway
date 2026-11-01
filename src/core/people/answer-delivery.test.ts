@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { createAnswerDelivery } from './answer-delivery.js';
@@ -30,6 +30,8 @@ const OPENED: OpenedDelivery = {
   withdrawnQuestionId: null,
   stepId: null,
   withdrawnStepId: null,
+  stepLink: null,
+  openedIn: null,
   sentAt: new Date('2026-10-19T08:00:00.000Z'),
   openedAt: AT,
 };
@@ -183,7 +185,7 @@ describe('a delivery the person dealt with', () => {
     const asCrew = { crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened };
     await deal();
 
-    const read = await createReadInbox({ ...asCrew, routes: memoryRoutes(), defaults: routingDefaultsOf([{ job: 'everything-else', place: 'chat' }]) })(CALLER);
+    const read = await createReadInbox({ ...asCrew, connections: memoryConnectionStore(), routes: memoryRoutes(), defaults: routingDefaultsOf([{ job: 'everything-else', place: 'chat' }]) })(CALLER);
     const reopened = await createOpenDelivery({ ...asCrew, changes, outcomes, clock: { now: () => AT } })({ caller: CALLER, deliveryId: OPENED.deliveryId, place: 'chat' });
 
     expect({ listed: read.isOk && read.value.opened, reopened }).toMatchObject({ listed: [], reopened: { isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } } });
@@ -194,7 +196,27 @@ describe('what came of it is kept, and where (Bridge, CC4)', () => {
   it('keeps an answer with the option the person picked, and where they answered, once handled', async () => {
     await answerDelivery({ caller: CALLER, place: 'bridge', deliveryId: OPENED.deliveryId, ...ANSWER });
 
-    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: OPENED.deliveryId, place: 'bridge', kind: 'answered', option: 1, at: AT }]);
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: OPENED.deliveryId, place: 'bridge', kind: 'answered', option: 1, note: null, seen: null, at: AT }]);
+  });
+
+  it('keeps the note the person sent with their answer, so Done quotes it', async () => {
+    await answerDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId, contentType: ANSWER.contentType, payload: '{"questionId":"9b2f","option":1,"note":"Fleet, it says what it is"}' });
+
+    expect(outcomes.held.map(({ option, note }) => ({ option, note }))).toEqual([{ option: 1, note: 'Fleet, it says what it is' }]);
+  });
+
+  it('keeps a note alone as its note', async () => {
+    await answerDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId, contentType: 'text/plain', payload: 'Not before Monday' });
+
+    expect(outcomes.held.map(({ note }) => note)).toEqual(['Not before Monday']);
+  });
+
+  it('keeps where and when the person first saw it, as they opened it, so Done tells its history', async () => {
+    await opened.save({ ...OPENED, openedIn: 'slack', openedAt: new Date('2026-10-31T19:57:00.000Z') });
+
+    await answerDelivery({ caller: CALLER, place: 'bridge', deliveryId: OPENED.deliveryId, ...ANSWER });
+
+    expect(outcomes.held.map(({ seen }) => seen)).toEqual([{ place: 'slack', at: new Date('2026-10-31T19:57:00.000Z') }]);
   });
 
   it('keeps a note alone as answered with no option', async () => {

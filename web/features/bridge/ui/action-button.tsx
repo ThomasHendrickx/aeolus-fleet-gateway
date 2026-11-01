@@ -3,6 +3,15 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 const VARIANTS = {
   primary: 'bg-primary text-primary-foreground hover:bg-primary-hover',
   secondary: 'border border-border bg-card text-card-foreground hover:bg-accent',
+  ghost: 'text-foreground hover:bg-accent',
+} as const;
+
+/** A row's buttons are small on a desktop, and a thumb's size on a phone (Bridge mockups, home). */
+export const SIZES = {
+  regular: 'h-9 gap-2 px-4',
+  row: 'h-9 gap-2 px-4 text-body sm:h-6 sm:gap-1.5 sm:px-2.5 sm:text-meta',
+  /** A basket entry's buttons (basket.html). */
+  small: 'h-8 gap-2 px-3 text-meta',
 } as const;
 
 /**
@@ -13,17 +22,18 @@ export function ActionButton({
   isPending,
   pendingLabel,
   variant = 'secondary',
+  size = 'regular',
   children,
   className = '',
   disabled,
   ...button
-}: ButtonHTMLAttributes<HTMLButtonElement> & { isPending: boolean; pendingLabel: string; variant?: keyof typeof VARIANTS; children: ReactNode }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { isPending: boolean; pendingLabel: string; variant?: keyof typeof VARIANTS; size?: keyof typeof SIZES; children: ReactNode }) {
   return (
     <button
       {...button}
       disabled={disabled === true || isPending}
       aria-busy={isPending}
-      className={`inline-flex h-9 items-center gap-2 rounded-md px-4 disabled:cursor-not-allowed disabled:opacity-70 ${VARIANTS[variant]} ${className}`}
+      className={`inline-flex items-center rounded-md disabled:cursor-not-allowed disabled:opacity-70 ${SIZES[size]} ${VARIANTS[variant]} ${className}`}
     >
       {isPending ? (
         <>

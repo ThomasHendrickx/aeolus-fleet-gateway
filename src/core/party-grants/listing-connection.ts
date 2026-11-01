@@ -31,9 +31,9 @@ export interface ListingConnection {
 export function createListingConnectionOf(deps: { grants: Pick<PartyGrants, 'usable'>; clock: Clock }): ListingConnectionOf {
   return async (server) => {
     if (server.credential.kind !== 'personSignIn') {
-      return { url: server.url, credential: server.credential };
+      return { url: server.url, credential: server.credential, party: { fleetId: server.fleetId, name: server.name } };
     }
     const grant = await deps.grants.usable(server.fleetId, { party: server.name, now: deps.clock.now() });
-    return grant === undefined ? undefined : { url: server.url, credential: { kind: 'bearer', token: grant.accessToken } };
+    return grant === undefined ? undefined : { url: server.url, credential: { kind: 'bearer', token: grant.accessToken }, party: { fleetId: server.fleetId, name: server.name } };
   };
 }

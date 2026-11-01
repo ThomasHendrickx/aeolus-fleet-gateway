@@ -21,3 +21,13 @@ describe("Bridge home's title row (home.html, states.html)", () => {
     expect(markup.includes('<p>heading</p>') && markup.indexOf('<p>heading</p>') < markup.indexOf('<p>banner</p>')).toBe(true);
   });
 });
+
+// decide.html, do.html: an opened item takes Your fleet's place, the list beside it (aeolus-fleet#1538).
+describe("Bridge home's columns while an item is open", () => {
+  it('gives the whole width to the list and the open item, Your fleet out of sight', () => {
+    const markup = renderToStaticMarkup(createElement(HomeColumns, { main: createElement('p', null, 'home'), aside: createElement('p', null, 'fleet') }));
+    const columns = (/<div class="([^"]*lg:grid-cols-[^"]*)"/.exec(markup)?.[1] ?? '').replaceAll('&amp;', '&').replaceAll('&gt;', '>').split(' ');
+
+    expect({ whole: columns.includes('has-[[data-testid=bridge-split]]:lg:grid-cols-1'), fleetHidden: markup.includes('in-[:has([data-testid=bridge-split])]:hidden') || columns.includes('has-[[data-testid=bridge-split]]:[&>:last-child]:hidden') }).toEqual({ whole: true, fleetHidden: true });
+  });
+});

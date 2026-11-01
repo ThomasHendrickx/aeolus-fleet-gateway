@@ -13,7 +13,7 @@ async function StayAwareParts({ api, fleetId }: { api: GatewayApi; fleetId: stri
   const read = await readBridgeHome(api);
   return (
     <PageAsLastRead read={read}>
-      {read.kind === 'unreadable' ? null : <StayAwarePanel fleetId={fleetId} stayAware={read.kind === 'read' ? read.value.stayAware : []} />}
+      {read.kind === 'unreadable' ? null : <StayAwarePanel fleetId={fleetId} stayAware={read.kind === 'read' ? read.value.stayAware : []} now={new Date().toISOString()} />}
     </PageAsLastRead>
   );
 }

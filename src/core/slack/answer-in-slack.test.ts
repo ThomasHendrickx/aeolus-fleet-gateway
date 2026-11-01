@@ -79,7 +79,7 @@ describe("a press of a question's button in Slack", () => {
   it('keeps it answered in Slack with the option pressed, so Bridge says where it was answered (Bridge, CC4)', async () => {
     await press(2);
 
-    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, place: 'slack', kind: 'answered', option: 2, at: NOW }]);
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, place: 'slack', kind: 'answered', option: 2, note: null, seen: null, at: NOW }]);
   });
 
   it("tells the person's pages their inbox changed, so an open Bridge page shows it answered in Slack without a reload", async () => {
@@ -89,7 +89,7 @@ describe("a press of a question's button in Slack", () => {
   });
 
   it('forgets the question as opened, so a chat no longer lists it at its next aeolus_inbox', async () => {
-    await opened.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, messageId: QUESTION.messageId, senderShipId: BUDGET_CHECK, from: 'budget-check', title: 'Cut travel?', contentType: QUESTION.contentType, askedQuestionId: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', withdrawnQuestionId: null, stepId: null, withdrawnStepId: null, sentAt: QUESTION.sentAt, openedAt: NOW });
+    await opened.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, messageId: QUESTION.messageId, senderShipId: BUDGET_CHECK, from: 'budget-check', title: 'Cut travel?', contentType: QUESTION.contentType, askedQuestionId: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', withdrawnQuestionId: null, stepId: null, withdrawnStepId: null, stepLink: null, openedIn: null, sentAt: QUESTION.sentAt, openedAt: NOW });
 
     await press(2);
 

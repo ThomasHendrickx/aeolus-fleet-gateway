@@ -14,9 +14,9 @@ function doneListOf(fleetId: string, read: BridgeRead<RecordPage>): ReactNode {
   switch (read.kind) {
     case 'read':
       // A change to the record reads the first page again, in place of what was shown.
-      return <DonePanel key={read.value.items.map(({ deliveryId, state }) => `${deliveryId}:${state}`).join(',')} fleetId={fleetId} first={read.value} />;
+      return <DonePanel key={read.value.items.map(({ deliveryId, state }) => `${deliveryId}:${state}`).join(',')} fleetId={fleetId} first={read.value} now={new Date().toISOString()} />;
     case 'none':
-      return <DonePanel fleetId={fleetId} first={{ items: [], nextCursor: null }} />;
+      return <DonePanel fleetId={fleetId} first={{ items: [], nextCursor: null }} now={new Date().toISOString()} />;
     case 'unreadable':
       return null;
   }

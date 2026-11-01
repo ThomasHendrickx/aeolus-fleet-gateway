@@ -1,11 +1,12 @@
 import { RECEIVE_MAX_UPPER_BOUND } from '@aeolus-fleet/common';
 
+import type { ConnectionStore, FleetRefusal } from '../connection/ports.js';
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import { chatInboxEntryOf, chatOpenedEntryOf, type ChatInboxEntry } from './inbox-entry.js';
 import { asPersonCrew, type PersonCaller, type PersonCrewError, type PersonCrewToken } from './person-crew.js';
 import type { OpenedDeliveries, PersonCrews, PersonDelivery, PersonShipDoor } from './ports.js';
-import { routingOf, type RoutingDefaults, type Routes } from './routing.js';
+import { ownStepsInBridgeOnly, routingOf, type RoutingDefaults, type Routes } from './routing.js';
 
 /** A person's inbox: how many deliveries wait and each of them, and the ones they opened and have not answered or done yet. */
 export interface Inbox {
@@ -54,6 +55,33 @@ export async function waitingFor(
 }
 
 /**
+ * What waits for a person ship, read with a crew token the gateway holds, as
+ * its own workers read it with no person calling: taken as waitingFor takes
+ * it, and refused as the fleet refuses, a crew that no longer works included.
+ */
+export async function waitingOn(door: Pick<PersonShipDoor, 'inbox' | 'pushReceive'>, crewToken: string): Promise<Result<PersonDelivery[], FleetRefusal>> {
+  const counted = await door.inbox(crewToken);
+  if (!counted.isOk) {
+    return counted;
+  }
+  let deliveries: PersonDelivery[] = [];
+  while (deliveries.length < counted.value.waiting) {
+    const excluding = deliveries.map(({ deliveryId }) => deliveryId);
+    const taken = await door.pushReceive(crewToken, { max: RECEIVE_MAX_UPPER_BOUND, ...(excluding.length === 0 ? {} : { excluding }) });
+    if (!taken.isOk) {
+      return taken;
+    }
+    const isTaken = new Set<string>(excluding);
+    const fresh = taken.value.filter(({ deliveryId }) => !isTaken.has(deliveryId));
+    if (fresh.length === 0) {
+      break;
+    }
+    deliveries = [...deliveries, ...fresh];
+  }
+  return ok(deliveries);
+}
+
+/**
  * Use case: a person reads their own person ship's inbox from a chat (Q20),
  * by titles only, in two groups (aeolus-fleet #1046): what waits, which the
  * gateway takes as the ship's crew, and what any client of the person opened
@@ -61,16 +89,18 @@ export async function waitingFor(
  * as waiting, as when it did not take its acknowledgement, is listed waiting
  * only. A chat is a pull place (Bridge, CC7): it lists only the items of the
  * jobs on for it, every one not done whenever it arrived (CC20); what it
- * leaves out of what waits is left out of the count too.
+ * leaves out of what waits is left out of the count too. The gateway's own
+ * steps are never listed: they show in Bridge only (BH8).
  */
-export function createReadInbox(deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; opened: OpenedDeliveries; routes: Routes; defaults: RoutingDefaults }): ReadInbox {
+export function createReadInbox(deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; opened: OpenedDeliveries; routes: Routes; defaults: RoutingDefaults; connections: Pick<ConnectionStore, 'binding'> }): ReadInbox {
   return async (caller) => {
     const waiting = await waitingFor(deps, caller);
     if (!waiting.isOk) {
       return waiting;
     }
     const ship = { fleetId: caller.fleetId, shipId: waiting.value.crew.shipId };
-    const routing = routingOf(await deps.routes.list(ship), deps.defaults);
+    const [routes, gateway] = await Promise.all([deps.routes.list(ship), deps.connections.binding(ship.fleetId)]);
+    const routing = ownStepsInBridgeOnly(routingOf(routes, deps.defaults), gateway?.shipId);
     const isWaiting = new Set<string>(waiting.value.deliveries.map(({ deliveryId }) => deliveryId));
     const listed = waiting.value.deliveries.filter((delivery) => routing.isShowing('chat', delivery));
     const opened = await deps.opened.list(ship.fleetId, ship.shipId);
@@ -78,7 +108,7 @@ export function createReadInbox(deps: { crewPersonShip: CrewPersonShip; crews: P
       waiting: waiting.value.waiting - (waiting.value.deliveries.length - listed.length),
       deliveries: listed.map(chatInboxEntryOf),
       // One opened before the gateway kept its content type is everything else.
-      opened: opened.filter(({ deliveryId, contentType, sentAt }) => !isWaiting.has(deliveryId) && routing.isShowing('chat', { contentType: contentType ?? '', sentAt })).map(chatOpenedEntryOf),
+      opened: opened.filter(({ deliveryId, contentType, sentAt, senderShipId }) => !isWaiting.has(deliveryId) && routing.isShowing('chat', { contentType: contentType ?? '', sentAt, senderShipId })).map(chatOpenedEntryOf),
     });
   };
 }

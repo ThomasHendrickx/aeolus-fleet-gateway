@@ -21,7 +21,7 @@ const AS: ActorCredential = { crewToken: 'aeolus_ct_v1_manager' };
 const CRM: McpServerParty = {
   fleetId: FLEET_ID,
   name: 'crm',
-  kind: 'mcpServer',
+  kind: 'mcpServer', displayName: null,
   url: 'https://crm.example.com/mcp',
   credential: { kind: 'bearer', token: 't' },
   concurrencyLimit: 4,
