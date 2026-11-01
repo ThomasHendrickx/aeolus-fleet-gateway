@@ -41,6 +41,8 @@ export interface McpServerParty extends PartyBase {
   readonly concurrencyLimit: number;
   /** Which of its tools the fleet may call; none kept yet means every tool it lists (aeolus-fleet#1151). */
   readonly toolSwitches: ToolSwitches | null;
+  /** The title the server gave in its serverInfo on the gateway's last connect, its display name; none if it gave none. */
+  readonly displayName: string | null;
 }
 
 /** An outside MCP client argo approved at /authorize: it calls fleet ships as its proxy ship (MCP in). */

@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { readHeader } from '../../frame/hooks/read-header';
-import { readBridgeHome, readRecordPage } from '../hooks/read-bridge';
+import { readBridgeHome } from '../hooks/read-bridge';
 import { BRIDGE_STAY_AWARE_PATH } from '../paths';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
@@ -16,20 +16,21 @@ async function readConsoleUrl(fleetId: string): Promise<string | undefined> {
 }
 
 async function StayAwareParts({ api, fleetId }: { api: GatewayApi; fleetId: string }) {
-  const [home, record, consoleUrl] = await Promise.all([readBridgeHome(api), readRecordPage(api, null), readConsoleUrl(fleetId)]);
-  if (home.kind === 'unreadable') {
-    return <RecordUnreadable message={home.message} />;
+  const [read, consoleUrl] = await Promise.all([readBridgeHome(api), readConsoleUrl(fleetId)]);
+  switch (read.kind) {
+    case 'read':
+      return <StayAwarePanel fleetId={fleetId} consoleUrl={consoleUrl} stayAware={read.value.stayAware} now={new Date().toISOString()} />;
+    case 'none':
+      return <StayAwarePanel fleetId={fleetId} consoleUrl={consoleUrl} stayAware={[]} now={new Date().toISOString()} />;
+    case 'unreadable':
+      return <RecordUnreadable message={read.message} />;
   }
-  if (record.kind === 'unreadable') {
-    return <RecordUnreadable message={record.message} />;
-  }
-  return <StayAwarePanel fleetId={fleetId} consoleUrl={consoleUrl} unseen={home.kind === 'read' ? home.value.stayAware : []} record={record.kind === 'read' ? record.value.items : []} />;
 }
 
 /**
  * Stay aware (docs/design/bridge, CC16), a page of the shell: the feed of
- * alerts and notices, the ones not seen yet as Bridge home reads them and
- * the seen ones from the record's newest page, read side by side. Signed out,
+ * alerts and notices as Bridge home reads it, and the fleet's console for
+ * an alert's ship, read side by side. Signed out,
  * the browser goes to sign in before anything shows.
  */
 export async function BridgeStayAwarePage({ searchParams }: { searchParams: SearchParams }) {

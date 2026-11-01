@@ -76,6 +76,7 @@ import type { MeetingRead } from '../../core/meetings/ports.js';
 import type { PersonMeeting, ReadMeeting } from '../../core/meetings/read-meeting.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { SendMessage } from '../../core/people/send-message.js';
+import type { ReadSendTo } from '../../core/people/read-send-to.js';
 import type { ReadBridgeHome } from '../../core/people/read-bridge-home.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { ReadRecord } from '../../core/people/read-record.js';
@@ -195,6 +196,7 @@ export interface Context {
     turnOnWebPush: TurnOnWebPush;
     turnOffWebPush: TurnOffWebPush;
     focusPage: FocusPage;
+    readSendTo: ReadSendTo;
     sendMessage: SendMessage;
     readMeeting: ReadMeeting;
     changeOwnMic: ChangeOwnMic;
@@ -629,6 +631,9 @@ const PERSON_CODES = {
   NO_SUCH_MEETING: 'NOT_FOUND',
   MIC_REFUSED: 'CONFLICT',
 } as const satisfies Record<string, TRPCError['code']>;
+
+/** A message a person writes to a ship in Bridge: text or Markdown, as its form says. */
+const MESSAGE_CONTENT_TYPE = 'text/markdown';
 
 /** A contribution a person writes on the pages: plain text. */
 const CONTRIBUTION_CONTENT_TYPE = 'text/plain';
@@ -1264,7 +1269,7 @@ export const gatewayRouter = t.router({
     basketCount: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.countBasket(ctx.caller))),
     /** Puts their answer to a question they opened in the basket, or changes it there; nothing is sent. */
     putInBasket: personProcedure
-      .input(z.strictObject({ deliveryId: z.string().min(1), option: z.int().min(1).nullable(), note: payloadSchema }))
+      .input(z.strictObject({ deliveryId: z.string().min(1), option: z.int().min(1).nullable(), optionLabel: payloadSchema.nullable(), note: payloadSchema }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.putInBasket({ caller: ctx.caller, ...input }))),
     /** Takes an entry out of the basket. */
     removeFromBasket: personProcedure.input(z.strictObject({ questionId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.removeFromBasket({ caller: ctx.caller, ...input }))),
@@ -1327,6 +1332,14 @@ export const gatewayRouter = t.router({
       .input(z.strictObject({ meetingId: idSchema('meeting'), payload: payloadSchema.min(1), idempotencyKey: z.string().min(1) }))
       .mutation(async ({ ctx, input: { meetingId, payload, idempotencyKey } }) =>
         personAnswerOf(await ctx.person.sendMessage({ caller: ctx.caller, to: { kind: 'meeting', meetingId }, contentType: CONTRIBUTION_CONTENT_TYPE, payload, idempotencyKey })),
+      ),
+    /** Who they can send a message to from Bridge (aeolus-fleet #1547): the ships their person ship may send to now, and its name. */
+    sendTo: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readSendTo(ctx.caller))),
+    /** Sends a ship a message from Bridge as their person ship, once under the page's key; it answers once the fleet stored it. */
+    send: personProcedure
+      .input(z.strictObject({ to: z.string().min(1), payload: payloadSchema.min(1), idempotencyKey: z.string().min(1) }))
+      .mutation(async ({ ctx, input: { to, payload, idempotencyKey } }) =>
+        personAnswerOf(await ctx.person.sendMessage({ caller: ctx.caller, to: { kind: 'ship', name: to }, contentType: MESSAGE_CONTENT_TYPE, payload, idempotencyKey })),
       ),
     /** Their own mic call: request it, withdraw the request, or release the mic they hold. */
     mic: personProcedure

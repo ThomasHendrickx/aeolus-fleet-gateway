@@ -81,12 +81,12 @@ describe("a press of a step's Done in Slack", () => {
   });
 
   it("keeps it done in Slack, forgets it as opened and tells the person's pages, so Bridge shows where it was done and its post is edited", async () => {
-    await opened.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: STEP.deliveryId, messageId: STEP.messageId, senderShipId: ORCHESTRATOR, from: 'orchestrator-1', title: 'Create the repository', contentType: STEP.contentType, askedQuestionId: null, withdrawnQuestionId: null, stepId: STEP_ID, withdrawnStepId: null, sentAt: STEP.sentAt, openedAt: NOW });
+    await opened.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: STEP.deliveryId, messageId: STEP.messageId, senderShipId: ORCHESTRATOR, from: 'orchestrator-1', title: 'Create the repository', contentType: STEP.contentType, askedQuestionId: null, withdrawnQuestionId: null, stepId: STEP_ID, withdrawnStepId: null, stepLink: null, sentAt: STEP.sentAt, openedAt: NOW, openedIn: null });
 
     await pressDone();
 
     expect({ outcomes: outcomes.held, opened: opened.held.size, told: changes.told }).toEqual({
-      outcomes: [{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: STEP.deliveryId, place: 'slack', kind: 'done', option: null, at: NOW }],
+      outcomes: [{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: STEP.deliveryId, place: 'slack', kind: 'done', option: null, note: null, seen: null, at: NOW }],
       opened: 0,
       told: [{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP }],
     });

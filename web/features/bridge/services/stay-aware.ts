@@ -1,31 +1,10 @@
 /**
- * Stay aware as Bridge shows it (stay-aware.html, CC16): the feed of alerts
- * and notices, the ones not seen yet marked new, and an opened alert's ship,
+ * Stay aware as Bridge shows it (stay-aware.html, CC16): how many alerts
+ * and notices are not seen yet, and an opened alert's ship,
  * its Health in the console and what Aeolus does when it clears (decision
  * 0071). Pure view logic, no React and no API client.
  */
 import { ALERT_CONTENT_TYPE, alertMessageSchema, type AlertSignal } from '@aeolus-fleet/common';
-
-import type { HomeItem, RecordItem } from './items';
-
-type FeedItem = Pick<HomeItem, 'deliveryId' | 'from' | 'title' | 'sentAt' | 'job'>;
-
-/** An item of the feed, new until the person sees it. */
-export interface FeedRow {
-  readonly item: FeedItem;
-  readonly isNew: boolean;
-}
-
-/**
- * The feed: the alerts and notices not seen yet, as Bridge home reads them,
- * and the ones the record holds seen, newest first. Seeing one handles it
- * (CC16), so the seen ones live only in the record.
- */
-export function feedOf({ unseen, record }: { unseen: readonly FeedItem[]; record: readonly (FeedItem & Pick<RecordItem, 'state'>)[] }): FeedRow[] {
-  const isUnseen = new Set(unseen.map(({ deliveryId }) => deliveryId));
-  const seen = record.filter(({ job, deliveryId }) => job === 'stay-aware' && !isUnseen.has(deliveryId));
-  return [...unseen.map((item) => ({ item, isNew: true })), ...seen.map((item) => ({ item, isNew: false }))].sort((a, b) => b.item.sentAt.localeCompare(a.item.sentAt));
-}
 
 /** How many are not seen yet: "1 unseen". */
 export function unseenSaidOf(count: number): string {

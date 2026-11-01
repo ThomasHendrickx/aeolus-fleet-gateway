@@ -1,4 +1,4 @@
-import { MEETING_ADDED_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, QUESTION_CONTENT_TYPE, REPLACEMENT_CONTENT_TYPE, questionSchema, replacementSchema, type DeliveryId } from '@aeolus-fleet/common';
+import { MEETING_ADDED_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, QUESTION_CONTENT_TYPE, REPLACEMENT_CONTENT_TYPE, questionSchema, replacementSchema, type DeliveryId, type Question } from '@aeolus-fleet/common';
 
 import { essenceOf, jobOf, type ItemJob } from './item-job.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
@@ -47,8 +47,8 @@ export interface ChatInboxEntry extends InboxEntry {
   readonly pick: AskerPick | null;
 }
 
-/** The asker's pick of a question, or of the new question a replacement asks; none for any other delivery or a payload that is no question. */
-function pickOf(delivery: Pick<PersonDelivery, 'contentType' | 'payload'>): AskerPick | null {
+/** The question a delivery asks: a question's own, or the new question a replacement asks; none for any other delivery or a payload that is no question. */
+export function askedQuestionOf(delivery: Pick<PersonDelivery, 'contentType' | 'payload'>): Question | null {
   const essence = essenceOf(delivery.contentType);
   if (essence !== QUESTION_CONTENT_TYPE && essence !== REPLACEMENT_CONTENT_TYPE) {
     return null;
@@ -59,8 +59,12 @@ function pickOf(delivery: Pick<PersonDelivery, 'contentType' | 'payload'>): Aske
   } catch {
     return null;
   }
-  const question = essence === QUESTION_CONTENT_TYPE ? questionSchema.safeParse(parsed).data : replacementSchema.safeParse(parsed).data?.question;
-  return question === undefined ? null : question.pick;
+  return (essence === QUESTION_CONTENT_TYPE ? questionSchema.safeParse(parsed).data : replacementSchema.safeParse(parsed).data?.question) ?? null;
+}
+
+/** The asker's pick of a question, or of the new question a replacement asks; none for any other delivery or a payload that is no question. */
+function pickOf(delivery: Pick<PersonDelivery, 'contentType' | 'payload'>): AskerPick | null {
+  return askedQuestionOf(delivery)?.pick ?? null;
 }
 
 export function chatInboxEntryOf(delivery: PersonDelivery): ChatInboxEntry {

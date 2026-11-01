@@ -36,6 +36,8 @@ const SLOW_TOOL_PAST_WAIT_MS = 1_000;
 export interface MockCrmOptions {
   /** How long `forecast_revenue` takes; by default past the gateway's default MCP_WAIT_MAX_MS. */
   slowToolMs?: number;
+  /** The title it gives in its serverInfo, if any. */
+  serverTitle?: string;
   /** Whether it asks for no credential, as a server reached only on a private network. */
   isOpen?: boolean;
   /** Tools whose call it refuses 403 `insufficient_scope`, as a server whose credential lacks the tool's scope. */
@@ -77,7 +79,7 @@ const toolCallSchema = z.object({ method: z.literal('tools/call'), params: z.obj
 const textOf = (value: unknown) => [{ type: 'text' as const, text: JSON.stringify(value) }];
 
 function crmServer(crm: MockCrm, options: MockCrmOptions): McpServer {
-  const mcp = new McpServer({ name: 'mock-crm', version: '1.0.0' }, { capabilities: { tools: {} } });
+  const mcp = new McpServer({ name: 'mock-crm', version: '1.0.0', ...(options.serverTitle === undefined ? {} : { title: options.serverTitle }) }, { capabilities: { tools: {} } });
   const counted = (name: string) => {
     crm.calls.set(name, (crm.calls.get(name) ?? 0) + 1);
   };

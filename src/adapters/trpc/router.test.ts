@@ -154,13 +154,13 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readBridgeHome: (caller) =>
         Promise.resolve(
           grantOf(caller) === PERSON_TOKEN
-            ? ok({ waiting: { count: 1, items: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, state: 'new' as const, stale: null, inBasket: null }] }, stayAware: [] })
+            ? ok({ waiting: { count: 1, items: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, isAlert: false, state: 'new' as const, seenIn: null, stale: null, inBasket: null, places: ['chat' as const], actInPlace: { kind: 'putPick' as const, option: 1 } }] }, stayAware: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       readRecord: ({ cursor }) =>
         Promise.resolve(
           ok({
-            items: [{ deliveryId: DELIVERY, from: 'watch', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-20T09:00:00.000Z', job: 'stay-aware' as const, state: 'done' as const, outcome: { place: 'bridge' as const, kind: 'seen' as const, option: null, at: '2026-10-20T09:05:00.000Z' } }],
+            items: [{ deliveryId: DELIVERY, from: 'watch', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-20T09:00:00.000Z', job: 'stay-aware' as const, isAlert: true, state: 'done' as const, places: [], contentType: 'application/vnd.aeolus.alert+json', payload: '{}', outcome: { place: 'bridge' as const, kind: 'seen' as const, option: null, optionLabel: null, note: null, seen: { place: 'bridge' as const, at: '2026-10-20T09:05:00.000Z' }, replacementTitle: null, at: '2026-10-20T09:05:00.000Z' } }],
             nextCursor: cursor,
           }),
         ),
@@ -182,8 +182,9 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readBasket: () =>
         Promise.resolve(
           ok({
+            count: 1,
             toSend: 1,
-            entries: [{ questionId: QUESTION_ID, deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', option: 2, note: null, standing: { kind: 'waiting' as const } }],
+            entries: [{ questionId: QUESTION_ID, deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', option: 2, optionLabel: 'Publish it', note: null, standing: { kind: 'waiting' as const } }],
           }),
         ),
       countBasket: () => Promise.resolve(ok({ count: 1 })),
@@ -191,7 +192,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         if (input.deliveryId !== DELIVERY) {
           return Promise.resolve(err({ kind: 'NOT_A_QUESTION' as const, message: 'Only an answer to a question goes in the basket' }));
         }
-        answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId, option: String(input.option), note: input.note });
+        answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId, option: String(input.option), optionLabel: String(input.optionLabel), note: input.note });
         return Promise.resolve(ok({ questionId: QUESTION_ID, option: input.option, note: input.note === '' ? null : input.note }));
       },
       removeFromBasket: ({ questionId }) =>
@@ -255,6 +256,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
             ? ok({ meeting: aMeetingRead(), mic: { kind: 'requested' as const, place: 1 } })
             : err({ kind: 'NO_SUCH_MEETING' as const, message: `The fleet did not read the meeting to you: Meeting ${meetingId} does not exist` }),
         ),
+      readSendTo: (caller) => Promise.resolve(grantOf(caller) === PERSON_TOKEN ? ok({ sentAs: 'charlotte', ships: ['builder-core', 'tracker'] }) : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' })),
       sendMessage: (input) => {
         answers.push({ grantId: grantOf(input.caller), to: JSON.stringify(input.to), contentType: input.contentType, payload: input.payload, idempotencyKey: input.idempotencyKey ?? '' });
         return Promise.resolve(ok({ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0009' as const }));
@@ -986,10 +988,10 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context, answers } = aContext(PERSON_COOKIE);
     const caller = gatewayRouter.createCaller(context);
 
-    await expect(caller.people.putInBasket({ deliveryId: DELIVERY, option: 2, note: 'Harbour first' })).resolves.toEqual({ questionId: QUESTION_ID, option: 2, note: 'Harbour first' });
+    await expect(caller.people.putInBasket({ deliveryId: DELIVERY, option: 2, optionLabel: "Harbour first, on today's look", note: 'Harbour first' })).resolves.toEqual({ questionId: QUESTION_ID, option: 2, note: 'Harbour first' });
     await expect(caller.people.sendBasket()).resolves.toEqual({ sending: 1, skipped: [] });
     expect(answers).toEqual([
-      { grantId: PERSON_TOKEN, deliveryId: DELIVERY, option: '2', note: 'Harbour first' },
+      { grantId: PERSON_TOKEN, deliveryId: DELIVERY, option: '2', optionLabel: "Harbour first, on today's look", note: 'Harbour first' },
       { grantId: PERSON_TOKEN, sent: 'basket' },
     ]);
   });
@@ -997,21 +999,21 @@ describe("a person reads and deals with their person ship's deliveries through t
   it('puts a note alone in the basket, with no option', async () => {
     const { context, answers } = aContext(PERSON_COOKIE);
 
-    await expect(gatewayRouter.createCaller(context).people.putInBasket({ deliveryId: DELIVERY, option: null, note: 'Ask me after the demo' })).resolves.toEqual({ questionId: QUESTION_ID, option: null, note: 'Ask me after the demo' });
-    expect(answers).toEqual([{ grantId: PERSON_TOKEN, deliveryId: DELIVERY, option: 'null', note: 'Ask me after the demo' }]);
+    await expect(gatewayRouter.createCaller(context).people.putInBasket({ deliveryId: DELIVERY, option: null, optionLabel: null, note: 'Ask me after the demo' })).resolves.toEqual({ questionId: QUESTION_ID, option: null, note: 'Ask me after the demo' });
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, deliveryId: DELIVERY, option: 'null', optionLabel: 'null', note: 'Ask me after the demo' }]);
   });
 
   it('refuses an option that is no whole number from 1, putting nothing in the basket', async () => {
     const { context, answers } = aContext(PERSON_COOKIE);
 
-    await expect(gatewayRouter.createCaller(context).people.putInBasket({ deliveryId: DELIVERY, option: 1.5, note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(gatewayRouter.createCaller(context).people.putInBasket({ deliveryId: DELIVERY, option: 1.5, optionLabel: 'Compact look first', note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(answers).toEqual([]);
   });
 
   it('says a delivery that asks no question goes in no basket, an entry being sent cannot be removed, and one not in the basket is not found', async () => {
     const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
 
-    await expect(caller.people.putInBasket({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9txt', option: 1, note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller.people.putInBasket({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9txt', option: 1, optionLabel: 'Compact look first', note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     await expect(caller.people.removeFromBasket({ questionId: QUESTION_ID })).rejects.toMatchObject({ code: 'CONFLICT' });
     await expect(caller.people.removeFromBasket({ questionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
@@ -1509,5 +1511,30 @@ describe("an actor holding gateway:slack connects the fleet's Slack through the 
 
   it('refuses Install while the fleet is connected to no workspace', async () => {
     await expect(asCharlotte(['gateway:slack']).caller.slack.install({})).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe("a person sends a ship a message from Bridge through the gateway's API (aeolus-fleet #1547)", () => {
+  it('reads who they can send a message to in Bridge as their own account', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.sendTo()).resolves.toEqual({ sentAs: 'charlotte', ships: ['builder-core', 'tracker'] });
+  });
+
+  it('sends a ship a message from Bridge as their own account, as Markdown, once under the key the page gives', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.send({ to: 'builder-gateway', payload: 'Report where you are', idempotencyKey: 'page-2' })).resolves.toEqual({ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0009' });
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, to: JSON.stringify({ kind: 'ship', name: 'builder-gateway' }), contentType: 'text/markdown', payload: 'Report where you are', idempotencyKey: 'page-2' }]);
+  });
+
+  it.each([
+    ['an empty message', ''],
+    ["a message over the fleet's payload limit in UTF-8 bytes, though under it in characters", 'é'.repeat(PAYLOAD_MAX_BYTES / 2 + 1)],
+  ])('refuses %s from Bridge, sending nothing', async (_, payload) => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.send({ to: 'builder-gateway', payload, idempotencyKey: 'page-2' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(answers).toEqual([]);
   });
 });

@@ -33,6 +33,8 @@ export interface FocusedDelivery {
   readonly meetingId: string | undefined;
   /** Whether its asker withdrew or replaced the question or step it asks, with the replacement, a new item. */
   readonly stale: Stale | null;
+  /** The ship an alert is about, by name, for the person to send it a message (aeolus-fleet #1547). */
+  readonly alertShip?: string | undefined;
 }
 
 /** A question or step its asker withdrew or replaced (decision 0038, CC14), as the API says it: when, and the replacement with its title. */
@@ -43,9 +45,18 @@ export interface Stale {
   readonly replacementTitle: string | null;
 }
 
-/** Who withdrew or replaced it and when, in UTC to the minute, and a replacement's title, as the mockups word it (basket.html). */
-export function staleSaidOf(stale: Stale, from: string): string {
-  const said = `${stale.kind === 'withdrawn' ? 'Withdrawn' : 'Replaced'} by ${from} at ${new Date(stale.at).toISOString().slice(11, 16)} UTC`;
+/** A time of day in UTC to the minute, as a list read on the server says it. */
+function utcClockOf(at: string): string {
+  return `${new Date(at).toISOString().slice(11, 16)} UTC`;
+}
+
+/**
+ * Who withdrew or replaced it and when, and a replacement's title, as the
+ * mockups word it (basket.html); the time in UTC unless said otherwise, as
+ * an opened item says it in the person's own time.
+ */
+export function staleSaidOf(stale: Stale, { from, clockOf = utcClockOf }: { from: string; clockOf?: (at: string) => string }): string {
+  const said = `${stale.kind === 'withdrawn' ? 'Withdrawn' : 'Replaced'} by ${from} at ${clockOf(stale.at)}`;
   return stale.replacementTitle === null ? said : `${said} with “${stale.replacementTitle}”`;
 }
 

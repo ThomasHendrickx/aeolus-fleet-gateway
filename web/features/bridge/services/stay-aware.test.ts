@@ -1,11 +1,11 @@
 import { ALERT_CONTENT_TYPE } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
-import { alertOf, clearsSaidOf, feedOf, healthHrefOf, unseenSaidOf } from './stay-aware';
+import { alertOf, clearsSaidOf, healthHrefOf, unseenSaidOf } from './stay-aware';
 
-// Stay aware (stay-aware.html, CC16): the alerts and notices not seen yet,
-// then the ones seen, newest first; an opened alert names its ship, links its
-// Health in the console and says what Aeolus does on clear.
+// Stay aware (stay-aware.html, CC16): how many are not seen yet; an opened
+// alert names its ship, links its Health in the console and says what Aeolus
+// does on clear.
 
 const ALERT = {
   alertId: 'alt_01m6bx0dz59nqc0539gsxywrgd',
@@ -20,34 +20,7 @@ const ALERT = {
   facts: { reportChangedAt: '2026-10-31T17:46:00.000Z', state: 'working', minutes: 45, setBy: 'shp_01m3tb1zhjs6kthtcs2zvksacv' },
 };
 
-function anItem(deliveryId: `dlv_${string}`, sentAt: string) {
-  return { deliveryId, from: 'watch', title: `Item ${deliveryId}`, sentAt, job: 'stay-aware' as const };
-}
-
 describe('the stay-aware feed', () => {
-  it('lists what is not seen yet and what was seen, newest first, marking the unseen new', () => {
-    const unseen = [anItem('dlv_alert', '2026-10-31T19:47:00.000Z')];
-    const seen = [anItem('dlv_release', '2026-10-31T15:00:00.000Z'), anItem('dlv_pr', '2026-10-31T19:41:00.000Z')];
-
-    expect(feedOf({ unseen, record: seen.map((item) => ({ ...item, state: 'done' as const })) }).map(({ item, isNew }) => [item.deliveryId, isNew])).toEqual([
-      ['dlv_alert', true],
-      ['dlv_pr', false],
-      ['dlv_release', false],
-    ]);
-  });
-
-  it('leaves out of the seen ones every item of another job', () => {
-    const record = [{ ...anItem('dlv_question', '2026-10-31T19:41:00.000Z'), job: 'decide' as const, state: 'done' as const }];
-
-    expect(feedOf({ unseen: [], record })).toEqual([]);
-  });
-
-  it('lists an item the record holds and the person has not seen once, as unseen', () => {
-    const unseen = [anItem('dlv_alert', '2026-10-31T19:47:00.000Z')];
-
-    expect(feedOf({ unseen, record: [{ ...anItem('dlv_alert', '2026-10-31T19:47:00.000Z'), state: 'new' }] }).map(({ isNew }) => isNew)).toEqual([true]);
-  });
-
   it('says how many are not seen yet', () => {
     expect(unseenSaidOf(1)).toBe('1 unseen');
   });

@@ -1,4 +1,5 @@
 import { CircleAlert, Info, SquareArrowOutUpRight } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { clearsSaidOf, type AlertView } from '../services/stay-aware';
 
@@ -6,9 +7,10 @@ import { clearsSaidOf, type AlertView } from '../services/stay-aware';
  * What an opened alert shows of its ship (stay-aware.html): the ship's tile
  * in the alert's tone, as the alert left it, since nothing is sent when it
  * clears (decision 0071); Open <ship>'s Health in the console for its state
- * now, when the fleet's console is known; and the info line saying so.
+ * now, when the fleet's console is known, beside sending the ship a
+ * message; and the info line saying so.
  */
-export function AlertShip({ alert, healthHref }: { alert: AlertView; healthHref: string | undefined }) {
+export function AlertShip({ alert, healthHref, send }: { alert: AlertView; healthHref: string | undefined; /** Send <ship> a message, beside Health, when it can be sent. */ send?: ReactNode }) {
   const { name } = alert.ship;
   return (
     <div className="grid gap-3">
@@ -19,18 +21,21 @@ export function AlertShip({ alert, healthHref }: { alert: AlertView; healthHref:
           Alert
         </span>
       </div>
-      {healthHref === undefined ? null : (
-        <a
-          data-testid="bridge-ship-health"
-          href={healthHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex h-8 items-center gap-2 justify-self-start rounded-md border border-border bg-card px-3 text-caption font-medium hover:bg-accent"
-        >
-          <SquareArrowOutUpRight aria-hidden="true" className="size-3.5 shrink-0" />
-          {`Open ${name}’s Health`}
-        </a>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {healthHref === undefined ? null : (
+          <a
+            data-testid="bridge-ship-health"
+            href={healthHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-8 items-center gap-2 justify-self-start rounded-md border border-border bg-card px-3 text-caption font-medium hover:bg-accent"
+          >
+            <SquareArrowOutUpRight aria-hidden="true" className="size-3.5 shrink-0" />
+            {`Open ${name}’s Health`}
+          </a>
+        )}
+        {send}
+      </div>
       <p data-testid="bridge-alert-clears" className="flex items-start gap-1.5 text-caption text-muted-foreground">
         <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
         <span>{clearsSaidOf(alert)}</span>

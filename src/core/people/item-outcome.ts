@@ -24,13 +24,31 @@ export interface ItemOutcome {
   readonly kind: OutcomeKind;
   /** The option of a question the person answered with; none for a note alone or any other outcome. */
   readonly option: number | null;
+  /** The note the person sent with it: an answer's or a step outcome's; none when they wrote none. */
+  readonly note: string | null;
+  /** Where and when the person first saw the item, so Done tells its history; none where the gateway did not see it seen. */
+  readonly seen: Sighting | null;
   readonly at: Date;
 }
 
+/** Where and when the person saw an item. */
+export interface Sighting {
+  readonly place: Place;
+  readonly at: Date;
+}
+
+/** An outcome to keep: its note and where it was seen, when the place it came from knows them. */
+export type NewItemOutcome = Omit<ItemOutcome, 'note' | 'seen'> & { readonly note?: string | null; readonly seen?: Sighting | null };
+
 /** Outbound port: the outcomes kept, by fleet, person ship and delivery. */
 export interface ItemOutcomes {
-  /** Keeps it, unless an outcome of the delivery is kept already. */
-  save(outcome: ItemOutcome): Promise<void>;
+  /**
+   * Keeps it, unless an outcome of the delivery is kept already: one answer
+   * per question. An item kept as seen is the one exception: what came of it
+   * after takes its place, still saying where and when it was seen. An
+   * outcome of seen was seen where and when it was kept.
+   */
+  save(outcome: NewItemOutcome): Promise<void>;
   /** The outcomes of these deliveries of the person ship that are kept. */
   findMany(fleetId: FleetId, asked: { shipId: ShipId; deliveryIds: readonly DeliveryId[] }): Promise<ItemOutcome[]>;
 }

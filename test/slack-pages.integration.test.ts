@@ -478,7 +478,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
       const deliveryId = (await prisma.slackPost.findFirstOrThrow({ where: { fleetId, messageId: questionMessageId } })).deliveryId;
       // Charlotte opened it in Bridge and put option 1 in the basket, not sent yet.
       expect((await personCall('open', { deliveryId })).status).toBe(200);
-      expect((await personCall('putInBasket', { deliveryId, option: 1, note: '' })).status).toBe(200);
+      expect((await personCall('putInBasket', { deliveryId, option: 1, optionLabel: 'Compact', note: '' })).status).toBe(200);
       const bridge = await charlottesBridge();
 
       const pressed = await press({ messageTs: questionTs, messageId: questionMessageId, option: 2 });
@@ -493,7 +493,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
       // Bridge says it as Answered in Slack: option 2 (web/features/bridge/services/basket.ts); Done reads it from core's record, which the test core does not serve yet.
       expect(basket.find((entry) => entry.deliveryId === deliveryId)?.standing).toEqual({ kind: 'dealtElsewhere', place: 'slack', option: 2 });
 
-      const later = await personCall('putInBasket', { deliveryId, option: 3, note: '' });
+      const later = await personCall('putInBasket', { deliveryId, option: 3, optionLabel: 'Both', note: '' });
       expect({ status: later.status, said: JSON.stringify(await later.json()).includes('Already answered in Slack: option 2. Nothing is sent.') }).toEqual({ status: 409, said: true });
       expect((await personCall('sendBasket', {})).status).toBe(200);
       // A basket round after Send, which would send what the basket held.
