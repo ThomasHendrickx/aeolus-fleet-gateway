@@ -7,7 +7,7 @@ import type { PersonDelivery, PersonShip, PersonShipDoor, PushedPersonDelivery, 
 import type { Routing } from '../people/routing.js';
 import type { Clock } from '../shared/clock.js';
 import { ok, type Result } from '../shared/result.js';
-import type { SlackApps, SlackButton, SlackLinks, SlackMessages, SlackPosts } from './ports.js';
+import type { SlackApps, SlackLinks, SlackMessage, SlackMessages, SlackPosts } from './ports.js';
 import type { SlackApp } from './slack-app.js';
 import type { SlackLink } from './slack-link.js';
 import { slackPostOf } from './slack-post-of.js';
@@ -89,9 +89,9 @@ export function createShowInSlack(deps: {
   };
 
   /** Posts it, waiting out Slack's rate limits: the Slack message, or none when Slack refused it. */
-  const posted = async (where: Where, shown: { messageId: MessageId; text: string; buttons: readonly SlackButton[] }): Promise<string | undefined> => {
+  const posted = async (where: Where, shown: { messageId: MessageId; message: SlackMessage }): Promise<string | undefined> => {
     for (let tried = 1; ; tried += 1) {
-      const answered = await deps.slack.post(where.app.bot.token, { messageId: shown.messageId, channel: where.channel, threadTs: where.threadTs, text: shown.text, buttons: shown.buttons });
+      const answered = await deps.slack.post(where.app.bot.token, { messageId: shown.messageId, channel: where.channel, threadTs: where.threadTs, message: shown.message });
       if (answered.isOk) {
         return answered.value.ts;
       }
@@ -119,8 +119,8 @@ export function createShowInSlack(deps: {
         return 'notShown';
       }
       const app = await deps.apps.find(post.fleetId, post.appId);
-      const shown = slackPostOf(delivery, { bridgeUrl: deps.bridgeUrlOf(post.fleetId), isHeadedBySender: app?.shipId === null });
-      const ts = isInSlack(app) ? await posted({ app, channel: post.channel, threadTs: post.threadTs }, { messageId: post.messageId, text: shown.text, buttons: shown.buttons }) : undefined;
+      const { text, item, buttons } = slackPostOf(delivery, { bridgeUrl: deps.bridgeUrlOf(post.fleetId), isHeadedBySender: app?.shipId === null });
+      const ts = isInSlack(app) ? await posted({ app, channel: post.channel, threadTs: post.threadTs }, { messageId: post.messageId, message: { text, item, buttons } }) : undefined;
       if (ts === undefined) {
         await deps.posts.remove(post.fleetId, post);
         return 'notShown';

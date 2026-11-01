@@ -18,10 +18,12 @@ import { z } from 'zod';
 import { SHARED_SIGN_IN_COOKIE } from '../../core/account-sign-in/ports.js';
 import type { CompleteInstall } from '../../core/slack/complete-install.js';
 import type { AnswerInSlack } from '../../core/slack/answer-in-slack.js';
+import type { DoneInSlack } from '../../core/slack/done-in-slack.js';
+import type { SlackPress } from '../../core/slack/slack-press.js';
 import type { CompleteLink } from '../../core/slack/complete-link.js';
 import type { SeeInSlack } from '../../core/slack/see-in-slack.js';
 import type { TakeSlackEvent } from '../../core/slack/take-slack-event.js';
-import { SEEN_ACTION } from '../slack/slack-messages.js';
+import { DONE_ACTION, SEEN_ACTION } from '../slack/slack-messages.js';
 import { cookieValueOf } from './account-sign-in-routes.js';
 
 export const SLACK_INSTALL_PATH = '/gw/slack/install';
@@ -35,14 +37,14 @@ export const SLACK_ACTIONS_PATH = '/gw/slack/actions';
 /** Form posts, as Slack sends a press of a button. */
 const FORM_TYPE = 'application/x-www-form-urlencoded';
 
-/** A press of a button under a post of the gateway's: the app, who pressed it, the Slack message it is under, the fleet message its buttons name, and the option, or Seen. */
+/** A press of a button under a post of the gateway's: the app, who pressed it, the Slack message it is under, the fleet message its buttons name, and the option, Seen or a step's Done. A step's Open, which Slack opens, is no press the gateway takes. */
 const blockActionsSchema = z.object({
   type: z.literal('block_actions'),
   api_app_id: z.string(),
   team: z.object({ id: z.string() }),
   user: z.object({ id: z.string() }),
   container: z.object({ channel_id: z.string(), message_ts: z.string() }),
-  actions: z.tuple([z.object({ block_id: idSchema('message'), value: z.union([z.literal(SEEN_ACTION), z.string().regex(/^\d+$/)]) })]).rest(z.unknown()),
+  actions: z.tuple([z.object({ block_id: idSchema('message'), value: z.union([z.literal(SEEN_ACTION), z.literal(DONE_ACTION), z.string().regex(/^\d+$/)]) })]).rest(z.unknown()),
 });
 
 /** The Slack page of the web app (web/features/slack/paths.ts names the same). */
@@ -102,7 +104,16 @@ const OUTCOMES = {
   SLACK_UNAVAILABLE: 'unavailable',
 } as const;
 
-export function registerSlackRoutes(server: FastifyInstance, deps: { completeInstall: CompleteInstall; completeLink: CompleteLink; takeSlackEvent: TakeSlackEvent; answerInSlack: AnswerInSlack; seeInSlack: SeeInSlack }): void {
+/** The use case a press runs, by the button pressed: Seen, a step's Done, or an option. */
+function pressedAs(deps: { answerInSlack: AnswerInSlack; seeInSlack: SeeInSlack; doneInSlack: DoneInSlack }, press: { pressing: SlackPress; value: string }) {
+  const { pressing, value } = press;
+  if (value === SEEN_ACTION) {
+    return deps.seeInSlack(pressing);
+  }
+  return value === DONE_ACTION ? deps.doneInSlack(pressing) : deps.answerInSlack({ ...pressing, option: Number(value) });
+}
+
+export function registerSlackRoutes(server: FastifyInstance, deps: { completeInstall: CompleteInstall; completeLink: CompleteLink; takeSlackEvent: TakeSlackEvent; answerInSlack: AnswerInSlack; seeInSlack: SeeInSlack; doneInSlack: DoneInSlack }): void {
   server.get(SLACK_INSTALL_PATH, async (request, reply) => {
     const query = installQuerySchema.safeParse(request.query);
     const { code, state, error } = query.success ? query.data : {};
@@ -163,7 +174,7 @@ export function registerSlackRoutes(server: FastifyInstance, deps: { completeIns
         timestamp: headerOf(request.headers['x-slack-request-timestamp']),
         signature: headerOf(request.headers['x-slack-signature']),
       };
-      const answered = action.value === SEEN_ACTION ? await deps.seeInSlack(pressing) : await deps.answerInSlack({ ...pressing, option: Number(action.value) });
+      const answered = await pressedAs(deps, { pressing, value: action.value });
       return answered.isOk ? reply.send() : reply.code(HTTP_UNAUTHORIZED).send();
     });
     scope.post(SLACK_EVENTS_PATH, async (request, reply) => {

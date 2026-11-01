@@ -194,20 +194,21 @@ export interface SlackMessages {
   /** A message only one person sees, in a conversation (chat.postEphemeral), with a button that opens an address. */
   postOnlyTo(botToken: string, message: { channel: string; user: string; text: string; button?: { text: string; url: string } }): Promise<Result<undefined, SlackRefusal>>;
   /**
-   * A message in a conversation, or a thread of it, with a button per option
-   * to answer (chat.postMessage): the Slack message it is. A press of a
+   * A message in a conversation, or a thread of it, an item framed as
+   * views.html draws it, with its buttons (chat.postMessage): the Slack
+   * message it is. A press of a
    * button names the fleet message it shows, so a press is matched before
    * the gateway keeps the Slack message.
    */
-  post(botToken: string, message: { messageId: MessageId; channel: string; threadTs: string | null; text: string; buttons: readonly SlackButton[] }): Promise<Result<{ channel: string; ts: string }, SlackRefusal>>;
+  post(botToken: string, message: { messageId: MessageId; channel: string; threadTs: string | null; message: SlackMessage }): Promise<Result<{ channel: string; ts: string }, SlackRefusal>>;
   /** A message in a message's thread, everyone in the conversation sees (chat.postMessage). */
   postInThread(botToken: string, message: { channel: string; threadTs: string; text: string }): Promise<Result<undefined, SlackRefusal>>;
   /** A reaction on a message (reactions.add); one already there is no refusal. */
   react(botToken: string, reaction: { channel: string; ts: string; name: string }): Promise<Result<undefined, SlackRefusal>>;
-  /** A message's text as Slack holds it, in a conversation or a thread of it (conversations.history, conversations.replies). */
-  textOf(botToken: string, message: { channel: string; ts: string; threadTs: string | null }): Promise<Result<string, SlackRefusal>>;
-  /** Gives a message the text given, its buttons gone (chat.update). */
-  update(botToken: string, message: { channel: string; ts: string; text: string }): Promise<Result<undefined, SlackRefusal>>;
+  /** A message as Slack holds it, in a conversation or a thread of it (conversations.history, conversations.replies): the item it frames as the gateway posted or edited it, or its text alone. */
+  messageOf(botToken: string, message: { channel: string; ts: string; threadTs: string | null }): Promise<Result<SlackMessage, SlackRefusal>>;
+  /** Gives a message the item or text given, its buttons gone (chat.update). */
+  update(botToken: string, message: { channel: string; ts: string; message: SlackMessage }): Promise<Result<undefined, SlackRefusal>>;
 }
 
 /**
@@ -230,8 +231,44 @@ export interface SlackEvents {
   remove(fleetId: FleetId, eventId: string): Promise<void>;
 }
 
-/** A button under a post: under a question, its option's label and the option it answers; or Seen, under an item with no other (Bridge, section 6). */
-export type SlackButton = { readonly text: string; readonly option: number } | { readonly text: string; readonly isSeen: true };
+/**
+ * A button under a post: under a question, its option's number and label,
+ * the option it answers, and whether it is the asker's pick, filled; under a
+ * step, Open on its link and Done; or Seen, under an item with no other
+ * (Bridge, section 6).
+ */
+export type SlackButton =
+  | { readonly text: string; readonly option: number; readonly isPicked: boolean }
+  | { readonly text: string; readonly url: string }
+  | { readonly text: string; readonly isDone: true }
+  | { readonly text: string; readonly isSeen: true };
+
+/** How an item's post is marked at its side (views.html): asking while it waits on the person, aware for what only tells, done once answered, done or seen, ended for any other outcome. */
+export type SlackTone = 'asking' | 'aware' | 'done' | 'ended';
+
+/**
+ * An item as its post in Slack shows it (Bridge, views.html): headed by its
+ * asker and job, such as Question from orchestrator-1 · Decide; its title;
+ * what it asks with, or once something came of it, what and where; a quiet
+ * line under that, such as the asker's pick; and the line under its
+ * buttons, such as Open in Bridge. Each is in Slack's markup.
+ */
+export interface SlackItem {
+  readonly asker: string;
+  readonly heading: string;
+  readonly title: string;
+  readonly body: string | null;
+  readonly aside: string | null;
+  readonly footer: string | null;
+  readonly tone: SlackTone;
+}
+
+/** A post as the gateway gives it to Slack and reads it back: what a notification of it says, the item it frames, none for a message that is no item, and its buttons. */
+export interface SlackMessage {
+  readonly text: string;
+  readonly item: SlackItem | null;
+  readonly buttons: readonly SlackButton[];
+}
 
 /** Outbound port: the fleet messages in Slack, by person ship. */
 export interface SlackPosts {
