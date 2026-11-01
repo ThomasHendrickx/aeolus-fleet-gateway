@@ -68,7 +68,7 @@ const sender: CallSender = {
 };
 
 function askOwners() {
-  return createAskOwners({ questions, connections, owners: fakeOwners({ [SHIP_ID]: OWNER_SHIP_ID }), sender, newQuestionId: () => QUESTION_ID, clock: { now: () => now }, bridgeUrl: OVERVIEW })();
+  return createAskOwners({ questions, connections, owners: fakeOwners({ [SHIP_ID]: OWNER_SHIP_ID }), sender, newQuestionId: () => QUESTION_ID, clock: { now: () => now }, settingsUrl: OVERVIEW })();
 }
 
 describe("the gateway asks its owner when a request opens", () => {

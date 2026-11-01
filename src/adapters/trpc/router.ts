@@ -1398,11 +1398,11 @@ export const gatewayRouter = t.router({
         slackAnswerOf(await ctx.slack.removeBot({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, appId: input.appId }));
         return {};
       }),
-    /** The person's Slack link as the Overview shows it (9.6): the workspace and the Slack name linked; none while the fleet's own bot is not in Slack. */
+    /** The person's Slack link as Bridge's settings show it (9.6): the workspace and the Slack name linked; none while the fleet's own bot is not in Slack. */
     link: servedProcedure
       .output(z.object({ workspaceName: z.string(), link: z.object({ slackName: z.string(), isShowingAll: z.boolean() }).nullable() }).nullable())
       .query(({ ctx }) => ctx.slack.readSlackLink({ actor: ctx.actor })),
-    /** Sign in with Slack to link the person's Slack account, from the Overview or Slack's answer to an unlinked person (9.3). */
+    /** Sign in with Slack to link the person's Slack account, from Bridge's settings or Slack's answer to an unlinked person (9.3). */
     startLink: servedProcedure.output(z.object({ url: z.string() })).mutation(async ({ ctx }) => slackAnswerOf(await ctx.slack.startLink({ actor: ctx.actor }))),
     /** Turns Show everything that waits in Slack on or off for the person's own link (9.6, B5). */
     showAll: servedProcedure

@@ -209,7 +209,7 @@ export interface WakeWindow {
 
 /**
  * Outbound port: one way to wake a person (wake a person, W1, W4): it says
- * only that something waits in the fleet, with the overview's link, and
+ * only that something waits in the fleet, with Bridge's link, and
  * goes out at most once per its window (W3, W10).
  */
 export interface WakeChannel {
@@ -258,7 +258,7 @@ export interface FocusedPages {
  * A browser a person turned web push on in (wake a person, W8): its push
  * service's endpoint and keys, and the fleet's name its wakes say, as the
  * person's sign-in named it when they turned it on. A subscription its push
- * service said is gone takes no wake again, and the overview says so.
+ * service said is gone takes no wake again, and Bridge's settings say so.
  */
 export interface WebPushSubscription {
   readonly fleetId: FleetId;
@@ -282,10 +282,10 @@ export interface WebPushSubscriptions {
   remove(fleetId: FleetId, removed: { shipId: ShipId; endpoint: string }): Promise<void>;
 }
 
-/** What a wake says (W4): something waits in the fleet, by its name, and the link to the gateway's overview. Nothing else. */
+/** What a wake says (W4): something waits in the fleet, by its name, and the link to Bridge. Nothing else. */
 export interface Wake {
   readonly fleetName: string;
-  readonly overviewUrl: string;
+  readonly bridgeUrl: string;
 }
 
 /** How a push service took a wake: sent, gone (it answered 404 or 410: the subscription ended), or failed otherwise. */

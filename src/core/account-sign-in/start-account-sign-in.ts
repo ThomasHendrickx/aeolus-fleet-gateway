@@ -5,7 +5,7 @@ import { SIGN_IN_LIFETIME_MS } from '../sign-in/start-sign-in.js';
 import type { AccountSignInSeals, SharedSignIn } from './ports.js';
 
 /** Where a person lands once signed in, when they asked for no page of the gateway's own. */
-export const FIRST_PAGE = '/overview';
+export const FIRST_PAGE = '/bridge';
 
 export type StartAccountSignIn = (asked: { returnTo?: string | undefined }) => { redirectTo: string; browserSecret: string };
 

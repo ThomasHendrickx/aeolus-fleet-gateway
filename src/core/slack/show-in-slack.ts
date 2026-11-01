@@ -64,7 +64,7 @@ export function createShowInSlack(deps: {
   door: Pick<PersonShipDoor, 'pushReceive' | 'handed' | 'ack'>;
   sleep: Sleep;
   clock: Clock;
-  overviewUrlOf: (fleetId: FleetId) => string;
+  bridgeUrlOf: (fleetId: FleetId) => string;
 }): ShowInSlack {
   const whereOf = async (link: SlackLink, delivery: PersonDelivery): Promise<Where | undefined> => {
     const { fleetId, personShipId, slackUserId, isShowingAll } = link;
@@ -117,7 +117,7 @@ export function createShowInSlack(deps: {
         return 'notShown';
       }
       const app = await deps.apps.find(post.fleetId, post.appId);
-      const shown = slackPostOf(delivery, { overviewUrl: deps.overviewUrlOf(post.fleetId), isHeadedBySender: app?.shipId === null });
+      const shown = slackPostOf(delivery, { bridgeUrl: deps.bridgeUrlOf(post.fleetId), isHeadedBySender: app?.shipId === null });
       const ts = isInSlack(app) ? await posted({ app, channel: post.channel, threadTs: post.threadTs }, { messageId: post.messageId, text: shown.text, buttons: shown.kind === 'shown' ? shown.buttons : [] }) : undefined;
       if (ts === undefined) {
         await deps.posts.remove(post.fleetId, post);
@@ -164,7 +164,7 @@ export function createShowInSlack(deps: {
       if (where === undefined) {
         continue;
       }
-      const shown = slackPostOf(delivery, { overviewUrl: deps.overviewUrlOf(ship.fleetId), isHeadedBySender: where.app.shipId === null });
+      const shown = slackPostOf(delivery, { bridgeUrl: deps.bridgeUrlOf(ship.fleetId), isHeadedBySender: where.app.shipId === null });
       const post: SlackPost = {
         fleetId: ship.fleetId,
         personShipId: ship.shipId,

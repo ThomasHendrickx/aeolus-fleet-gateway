@@ -702,7 +702,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             webPush: createWebPush({ ...options.webPush, timeoutMs: WEB_PUSH_TIMEOUT_MS, addressesOf: (host) => systemHostResolver.addressesOf(host), isAllowedAddress: options.isAllowedPushAddress ?? isPublicAddress }),
             clock,
             windowMs: options.webPushWakeWindowMs ?? WEB_PUSH_WAKE_WINDOW_MS,
-            overviewUrlOf: (fleetId) => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`,
+            bridgeUrlOf: (fleetId) => `${issuer}/bridge?fleet=${encodeURIComponent(fleetId)}`,
           }),
         ]),
   ];
@@ -712,8 +712,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const slackLinks = createPrismaSlackLinks(prisma);
   const slackPosts = createPrismaSlackPosts(prisma);
   const slackMessages = createSlackMessages({ apiUrl: slackApiUrl });
-  const overviewUrlOf = (fleetId: FleetId): string => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`;
-  const showInSlack = createShowInSlack({ links: slackLinks, apps: slackApps, posts: slackPosts, slack: slackMessages, door: door.person, sleep, clock, overviewUrlOf });
+  const bridgeUrlOf = (fleetId: FleetId): string => `${issuer}/bridge?fleet=${encodeURIComponent(fleetId)}`;
+  const showInSlack = createShowInSlack({ links: slackLinks, apps: slackApps, posts: slackPosts, slack: slackMessages, door: door.person, sleep, clock, bridgeUrlOf });
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
   const personCrews = createPrismaPersonCrews(prisma);
   // A person's pages in focus, on every instance: while one is, what arrives is handed through it (wake a person, W6).
@@ -838,7 +838,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const outcomes = createOutcomeWorker({
     expireRequests: createExpireRequests({ requests: pendingRequests, clock }),
     tellOutcomes: createTellOutcomes({ notices: createPrismaOutcomeNotices(prisma), requests: pendingRequests, connections, sender: door }),
-    askOwners: createAskOwners({ questions: createPrismaOwnerQuestions(prisma), connections, owners: door, sender: door, newQuestionId: randomUUID, clock, overviewUrl: `${issuer}/overview` }),
+    askOwners: createAskOwners({ questions: createPrismaOwnerQuestions(prisma), connections, owners: door, sender: door, newQuestionId: randomUUID, clock, settingsUrl: `${issuer}/bridge/settings` }),
     sleep,
     intervalMs: OUTCOME_ROUND_MS,
     log: server.log,

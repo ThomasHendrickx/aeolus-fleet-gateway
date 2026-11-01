@@ -7,11 +7,11 @@
 self.addEventListener('push', (event) => {
   const wake = event.data === null ? {} : event.data.json();
   const fleetName = typeof wake.fleetName === 'string' ? wake.fleetName : 'Your fleet';
-  const overviewUrl = typeof wake.overviewUrl === 'string' ? wake.overviewUrl : '/overview';
-  event.waitUntil(self.registration.showNotification(fleetName, { body: 'Something waits for you.', data: { overviewUrl }, tag: 'aeolus-wake' }));
+  const bridgeUrl = typeof wake.bridgeUrl === 'string' ? wake.bridgeUrl : '/overview';
+  event.waitUntil(self.registration.showNotification(fleetName, { body: 'Something waits for you.', data: { bridgeUrl }, tag: 'aeolus-wake' }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(self.clients.openWindow(event.notification.data.overviewUrl));
+  event.waitUntil(self.clients.openWindow(event.notification.data.bridgeUrl));
 });

@@ -5,7 +5,7 @@
  * how the install went by its outcome in the address, never by a text the
  * address carries. `/gw/slack/link` is where Sign in with Slack sends them
  * back to link, with the browser's shared sign-in so the link binds to the
- * account that started it, going on to the Overview the same way; a link refused for
+ * account that started it, going on to Bridge's settings the same way; a link refused for
  * one kept already carries the first link's name. `/gw/slack/events` takes
  * the events of the apps the gateway made, and `/gw/slack/actions` a press
  * of a button under a question it posted, each read as its raw body so its
@@ -46,8 +46,8 @@ const blockActionsSchema = z.object({
 /** The Slack page of the web app (web/features/slack/paths.ts names the same). */
 const SLACK_PAGE_PATH = '/slack';
 
-/** The Overview of the web app, where a person's Slack link shows. */
-const OVERVIEW_PATH = '/overview';
+/** Bridge's settings in the web app, where a person's Slack link shows. */
+const BRIDGE_SETTINGS_PATH = '/bridge/settings';
 
 const HTTP_FOUND = 302;
 const HTTP_UNAUTHORIZED = 401;
@@ -81,7 +81,7 @@ function headerOf(value: string | string[] | undefined): string {
 
 const installQuerySchema = z.object({ code: z.string().optional(), state: z.string().optional(), error: z.string().optional() });
 
-/** What the Overview says of a link, by its outcome (web/features/overview/services/slack-link-outcomes.ts). */
+/** What Bridge's settings say of a link, by its outcome (web/features/bridge/services/slack-link-outcomes.ts). */
 const LINK_OUTCOMES = {
   LINK_REFUSED: 'refused',
   SLACK_NOT_CONNECTED: 'not-connected',
@@ -116,7 +116,7 @@ export function registerSlackRoutes(server: FastifyInstance, deps: { completeIns
   server.get(SLACK_LINK_PATH, async (request, reply) => {
     const query = installQuerySchema.safeParse(request.query);
     const { code, state, error } = query.success ? query.data : {};
-    const goTo = (said: Record<string, string>) => reply.code(HTTP_FOUND).header('location', `${OVERVIEW_PATH}?${new URLSearchParams(said).toString()}`).send();
+    const goTo = (said: Record<string, string>) => reply.code(HTTP_FOUND).header('location', `${BRIDGE_SETTINGS_PATH}?${new URLSearchParams(said).toString()}`).send();
     if (error !== undefined || code === undefined || state === undefined) {
       // The person cancelled on Slack's screen, or Slack sent nothing to take.
       return goTo({ slack: 'cancelled' });

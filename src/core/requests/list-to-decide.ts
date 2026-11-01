@@ -7,7 +7,7 @@ import type { PendingRequest, PendingRequests } from './ports.js';
 
 export type ListToDecide = (actor: Actor) => Promise<Result<PendingRequest[], DomainError<'NOT_AN_APPROVER'>>>;
 
-/** Use case: every open request of the fleet, for an actor holding gateway:approve (decision 0056: To decide on the overview). */
+/** Use case: every open request of the fleet, for an actor holding gateway:approve (decision 0056: To decide, in Bridge's settings). */
 export function createListToDecide(deps: { requests: PendingRequests; clock: Clock }): ListToDecide {
   return async (actor) => {
     if (!actor.scopes.includes(APPROVING_SCOPE)) {
