@@ -57,20 +57,32 @@ describe('the question an opened item asks (decision 0038)', () => {
 describe('a step, as Bridge shows it (CC14)', () => {
   const STEP = { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Sign in to attio', why: 'A ship of yours called attio.', link: 'https://gateway.example.com/outside-parties/attio?fleet=flt_01' };
 
-  it('reads its title, why, and its link with the host the link leads to', () => {
-    expect(stepOf({ contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(STEP) })).toEqual({ title: 'Sign in to attio', why: 'A ship of yours called attio.', link: { href: STEP.link, host: 'gateway.example.com' } });
+  it("reads its title, why, and its link with where it leads, host and path, inside Aeolus when Bridge's own host serves it", () => {
+    expect(stepOf({ contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(STEP) }, 'gateway.example.com')).toEqual({ title: 'Sign in to attio', why: 'A ship of yours called attio.', link: { href: STEP.link, address: 'gateway.example.com/outside-parties/attio', isOutside: false } });
+  });
+
+  it('reads a link to any other host as one that leads outside Aeolus, shown by host and path without its query', () => {
+    const outside = { ...STEP, link: 'https://github.com/new?owner=ThomasHendrickx' };
+
+    expect(stepOf({ contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(outside) }, 'gateway.example.com')?.link).toEqual({ href: outside.link, address: 'github.com/new', isOutside: true });
+  });
+
+  it('shows a link to a host alone by its host', () => {
+    const bare = { ...STEP, link: 'https://linear.app/' };
+
+    expect(stepOf({ contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(bare) }, 'gateway.example.com')?.link?.address).toBe('linear.app');
   });
 
   it('reads a step with no link as one with none', () => {
     const unlinked = { id: STEP.id, title: STEP.title, why: STEP.why };
 
-    expect(stepOf({ contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(unlinked) })).toEqual({ title: 'Sign in to attio', why: 'A ship of yours called attio.', link: undefined });
+    expect(stepOf({ contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(unlinked) }, 'gateway.example.com')).toEqual({ title: 'Sign in to attio', why: 'A ship of yours called attio.', link: undefined });
   });
 
   it('reads the new step a step replacement asks, so it is done as a step', () => {
     const replacing = { id: '7a2d3b51-6e2c-4c9f-8b62-1d9f4a3b8e21', title: 'Sign in to attio with the team account', why: 'The team owns attio now.' };
 
-    expect(stepOf({ contentType: 'application/vnd.aeolus.step-replacement+json', payload: JSON.stringify({ stepId: STEP.id, step: replacing }) })).toEqual({ title: 'Sign in to attio with the team account', why: 'The team owns attio now.', link: undefined });
+    expect(stepOf({ contentType: 'application/vnd.aeolus.step-replacement+json', payload: JSON.stringify({ stepId: STEP.id, step: replacing }) }, 'gateway.example.com')).toEqual({ title: 'Sign in to attio with the team account', why: 'The team owns attio now.', link: undefined });
   });
 
   it.each([
@@ -79,6 +91,6 @@ describe('a step, as Bridge shows it (CC14)', () => {
     { what: 'a step whose link is not http(s)', contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify({ ...STEP, link: 'javascript:alert(1)' }) },
     { what: 'a step withdrawal', contentType: 'application/vnd.aeolus.step-withdrawal+json', payload: JSON.stringify({ stepId: STEP.id }) },
   ])('reads no step of $what', ({ contentType, payload }) => {
-    expect(stepOf({ contentType, payload })).toBeUndefined();
+    expect(stepOf({ contentType, payload }, 'gateway.example.com')).toBeUndefined();
   });
 });

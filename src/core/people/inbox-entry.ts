@@ -1,5 +1,6 @@
-import { MEETING_ADDED_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, type DeliveryId } from '@aeolus-fleet/common';
+import { MEETING_ADDED_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, QUESTION_CONTENT_TYPE, REPLACEMENT_CONTENT_TYPE, questionSchema, replacementSchema, type DeliveryId } from '@aeolus-fleet/common';
 
+import { essenceOf, jobOf, type ItemJob } from './item-job.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 
 /** The longest title an inbox shows, as a message's headline is at most 80 characters. */
@@ -32,4 +33,41 @@ export function inboxEntryOf(delivery: PersonDelivery): InboxEntry {
 
 export function openedEntryOf(opened: OpenedDelivery): InboxEntry {
   return { deliveryId: opened.deliveryId, from: opened.from, title: opened.title, sentAt: opened.sentAt.toISOString() };
+}
+
+/** The option the asker of a question would pick, and why. */
+export interface AskerPick {
+  readonly option: number;
+  readonly why: string;
+}
+
+/** An inbox entry as a chat lists it: with its job (Bridge, section 6), and for a question the asker's pick, so the chat can say what waits without opening (and so acknowledging) it. */
+export interface ChatInboxEntry extends InboxEntry {
+  readonly job: ItemJob;
+  readonly pick: AskerPick | null;
+}
+
+/** The asker's pick of a question, or of the new question a replacement asks; none for any other delivery or a payload that is no question. */
+function pickOf(delivery: Pick<PersonDelivery, 'contentType' | 'payload'>): AskerPick | null {
+  const essence = essenceOf(delivery.contentType);
+  if (essence !== QUESTION_CONTENT_TYPE && essence !== REPLACEMENT_CONTENT_TYPE) {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(delivery.payload);
+  } catch {
+    return null;
+  }
+  const question = essence === QUESTION_CONTENT_TYPE ? questionSchema.safeParse(parsed).data : replacementSchema.safeParse(parsed).data?.question;
+  return question === undefined ? null : question.pick;
+}
+
+export function chatInboxEntryOf(delivery: PersonDelivery): ChatInboxEntry {
+  return { ...inboxEntryOf(delivery), job: jobOf(delivery.contentType), pick: pickOf(delivery) };
+}
+
+/** An opened delivery is kept without its payload, so it carries no pick; one opened before the gateway kept its content type is everything else. */
+export function chatOpenedEntryOf(opened: OpenedDelivery): ChatInboxEntry {
+  return { ...openedEntryOf(opened), job: jobOf(opened.contentType ?? ''), pick: null };
 }

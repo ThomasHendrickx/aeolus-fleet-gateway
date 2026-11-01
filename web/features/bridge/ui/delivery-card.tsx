@@ -1,3 +1,4 @@
+import { Check, CircleCheck, CircleX, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
 
 import type { Question } from '@aeolus-fleet/common';
@@ -12,6 +13,13 @@ export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'remo
 
 /** How the person ends a step: they did it, or cannot. */
 export type StepOutcome = 'done' | 'cannot';
+
+/** A step the person ended in Bridge: how, with the note sent, empty for none, and when (ISO 8601). */
+export interface StepFinished {
+  readonly outcome: StepOutcome;
+  readonly note: string;
+  readonly at: string;
+}
 
 /** The answer to a question in the basket (Bridge, section 9): its option, none for a note alone, and its note, none when the person wrote none. */
 export interface InBasket {
@@ -90,17 +98,50 @@ function StaleNotice({ stale, from, isStep, onOpen }: { stale: Stale; from: stri
   );
 }
 
-/** What a step asks: why, and the link where it is done, shown with its host and opened only by the person's own press; gone once the step is stale (Bridge, section 9). */
-function StepAsked({ step, isStale }: { step: StepView; isStale: boolean }) {
+/** The time of day an outcome was sent, in UTC to the minute, as the stale notice says its time. */
+function clockTimeOf(at: string): string {
+  return `${new Date(at).toISOString().slice(11, 16)} UTC`;
+}
+
+/** What a step asks: why, and the link where it is done in its box, with where it leads and whether that is outside Aeolus, opened only by the person's own Open; the box stays once the step is ended, without Open, and goes once it is stale (Bridge, section 9). */
+function StepAsked({ step, isStale, isFinished }: { step: StepView; isStale: boolean; isFinished: boolean }) {
+  const { link } = step;
   return (
     <>
       <p className="whitespace-pre-wrap">{step.why}</p>
-      {step.link === undefined || isStale ? null : (
-        <a data-testid="bridge-step-link" href={step.link.href} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center justify-self-start rounded-md border border-border px-4 hover:bg-accent">
-          Open on {step.link.host}
-        </a>
+      {link === undefined || isStale ? null : (
+        <div className="flex items-center gap-3 rounded-md border border-border p-3">
+          <ExternalLink aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+          <span className="grid flex-1">
+            <span className="font-medium">Where it is done</span>
+            <span className="font-mono text-caption text-muted-foreground">{link.isOutside ? `${link.address} · opens outside Aeolus` : link.address}</span>
+          </span>
+          {isFinished ? null : (
+            <a data-testid="bridge-step-link" href={link.href} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center rounded-md border border-border px-3 hover:bg-accent">
+              Open
+            </a>
+          )}
+        </div>
       )}
     </>
+  );
+}
+
+/** A step ended in Bridge, shown on the step: done in the ok tone, cannot in the ended tone, only the icon in the tone's colour, when, the note quoted and what was sent (do.html). */
+function StepOutcomeNotice({ from, finished }: { from: string; finished: StepFinished }) {
+  const isDone = finished.outcome === 'done';
+  const Icon = isDone ? CircleCheck : CircleX;
+  return (
+    <div data-testid="bridge-step-outcome" role="status" className={`flex items-start gap-3 rounded-md border p-3 ${isDone ? 'border-tone-ok-border bg-tone-ok-bg' : 'border-tone-ended-border bg-tone-ended-bg'}`}>
+      <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${isDone ? 'text-tone-ok-fg' : 'text-tone-ended-fg'}`} />
+      <span className="grid gap-0.5">
+        <span className="font-medium">{`${isDone ? 'Done in Bridge' : 'Cannot, in Bridge'} at ${clockTimeOf(finished.at)}`}</span>
+        <span className="text-caption text-muted-foreground">
+          {finished.note === '' ? '' : `“${finished.note}” `}
+          {`Sent to ${from} as you, with the outcome ${finished.outcome}.`}
+        </span>
+      </span>
+    </div>
   );
 }
 
@@ -109,29 +150,32 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
   const isWorking = working !== undefined;
   return (
     <>
-      <label className="grid gap-1">
-        <span>Note</span>
+      <label className="grid max-w-2xl gap-1">
+        <span>Note (optional)</span>
         <textarea
           data-testid="bridge-note"
           rows={2}
           value={note}
           onChange={(event) => { onNoteChange(event.target.value); }}
-          placeholder="Optional, goes with Done or Cannot"
-          className="rounded-md border border-input bg-background p-2"
+          placeholder={`Add a note for ${from}: what you did, or why you cannot`}
+          className="field-sizing-content min-h-16 rounded-md border border-input bg-background p-2"
         />
+        <span className="text-caption text-muted-foreground">Sent with Done or Cannot, whichever you press.</span>
       </label>
       {failure === undefined ? null : <Notice message={failure} isFailure />}
-      <div className="grid gap-1">
-        <div className="flex flex-wrap gap-2">
-          <ActionButton data-testid="bridge-step-done" variant="primary" isPending={working?.kind === 'done'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onFinish('done'); }}>
-            Done
-          </ActionButton>
-          <ActionButton data-testid="bridge-step-cannot" isPending={working?.kind === 'cannot'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onFinish('cannot'); }}>
-            Cannot
-          </ActionButton>
-        </div>
-        <span className="text-caption text-muted-foreground">{from} is told at once, with your note.</span>
+      <div className="flex flex-wrap gap-2">
+        <ActionButton data-testid="bridge-step-done" variant="primary" isPending={working?.kind === 'done'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onFinish('done'); }}>
+          <Check aria-hidden className="size-4" />
+          Done
+        </ActionButton>
+        <ActionButton data-testid="bridge-step-cannot" isPending={working?.kind === 'cannot'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onFinish('cannot'); }}>
+          Cannot
+        </ActionButton>
       </div>
+      <p className="flex items-start gap-1.5 text-caption text-muted-foreground">
+        <Info aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+        <span>Done tells {from} you did it, Cannot that you could not; the note goes with either. Whether it worked is theirs to check.</span>
+      </p>
     </>
   );
 }
@@ -143,7 +187,7 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
  * note chosen, the note alone, and sends nothing (CC24): the person sends
  * the basket. A step (CC14) shows why and its link, then its
  * note field before Done and Cannot, each sending its outcome at once with
- * the note. Any other item may get a note as its answer, and may
+ * the note; once sent, the step shows its outcome in place of them. Any other item may get a note as its answer, and may
  * be done with; one of a meeting leads to the meeting. An alert or a notice
  * is done once seen (Bridge, CC16): it asks nothing more. So is a question
  * its asker withdrew or replaced: stale, nothing to send, a replaced one
@@ -155,6 +199,7 @@ export function DeliveryCard({
   meetingHref,
   basketHref,
   inBasket,
+  finished,
   note,
   working,
   failure,
@@ -176,6 +221,8 @@ export function DeliveryCard({
   basketHref: string;
   /** The answer to the question in the basket, if any. */
   inBasket: InBasket | null;
+  /** How the person ended the step in Bridge, once they did. */
+  finished: StepFinished | null;
   note: string;
   working: DeliveryControl | undefined;
   failure: string | undefined;
@@ -208,7 +255,7 @@ export function DeliveryCard({
         </a>
       )}
       {step !== undefined ? (
-        <StepAsked step={step} isStale={stale !== null} />
+        <StepAsked step={step} isStale={stale !== null} isFinished={finished !== null} />
       ) : question === undefined ? (
         <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-caption">{delivery.body}</pre>
       ) : (
@@ -227,7 +274,7 @@ export function DeliveryCard({
           Seen now, so done: it asks nothing more.
         </p>
       ) : stale !== null ? null : step !== undefined ? (
-        <StepControls from={delivery.from} note={note} working={working} failure={failure} onNoteChange={onNoteChange} onFinish={onFinishStep} />
+        finished === null ? <StepControls from={delivery.from} note={note} working={working} failure={failure} onNoteChange={onNoteChange} onFinish={onFinishStep} /> : <StepOutcomeNotice from={delivery.from} finished={finished} />
       ) : (
         <>
           <label className="grid gap-1">
