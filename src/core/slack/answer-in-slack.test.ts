@@ -2,7 +2,7 @@ import type { ShipId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, fakePersonShipDoor, memoryItemOutcomes } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, fakePersonShipDoor, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries } from '../../../test/support/people-fakes.js';
 import { aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackLinks, memorySlackPosts } from '../../../test/support/slack-fakes.js';
 import { createAnswerInSlack } from './answer-in-slack.js';
 
@@ -29,6 +29,8 @@ let posts: ReturnType<typeof memorySlackPosts>;
 let slack: ReturnType<typeof fakeSlackMessages>;
 let fleet: ReturnType<typeof fakePersonShipDoor>;
 let outcomes: ReturnType<typeof memoryItemOutcomes>;
+let opened: ReturnType<typeof memoryOpenedDeliveries>;
+let changes: ReturnType<typeof memoryInboxChanges>;
 
 beforeEach(async () => {
   apps = memorySlackApps();
@@ -36,6 +38,8 @@ beforeEach(async () => {
   posts = memorySlackPosts();
   slack = fakeSlackMessages();
   outcomes = memoryItemOutcomes();
+  opened = memoryOpenedDeliveries();
+  changes = memoryInboxChanges();
   fleet = fakePersonShipDoor({ crewToken: 'crew-mathilde', deliveries: [QUESTION] });
   await fleet.door.ack('crew-mathilde', QUESTION.deliveryId);
   await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
@@ -54,6 +58,8 @@ function press(option: number, sent: { signature?: string; userId?: string } = {
     crews: { find: (_fleetId, shipId) => Promise.resolve(shipId === MATHILDE_SHIP ? { fleetId: FLEET_ID, shipId, crewToken: 'crew-mathilde', crewedAt: NOW } : undefined) },
     door: fleet.door,
     outcomes,
+    opened,
+    changes,
     slack: slack.messages,
     signatures,
     clock: { now: () => NOW },
@@ -65,7 +71,7 @@ describe("a press of a question's button in Slack", () => {
     const answered = await press(1);
 
     expect(answered).toEqual({ isOk: true, value: { kind: 'answered' } });
-    expect(fleet.replies).toEqual([{ to: BUDGET_CHECK, inReplyTo: QUESTION.messageId, contentType: 'application/vnd.aeolus.answer+json', payload: '{"questionId":"5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11","option":1}', idempotencyKey: `answer-${QUESTION.deliveryId}` }]);
+    expect(fleet.replies).toEqual([{ to: BUDGET_CHECK, inReplyTo: QUESTION.messageId, contentType: 'application/vnd.aeolus.answer+json', payload: '{"questionId":"5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11","option":1}', idempotencyKey: 'answer-5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11' }]);
     expect(fleet.calls).toContain(`handled(${QUESTION.deliveryId})`);
     expect(slack.state.reactions).toEqual([{ botToken: 'xoxb-1', channel: 'D0MATHILDE', ts: '1730020000.000001', name: 'white_check_mark' }]);
   });
@@ -74,6 +80,32 @@ describe("a press of a question's button in Slack", () => {
     await press(2);
 
     expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, place: 'slack', kind: 'answered', option: 2, at: NOW }]);
+  });
+
+  it("tells the person's pages their inbox changed, so an open Bridge page shows it answered in Slack without a reload", async () => {
+    await press(2);
+
+    expect(changes.told).toEqual([{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP }]);
+  });
+
+  it('forgets the question as opened, so a chat no longer lists it at its next aeolus_inbox', async () => {
+    await opened.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, messageId: QUESTION.messageId, senderShipId: BUDGET_CHECK, from: 'budget-check', title: 'Cut travel?', contentType: QUESTION.contentType, askedQuestionId: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', withdrawnQuestionId: null, stepId: null, sentAt: QUESTION.sentAt, openedAt: NOW });
+
+    await press(2);
+
+    expect(opened.held.size).toBe(0);
+  });
+
+  it("sends nothing for a question answered in Bridge first, saying so in its thread: one answer per question", async () => {
+    await outcomes.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, place: 'bridge', kind: 'answered', option: 2, at: NOW });
+
+    const answered = await press(1);
+
+    expect({ answered, replies: fleet.replies, thread: slack.state.inThread.map(({ threadTs, text }) => ({ threadTs, text })) }).toEqual({
+      answered: { isOk: true, value: { kind: 'answeredElsewhere' } },
+      replies: [],
+      thread: [{ threadTs: '1730020000.000001', text: 'Already answered in Bridge: option 2. Nothing is sent.' }],
+    });
   });
 
   it('keeps nothing while the fleet did not take handled', async () => {
