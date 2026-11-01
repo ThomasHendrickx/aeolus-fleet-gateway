@@ -12,7 +12,7 @@ import { Notice } from './notice';
 import { StaleIcon } from './stale-icon';
 
 /** A phone shows only the first paragraph of what an item says, as the sheets draw it; a desktop shows it whole. */
-const PROSE = 'max-md:[&_p+p]:hidden';
+export const PROSE = 'max-md:[&_p+p]:hidden';
 
 /** Which of the card's controls is working: an option of the question put in the basket, its entry removed, the note alone, done, or a step's cannot. */
 export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'remove' } | { kind: 'note' } | { kind: 'done' } | { kind: 'cannot' };
@@ -112,7 +112,7 @@ function StaleNotice({ stale, from, isStep, timeZone, onOpen }: { stale: Stale; 
 }
 
 /** What a step asks: why, and the link where it is done in its box, with where it leads and whether that is outside Aeolus, opened only by the person's own Open; the box stays once the step is ended, without Open, and goes once it is stale (Bridge, section 9). */
-function StepAsked({ step, isStale, isFinished }: { step: StepView; isStale: boolean; isFinished: boolean }) {
+export function StepAsked({ step, isStale, isFinished }: { step: StepView; isStale: boolean; isFinished: boolean }) {
   const { link } = step;
   return (
     <>
@@ -191,7 +191,7 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
 }
 
 /** An opened item's heading (decide.html): its job's icon and word in its tone, who sent it, the time of day it arrived, and whether it was seen. */
-function ItemHeading({ delivery, opened, timeZone }: { delivery: FocusedDelivery; opened: Opened; timeZone: string | undefined }) {
+export function ItemHeading({ delivery, opened, timeZone }: { delivery: Pick<FocusedDelivery, 'from' | 'sentAt'>; opened: Opened; timeZone: string | undefined }) {
   const look = jobLookOf(opened);
   const JobIcon = look.icon;
   const seen = seenWordsOf({ wasNew: opened.wasNew, isDoneOnSeeing: opened.job === 'stay-aware' });
@@ -226,7 +226,7 @@ function Separator() {
 }
 
 /** An opened item's own screen on a phone: back to the list by its chevron, titled by its job (decide.html, do.html). A desktop shows the list beside it instead. */
-function ScreenBar({ opened, isWorking, onBack }: { opened: Opened; isWorking: boolean; onBack: () => void }) {
+export function ScreenBar({ opened, isWorking, onBack }: { opened: Opened; isWorking: boolean; onBack: () => void }) {
   return (
     <div data-testid="bridge-item-screen-bar" className="-mx-1 flex items-center gap-1 md:hidden">
       <button type="button" data-testid="bridge-back" aria-label="Back to the list" onClick={onBack} disabled={isWorking} className="inline-flex size-9 items-center justify-center rounded-md hover:bg-accent disabled:opacity-70">

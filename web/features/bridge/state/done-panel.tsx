@@ -1,24 +1,69 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { CircleCheck, CircleX } from 'lucide-react';
+import { useState, useSyncExternalStore, useTransition } from 'react';
 
 import { readMoreRecord } from '../hooks/bridge-actions';
-import { doneOutcomeOf, type RecordPage } from '../services/items';
+import { clockTimeOf, dayOf, doneOutcomeOf, type RecordItem, type RecordPage } from '../services/items';
 import { ActionButton } from '../ui/action-button';
+import { DoneCard } from '../ui/done-card';
 import { ItemRow } from '../ui/item-row';
+import { ItemSplit } from '../ui/item-split';
 import { Notice } from '../ui/notice';
-import { ItemFocus } from './item-focus';
+
+/** The time zone a page is read in on the server, before the browser says its own. */
+const SERVER_TIME_ZONE = 'UTC';
+
+function unchanging(): () => void {
+  return () => undefined;
+}
+
+/** The person's own time zone, the browser's; the server's until the page runs there, so the first render matches it. */
+function useTimeZone(): string {
+  return useSyncExternalStore(unchanging, () => Intl.DateTimeFormat().resolvedOptions().timeZone, () => SERVER_TIME_ZONE);
+}
+
+/** The items in their order, a run per day they arrived on. */
+function byDay(items: readonly RecordItem[], of: { now: Date; timeZone: string }): { day: string; items: RecordItem[] }[] {
+  const days: { day: string; items: RecordItem[] }[] = [];
+  for (const item of items) {
+    const day = dayOf(item.sentAt, of);
+    const last = days.at(-1);
+    if (last?.day === day) {
+      last.items.push(item);
+    } else {
+      days.push({ day, items: [item] });
+    }
+  }
+  return days;
+}
+
+/** What came of an item on its row, on a line of its own, its icon saying whether it ended well (done.html). */
+function DoneOutcome({ item }: { item: RecordItem }) {
+  const outcome = doneOutcomeOf(item);
+  const Icon = outcome.isOk ? CircleCheck : CircleX;
+  return (
+    <span data-testid="bridge-done-outcome" className="flex items-start gap-1.5 text-caption">
+      <Icon aria-hidden="true" className={`mt-0.5 size-3.5 shrink-0 ${outcome.isOk ? 'text-tone-ok-fg' : 'text-muted-foreground'}`} />
+      {outcome.text}
+    </span>
+  );
+}
 
 /**
- * Done (Bridge, CC4): everything that reached the person, newest first, with
- * what came of it and where. The next page is read only when they ask for
- * it. One not done yet opens here, to answer or be done with.
+ * Done (Bridge, CC4; done.html): everything done that reached the person,
+ * newest first, under the day it arrived, each with the time of day, the
+ * places that showed it and what came of it and where. Its title opens it,
+ * read back whole beside the list, with nothing acknowledged. The next page
+ * is read only when they ask for it.
  */
 export function DonePanel({ fleetId, first, now }: { fleetId: string; first: RecordPage; now: string }) {
   const readAt = new Date(now);
+  const timeZone = useTimeZone();
   const [items, setItems] = useState(first.items);
   const [nextCursor, setNextCursor] = useState(first.nextCursor);
   const [failure, setFailure] = useState<string | undefined>();
+  const [openId, setOpenId] = useState<string | undefined>();
   const [isReading, startTransition] = useTransition();
 
   const readMore = (cursor: string) => {
@@ -34,41 +79,43 @@ export function DonePanel({ fleetId, first, now }: { fleetId: string; first: Rec
     });
   };
 
+  const open = items.find(({ deliveryId }) => deliveryId === openId);
   return (
-    <ItemFocus fleetId={fleetId}>
-      {(opening) => (
+    <ItemSplit
+      list={
         <section className="grid gap-3" aria-labelledby="bridge-done-heading">
-          <div>
+          <div className={open === undefined ? '' : 'md:px-3 md:pt-3'}>
             <h1 id="bridge-done-heading" className="text-heading font-semibold">
               Done
             </h1>
-            <p className="text-muted-foreground">Everything that reached you, with what came of it and where.</p>
+            <p className="text-muted-foreground">Everything that reached you, with what came of it and where. Opening one reads it back whole.</p>
           </div>
           {items.length === 0 ? (
             <p data-testid="bridge-record-empty" className="rounded-md border border-border bg-card p-3 text-muted-foreground">
-              Nothing has reached you yet.
+              Nothing is done yet.
             </p>
           ) : (
-            <ul className="overflow-hidden rounded-lg border border-border bg-card">
-              {items.map((item) => (
-                <ItemRow
-                  key={item.deliveryId}
-                  item={item}
-                  now={readAt}
-                  isNew={item.state === 'new'}
-                  isOpen={opening.opened?.deliveryId === item.deliveryId}
-                  outcome={doneOutcomeOf(item).text}
-                  failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}
-                  actions={
-                    item.state === 'done' ? null : (
-                      <ActionButton data-testid="bridge-open" size="row" isPending={opening.openingId === item.deliveryId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open(item); }}>
-                        Open
-                      </ActionButton>
-                    )
-                  }
-                />
-              ))}
-            </ul>
+            byDay(items, { now: readAt, timeZone }).map(({ day, items: ofDay }) => (
+              <div key={day} className="grid gap-1.5">
+                <h2 className="text-caption text-muted-foreground">{day}</h2>
+                <ul className="overflow-hidden rounded-lg border border-border bg-card">
+                  {ofDay.map((item) => (
+                    <ItemRow
+                      key={item.deliveryId}
+                      item={item}
+                      now={readAt}
+                      isNew={false}
+                      isOpen={item.deliveryId === openId}
+                      outcome={undefined}
+                      failure={undefined}
+                      time={clockTimeOf(item.sentAt, timeZone)}
+                      detail={<DoneOutcome item={item} />}
+                      onOpen={() => { setOpenId(item.deliveryId); }}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ))
           )}
           {failure === undefined ? null : <Notice message={failure} isFailure />}
           {nextCursor === null ? null : (
@@ -77,7 +124,8 @@ export function DonePanel({ fleetId, first, now }: { fleetId: string; first: Rec
             </ActionButton>
           )}
         </section>
-      )}
-    </ItemFocus>
+      }
+      item={open === undefined ? undefined : <DoneCard item={open} timeZone={timeZone} bridgeHost={window.location.host} onBack={() => { setOpenId(undefined); }} />}
+    />
   );
 }

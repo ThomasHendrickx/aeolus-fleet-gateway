@@ -28,9 +28,9 @@ describe('Done (done.html)', () => {
   });
 
   it('groups items under their day, each with the time of day it arrived', () => {
-    const markup = render({ items: [anItem(), anItem({ deliveryId: 'dlv_02', sentAt: '2026-10-30T09:12:00.000Z' })], nextCursor: null });
+    const markup = render({ items: [anItem(), anItem({ deliveryId: 'dlv_02', sentAt: '2026-10-29T09:12:00.000Z' })], nextCursor: null });
 
-    expect([markup.includes('>Today<'), markup.includes('>30 Oct<'), markup.includes('>19:47<'), markup.includes('>09:12<')]).toEqual([true, true, true, true]);
+    expect([markup.includes('>Today<'), markup.includes('>29 Oct<'), markup.includes('>19:47<'), markup.includes('>09:12<')]).toEqual([true, true, true, true]);
   });
 
   it('opens a done item by its title, with no Open button beside it', () => {
