@@ -79,7 +79,7 @@ describe("a press of a question's button in Slack", () => {
 
   describe('the post, as the press goes (aeolus-fleet#1573)', () => {
     it('shows the option it sends and to whom before the answer goes, its buttons gone', async () => {
-      const reply = fleet.door.reply;
+      const reply = fleet.door.reply.bind(fleet.door);
       let editsAsSent: typeof slack.state.edits = [];
       fleet.door.reply = (crewToken, message) => {
         editsAsSent = [...slack.state.edits];
@@ -116,13 +116,14 @@ describe("a press of a question's button in Slack", () => {
 
       const answered = await press(2);
 
-      expect({ answered, thread: slack.state.inThread, post: slack.state.edits.at(-1)?.message }).toEqual({
+      const post = slack.state.edits.at(-1)?.message;
+      expect({ answered, thread: slack.state.inThread, body: post?.item?.body, aside: post?.item?.aside, tone: post?.item?.tone, buttons: post?.buttons }).toEqual({
         answered: { isOk: true, value: { kind: 'refused' } },
         thread: [],
-        post: expect.objectContaining({
-          item: expect.objectContaining({ body: 'Over by 10%', aside: '⚠️ Not sent: No rule. Press an option to try again.', tone: 'asking' }),
-          buttons: [{ text: '1. Cut', option: 1, isPicked: true }, { text: '2. Keep', option: 2, isPicked: false }],
-        }),
+        body: 'Over by 10%',
+        aside: '⚠️ Not sent: No rule. Press an option to try again.',
+        tone: 'asking',
+        buttons: [{ text: '1. Cut', option: 1, isPicked: true }, { text: '2. Keep', option: 2, isPicked: false }],
       });
     });
   });

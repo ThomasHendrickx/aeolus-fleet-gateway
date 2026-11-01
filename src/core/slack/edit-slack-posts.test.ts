@@ -140,7 +140,7 @@ describe("an item's post in Slack once something came of it (views.html)", () =>
   it('is left as it is when another gateway edited it already', async () => {
     await postedAsItem();
     await answeredInBridge();
-    await slack.messages.update('xoxb-1', { channel: 'D0MATHILDE', ts: '1730020000.000001', message: { text: 'Question from orchestrator-1: Which goes first?', item: { ...ITEM, body: 'answered elsewhere', tone: 'done' }, buttons: [] } });
+    await slack.messages.update('xoxb-1', { channel: 'D0MATHILDE', ts: '1730020000.000001', messageId: QUESTION_MESSAGE, message: { text: 'Question from orchestrator-1: Which goes first?', item: { ...ITEM, body: 'answered elsewhere', tone: 'done' }, buttons: [] } });
 
     await editSlackPosts();
 
@@ -154,7 +154,7 @@ describe('a post of a message that is no item in Slack, once something came of i
 
     await editSlackPosts();
 
-    expect(slack.state.edits).toEqual([{ botToken: 'xoxb-1', channel: 'D0MATHILDE', ts: '1730020000.000001', message: { text: `${QUESTION_TEXT}\n\n_Answered in Bridge: option 2_`, item: null, buttons: [] } }]);
+    expect(slack.state.edits).toEqual([{ botToken: 'xoxb-1', channel: 'D0MATHILDE', ts: '1730020000.000001', messageId: QUESTION_MESSAGE, message: { text: `${QUESTION_TEXT}\n\n_Answered in Bridge: option 2_`, item: null, buttons: [] } }]);
   });
 
   it('is edited once: the next round edits nothing', async () => {
@@ -193,7 +193,7 @@ describe('a post of a message that is no item in Slack, once something came of i
 
   it('adds its line once, though another gateway edited it meanwhile', async () => {
     await answeredInBridge();
-    await slack.messages.update('xoxb-1', { channel: 'D0MATHILDE', ts: '1730020000.000001', message: { text: `${QUESTION_TEXT}\n\n_Answered in Bridge: option 2_`, item: null, buttons: [] } });
+    await slack.messages.update('xoxb-1', { channel: 'D0MATHILDE', ts: '1730020000.000001', messageId: QUESTION_MESSAGE, message: { text: `${QUESTION_TEXT}\n\n_Answered in Bridge: option 2_`, item: null, buttons: [] } });
 
     await editSlackPosts();
 

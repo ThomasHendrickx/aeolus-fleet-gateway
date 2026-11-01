@@ -27,7 +27,7 @@ function slackTimeOf(at: Date): string {
 const TONES: Record<OutcomeKind, SlackTone> = { answered: 'done', done: 'done', seen: 'done', cannot: 'ended', withdrawn: 'ended', replaced: 'ended', notSent: 'ended' };
 
 /** The option answered with, as its button named it, or by its number once the button is gone. */
-function optionTextOf(message: SlackMessage, option: number): string {
+export function optionTextOf(message: SlackMessage, option: number): string {
   const button = message.buttons.find((each) => 'option' in each && each.option === option);
   return escaped(button?.text ?? `option ${String(option)}`);
 }
