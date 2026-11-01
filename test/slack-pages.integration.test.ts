@@ -292,15 +292,15 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     const joris = await linked(JORIS_SIGN_IN);
     const refusedPage = await whereThingsShow(JORIS_SIGN_IN, joris);
 
-    expect(unlinked).toContain('Not linked in Acme');
+    expect(unlinked).toContain('Link your Slack account in Acme');
     expect(charlottes).toBe(`/bridge/settings/routing?fleet=${fleetId}&slack=linked`);
-    expect(['Slack linked as @charlotte.d in Acme', "Your Slack account is linked: message the fleet's bots in Slack"].map((text) => linkedPage.includes(text) || text)).toEqual([true, true]);
+    expect(['As @charlotte.d in Acme.', "Your Slack account is linked: message the fleet's bots in Slack"].map((text) => linkedPage.includes(text) || text)).toEqual([true, true]);
     expect(joris).toBe(`/bridge/settings/routing?fleet=${fleetId}&slack=slack-user-linked&name=charlotte`);
     expect(refusedPage).toContain('This Slack account is linked to charlotte in this fleet already');
 
     const unlink = await fetch(`${address}/trpc/slack.unlink`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: `aeolus_account_session=${HOLDER_SIGN_IN}`, [FLEET_HEADER]: fleetId }, body: '{}' });
     expect(unlink.status).toBe(200);
-    expect(await whereThingsShow(HOLDER_SIGN_IN)).toContain('Not linked in Acme');
+    expect(await whereThingsShow(HOLDER_SIGN_IN)).toContain('Link your Slack account in Acme');
   }, 60_000);
 
   it("refuses a link started by one account and followed in another's browser, linking neither", async () => {
@@ -309,7 +309,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     const followed = await linked(HOLDER_SIGN_IN, JORIS_SIGN_IN);
 
     expect(followed).toBe('/bridge/settings/routing?slack=refused');
-    expect([await whereThingsShow(HOLDER_SIGN_IN), await whereThingsShow(JORIS_SIGN_IN)].map((page) => page.includes('Not linked in Acme'))).toEqual([true, true]);
+    expect([await whereThingsShow(HOLDER_SIGN_IN), await whereThingsShow(JORIS_SIGN_IN)].map((page) => page.includes('Link your Slack account in Acme'))).toEqual([true, true]);
   }, 60_000);
 
   it("answers an unlinked person's message to a bot only they see, with a button to link, and the message never reaches the fleet", async () => {

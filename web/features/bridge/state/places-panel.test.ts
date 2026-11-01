@@ -18,16 +18,17 @@ function render(): string {
     createElement(PlacesPanel, {
       fleetId: 'flt_01',
       routing: ROUTING,
-      slackLink: { workspaceName: 'Aeolus', link: { slackName: 'thomas', linkedAt: '2026-10-31T19:00:00.000Z' } },
+      slackLink: { workspaceName: 'Aeolus', link: { slackName: 'thomas' } },
       chats: ['claude.ai'],
       webPush: { publicKey: 'BKey', browsers: [] },
     }),
   );
 }
 
+/** One place's card: from its own start to the next card's. */
 function card(markup: string, place: string): string {
-  const start = markup.indexOf(`data-testid="bridge-place-${place}"`);
-  return markup.slice(start, markup.indexOf('data-testid="bridge-place-', start + 1) === -1 ? undefined : markup.indexOf('data-testid="bridge-place-', start + 1));
+  const [, after = ''] = markup.split(`data-testid="bridge-place-${place}"`);
+  return after.split(/data-testid="bridge-place-(?:slack|chat|web-push|email)"/)[0] ?? '';
 }
 
 describe("Where things show's places", () => {
