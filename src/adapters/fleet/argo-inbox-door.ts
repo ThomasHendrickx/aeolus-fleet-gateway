@@ -3,11 +3,12 @@
  * ship contract, by its crew token and within its read reach (argo's inbox,
  * AI9; decision 0034): argo by fleet.list, the fleet's events by
  * fleet.follow, each change with when and the account that made it, and
- * argo's messages by fleet.shipMessages and fleet.message, which have no
+ * a sender's type by fleet.ship, and argo's messages by fleet.shipMessages
+ * and fleet.message, which have no
  * REST door, so they go over tRPC with the crew token; one read whole with
  * its headline.
  */
-import { FOLLOW_MAX_LIMIT, FOLLOW_WAIT_MAX_SECONDS, followFleetOutputSchema, messageOutputSchema, shipMessagesOutputSchema, type MessageId, type ShipId } from '@aeolus-fleet/common';
+import { FOLLOW_MAX_LIMIT, FOLLOW_WAIT_MAX_SECONDS, followFleetOutputSchema, messageOutputSchema, shipMessagesOutputSchema, shipOutputSchema, type MessageId, type ShipId } from '@aeolus-fleet/common';
 import { PAGE_SIZE_MAX } from '@aeolus-fleet/common/rules';
 import type { z } from 'zod';
 
@@ -81,6 +82,10 @@ export function createArgoInboxDoor(options: { fleetUrl: string }): ArgoInboxDoo
       }
       const entry = entryOf(argo, read.value);
       return ok(entry === null ? null : { ...entry, headline: headlineOf(read.value) });
+    },
+    shipType: async (crewToken, shipId) => {
+      const read = parsedAs(shipOutputSchema, await readAs(fleetUrl, { as: { crewToken }, procedure: 'ship', input: { shipId } }));
+      return read.isOk ? ok(read.value.type) : read;
     },
     changes: async (crewToken, { argo, afterSeq, signal }) => {
       const input = { afterSeq, max: FOLLOW_MAX_LIMIT, waitSeconds: FOLLOW_WAIT_MAX_SECONDS };

@@ -23,14 +23,14 @@ function titleOf(headline: string): string {
   return headline.length <= TITLE_MAX_LENGTH ? headline : `${headline.slice(0, TITLE_MAX_LENGTH - 1)}…`;
 }
 
-/** Slack's post of a message open at argo, its button to the message in the console as argo (A1's link). */
-export function argoSlackMessageOf(message: ArgoMessageRead, argoMessageUrl: string): SlackMessage {
+/** Slack's post of a message open at argo, its sender named by type and name, its button to the message in the console as argo (A1's link). */
+export function argoSlackMessageOf(message: ArgoMessageRead, shown: { senderType: string; argoMessageUrl: string }): SlackMessage {
   const kind = isQuestionContentType(message.contentType) ? 'Question' : 'Report';
   const title = escaped(titleOf(message.headline));
   return {
     text: `Waits at argo, not you: ${title}`,
-    item: { asker: message.sender.name, heading: `*Waits at argo*, not you · ${kind} from ${escaped(message.sender.name)}`, title, body: null, aside: FOR_EVERYONE, footer: null, tone: 'argo' },
-    buttons: [{ text: OPEN_AS_ARGO, url: argoMessageUrl, isPlain: true }],
+    item: { asker: message.sender.name, heading: `*Waits at argo*, not you · ${kind} from ${escaped(shown.senderType)} ${escaped(message.sender.name)}`, title, body: null, aside: FOR_EVERYONE, footer: null, tone: 'argo' },
+    buttons: [{ text: OPEN_AS_ARGO, url: shown.argoMessageUrl, isPlain: true }],
   };
 }
 

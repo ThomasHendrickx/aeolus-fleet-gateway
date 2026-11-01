@@ -97,6 +97,13 @@ describe("argo's inbox as the gateway's ship reads it from core", () => {
     expect({ isDatedChange: change?.at instanceof Date, state: done.isOk ? done.value?.deliveryState : done.error }).toEqual({ isDatedChange: true, state: 'acknowledged' });
   });
 
+  it("reads a sender's type, as Slack's post names it", async () => {
+    const entries = await door().entries(gateway.crewToken, argo);
+    const senderShipId = entries.isOk ? (entries.value[0]?.sender.shipId ?? argo) : argo;
+
+    await expect(door().shipType(gateway.crewToken, senderShipId)).resolves.toEqual({ isOk: true, value: 'trierarch' });
+  });
+
   it('reads no message argo sent as one to argo', async () => {
     const messageId = await send(fleet, { crewToken: trierarch, to: argo, contentType: 'text/plain', payload: 'which repository?' });
     const asked = await door().entry(gateway.crewToken, { argo, messageId });

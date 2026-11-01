@@ -41,7 +41,7 @@ export function createShowArgoInboxInSlack(deps: {
   connections: Pick<ConnectionStore, 'connected'>;
   inboxOf: FollowArgoInbox['inboxOf'];
   doneAtArgo: FollowArgoInbox['doneAtArgo'];
-  door: Pick<ArgoInboxDoor, 'entry'>;
+  door: Pick<ArgoInboxDoor, 'entry' | 'shipType'>;
   accounts: Pick<ArgoAccounts, 'list'>;
   posts: ArgoSlackPosts;
   links: Pick<SlackLinks, 'ofPersonShip'>;
@@ -52,6 +52,9 @@ export function createShowArgoInboxInSlack(deps: {
   shipNames: ShipNames;
   argoMessageUrlOf: (deliveryId: DeliveryId) => string;
 }): ShowArgoInboxInSlack {
+  // A ship's type does not change: each sender's is read once, kept for every pass after.
+  const senderTypes = new Map<string, string>();
+
   /** Who did it: the name of the person ship of the account signed in as argo, when the gateway keeps it as allowed as argo. */
   const byOf = async (fleetId: FleetId, { done, accounts }: { done: DoneAtArgo | undefined; accounts: readonly ArgoAccount[] }): Promise<string | undefined> => {
     const account = accounts.find(({ accountId }) => accountId === done?.accountId);
@@ -78,8 +81,8 @@ export function createShowArgoInboxInSlack(deps: {
   };
 
   /** Posts it: kept with its Slack message, given up once Slack refused it, or left for the next pass. */
-  const post = async (bot: InSlack, { kept, read }: { kept: ArgoSlackPost; read: ArgoMessageRead }): Promise<void> => {
-    const message = argoSlackMessageOf(read, deps.argoMessageUrlOf(read.deliveryId));
+  const post = async (bot: InSlack, { kept, read, senderType }: { kept: ArgoSlackPost; read: ArgoMessageRead; senderType: string }): Promise<void> => {
+    const message = argoSlackMessageOf(read, { senderType, argoMessageUrl: deps.argoMessageUrlOf(read.deliveryId) });
     const posted = await deps.slack.post(bot.bot.token, { messageId: read.messageId, channel: kept.channel, threadTs: null, message });
     if (posted.isOk) {
       await deps.posts.save({ ...kept, ts: posted.value.ts });
@@ -114,6 +117,16 @@ export function createShowArgoInboxInSlack(deps: {
       }
       return reads.get(messageId) ?? null;
     };
+    const senderTypeOf = async ({ sender }: ArgoMessage): Promise<string | undefined> => {
+      const key = `${fleetId}:${sender.shipId}`;
+      if (!senderTypes.has(key)) {
+        const type = await deps.door.shipType(crewToken, sender.shipId);
+        if (type.isOk) {
+          senderTypes.set(key, type.value);
+        }
+      }
+      return senderTypes.get(key);
+    };
     for (const { personShipId } of accounts) {
       const link = await deps.links.ofPersonShip(fleetId, personShipId);
       if (link?.stoppedAt !== null) {
@@ -124,7 +137,8 @@ export function createShowArgoInboxInSlack(deps: {
         const before = kept.find((each) => each.personShipId === personShipId && each.messageId === message.messageId);
         const isDue = before === undefined ? routing.isShowing('slack', { contentType: message.contentType, sentAt: message.sentAt, senderShipId: message.sender.shipId }) : before.ts === null && !before.isGivenUp;
         const read = isDue ? await readOf(message) : null;
-        if (read === null) {
+        const senderType = read === null ? undefined : await senderTypeOf(message);
+        if (read === null || senderType === undefined) {
           continue;
         }
         // Kept before Slack is asked: a gateway that stops in between posts it once more, never again.
@@ -132,7 +146,7 @@ export function createShowArgoInboxInSlack(deps: {
         if (before === undefined && (await deps.posts.keep(toPost)) === 'known') {
           continue;
         }
-        await post(bot, { kept: toPost, read });
+        await post(bot, { kept: toPost, read, senderType });
       }
     }
   };
