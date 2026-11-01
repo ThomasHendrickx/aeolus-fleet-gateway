@@ -79,6 +79,7 @@ import type { SendMessage } from '../../core/people/send-message.js';
 import type { ReadBridgeHome } from '../../core/people/read-bridge-home.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { ReadRecord } from '../../core/people/read-record.js';
+import type { ReadYourFleet } from '../../core/people/read-your-fleet.js';
 import type { ReadWakeChannels } from '../../core/people/read-wake-channels.js';
 import type { FocusPage } from '../../core/people/focus-page.js';
 import type { TurnOffWebPush } from '../../core/people/turn-off-web-push.js';
@@ -143,6 +144,8 @@ export interface Context {
   crewParty: CrewParty;
   listParties: ListParties;
   listOwnerChoices: ListOwnerChoices;
+  /** Your fleet on Bridge home, read as the actor. */
+  readYourFleet: ReadYourFleet;
   retireParty: RetireParty;
   changePartyOwner: ChangePartyOwner;
   changePartyScopes: ChangePartyScopes;
@@ -1233,6 +1236,18 @@ export const gatewayRouter = t.router({
     inbox: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readInbox(ctx.caller))),
     /** Bridge home (CC18): what waits on the person with its count, decide and do, and the stay-aware feed. */
     home: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readBridgeHome(ctx.caller))),
+    /**
+     * Your fleet (Bridge home, as Harbour draws it): every active ship the
+     * actor reads, in its state and group, with the numbers on top. The fleet
+     * decides which ships they read; one it refuses holds no fleet:read.
+     */
+    yourFleet: servedProcedure.query(async ({ ctx }) => {
+      const read = await ctx.readYourFleet({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken } });
+      if (!read.isOk) {
+        throw new TRPCError({ code: read.error.kind === 'SCOPE_NOT_HELD' ? 'FORBIDDEN' : 'BAD_GATEWAY', message: read.error.message });
+      }
+      return read.value;
+    }),
     /** A page of the person ship's record (CC12), newest first, after the cursor the last page answered. */
     record: personProcedure
       .input(z.strictObject({ cursor: idSchema('delivery').nullable() }))

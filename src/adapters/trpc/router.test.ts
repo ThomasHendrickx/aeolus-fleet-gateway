@@ -86,6 +86,13 @@ const ORDERBOT_REQUEST: PendingRequest = {
 };
 
 /** A context with only what the parties procedures read; every approval it is asked for is recorded. */
+/** Your fleet as the fleet answers Charlotte's account: one agent at work. */
+const YOUR_FLEET = {
+  shipCount: 1,
+  counts: { alert: 0, waiting: 0, working: 1, idle: 0 },
+  groups: [{ group: 'agents' as const, tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9rev' as const, name: 'reviewer', state: 'working' as const, note: 'reviewing #165' }] }],
+};
+
 function aContext(cookie: string | undefined, crewToken?: string): {
   context: Context;
   approvals: Parameters<ApproveParty>[0][];
@@ -294,6 +301,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     },
     listParties: () => Promise.resolve([]),
     listOwnerChoices: () => Promise.resolve(ok([])),
+    readYourFleet: () => Promise.resolve(ok(YOUR_FLEET)),
     retireParty: unused,
     changePartyOwner: unused,
     changePartyScopes: unused,
@@ -1040,6 +1048,28 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe("a person reads Your fleet through the gateway's API (Bridge home)", () => {
+  it('reads the numbers and the tiles by group, as the fleet answers their account', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.yourFleet()).resolves.toEqual(YOUR_FLEET);
+  });
+
+  it('is forbidden to an account the fleet does not let read it', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+    const refused = { ...context, readYourFleet: () => Promise.resolve(err({ kind: 'SCOPE_NOT_HELD' as const, message: 'fleet.list needs the fleet:read scope' })) };
+
+    await expect(gatewayRouter.createCaller(refused).people.yourFleet()).rejects.toMatchObject({ code: 'FORBIDDEN', message: 'fleet.list needs the fleet:read scope' });
+  });
+
+  it('says why when the fleet does not list its ships', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+    const unavailable = { ...context, readYourFleet: () => Promise.resolve(err({ kind: 'FLEET_UNAVAILABLE' as const, message: 'The fleet did not list its ships: The fleet did not answer' })) };
+
+    await expect(gatewayRouter.createCaller(unavailable).people.yourFleet()).rejects.toMatchObject({ code: 'BAD_GATEWAY', message: 'The fleet did not list its ships: The fleet did not answer' });
   });
 });
 
