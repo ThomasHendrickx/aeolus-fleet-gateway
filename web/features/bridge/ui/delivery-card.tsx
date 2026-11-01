@@ -184,7 +184,7 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
 /** Sends the ship an opened alert is about a message, the form opening with its ship filled in (aeolus-fleet #1547). */
 function SendShipButton({ ship, onSendMessage }: { ship: string; onSendMessage: (alertShip: string) => void }) {
   return (
-    <button type="button" data-testid="bridge-send-alert-ship" onClick={() => { onSendMessage(ship); }} className="inline-flex h-9 items-center gap-2 justify-self-start rounded-md px-3 font-semibold hover:bg-accent">
+    <button type="button" data-testid="bridge-send-alert-ship" onClick={() => { onSendMessage(ship); }} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md px-3 font-semibold hover:bg-accent sm:h-9 sm:w-auto sm:justify-self-start">
       <Send aria-hidden="true" className="size-4" />
       Send {ship} a message
     </button>
