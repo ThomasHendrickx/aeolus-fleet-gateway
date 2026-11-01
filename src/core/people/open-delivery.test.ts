@@ -255,7 +255,7 @@ describe('a person opens a question its asker withdrew or replaced: their look a
   it('shows a withdrawn question stale, with nothing to answer', async () => {
     const shown = await opening([ASKING, WITHDRAWAL]).openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
 
-    expect(shown).toMatchObject({ isOk: true, value: { deliveryId: ASKING.deliveryId, stale: { kind: 'withdrawn', replacementId: null } } });
+    expect(shown).toMatchObject({ isOk: true, value: { deliveryId: ASKING.deliveryId, stale: { kind: 'withdrawn', replacementId: null, at: WITHDRAWAL.sentAt.toISOString(), replacementTitle: null } } });
   });
 
   it('acknowledges and reports handled both the withdrawn question and its withdrawal, keeping nothing opened', async () => {
@@ -288,7 +288,7 @@ describe('a person opens a question its asker withdrew or replaced: their look a
     const shown = await openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
 
     expect({ stale: shown.isOk ? shown.value.stale : shown, calls: asked(fleet.calls), opened: [...opened.held.values()] }).toEqual({
-      stale: { kind: 'withdrawn', replacementId: null },
+      stale: { kind: 'withdrawn', replacementId: null, at: WITHDRAWAL.sentAt.toISOString(), replacementTitle: null },
       calls: [`ack(${ASKING.deliveryId})`, `delivery(${ASKING.deliveryId})`, `handled(${ASKING.deliveryId})`, `ack(${WITHDRAWAL.deliveryId})`, `handled(${WITHDRAWAL.deliveryId})`],
       opened: [],
     });
@@ -300,7 +300,7 @@ describe('a person opens a question its asker withdrew or replaced: their look a
     const shown = await openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
 
     expect({ stale: shown.isOk ? shown.value.stale : shown, calls: asked(calls), kinds: outcomes.held.map(({ deliveryId, kind }) => ({ deliveryId, kind })) }).toEqual({
-      stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId },
+      stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId, at: REPLACEMENT.sentAt.toISOString(), replacementTitle: REPLACEMENT.headline },
       calls: [`ack(${ASKING.deliveryId})`, `handled(${ASKING.deliveryId})`],
       kinds: [{ deliveryId: ASKING.deliveryId, kind: 'replaced' }],
     });
@@ -352,7 +352,7 @@ describe('a person opens a step its asker withdrew or replaced: as a question, t
     const shown = await openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
 
     expect({ stale: shown.isOk ? shown.value.stale : shown, calls: asked(calls), kinds: outcomes.held.map(({ deliveryId, kind }) => ({ deliveryId, kind })), opened: [...opened.held.values()] }).toEqual({
-      stale: { kind: 'withdrawn', replacementId: null },
+      stale: { kind: 'withdrawn', replacementId: null, at: WITHDRAWAL.sentAt.toISOString(), replacementTitle: null },
       calls: [`ack(${ASKING.deliveryId})`, `handled(${ASKING.deliveryId})`, `ack(${WITHDRAWAL.deliveryId})`, `handled(${WITHDRAWAL.deliveryId})`],
       kinds: [
         { deliveryId: ASKING.deliveryId, kind: 'withdrawn' },
@@ -368,7 +368,7 @@ describe('a person opens a step its asker withdrew or replaced: as a question, t
     const shown = await openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
 
     expect({ stale: shown.isOk ? shown.value.stale : shown, calls: asked(calls), kinds: outcomes.held.map(({ deliveryId, kind }) => ({ deliveryId, kind })) }).toEqual({
-      stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId },
+      stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId, at: REPLACEMENT.sentAt.toISOString(), replacementTitle: REPLACEMENT.headline },
       calls: [`ack(${ASKING.deliveryId})`, `handled(${ASKING.deliveryId})`],
       kinds: [{ deliveryId: ASKING.deliveryId, kind: 'replaced' }],
     });
