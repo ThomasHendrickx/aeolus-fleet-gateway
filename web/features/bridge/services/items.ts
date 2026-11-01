@@ -39,6 +39,8 @@ const KINDS: Record<Outcome['kind'], string> = {
   seen: 'Seen',
   answered: 'Answered',
   done: 'Done',
+  withdrawn: 'Withdrawn by its asker, seen',
+  replaced: 'Replaced by its asker, seen',
 };
 
 export function jobLabelOf(job: Job): string {
