@@ -11,6 +11,9 @@ import { Markdown } from './markdown';
 import { Notice } from './notice';
 import { StaleIcon } from './stale-icon';
 
+/** A phone shows only the first paragraph of what an item says, as the sheets draw it; a desktop shows it whole. */
+const PROSE = 'max-md:[&_p+p]:hidden';
+
 /** Which of the card's controls is working: an option of the question put in the basket, its entry removed, the note alone, done, or a step's cannot. */
 export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'remove' } | { kind: 'note' } | { kind: 'done' } | { kind: 'cannot' };
 
@@ -68,7 +71,7 @@ function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Qu
             <span className="font-medium">
               {option.key}. {option.label}
             </span>
-            {option.detail === '' ? null : <span className="text-caption text-muted-foreground">{option.detail}</span>}
+            {option.detail === '' ? null : <span className="text-caption text-muted-foreground max-md:hidden">{option.detail}</span>}
           </span>
           {option.key === question.pick.option ? <span className="rounded-sm border border-border px-1.5 text-caption">Their pick</span> : null}
         </label>
@@ -113,7 +116,9 @@ function StepAsked({ step, isStale, isFinished }: { step: StepView; isStale: boo
   const { link } = step;
   return (
     <>
-      <Markdown text={step.why} />
+      <div className={PROSE}>
+        <Markdown text={step.why} />
+      </div>
       {link === undefined || isStale ? null : (
         <div className="flex items-center gap-3 rounded-md border border-border p-3">
           <ExternalLink aria-hidden className="size-4 shrink-0 text-muted-foreground" />
@@ -317,7 +322,9 @@ export function DeliveryCard({
         <Markdown text={delivery.body} />
       ) : (
         <>
-          <Markdown text={question.context} />
+          <div className={PROSE}>
+            <Markdown text={question.context} />
+          </div>
           <QuestionOptions question={question} chosen={chosen} isStale={stale !== null} onChoose={setChosen} />
           <p className="text-caption text-muted-foreground">
             {delivery.from} picks {question.pick.option}: {question.pick.why}

@@ -49,10 +49,10 @@ function Places({ places }: { places: readonly Place[] }) {
   );
 }
 
-/** A row's ground: the open item on the active tone with a bar at its side, a stale one muted. */
+/** A row's ground: the open item on the highlight with an inset bar in the primary colour, a stale one muted (decide.html). */
 function groundOf({ isOpen, isStale }: { isOpen: boolean; isStale: boolean }): string {
   if (isOpen) {
-    return 'border-l-2 border-l-tone-active-fg bg-tone-active-bg pl-2.5';
+    return 'bg-highlight shadow-[inset_2px_0_0_var(--primary)]';
   }
   return isStale ? 'bg-muted' : '';
 }
@@ -63,7 +63,7 @@ function groundOf({ isOpen, isStale }: { isOpen: boolean; isStale: boolean }): s
  * who sent it, its state, and the places that show it; how long ago it
  * arrived on the right; and its actions beneath, the one that acts in place
  * beside Open. Pressing the title opens it too. Struck through, on muted
- * ground and marked, when stale (basket.html); marked on the active tone when it is the item open beside the list. The row
+ * ground and marked, when stale (basket.html); marked on the highlight when it is the item open beside the list. The row
  * and its title shrink to a phone's width (aeolus-fleet#1238).
  */
 export function ItemRow({

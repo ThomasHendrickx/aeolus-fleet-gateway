@@ -11,7 +11,7 @@ export function ItemSplit({ list, item }: { list: ReactNode; item: ReactNode }) 
     return <div className="grid gap-4">{list}</div>;
   }
   return (
-    <div data-testid="bridge-split" className="grid min-w-0 md:grid-cols-[18rem_minmax(0,1fr)] md:overflow-hidden md:rounded-lg md:border md:border-border md:bg-card">
+    <div data-testid="bridge-split" className="grid min-w-0 md:grid-cols-[340px_minmax(0,1fr)] md:overflow-hidden md:rounded-lg md:border md:border-border md:bg-card">
       <div data-testid="bridge-split-list" className="hidden min-w-0 border-r border-border md:block">
         {list}
       </div>
