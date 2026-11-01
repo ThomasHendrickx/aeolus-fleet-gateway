@@ -131,8 +131,13 @@ export interface PersonShipDoor {
    * (wake a person, W5), or less when told. Stopping the signal ends the wait.
    */
   inbox(crewToken: string, wait?: { knownWaiting: number; signal: AbortSignal; atMostMs?: number }): Promise<Result<{ waiting: number }, FleetRefusal>>;
-  /** The ship's deliveries, up to max, its own held ones again first; shouldSkipHanded leaves the handed ones out before the limit, so a new one is not shut out by held ones. */
-  pushReceive(crewToken: string, take: { max: number; shouldSkipHanded?: boolean }): Promise<Result<PushedPersonDelivery[], FleetRefusal>>;
+  /**
+   * The ship's deliveries, up to max, its own held ones again first;
+   * shouldSkipHanded leaves the handed ones out before the limit, so a new
+   * one is not shut out by held ones, and excluding leaves out the ones the
+   * crew took already, so it reaches past them.
+   */
+  pushReceive(crewToken: string, take: { max: number; shouldSkipHanded?: boolean; excluding?: readonly DeliveryId[] }): Promise<Result<PushedPersonDelivery[], FleetRefusal>>;
   /** A page of the ship's record (Bridge, CC12): its deliveries in every state and across its leases, newest first, after the cursor; records nothing. */
   record(crewToken: string, page: { cursor: DeliveryId | null; limit: number }): Promise<Result<RecordPage, FleetRefusal>>;
   /** Acknowledges a delivery the person opened: their own act confirms it (interop 5.1). */

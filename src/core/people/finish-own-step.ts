@@ -1,4 +1,4 @@
-import type { DeliveryId, DeliveryState } from '@aeolus-fleet/common';
+import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId, type DeliveryState } from '@aeolus-fleet/common';
 
 import type { ConnectionStore } from '../connection/ports.js';
 import type { FinishesOwnStep } from '../party-grants/ports.js';
@@ -6,7 +6,6 @@ import type { SentMessages } from '../mcp-in/ports.js';
 import type { Clock } from '../shared/clock.js';
 import type { ItemOutcomes } from './item-outcome.js';
 import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from './ports.js';
-import { INBOX_LIST_MAX } from './read-inbox.js';
 
 /** What finishing the step does with its delivery, by where it stands: acknowledge it first, report it handled only, or nothing, as it ended already. */
 type Finishing = 'acknowledgeFirst' | 'takeFirst' | 'handledOnly' | 'ended';
@@ -58,7 +57,7 @@ export function createFinishOwnStep(deps: {
       case 'handledOnly':
         return true;
       case 'takeFirst': {
-        const taken = await deps.door.pushReceive(crewToken, { max: INBOX_LIST_MAX });
+        const taken = await deps.door.pushReceive(crewToken, { max: RECEIVE_MAX_UPPER_BOUND });
         return taken.isOk && taken.value.some(({ deliveryId }) => deliveryId === delivery.deliveryId) && (await deps.door.ack(crewToken, delivery.deliveryId)).isOk;
       }
       case 'acknowledgeFirst':

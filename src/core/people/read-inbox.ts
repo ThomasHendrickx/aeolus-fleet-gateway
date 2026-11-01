@@ -1,3 +1,5 @@
+import { RECEIVE_MAX_UPPER_BOUND } from '@aeolus-fleet/common';
+
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import { inboxEntryOf, openedEntryOf, type InboxEntry } from './inbox-entry.js';
@@ -5,10 +7,7 @@ import { asPersonCrew, type PersonCaller, type PersonCrewError, type PersonCrewT
 import type { OpenedDeliveries, PersonCrews, PersonDelivery, PersonShipDoor } from './ports.js';
 import { routingOf, type RoutingDefaults, type Routes } from './routing.js';
 
-/** The most deliveries an inbox lists at once: as many as one receive takes. */
-export const INBOX_LIST_MAX = 10;
-
-/** A person's inbox: how many deliveries wait and the first of them, and the ones they opened and have not answered or done yet. */
+/** A person's inbox: how many deliveries wait and each of them, and the ones they opened and have not answered or done yet. */
 export interface Inbox {
   readonly waiting: number;
   readonly deliveries: InboxEntry[];
@@ -18,8 +17,11 @@ export interface Inbox {
 export type ReadInbox = (caller: PersonCaller) => Promise<Result<Inbox, PersonCrewError>>;
 
 /**
- * What waits for the caller's person ship: how many, and up to the most an
- * inbox lists, taken as received, the crew's own held ones again first. It
+ * What waits for the caller's person ship: how many, and every one of them,
+ * taken as received, the crew's own held ones again first, as many at a time
+ * as one receive takes, each time past the ones taken already (aeolus-fleet
+ * #1517). It stops once it took as many as wait, or once the fleet takes
+ * nothing new, as a core that does not leave the taken ones out answers. It
  * asks how many wait first, so the person is never kept waiting while none
  * does.
  */
@@ -31,12 +33,24 @@ export async function waitingFor(
   if (!counted.isOk) {
     return counted;
   }
-  const { crew, value } = counted.value;
-  if (value.waiting === 0) {
-    return ok({ crew, waiting: 0, deliveries: [] });
+  const { waiting } = counted.value.value;
+  let crew = counted.value.crew;
+  let deliveries: PersonDelivery[] = [];
+  while (deliveries.length < waiting) {
+    const excluding = deliveries.map(({ deliveryId }) => deliveryId);
+    const taken = await asPersonCrew(deps, { caller, run: (held) => deps.door.pushReceive(held.crewToken, { max: RECEIVE_MAX_UPPER_BOUND, ...(excluding.length === 0 ? {} : { excluding }) }) });
+    if (!taken.isOk) {
+      return taken;
+    }
+    crew = taken.value.crew;
+    const isTaken = new Set<string>(excluding);
+    const fresh = taken.value.value.filter(({ deliveryId }) => !isTaken.has(deliveryId));
+    if (fresh.length === 0) {
+      break;
+    }
+    deliveries = [...deliveries, ...fresh];
   }
-  const taken = await asPersonCrew(deps, { caller, run: (held) => deps.door.pushReceive(held.crewToken, { max: INBOX_LIST_MAX }) });
-  return taken.isOk ? ok({ crew: taken.value.crew, waiting: value.waiting, deliveries: taken.value.value }) : taken;
+  return ok({ crew, waiting, deliveries });
 }
 
 /**
