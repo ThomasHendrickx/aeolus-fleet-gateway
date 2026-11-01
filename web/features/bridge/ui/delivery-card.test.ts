@@ -101,15 +101,15 @@ describe('a question opened in Bridge (CC11)', () => {
   });
 
   it('shows a withdrawn question stale: nothing to choose or send', () => {
-    const markup = render(aQuestion({ stale: { kind: 'withdrawn', replacementId: null } }));
+    const markup = render(aQuestion({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } }));
 
-    expect({ stale: markup.includes('Withdrawn by orchestrator-1. Nothing to answer: it is done.'), send: markup.includes('in the basket'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, send: false, note: false });
+    expect({ stale: markup.includes('Withdrawn by orchestrator-1 at 20:09 UTC. Nothing to answer: it is done.'), send: markup.includes('in the basket'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, send: false, note: false });
   });
 
   it('links a replaced question to its replacement', () => {
-    const markup = render(aQuestion({ stale: { kind: 'replaced', replacementId: 'dlv_02' } }));
+    const markup = render(aQuestion({ stale: { kind: 'replaced', replacementId: 'dlv_02', at: '2026-10-31T20:10:00.000Z', replacementTitle: 'Which goes first, now that U4 slipped?' } }));
 
-    expect({ stale: markup.includes('Replaced by orchestrator-1. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('in the basket') }).toEqual({ stale: true, link: true, send: false });
+    expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:10 UTC with “Which goes first, now that U4 slipped?”. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('in the basket') }).toEqual({ stale: true, link: true, send: false });
   });
 });
 
@@ -143,15 +143,22 @@ describe('a step opened in Bridge (CC14)', () => {
     }).toEqual({ noteFirst: true, note: true, noteSays: true, done: true, cannot: true, answer: false });
   });
 
-  it('shows a withdrawn step stale: nothing to do, no link, Done or Cannot', () => {
-    const markup = render(aStep({ stale: { kind: 'withdrawn', replacementId: null } }));
+  it('shows a withdrawn step stale, struck through with when it was withdrawn: nothing to do, no link, Done or Cannot', () => {
+    const markup = render(aStep({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T21:09:00.000Z', replacementTitle: null } }));
 
-    expect({ stale: markup.includes('Withdrawn by gateway. Nothing to do: it is done.'), done: markup.includes('data-testid="bridge-step-done"'), note: markup.includes('data-testid="bridge-note"'), link: markup.includes('data-testid="bridge-step-link"') }).toEqual({ stale: true, done: false, note: false, link: false });
+    expect({
+      stale: markup.includes('Withdrawn by gateway at 21:09 UTC. Nothing to do: it is done.'),
+      struck: markup.includes('<s>Sign in to attio</s>'),
+      icon: markup.includes('aria-label="Withdrawn"'),
+      done: markup.includes('data-testid="bridge-step-done"'),
+      note: markup.includes('data-testid="bridge-note"'),
+      link: markup.includes('data-testid="bridge-step-link"'),
+    }).toEqual({ stale: true, struck: true, icon: true, done: false, note: false, link: false });
   });
 
-  it('links a replaced step to its replacement, the new step', () => {
-    const markup = render(aStep({ stale: { kind: 'replaced', replacementId: 'dlv_04' } }));
+  it('links a replaced step to its replacement, named with when it was replaced', () => {
+    const markup = render(aStep({ stale: { kind: 'replaced', replacementId: 'dlv_04', at: '2026-10-31T21:11:00.000Z', replacementTitle: 'Sign in to attio with the team account' } }));
 
-    expect({ stale: markup.includes('Replaced by gateway. Do the new step.'), link: markup.includes('Open the new step'), done: markup.includes('data-testid="bridge-step-done"') }).toEqual({ stale: true, link: true, done: false });
+    expect({ stale: markup.includes('Replaced by gateway at 21:11 UTC with “Sign in to attio with the team account”. Do the new step.'), icon: markup.includes('aria-label="Replaced"'), link: markup.includes('Open the new step'), done: markup.includes('data-testid="bridge-step-done"') }).toEqual({ stale: true, icon: true, link: true, done: false });
   });
 });
