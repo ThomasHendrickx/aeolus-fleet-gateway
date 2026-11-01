@@ -732,3 +732,24 @@ model ArgoSlackPost {
   @@id([fleetId, personShipId, messageId])
   @@map("argo_slack_posts")
 }
+
+/// A message to argo a wake or a page in focus covered for a person ship allowed as argo, so it wakes that person once (argo's inbox, AI5).
+model ArgoMessageCovered {
+  fleetId   String @map("fleet_id")
+  shipId    String @map("ship_id")
+  messageId String @map("message_id")
+
+  @@id([fleetId, shipId, messageId])
+  @@map("argo_messages_covered")
+}
+
+/// When a channel last woke a person ship for what waits at argo, apart from its own wakes, so it sends at most one per its window (argo's inbox, AI5).
+model ArgoWakeSent {
+  fleetId String   @map("fleet_id")
+  shipId  String   @map("ship_id")
+  channel String
+  sentAt  DateTime @map("sent_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId, channel])
+  @@map("argo_wakes_sent")
+}

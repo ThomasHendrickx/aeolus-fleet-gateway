@@ -2,7 +2,8 @@
  * The email channel (wake a person, W2): pagasae sends the email, asked by
  * the gateway with its own installation token at `/api/wakes`, naming the
  * person ship by its fleet and id, with the key of the window, so a retry
- * mails nothing twice. The address never leaves pagasae. It reaches every
+ * mails nothing twice, and, for what waits at argo, saying so (argo's
+ * inbox, AI4), so pagasae mails its own wake for argo. The address never leaves pagasae. It reaches every
  * person; which jobs it wakes them for is routed per job (Bridge, section 8).
  */
 import { z } from 'zod';
@@ -17,13 +18,14 @@ export function createEmailChannel(options: { url: string; installationToken: st
     name: 'email',
     windowMs: options.windowMs,
     isOn: () => Promise.resolve(true),
-    wake: async ({ fleetId, shipId }, window) => {
+    wake: async ({ fleetId, shipId }, { key, waitsAt }) => {
       let response: Response;
       try {
         response = await fetch(`${options.url}/api/wakes`, {
           method: 'POST',
           headers: { authorization: `Bearer ${options.installationToken}`, 'content-type': 'application/json', accept: 'application/json' },
-          body: JSON.stringify({ fleetId, shipId, key: window.key }),
+          // Only a wake for argo says where it waits: pagasae mails the person's own as before.
+          body: JSON.stringify({ fleetId, shipId, key, ...(waitsAt === 'argo' ? { waitsAt } : {}) }),
           redirect: 'manual',
           signal: AbortSignal.timeout(options.timeoutMs),
         });
