@@ -47,8 +47,14 @@ describe('what came of an item and where, on its row in Done (done.html)', () =>
 describe('a done item opened, with what came of it and its history (decide.html, answered in Slack)', () => {
   const ANSWERED = anItem({ places: ['slack', 'chat'], sentAt: '2026-10-31T19:41:00.000Z', outcome: anOutcome({ place: 'slack', kind: 'answered', option: 2, optionLabel: 'Harbour first', seen: { place: 'slack', at: '2026-10-31T19:57:00.000Z' } }) });
 
-  it('says what came of it, where and when, and what was sent as the person', () => {
-    expect(endedOf(ANSWERED, 'UTC')).toEqual({ isOk: true, text: 'Answered in Slack at 19:58: option 2, Harbour first', sent: 'Sent to orchestrator-1 as you.' });
+  it('says what came of it, where and when, what was sent as the person, and the places that show the same answer', () => {
+    expect(endedOf(ANSWERED, 'UTC')).toEqual({ isOk: true, text: 'Answered in Slack at 19:58: option 2, Harbour first', sent: "Sent to orchestrator-1 as you. Slack's post and the chat show the same answer." });
+  });
+
+  it('names only the places that show an answer, one alone in the singular, none when only Bridge showed it', () => {
+    const answeredIn = (places: RecordItem['places']) => endedOf({ ...ANSWERED, places }, 'UTC')?.sent;
+
+    expect([answeredIn(['chat', 'web-push']), answeredIn(['email'])]).toEqual(['Sent to orchestrator-1 as you. The chat shows the same answer.', 'Sent to orchestrator-1 as you.']);
   });
 
   it('quotes the note sent with a step outcome, and says nothing was sent for one only seen', () => {

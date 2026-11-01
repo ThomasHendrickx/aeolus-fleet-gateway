@@ -48,16 +48,23 @@ describe('a done item read back whole (decide.html)', () => {
     expect([markup.includes('Decide'), markup.includes('question from'), markup.includes('19:41')]).toEqual([true, true, true]);
   });
 
-  it('shows the options with the one answered marked, and none to choose', () => {
+  it('shows each option with its radio, filled on the one answered on the card ground with the ring border, and none to choose', () => {
     const markup = render(anItem());
 
-    expect({ marked: (markup.match(/data-answered="true"/g) ?? []).length, radios: markup.includes('type="radio"'), pick: markup.includes('Their pick') }).toEqual({ marked: 1, radios: false, pick: true });
+    expect({
+      marked: (markup.match(/data-answered="true"/g) ?? []).length,
+      radios: (markup.match(/data-testid="bridge-done-radio"/g) ?? []).length,
+      filled: (markup.match(/data-testid="bridge-done-radio" data-filled="true"/g) ?? []).length,
+      inputs: markup.includes('type="radio"'),
+      accent: /data-answered="true" class="[^"]*bg-accent/.test(markup),
+      pick: markup.includes('Their pick'),
+    }).toEqual({ marked: 1, radios: 2, filled: 1, inputs: false, accent: false, pick: true });
   });
 
   it('says what came of it, where and when, and what was sent as the person', () => {
     const markup = render(anItem());
 
-    expect([markup.includes('Answered in Slack at 19:58: option 2, Harbour first, on today’s look'), markup.includes('Sent to orchestrator-1 as you.')]).toEqual([true, true]);
+    expect([markup.includes('Answered in Slack at 19:58: option 2, Harbour first, on today’s look'), markup.includes('Sent to orchestrator-1 as you. Slack&#x27;s post and the chat show the same answer.')]).toEqual([true, true]);
   });
 
   it('tells its history: arrived and where it showed, seen where, and what came of it', () => {
