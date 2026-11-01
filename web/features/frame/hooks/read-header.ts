@@ -5,10 +5,13 @@
  * in to its pages, or pagasae not answering, shows the plain bar: the page
  * itself says what to do.
  */
+import { cache } from 'react';
+
 import { refusalCodeOf, requestApi } from '../../../lib/gateway-api/page-api';
 import type { AccountApps } from '../services/header-switchers';
 
-export async function readHeader(): Promise<AccountApps | undefined> {
+/** Read once per page: the header and a page that needs a fleet's app, such as Stay aware's console, share the read. */
+export const readHeader = cache(async (): Promise<AccountApps | undefined> => {
   try {
     return await (await requestApi(undefined)).account.apps.query();
   } catch (error) {
@@ -17,4 +20,4 @@ export async function readHeader(): Promise<AccountApps | undefined> {
     }
     throw error;
   }
-}
+});
