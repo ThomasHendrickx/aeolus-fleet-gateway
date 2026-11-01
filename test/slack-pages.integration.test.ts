@@ -527,9 +527,14 @@ describe('linking a Slack account (gateway scopes S7)', () => {
           isAnswered: /^✅ You answered at <!date\^\d+\^\{time\}\|\d\d:\d\d UTC>: \*2\. Harbour\*, sent to release-notes-s7$/.test(textOf('body')?.text?.text ?? ''),
           isWhere: /^Bridge and the chat show it answered in Slack · <http[^|]+\|Open in Bridge>$/.test(textOf('footer')?.elements?.[0]?.text ?? ''),
           hasButtons: attachment?.blocks.some(({ type }) => type === 'actions'),
+          aside: textOf('aside')?.elements?.[0]?.text,
         };
       };
-      await expect.poll(() => slack.updated.filter(({ form }) => form.ts === questionTs).map(editedOf), { timeout: 45_000 }).toEqual([{ title: '*Which design?*', isAnswered: true, isWhere: true, hasButtons: false }]);
+      // Shown sending as the press goes, then the answer once sent (aeolus-fleet#1573); the view sync round finds it edited already.
+      await expect.poll(() => slack.updated.filter(({ form }) => form.ts === questionTs).map(editedOf), { timeout: 45_000 }).toEqual([
+        { title: '*Which design?*', isAnswered: false, isWhere: false, hasButtons: false, aside: 'Sending *2. Harbour* to release-notes-s7…' },
+        { title: '*Which design?*', isAnswered: true, isWhere: true, hasButtons: false, aside: undefined },
+      ]);
     }, 120_000);
   });
 });

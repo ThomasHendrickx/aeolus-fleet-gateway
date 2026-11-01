@@ -167,17 +167,28 @@ describe("a bot's post edited once something came of its item (Bridge, view sync
     await messages.post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'D0MATHILDE', threadTs: null, message: QUESTION_POST });
     const answered = { text: QUESTION_POST.text, item: { ...QUESTION_POST.item, body: '✅ You answered: *2. Keep*', aside: null, tone: 'done' as const }, buttons: [] };
 
-    const updated = await messages.update('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', message: answered });
+    const updated = await messages.update('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', message: answered });
 
     const form = slack.updated[0]?.form;
     expect({ updated, blocks: form?.blocks, read: await messages.messageOf('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', threadTs: null }) }).toEqual({ updated: { isOk: true, value: undefined }, blocks: '[]', read: { isOk: true, value: answered } });
+  });
+
+  it('gives an item its buttons again, naming its fleet message, so a press after an answer not sent is taken (aeolus-fleet#1573)', async () => {
+    const messages = createSlackMessages({ apiUrl: slack.apiUrl });
+    await messages.post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'D0MATHILDE', threadTs: null, message: QUESTION_POST });
+    const notSent = { ...QUESTION_POST, item: { ...QUESTION_POST.item, aside: '⚠️ Not sent: No rule. Press an option to try again.' } };
+
+    await messages.update('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', message: notSent });
+
+    const attachments = z.array(z.object({ blocks: z.array(z.object({ type: z.string(), block_id: z.string() })) })).parse(JSON.parse(slack.updated[0]?.form.attachments ?? '[]'));
+    expect({ actions: attachments[0]?.blocks.filter(({ type }) => type === 'actions').map(({ block_id: blockId }) => blockId), read: await messages.messageOf('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', threadTs: null }) }).toEqual({ actions: ['msg_01m3tbfspe96yf1rnr4ank0002'], read: { isOk: true, value: notSent } });
   });
 
   it('gives a message that is no item new text, its buttons gone', async () => {
     const messages = createSlackMessages({ apiUrl: slack.apiUrl });
     await messages.post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'D0MATHILDE', threadTs: null, message: { text: 'Friday', item: null, buttons: [{ text: 'Seen', isSeen: true }] } });
 
-    const updated = await messages.update('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', message: { text: 'Friday\n\n_Seen in Bridge_', item: null, buttons: [] } });
+    const updated = await messages.update('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', message: { text: 'Friday\n\n_Seen in Bridge_', item: null, buttons: [] } });
 
     expect({ updated, form: slack.updated[0]?.form }).toEqual({ updated: { isOk: true, value: undefined }, form: { channel: 'D0MATHILDE', ts: '1730019600.000001', text: 'Friday\n\n_Seen in Bridge_', blocks: '[]', attachments: '[]' } });
   });
