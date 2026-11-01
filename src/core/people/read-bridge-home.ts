@@ -7,9 +7,9 @@ import type { ItemState } from './item-state.js';
 import type { PersonCaller, PersonCrewError } from './person-crew.js';
 import type { OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
-import { staleOf, type Asking, type Stale } from './stale-question.js';
+import { staleOf, type Asking, type Stale } from './stale-item.js';
 
-/** An item on Bridge home: by its title, with its job, new or seen, stale once its asker withdrew or replaced the question it asks, and the answer to it in the basket, if any. */
+/** An item on Bridge home: by its title, with its job, new or seen, stale once its asker withdrew or replaced the question or step it asks, and the answer to it in the basket, if any. */
 export interface HomeItem extends InboxEntry {
   readonly job: ItemJob;
   readonly state: Exclude<ItemState, 'done'>;
@@ -17,7 +17,7 @@ export interface HomeItem extends InboxEntry {
   readonly inBasket: { readonly option: number | null; readonly note: string | null } | null;
 }
 
-/** Bridge home: what waits on the person, decide and do, with its count, a stale question listed outside it; and the stay-aware feed, outside the count. */
+/** Bridge home: what waits on the person, decide and do, with its count, a stale question or step listed outside it; and the stay-aware feed, outside the count. */
 export interface BridgeHome {
   readonly waiting: { readonly count: number; readonly items: HomeItem[] };
   readonly stayAware: HomeItem[];
@@ -50,8 +50,8 @@ function newestFirst(a: HomeItem, b: HomeItem): number {
  * gateway takes for their person ship as its crew, as their inbox does, and
  * what they opened and are not done with yet, kept to the jobs that wait on
  * them, decide and do (section 6), newest first, with their count. A
- * question its asker withdrew or replaced is listed stale, out of the count,
- * linked to its replacement; the withdrawal itself is not listed (CC11). The
+ * question or step its asker withdrew or replaced is listed stale, out of the count,
+ * linked to its replacement; the withdrawal itself is not listed (CC11, CC14). The
  * alerts and notices that reached them and they have not seen are the
  * stay-aware feed, outside the count. Everything else is in the record. A
  * question whose answer is in the basket says so, and still waits until the

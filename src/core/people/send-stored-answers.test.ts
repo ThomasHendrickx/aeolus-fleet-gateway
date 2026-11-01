@@ -57,6 +57,7 @@ function openedOf(entry: BasketEntry): OpenedDelivery {
     askedQuestionId: entry.questionId,
     withdrawnQuestionId: null,
     stepId: null,
+    withdrawnStepId: null,
     sentAt: entry.sentAt,
     openedAt: new Date('2026-10-31T19:50:00.000Z'),
   };

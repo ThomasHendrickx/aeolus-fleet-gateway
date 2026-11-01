@@ -7,7 +7,7 @@ import type { ItemOutcomes } from './item-outcome.js';
 import type { PersonCaller, PersonCrewError, PersonCrewToken } from './person-crew.js';
 import type { OpenedDeliveries, OpenedDelivery, PersonCrews, PersonDelivery, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
-import { staleOf, type Asking } from './stale-question.js';
+import { staleOf, type Asking } from './stale-item.js';
 
 /** An entry as the basket shows it: the question, its asker and when it asked, the option and the note, and what it stands as now. */
 export interface BasketItem {
@@ -49,7 +49,7 @@ export interface StandingBasket {
 
 /** The question an entry answers, as a withdrawal or a replacement names it. */
 function askingOf(entry: BasketEntry): Asking {
-  return { deliveryId: entry.deliveryId, senderShipId: entry.senderShipId, askedQuestionId: entry.questionId, withdrawnQuestionId: null };
+  return { deliveryId: entry.deliveryId, senderShipId: entry.senderShipId, askedQuestionId: entry.questionId, withdrawnQuestionId: null, stepId: null, withdrawnStepId: null };
 }
 
 /**

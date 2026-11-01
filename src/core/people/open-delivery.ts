@@ -9,9 +9,9 @@ import type { Place } from './item-outcome.js';
 import { handledOf, type DealDeps } from './opened-of.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import { waitingFor } from './read-inbox.js';
-import { replacedBy, staleBy, withdrawerOf, type Asking, type Stale } from './stale-question.js';
+import { replacedBy, staleBy, withdrawerOf, type Asking, type Stale } from './stale-item.js';
 
-/** A delivery as a person opens it: whole, with the meeting it belongs to, none outside a meeting, and stale once its asker withdrew or replaced the question it asks. */
+/** A delivery as a person opens it: whole, with the meeting it belongs to, none outside a meeting, and stale once its asker withdrew or replaced the question or step it asks. */
 export interface OpenedView extends InboxEntry {
   readonly contentType: string;
   readonly payload: string;
@@ -35,10 +35,10 @@ export type OpenDelivery = (input: { caller: PersonCaller; deliveryId: string; p
  * Seeing an alert or a notice is all it asks (Bridge, CC16): it is reported
  * handled at once, seen where the person saw it; one the fleet did not take
  * handled for stays opened, and opening it again tries once more. So is
- * looking at a question its asker withdrew or replaced (Bridge, section 9):
+ * looking at a question or step its asker withdrew or replaced (Bridge, section 9):
  * it is shown stale and is done, withdrawn with its withdrawal, or replaced;
  * the replacement is a new item that still waits. Opening a replacement is
- * done with the question it replaces too.
+ * done with the question or step it replaces too.
  */
 export function createOpenDelivery(deps: DealDeps): OpenDelivery {
   return async ({ caller, deliveryId, place }) => {
@@ -76,6 +76,7 @@ function keptOf(deps: DealDeps, opening: { caller: PersonCaller; shipId: OpenedD
     askedQuestionId: delivery.askedQuestionId,
     withdrawnQuestionId: delivery.withdrawnQuestionId,
     stepId: delivery.stepId,
+    withdrawnStepId: delivery.withdrawnStepId,
     sentAt: delivery.sentAt,
     openedAt: deps.clock.now(),
   };
@@ -94,9 +95,9 @@ async function seenNow(deps: DealDeps, seen: { caller: PersonCaller; kept: Opene
 }
 
 /**
- * The person looked at a delivery (Bridge, section 9): a question its asker
+ * The person looked at a delivery (Bridge, section 9): a question or step its asker
  * withdrew is done as withdrawn, and its withdrawal as seen; one replaced is
- * done as replaced. A replacement is done with the question it replaces.
+ * done as replaced. A replacement is done with the one it replaces.
  * What the fleet does not take now waits for the next look.
  */
 export async function doneIfStale(deps: DealDeps, look: { caller: PersonCaller; crew: PersonCrewToken; looked: OpenedDelivery; waiting: readonly PersonDelivery[]; place: Place }): Promise<Stale | null> {

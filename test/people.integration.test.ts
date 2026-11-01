@@ -40,6 +40,7 @@ function anOpenedDelivery(overrides: Partial<OpenedDelivery> = {}): OpenedDelive
     askedQuestionId: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e',
     withdrawnQuestionId: null,
     stepId: null,
+    withdrawnStepId: null,
     sentAt: new Date('2026-10-19T08:00:00.000Z'),
     openedAt: AT,
     ...overrides,

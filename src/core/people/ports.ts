@@ -86,8 +86,10 @@ export interface PersonDelivery {
   readonly askedQuestionId: string | null;
   /** The uuid of the question it withdraws or replaces, from the same asker; none for any other message. */
   readonly withdrawnQuestionId: string | null;
-  /** The uuid of the step it asks (Bridge, CC14); none for any other message. */
+  /** The uuid of the step it asks (Bridge, CC14): a step's own, a step replacement's new one; none for any other message. */
   readonly stepId: string | null;
+  /** The uuid of the step it withdraws or replaces, from the same asker; none for any other message. */
+  readonly withdrawnStepId: string | null;
   readonly sentAt: Date;
   readonly inReplyTo: MessageId | null;
   /** The meeting its message was contributed to or tells of; none outside a meeting (decision 0061). */
@@ -176,8 +178,9 @@ export interface OpenedDelivery {
   /** The uuid of the question it asks, and of the one it withdraws or replaces (decision 0038), as its payload named them; none otherwise. */
   readonly askedQuestionId: string | null;
   readonly withdrawnQuestionId: string | null;
-  /** The uuid of the step it asks (Bridge, CC14), as its payload named it; none otherwise. */
+  /** The uuid of the step it asks, and of the one it withdraws or replaces (Bridge, CC14), as its payload named them; none otherwise. */
   readonly stepId: string | null;
+  readonly withdrawnStepId: string | null;
   readonly sentAt: Date;
   readonly openedAt: Date;
 }

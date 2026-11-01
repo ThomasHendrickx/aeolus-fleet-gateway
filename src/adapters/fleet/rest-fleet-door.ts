@@ -139,6 +139,7 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     askedQuestionId: asked?.id ?? null,
     withdrawnQuestionId: withdrawalOf({ contentType, payload })?.questionId ?? null,
     stepId: jobOf(contentType) === 'do' ? (parsedOf(stepIdSchema, payload) ?? null) : null,
+    withdrawnStepId: null,
     sentAt: new Date(sentAt),
     inReplyTo,
     meetingId,

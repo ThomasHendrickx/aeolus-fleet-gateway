@@ -30,6 +30,7 @@ const STEP = aPersonDelivery({
   headline: 'Sign in to attio',
   askedQuestionId: null,
   stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d11',
+  withdrawnStepId: null,
 });
 
 /** The same step, as Charlotte opened it before she signed in. */
@@ -45,6 +46,7 @@ const OPENED: OpenedDelivery = {
   askedQuestionId: null,
   withdrawnQuestionId: null,
   stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d11',
+  withdrawnStepId: null,
   sentAt: new Date('2026-10-31T21:00:00.000Z'),
   openedAt: new Date('2026-10-31T21:10:00.000Z'),
 };
