@@ -382,8 +382,10 @@ model OpenedDelivery {
   askedQuestionId     String?  @map("asked_question_id")
   /// The uuid of the question it withdraws or replaces; null otherwise.
   withdrawnQuestionId String?  @map("withdrawn_question_id")
-  /// The uuid of the step it asks (Bridge, CC14); null otherwise.
+  /// The uuid of the step it asks (Bridge, CC14): a step's own, a step replacement's new one; null otherwise.
   stepId              String?  @map("step_id")
+  /// The uuid of the step it withdraws or replaces; null otherwise.
+  withdrawnStepId     String?  @map("withdrawn_step_id")
   sentAt              DateTime @map("sent_at") @db.Timestamptz(3)
   openedAt            DateTime @map("opened_at") @db.Timestamptz(3)
 

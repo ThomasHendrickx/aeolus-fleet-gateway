@@ -26,6 +26,7 @@ function aDelivery(overrides: Partial<PersonDelivery> = {}): PersonDelivery {
     askedQuestionId: null,
     withdrawnQuestionId: null,
     stepId: null,
+    withdrawnStepId: null,
     sentAt: new Date('2026-10-27T09:00:00.000Z'),
     inReplyTo: null,
     meetingId: null,

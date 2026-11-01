@@ -172,6 +172,51 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     ]);
   });
 
+  it("reads the step a step asks, and the one a step withdrawal or replacement names, a replacement headed by its new step (Bridge, CC14)", async () => {
+    const delivery = {
+      deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+      messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+      senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderName: 'builder-plugin',
+      senderType: 'builder',
+      recipient: { kind: 'ship', shipId: 'shp_01m3tbfspe96yf1rnr4ank0per' },
+      model: null,
+      sentAt: '2026-10-31T19:41:00.000Z',
+      inReplyTo: null,
+      attempts: 0,
+      isForced: false,
+      meetingId: null,
+      scheduleId: null,
+      sendTime: null,
+      state: 'received',
+      handOverNumber: null,
+    };
+    const step = { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Create the GitHub repository aeolus-fleet-memory-plugin', why: 'The plugin needs a home' };
+    const replacing = { id: '7a2d3b51-6e2c-4c9f-8b62-1d9f4a3b8e21', title: 'Create the GitHub repository aeolus-fleet-memory', why: 'The plugin was renamed' };
+    answer = {
+      status: 200,
+      body: {
+        deliveries: [
+          { ...delivery, contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(step) },
+          { ...delivery, contentType: 'application/vnd.aeolus.step-withdrawal+json', payload: JSON.stringify({ stepId: step.id }) },
+          { ...delivery, contentType: 'application/vnd.aeolus.step-replacement+json', payload: JSON.stringify({ stepId: step.id, step: replacing }) },
+          { ...delivery, contentType: 'application/vnd.aeolus.step-withdrawal+json', payload: '{"stepId":"not a uuid"}' },
+          { ...delivery, contentType: 'application/vnd.aeolus.question-withdrawal+json', payload: JSON.stringify({ questionId: step.id }) },
+        ],
+      },
+    };
+
+    const taken = await createRestFleetDoor(base).person.pushReceive('aeolus_ct_v1_charlotte', { max: 10 });
+
+    expect(taken.isOk ? taken.value.map(({ headline, stepId, withdrawnStepId }) => ({ headline, stepId, withdrawnStepId })) : taken).toEqual([
+      { headline: step.title, stepId: step.id, withdrawnStepId: null },
+      { headline: null, stepId: null, withdrawnStepId: step.id },
+      { headline: replacing.title, stepId: replacing.id, withdrawnStepId: step.id },
+      { headline: null, stepId: null, withdrawnStepId: null },
+      { headline: null, stepId: null, withdrawnStepId: null },
+    ]);
+  });
+
   it("reads the uuid of the step a step asks, and none of a step whose payload does not read or of any other message (Bridge, CC14)", async () => {
     const delivery = {
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
@@ -375,6 +420,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         askedQuestionId: QUESTION.id,
         withdrawnQuestionId: null,
         stepId: null,
+        withdrawnStepId: null,
         sentAt: new Date('2026-10-19T08:00:00.000Z'),
         inReplyTo: null,
         meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',

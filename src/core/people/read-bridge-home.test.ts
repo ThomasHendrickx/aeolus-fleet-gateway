@@ -51,6 +51,7 @@ function anOpened(overrides: Partial<OpenedDelivery> = {}): OpenedDelivery {
     askedQuestionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b',
     withdrawnQuestionId: null,
     stepId: null,
+    withdrawnStepId: null,
     sentAt: new Date('2026-10-31T19:20:00.000Z'),
     openedAt: new Date('2026-10-31T19:30:00.000Z'),
     ...overrides,
@@ -193,7 +194,7 @@ describe('Bridge home: a question its asker withdrew or replaced (CC11, decision
   it('shows a withdrawn question stale, out of the count, and leaves the withdrawal itself out', async () => {
     const home = await readHome([ASKING, WITHDRAWAL]).readHome(CHARLOTTE_GRANT);
 
-    expect(shownOf(home)).toEqual({ count: 0, items: [{ deliveryId: QUESTION.deliveryId, stale: { kind: 'withdrawn', replacementId: null } }] });
+    expect(shownOf(home)).toEqual({ count: 0, items: [{ deliveryId: QUESTION.deliveryId, stale: { kind: 'withdrawn', replacementId: null, at: WITHDRAWAL.sentAt.toISOString(), replacementTitle: null } }] });
   });
 
   it('shows a replaced question stale, out of the count, linked to its replacement, which waits as a new item', async () => {
@@ -203,7 +204,7 @@ describe('Bridge home: a question its asker withdrew or replaced (CC11, decision
       count: 1,
       items: [
         { deliveryId: REPLACEMENT.deliveryId, stale: null },
-        { deliveryId: QUESTION.deliveryId, stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId } },
+        { deliveryId: QUESTION.deliveryId, stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId, at: REPLACEMENT.sentAt.toISOString(), replacementTitle: REPLACEMENT.headline } },
       ],
     });
   });
@@ -213,11 +214,11 @@ describe('Bridge home: a question its asker withdrew or replaced (CC11, decision
 
     const home = await readHome([WITHDRAWAL]).readHome(CHARLOTTE_GRANT);
 
-    expect(shownOf(home)).toEqual({ count: 0, items: [{ deliveryId: QUESTION.deliveryId, stale: { kind: 'withdrawn', replacementId: null } }] });
+    expect(shownOf(home)).toEqual({ count: 0, items: [{ deliveryId: QUESTION.deliveryId, stale: { kind: 'withdrawn', replacementId: null, at: WITHDRAWAL.sentAt.toISOString(), replacementTitle: null } }] });
   });
 
   it('shows a question stale whose replacement the person opened already', async () => {
-    await opened.save(anOpened({ deliveryId: REPLACEMENT.deliveryId, senderShipId: ORCHESTRATOR, askedQuestionId: REPLACEMENT.askedQuestionId, withdrawnQuestionId: ASKED, sentAt: REPLACEMENT.sentAt }));
+    await opened.save(anOpened({ deliveryId: REPLACEMENT.deliveryId, senderShipId: ORCHESTRATOR, title: 'Which goes first, now that U4 slipped?', askedQuestionId: REPLACEMENT.askedQuestionId, withdrawnQuestionId: ASKED, sentAt: REPLACEMENT.sentAt }));
 
     const home = await readHome([ASKING]).readHome(CHARLOTTE_GRANT);
 
@@ -225,13 +226,99 @@ describe('Bridge home: a question its asker withdrew or replaced (CC11, decision
       count: 1,
       items: [
         { deliveryId: REPLACEMENT.deliveryId, stale: null },
-        { deliveryId: QUESTION.deliveryId, stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId } },
+        { deliveryId: QUESTION.deliveryId, stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId, at: REPLACEMENT.sentAt.toISOString(), replacementTitle: REPLACEMENT.headline } },
       ],
     });
   });
 
   it('keeps a question waiting, in the count, when another ship names it: only its asker withdraws it', async () => {
     const home = await readHome([ASKING, { ...WITHDRAWAL, senderShipId: 'shp_01m3tbfspe96yf1rnr4ank0oth' }]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toEqual({ count: 1, items: [{ deliveryId: QUESTION.deliveryId, stale: null }] });
+  });
+});
+
+describe('Bridge home: a step its asker withdrew or replaced, as a question (CC14)', () => {
+  const STEP_ID = '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10';
+  const ORCHESTRATOR = 'shp_01m3tbfspe96yf1rnr4ank0orc';
+  const ASKING = aPersonDelivery({ ...STEP, senderShipId: ORCHESTRATOR, askedQuestionId: null, stepId: STEP_ID });
+  const WITHDRAWAL = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0006',
+    senderShipId: ORCHESTRATOR,
+    senderName: 'orchestrator-1',
+    contentType: 'application/vnd.aeolus.step-withdrawal+json',
+    payload: JSON.stringify({ stepId: STEP_ID }),
+    headline: null,
+    askedQuestionId: null,
+    withdrawnStepId: STEP_ID,
+    sentAt: new Date('2026-10-31T20:09:00.000Z'),
+  });
+  const REPLACEMENT = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0007',
+    senderShipId: ORCHESTRATOR,
+    senderName: 'orchestrator-1',
+    contentType: 'application/vnd.aeolus.step-replacement+json',
+    headline: 'Create the GitHub repository aeolus-fleet-memory',
+    askedQuestionId: null,
+    stepId: '7a2d3b51-6e2c-4c9f-8b62-1d9f4a3b8e21',
+    withdrawnStepId: STEP_ID,
+    sentAt: new Date('2026-10-31T20:10:00.000Z'),
+  });
+
+  function shownOf(home: Awaited<ReturnType<ReturnType<typeof readHome>['readHome']>>) {
+    return home.isOk ? { count: home.value.waiting.count, items: home.value.waiting.items.map(({ deliveryId, stale }) => ({ deliveryId, stale })) } : home;
+  }
+
+  it('shows a withdrawn step stale, out of the count, and leaves the withdrawal itself out', async () => {
+    const home = await readHome([ASKING, WITHDRAWAL]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toEqual({ count: 0, items: [{ deliveryId: STEP.deliveryId, stale: { kind: 'withdrawn', replacementId: null, at: WITHDRAWAL.sentAt.toISOString(), replacementTitle: null } }] });
+  });
+
+  it('shows a replaced step stale, out of the count, linked to its replacement, which waits as a new item', async () => {
+    const home = await readHome([ASKING, REPLACEMENT]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toEqual({
+      count: 1,
+      items: [
+        { deliveryId: REPLACEMENT.deliveryId, stale: null },
+        { deliveryId: STEP.deliveryId, stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId, at: REPLACEMENT.sentAt.toISOString(), replacementTitle: REPLACEMENT.headline } },
+      ],
+    });
+  });
+
+  it('shows a step the person opened stale once its asker withdraws it', async () => {
+    await opened.save(anOpened({ deliveryId: STEP.deliveryId, senderShipId: ORCHESTRATOR, contentType: STEP.contentType, askedQuestionId: null, stepId: STEP_ID }));
+
+    const home = await readHome([WITHDRAWAL]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toEqual({ count: 0, items: [{ deliveryId: STEP.deliveryId, stale: { kind: 'withdrawn', replacementId: null, at: WITHDRAWAL.sentAt.toISOString(), replacementTitle: null } }] });
+  });
+
+  it('shows a step stale whose replacement the person opened already', async () => {
+    await opened.save(anOpened({ deliveryId: REPLACEMENT.deliveryId, senderShipId: ORCHESTRATOR, title: 'Create the GitHub repository aeolus-fleet-memory', contentType: REPLACEMENT.contentType, askedQuestionId: null, stepId: REPLACEMENT.stepId, withdrawnStepId: STEP_ID, sentAt: REPLACEMENT.sentAt }));
+
+    const home = await readHome([ASKING]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toEqual({
+      count: 1,
+      items: [
+        { deliveryId: REPLACEMENT.deliveryId, stale: null },
+        { deliveryId: STEP.deliveryId, stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId, at: REPLACEMENT.sentAt.toISOString(), replacementTitle: REPLACEMENT.headline } },
+      ],
+    });
+  });
+
+  it('keeps a step waiting, in the count, when another ship names it: only its asker withdraws it', async () => {
+    const home = await readHome([ASKING, { ...WITHDRAWAL, senderShipId: 'shp_01m3tbfspe96yf1rnr4ank0oth' }]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toEqual({ count: 1, items: [{ deliveryId: STEP.deliveryId, stale: null }] });
+  });
+
+  it('keeps a question waiting, in the count, when a step withdrawal names its uuid: a step withdrawal withdraws only a step', async () => {
+    const question = aPersonDelivery({ ...QUESTION, senderShipId: ORCHESTRATOR, askedQuestionId: STEP_ID });
+
+    const home = await readHome([question, WITHDRAWAL]).readHome(CHARLOTTE_GRANT);
 
     expect(shownOf(home)).toEqual({ count: 1, items: [{ deliveryId: QUESTION.deliveryId, stale: null }] });
   });

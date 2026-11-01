@@ -10,7 +10,7 @@
 import type { DeliveryId, FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { ItemOutcome, Place } from './item-outcome.js';
-import type { Stale } from './stale-question.js';
+import type { Stale } from './stale-item.js';
 
 /** Where an entry is: waiting for Send, stored as sending, or refused by the fleet, not sent. */
 export type BasketEntryState = 'waiting' | 'sending' | 'refused';

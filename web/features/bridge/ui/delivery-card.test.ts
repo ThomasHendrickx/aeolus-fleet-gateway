@@ -101,23 +101,23 @@ describe('a question opened in Bridge (CC11)', () => {
   });
 
   it('shows a withdrawn question stale: nothing to choose or send', () => {
-    const markup = render(aQuestion({ stale: { kind: 'withdrawn', replacementId: null } }));
+    const markup = render(aQuestion({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } }));
 
-    expect({ stale: markup.includes('Withdrawn by orchestrator-1. Nothing to answer: it is done.'), send: markup.includes('in the basket'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, send: false, note: false });
+    expect({ stale: markup.includes('Withdrawn by orchestrator-1 at 20:09 UTC. Nothing to answer: it is done.'), send: markup.includes('in the basket'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, send: false, note: false });
   });
 
   it('links a replaced question to its replacement', () => {
-    const markup = render(aQuestion({ stale: { kind: 'replaced', replacementId: 'dlv_02' } }));
+    const markup = render(aQuestion({ stale: { kind: 'replaced', replacementId: 'dlv_02', at: '2026-10-31T20:10:00.000Z', replacementTitle: 'Which goes first, now that U4 slipped?' } }));
 
-    expect({ stale: markup.includes('Replaced by orchestrator-1. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('in the basket') }).toEqual({ stale: true, link: true, send: false });
+    expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:10 UTC with “Which goes first, now that U4 slipped?”. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('in the basket') }).toEqual({ stale: true, link: true, send: false });
   });
 });
 
 describe('a step opened in Bridge (CC14)', () => {
   const STEP = { title: 'Sign in to attio', why: "Until you sign in, your ships' calls to attio are refused.", link: { href: 'https://gateway.example.com/outside-parties/attio?fleet=flt_01', host: 'gateway.example.com' } };
 
-  function aStep(): FocusedDelivery {
-    return { deliveryId: 'dlv_03', from: 'gateway', title: STEP.title, sentAt: '2026-10-31T21:00:00.000Z', payload: '{}', body: '{}', question: undefined, step: STEP, meetingId: undefined, stale: null };
+  function aStep(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
+    return { deliveryId: 'dlv_03', from: 'gateway', title: STEP.title, sentAt: '2026-10-31T21:00:00.000Z', payload: '{}', body: '{}', question: undefined, step: STEP, meetingId: undefined, stale: null, ...overrides };
   }
 
   it('shows why, and the link with the host it leads to, opened only by the person', () => {
@@ -141,5 +141,24 @@ describe('a step opened in Bridge (CC14)', () => {
       cannot: markup.includes('data-testid="bridge-step-cannot"'),
       answer: markup.includes('data-testid="bridge-answer"'),
     }).toEqual({ noteFirst: true, note: true, noteSays: true, done: true, cannot: true, answer: false });
+  });
+
+  it('shows a withdrawn step stale, struck through with when it was withdrawn: nothing to do, no link, Done or Cannot', () => {
+    const markup = render(aStep({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T21:09:00.000Z', replacementTitle: null } }));
+
+    expect({
+      stale: markup.includes('Withdrawn by gateway at 21:09 UTC. Nothing to do: it is done.'),
+      struck: /<s[^>]*>Sign in to attio<\/s>/.test(markup),
+      icon: markup.includes('aria-label="Withdrawn"'),
+      done: markup.includes('data-testid="bridge-step-done"'),
+      note: markup.includes('data-testid="bridge-note"'),
+      link: markup.includes('data-testid="bridge-step-link"'),
+    }).toEqual({ stale: true, struck: true, icon: true, done: false, note: false, link: false });
+  });
+
+  it('links a replaced step to its replacement, named with when it was replaced', () => {
+    const markup = render(aStep({ stale: { kind: 'replaced', replacementId: 'dlv_04', at: '2026-10-31T21:11:00.000Z', replacementTitle: 'Sign in to attio with the team account' } }));
+
+    expect({ stale: markup.includes('Replaced by gateway at 21:11 UTC with “Sign in to attio with the team account”. Do the new step.'), icon: markup.includes('aria-label="Replaced"'), link: markup.includes('Open the new step'), done: markup.includes('data-testid="bridge-step-done"') }).toEqual({ stale: true, icon: true, link: true, done: false });
   });
 });

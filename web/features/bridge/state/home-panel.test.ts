@@ -46,23 +46,35 @@ describe('Bridge home (CC18)', () => {
     expect({ nothingWaits: markup.includes('data-testid="bridge-nothing-waits"'), nothingNew: markup.includes('Nothing new. What you saw is in Done.') }).toEqual({ nothingWaits: true, nothingNew: true });
   });
 
-  it('shows a withdrawn question stale, outside the count', () => {
-    const markup = render({ waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_02', title: 'Hold PR #1488?' }), anItem({ stale: { kind: 'withdrawn', replacementId: null } })] }, stayAware: [] });
+  it('shows a withdrawn question stale, outside the count: struck through, with when it was withdrawn and its icon, not faded', () => {
+    const markup = render({ waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_02', title: 'Hold PR #1488?' }), anItem({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } })] }, stayAware: [] });
 
     expect({
       counts: markup.includes('1 to decide, 0 to do.'),
-      stale: markup.includes('Withdrawn by orchestrator-1: open it to clear it'),
-      faded: (markup.match(/data-testid="bridge-item" data-stale="true"/g) ?? []).length,
-    }).toEqual({ counts: true, stale: true, faded: 1 });
+      stale: markup.includes('Withdrawn by orchestrator-1 at 20:09 UTC: open it to clear it'),
+      struck: /<s[^>]*>Which goes first: the Compact look \(U4\) or Harbour\?<\/s>/.test(markup),
+      icon: markup.includes('aria-label="Withdrawn"'),
+      faded: markup.includes('opacity-60'),
+      marked: (markup.match(/data-testid="bridge-item" data-stale="true"/g) ?? []).length,
+    }).toEqual({ counts: true, stale: true, struck: true, icon: true, faded: false, marked: 1 });
   });
 
   it('links a replaced question to its replacement, the new item', () => {
     const markup = render({
-      waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_03', title: 'Which goes first, now that U4 slipped?' }), anItem({ stale: { kind: 'replaced', replacementId: 'dlv_03' } })] },
+      waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_03', title: 'Which goes first, now that U4 slipped?' }), anItem({ stale: { kind: 'replaced', replacementId: 'dlv_03', at: '2026-10-31T20:10:00.000Z', replacementTitle: 'Which goes first, now that U4 slipped?' } })] },
       stayAware: [],
     });
 
-    expect({ stale: markup.includes('Replaced by orchestrator-1 with “Which goes first, now that U4 slipped?”'), link: (markup.match(/data-testid="bridge-replacement"/g) ?? []).length }).toEqual({ stale: true, link: 1 });
+    expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:10 UTC with “Which goes first, now that U4 slipped?”'), icon: markup.includes('aria-label="Replaced"'), link: (markup.match(/data-testid="bridge-replacement"/g) ?? []).length }).toEqual({ stale: true, icon: true, link: 1 });
+  });
+
+  it('links a replaced step to its replacement, the new step', () => {
+    const markup = render({
+      waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_03', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory' }), anItem({ job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin', stale: { kind: 'replaced', replacementId: 'dlv_03', at: '2026-10-31T20:11:00.000Z', replacementTitle: 'Create the GitHub repository aeolus-fleet-memory' } })] },
+      stayAware: [],
+    });
+
+    expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:11 UTC with “Create the GitHub repository aeolus-fleet-memory”'), struck: /<s[^>]*>Create the GitHub repository aeolus-fleet-memory-plugin<\/s>/.test(markup), link: markup.includes('Open the new step') }).toEqual({ stale: true, struck: true, link: true });
   });
 
   it('says on its row that a question is in the basket with the note alone', () => {

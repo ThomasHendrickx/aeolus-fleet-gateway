@@ -78,7 +78,7 @@ describe("a press of Slack's Seen button", () => {
   });
 
   it("tells the person's pages their inbox changed, and forgets the alert as opened", async () => {
-    await opened.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: ALERT.deliveryId, messageId: ALERT.messageId, senderShipId: WATCH, from: 'watch', title: 'charlotte is silent', contentType: ALERT.contentType, askedQuestionId: null, withdrawnQuestionId: null, stepId: null, sentAt: ALERT.sentAt, openedAt: NOW });
+    await opened.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: ALERT.deliveryId, messageId: ALERT.messageId, senderShipId: WATCH, from: 'watch', title: 'charlotte is silent', contentType: ALERT.contentType, askedQuestionId: null, withdrawnQuestionId: null, stepId: null, withdrawnStepId: null, sentAt: ALERT.sentAt, openedAt: NOW });
 
     await press(ALERT);
 

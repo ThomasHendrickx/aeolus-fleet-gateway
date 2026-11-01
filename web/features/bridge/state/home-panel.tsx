@@ -1,5 +1,6 @@
 'use client';
 
+import { staleSaidOf } from '../services/deliveries';
 import type { BridgeHome, HomeItem } from '../services/items';
 import { ActionButton } from '../ui/action-button';
 import { ItemRow } from '../ui/item-row';
@@ -13,7 +14,7 @@ function countsOf(items: readonly HomeItem[]): string {
 }
 
 /** What a row says of its item: stale, in the basket, seen and not done, or nothing while new. */
-function rowOutcomeOf(item: HomeItem, items: readonly HomeItem[]): string | undefined {
+function rowOutcomeOf(item: HomeItem): string | undefined {
   const { stale, inBasket } = item;
   if (stale === null && inBasket !== null) {
     return inBasket.option === null ? 'In the basket: the note alone' : `In the basket: option ${String(inBasket.option)}`;
@@ -21,22 +22,19 @@ function rowOutcomeOf(item: HomeItem, items: readonly HomeItem[]): string | unde
   if (stale === null) {
     return item.state === 'seen' ? 'Seen, not done yet' : undefined;
   }
-  if (stale.kind === 'withdrawn') {
-    return `Withdrawn by ${item.from}: open it to clear it`;
-  }
-  const replacement = items.find(({ deliveryId }) => deliveryId === stale.replacementId);
-  return replacement === undefined ? `Replaced by ${item.from}` : `Replaced by ${item.from} with “${replacement.title}”`;
+  const said = staleSaidOf(stale, item.from);
+  return stale.kind === 'withdrawn' ? `${said}: open it to clear it` : said;
 }
 
-/** Opens a replaced question's replacement, the new item. */
+/** Opens a replaced question's or step's replacement, the new item, of the same job. */
 function ReplacementButton({ item, opening }: { item: HomeItem; opening: ItemOpening }) {
   const replacementId = item.stale?.replacementId ?? null;
   if (replacementId === null) {
     return null;
   }
   return (
-    <ActionButton data-testid="bridge-replacement" isPending={opening.openingId === replacementId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open({ deliveryId: replacementId, job: 'decide' }); }}>
-      Open the new question
+    <ActionButton data-testid="bridge-replacement" isPending={opening.openingId === replacementId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open({ deliveryId: replacementId, job: item.job }); }}>
+      {item.job === 'do' ? 'Open the new step' : 'Open the new question'}
     </ActionButton>
   );
 }
@@ -51,7 +49,7 @@ function OpenButton({ item, opening }: { item: HomeItem; opening: ItemOpening })
 
 /**
  * Bridge home's lists (CC18): what waits on the person, decide and do, with
- * one count, a dot on what is new, a question its asker withdrew or replaced
+ * one count, a dot on what is new, a question or step its asker withdrew or replaced
  * faded and outside the count, a replaced one leading to its replacement; and the stay-aware feed beside it, the
  * alerts and notices they have not seen, outside the count. Opening one of
  * the feed is all it asks (CC16).
@@ -77,7 +75,7 @@ export function HomePanel({ fleetId, home }: { fleetId: string; home: BridgeHome
             ) : (
               <ul className="grid gap-2">
                 {waiting.items.map((item) => (
-                  <ItemRow key={item.deliveryId} item={item} isNew={item.state === 'new'} isStale={item.stale !== null} outcome={rowOutcomeOf(item, waiting.items)} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}>
+                  <ItemRow key={item.deliveryId} item={item} isNew={item.state === 'new'} staleKind={item.stale?.kind} outcome={rowOutcomeOf(item)} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}>
                     <ReplacementButton item={item} opening={opening} />
                     <OpenButton item={item} opening={opening} />
                   </ItemRow>

@@ -2,9 +2,10 @@ import { useState } from 'react';
 
 import type { Question } from '@aeolus-fleet/common';
 
-import type { FocusedDelivery, Stale, StepView } from '../services/deliveries';
+import { staleSaidOf, type FocusedDelivery, type Stale, type StepView } from '../services/deliveries';
 import { ActionButton } from './action-button';
 import { Notice } from './notice';
+import { StaleIcon } from './stale-icon';
 
 /** Which of the card's controls is working: an option of the question put in the basket, its entry removed, the note alone, done, or a step's cannot. */
 export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'remove' } | { kind: 'note' } | { kind: 'done' } | { kind: 'cannot' };
@@ -65,27 +66,36 @@ function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Qu
   );
 }
 
-/** What a stale question says: withdrawn, done; or replaced, with the replacement to open. */
-function StaleNotice({ stale, from, onOpen }: { stale: Stale; from: string; onOpen: (deliveryId: string) => void }) {
+/** What a stale question or step says after who and when, in its words: withdrawn, done; or replaced, with the replacement to open. */
+const STALE_WORDS = {
+  question: { withdrawn: 'Nothing to answer: it is done.', replaced: 'Answer the new question.', open: 'Open the new question' },
+  step: { withdrawn: 'Nothing to do: it is done.', replaced: 'Do the new step.', open: 'Open the new step' },
+} as const;
+
+function StaleNotice({ stale, from, isStep, onOpen }: { stale: Stale; from: string; isStep: boolean; onOpen: (deliveryId: string) => void }) {
   const { replacementId } = stale;
+  const words = STALE_WORDS[isStep ? 'step' : 'question'];
   return (
-    <div data-testid="bridge-stale" className="grid gap-2 rounded-md border border-border bg-muted p-3">
-      <span>{stale.kind === 'withdrawn' ? `Withdrawn by ${from}. Nothing to answer: it is done.` : `Replaced by ${from}. Answer the new question.`}</span>
+    <div data-testid="bridge-stale" className="grid gap-2">
+      <span className="flex items-center gap-1.5">
+        <StaleIcon kind={stale.kind} />
+        {`${staleSaidOf(stale, from)}. ${stale.kind === 'withdrawn' ? words.withdrawn : words.replaced}`}
+      </span>
       {replacementId === null ? null : (
         <ActionButton data-testid="bridge-replacement" className="justify-self-start" isPending={false} pendingLabel="Opening..." onClick={() => { onOpen(replacementId); }}>
-          Open the new question
+          {words.open}
         </ActionButton>
       )}
     </div>
   );
 }
 
-/** What a step asks: why, and the link where it is done, shown with its host and opened only by the person's own press (Bridge, section 9). */
-function StepAsked({ step }: { step: StepView }) {
+/** What a step asks: why, and the link where it is done, shown with its host and opened only by the person's own press; gone once the step is stale (Bridge, section 9). */
+function StepAsked({ step, isStale }: { step: StepView; isStale: boolean }) {
   return (
     <>
       <p className="whitespace-pre-wrap">{step.why}</p>
-      {step.link === undefined ? null : (
+      {step.link === undefined || isStale ? null : (
         <a data-testid="bridge-step-link" href={step.link.href} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center justify-self-start rounded-md border border-border px-4 hover:bg-accent">
           Open on {step.link.host}
         </a>
@@ -179,7 +189,7 @@ export function DeliveryCard({
   onDone: () => void;
   /** Ends a step done or cannot, with the note. */
   onFinishStep: (outcome: StepOutcome) => void;
-  /** Opens another item: a replaced question's replacement. */
+  /** Opens another item: a replaced question's or step's replacement. */
   onOpen: (deliveryId: string) => void;
   onBack: () => void;
 }) {
@@ -191,14 +201,14 @@ export function DeliveryCard({
       <span className="text-caption text-muted-foreground">
         {delivery.from} · {new Date(delivery.sentAt).toUTCString()}
       </span>
-      <h2 className="text-heading font-semibold">{question?.title ?? delivery.title}</h2>
+      <h2 className="text-heading font-semibold">{stale === null ? (question?.title ?? delivery.title) : <s className="decoration-muted-foreground">{question?.title ?? delivery.title}</s>}</h2>
       {meetingHref === undefined ? null : (
         <a data-testid="bridge-meeting" href={meetingHref} className="inline-flex h-9 items-center justify-self-start rounded-md bg-primary px-4 text-primary-foreground hover:bg-primary-hover">
           Go to the meeting
         </a>
       )}
       {step !== undefined ? (
-        <StepAsked step={step} />
+        <StepAsked step={step} isStale={stale !== null} />
       ) : question === undefined ? (
         <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-caption">{delivery.body}</pre>
       ) : (
@@ -210,7 +220,7 @@ export function DeliveryCard({
           </p>
         </>
       )}
-      {stale === null ? null : <StaleNotice stale={stale} from={delivery.from} onOpen={onOpen} />}
+      {stale === null ? null : <StaleNotice stale={stale} from={delivery.from} isStep={step !== undefined} onOpen={onOpen} />}
       {inBasket === null || stale !== null ? null : <InBasketNotice inBasket={inBasket} basketHref={basketHref} isRemoving={working?.kind === 'remove'} isWorking={isWorking} onRemove={onRemove} />}
       {isDoneOnSeeing ? (
         <p data-testid="bridge-seen-done" className="text-muted-foreground">
