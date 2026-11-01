@@ -93,14 +93,15 @@ export function ItemRow({
   const isAlert = item.isAlert ?? false;
   const look = JOB_LOOKS[isAlert ? 'alert' : item.job];
   const JobIcon = look.icon;
-  const titleClass = 'min-w-0 truncate text-left font-medium';
+  // A phone wraps the title, at a thumb's text size; a desktop cuts it to one line (Bridge mockups, home).
+  const titleClass = 'min-w-0 break-words text-left text-body-touch font-medium sm:truncate sm:text-body';
   const title = staleKind === undefined ? item.title : <s className="decoration-muted-foreground">{item.title}</s>;
   return (
     <li data-testid="bridge-item" data-stale={staleKind !== undefined} className={`grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1.5 border-t border-border px-3 py-2.5 first:border-t-0 ${staleKind === undefined ? '' : 'bg-muted'}`}>
       <JobIcon aria-hidden="true" className={`mt-0.5 size-4 ${look.tone}`} />
       <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="flex min-w-0 items-center">
-          {isNew ? <span aria-label="New" className="mr-1.5 size-[7px] shrink-0 rounded-full bg-primary" /> : null}
+        <span className="flex min-w-0 items-baseline sm:items-center">
+          {isNew ? <span aria-label="New" className="mr-1.5 size-[7px] shrink-0 -translate-y-px rounded-full bg-primary" /> : null}
           {onOpen === undefined ? (
             <span data-testid="bridge-item-title" className={titleClass}>
               {title}
