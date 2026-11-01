@@ -12,6 +12,7 @@ import { cache } from 'react';
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { readYourFleet } from '../fleet/hooks/read-your-fleet';
 import { refusalCodeOf, refusalMessageOf } from '../../../lib/gateway-api/page-api';
+import type { ArgoInboxNotice } from '../services/argo-inbox-notice';
 import type { WakeChannels } from '../services/deliveries';
 import type { BasketView } from '../services/basket';
 import type { BridgeHome, RecordPage } from '../services/items';
@@ -72,6 +73,15 @@ async function personRead<T>(call: Promise<T>): Promise<BridgeRead<T>> {
 
 /** Bridge home, read once per page: the shell's counts and home's lists share the read. */
 export const readBridgeHome = cache((api: GatewayApi): Promise<BridgeRead<BridgeHome>> => personRead(api.people.home.query()));
+
+/** Bridge home's notice of argo's read rule; none while the gateway does not answer it, as home shows without it. */
+export async function readArgoInboxNotice(api: GatewayApi): Promise<ArgoInboxNotice> {
+  try {
+    return await api.people.argoInboxNotice.query();
+  } catch {
+    return { kind: 'none' };
+  }
+}
 
 /** The places besides Bridge that show a question, for an opened question to name; none while routing cannot be read, as the question shows without them. */
 export async function readDecidePlaces(api: GatewayApi): Promise<RoutedPlace[] | undefined> {
