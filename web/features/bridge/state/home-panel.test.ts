@@ -52,7 +52,7 @@ describe('Bridge home (CC18)', () => {
     expect({
       counts: markup.includes('1 to decide, 0 to do.'),
       stale: markup.includes('Withdrawn by orchestrator-1 at 20:09 UTC: open it to clear it'),
-      struck: markup.includes('<s>Which goes first: the Compact look (U4) or Harbour?</s>'),
+      struck: /<s[^>]*>Which goes first: the Compact look \(U4\) or Harbour\?<\/s>/.test(markup),
       icon: markup.includes('aria-label="Withdrawn"'),
       faded: markup.includes('opacity-60'),
       marked: (markup.match(/data-testid="bridge-item" data-stale="true"/g) ?? []).length,
@@ -74,7 +74,7 @@ describe('Bridge home (CC18)', () => {
       stayAware: [],
     });
 
-    expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:11 UTC with “Create the GitHub repository aeolus-fleet-memory”'), struck: markup.includes('<s>Create the GitHub repository aeolus-fleet-memory-plugin</s>'), link: markup.includes('Open the new step') }).toEqual({ stale: true, struck: true, link: true });
+    expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:11 UTC with “Create the GitHub repository aeolus-fleet-memory”'), struck: /<s[^>]*>Create the GitHub repository aeolus-fleet-memory-plugin<\/s>/.test(markup), link: markup.includes('Open the new step') }).toEqual({ stale: true, struck: true, link: true });
   });
 
   it('says on its row that a question is in the basket with the note alone', () => {

@@ -148,7 +148,7 @@ describe('a step opened in Bridge (CC14)', () => {
 
     expect({
       stale: markup.includes('Withdrawn by gateway at 21:09 UTC. Nothing to do: it is done.'),
-      struck: markup.includes('<s>Sign in to attio</s>'),
+      struck: /<s[^>]*>Sign in to attio<\/s>/.test(markup),
       icon: markup.includes('aria-label="Withdrawn"'),
       done: markup.includes('data-testid="bridge-step-done"'),
       note: markup.includes('data-testid="bridge-note"'),

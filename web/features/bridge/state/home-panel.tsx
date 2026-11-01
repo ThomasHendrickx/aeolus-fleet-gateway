@@ -1,5 +1,6 @@
 'use client';
 
+import { staleSaidOf } from '../services/deliveries';
 import type { BridgeHome, HomeItem } from '../services/items';
 import { ActionButton } from '../ui/action-button';
 import { ItemRow } from '../ui/item-row';
@@ -13,7 +14,7 @@ function countsOf(items: readonly HomeItem[]): string {
 }
 
 /** What a row says of its item: stale, in the basket, seen and not done, or nothing while new. */
-function rowOutcomeOf(item: HomeItem, items: readonly HomeItem[]): string | undefined {
+function rowOutcomeOf(item: HomeItem): string | undefined {
   const { stale, inBasket } = item;
   if (stale === null && inBasket !== null) {
     return inBasket.option === null ? 'In the basket: the note alone' : `In the basket: option ${String(inBasket.option)}`;
@@ -21,11 +22,8 @@ function rowOutcomeOf(item: HomeItem, items: readonly HomeItem[]): string | unde
   if (stale === null) {
     return item.state === 'seen' ? 'Seen, not done yet' : undefined;
   }
-  if (stale.kind === 'withdrawn') {
-    return `Withdrawn by ${item.from}: open it to clear it`;
-  }
-  const replacement = items.find(({ deliveryId }) => deliveryId === stale.replacementId);
-  return replacement === undefined ? `Replaced by ${item.from}` : `Replaced by ${item.from} with “${replacement.title}”`;
+  const said = staleSaidOf(stale, item.from);
+  return stale.kind === 'withdrawn' ? `${said}: open it to clear it` : said;
 }
 
 /** Opens a replaced question's or step's replacement, the new item, of the same job. */
@@ -77,7 +75,7 @@ export function HomePanel({ fleetId, home }: { fleetId: string; home: BridgeHome
             ) : (
               <ul className="grid gap-2">
                 {waiting.items.map((item) => (
-                  <ItemRow key={item.deliveryId} item={item} isNew={item.state === 'new'} isStale={item.stale !== null} outcome={rowOutcomeOf(item, waiting.items)} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}>
+                  <ItemRow key={item.deliveryId} item={item} isNew={item.state === 'new'} staleKind={item.stale?.kind} outcome={rowOutcomeOf(item)} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}>
                     <ReplacementButton item={item} opening={opening} />
                     <OpenButton item={item} opening={opening} />
                   </ItemRow>

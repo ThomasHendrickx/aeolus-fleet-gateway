@@ -28,14 +28,22 @@ export interface FocusedDelivery {
   readonly step: StepView | undefined;
   /** The meeting it was contributed to or tells of, when it belongs to one. */
   readonly meetingId: string | undefined;
-  /** Whether its asker withdrew or replaced the question it asks, with the replacement, a new item. */
+  /** Whether its asker withdrew or replaced the question or step it asks, with the replacement, a new item. */
   readonly stale: Stale | null;
 }
 
-/** A question its asker withdrew or replaced (decision 0038), as the API says it. */
+/** A question or step its asker withdrew or replaced (decision 0038, CC14), as the API says it: when, and the replacement with its title. */
 export interface Stale {
   readonly kind: 'withdrawn' | 'replaced';
   readonly replacementId: string | null;
+  readonly at: string;
+  readonly replacementTitle: string | null;
+}
+
+/** Who withdrew or replaced it and when, in UTC to the minute, and a replacement's title, as the mockups word it (basket.html). */
+export function staleSaidOf(stale: Stale, from: string): string {
+  const said = `${stale.kind === 'withdrawn' ? 'Withdrawn' : 'Replaced'} by ${from} at ${new Date(stale.at).toISOString().slice(11, 16)} UTC`;
+  return stale.replacementTitle === null ? said : `${said} with “${stale.replacementTitle}”`;
 }
 
 /** The question a delivery asks (decision 0038): a question's own, or the new question a replacement asks. */
