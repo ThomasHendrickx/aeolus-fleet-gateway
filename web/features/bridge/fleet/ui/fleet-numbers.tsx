@@ -3,13 +3,20 @@ import { Ship } from 'lucide-react';
 import { SHIP_STATES, STATE_LABELS, type ShipState, type YourFleet } from '../services/your-fleet';
 import { StateIcon } from './state-icon';
 
+const PLAIN = 'border-border bg-card text-card-foreground';
+
 /** Only Alert is filled in its tone; Waiting and Working say theirs in the number; Idle stays plain. */
 const NUMBER_TONES: Record<ShipState, string> = {
   alert: 'border-tone-attention-border bg-tone-attention-bg text-tone-attention-fg',
   waiting: 'border-border bg-card text-tone-waiting-fg',
   working: 'border-border bg-card text-tone-ok-fg',
-  idle: 'border-border bg-card text-card-foreground',
+  idle: PLAIN,
 };
+
+/** A count takes its tone only above 0: a zero is drawn plain, so it does not draw the eye. */
+function toneOf(state: ShipState, count: number): string {
+  return count > 0 ? NUMBER_TONES[state] : PLAIN;
+}
 
 function FleetNumber({ testId, tone, value, children }: { testId: string; tone: string; value: number; children: React.ReactNode }) {
   return (
@@ -29,13 +36,13 @@ export function FleetNumbers({ fleet, isShipCountShown }: { fleet: YourFleet; is
   return (
     <div className={`grid gap-1.5 max-sm:gap-1 ${isShipCountShown ? 'grid-cols-5' : 'grid-cols-4'}`}>
       {isShipCountShown ? (
-        <FleetNumber testId="fleet-number-ships" tone="border-border bg-card text-card-foreground" value={fleet.shipCount}>
+        <FleetNumber testId="fleet-number-ships" tone={PLAIN} value={fleet.shipCount}>
           <Ship aria-hidden="true" className="size-3 shrink-0" />
           <span>Ships</span>
         </FleetNumber>
       ) : null}
       {SHIP_STATES.map((state) => (
-        <FleetNumber key={state} testId={`fleet-number-${state}`} tone={NUMBER_TONES[state]} value={fleet.counts[state]}>
+        <FleetNumber key={state} testId={`fleet-number-${state}`} tone={toneOf(state, fleet.counts[state])} value={fleet.counts[state]}>
           <StateIcon state={state} />
           <span>{STATE_LABELS[state]}</span>
         </FleetNumber>
