@@ -11,8 +11,10 @@ import { BridgeSidebar, type ShellCounts } from './bridge-sidebar';
 
 const COUNTS: ShellCounts = { waiting: 4, stayAware: 2, basket: 0, fleetAlerts: 1 };
 
-function sidebarOf({ screen = 'home', counts = COUNTS, accountUrl = 'https://account.aeolus.test' }: { screen?: BridgeScreen; counts?: ShellCounts; accountUrl?: string | undefined } = {}): string {
-  return renderToStaticMarkup(createElement(BridgeSidebar, { fleetId: 'flt_01', screen, counts, accountUrl, foot: null }));
+const ACCOUNT_URL = 'https://account.aeolus.test';
+
+function sidebarOf({ screen = 'home', counts = COUNTS, accountUrl = ACCOUNT_URL }: { screen?: BridgeScreen; counts?: ShellCounts; accountUrl?: string | null } = {}): string {
+  return renderToStaticMarkup(createElement(BridgeSidebar, { fleetId: 'flt_01', screen, counts, accountUrl: accountUrl ?? undefined, foot: null }));
 }
 
 /** Each entry of the sidebar by its key: where it leads, its words, whether it is the page in view. */
@@ -69,11 +71,11 @@ describe("Bridge's sidebar", () => {
       { href: '/bridge/settings?fleet=flt_01', text: 'Settings', isCurrent: false },
       { href: '/bridge/settings/routing?fleet=flt_01', text: 'Where things show', isCurrent: false },
       { href: '/outside-parties?fleet=flt_01', text: 'Outside parties', isCurrent: false },
-      { href: 'https://account.aeolus.test', text: 'Fleets and account', isCurrent: false },
+      { href: ACCOUNT_URL, text: 'Fleets and account', isCurrent: false },
     ]);
   });
 
   it('leaves Fleets and account out while the account app is not known', () => {
-    expect(entriesOf(sidebarOf({ accountUrl: undefined })).account).toBeUndefined();
+    expect(entriesOf(sidebarOf({ accountUrl: null })).account).toBeUndefined();
   });
 });
