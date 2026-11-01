@@ -15,7 +15,6 @@ function linkOf(row: SlackLinkRow): SlackLink {
     personShipId: idSchema('ship').parse(row.personShipId),
     linkedAt: row.linkedAt,
     stoppedAt: row.stoppedAt,
-    isShowingAll: row.isShowingAll,
   };
 }
 
@@ -41,9 +40,6 @@ export function createPrismaSlackLinks(db: PrismaClient): SlackLinks {
     ofPersonShip: async (fleetId, personShipId) => {
       const row = await db.slackLink.findFirst({ where: { fleetId, personShipId } });
       return row === null ? undefined : linkOf(row);
-    },
-    showAll: async (fleetId, { accountId, isOn }) => {
-      await db.slackLink.updateMany({ where: { fleetId, accountId }, data: { isShowingAll: isOn } });
     },
     remove: async (fleetId, accountId) => {
       await db.slackLink.deleteMany({ where: { fleetId, accountId } });

@@ -341,14 +341,19 @@ model PersonCrew {
   @@map("person_crews")
 }
 
-/// A person who turned email on to be woken for their person ship (wake a person, W8): a row while it is on; nothing is on by default.
-model EmailChannel {
-  fleetId    String   @map("fleet_id")
-  shipId     String   @map("ship_id")
-  turnedOnAt DateTime @map("turned_on_at") @db.Timestamptz(3)
+/// A person's own choice of where a job shows besides Bridge (Bridge, section 8): on or off, and when they made it; where none is kept, the gateway's default holds.
+model Route {
+  fleetId   String   @map("fleet_id")
+  shipId    String   @map("ship_id")
+  /// decide, do, stay-aware or everything-else.
+  job       String
+  /// slack, chat, web-push or email.
+  place     String
+  isOn      Boolean  @map("is_on")
+  changedAt DateTime @map("changed_at") @db.Timestamptz(3)
 
-  @@id([fleetId, shipId])
-  @@map("email_channels")
+  @@id([fleetId, shipId, job, place])
+  @@map("routes")
 }
 
 /// When a channel last woke a person ship, so it sends at most one wake per its window (wake a person, W3).
@@ -555,8 +560,6 @@ model SlackLink {
   linkedAt     DateTime  @map("linked_at") @db.Timestamptz(3)
   /// When the account was disabled (0055), its link stopped.
   stoppedAt    DateTime? @map("stopped_at") @db.Timestamptz(3)
-  /// Show everything that waits in Slack (B5), off until turned on.
-  isShowingAll Boolean   @default(false) @map("is_showing_all")
 
   @@id([fleetId, teamId, slackUserId])
   @@unique([fleetId, accountId])
@@ -599,8 +602,6 @@ model SlackPost {
   /// The Slack message, once Slack accepted the post.
   ts           String?
   threadTs     String?   @map("thread_ts")
-  isLinkOnly   Boolean   @map("is_link_only")
-  ackedAt      DateTime? @map("acked_at") @db.Timestamptz(3)
 
   @@id([fleetId, personShipId, messageId])
   @@index([fleetId, appId, channel, ts])

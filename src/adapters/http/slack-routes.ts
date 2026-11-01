@@ -46,8 +46,8 @@ const blockActionsSchema = z.object({
 /** The Slack page of the web app (web/features/slack/paths.ts names the same). */
 const SLACK_PAGE_PATH = '/slack';
 
-/** Bridge's settings in the web app, where a person's Slack link shows. */
-const BRIDGE_SETTINGS_PATH = '/bridge/settings';
+/** Where things show in the web app (web/features/bridge/paths.ts names the same), where a person's Slack link shows. */
+const BRIDGE_ROUTING_PATH = '/bridge/settings/routing';
 
 const HTTP_FOUND = 302;
 const HTTP_UNAUTHORIZED = 401;
@@ -116,7 +116,7 @@ export function registerSlackRoutes(server: FastifyInstance, deps: { completeIns
   server.get(SLACK_LINK_PATH, async (request, reply) => {
     const query = installQuerySchema.safeParse(request.query);
     const { code, state, error } = query.success ? query.data : {};
-    const goTo = (said: Record<string, string>) => reply.code(HTTP_FOUND).header('location', `${BRIDGE_SETTINGS_PATH}?${new URLSearchParams(said).toString()}`).send();
+    const goTo = (said: Record<string, string>) => reply.code(HTTP_FOUND).header('location', `${BRIDGE_ROUTING_PATH}?${new URLSearchParams(said).toString()}`).send();
     if (error !== undefined || code === undefined || state === undefined) {
       // The person cancelled on Slack's screen, or Slack sent nothing to take.
       return goTo({ slack: 'cancelled' });

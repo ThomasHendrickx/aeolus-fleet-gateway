@@ -2,7 +2,9 @@ import type { DeliveryId, FleetId, MessageId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Sleep } from '../mcp-out/run-party.js';
+import { jobOf } from '../people/item-job.js';
 import type { PersonDelivery, PersonShip, PersonShipDoor, PushedPersonDelivery, ShownThere } from '../people/ports.js';
+import type { Routing } from '../people/routing.js';
 import type { Clock } from '../shared/clock.js';
 import { ok, type Result } from '../shared/result.js';
 import type { SlackApps, SlackButton, SlackLinks, SlackMessages, SlackPosts } from './ports.js';
@@ -19,14 +21,13 @@ const SECOND_MS = 1000;
 /** The number a delivery is handed with: the first hand-over, made again with the same number counts nothing (0040). */
 const FIRST_HAND_OVER = 1;
 
-export type ShowInSlack = (ship: PersonShip, wake: { crewToken: string; fresh: readonly PushedPersonDelivery[] }) => Promise<Result<ShownThere, FleetRefusal>>;
+export type ShowInSlack = (ship: PersonShip, wake: { crewToken: string; fresh: readonly PushedPersonDelivery[]; routing: Routing }) => Promise<Result<ShownThere, FleetRefusal>>;
 
 /**
- * What came of a kept post: in Slack and finished, in Slack but its
- * acknowledgement refused, not shown and forgotten, or not yet in Slack
- * and kept, its delivery waiting beyond the read.
+ * What came of a kept post: in Slack, not shown and forgotten, or not yet
+ * in Slack and kept, its delivery waiting beyond the read.
  */
-type Finished = 'shown' | 'unacknowledged' | 'notShown' | 'waiting';
+type Finished = 'shown' | 'notShown' | 'waiting';
 
 /** Where a delivery shows in Slack: through which bot, in which conversation and thread. */
 interface Where {
@@ -41,20 +42,23 @@ function isInSlack(app: SlackApp | undefined): app is Where['app'] {
 
 /**
  * Use case: shows what waits for a linked person's person ship in Slack
- * (gateway scopes 9.5), as the gateway wakes them. A reply to a message
- * from Slack goes into that conversation or thread; a bot ship's message
- * into that bot's direct messages with the person (P-B1); anything else
- * through the gateway's own bot, headed by the sender, once the person
- * turned Slack on (B5). A bot removed in Slack falls back to the gateway's
- * bot, with Slack on. Each delivery is kept as a post, handed with channel
- * slack, posted, given its Slack message, then acknowledged (B4); a link for
- * what Slack does not show in full is handed only, as a wake. Slack rate
- * limited: the post waits Retry-After and goes again with the same hand-over.
- * Slack refused the post: nothing is kept, and web push and email wake as
- * before. A post the gateway did not finish (it stopped, or core refused
- * the acknowledgement) is finished first, at every wake, never posted twice
- * once in Slack. It answers the deliveries Slack showed, which no other
- * channel wakes for, and whether a post is left unfinished.
+ * (gateway scopes 9.5), as the gateway wakes them, each job once the person
+ * turned Slack on for it, only what arrived since (Bridge, section 8). A
+ * reply to a message from Slack goes into that conversation or thread; a
+ * bot ship's message into that bot's direct messages with the person
+ * (P-B1); anything else through the gateway's own bot, headed by the
+ * sender. With Slack off for everything else, a bot ship's messages and
+ * replies into Slack still show there, as before routing; with it off for
+ * any other job, nothing of that job does. A bot removed in Slack falls back
+ * to the gateway's bot, with Slack on for the job. Each delivery is kept as
+ * a post, handed with channel slack, posted and given its Slack message,
+ * never acknowledged: only the person's action does that (CC6). Slack rate
+ * limited: the post waits Retry-After and goes again with the same
+ * hand-over. Slack refused the post: nothing is kept, and the wakes go on
+ * as before. A post the gateway did not finish (it stopped in between) is
+ * finished first, at every wake, never posted twice once in Slack. It
+ * answers the deliveries Slack showed, which no other channel wakes for,
+ * and whether a post is left unfinished.
  */
 export function createShowInSlack(deps: {
   links: Pick<SlackLinks, 'ofPersonShip'>;
@@ -66,8 +70,9 @@ export function createShowInSlack(deps: {
   clock: Clock;
   bridgeUrlOf: (fleetId: FleetId) => string;
 }): ShowInSlack {
-  const whereOf = async (link: SlackLink, delivery: PersonDelivery): Promise<Where | undefined> => {
-    const { fleetId, personShipId, slackUserId, isShowingAll } = link;
+  /** Where it shows: with Slack on for its job, through the gateway's own bot too; off, only in a Slack thread or a bot ship's own conversation. */
+  const whereOf = async (link: SlackLink, { delivery, isOn }: { delivery: PersonDelivery; isOn: boolean }): Promise<Where | undefined> => {
+    const { fleetId, personShipId, slackUserId } = link;
     const repliedTo = delivery.inReplyTo === null ? undefined : await deps.posts.ofMessage(fleetId, { personShipId, messageId: delivery.inReplyTo });
     if (repliedTo !== undefined) {
       const app = await deps.apps.find(fleetId, repliedTo.appId);
@@ -79,7 +84,7 @@ export function createShowInSlack(deps: {
     if (isInSlack(bot)) {
       return { app: bot, channel: slackUserId, threadTs: null };
     }
-    const gatewayBot = isShowingAll ? await deps.apps.gatewayBot(fleetId) : undefined;
+    const gatewayBot = isOn ? await deps.apps.gatewayBot(fleetId) : undefined;
     return isInSlack(gatewayBot) ? { app: gatewayBot, channel: slackUserId, threadTs: null } : undefined;
   };
 
@@ -98,16 +103,13 @@ export function createShowInSlack(deps: {
   };
 
   /**
-   * Posts a kept post not yet in Slack, then acknowledges it unless a link.
-   * A post not yet in Slack whose delivery the read did not hold is handed
-   * again with the same number, which counts nothing: still handed, it
-   * waits for a later read; acknowledged meanwhile, or undeliverable, it is
-   * forgotten. A post in Slack is acknowledged by core's ack alone, which
-   * takes a delivery acknowledged meanwhile as OK.
+   * Posts a kept post not yet in Slack. One whose delivery the read did not
+   * hold is handed again with the same number, which counts nothing: still
+   * handed, it waits for a later read; acknowledged meanwhile, or
+   * undeliverable, it is forgotten.
    */
   const finish = async ({ crewToken, post, delivery }: { crewToken: string; post: SlackPost & { deliveryId: DeliveryId }; delivery: PersonDelivery | undefined }): Promise<Finished> => {
-    let current = post;
-    if (current.ts === null) {
+    if (post.ts === null) {
       if (delivery === undefined) {
         const handed = await deps.door.handed(crewToken, { deliveryId: post.deliveryId, handOverNumber: FIRST_HAND_OVER, channel: 'slack' });
         if (!handed.isOk || handed.value === 'handed') {
@@ -123,21 +125,12 @@ export function createShowInSlack(deps: {
         await deps.posts.remove(post.fleetId, post);
         return 'notShown';
       }
-      current = { ...current, ts };
-      await deps.posts.save(current);
+      await deps.posts.save({ ...post, ts });
     }
-    if (current.isLinkOnly || current.ackedAt !== null) {
-      return 'shown';
-    }
-    const acked = await deps.door.ack(crewToken, post.deliveryId);
-    if (!acked.isOk) {
-      return 'unacknowledged';
-    }
-    await deps.posts.save({ ...current, ackedAt: deps.clock.now() });
     return 'shown';
   };
 
-  return async (ship, { crewToken, fresh }) => {
+  return async (ship, { crewToken, fresh, routing }) => {
     const link = await deps.links.ofPersonShip(ship.fleetId, ship.shipId);
     const shownIds = new Set<DeliveryId>();
     let isAnyUnfinished = false;
@@ -155,16 +148,17 @@ export function createShowInSlack(deps: {
         const { deliveryId } = post;
         if (deliveryId !== null) {
           const finished = await finish({ crewToken, post: { ...post, deliveryId }, delivery: held.value.find((each) => each.deliveryId === deliveryId) });
-          isAnyUnfinished ||= finished === 'unacknowledged' || finished === 'waiting';
+          isAnyUnfinished ||= finished === 'waiting';
         }
       }
     }
     for (const delivery of fresh) {
-      const where = await whereOf(link, delivery);
+      const isOn = routing.isShowing('slack', delivery);
+      // Off for everything else, a bot ship's messages and replies into Slack still show, as before routing; off for another job, none.
+      const where = isOn || jobOf(delivery.contentType) === 'everything-else' ? await whereOf(link, { delivery, isOn }) : undefined;
       if (where === undefined) {
         continue;
       }
-      const shown = slackPostOf(delivery, { bridgeUrl: deps.bridgeUrlOf(ship.fleetId), isHeadedBySender: where.app.shipId === null });
       const post: SlackPost = {
         fleetId: ship.fleetId,
         personShipId: ship.shipId,
@@ -175,8 +169,6 @@ export function createShowInSlack(deps: {
         channel: where.channel,
         ts: null,
         threadTs: where.threadTs,
-        isLinkOnly: shown.kind === 'link',
-        ackedAt: null,
       };
       // Kept before it is handed: a gateway that stops in between finishes it at the next wake.
       await deps.posts.save(post);
@@ -186,10 +178,9 @@ export function createShowInSlack(deps: {
         continue;
       }
       const finished = await finish({ crewToken, post: { ...post, deliveryId: delivery.deliveryId }, delivery });
-      if (finished === 'shown' || finished === 'unacknowledged') {
+      if (finished === 'shown') {
         shownIds.add(delivery.deliveryId);
       }
-      isAnyUnfinished ||= finished === 'unacknowledged';
     }
     return ok({ shown: shownIds, isAnyUnfinished });
   };

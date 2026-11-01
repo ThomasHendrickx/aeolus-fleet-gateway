@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+import type { ItemJob } from './core/people/item-job.js';
+import { ITEM_JOBS, ROUTING_PLACES, type RoutingPlace } from './core/people/routing.js';
+
 /** The shortest installation token the gateway takes, as the server does (decision 0020). */
 const INSTALLATION_TOKEN_MIN_LENGTH = 32;
 
@@ -16,6 +19,9 @@ const EMAIL_WAKE_WINDOW_MINUTES_DEFAULT = 60;
 const WEB_PUSH_WAKE_WINDOW_MINUTES_DEFAULT = 10;
 
 const MINUTE_MS = 60_000;
+
+/** What is on by default besides Bridge unless set: a chat for every job; Slack, web push and email off until turned on (Bridge, CC19). */
+const ROUTING_ON_BY_DEFAULT_DEFAULT = 'decide:chat,do:chat,stay-aware:chat,everything-else:chat';
 
 const environmentSchema = z.object({
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/, error: 'must be a postgres:// or postgresql:// URL' }),
@@ -39,6 +45,7 @@ const environmentSchema = z.object({
   PAGASAE_APP_CLIENT_SECRET: z.string().min(1).optional(),
   SLACK_API_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).default('https://slack.com/api'),
   OPENAI_APPS_CHALLENGE: z.string().min(1).optional(),
+  ROUTING_ON_BY_DEFAULT: z.string().default(ROUTING_ON_BY_DEFAULT_DEFAULT),
 });
 
 /** What `aeolus-gateway migrate` reads: the database alone. */
@@ -104,6 +111,8 @@ export interface Config {
    * 7.5). Unset, there is no such address.
    */
   openAiAppsChallenge: string | undefined;
+  /** The jobs and places on while a person chose nothing of their own (Bridge, CC19); every other place is off until turned on. */
+  routingOnByDefault: readonly { job: ItemJob; place: RoutingPlace }[];
 }
 
 export class ConfigError extends Error {
@@ -139,7 +148,25 @@ export function loadConfig(environment: Record<string, string | undefined>): Con
     pagasaeApp: pagasaeAppOf(variables),
     slackApiUrl: variables.SLACK_API_URL.replace(/\/$/, ''),
     openAiAppsChallenge: variables.OPENAI_APPS_CHALLENGE,
+    routingOnByDefault: routingOnByDefaultOf(variables.ROUTING_ON_BY_DEFAULT),
   };
+}
+
+/** The job:place pairs on by default, comma separated; a pair that names no job and place is refused by name. */
+function routingOnByDefaultOf(pairs: string): Config['routingOnByDefault'] {
+  return pairs
+    .split(',')
+    .map((pair) => pair.trim())
+    .filter((pair) => pair !== '')
+    .map((pair) => {
+      const [jobName, placeName] = pair.split(':');
+      const job = ITEM_JOBS.find((each) => each === jobName);
+      const place = ROUTING_PLACES.find((each) => each === placeName);
+      if (job === undefined || place === undefined) {
+        throw new ConfigError(`ROUTING_ON_BY_DEFAULT: ${pair} is no job:place, such as decide:chat`);
+      }
+      return { job, place };
+    });
 }
 
 /** pagasae's three settings: all of them, or none. */

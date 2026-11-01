@@ -92,7 +92,7 @@ export function createSendSlackEvents(deps: {
     const sent = await deps.sender.send(crew.crewToken, event.inReplyTo === null ? message : { ...message, inReplyTo: event.inReplyTo });
     if (sent.isOk) {
       const { fleetId, personShipId, appId, channel, ts, threadTs } = event;
-      await deps.posts.save({ fleetId, personShipId, messageId: sent.value.messageId, deliveryId: null, senderShipId: null, appId, channel, ts, threadTs, isLinkOnly: false, ackedAt: null });
+      await deps.posts.save({ fleetId, personShipId, messageId: sent.value.messageId, deliveryId: null, senderShipId: null, appId, channel, ts, threadTs });
       if (event.deliveryId !== null) {
         // Answered before the gateway acknowledged it, the person's answer acknowledges it, as core takes handled only then.
         // A refusal leaves the delivery acknowledged, as an answer on the gateway's page does when handled is refused.

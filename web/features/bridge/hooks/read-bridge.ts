@@ -1,10 +1,11 @@
 /**
  * What Bridge's pages show, read through the gateway's API as the signed-in
  * account (docs/design/bridge; decision 0056): Bridge home, a page of the
- * record for Done, and Bridge's settings: the channels that wake the person,
- * the requests to decide for an approver, the requests they asked, and their
- * Slack link. A part the API refuses the account (FORBIDDEN) is not theirs to
- * see, so it is left out.
+ * record for Done, Bridge's settings: the requests to decide for an
+ * approver and the requests they asked, and where things show: each job's
+ * places, the channels that wake the person and their Slack link. A part the
+ * API refuses the account (FORBIDDEN) is not theirs to see, so it is left
+ * out.
  */
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { refusalCodeOf, refusalMessageOf } from '../../../lib/gateway-api/page-api';
@@ -12,6 +13,7 @@ import type { WakeChannels } from '../services/deliveries';
 import type { BasketView } from '../services/basket';
 import type { BridgeHome, RecordPage } from '../services/items';
 import type { ShownRequest } from '../services/requests';
+import type { RoutingView } from '../services/routing';
 
 /**
  * What Bridge read of the person ship: what it answered; none, for an account
@@ -21,10 +23,15 @@ import type { ShownRequest } from '../services/requests';
 export type BridgeRead<T> = { kind: 'read'; value: T } | { kind: 'none' } | { kind: 'unreadable'; message: string };
 
 export interface BridgeSettingsParts {
-  /** The channels that wake the person when something waits for their person ship (wake a person, W8). */
-  readonly wakeChannels: WakeChannels | undefined;
   readonly toDecide: readonly ShownRequest[] | undefined;
   readonly mine: readonly ShownRequest[] | undefined;
+}
+
+/** Where things show (Bridge, section 8): each job's places, and the places' own state. */
+export interface BridgeRoutingParts {
+  readonly routing: RoutingView | undefined;
+  /** The channels that can wake the person when something waits for their person ship (wake a person, W8). */
+  readonly wakeChannels: WakeChannels | undefined;
   /** The person's Slack link (gateway scopes 9.6); none while the fleet's own bot is not in Slack. */
   readonly slackLink: SlackLink | null | undefined;
 }
@@ -78,13 +85,13 @@ export function readRecordPage(api: GatewayApi, cursor: string | null): Promise<
 }
 
 export async function readBridgeSettings(api: GatewayApi): Promise<BridgeSettingsParts> {
-  const [wakeChannels, toDecide, mine, slackLink] = await Promise.all([
-    unlessForbidden(api.people.wakeChannels.query()),
-    unlessForbidden(api.requests.toDecide.query()),
-    unlessForbidden(api.requests.mine.query()),
-    unlessForbidden(api.slack.link.query()),
-  ]);
-  return { wakeChannels, toDecide, mine, slackLink };
+  const [toDecide, mine] = await Promise.all([unlessForbidden(api.requests.toDecide.query()), unlessForbidden(api.requests.mine.query())]);
+  return { toDecide, mine };
+}
+
+export async function readBridgeRouting(api: GatewayApi): Promise<BridgeRoutingParts> {
+  const [routing, wakeChannels, slackLink] = await Promise.all([unlessForbidden(api.people.routing.query()), unlessForbidden(api.people.wakeChannels.query()), unlessForbidden(api.slack.link.query())]);
+  return { routing, wakeChannels, slackLink };
 }
 
 /** One request to decide, undefined once it no longer waits, and the queue beside it. */

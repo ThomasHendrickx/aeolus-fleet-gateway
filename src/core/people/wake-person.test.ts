@@ -2,11 +2,12 @@ import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, memoryFocusedPages } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, memoryFocusedPages, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { FocusedPages, PersonShip, PushedPersonDelivery, ShownElsewhere, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
+import { ITEM_JOBS, routingDefaultsOf, type Route, type RoutingDefaults } from './routing.js';
 import { createWakePerson } from './wake-person.js';
 
 // The gateway wakes a person when something waits for their person ship
@@ -19,6 +20,17 @@ const CREW_TOKEN = 'aeolus_ct_v1_charlotte';
 const NOW = new Date('2026-10-23T12:00:00.000Z');
 const HOUR_MS = 3_600_000;
 const FOCUS_FRESH_MS = 60_000;
+
+/** Every job routed to both wake channels, as the tests of waking itself need. */
+const EVERY_JOB_WAKES = routingDefaultsOf(ITEM_JOBS.flatMap((job) => [{ job, place: 'email' as const }, { job, place: 'web-push' as const }]));
+/** Nothing on by default: each test of routing turns on what it needs. */
+const NOTHING_ON = routingDefaultsOf([]);
+const TURNED_ON_AT = new Date('2026-10-19T00:00:00.000Z');
+const PLAIN_TEXT = { contentType: 'text/plain', payload: 'Release 1.4 is out', headline: null, askedQuestionId: null };
+
+function aRoute(overrides: Partial<Route>): Route {
+  return { ...SHIP, job: 'decide', place: 'email', isOn: true, changedAt: TURNED_ON_AT, ...overrides };
+}
 
 function aDelivery(index: number, overrides: Partial<PushedPersonDelivery> = {}): PushedPersonDelivery {
   const deliveryId: DeliveryId = `dlv_01m3tbfspe96yf1rnr4ank${String(index).padStart(4, '0')}`;
@@ -85,8 +97,10 @@ function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: Flee
   };
 }
 
-function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[]; wakesSent?: WakesSent; focused?: FocusedPages; endedAttempts?: { channel: WakeChannelName; reason: string }[]; shownElsewhere?: ShownElsewhere }) {
+function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[]; wakesSent?: WakesSent; focused?: FocusedPages; endedAttempts?: { channel: WakeChannelName; reason: string }[]; shownElsewhere?: ShownElsewhere; routes?: Route[]; defaults?: RoutingDefaults }) {
   return createWakePerson({
+    routes: memoryRoutes(deps.routes ?? []),
+    defaults: deps.defaults ?? EVERY_JOB_WAKES,
     ...(deps.shownElsewhere === undefined ? {} : { shownElsewhere: deps.shownElsewhere }),
     attemptEnded: (ended) => deps.endedAttempts?.push({ channel: ended.channel, reason: ended.reason }),
     door: deps.ship.door,
@@ -103,9 +117,9 @@ function slackShowing(ship: ReturnType<typeof aShip>, options: { shown?: readonl
   const asked: DeliveryId[][] = [];
   return {
     asked,
-    show: async (_ship, { crewToken, fresh }) => {
+    show: async (_ship, { crewToken, fresh, routing }) => {
       asked.push(fresh.map(({ deliveryId }) => deliveryId));
-      const taken = fresh.filter(({ deliveryId }) => options.shown?.includes(deliveryId) === true);
+      const taken = fresh.filter((delivery) => (options.shown === undefined ? routing.isShowing('slack', delivery) : options.shown.includes(delivery.deliveryId)));
       for (const { deliveryId } of taken) {
         await ship.door.handed(crewToken, { deliveryId, handOverNumber: 1, channel: 'slack' });
       }
@@ -297,7 +311,7 @@ describe('waking a person', () => {
     const email = aChannel('email');
     const wakesSent = memoryWakesSent();
     const crashing = { ...ship.door, handed: () => Promise.reject(new Error('the gateway stopped')) };
-    await expect(createWakePerson({ attemptEnded: () => undefined, door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
+    await expect(createWakePerson({ routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
 
     await waking({ ship, channels: [email.channel], wakesSent })(SHIP, CREW_TOKEN);
 
@@ -309,7 +323,7 @@ describe('waking a person', () => {
     const refusing = { ...ship.door, handed: () => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) };
     const wakesSent = memoryWakesSent();
 
-    const woken = await createWakePerson({ attemptEnded: () => undefined, door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
+    const woken = await createWakePerson({ routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
 
     expect({ woken, sent: wakesSent.sent }).toEqual({ woken: err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }), sent: [{ channel: 'email', at: NOW }] });
   });
@@ -326,7 +340,7 @@ describe('waking a person', () => {
         return handedCalls === 2 ? Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) : ship.door.handed(crewToken, handOver);
       },
     };
-    const wakePerson = createWakePerson({ attemptEnded: () => undefined, door: refusingOnce, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
+    const wakePerson = createWakePerson({ routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: refusingOnce, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
 
     const first = await wakePerson(SHIP, CREW_TOKEN);
     const retried = await wakePerson(SHIP, CREW_TOKEN);
@@ -462,5 +476,98 @@ describe('waking a person while a page of theirs is in focus (wake a person, W6)
     await waking({ ship, channels: [email.channel], focused })(SHIP, CREW_TOKEN);
 
     expect(email.woken).toEqual([SHIP]);
+  });
+});
+
+describe('waking a person per job (Bridge, section 8)', () => {
+  it('wakes through a channel only for the jobs on there, leaving the rest in Bridge, unhanded', async () => {
+    const ship = aShip([aDelivery(1), aDelivery(2, PLAIN_TEXT)]);
+    const email = aChannel('email');
+
+    const woken = await waking({ ship, channels: [email.channel], defaults: NOTHING_ON, routes: [aRoute({ job: 'decide', place: 'email' })] })(SHIP, CREW_TOKEN);
+
+    expect({ woken, emails: email.woken.length, handOvers: ship.handOvers }).toEqual({
+      woken: ok({ kind: 'settled' }),
+      emails: 1,
+      handOvers: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', handOverNumber: 1, channel: 'email' }],
+    });
+  });
+
+  it('sends no wake while no fresh delivery is of a job on for any channel', async () => {
+    const ship = aShip([aDelivery(1, PLAIN_TEXT)]);
+    const email = aChannel('email');
+
+    const woken = await waking({ ship, channels: [email.channel], defaults: NOTHING_ON, routes: [aRoute({ job: 'decide', place: 'email' })] })(SHIP, CREW_TOKEN);
+
+    expect({ woken, emails: email.woken.length, handOvers: ship.handOvers }).toEqual({ woken: ok({ kind: 'settled' }), emails: 0, handOvers: [] });
+  });
+
+  it('wakes a channel turned on for a job only for what arrived since, never for what was already there (CC20)', async () => {
+    const ship = aShip([aDelivery(1, { sentAt: new Date('2026-10-18T23:59:59.999Z') }), aDelivery(2, { sentAt: TURNED_ON_AT })]);
+    const email = aChannel('email');
+
+    await waking({ ship, channels: [email.channel], defaults: NOTHING_ON, routes: [aRoute({ job: 'decide', place: 'email' })] })(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers.map(({ deliveryId }) => deliveryId)).toEqual(['dlv_01m3tbfspe96yf1rnr4ank0002']);
+  });
+
+  it('hands each delivery once with Slack and a wake both on for its job: Slack shows it, and no wake goes out (CC13)', async () => {
+    const ship = aShip([aDelivery(1), aDelivery(2, PLAIN_TEXT)]);
+    const email = aChannel('email');
+    const routes = [aRoute({ job: 'decide', place: 'slack' }), aRoute({ job: 'decide', place: 'email' }), aRoute({ job: 'everything-else', place: 'email' })];
+
+    await waking({ ship, channels: [email.channel], defaults: NOTHING_ON, routes, shownElsewhere: slackShowing(ship) })(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers).toEqual([
+      { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', handOverNumber: 1, channel: 'slack' },
+      { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', handOverNumber: 1, channel: 'email' },
+    ]);
+  });
+
+  it('hands each delivery once with Slack and a chat on for its job: Slack hands it, a chat only lists it (CC13)', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const routes = [aRoute({ job: 'decide', place: 'slack' }), aRoute({ job: 'decide', place: 'chat' })];
+
+    await waking({ ship, channels: [aChannel('email').channel], defaults: NOTHING_ON, routes, shownElsewhere: slackShowing(ship) })(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers).toEqual([{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', handOverNumber: 1, channel: 'slack' }]);
+  });
+
+  it('applies a change at once: the next wake reads where each job shows anew', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email');
+    const routes: Route[] = [];
+    const wakePerson = waking({ ship, channels: [email.channel], defaults: NOTHING_ON, routes });
+    await wakePerson(SHIP, CREW_TOKEN);
+
+    routes.push(aRoute({ job: 'decide', place: 'email' }));
+    await wakePerson(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers.map(({ channel }) => channel)).toEqual(['email']);
+  });
+
+  it('says the wake failed while a delivery only a failing channel shows is left, though another channel went out', async () => {
+    const ship = aShip([aDelivery(1), aDelivery(2, PLAIN_TEXT)]);
+    const webPush = aChannel('web-push', { isFailing: true });
+    const email = aChannel('email');
+    const routes = [aRoute({ job: 'decide', place: 'web-push' }), aRoute({ job: 'everything-else', place: 'email' })];
+
+    const woken = await waking({ ship, channels: [webPush.channel, email.channel], defaults: NOTHING_ON, routes })(SHIP, CREW_TOKEN);
+
+    expect({ woken, handOvers: ship.handOvers }).toEqual({ woken: ok({ kind: 'failed' }), handOvers: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', handOverNumber: 1, channel: 'email' }] });
+  });
+
+  it('hands each delivery through the first channel that went out of the ones on for its job', async () => {
+    const ship = aShip([aDelivery(1), aDelivery(2, PLAIN_TEXT)]);
+    const webPush = aChannel('web-push');
+    const email = aChannel('email');
+    const routes = [aRoute({ job: 'decide', place: 'email' }), aRoute({ job: 'everything-else', place: 'web-push' }), aRoute({ job: 'everything-else', place: 'email' })];
+
+    await waking({ ship, channels: [webPush.channel, email.channel], defaults: NOTHING_ON, routes })(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers.map(({ deliveryId, channel }) => [deliveryId, channel])).toEqual([
+      ['dlv_01m3tbfspe96yf1rnr4ank0001', 'email'],
+      ['dlv_01m3tbfspe96yf1rnr4ank0002', 'web-push'],
+    ]);
   });
 });

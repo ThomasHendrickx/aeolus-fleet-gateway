@@ -84,7 +84,9 @@ import type { FocusPage } from '../../core/people/focus-page.js';
 import type { TurnOffWebPush } from '../../core/people/turn-off-web-push.js';
 import type { TurnOnWebPush } from '../../core/people/turn-on-web-push.js';
 import type { PersonShip } from '../../core/people/ports.js';
-import type { TurnEmailChannel } from '../../core/people/turn-email-channel.js';
+import type { ReadRouting } from '../../core/people/read-routing.js';
+import { ITEM_JOBS, ROUTING_PLACES } from '../../core/people/routing.js';
+import type { TurnRoute } from '../../core/people/turn-route.js';
 import type { ReadAuthorization } from '../../core/oauth/read-authorization.js';
 import type { WatchWaiting } from '../../core/requests/watch-waiting.js';
 import type { Result } from '../../core/shared/result.js';
@@ -95,7 +97,6 @@ import type { ListExposable } from '../../core/slack/list-exposable.js';
 import type { RemoveBot } from '../../core/slack/remove-bot.js';
 import type { ReadSlack } from '../../core/slack/read-slack.js';
 import type { ReadSlackLink } from '../../core/slack/read-slack-link.js';
-import type { ShowAllInSlack } from '../../core/slack/show-all-in-slack.js';
 import type { StartLink } from '../../core/slack/start-link.js';
 import type { StopSlackLink } from '../../core/slack/stop-slack-link.js';
 import type { UnlinkSlack } from '../../core/slack/unlink-slack.js';
@@ -186,7 +187,8 @@ export interface Context {
     removeFromBasket: RemoveFromBasket;
     sendBasket: SendBasket;
     readWakeChannels: ReadWakeChannels;
-    turnEmailChannel: TurnEmailChannel;
+    readRouting: ReadRouting;
+    turnRoute: TurnRoute;
     turnOnWebPush: TurnOnWebPush;
     turnOffWebPush: TurnOffWebPush;
     focusPage: FocusPage;
@@ -206,7 +208,6 @@ export interface Context {
     readSlackLink: ReadSlackLink;
     startLink: StartLink;
     unlinkSlack: UnlinkSlack;
-    showAllInSlack: ShowAllInSlack;
   };
   readOutsideParties: ReadOutsideParties;
   setOutsideParties: SetOutsideParties;
@@ -1260,13 +1261,19 @@ export const gatewayRouter = t.router({
         const { deliveryId, outcome, note } = input;
         return personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, place: 'bridge', deliveryId, ...(outcome === undefined ? {} : { outcome }), ...(note === undefined ? {} : { note }) }));
       }),
-    /** The channels that wake them when something waits for their person ship, each offered or not and on or not (wake a person, W8). */
+    /** The channels that wake them when something waits for their person ship, each offered or not; which jobs each wakes for is routed per job (Bridge, section 8). */
     wakeChannels: personProcedure.query(async ({ ctx }) => {
       const { email, webPush } = personAnswerOf(await ctx.person.readWakeChannels(ctx.caller));
       return { email, webPush: { publicKey: webPush.publicKey, browsers: webPush.browsers.map(({ addedAt, ...browser }) => ({ ...browser, addedAt: addedAt.toISOString() })) } };
     }),
-    /** Turns email on or off, to be woken when something waits for their person ship. */
-    turnEmail: personProcedure.input(z.strictObject({ isOn: z.boolean() })).mutation(async ({ ctx, input }) => { personAnswerOf(await ctx.person.turnEmailChannel({ caller: ctx.caller, ...input })); }),
+    /** Where each job shows besides Bridge, per place, and the places the gateway offers (Bridge, section 8). */
+    routing: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readRouting(ctx.caller))),
+    /** Turns a place on or off for a job; it applies at once. */
+    turnRoute: personProcedure
+      .input(z.strictObject({ job: z.enum(ITEM_JOBS), place: z.enum(ROUTING_PLACES), isOn: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        personAnswerOf(await ctx.person.turnRoute({ caller: ctx.caller, ...input }));
+      }),
     /** Turns web push on for the browser that sent its subscription; its wakes name the fleet as the person's shared sign-in states it. */
     turnOnWebPush: personProcedure.input(webPushSubscriptionInputSchema).mutation(async ({ ctx, input }) => {
       personAnswerOf(await ctx.person.turnOnWebPush({ caller: ctx.caller, fleetName: await fleetNameOf(ctx, { fleetId: ctx.caller.fleetId, toDo: 'turn web push on' }), ...input }));
@@ -1432,18 +1439,10 @@ export const gatewayRouter = t.router({
       }),
     /** The person's Slack link as Bridge's settings show it (9.6): the workspace and the Slack name linked; none while the fleet's own bot is not in Slack. */
     link: servedProcedure
-      .output(z.object({ workspaceName: z.string(), link: z.object({ slackName: z.string(), isShowingAll: z.boolean() }).nullable() }).nullable())
+      .output(z.object({ workspaceName: z.string(), link: z.object({ slackName: z.string() }).nullable() }).nullable())
       .query(({ ctx }) => ctx.slack.readSlackLink({ actor: ctx.actor })),
     /** Sign in with Slack to link the person's Slack account, from Bridge's settings or Slack's answer to an unlinked person (9.3). */
     startLink: servedProcedure.output(z.object({ url: z.string() })).mutation(async ({ ctx }) => slackAnswerOf(await ctx.slack.startLink({ actor: ctx.actor }))),
-    /** Turns Show everything that waits in Slack on or off for the person's own link (9.6, B5). */
-    showAll: servedProcedure
-      .input(z.strictObject({ isOn: z.boolean() }))
-      .output(z.strictObject({}))
-      .mutation(async ({ ctx, input }) => {
-        slackAnswerOf(await ctx.slack.showAllInSlack({ actor: ctx.actor, isOn: input.isOn }));
-        return {};
-      }),
     /** Unlinks the person's own Slack account (9.3). */
     unlink: servedProcedure.output(z.strictObject({})).mutation(async ({ ctx }) => {
       await ctx.slack.unlinkSlack({ actor: ctx.actor });

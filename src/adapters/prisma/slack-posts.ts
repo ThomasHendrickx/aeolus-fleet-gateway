@@ -16,8 +16,6 @@ function postOf(row: SlackPostRow): SlackPost {
     channel: row.channel,
     ts: row.ts,
     threadTs: row.threadTs,
-    isLinkOnly: row.isLinkOnly,
-    ackedAt: row.ackedAt,
   };
 }
 
@@ -37,7 +35,7 @@ export function createPrismaSlackPosts(db: PrismaClient): SlackPosts {
       return row === null ? undefined : postOf(row);
     },
     unfinished: async (fleetId, personShipId) =>
-      (await db.slackPost.findMany({ where: { fleetId, personShipId, deliveryId: { not: null }, OR: [{ ts: null }, { isLinkOnly: false, ackedAt: null }] } })).map(postOf),
+      (await db.slackPost.findMany({ where: { fleetId, personShipId, deliveryId: { not: null }, ts: null } })).map(postOf),
     remove: async (fleetId, { personShipId, messageId }) => {
       await db.slackPost.deleteMany({ where: { fleetId, personShipId, messageId } });
     },

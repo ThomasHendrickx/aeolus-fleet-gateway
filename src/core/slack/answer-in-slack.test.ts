@@ -40,7 +40,7 @@ beforeEach(async () => {
   await fleet.door.ack('crew-mathilde', QUESTION.deliveryId);
   await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
   await links.add(aSlackLink());
-  await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: QUESTION.messageId, deliveryId: QUESTION.deliveryId, senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'D0MATHILDE', ts: '1730020000.000001', threadTs: null, isLinkOnly: false, ackedAt: NOW });
+  await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: QUESTION.messageId, deliveryId: QUESTION.deliveryId, senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'D0MATHILDE', ts: '1730020000.000001', threadTs: null });
 });
 
 const signatures = { isSigned: ({ secret, timestamp, body, signature }: { secret: string; timestamp: string; body: string; signature: string }) => signature === `${secret}:${timestamp}:${body}` };
@@ -98,7 +98,7 @@ describe("a press of a question's button in Slack", () => {
 
   it('answers a question pressed before Slack answered its post, acknowledging the delivery first', async () => {
     fleet = fakePersonShipDoor({ crewToken: 'crew-mathilde', deliveries: [QUESTION] });
-    await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: QUESTION.messageId, deliveryId: QUESTION.deliveryId, senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null });
+    await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: QUESTION.messageId, deliveryId: QUESTION.deliveryId, senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null });
 
     const answered = await press(2);
 
@@ -123,7 +123,7 @@ describe("a press of a question's button in Slack", () => {
   });
 
   it('answers nothing for a press naming a question posted in another conversation', async () => {
-    await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: QUESTION.messageId, deliveryId: QUESTION.deliveryId, senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'C0LAUNCH', ts: '1730020000.000001', threadTs: null, isLinkOnly: false, ackedAt: NOW });
+    await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: QUESTION.messageId, deliveryId: QUESTION.deliveryId, senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'C0LAUNCH', ts: '1730020000.000001', threadTs: null });
 
     const answered = await press(1);
 

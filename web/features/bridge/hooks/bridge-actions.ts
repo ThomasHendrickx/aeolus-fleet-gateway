@@ -3,8 +3,8 @@
  * Bridge's actions, each one call of the gateway's API as the signed-in
  * account, on the server (0033): opening, answering and being done with an
  * item, putting an answer in the basket, removing it and sending the basket,
- * reading the next page of the record, and in Bridge's settings the
- * wake channels, the Slack link and deciding a request. The API checks everything; a
+ * reading the next page of the record, and in Bridge's settings where
+ * each job shows, web push, the Slack link and deciding a request. The API checks everything; a
  * refusal comes back in its own words for the page to say by the control. A
  * sign-in that ended sends the person to sign in again.
  */
@@ -21,6 +21,7 @@ import type { SubscriptionInput } from '../services/web-push';
 import { EVERY_APP_SHIP_SCOPES, type DecisionInput } from '../services/requests';
 import type { BasketSent } from '../services/basket';
 import type { RecordPage } from '../services/items';
+import type { RoutedJob, RoutedPlace } from '../services/routing';
 import { BRIDGE_PATH } from '../paths';
 
 /** What an action says when the gateway gave no answer of its own. */
@@ -97,10 +98,10 @@ export async function doneDelivery({ fleet, deliveryId, step }: { fleet: string;
   });
 }
 
-/** Turns email on or off, to be woken when something waits for the person's own ship (wake a person, W8). */
-export async function turnEmail(fleet: string, isOn: boolean): Promise<ActionOutcome<undefined>> {
+/** Turns a place on or off for a job: it applies at once (Bridge, section 8). */
+export async function turnRoute({ fleet, job, place, isOn }: { fleet: string; job: RoutedJob; place: RoutedPlace; isOn: boolean }): Promise<ActionOutcome<undefined>> {
   return attempt(fleet, async (api) => {
-    await api.people.turnEmail.mutate({ isOn });
+    await api.people.turnRoute.mutate({ job, place, isOn });
     return undefined;
   });
 }
@@ -125,14 +126,6 @@ export async function turnOffWebPush(fleet: string, endpoint: string): Promise<A
 export async function unlinkSlack(fleet: string): Promise<ActionOutcome<undefined>> {
   return attempt(fleet, async (api) => {
     await api.slack.unlink.mutate();
-    return undefined;
-  });
-}
-
-/** Turns Show everything that waits in Slack on or off (gateway scopes 9.6, B5). */
-export async function showAllInSlack(fleet: string, isOn: boolean): Promise<ActionOutcome<undefined>> {
-  return attempt(fleet, async (api) => {
-    await api.slack.showAll.mutate({ isOn });
     return undefined;
   });
 }

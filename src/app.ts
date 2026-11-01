@@ -137,7 +137,6 @@ import { createSlackLinkSeals } from './adapters/crypto/slack-link-seals.js';
 import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_INSTALL_PATH, SLACK_LINK_PATH } from './adapters/http/slack-routes.js';
 import { createPrismaSlackPosts } from './adapters/prisma/slack-posts.js';
 import { createAnswerInSlack } from './core/slack/answer-in-slack.js';
-import { createShowAllInSlack } from './core/slack/show-all-in-slack.js';
 import { createShowInSlack } from './core/slack/show-in-slack.js';
 import { createPrismaSlackLinks } from './adapters/prisma/slack-links.js';
 import { createSlackMessages } from './adapters/slack/slack-messages.js';
@@ -198,8 +197,12 @@ import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadBridgeHome } from './core/people/read-bridge-home.js';
 import { createReadRecord } from './core/people/read-record.js';
 import { createReadInbox } from './core/people/read-inbox.js';
+import type { ItemJob } from './core/people/item-job.js';
+import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/routing.js';
+import { createPrismaRoutes } from './adapters/prisma/routes.js';
 import { createReadWakeChannels } from './core/people/read-wake-channels.js';
-import { createTurnEmailChannel } from './core/people/turn-email-channel.js';
+import { createReadRouting } from './core/people/read-routing.js';
+import { createTurnRoute } from './core/people/turn-route.js';
 import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
 import { createReadMeeting } from './core/meetings/read-meeting.js';
@@ -208,7 +211,6 @@ import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
 import { createWakePerson } from './core/people/wake-person.js';
 import { createFocusPage } from './core/people/focus-page.js';
 import { createEmailChannel } from './adapters/pagasae/email-channel.js';
-import { createPrismaEmailChannels } from './adapters/prisma/email-channels.js';
 import { createPrismaWakesSent } from './adapters/prisma/wakes-sent.js';
 import { createPrismaFocusedPages } from './adapters/prisma/focused-pages.js';
 import { createPrismaWebPushSubscriptions } from './adapters/prisma/web-push-subscriptions.js';
@@ -297,7 +299,12 @@ export interface GatewayAppOptions {
   slackApiUrl?: string;
   /** How often the gateway looks for grants to keep alive, idle or near their end (decision 0067, Q7): 5 minutes unless set. */
   grantRoundMs?: number;
+  /** The jobs and places on while a person chose nothing of their own (Bridge, CC19): a chat for every job unless set. */
+  routingOnByDefault?: readonly { job: ItemJob; place: RoutingPlace }[];
 }
+
+/** What is on by default unless told: a chat for every job, nothing that pushes (Bridge, CC19). */
+const ROUTING_ON_BY_DEFAULT = ITEM_JOBS.map((job) => ({ job, place: 'chat' as const }));
 
 /** Within the fleet's 10 minutes a handed delivery may wait for its confirmation (decision 0040). */
 const TOOL_CALL_TIMEOUT_MS = 5 * 60_000;
@@ -689,7 +696,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
   const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });
   // pagasae sends the email, asked with the gateway's installation token (wake a person, W2); without either, email wakes no one.
-  const emailChannels = createPrismaEmailChannels(prisma);
   // The browsers people turned web push on in (wake a person, W8).
   const webPushSubscriptions = createPrismaWebPushSubscriptions(prisma);
   const wakeChannels: WakeChannel[] = [
@@ -701,7 +707,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             installationToken: options.installationToken,
             timeoutMs: PAGASAE_TIMEOUT_MS,
             windowMs: options.emailWakeWindowMs ?? EMAIL_WAKE_WINDOW_MS,
-            emailChannels,
           }),
         ]),
     // Web push, where the gateway holds push keys: a wake to each browser the person turned it on in (wake a person, S3).
@@ -718,6 +723,10 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           }),
         ]),
   ];
+  // Where each person routed each job besides Bridge, the configuration's defaults where they chose nothing (Bridge, section 8).
+  const routes = createPrismaRoutes(prisma);
+  const routingDefaults = routingDefaultsOf(options.routingOnByDefault ?? ROUTING_ON_BY_DEFAULT);
+  const placesOffered = { isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), isWebPushOffered: options.webPush !== undefined };
   // What waits for a linked person shows in Slack before anything wakes them (gateway scopes 9.5).
   const slackApiUrl = options.slackApiUrl ?? SLACK_API_URL;
   const slackApps = createPrismaSlackApps(prisma);
@@ -739,7 +748,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: door.person,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: door.person, shownElsewhere: { show: showInSlack }, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
+      wakePerson: createWakePerson({ door: door.person, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,
@@ -775,7 +784,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     const changes = inboxChanges;
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
-      readInbox: createReadInbox({ ...asCrew, opened }),
+      readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults }),
       readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries }),
       readRecord: createReadRecord({ ...asCrew, outcomes }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
@@ -788,12 +797,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       sendBasket: createSendBasket({ ...asCrew, opened, entries, outcomes, changes, clock, sendNow: () => { basketSends.wake(); } }),
       readWakeChannels: createReadWakeChannels({
         crewPersonShip: asCrew.crewPersonShip,
-        emailChannels,
         isEmailOffered: wakeChannels.some(({ name }) => name === 'email'),
         subscriptions: webPushSubscriptions,
         webPushKey: options.webPush?.publicKey ?? null,
       }),
-      turnEmailChannel: createTurnEmailChannel({ crewPersonShip: asCrew.crewPersonShip, emailChannels, isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), clock }),
+      readRouting: createReadRouting({ crewPersonShip: asCrew.crewPersonShip, routes, defaults: routingDefaults, ...placesOffered }),
+      turnRoute: createTurnRoute({ crewPersonShip: asCrew.crewPersonShip, routes, defaults: routingDefaults, ...placesOffered, clock }),
       turnOnWebPush: createTurnOnWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions, resolver: systemHostResolver, isWebPushOffered: options.webPush !== undefined, clock }),
       turnOffWebPush: createTurnOffWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions }),
       focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
@@ -902,7 +911,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     // Where no pagasae is set no one signs in, so no account has a person ship to link.
     startLink: createStartLink({ workspaces: slackWorkspaces, apps: slackApps, signIn: slackSignIn, states: slackLinkStates, crewPersonShip: person?.crewPersonShip ?? (() => Promise.resolve(err({ kind: 'noPersonShip' as const }))), clock, linkRedirectUrl }),
     unlinkSlack: createUnlinkSlack({ links: slackLinks }),
-    showAllInSlack: createShowAllInSlack({ links: slackLinks }),
   };
   const slackEvents = createPrismaSlackEvents(prisma);
   const slackSends = createSlackEventWorker({

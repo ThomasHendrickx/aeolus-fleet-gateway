@@ -25,6 +25,12 @@ describe('the gateway configuration from the environment', () => {
       pagasaeApp: undefined,
       slackApiUrl: 'https://slack.com/api',
       openAiAppsChallenge: undefined,
+      routingOnByDefault: [
+        { job: 'decide', place: 'chat' },
+        { job: 'do', place: 'chat' },
+        { job: 'stay-aware', place: 'chat' },
+        { job: 'everything-else', place: 'chat' },
+      ],
     });
   });
 
@@ -51,6 +57,7 @@ describe('the gateway configuration from the environment', () => {
       pagasaeApp: undefined,
       slackApiUrl: 'https://slack.com/api',
       openAiAppsChallenge: undefined,
+      routingOnByDefault: loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' }).routingOnByDefault,
     });
   });
 
@@ -168,5 +175,20 @@ describe('the gateway configuration from the environment', () => {
     const environment = { DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' };
     expect([loadConfig({ ...environment, WEB_PUSH_WAKE_WINDOW_MINUTES: '1' }).webPushWakeWindowMs, loadConfig({ ...environment, WEB_PUSH_WAKE_WINDOW_MINUTES: '30' }).webPushWakeWindowMs]).toEqual([60_000, 1_800_000]);
     expect(() => loadConfig({ ...environment, WEB_PUSH_WAKE_WINDOW_MINUTES: '0' })).toThrow(/^WEB_PUSH_WAKE_WINDOW_MINUTES: /);
+  });
+
+  it('reads the jobs and places on by default as job:place pairs (Bridge, CC19), none when set empty', () => {
+    const environment = { DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' };
+    expect([loadConfig({ ...environment, ROUTING_ON_BY_DEFAULT: 'decide:chat, stay-aware:web-push' }).routingOnByDefault, loadConfig({ ...environment, ROUTING_ON_BY_DEFAULT: '' }).routingOnByDefault]).toEqual([
+      [
+        { job: 'decide', place: 'chat' },
+        { job: 'stay-aware', place: 'web-push' },
+      ],
+      [],
+    ]);
+  });
+
+  it('refuses a default that names no job and place, naming the variable', () => {
+    expect(() => loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example', ROUTING_ON_BY_DEFAULT: 'decide:chat,decide:fax' })).toThrow(/^ROUTING_ON_BY_DEFAULT: decide:fax is no job:place/);
   });
 });

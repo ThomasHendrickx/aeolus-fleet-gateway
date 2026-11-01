@@ -140,8 +140,9 @@ afterEach(async () => {
 
 const asCharlotte = (): Record<string, string> => ({ cookie: `aeolus_account_session=${SIGN_IN}`, 'aeolus-fleet': fleetId });
 
-async function turnEmail(isOn: boolean): Promise<void> {
-  const turned = await fetch(`${address}/trpc/people.turnEmail`, { method: 'POST', headers: { 'content-type': 'application/json', ...asCharlotte() }, body: JSON.stringify({ isOn }) });
+/** Charlotte turns email on for everything else, the job of the tracker's plain messages (Bridge, section 8). */
+async function turnEmailOn(): Promise<void> {
+  const turned = await fetch(`${address}/trpc/people.turnRoute`, { method: 'POST', headers: { 'content-type': 'application/json', ...asCharlotte() }, body: JSON.stringify({ job: 'everything-else', place: 'email', isOn: true }) });
   expect(turned.status).toBe(200);
 }
 
@@ -178,8 +179,8 @@ describe('a person woken by email (wake a person, S4)', () => {
     expect({ wakes: pagasae.wakes, handOvers: await handOvers(messageId) }).toEqual({ wakes: [], handOvers: [] });
   });
 
-  it('gets an email once they turned email on, naming their person ship, and the delivery is handed no. 1 through email', async () => {
-    await turnEmail(true);
+  it('gets an email once they turned email on for the job, naming their person ship, and the delivery is handed no. 1 through email', async () => {
+    await turnEmailOn();
 
     const messageId = await trackerSendsCharlotte();
 
@@ -188,7 +189,7 @@ describe('a person woken by email (wake a person, S4)', () => {
   });
 
   it('gets one email per window: what arrives inside it waits for the next, and is handed then', async () => {
-    await turnEmail(true);
+    await turnEmailOn();
     const first = await trackerSendsCharlotte();
     await expect.poll(async () => handOvers(first), { timeout: SEEN_WITHIN_MS }).toEqual(['email']);
 
@@ -202,7 +203,7 @@ describe('a person woken by email (wake a person, S4)', () => {
 
   it('hands nothing when pagasae refuses the wake', async () => {
     pagasae.answerWakes(503);
-    await turnEmail(true);
+    await turnEmailOn();
 
     const messageId = await trackerSendsCharlotte();
 
@@ -215,7 +216,7 @@ describe('a person woken by email (wake a person, S4)', () => {
 
     /** Ten deliveries handed through email and never acknowledged: the most one push receive returns. */
     async function holdTen(): Promise<void> {
-      await turnEmail(true);
+      await turnEmailOn();
       const held = await Promise.all(Array.from({ length: HELD }, () => trackerSendsCharlotte()));
       for (const messageId of held) {
         await expect.poll(async () => handOvers(messageId), { timeout: SEEN_WITHIN_MS + WINDOW_MS }).toEqual(['email']);

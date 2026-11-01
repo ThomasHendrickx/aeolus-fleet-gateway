@@ -5,7 +5,8 @@ import type { BasketEntries, BasketEntry } from '../../src/core/people/basket.js
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { ItemOutcome, ItemOutcomes } from '../../src/core/people/item-outcome.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
-import type { AccountDoor, EmailChannels, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
+import type { Route, Routes } from '../../src/core/people/routing.js';
+import type { AccountDoor, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -357,24 +358,6 @@ export function memoryInboxChanges(): InboxChanges & { told: InboxChange[] } {
   };
 }
 
-/** The email channels people turned on, in memory, by fleet and person ship. */
-export function memoryEmailChannels(): EmailChannels & { turnedOn: Map<string, Date> } {
-  const turnedOn = new Map<string, Date>();
-  const key = ({ fleetId, shipId }: { fleetId: string; shipId: string }) => `${fleetId}/${shipId}`;
-  return {
-    turnedOn,
-    isOn: (ship) => Promise.resolve(turnedOn.has(key(ship))),
-    turn: (ship, { isOn, at }) => {
-      if (isOn) {
-        turnedOn.set(key(ship), turnedOn.get(key(ship)) ?? at);
-      } else {
-        turnedOn.delete(key(ship));
-      }
-      return Promise.resolve();
-    },
-  };
-}
-
 /** The person's pages in focus, in memory: each by its id, with when it was last seen in focus. */
 export function memoryFocusedPages(): FocusedPages & { held: FocusedPage[] } {
   const held: FocusedPage[] = [];
@@ -457,3 +440,16 @@ export function fakeWebPush() {
   return { webPush, sent, answers };
 }
 
+
+/** The routes people chose, in memory, one per fleet, person ship, job and place. */
+export function memoryRoutes(held: Route[] = []): Routes & { held: Route[] } {
+  return {
+    held,
+    list: ({ fleetId, shipId }) => Promise.resolve(held.filter((route) => route.fleetId === fleetId && route.shipId === shipId)),
+    save: (route) => {
+      const index = held.findIndex((each) => each.fleetId === route.fleetId && each.shipId === route.shipId && each.job === route.job && each.place === route.place);
+      held.splice(index < 0 ? held.length : index, index < 0 ? 0 : 1, route);
+      return Promise.resolve();
+    },
+  };
+}

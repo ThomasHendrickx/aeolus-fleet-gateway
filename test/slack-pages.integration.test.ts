@@ -4,6 +4,7 @@ import { FLEET_HEADER, idSchema, type FleetId } from '@aeolus-fleet/common';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
+import { createPrismaRoutes } from '../src/adapters/prisma/routes.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { commission, register, signIn } from './support/argo.js';
 import { charlotteIn, PAGASAE_APP_CLIENT, PAGASAE_CLIENT, startFakePagasae, type FakePagasae } from './support/fake-pagasae.js';
@@ -231,7 +232,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     return done.headers.get('location') ?? '';
   }
 
-  async function bridgeSettings(signIn: string, path = `/bridge/settings?fleet=${fleetId}`): Promise<string> {
+  async function whereThingsShow(signIn: string, path = `/bridge/settings/routing?fleet=${fleetId}`): Promise<string> {
     return textOf(await (await fetch(`${address}${path}`, { headers: pageHeaders(signIn) })).text());
   }
 
@@ -269,6 +270,8 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     for (const ship of [charlotteShip, joris]) {
       await prisma.personCrew.create({ data: { fleetId, shipId: ship.shipId, crewToken: await register(fleet, ship), crewedAt: new Date() } });
     }
+    // Charlotte turned Slack on for decide before anything was sent, so her bot's questions show there (Bridge, section 8).
+    await createPrismaRoutes(prisma).save({ fleetId, shipId: charlotteShip.shipId, job: 'decide', place: 'slack', isOn: true, changedAt: new Date() });
     pagasae.sharedSignIn(JORIS_SIGN_IN, { ...charlotteIn(pagasae, fleetId), sub: 'acc-joris', person_ship: joris.shipId });
     const releaseNotes = await commission(fleet, { cookie: argoCookie, ship: { name: 'release-notes-s7', type: 'agent' } });
     const admin = await register(fleet, await commission(fleet, { cookie: argoCookie, ship: { name: 'slack-admin-s7', type: 'agent', scopes: ['fleet:read', 'fleet:manage', 'gateway:slack'] } }));
@@ -283,21 +286,21 @@ describe('linking a Slack account (gateway scopes S7)', () => {
   it('links a Slack account from Bridge, refuses a second link of it naming the first, and unlinks', async () => {
     slack.signInAs({ userId: 'U0CHARLOTTE', name: 'charlotte.d' });
 
-    const unlinked = await bridgeSettings(HOLDER_SIGN_IN);
+    const unlinked = await whereThingsShow(HOLDER_SIGN_IN);
     const charlottes = await linked(HOLDER_SIGN_IN);
-    const linkedPage = await bridgeSettings(HOLDER_SIGN_IN, charlottes);
+    const linkedPage = await whereThingsShow(HOLDER_SIGN_IN, charlottes);
     const joris = await linked(JORIS_SIGN_IN);
-    const refusedPage = await bridgeSettings(JORIS_SIGN_IN, joris);
+    const refusedPage = await whereThingsShow(JORIS_SIGN_IN, joris);
 
     expect(unlinked).toContain('Not linked in Acme');
-    expect(charlottes).toBe(`/bridge/settings?fleet=${fleetId}&slack=linked`);
+    expect(charlottes).toBe(`/bridge/settings/routing?fleet=${fleetId}&slack=linked`);
     expect(['Slack linked as @charlotte.d in Acme', "Your Slack account is linked: message the fleet's bots in Slack"].map((text) => linkedPage.includes(text) || text)).toEqual([true, true]);
-    expect(joris).toBe(`/bridge/settings?fleet=${fleetId}&slack=slack-user-linked&name=charlotte`);
+    expect(joris).toBe(`/bridge/settings/routing?fleet=${fleetId}&slack=slack-user-linked&name=charlotte`);
     expect(refusedPage).toContain('This Slack account is linked to charlotte in this fleet already');
 
     const unlink = await fetch(`${address}/trpc/slack.unlink`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: `aeolus_account_session=${HOLDER_SIGN_IN}`, [FLEET_HEADER]: fleetId }, body: '{}' });
     expect(unlink.status).toBe(200);
-    expect(await bridgeSettings(HOLDER_SIGN_IN)).toContain('Not linked in Acme');
+    expect(await whereThingsShow(HOLDER_SIGN_IN)).toContain('Not linked in Acme');
   }, 60_000);
 
   it("refuses a link started by one account and followed in another's browser, linking neither", async () => {
@@ -305,8 +308,8 @@ describe('linking a Slack account (gateway scopes S7)', () => {
 
     const followed = await linked(HOLDER_SIGN_IN, JORIS_SIGN_IN);
 
-    expect(followed).toBe('/bridge/settings?slack=refused');
-    expect([await bridgeSettings(HOLDER_SIGN_IN), await bridgeSettings(JORIS_SIGN_IN)].map((page) => page.includes('Not linked in Acme'))).toEqual([true, true]);
+    expect(followed).toBe('/bridge/settings/routing?slack=refused');
+    expect([await whereThingsShow(HOLDER_SIGN_IN), await whereThingsShow(JORIS_SIGN_IN)].map((page) => page.includes('Not linked in Acme'))).toEqual([true, true]);
   }, 60_000);
 
   it("answers an unlinked person's message to a bot only they see, with a button to link, and the message never reaches the fleet", async () => {
@@ -347,9 +350,9 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     return z.object({ messageId: z.string() }).parse(await sent.json()).messageId;
   }
 
-  /** Waits until the gateway kept this many of the bot's posts to charlotte with their Slack message and acknowledged: Slack has the post before the gateway keeps its message, and a press or a reply before then finds no post. */
+  /** Waits until the gateway kept this many of the bot's posts to charlotte with their Slack message: Slack has the post before the gateway keeps its message, and a press or a reply before then finds no post. */
   async function waitForKeptPosts(count: number): Promise<void> {
-    await expect.poll(() => prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'U0CHARLOTTE', ts: { not: null }, ackedAt: { not: null } } }), { timeout: 30_000 }).toBe(count);
+    await expect.poll(() => prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'U0CHARLOTTE', ts: { not: null } } }), { timeout: 30_000 }).toBe(count);
   }
 
   /** Charlotte presses an option's button under a question release-notes-s7 asked, as Slack sends it: the button's block names the question's fleet message. */
@@ -370,7 +373,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     return deliveries.map(({ contentType, payload, inReplyTo }) => ({ contentType, payload, inReplyTo: inReplyTo ?? null }));
   }
 
-  it("shows a bot ship's message to a linked person in that bot's direct messages once, acknowledged, and their answers by button and in the thread reach the ship (gateway scopes S9)", async () => {
+  it("shows a bot ship's message to a linked person in that bot's direct messages once, handed, and their answers by button and in the thread reach the ship (gateway scopes S9)", async () => {
     await releaseNotesReceives();
     const posted = slack.posted.length;
     const kept = await prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'U0CHARLOTTE' } });

@@ -140,7 +140,7 @@ describe("a person's message to a bot, from Slack", () => {
   it('keeps an answer in the thread under a posted delivery in reply to its message, to its sender, to hand it then', async () => {
     await links.add(aSlackLink());
     await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
-    await posts.save({ fleetId: FLEET_ID, personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', appId: 'A01', channel: 'D0MATHILDE', ts: '1730020000.000001', threadTs: null, isLinkOnly: false, ackedAt: NOW });
+    await posts.save({ fleetId: FLEET_ID, personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', appId: 'A01', channel: 'D0MATHILDE', ts: '1730020000.000001', threadTs: null });
 
     await takeEvent({ type: 'message', appId: 'A01', fields: { ...MATHILDE_WRITES, text: 'Cut the travel', threadTs: '1730020000.000001' } });
 
@@ -150,7 +150,7 @@ describe("a person's message to a bot, from Slack", () => {
   it("keeps an answer in a thread through the gateway's own bot while a delivery in that conversation waits for Slack, to match it once sent", async () => {
     await links.add(aSlackLink());
     await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
-    await posts.save({ fleetId: FLEET_ID, personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null });
+    await posts.save({ fleetId: FLEET_ID, personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null });
 
     const taken = await takeEvent({ type: 'message', appId: 'A01', fields: { ...MATHILDE_WRITES, text: 'Cut the travel', threadTs: '1730020000.000001' } });
 
@@ -163,7 +163,7 @@ describe("a person's message to a bot, from Slack", () => {
   it("keeps an answer in a thread through the gateway's own bot in reply to its delivery when Slack answered the post between the gateway's reads", async () => {
     await links.add(aSlackLink());
     await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
-    const question = { fleetId: FLEET_ID, personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null } as const;
+    const question = { fleetId: FLEET_ID, personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9bdg', appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null } as const;
     await posts.save(question);
     posts = savingAfterFirstRead(posts, { ...question, ts: '1730020000.000001' });
 
