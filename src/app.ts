@@ -209,6 +209,7 @@ import { createWebPushChannel } from './core/people/web-push-channel.js';
 import { createTurnOffWebPush } from './core/people/turn-off-web-push.js';
 import { createTurnOnWebPush } from './core/people/turn-on-web-push.js';
 import { createPrismaItemOutcomes } from './adapters/prisma/item-outcomes.js';
+import { createPrismaBasketEntries } from './adapters/prisma/basket-entries.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
@@ -749,11 +750,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     };
     const opened = createPrismaOpenedDeliveries(prisma);
     const outcomes = createPrismaItemOutcomes(prisma);
+    const entries = createPrismaBasketEntries(prisma);
     const changes = inboxChanges;
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
       readInbox: createReadInbox({ ...asCrew, opened }),
-      readBridgeHome: createReadBridgeHome({ ...asCrew, opened }),
+      readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries }),
       readRecord: createReadRecord({ ...asCrew, outcomes }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes, outcomes, clock }),
