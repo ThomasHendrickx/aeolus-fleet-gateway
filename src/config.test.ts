@@ -57,6 +57,7 @@ describe('the gateway configuration from the environment', () => {
       pagasaeApp: undefined,
       slackApiUrl: 'https://slack.com/api',
       openAiAppsChallenge: undefined,
+      routingOnByDefault: loadConfig({ DATABASE_URL, GATEWAY_SECRET, FLEET_URL: 'https://fleet.example' }).routingOnByDefault,
     });
   });
 
