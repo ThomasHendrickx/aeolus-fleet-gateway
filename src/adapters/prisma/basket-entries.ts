@@ -45,7 +45,6 @@ export function createPrismaBasketEntries(db: Db): BasketEntries {
       const rows = await db.basketEntry.findMany({ where: { fleetId, shipId }, orderBy: [{ addedAt: 'asc' }, { questionId: 'asc' }] });
       return rows.map(entryOf);
     },
-    count: (fleetId, shipId) => db.basketEntry.count({ where: { fleetId, shipId, state: { not: 'sent' } } }),
     remove: async (fleetId, { shipId, questionId }) => {
       await db.basketEntry.deleteMany({ where: { fleetId, shipId, questionId } });
     },

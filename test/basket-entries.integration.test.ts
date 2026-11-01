@@ -80,7 +80,7 @@ describe('the basket in Postgres', () => {
     await expect(entries.list(FLEET, shipId)).resolves.toEqual([anEntry({ shipId, option: null, optionLabel: null, note: 'Neither: ask me after the demo.' })]);
   });
 
-  it("lists a person ship's entries in the order added, and counts them, none of another ship or fleet", async () => {
+  it("lists a person ship's entries in the order added, none of another ship or fleet", async () => {
     const entries = createPrismaBasketEntries(prisma);
     const shipId: ShipId = 'shp_01m3tb1zgr5h2ffee12xnch8p3';
     const later = anEntry({ shipId, questionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', addedAt: new Date('2026-10-31T19:55:00.000Z') });
@@ -90,12 +90,10 @@ describe('the basket in Postgres', () => {
     await entries.save(anEntry({ shipId: 'shp_01m3tb1zgr5h2ffee12xnch8p4' }));
     await entries.save(anEntry({ fleetId: OTHER_FLEET, shipId }));
 
-    const [listed, counted] = await Promise.all([entries.list(FLEET, shipId), entries.count(FLEET, shipId)]);
-
-    expect({ listed, counted }).toEqual({ listed: [earlier, later], counted: 2 });
+    await expect(entries.list(FLEET, shipId)).resolves.toEqual([earlier, later]);
   });
 
-  it('keeps an entry sent with when the fleet stored it, and one the fleet did not answer, counting only those not sent', async () => {
+  it('keeps an entry sent with when the fleet stored it, and one the fleet did not answer', async () => {
     const entries = createPrismaBasketEntries(prisma);
     const shipId: ShipId = 'shp_01m3tb1zgr5h2ffee12xnch8p8';
     const sent = anEntry({ shipId, state: 'sent', storedAt: new Date('2026-10-31T20:16:00.000Z') });
@@ -103,9 +101,7 @@ describe('the basket in Postgres', () => {
     await entries.save(sent);
     await entries.save(unanswered);
 
-    const [listed, counted] = await Promise.all([entries.list(FLEET, shipId), entries.count(FLEET, shipId)]);
-
-    expect({ listed, counted }).toEqual({ listed: [sent, unanswered], counted: 1 });
+    await expect(entries.list(FLEET, shipId)).resolves.toEqual([sent, unanswered]);
   });
 
   it('removes an entry, and only that one', async () => {

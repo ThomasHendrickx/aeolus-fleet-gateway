@@ -1,7 +1,7 @@
 import type { DeliveryId } from '@aeolus-fleet/common';
 
 import { ok, type Result } from '../shared/result.js';
-import { askingOfEntry, isCounted, standingOf, type BasketEntries, type BasketEntry, type BasketStanding } from './basket.js';
+import { askingOfEntry, basketCountOf, standingOf, type BasketEntries, type BasketEntry, type BasketStanding } from './basket.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import type { ItemOutcomes } from './item-outcome.js';
 import type { PersonCaller, PersonCrewError, PersonCrewToken } from './person-crew.js';
@@ -25,7 +25,7 @@ export interface BasketItem {
 
 /** The basket: its entries in the order added, how many will be sent, and how many answers Send would send now. */
 export interface BasketView {
-  /** Entries waiting, sending, or refused until removed: what the basket's heading counts. */
+  /** What is or will be sent, as the basket's heading counts it. */
   readonly count: number;
   readonly toSend: number;
   readonly entries: BasketItem[];
@@ -98,6 +98,6 @@ export function createReadBasket(deps: BasketDeps): ReadBasket {
       note: entry.note,
       standing,
     }));
-    return ok({ count: entries.filter(({ standing }) => isCounted(standing)).length, toSend: entries.filter(({ standing }) => standing.kind === 'waiting').length, entries });
+    return ok({ count: basketCountOf(entries.map(({ standing }) => standing)), toSend: entries.filter(({ standing }) => standing.kind === 'waiting').length, entries });
   };
 }

@@ -52,8 +52,6 @@ export interface BasketEntries {
   find(fleetId: FleetId, asked: { shipId: ShipId; questionId: string }): Promise<BasketEntry | undefined>;
   /** The person ship's, in the order added. */
   list(fleetId: FleetId, shipId: ShipId): Promise<BasketEntry[]>;
-  /** How many entries the person ship's basket holds, the sent ones not counted. */
-  count(fleetId: FleetId, shipId: ShipId): Promise<number>;
   remove(fleetId: FleetId, removed: { shipId: ShipId; questionId: string }): Promise<void>;
   /** The person ships with an entry stored as sending, of every fleet, by fleet and ship, after the one given. */
   sendingShips(page: { after: { fleetId: FleetId; shipId: ShipId } | null; limit: number }): Promise<{ fleetId: FleetId; shipId: ShipId }[]>;
@@ -111,19 +109,16 @@ export function standingOf(entry: BasketEntry, known: { outcome: ItemOutcome | u
   }
 }
 
-/** Whether an entry counts as what will be sent: waiting, sending, or refused until removed; not one sent, nor one withdrawn, replaced or answered elsewhere. */
-export function isCounted(standing: BasketStanding): boolean {
-  switch (standing.kind) {
-    case 'waiting':
-    case 'sending':
-    case 'refused':
-      return true;
-    case 'sent':
-    case 'withdrawn':
-    case 'replaced':
-    case 'dealtElsewhere':
-      return false;
-  }
+/**
+ * How many answers the basket counts (the basket mockup, basket-3 to
+ * basket-7): what is or will be sent by the send, the entries waiting and
+ * sending, and the ones sent while any is still sending; never one the
+ * fleet refused, nor one withdrawn, replaced or answered elsewhere. Once
+ * none is sending, the sent ones are out of the count.
+ */
+export function basketCountOf(standings: readonly BasketStanding[]): number {
+  const isSending = standings.some(({ kind }) => kind === 'sending');
+  return standings.filter(({ kind }) => kind === 'waiting' || kind === 'sending' || (kind === 'sent' && isSending)).length;
 }
 
 /** The question an entry answers, as a withdrawal or a replacement names it. */
