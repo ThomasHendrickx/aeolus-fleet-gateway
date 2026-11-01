@@ -96,7 +96,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
         onNoteChange={setNote}
         onAnswer={(option) => { settle({ control: option === undefined ? { kind: 'note' } : { kind: 'option', option }, action: () => answerDelivery({ fleet: fleetId, deliveryId: delivery.deliveryId, input: { questionId: delivery.question?.id, option, note } }), said: `Your answer went to ${delivery.from}.` }); }
         }
-        onPut={(option) => { settle({ control: { kind: 'option', option }, action: () => putInBasket({ fleet: fleetId, deliveryId: delivery.deliveryId, option, note }), said: `Option ${String(option)} is in the basket, not sent: ${delivery.from} receives it when you send the basket.` }); }}
+        onPut={(option) => { settle({ control: option === null ? { kind: 'note' } : { kind: 'option', option }, action: () => putInBasket({ fleet: fleetId, deliveryId: delivery.deliveryId, option, note }), said: `${option === null ? 'Your note alone' : `Option ${String(option)}`} is in the basket, not sent: ${delivery.from} receives it when you send the basket.` }); }}
         onRemove={() => {
           if (questionId !== undefined) {
             settle({ control: { kind: 'remove' }, action: () => removeFromBasket(fleetId, questionId), said: `Your answer to “${delivery.title}” is out of the basket; the question still waits on you.` });

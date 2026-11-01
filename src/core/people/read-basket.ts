@@ -16,7 +16,8 @@ export interface BasketItem {
   readonly from: string;
   readonly title: string;
   readonly sentAt: string;
-  readonly option: number;
+  /** None for a note alone. */
+  readonly option: number | null;
   readonly note: string | null;
   readonly standing: BasketStanding;
 }

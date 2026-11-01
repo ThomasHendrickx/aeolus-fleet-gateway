@@ -28,7 +28,8 @@ export interface BasketEntry {
   readonly title: string;
   /** When the question was asked. */
   readonly sentAt: Date;
-  readonly option: number;
+  /** The option picked; none for a note alone (decision 0038). */
+  readonly option: number | null;
   /** The note that goes with the answer; none when the person wrote none. */
   readonly note: string | null;
   /** When it was put in the basket: entries are sent in this order, and changing one keeps its place. */
@@ -100,9 +101,9 @@ export function standingOf(entry: BasketEntry, known: { outcome: ItemOutcome | u
   }
 }
 
-/** The answer an entry sends (decision 0038): its question's uuid, its option, and its note if any. */
-export function answerOf(entry: Pick<BasketEntry, 'questionId' | 'option' | 'note'>): { questionId: string; option: number; note?: string } {
-  return { questionId: entry.questionId, option: entry.option, ...(entry.note === null ? {} : { note: entry.note }) };
+/** The answer an entry sends (decision 0038): its question's uuid, its option if any, and its note if any. */
+export function answerOf(entry: Pick<BasketEntry, 'questionId' | 'option' | 'note'>): { questionId: string; option?: number; note?: string } {
+  return { questionId: entry.questionId, ...(entry.option === null ? {} : { option: entry.option }), ...(entry.note === null ? {} : { note: entry.note }) };
 }
 
 /** The key an entry's answer is sent under: the question's, so it is stored once however often it is sent (section 9). */

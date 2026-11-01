@@ -10,19 +10,19 @@ import { openedOf, type DealtError } from './opened-of.js';
 import type { PersonCaller } from './person-crew.js';
 import type { InboxChanges, OpenedDeliveries } from './ports.js';
 
-/** What the basket holds for a question once put: its option and its note, none when the person wrote none. */
+/** What the basket holds for a question once put: its option, none for a note alone, and its note, none when the person wrote none. */
 export interface PutEntry {
   readonly questionId: string;
-  readonly option: number;
+  readonly option: number | null;
   readonly note: string | null;
 }
 
-export type PutInBasket = (input: { caller: PersonCaller; deliveryId: string; option: number; note: string }) => Promise<Result<PutEntry, DealtError | DomainError<'NOT_A_QUESTION' | 'INVALID_ARGUMENTS' | 'CONFLICT'>>>;
+export type PutInBasket = (input: { caller: PersonCaller; deliveryId: string; option: number | null; note: string }) => Promise<Result<PutEntry, DealtError | DomainError<'NOT_A_QUESTION' | 'INVALID_ARGUMENTS' | 'CONFLICT'>>>;
 
 /**
  * Use case: a person puts their answer to a question they opened in Bridge
  * into the basket (section 9, rule 1): its option and a note if they wrote
- * one. Nothing is sent; the question still waits on them. One entry per
+ * one, or a note alone. Nothing is sent; the question still waits on them. One entry per
  * question: picking again changes it, in its place in the order added. An
  * entry being sent goes as stored, and one the fleet refused is removed,
  * not sent again, so neither changes. A question answered elsewhere first
@@ -43,7 +43,7 @@ export function createPutInBasket(deps: { crewPersonShip: CrewPersonShip; opened
     const written = note.trim();
     const entry = { questionId, option, note: written === '' ? null : written };
     if (!answerSchema.safeParse(answerOf(entry)).success) {
-      return refuse('INVALID_ARGUMENTS', 'Pick one of the options, numbered from 1');
+      return refuse('INVALID_ARGUMENTS', 'Pick one of the options, numbered from 1, or write a note');
     }
     const kept = await deps.entries.find(caller.fleetId, { shipId: question.shipId, questionId });
     if (kept?.state === 'sending') {

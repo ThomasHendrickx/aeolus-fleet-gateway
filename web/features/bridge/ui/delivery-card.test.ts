@@ -25,7 +25,7 @@ function aQuestion(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, step: undefined, meetingId: undefined, stale: null, ...overrides };
 }
 
-function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number; note: string | null } | null; note?: string } = {}): string {
+function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string } = {}): string {
   const { inBasket = null, note = '' } = shown;
   const noop = () => undefined;
   return renderToStaticMarkup(
@@ -61,7 +61,7 @@ describe('a question opened in Bridge (CC11)', () => {
       put: markup.includes('>Put option 2 in the basket<'),
       said: markup.includes('Nothing is sent yet. orchestrator-1 receives this answer when you send the basket.'),
       sendsAtOnce: markup.includes('Send option') || markup.includes('Send the note alone'),
-    }).toEqual({ choices: 2, picked: true, theirPick: true, put: true, said: true, sendsAtOnce: false });
+    }).toEqual({ choices: 3, picked: true, theirPick: true, put: true, said: true, sendsAtOnce: false });
   });
 
   it('says a question whose answer is in the basket is in it, not sent, with its note, its option picked, the basket and Remove beside it', () => {
@@ -74,6 +74,30 @@ describe('a question opened in Bridge (CC11)', () => {
       basket: markup.includes('href="/bridge/basket?fleet=flt_01"'),
       remove: markup.includes('data-testid="bridge-basket-remove"'),
     }).toEqual({ inBasket: true, note: true, picked: true, basket: true, remove: true });
+  });
+
+  it('offers No option, only the note, among the options, for an answer with the note alone', () => {
+    const markup = render(aQuestion());
+
+    expect({ choices: (markup.match(/type="radio"/g) ?? []).length, noteAlone: markup.includes('No option, only the note'), secondButton: markup.includes('data-testid="bridge-put-note-alone"') }).toEqual({ choices: 3, noteAlone: true, secondButton: false });
+  });
+
+  it('opens a question whose note alone is in the basket with No option, only the note chosen, its button putting the note alone', () => {
+    const markup = render(aQuestion(), { inBasket: { option: null, note: 'Neither: ask me after the demo.' }, note: 'Neither: ask me after the demo.' });
+
+    expect({ chosen: markup.includes('checked="" value=""'), put: markup.includes('>Put the note alone in the basket<') }).toEqual({ chosen: true, put: true });
+  });
+
+  it('puts no note alone while the note is empty', () => {
+    const markup = render(aQuestion(), { inBasket: { option: null, note: 'Neither: ask me after the demo.' }, note: '' });
+
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Put the note alone in the basket</);
+  });
+
+  it('says a question whose note alone is in the basket is in it, not sent, with its note', () => {
+    const markup = render(aQuestion(), { inBasket: { option: null, note: 'Neither: ask me after the demo.' } });
+
+    expect({ inBasket: markup.includes('In the basket: the note alone, not sent'), note: markup.includes('“Neither: ask me after the demo.”') }).toEqual({ inBasket: true, note: true });
   });
 
   it('shows a withdrawn question stale: nothing to choose or send', () => {

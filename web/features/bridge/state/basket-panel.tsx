@@ -28,7 +28,7 @@ function BasketEntryRow({ entry, opening, working, onRemove }: { entry: BasketIt
       <span className="text-caption text-muted-foreground">
         to {entry.from} · asked at <time dateTime={entry.sentAt}>{askedAtOf(entry.sentAt)}</time>
       </span>
-      <span>Option {entry.option}</span>
+      <span>{entry.option === null ? 'Note alone' : `Option ${String(entry.option)}`}</span>
       {entry.note === null ? null : <span className="text-caption">“{entry.note}”</span>}
       {said === undefined ? null : <span data-testid="bridge-basket-standing" className="text-caption">{said}</span>}
       {opening.failure?.deliveryId === entry.deliveryId ? <Notice message={opening.failure.message} isFailure /> : null}

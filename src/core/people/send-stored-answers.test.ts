@@ -115,6 +115,16 @@ describe('the gateway sends the answers stored as sending', () => {
     expect(changes.told).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }]);
   });
 
+  it('sends an entry with only a note as an answer with the note and no option, kept answered in Bridge with no option', async () => {
+    const noteAlone = aBasketEntry({ option: null, note: 'Neither: ask me after the demo.', state: 'sending' });
+    await store(noteAlone);
+
+    await aSender()();
+
+    expect(ship.replies).toEqual([{ to: noteAlone.senderShipId, inReplyTo: noteAlone.messageId, contentType: ANSWER, payload: JSON.stringify({ questionId: noteAlone.questionId, note: 'Neither: ask me after the demo.' }), idempotencyKey: `answer-${noteAlone.questionId}` }]);
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: noteAlone.deliveryId, place: 'bridge', kind: 'answered', option: null, at: AT }]);
+  });
+
   it('sends no entry waiting for Send: no clock sends the basket', async () => {
     await store(aBasketEntry({ state: 'waiting' }));
 

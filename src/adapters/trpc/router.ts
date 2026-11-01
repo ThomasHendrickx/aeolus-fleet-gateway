@@ -1249,7 +1249,7 @@ export const gatewayRouter = t.router({
     basketCount: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.countBasket(ctx.caller))),
     /** Puts their answer to a question they opened in the basket, or changes it there; nothing is sent. */
     putInBasket: personProcedure
-      .input(z.strictObject({ deliveryId: z.string().min(1), option: z.int().min(1), note: payloadSchema }))
+      .input(z.strictObject({ deliveryId: z.string().min(1), option: z.int().min(1).nullable(), note: payloadSchema }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.putInBasket({ caller: ctx.caller, ...input }))),
     /** Takes an entry out of the basket. */
     removeFromBasket: personProcedure.input(z.strictObject({ questionId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.removeFromBasket({ caller: ctx.caller, ...input }))),

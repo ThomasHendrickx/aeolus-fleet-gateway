@@ -79,6 +79,20 @@ describe('a person puts an answer to a question in the basket', () => {
     expect([...entries.held.values()]).toEqual([anEntry()]);
   });
 
+  it('keeps a note with no option as an entry of the question, answering it with the note alone', async () => {
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: null, note: 'Neither: ask me after the demo.' });
+
+    expect(put).toEqual({ isOk: true, value: { questionId: QUESTION_ID, option: null, note: 'Neither: ask me after the demo.' } });
+    expect([...entries.held.values()]).toEqual([anEntry({ option: null, note: 'Neither: ask me after the demo.' })]);
+  });
+
+  it('refuses an entry with neither an option nor a note, as it answers nothing', async () => {
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: null, note: '   ' });
+
+    expect(put).toMatchObject({ isOk: false, error: { kind: 'INVALID_ARGUMENTS' } });
+    expect(entries.held.size).toBe(0);
+  });
+
   it('puts nothing in the basket for a question answered in Slack first, saying where: a later press in Bridge sends nothing', async () => {
     await outcomes.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: OPENED.deliveryId, place: 'slack', kind: 'answered', option: 2, at: AT });
 
