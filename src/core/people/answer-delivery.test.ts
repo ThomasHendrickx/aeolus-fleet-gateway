@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
-import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { createAnswerDelivery } from './answer-delivery.js';
 import { createDoneDelivery } from './done-delivery.js';
 import { createOpenDelivery } from './open-delivery.js';
 import { createReadInbox } from './read-inbox.js';
+import { routingDefaultsOf } from './routing.js';
 import type { OpenedDelivery } from './ports.js';
 
 // A person deals with a delivery they opened, from their MCP client: they
@@ -159,7 +160,7 @@ describe('a delivery the person dealt with', () => {
     const asCrew = { crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened };
     await deal();
 
-    const read = await createReadInbox(asCrew)(CALLER);
+    const read = await createReadInbox({ ...asCrew, routes: memoryRoutes(), defaults: routingDefaultsOf([{ job: 'everything-else', place: 'chat' }]) })(CALLER);
     const reopened = await createOpenDelivery({ ...asCrew, changes, outcomes, clock: { now: () => AT } })({ caller: CALLER, deliveryId: OPENED.deliveryId, place: 'chat' });
 
     expect({ listed: read.isOk && read.value.opened, reopened }).toMatchObject({ listed: [], reopened: { isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } } });

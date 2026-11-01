@@ -784,7 +784,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     const changes = inboxChanges;
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
-      readInbox: createReadInbox({ ...asCrew, opened }),
+      readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults }),
       readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries }),
       readRecord: createReadRecord({ ...asCrew, outcomes }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),

@@ -22,7 +22,8 @@ beforeEach(() => {
 /** A chat on for every job, as the gateway's defaults have it (Bridge, CC19). */
 const CHAT_ON = routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' as const })));
 
-function readInbox(deliveries: PersonDelivery[], crewToken = 'aeolus_ct_v1_charlotte', routes: Route[] = []) {
+function readInbox(deliveries: PersonDelivery[], options: { crewToken?: string; routes?: Route[] } = {}) {
+  const { crewToken = 'aeolus_ct_v1_charlotte', routes = [] } = options;
   const ship = fakePersonShipDoor({ crewToken, deliveries });
   return { ...ship, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, routes: memoryRoutes(routes), defaults: CHAT_ON }) };
 }
@@ -146,7 +147,7 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
   });
 
   it('says the fleet did not answer when it refuses the person ship even crewed again', async () => {
-    await expect(readInbox([], 'aeolus_ct_v1_other').readInbox(CHARLOTTE_GRANT)).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
+    await expect(readInbox([], { crewToken: 'aeolus_ct_v1_other' }).readInbox(CHARLOTTE_GRANT)).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
   });
 });
 
@@ -154,7 +155,7 @@ describe('a chat lists only the jobs on for it (Bridge, section 8)', () => {
   const PLAIN = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', contentType: 'text/plain', payload: 'Release 1.4 is out', headline: null, askedQuestionId: null });
 
   it('leaves out what waits of a job a chat is off for, counting only what it lists', async () => {
-    const read = await readInbox([aPersonDelivery(), PLAIN], undefined, [aChatRoute({ job: 'decide' })]).readInbox(CHARLOTTE_GRANT);
+    const read = await readInbox([aPersonDelivery(), PLAIN], { routes: [aChatRoute({ job: 'decide' })] }).readInbox(CHARLOTTE_GRANT);
 
     expect(read.isOk && { waiting: read.value.waiting, listed: read.value.deliveries.map(({ deliveryId }) => deliveryId) }).toEqual({ waiting: 1, listed: [PLAIN.deliveryId] });
   });
@@ -162,13 +163,13 @@ describe('a chat lists only the jobs on for it (Bridge, section 8)', () => {
   it('leaves out what was opened of a job a chat is off for', async () => {
     await opened.save(OPENED);
 
-    const read = await readInbox([], undefined, [aChatRoute({ job: 'everything-else' })]).readInbox(CHARLOTTE_GRANT);
+    const read = await readInbox([], { routes: [aChatRoute({ job: 'everything-else' })] }).readInbox(CHARLOTTE_GRANT);
 
     expect(read.isOk && read.value.opened).toEqual([]);
   });
 
   it('lists every item of a job not done once a chat is turned on for it, whenever it arrived (CC20)', async () => {
-    const read = await readInbox([aPersonDelivery()], undefined, [aChatRoute({ job: 'decide', isOn: true })]).readInbox(CHARLOTTE_GRANT);
+    const read = await readInbox([aPersonDelivery()], { routes: [aChatRoute({ job: 'decide', isOn: true })] }).readInbox(CHARLOTTE_GRANT);
 
     expect(read.isOk && read.value.deliveries.map(({ deliveryId }) => deliveryId)).toEqual([aPersonDelivery().deliveryId]);
   });
