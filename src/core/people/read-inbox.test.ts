@@ -57,13 +57,13 @@ function manyDeliveries(count: number): PersonDelivery[] {
   });
 }
 
-const OPENED_ENTRY = { deliveryId: OPENED.deliveryId, from: 'tracker', title: 'The build is red', sentAt: '2026-10-19T07:00:00.000Z' };
+const OPENED_ENTRY = { deliveryId: OPENED.deliveryId, from: 'tracker', title: 'The build is red', sentAt: '2026-10-19T07:00:00.000Z', job: 'everything-else', pick: null };
 
 describe("a person reads their person ship's inbox: what waits, by titles only", () => {
   it('lists each waiting delivery by who sent it, when, and its title, never its payload', async () => {
     await expect(readInbox([aPersonDelivery()]).readInbox(CHARLOTTE_GRANT)).resolves.toEqual({
       isOk: true,
-      value: { waiting: 1, deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z' }], opened: [] },
+      value: { waiting: 1, deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', job: 'decide', pick: null }], opened: [] },
     });
   });
 
@@ -139,7 +139,7 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
 
     await expect(readInbox([aPersonDelivery()]).readInbox(CHARLOTTE_GRANT)).resolves.toEqual({
       isOk: true,
-      value: { waiting: 1, deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z' }], opened: [OPENED_ENTRY] },
+      value: { waiting: 1, deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', job: 'decide', pick: null }], opened: [OPENED_ENTRY] },
     });
   });
 
@@ -207,5 +207,48 @@ describe('a chat lists only the jobs on for it (Bridge, section 8)', () => {
     const read = await readInbox([aPersonDelivery()], { routes: [aChatRoute({ job: 'decide', isOn: true })] }).readInbox(CHARLOTTE_GRANT);
 
     expect(read.isOk && read.value.deliveries.map(({ deliveryId }) => deliveryId)).toEqual([aPersonDelivery().deliveryId]);
+  });
+});
+
+const ASKED_QUESTION = {
+  id: '3f0c7a52-6d1e-4b8a-9c2f-5a1d8e7b4c90',
+  title: 'Go for release 1.4?',
+  context: 'All checks are green.',
+  options: [{ key: 1, label: 'Go' }, { key: 2, label: 'Hold' }],
+  pick: { option: 2, why: 'One check is still running.' },
+};
+const ASKED_WITH_PICK = JSON.stringify(ASKED_QUESTION);
+
+describe('a chat lists each item with its job and, for a question, the asker pick, so it can say what waits without opening any', () => {
+  it("gives a question its job decide and the asker's pick with why", async () => {
+    const read = await readInbox([aPersonDelivery({ payload: ASKED_WITH_PICK })]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk && read.value.deliveries.map(({ job, pick }) => ({ job, pick }))).toEqual([{ job: 'decide', pick: { option: 2, why: 'One check is still running.' } }]);
+  });
+
+  it('gives no pick to a question whose payload is no question', async () => {
+    const read = await readInbox([aPersonDelivery({ payload: 'not json' })]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk && read.value.deliveries.map(({ job, pick }) => ({ job, pick }))).toEqual([{ job: 'decide', pick: null }]);
+  });
+
+  it.each([
+    ['application/vnd.aeolus.step+json', 'do'],
+    ['application/vnd.aeolus.alert+json', 'stay-aware'],
+    ['application/vnd.aeolus.notice+json', 'stay-aware'],
+    ['text/plain', 'everything-else'],
+  ])('gives a delivery of %s the job %s and no pick', async (contentType, job) => {
+    const read = await readInbox([aPersonDelivery({ contentType, payload: ASKED_WITH_PICK, headline: null })]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk && read.value.deliveries.map((entry) => ({ job: entry.job, pick: entry.pick }))).toEqual([{ job, pick: null }]);
+  });
+});
+
+describe('a replacement', () => {
+  it("gives the asker's pick of the new question it asks", async () => {
+    const payload = JSON.stringify({ questionId: '7d2e9b14-0c3a-4f5e-8a61-2b9c4d0e1f37', question: ASKED_QUESTION });
+    const read = await readInbox([aPersonDelivery({ contentType: 'application/vnd.aeolus.question-replacement+json', payload })]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk && read.value.deliveries.map(({ job, pick }) => ({ job, pick }))).toEqual([{ job: 'decide', pick: { option: 2, why: 'One check is still running.' } }]);
   });
 });

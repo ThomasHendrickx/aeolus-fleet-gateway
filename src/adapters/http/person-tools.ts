@@ -56,8 +56,9 @@ const INBOX_TOOL = {
   name: 'aeolus_inbox',
   title: 'Read your inbox',
   description: [
-    'Your person ship\'s inbox, by who sent each delivery, when, and its title, without its content, in two groups:',
-    'deliveries, what waits for you, at most 10, with how many wait in all; and opened, what you opened from any client and have not answered or done yet.',
+    'Your person ship\'s inbox, by who sent each delivery, when, its title and its job (decide, do, stay-aware or everything-else), without its content, in two groups:',
+    'deliveries, everything that waits for you, with how many wait; and opened, what you opened from any client and have not answered or done yet.',
+    'A question also gives the asker\'s pick, its option and why, so you can say what waits without opening it.',
   ].join(' '),
   inputSchema: { type: 'object' as const, properties: {} },
   annotations: READS,
