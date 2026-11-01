@@ -40,7 +40,7 @@ describe('the open item’s row, in the list beside it (decide.html, aeolus-flee
   it('marks the open item, on the active tone with a bar at its side, as the current one', () => {
     const row = /<li[^>]*>/.exec(render(true))?.[0] ?? '';
 
-    expect({ current: row.includes('aria-current="true"'), ground: row.includes('bg-tone-active-bg'), bar: row.includes('border-l-primary') }).toEqual({ current: true, ground: true, bar: true });
+    expect({ current: row.includes('aria-current="true"'), ground: row.includes('bg-tone-active-bg'), bar: row.includes('border-l-tone-active-fg') }).toEqual({ current: true, ground: true, bar: true });
   });
 
   it('marks no other row', () => {

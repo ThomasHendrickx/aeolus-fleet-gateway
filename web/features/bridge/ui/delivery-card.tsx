@@ -302,7 +302,7 @@ export function DeliveryCard({
   // Seeing an alert or a notice was all it asked, so it is done (CC16).
   const isDoneOnSeeing = opened.job === 'stay-aware';
   return (
-    <section data-testid="bridge-delivery" className="grid min-w-0 content-start gap-3 p-4 text-card-foreground md:p-5">
+    <section data-testid="bridge-delivery" className="grid min-w-0 content-start gap-3 text-card-foreground md:p-5">
       <ScreenBar opened={opened} isWorking={isWorking} onBack={onBack} />
       <ItemHeading delivery={delivery} opened={opened} timeZone={timeZone} />
       <h2 className="text-heading font-semibold">{stale === null ? (question?.title ?? delivery.title) : <s className="decoration-muted-foreground">{question?.title ?? delivery.title}</s>}</h2>

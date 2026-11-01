@@ -52,7 +52,7 @@ function Places({ places }: { places: readonly Place[] }) {
 /** A row's ground: the open item on the active tone with a bar at its side, a stale one muted. */
 function groundOf({ isOpen, isStale }: { isOpen: boolean; isStale: boolean }): string {
   if (isOpen) {
-    return 'border-l-2 border-l-primary bg-tone-active-bg pl-2.5';
+    return 'border-l-2 border-l-tone-active-fg bg-tone-active-bg pl-2.5';
   }
   return isStale ? 'bg-muted' : '';
 }
