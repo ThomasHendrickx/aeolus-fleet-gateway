@@ -1,4 +1,4 @@
-import type { ShipId } from '@aeolus-fleet/common';
+import type { FleetId, ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
@@ -35,7 +35,7 @@ let fleet: FleetServer;
 let pagasae: FakePagasae;
 let app: GatewayApp;
 let address: string;
-let fleetId: string;
+let fleetId: FleetId;
 let cookie: string;
 let gatewayShip: { shipId: ShipId; secret: string };
 let charlotteShipId: ShipId;
