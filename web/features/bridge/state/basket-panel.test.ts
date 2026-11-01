@@ -39,6 +39,10 @@ describe('the basket open', () => {
     expect(render({ count: 2, toSend: 2, entries: [anEntry(), anEntry({ questionId: 'q2' })] })).toContain('<span data-testid="bridge-basket-count" class="text-primary">2</span>');
   });
 
+  it('heads the basket on a desktop only, as the phone frames draw no heading nor intro (basket-3 to basket-7)', () => {
+    expect(render({ count: 1, toSend: 1, entries: [anEntry()] })).toMatch(/<div class="hidden sm:block"><h1 id="bridge-basket-heading"/);
+  });
+
   it('lists each entry with its question, asker, time asked, answer by number and label, and quoted note, Change and Remove at its top right (basket-3)', () => {
     const markup = render({ count: 2, toSend: 2, entries: [anEntry(), anEntry({ questionId: 'q2', deliveryId: 'dlv_02', from: 'commercial', title: 'Pricing page: a price per ship, or plans only?', option: 1, optionLabel: 'Plans only', note: null })] });
 

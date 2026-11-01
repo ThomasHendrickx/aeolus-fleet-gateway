@@ -78,7 +78,7 @@ describe('the line under each entry', () => {
 
     expect(lines.slice(1)).toEqual([
       { icon: 'unanswered', tone: 'waiting', words: { desktop: 'The fleet did not answer. Sending again with the same key until it is stored; it arrives once.', phone: 'No answer from the fleet. Sending again, same key.' } },
-      { icon: 'refused', tone: 'attention', words: { desktop: 'Not sent: commercial was retired, so it cannot receive an answer. The others were sent.', phone: 'Not sent: commercial was retired, so it cannot receive an answer.' } },
+      { icon: 'refused', tone: 'attention', words: { desktop: 'Not sent: commercial was retired, so it cannot receive an answer. The others were sent.', phone: 'Not sent: commercial was retired.' } },
     ]);
   });
 
@@ -86,6 +86,12 @@ describe('the line under each entry', () => {
     const lines = entryLinesOf(aView([{ ...RETENTION, standing: UNANSWERED }, { ...PRICING, standing: SENDING }], { count: 2, toSend: 0 }));
 
     expect(lines.map((line) => line?.icon)).toEqual(['unanswered', 'sending']);
+  });
+
+  it('says on a phone a refusal without its consequence, and one with none whole', () => {
+    const [line] = entryLinesOf(aView([{ ...PRICING, standing: { kind: 'refused', reason: 'you may not reach commercial' } }], { count: 0, toSend: 0 }));
+
+    expect(line?.words.phone).toBe('Not sent: you may not reach commercial.');
   });
 
   it('leaves out "The others were sent" while none was', () => {
