@@ -792,7 +792,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       readBasket: createReadBasket({ ...asCrew, opened, entries, outcomes }),
       countBasket: createCountBasket({ crewPersonShip: asCrew.crewPersonShip, entries }),
-      putInBasket: createPutInBasket({ crewPersonShip: asCrew.crewPersonShip, opened, entries, changes, clock }),
+      putInBasket: createPutInBasket({ crewPersonShip: asCrew.crewPersonShip, opened, entries, outcomes, changes, clock }),
       removeFromBasket: createRemoveFromBasket({ ...asCrew, opened, entries, outcomes, changes, clock }),
       sendBasket: createSendBasket({ ...asCrew, opened, entries, outcomes, changes, clock, sendNow: () => { basketSends.wake(); } }),
       readWakeChannels: createReadWakeChannels({

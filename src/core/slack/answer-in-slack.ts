@@ -1,6 +1,7 @@
 import { ANSWER_CONTENT_TYPE, questionSchema, type MessageId } from '@aeolus-fleet/common';
 
-import { outcomeTextOf, type ItemOutcomes } from '../people/item-outcome.js';
+import type { ItemOutcomes } from '../people/item-outcome.js';
+import { alreadyTextOf } from '../people/opened-of.js';
 import { answerKeyOf } from '../people/basket.js';
 import { KEY_UNAVAILABLE, SEALED_MESSAGE } from '../people/person-crew.js';
 import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from '../people/ports.js';
@@ -11,11 +12,6 @@ import { isSignedBy, type SignedRequest } from './slack-request.js';
 import { STORED_REACTION } from './send-slack-events.js';
 
 export type AnswerInSlack = (press: SignedRequest & { appId: string; teamId: string; userId: string; channel: string; messageTs: string; messageId: MessageId; option: number }) => Promise<Result<{ kind: 'answered' | 'answeredElsewhere' | 'refused' | 'ignored' }, { kind: 'notSigned' }>>;
-
-/** The words with their first letter small, as they go on in a sentence. */
-function lowerFirst(text: string): string {
-  return text.charAt(0).toLowerCase() + text.slice(1);
-}
 
 /** The question's id in a delivery's payload; none when it is no question. */
 function questionIdOf(payload: string): string | undefined {
@@ -72,7 +68,7 @@ export function createAnswerInSlack(deps: {
     }
     const [earlier] = await deps.outcomes.findMany(app.fleetId, { shipId: post.personShipId, deliveryIds: [post.deliveryId] });
     if (earlier !== undefined) {
-      await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: `Already ${lowerFirst(outcomeTextOf(earlier))}. Nothing is sent.` });
+      await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: alreadyTextOf(earlier) });
       return ok({ kind: 'answeredElsewhere' });
     }
     // The press, the person's own act, acknowledges it (Bridge, CC6); core reads a delivery again only once acknowledged, so a refusal leaves it unread, and the press ignored.

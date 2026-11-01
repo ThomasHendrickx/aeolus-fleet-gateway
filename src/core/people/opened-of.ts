@@ -1,9 +1,11 @@
+import { idSchema } from '@aeolus-fleet/common';
+
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import { asPersonCrew, personCrewOf, withOwnRefusal, type PersonCaller, type PersonCrewError } from './person-crew.js';
-import type { ItemOutcomes, OutcomeKind, Place } from './item-outcome.js';
+import { outcomeTextOf, type ItemOutcome, type ItemOutcomes, type OutcomeKind, type Place } from './item-outcome.js';
 import type { InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
 
 /** What a person dealt with a delivery as: answered, or done with it. */
@@ -12,11 +14,21 @@ export interface Dealt {
   readonly isHandled: true;
 }
 
-export type DealtError = PersonCrewError | DomainError<'NO_SUCH_DELIVERY'>;
+export type DealtError = PersonCrewError | DomainError<'NO_SUCH_DELIVERY' | 'ALREADY_DECIDED'>;
 
-/** A delivery the caller opened on their person ship. */
+/** The words with their first letter small, as they go on in a sentence. */
+function lowerFirst(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+/**
+ * A delivery the caller opened on their person ship, to act on. One whose
+ * job another place ended first, such as a question answered in Slack, is
+ * refused saying where, so nothing is sent twice: one answer per question
+ * (Bridge, section 9). Seen alone ends nothing but a stay-aware item's job.
+ */
 export async function openedOf(
-  deps: { crewPersonShip: CrewPersonShip; opened: OpenedDeliveries },
+  deps: { crewPersonShip: CrewPersonShip; opened: OpenedDeliveries; outcomes: Pick<ItemOutcomes, 'findMany'> },
   asked: { caller: PersonCaller; deliveryId: string },
 ): Promise<Result<OpenedDelivery, DealtError>> {
   const { caller, deliveryId } = asked;
@@ -24,11 +36,21 @@ export async function openedOf(
   if (!crew.isOk) {
     return crew;
   }
+  const named = idSchema('delivery').safeParse(deliveryId);
+  const [earlier] = named.success ? await deps.outcomes.findMany(caller.fleetId, { shipId: crew.value.shipId, deliveryIds: [named.data] }) : [];
+  if (earlier !== undefined && earlier.kind !== 'seen') {
+    return refuse('ALREADY_DECIDED', alreadyTextOf(earlier));
+  }
   const delivery = await deps.opened.find(caller.fleetId, { shipId: crew.value.shipId, deliveryId });
   if (!delivery) {
     return refuse('NO_SUCH_DELIVERY', `You have no opened delivery ${deliveryId}: open it from your inbox first`);
   }
   return ok(delivery);
+}
+
+/** Where and how another place ended an item first, as the person is told when they act on it again: Already answered in Slack: option 2. */
+export function alreadyTextOf(outcome: Pick<ItemOutcome, 'place' | 'kind' | 'option'>): string {
+  return `Already ${lowerFirst(outcomeTextOf(outcome))}. Nothing is sent.`;
 }
 
 /** What the person did with a delivery, and where (Bridge, CC4). */
