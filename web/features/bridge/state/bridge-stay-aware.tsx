@@ -17,7 +17,7 @@ async function StayAwareParts({ api, fleetId }: { api: GatewayApi; fleetId: stri
     case 'none':
       return <StayAwarePanel fleetId={fleetId} stayAware={[]} />;
     case 'unreadable':
-      return <RecordUnreadable message={read.message} />;
+      return <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} />;
   }
 }
 

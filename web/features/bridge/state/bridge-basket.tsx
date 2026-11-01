@@ -17,7 +17,7 @@ async function BasketParts({ api, fleetId }: { api: GatewayApi; fleetId: string 
     case 'none':
       return <BasketPanel fleetId={fleetId} basket={{ toSend: 0, entries: [] }} />;
     case 'unreadable':
-      return <RecordUnreadable message={read.message} />;
+      return <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} />;
   }
 }
 

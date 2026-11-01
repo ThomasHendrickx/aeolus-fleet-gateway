@@ -11,7 +11,8 @@ import { cache } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { readYourFleet } from '../fleet/hooks/read-your-fleet';
-import { refusalCodeOf, refusalMessageOf } from '../../../lib/gateway-api/page-api';
+import { refusalCodeOf } from '../../../lib/gateway-api/page-api';
+import type { WhoDidNotAnswer } from '../ui/unreadable-banner';
 import type { WakeChannels } from '../services/deliveries';
 import type { BasketView } from '../services/basket';
 import type { BridgeHome, RecordPage } from '../services/items';
@@ -24,7 +25,7 @@ import type { RoutingView } from '../services/routing';
  * with no person ship, on which nothing waits; or that the record cannot be
  * read now, saying why. Nothing was acknowledged then, so nothing is lost.
  */
-export type BridgeRead<T> = { kind: 'read'; value: T } | { kind: 'none' } | { kind: 'unreadable'; message: string };
+export type BridgeRead<T> = { kind: 'read'; value: T } | { kind: 'none' } | { kind: 'unreadable'; whoDidNotAnswer: WhoDidNotAnswer };
 
 export interface BridgeSettingsParts {
   readonly toDecide: readonly ShownRequest[] | undefined;
@@ -66,7 +67,8 @@ async function personRead<T>(call: Promise<T>): Promise<BridgeRead<T>> {
     if (code === 'UNAUTHORIZED') {
       throw error;
     }
-    return { kind: 'unreadable', message: code === undefined ? 'The gateway did not answer.' : refusalMessageOf(error) };
+    // Core's own words stay out of the page: the banner says it once (states.html).
+    return { kind: 'unreadable', whoDidNotAnswer: code === undefined ? 'gateway' : 'fleet' };
   }
 }
 

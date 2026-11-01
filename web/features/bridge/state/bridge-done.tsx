@@ -18,7 +18,7 @@ async function DoneParts({ api, fleetId }: { api: GatewayApi; fleetId: string })
     case 'none':
       return <DonePanel fleetId={fleetId} first={{ items: [], nextCursor: null }} />;
     case 'unreadable':
-      return <RecordUnreadable message={read.message} />;
+      return <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} />;
   }
 }
 

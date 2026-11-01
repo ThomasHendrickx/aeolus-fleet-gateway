@@ -21,7 +21,7 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
   const isNothingWaiting = read.kind !== 'unreadable' && (read.kind === 'none' || read.value.waiting.items.length === 0);
   return (
     <HomeColumns
-      banner={read.kind === 'unreadable' ? <RecordUnreadable message={read.message} /> : undefined}
+      banner={read.kind === 'unreadable' ? <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} /> : undefined}
       main={read.kind === 'unreadable' ? null : <HomePanel fleetId={fleetId} home={read.kind === 'read' ? read.value : NOTHING} />}
       aside={<YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} />}
     />
