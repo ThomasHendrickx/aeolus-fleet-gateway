@@ -7,7 +7,7 @@ import type { ItemState } from './item-state.js';
 import type { PersonCaller, PersonCrewError } from './person-crew.js';
 import type { OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
-import { staleOf, type Asking, type Stale } from './stale-item.js';
+import { askingOf, staleOf, type Asking, type Stale } from './stale-item.js';
 
 /** An item on Bridge home: by its title, with its job, new or seen, stale once its asker withdrew or replaced the question or step it asks, and the answer to it in the basket, if any. */
 export interface HomeItem extends InboxEntry {
@@ -64,9 +64,9 @@ export function createReadBridgeHome(deps: { crewPersonShip: CrewPersonShip; cre
       return waiting;
     }
     const [opened, entries] = await Promise.all([deps.opened.list(caller.fleetId, waiting.value.crew.shipId), deps.entries.list(caller.fleetId, waiting.value.crew.shipId)]);
-    const asking: Asking[] = [...waiting.value.deliveries, ...opened];
+    const asking: Asking[] = [...waiting.value.deliveries.map(askingOf), ...opened];
     const inBasket = inBasketOf(entries);
-    const taken: HomeItem[] = waiting.value.deliveries.map((delivery) => ({ ...inboxEntryOf(delivery), job: jobOf(delivery.contentType), state: 'new', stale: staleOf(delivery, asking), inBasket: inBasket(delivery.deliveryId) }));
+    const taken: HomeItem[] = waiting.value.deliveries.map((delivery) => ({ ...inboxEntryOf(delivery), job: jobOf(delivery.contentType), state: 'new', stale: staleOf(askingOf(delivery), asking), inBasket: inBasket(delivery.deliveryId) }));
     const isTaken = new Set<string>(taken.map(({ deliveryId }) => deliveryId));
     const seen: HomeItem[] = opened
       .filter(({ deliveryId }) => !isTaken.has(deliveryId))

@@ -9,7 +9,7 @@ import type { Place } from './item-outcome.js';
 import { handledOf, type DealDeps } from './opened-of.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import { waitingFor } from './read-inbox.js';
-import { replacedBy, staleBy, withdrawerOf, type Asking, type Stale } from './stale-item.js';
+import { askingOf, replacedBy, staleBy, withdrawerOf, type Asking, type Stale } from './stale-item.js';
 
 /** A delivery as a person opens it: whole, with the meeting it belongs to, none outside a meeting, and stale once its asker withdrew or replaced the question or step it asks. */
 export interface OpenedView extends InboxEntry {
@@ -103,7 +103,7 @@ async function seenNow(deps: DealDeps, seen: { caller: PersonCaller; kept: Opene
 export async function doneIfStale(deps: DealDeps, look: { caller: PersonCaller; crew: PersonCrewToken; looked: OpenedDelivery; waiting: readonly PersonDelivery[]; place: Place }): Promise<Stale | null> {
   const { caller, crew, looked, waiting, place } = look;
   const opened = await deps.opened.list(caller.fleetId, crew.shipId);
-  const among: Asking[] = [...waiting, ...opened.filter(({ deliveryId }) => deliveryId !== looked.deliveryId)];
+  const among: Asking[] = [...waiting.map(askingOf), ...opened.filter(({ deliveryId }) => deliveryId !== looked.deliveryId)];
   const withEach = { caller, crew, waiting, opened, place };
   const replaced = replacedBy(looked, among);
   if (replaced !== undefined) {
