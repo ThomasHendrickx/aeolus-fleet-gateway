@@ -21,3 +21,11 @@ describe('Slack dropped out', () => {
     expect(/<a[^>]*href="\/bridge\/settings\/routing\?fleet=flt_01"[^>]*>.*Where things show<\/a>/.test(markup)).toBe(true);
   });
 });
+
+describe('Slack dropped out on the phone', () => {
+  it("is left out, as the phone's frame draws it", () => {
+    const markup = renderToStaticMarkup(createElement(SlackDroppedOut, { fleetId: 'flt_01', botName: 'Aeolus fleet' }));
+
+    expect(/<section[^>]*data-testid="bridge-slack-dropped-out"[^>]*class="[^"]*max-sm:hidden/.test(markup)).toBe(true);
+  });
+});
