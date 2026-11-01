@@ -6,7 +6,13 @@
  * no API client.
  */
 import { ALERT_CONTENT_TYPE } from '@aeolus-fleet/common';
+import type { inferRouterOutputs } from '@trpc/server';
 import { z } from 'zod';
+
+import type { GatewayRouter } from '../../../../src/adapters/trpc/router.js';
+
+/** Who the person can send a message to, as the API answers it: the ships their person ship may send to now, and the name it sends as. */
+export type SendTo = inferRouterOutputs<GatewayRouter>['people']['sendTo'];
 
 /** The ships whose name holds what the person typed, whatever its case; every ship while nothing is typed. */
 export function shipsMatching(ships: readonly string[], typed: string): readonly string[] {
@@ -42,7 +48,7 @@ export type SendFailure = { readonly kind: 'refused'; readonly reason: string } 
 const REFUSED_CODES = new Set(['BAD_REQUEST', 'FORBIDDEN']);
 
 /** A refusal when the fleet refused the send; no answer for anything else, as the message may be stored. */
-export function sendFailureOf({ code, message }: { code: string | undefined; message: string }): SendFailure {
+export function sendFailureOf({ code, message }: { code?: string | undefined; message: string }): SendFailure {
   return code !== undefined && REFUSED_CODES.has(code) ? { kind: 'refused', reason: message } : { kind: 'noAnswer' };
 }
 

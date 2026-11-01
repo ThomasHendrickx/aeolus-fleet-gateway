@@ -3,6 +3,7 @@
  * Bridge's actions, each one call of the gateway's API as the signed-in
  * account, on the server (0033): opening, answering and being done with an
  * item, putting an answer in the basket, removing it and sending the basket,
+ * sending a ship a message,
  * reading the next page of the record, and in Bridge's settings where
  * each job shows, web push, the Slack link and deciding a request. The API checks everything; a
  * refusal comes back in its own words for the page to say by the control. A
@@ -21,6 +22,7 @@ import { answerOf, bodyOf, questionOf, stepOf, type AnswerInput, type FocusedDel
 import type { SubscriptionInput } from '../services/web-push';
 import { EVERY_APP_SHIP_SCOPES, type DecisionInput } from '../services/requests';
 import type { BasketSent } from '../services/basket';
+import { alertShipOf, type SendTo } from '../services/send-message';
 import type { RecordPage } from '../services/items';
 import type { RoutedJob, RoutedPlace } from '../services/routing';
 import { BRIDGE_PATH } from '../paths';
@@ -28,7 +30,8 @@ import { BRIDGE_PATH } from '../paths';
 /** What an action says when the gateway gave no answer of its own. */
 const NO_ANSWER = 'The gateway did not answer: try again in a moment';
 
-export type ActionOutcome<T> = { readonly isOk: true; readonly value: T } | { readonly isOk: false; readonly message: string };
+/** What an action came to: its value, or why not, with the API's code when the API refused. */
+export type ActionOutcome<T> = { readonly isOk: true; readonly value: T } | { readonly isOk: false; readonly message: string; readonly code?: string };
 
 async function attempt<T>(fleet: string, run: (api: GatewayApi) => Promise<T>): Promise<ActionOutcome<T>> {
   let outcome: ActionOutcome<T>;
@@ -39,7 +42,7 @@ async function attempt<T>(fleet: string, run: (api: GatewayApi) => Promise<T>): 
     if (code === 'UNAUTHORIZED') {
       return redirect(`/sign-in/start?${new URLSearchParams({ return_to: `${BRIDGE_PATH}?${new URLSearchParams({ [FLEET_PARAMETER]: fleet }).toString()}` }).toString()}`);
     }
-    return { isOk: false, message: code === undefined ? NO_ANSWER : refusalMessageOf(error) };
+    return code === undefined ? { isOk: false, message: NO_ANSWER } : { isOk: false, message: refusalMessageOf(error), code };
   }
   revalidatePath(BRIDGE_PATH, 'layout');
   return outcome;
@@ -56,7 +59,7 @@ export async function openDelivery(fleet: string, deliveryId: string): Promise<A
   return attempt(fleet, async (api) => {
     const opened = await api.people.open.mutate({ deliveryId });
     const { contentType, payload, meetingId, ...entry } = opened;
-    return { ...entry, payload, body: bodyOf({ contentType, payload }), question: questionOf({ contentType, payload }), step: stepOf({ contentType, payload }, bridgeHost), meetingId: meetingId ?? undefined };
+    return { ...entry, payload, body: bodyOf({ contentType, payload }), question: questionOf({ contentType, payload }), step: stepOf({ contentType, payload }, bridgeHost), meetingId: meetingId ?? undefined, alertShip: alertShipOf({ contentType, payload }) };
   });
 }
 
@@ -97,6 +100,19 @@ export async function doneDelivery({ fleet, deliveryId, step }: { fleet: string;
   return attempt(fleet, async (api) => {
     await api.people.done.mutate(step === undefined ? { deliveryId } : { deliveryId, ...step });
     return undefined;
+  });
+}
+
+/** Who the person can send a message to (aeolus-fleet #1547): the ships their person ship may send to now, and the name it sends as. */
+export async function readSendTo(fleet: string): Promise<ActionOutcome<SendTo>> {
+  return attempt(fleet, (api) => api.people.sendTo.query());
+}
+
+/** Sends a ship a message as the person ship, under the form's key; it answers once the fleet stored it, with when the gateway heard so. */
+export async function sendShipMessage({ fleet, to, payload, idempotencyKey }: { fleet: string; to: string; payload: string; idempotencyKey: string }): Promise<ActionOutcome<{ storedAt: string }>> {
+  return attempt(fleet, async (api) => {
+    await api.people.send.mutate({ to, payload, idempotencyKey });
+    return { storedAt: new Date().toISOString() };
   });
 }
 

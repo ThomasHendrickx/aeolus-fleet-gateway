@@ -10,6 +10,7 @@ import type { FocusedDelivery } from '../services/deliveries';
 import type { HomeItem } from '../services/items';
 import { DeliveryCard, type DeliveryControl, type InBasket, type StepFinished } from '../ui/delivery-card';
 import { Notice } from '../ui/notice';
+import { SendMessageProvider, useSendMessage } from './send-message';
 
 /** An item to open: by its delivery, with its job, and the answer to it in the basket, if any. */
 export interface ToOpen {
@@ -34,9 +35,19 @@ export interface ItemOpening {
  * replacement. A step ends done or cannot with the note, sent at once,
  * never through the basket (CC23), and stays open showing its outcome. A question's answer goes in the basket (CC24), and comes
  * out of it there. Answering, being done or putting in the basket says so
- * in place, and the page reads itself again.
+ * in place, and the page reads itself again. An opened alert offers to send
+ * its ship a message, as home offers to send any ship one (aeolus-fleet #1547).
  */
 export function ItemFocus({ fleetId, children }: { fleetId: string; children: (opening: ItemOpening) => ReactNode }) {
+  return (
+    <SendMessageProvider fleetId={fleetId}>
+      <FocusedItems fleetId={fleetId}>{children}</FocusedItems>
+    </SendMessageProvider>
+  );
+}
+
+function FocusedItems({ fleetId, children }: { fleetId: string; children: (opening: ItemOpening) => ReactNode }) {
+  const sendMessage = useSendMessage();
   const [focus, setFocus] = useState<{ delivery: FocusedDelivery; isDoneOnSeeing: boolean; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
   const [note, setNote] = useState('');
   const [openingId, setOpeningId] = useState<string | undefined>();
@@ -117,6 +128,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
           });
         }}
         onOpen={(deliveryId) => { open({ deliveryId, job: 'decide' }); }}
+        onSendMessage={delivery.alertShip === undefined || sendMessage === undefined ? undefined : (alertShip) => { sendMessage({ alertShip }); }}
         onBack={() => { setFocus(undefined); }}
       />
     );

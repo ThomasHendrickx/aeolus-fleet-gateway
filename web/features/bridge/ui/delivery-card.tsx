@@ -1,5 +1,6 @@
 import { Check, CircleCheck, CircleX, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
+import { Send } from 'lucide-react';
 
 import type { Question } from '@aeolus-fleet/common';
 
@@ -180,6 +181,16 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
   );
 }
 
+/** Sends the ship an opened alert is about a message, the form opening with its ship filled in (aeolus-fleet #1547). */
+function SendShipButton({ ship, onSendMessage }: { ship: string; onSendMessage: (alertShip: string) => void }) {
+  return (
+    <button type="button" data-testid="bridge-send-alert-ship" onClick={() => { onSendMessage(ship); }} className="inline-flex h-9 items-center gap-2 justify-self-start rounded-md px-3 font-semibold hover:bg-accent">
+      <Send aria-hidden="true" className="size-4" />
+      Send {ship} a message
+    </button>
+  );
+}
+
 /**
  * One item in focus (design B, Signal). A question opens with the asker's
  * pick chosen (CC11), or what is in the basket; its one button puts that
@@ -210,6 +221,7 @@ export function DeliveryCard({
   onDone,
   onFinishStep,
   onOpen,
+  onSendMessage,
   onBack,
 }: {
   delivery: FocusedDelivery;
@@ -238,6 +250,8 @@ export function DeliveryCard({
   onFinishStep: (outcome: StepOutcome) => void;
   /** Opens another item: a replaced question's or step's replacement. */
   onOpen: (deliveryId: string) => void;
+  /** Opens the form to send an alert's ship a message, its ship filled in; unset where the item is no alert. */
+  onSendMessage?: ((alertShip: string) => void) | undefined;
   onBack: () => void;
 }) {
   const { question, step, stale } = delivery;
@@ -269,6 +283,7 @@ export function DeliveryCard({
       )}
       {stale === null ? null : <StaleNotice stale={stale} from={delivery.from} isStep={step !== undefined} onOpen={onOpen} />}
       {inBasket === null || stale !== null ? null : <InBasketNotice inBasket={inBasket} basketHref={basketHref} isRemoving={working?.kind === 'remove'} isWorking={isWorking} onRemove={onRemove} />}
+      {isDoneOnSeeing && delivery.alertShip !== undefined && onSendMessage !== undefined ? <SendShipButton ship={delivery.alertShip} onSendMessage={onSendMessage} /> : null}
       {isDoneOnSeeing ? (
         <p data-testid="bridge-seen-done" className="text-muted-foreground">
           Seen now, so done: it asks nothing more.
