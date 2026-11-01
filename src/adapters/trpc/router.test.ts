@@ -35,7 +35,6 @@ import { createReadSlack } from '../../core/slack/read-slack.js';
 import { createReadSlackLink } from '../../core/slack/read-slack-link.js';
 import { createStartLink } from '../../core/slack/start-link.js';
 import { createUnlinkSlack } from '../../core/slack/unlink-slack.js';
-import { createShowAllInSlack } from '../../core/slack/show-all-in-slack.js';
 import { createStartInstall } from '../../core/slack/start-install.js';
 import { createTakeAccessToken } from '../../core/slack/take-access-token.js';
 import { gatewayRouter, type Context } from './router.js';
@@ -424,7 +423,6 @@ function slackOf({ tooling, workspaces, apps }: { tooling: ReturnType<typeof fak
     readSlackLink: createReadSlackLink({ workspaces, apps, links }),
     startLink: createStartLink({ workspaces, apps, signIn: fakeSlackSignIn().signIn, states: plainLinkStates(), crewPersonShip: (caller) => Promise.resolve('signedIn' in caller && caller.signedIn.personShipId !== null ? ok({ shipId: caller.signedIn.personShipId, crewToken: 'crew-person' }) : err({ kind: 'noPersonShip' as const })), clock, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' }),
     unlinkSlack: createUnlinkSlack({ links }),
-    showAllInSlack: createShowAllInSlack({ links }),
   };
 }
 

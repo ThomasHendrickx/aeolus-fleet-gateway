@@ -137,7 +137,6 @@ import { createSlackLinkSeals } from './adapters/crypto/slack-link-seals.js';
 import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_INSTALL_PATH, SLACK_LINK_PATH } from './adapters/http/slack-routes.js';
 import { createPrismaSlackPosts } from './adapters/prisma/slack-posts.js';
 import { createAnswerInSlack } from './core/slack/answer-in-slack.js';
-import { createShowAllInSlack } from './core/slack/show-all-in-slack.js';
 import { createShowInSlack } from './core/slack/show-in-slack.js';
 import { createPrismaSlackLinks } from './adapters/prisma/slack-links.js';
 import { createSlackMessages } from './adapters/slack/slack-messages.js';
@@ -913,7 +912,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     // Where no pagasae is set no one signs in, so no account has a person ship to link.
     startLink: createStartLink({ workspaces: slackWorkspaces, apps: slackApps, signIn: slackSignIn, states: slackLinkStates, crewPersonShip: person?.crewPersonShip ?? (() => Promise.resolve(err({ kind: 'noPersonShip' as const }))), clock, linkRedirectUrl }),
     unlinkSlack: createUnlinkSlack({ links: slackLinks }),
-    showAllInSlack: createShowAllInSlack({ links: slackLinks }),
   };
   const slackEvents = createPrismaSlackEvents(prisma);
   const slackSends = createSlackEventWorker({

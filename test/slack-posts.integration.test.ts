@@ -65,14 +65,12 @@ describe("the fleet messages in Slack, in the gateway's database", () => {
     expect(unfinished.map(({ messageId }) => messageId)).toEqual(['msg_01m3tbfspe96yf1rnr4ank0001']);
   });
 
-  it("finds a link by its person ship and turns Show everything that waits in Slack on", async () => {
+  it('finds a link by its person ship', async () => {
     const links = createPrismaSlackLinks(prisma);
     await prisma.slackLink.deleteMany();
     await links.add(aSlackLink({ fleetId: ACME }));
 
-    await links.showAll(ACME, { accountId: 'acc-mathilde', isOn: true });
-
-    await expect(links.ofPersonShip(ACME, MATHILDE_SHIP)).resolves.toEqual(aSlackLink({ fleetId: ACME, isShowingAll: true }));
+    await expect(links.ofPersonShip(ACME, MATHILDE_SHIP)).resolves.toEqual(aSlackLink({ fleetId: ACME }));
   });
 
   it("forgets a forgotten fleet's posts", async () => {

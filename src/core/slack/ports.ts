@@ -165,8 +165,6 @@ export interface SlackLinks {
   find(fleetId: FleetId, slack: { teamId: string; userId: string }): Promise<SlackLink | undefined>;
   ofAccount(fleetId: FleetId, accountId: string): Promise<SlackLink | undefined>;
   ofPersonShip(fleetId: FleetId, personShipId: ShipId): Promise<SlackLink | undefined>;
-  /** Turns Show everything that waits in Slack on or off for the account's link (B5). */
-  showAll(fleetId: FleetId, shown: { accountId: string; isOn: boolean }): Promise<void>;
   /** Keeps a new link; none when the Slack user or the account is linked already, as two links at once find. */
   add(link: SlackLink): Promise<'added' | 'taken'>;
   remove(fleetId: FleetId, accountId: string): Promise<void>;

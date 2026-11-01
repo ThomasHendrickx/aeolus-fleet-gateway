@@ -278,10 +278,6 @@ export function memorySlackLinks(): SlackLinks & { held: SlackLink[] } {
     find: (fleetId, { teamId, userId }) => Promise.resolve(held.find((link) => link.fleetId === fleetId && link.teamId === teamId && link.slackUserId === userId)),
     ofAccount: (fleetId, accountId) => Promise.resolve(held.find((link) => link.fleetId === fleetId && link.accountId === accountId)),
     ofPersonShip: (fleetId, personShipId) => Promise.resolve(held.find((link) => link.fleetId === fleetId && link.personShipId === personShipId)),
-    showAll: (fleetId, { accountId, isOn }) => {
-      held.splice(0, held.length, ...held.map((link) => (link.fleetId === fleetId && link.accountId === accountId ? { ...link, isShowingAll: isOn } : link)));
-      return Promise.resolve();
-    },
     add: (link) => {
       const isTaken = held.some((each) => each.fleetId === link.fleetId && ((each.teamId === link.teamId && each.slackUserId === link.slackUserId) || each.accountId === link.accountId));
       if (!isTaken) {
@@ -347,7 +343,6 @@ export function aSlackLink(overrides: Partial<SlackLink> = {}): SlackLink {
     personShipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t',
     linkedAt: new Date('2026-10-27T08:45:00.000Z'),
     stoppedAt: null,
-    isShowingAll: false,
     ...overrides,
   };
 }

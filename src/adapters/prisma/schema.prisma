@@ -570,8 +570,6 @@ model SlackLink {
   linkedAt     DateTime  @map("linked_at") @db.Timestamptz(3)
   /// When the account was disabled (0055), its link stopped.
   stoppedAt    DateTime? @map("stopped_at") @db.Timestamptz(3)
-  /// Show everything that waits in Slack (B5), off until turned on.
-  isShowingAll Boolean   @default(false) @map("is_showing_all")
 
   @@id([fleetId, teamId, slackUserId])
   @@unique([fleetId, accountId])

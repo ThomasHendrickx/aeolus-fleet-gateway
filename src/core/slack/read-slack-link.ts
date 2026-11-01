@@ -4,7 +4,7 @@ import type { SlackApps, SlackLinks, SlackWorkspaces } from './ports.js';
 /** A person's Slack link as Bridge's settings show it: the workspace, and the Slack name linked, none while unlinked. */
 export interface ShownSlackLink {
   readonly workspaceName: string;
-  readonly link: { readonly slackName: string; readonly isShowingAll: boolean } | null;
+  readonly link: { readonly slackName: string } | null;
 }
 
 export type ReadSlackLink = (input: { actor: Actor }) => Promise<ShownSlackLink | null>;
@@ -25,6 +25,6 @@ export function createReadSlackLink(deps: { workspaces: Pick<SlackWorkspaces, 'f
       return null;
     }
     const link = await deps.links.ofAccount(actor.fleetId, actor.accountId);
-    return { workspaceName: workspace.teamName, link: link === undefined ? null : { slackName: link.slackName, isShowingAll: link.isShowingAll } };
+    return { workspaceName: workspace.teamName, link: link === undefined ? null : { slackName: link.slackName } };
   };
 }
