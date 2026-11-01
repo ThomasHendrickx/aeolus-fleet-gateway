@@ -50,6 +50,36 @@ export function jobLabelOf(job: Job): string {
   return JOB_LABELS[job];
 }
 
+/** The job's word on an item's row: stay aware said as Alert or Notice (Bridge mockups, home). */
+export function jobWordOf({ job, isAlert }: { job: Job; isAlert: boolean }): string {
+  if (job === 'stay-aware') {
+    return isAlert ? 'Alert' : 'Notice';
+  }
+  return JOB_LABELS[job];
+}
+
+const MS_PER_MINUTE = 60_000;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const DAYS_YESTERDAY = 1;
+
+/** How long ago an item arrived, as its row says it: now, minutes, hours, yesterday, then days. */
+export function ageOf(sentAt: string, now: Date): string {
+  const minutes = Math.floor((now.getTime() - new Date(sentAt).getTime()) / MS_PER_MINUTE);
+  if (minutes < 1) {
+    return 'now';
+  }
+  if (minutes < MINUTES_PER_HOUR) {
+    return `${String(minutes)} min`;
+  }
+  const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+  if (hours < HOURS_PER_DAY) {
+    return `${String(hours)} h`;
+  }
+  const days = Math.floor(hours / HOURS_PER_DAY);
+  return days === DAYS_YESTERDAY ? 'yesterday' : `${String(days)} d`;
+}
+
 /** What came of an item and where, such as Answered in Slack: option 2; Done alone when no outcome was kept. */
 export function outcomeTextOf(item: Pick<RecordItem, 'state' | 'outcome'>): string {
   switch (item.state) {

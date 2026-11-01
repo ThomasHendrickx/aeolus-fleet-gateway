@@ -1,9 +1,12 @@
 'use client';
 
+import { ShoppingBasket } from 'lucide-react';
+
 import { staleSaidOf } from '../services/deliveries';
 import type { BridgeHome, HomeItem } from '../services/items';
 import { ActionButton } from '../ui/action-button';
 import { ItemRow } from '../ui/item-row';
+import { RowLink } from '../ui/row-link';
 import { ItemFocus, type ItemOpening } from './item-focus';
 
 function countsOf(items: readonly HomeItem[]): string {
@@ -13,14 +16,14 @@ function countsOf(items: readonly HomeItem[]): string {
   return `${String(toDecide)} to decide, ${String(toDo)} to do. Newest on top; nothing else is in this count.`;
 }
 
-/** What a row says of its item: stale, in the basket, seen and not done, or nothing while new. */
+/** What a row says of its item: stale, in the basket, seen, or nothing while new. */
 function rowOutcomeOf(item: HomeItem): string | undefined {
   const { stale, inBasket } = item;
   if (stale === null && inBasket !== null) {
     return inBasket.option === null ? 'In the basket: the note alone' : `In the basket: option ${String(inBasket.option)}`;
   }
   if (stale === null) {
-    return item.state === 'seen' ? 'Seen, not done yet' : undefined;
+    return item.state === 'seen' ? 'Seen' : undefined;
   }
   const said = staleSaidOf(stale, item.from);
   return stale.kind === 'withdrawn' ? `${said}: open it to clear it` : said;
@@ -33,7 +36,7 @@ function ReplacementButton({ item, opening }: { item: HomeItem; opening: ItemOpe
     return null;
   }
   return (
-    <ActionButton data-testid="bridge-replacement" isPending={opening.openingId === replacementId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open({ deliveryId: replacementId, job: item.job }); }}>
+    <ActionButton data-testid="bridge-replacement" size="row" isPending={opening.openingId === replacementId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open({ deliveryId: replacementId, job: item.job }); }}>
       {item.job === 'do' ? 'Open the new step' : 'Open the new question'}
     </ActionButton>
   );
@@ -41,10 +44,48 @@ function ReplacementButton({ item, opening }: { item: HomeItem; opening: ItemOpe
 
 function OpenButton({ item, opening }: { item: HomeItem; opening: ItemOpening }) {
   return (
-    <ActionButton data-testid="bridge-open" isPending={opening.openingId === item.deliveryId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open(item); }}>
+    <ActionButton data-testid="bridge-open" size="row" isPending={opening.openingId === item.deliveryId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open(item); }}>
       Open
     </ActionButton>
   );
+}
+
+/**
+ * What a row does in place (aeolus-fleet#1535): the asker's pick into the
+ * basket, or a step's link by its host, each beside Open; the gateway's own
+ * step is its own action alone, where the gateway finishes it.
+ */
+function WaitingActions({ item, opening }: { item: HomeItem; opening: ItemOpening }) {
+  const act = item.actInPlace;
+  if (act?.kind === 'ownStep') {
+    return (
+      <RowLink data-testid="bridge-own-step" href={act.href} isOutside={false}>
+        {act.title}
+      </RowLink>
+    );
+  }
+  return (
+    <>
+      {act?.kind === 'putPick' ? (
+        <ActionButton data-testid="bridge-put-pick" variant="primary" size="row" isPending={opening.puttingId === item.deliveryId} pendingLabel="Putting..." disabled={opening.openingId !== undefined || opening.puttingId !== undefined} onClick={() => { opening.putPick(item, act.option); }}>
+          <ShoppingBasket aria-hidden="true" className="size-3.5" />
+          Put option {act.option} in the basket
+        </ActionButton>
+      ) : null}
+      {act?.kind === 'openLink' ? (
+        <RowLink data-testid="bridge-step-link" href={act.href} isOutside>
+          Open {act.host}
+        </RowLink>
+      ) : null}
+      <ReplacementButton item={item} opening={opening} />
+      <OpenButton item={item} opening={opening} />
+    </>
+  );
+}
+
+/** Opens an item from its title, unless one is opening now. */
+function openerOf(item: HomeItem, opening: ItemOpening): (() => void) | undefined {
+  return opening.openingId === undefined ? () => { opening.open(item); } : undefined;
 }
 
 /**
@@ -54,8 +95,9 @@ function OpenButton({ item, opening }: { item: HomeItem; opening: ItemOpening })
  * alerts and notices they have not seen, outside the count. Opening one of
  * the feed is all it asks (CC16).
  */
-export function HomePanel({ fleetId, home }: { fleetId: string; home: BridgeHome }) {
+export function HomePanel({ fleetId, home, now }: { fleetId: string; home: BridgeHome; now: string }) {
   const { waiting, stayAware } = home;
+  const readAt = new Date(now);
   return (
     <ItemFocus fleetId={fleetId}>
       {(opening) => (
@@ -73,12 +115,19 @@ export function HomePanel({ fleetId, home }: { fleetId: string; home: BridgeHome
                 <span className="text-muted-foreground">Your ships have what they need from you. A question or a step shows here the moment one arrives.</span>
               </div>
             ) : (
-              <ul className="grid gap-2">
+              <ul className="overflow-hidden rounded-lg border border-border bg-card">
                 {waiting.items.map((item) => (
-                  <ItemRow key={item.deliveryId} item={item} isNew={item.state === 'new'} staleKind={item.stale?.kind} outcome={rowOutcomeOf(item)} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}>
-                    <ReplacementButton item={item} opening={opening} />
-                    <OpenButton item={item} opening={opening} />
-                  </ItemRow>
+                  <ItemRow
+                    key={item.deliveryId}
+                    item={item}
+                    now={readAt}
+                    isNew={item.state === 'new'}
+                    staleKind={item.stale?.kind}
+                    outcome={rowOutcomeOf(item)}
+                    failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}
+                    onOpen={openerOf(item, opening)}
+                    actions={<WaitingActions item={item} opening={opening} />}
+                  />
                 ))}
               </ul>
             )}
@@ -95,11 +144,9 @@ export function HomePanel({ fleetId, home }: { fleetId: string; home: BridgeHome
                 Nothing new. What you saw is in Done.
               </p>
             ) : (
-              <ul className="grid gap-2">
+              <ul className="overflow-hidden rounded-lg border border-border bg-card">
                 {stayAware.map((item) => (
-                  <ItemRow key={item.deliveryId} item={item} isNew outcome={undefined} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}>
-                    <OpenButton item={item} opening={opening} />
-                  </ItemRow>
+                  <ItemRow key={item.deliveryId} item={item} now={readAt} isNew outcome={undefined} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined} onOpen={openerOf(item, opening)} />
                 ))}
               </ul>
             )}

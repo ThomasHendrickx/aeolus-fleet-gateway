@@ -18,9 +18,9 @@ async function HomeParts({ api, fleetId }: { api: GatewayApi; fleetId: string })
   const read = await readBridgeHome(api);
   switch (read.kind) {
     case 'read':
-      return <HomePanel fleetId={fleetId} home={read.value} />;
+      return <HomePanel fleetId={fleetId} home={read.value} now={new Date().toISOString()} />;
     case 'none':
-      return <HomePanel fleetId={fleetId} home={NOTHING} />;
+      return <HomePanel fleetId={fleetId} home={NOTHING} now={new Date().toISOString()} />;
     case 'unreadable':
       return <RecordUnreadable message={read.message} />;
   }

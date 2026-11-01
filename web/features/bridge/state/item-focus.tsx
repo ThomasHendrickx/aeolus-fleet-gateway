@@ -4,7 +4,7 @@ import { useState, useTransition, type ReactNode } from 'react';
 
 import { meetingPathOf } from '../../meeting/paths';
 import { inFleet } from '../../../lib/gateway-api/page-account';
-import { answerDelivery, doneDelivery, openDelivery, putInBasket, removeFromBasket, type ActionOutcome } from '../hooks/bridge-actions';
+import { answerDelivery, doneDelivery, openDelivery, putInBasket, putPickInBasket, removeFromBasket, type ActionOutcome } from '../hooks/bridge-actions';
 import { BRIDGE_BASKET_PATH } from '../paths';
 import type { FocusedDelivery } from '../services/deliveries';
 import type { HomeItem } from '../services/items';
@@ -18,10 +18,18 @@ export interface ToOpen {
   readonly inBasket?: InBasket | null;
 }
 
-/** What a list of items gets to open one: the press, the one opening, and why one could not be opened. */
+/** A question to put its asker's pick in the basket from its row: by its delivery, from its asker. */
+export interface ToPut {
+  readonly deliveryId: string;
+  readonly from: string;
+}
+
+/** What a list of items gets to open one or put a pick in the basket from its row: the presses, the one opening or putting, and why one could not be. */
 export interface ItemOpening {
   readonly open: (item: ToOpen) => void;
   readonly openingId: string | undefined;
+  readonly putPick: (item: ToPut, option: number) => void;
+  readonly puttingId: string | undefined;
   readonly failure: { deliveryId: string; message: string } | undefined;
 }
 
@@ -33,13 +41,14 @@ export interface ItemOpening {
  * question its asker withdrew or replaced; a replaced one opens its
  * replacement. A step ends done or cannot with the note, sent at once,
  * never through the basket (CC23). A question's answer goes in the basket (CC24), and comes
- * out of it there. Answering, being done or putting in the basket says so
+ * out of it there; from its row, a new question's pick goes in it at once, opened by the same press. Answering, being done or putting in the basket says so
  * in place, and the page reads itself again.
  */
 export function ItemFocus({ fleetId, children }: { fleetId: string; children: (opening: ItemOpening) => ReactNode }) {
   const [focus, setFocus] = useState<{ delivery: FocusedDelivery; isDoneOnSeeing: boolean; inBasket: InBasket | null } | undefined>();
   const [note, setNote] = useState('');
   const [openingId, setOpeningId] = useState<string | undefined>();
+  const [puttingId, setPuttingId] = useState<string | undefined>();
   const [working, setWorking] = useState<DeliveryControl | undefined>();
   const [openFailure, setOpenFailure] = useState<{ deliveryId: string; message: string } | undefined>();
   const [failure, setFailure] = useState<string | undefined>();
@@ -58,6 +67,22 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
         setFocus({ delivery: outcome.value, isDoneOnSeeing: item.job === 'stay-aware', inBasket });
         setNote(inBasket?.note ?? '');
         setFailure(undefined);
+      } else {
+        setOpenFailure({ deliveryId: item.deliveryId, message: outcome.message });
+      }
+    });
+  };
+
+  /** Opens a question and puts its asker's pick in the basket, with no note, from its row: nothing is sent (CC24). */
+  const putPick = (item: ToPut, option: number) => {
+    setPuttingId(item.deliveryId);
+    setOpenFailure(undefined);
+    setDone(undefined);
+    startTransition(async () => {
+      const outcome = await putPickInBasket({ fleet: fleetId, deliveryId: item.deliveryId, option });
+      setPuttingId(undefined);
+      if (outcome.isOk) {
+        setDone(`Option ${String(option)} is in the basket, not sent: ${item.from} receives it when you send the basket.`);
       } else {
         setOpenFailure({ deliveryId: item.deliveryId, message: outcome.message });
       }
@@ -118,7 +143,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
   return (
     <div className="grid gap-4">
       {done === undefined ? null : <Notice message={done} isFailure={false} />}
-      {children({ open, openingId, failure: openFailure })}
+      {children({ open, openingId, putPick, puttingId, failure: openFailure })}
     </div>
   );
 }
