@@ -5,10 +5,12 @@
  */
 import type { DeliveryId, DeliveryState, FleetId, MeetingId, MessageId, ShipId, ShipKind } from '@aeolus-fleet/common';
 
+import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { DiscoveredStatement } from '../mcp-in/ports.js';
 import type { Result } from '../shared/result.js';
 import type { Routing } from './routing.js';
+import type { ListedShip } from './your-fleet.js';
 
 /** A call the gateway makes for an account: the account's token beside the gateway's own crew token, so the account acts through the gateway's ship. */
 export interface AccountCall {
@@ -309,4 +311,9 @@ export type WebPushSent = 'sent' | 'gone' | 'failed';
 /** Outbound port: sends a wake to one browser through its push service. */
 export interface WebPush {
   send(subscription: WebPushSubscription, wake: Wake): Promise<WebPushSent>;
+}
+
+/** Outbound port: the fleet's active ships as the actor reads them (fleet.list), each with its kind, its crew's report and its open alerts; retired ships are not read. */
+export interface ActiveShips {
+  list(as: ActorCredential): Promise<Result<ListedShip[], FleetRefusal>>;
 }
