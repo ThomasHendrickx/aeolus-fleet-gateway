@@ -196,3 +196,60 @@ describe('the wake for what waits at argo', () => {
     expect(push.woken).toEqual([]);
   });
 });
+
+describe('the wake for what waits at argo, at scale', () => {
+  const OPEN_AT_ARGO = 1_000;
+  const ALLOWED_AS_ARGO = 20;
+
+  async function manyAllowedAsArgo(): Promise<void> {
+    for (let index = 1; index < ALLOWED_AS_ARGO; index += 1) {
+      await accounts.keep(FLEET_ID, { accountId: `acc-${String(index)}`, personShipId: `shp_01m3tb1zgr5h2ffee12xnch${String(index).padStart(3, '0')}` });
+    }
+  }
+
+  function manyOpenAtArgo(): void {
+    for (let number = 1; number <= OPEN_AT_ARGO; number += 1) {
+      fleet.send(anArgoEntry(number, { sentAt: START }));
+    }
+  }
+
+  it("reads and writes nothing of argo's wakes in a round where nothing changed at argo and no window passed", async () => {
+    await manyAllowedAsArgo();
+    manyOpenAtArgo();
+    const wakeForArgo = waking([aChannel('web-push').channel]);
+    await round(wakeForArgo);
+    argoWakes.calls.length = 0;
+
+    later(1);
+    await round(wakeForArgo);
+
+    expect(argoWakes.calls).toEqual([]);
+  });
+
+  it('asks only about the message that arrived, once per person, however many are open', async () => {
+    await manyAllowedAsArgo();
+    manyOpenAtArgo();
+    const wakeForArgo = waking([aChannel('web-push').channel]);
+    await round(wakeForArgo);
+    argoWakes.calls.length = 0;
+
+    later(1);
+    fleet.send(anArgoEntry(OPEN_AT_ARGO + 1));
+    await round(wakeForArgo);
+
+    const asked = argoWakes.calls.filter(({ call }) => call === 'coveredAmong');
+    expect({ persons: asked.length, messageIds: new Set(asked.flatMap(({ messageIds }) => messageIds)) }).toEqual({ persons: ALLOWED_AS_ARGO, messageIds: new Set([anArgoEntry(OPEN_AT_ARGO + 1).messageId]) });
+  });
+
+  it('forgets only the message done at argo', async () => {
+    manyOpenAtArgo();
+    const wakeForArgo = waking([aChannel('web-push').channel]);
+    await round(wakeForArgo);
+    argoWakes.calls.length = 0;
+
+    fleet.markDone(anArgoEntry(7).messageId);
+    await round(wakeForArgo);
+
+    expect(argoWakes.calls).toEqual([{ call: 'forget', ship: THOMAS, messageIds: [anArgoEntry(7).messageId] }]);
+  });
+});

@@ -93,26 +93,38 @@ export function fakeArgoInboxFleet() {
   };
 }
 
-/** For each person ship, the messages to argo a wake or a page in focus covered, and when each channel last woke it for argo, in memory. */
-export function memoryArgoWakes(): ArgoWakes & { covered: Map<string, Set<MessageId>>; sent: { ship: PersonShip; channel: WakeChannelName; sentAt: Date }[] } {
+/** For each person ship, the messages to argo a wake or a page in focus covered, and when each channel last woke it for argo, in memory; each read and write is kept, with the messages it names. */
+export function memoryArgoWakes(): ArgoWakes & { covered: Map<string, Set<MessageId>>; sent: { ship: PersonShip; channel: WakeChannelName; sentAt: Date }[]; calls: { call: string; ship: PersonShip; messageIds: readonly MessageId[] }[] } {
   const covered = new Map<string, Set<MessageId>>();
   const sent: { ship: PersonShip; channel: WakeChannelName; sentAt: Date }[] = [];
+  const calls: { call: string; ship: PersonShip; messageIds: readonly MessageId[] }[] = [];
   const keyOf = ({ fleetId, shipId }: PersonShip) => `${fleetId}/${shipId}`;
   const isShip = (ship: PersonShip) => (each: { ship: PersonShip }) => keyOf(each.ship) === keyOf(ship);
   return {
     covered,
     sent,
-    coveredOf: (ship) => Promise.resolve(new Set(covered.get(keyOf(ship)))),
+    calls,
+    coveredAmong: (ship, messageIds) => {
+      calls.push({ call: 'coveredAmong', ship, messageIds });
+      const held = covered.get(keyOf(ship)) ?? new Set();
+      return Promise.resolve(new Set(messageIds.filter((messageId) => held.has(messageId))));
+    },
     cover: (ship, messageIds) => {
+      calls.push({ call: 'cover', ship, messageIds });
       covered.set(keyOf(ship), new Set([...(covered.get(keyOf(ship)) ?? []), ...messageIds]));
       return Promise.resolve();
     },
-    forgetAllBut: (ship, open) => {
-      covered.set(keyOf(ship), new Set([...(covered.get(keyOf(ship)) ?? [])].filter((messageId) => open.includes(messageId))));
+    forget: (ship, messageIds) => {
+      calls.push({ call: 'forget', ship, messageIds });
+      covered.set(keyOf(ship), new Set([...(covered.get(keyOf(ship)) ?? [])].filter((messageId) => !messageIds.includes(messageId))));
       return Promise.resolve();
     },
-    lastSentAt: (ship, channel) => Promise.resolve(sent.filter(isShip(ship)).findLast((wake) => wake.channel === channel)?.sentAt),
+    lastSentAt: (ship, channel) => {
+      calls.push({ call: 'lastSentAt', ship, messageIds: [] });
+      return Promise.resolve(sent.filter(isShip(ship)).findLast((wake) => wake.channel === channel)?.sentAt);
+    },
     record: (wake) => {
+      calls.push({ call: 'record', ship: wake.ship, messageIds: [] });
       sent.push(wake);
       return Promise.resolve();
     },
