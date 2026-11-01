@@ -69,6 +69,8 @@ function anEntry(overrides: Partial<BasketEntry> = {}): BasketEntry {
     addedAt: AT,
     state: 'waiting',
     refusal: null,
+    isUnanswered: false,
+    storedAt: null,
     ...overrides,
   };
 }
@@ -141,6 +143,15 @@ describe('a person puts an answer to a question in the basket', () => {
     await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 3, optionLabel: 'Both at once', note: '' });
 
     expect([...entries.held.values()]).toEqual([anEntry({ option: 3, optionLabel: 'Both at once', note: null, addedAt: AT })]);
+  });
+
+  it('clears the answers sent from the basket, as a new basket starts', async () => {
+    const sent = anEntry({ questionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', state: 'sent', storedAt: AT });
+    await entries.save(sent);
+
+    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 2, optionLabel: "Harbour first, on today's look", note: 'Harbour first: the demo on 12 Nov needs it.' });
+
+    expect([...entries.held.values()]).toEqual([anEntry()]);
   });
 
   it('refuses a delivery the person has not opened, as nothing of it is known', async () => {

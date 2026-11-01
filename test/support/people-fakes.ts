@@ -150,7 +150,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
   /** The messages the fleet took, as sent. */
   const sent: Parameters<PersonShipDoor['send']>[1][] = [];
   /** The fleet's answers to come for each call, before it takes them. */
-  const refusals: { pushReceive: FleetRefusal[]; record: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[] } = { pushReceive: [], record: [], reply: [], handled: [], discover: [], send: [], delivery: [] };
+  const refusals: { inbox: FleetRefusal[]; pushReceive: FleetRefusal[]; record: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[] } = { inbox: [], pushReceive: [], record: [], reply: [], handled: [], discover: [], send: [], delivery: [] };
   /** The hand-overs the gateway reported, in order. */
   const handOvers: Parameters<PersonShipDoor['handed']>[1][] = [];
   /** The deliveries the ship acknowledged and has not handled yet. */
@@ -160,6 +160,10 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
   const door: PersonShipDoor = {
     inbox: (crewToken) => {
       calls.push('inbox');
+      const refused = refusals.inbox.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
       return crewed(crewToken, () => ({ waiting: ship.deliveries.length }));
     },
     pushReceive: (crewToken, { max, excluding = [] }) => {
@@ -297,6 +301,8 @@ export function aBasketEntry(overrides: Partial<BasketEntry> = {}): BasketEntry 
     addedAt: new Date('2026-10-31T19:53:00.000Z'),
     state: 'waiting',
     refusal: null,
+    isUnanswered: false,
+    storedAt: null,
     ...overrides,
   };
 }

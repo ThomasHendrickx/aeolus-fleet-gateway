@@ -130,6 +130,15 @@ describe('a person removes an entry from the basket', () => {
     expect(entries.held.size).toBe(1);
   });
 
+  it('refuses to remove an entry sent: its answer is stored, and the next Put or Send clears it', async () => {
+    await store({ ...HARBOUR, state: 'sent', storedAt: new Date('2026-10-31T20:16:00.000Z') });
+
+    const removed = await removeWith().remove({ caller: CHARLOTTE_GRANT, questionId: HARBOUR.questionId });
+
+    expect(removed).toMatchObject({ isOk: false, error: { kind: 'CONFLICT' } });
+    expect(entries.held.size).toBe(1);
+  });
+
   it('refuses a question with no entry in the basket', async () => {
     const removed = await removeWith().remove({ caller: CHARLOTTE_GRANT, questionId: HARBOUR.questionId });
 

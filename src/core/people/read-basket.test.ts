@@ -62,6 +62,7 @@ describe('the basket open', () => {
     expect(basket).toEqual({
       isOk: true,
       value: {
+        count: 3,
         toSend: 3,
         entries: [
           { questionId: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'orchestrator-1', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:41:00.000Z', option: 2, optionLabel: "Harbour first, on today's look", note: 'Harbour first: the demo on 12 Nov needs it.', standing: { kind: 'waiting' } },
@@ -123,10 +124,43 @@ describe('the basket open', () => {
     });
   });
 
+  it('shows an entry the fleet stored as sent, with when, outside the count and the answers to send', async () => {
+    await entries.save(aBasketEntry({ state: 'sent', storedAt: new Date('2026-10-31T20:16:00.000Z') }));
+    await entries.save({ ...PRICING, state: 'sending' });
+
+    const basket = await readBasketWith([])(CHARLOTTE_GRANT);
+
+    expect(basket).toMatchObject({ isOk: true, value: { count: 1, toSend: 0, entries: [{ standing: { kind: 'sent', at: '2026-10-31T20:16:00.000Z' } }, { standing: { kind: 'sending', isUnanswered: false } }] } });
+  });
+
+  it('shows an entry the fleet did not answer as sending, not answered', async () => {
+    await entries.save(aBasketEntry({ state: 'sending', isUnanswered: true }));
+
+    const basket = await readBasketWith([])(CHARLOTTE_GRANT);
+
+    expect(basket).toMatchObject({ isOk: true, value: { entries: [{ standing: { kind: 'sending', isUnanswered: true } }] } });
+  });
+
+  it('counts what will be sent: entries waiting, sending or refused, not one withdrawn, replaced, answered elsewhere or sent', async () => {
+    await entries.save(aBasketEntry());
+    await entries.save({ ...PRICING, state: 'sending' });
+    await entries.save({ ...RETENTION, state: 'refused', refusal: 'builder-core was retired, so it cannot receive an answer' });
+    await entries.save(aBasketEntry({ questionId: '0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0004', state: 'sent', storedAt: new Date('2026-10-31T20:16:00.000Z') }));
+    await entries.save(aBasketEntry({ questionId: '1b2c3d4e-5f6a-4b7c-8d8e-9f0a1b2c3d4e', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0005' }));
+    await outcomes.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0005', place: 'slack', kind: 'answered', option: 3, at: new Date('2026-10-31T20:01:00.000Z') });
+    const withdrawn = aBasketEntry({ questionId: '2c3d4e5f-6a7b-4c8d-8e9f-0a1b2c3d4e5f', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0006', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9rev' });
+    await entries.save(withdrawn);
+    const withdrawal = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0w03', senderShipId: withdrawn.senderShipId, contentType: 'application/vnd.aeolus.question-withdrawal+json', askedQuestionId: null, withdrawnQuestionId: withdrawn.questionId });
+
+    const basket = await readBasketWith([withdrawal])(CHARLOTTE_GRANT);
+
+    expect(basket).toMatchObject({ isOk: true, value: { count: 3, toSend: 1 } });
+  });
+
   it("lists none of another fleet's or another person ship's entries", async () => {
     await entries.save(aBasketEntry({ fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8zz' }));
     await entries.save(aBasketEntry({ shipId: 'shp_01m3tbfspe96yf1rnr4ank9dk1' }));
 
-    await expect(readBasketWith([])(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { toSend: 0, entries: [] } });
+    await expect(readBasketWith([])(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { count: 0, toSend: 0, entries: [] } });
   });
 });
