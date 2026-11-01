@@ -78,4 +78,22 @@ describe('the form to send a ship a message (aeolus-fleet #1547)', () => {
       isSendOff: isSendOff(markup),
     }).toEqual({ reason: true, said: true, isSendOff: true });
   });
+
+  it('locks only Cancel and Send while it sends: Close and the clear of the ship stay on, as drawn', () => {
+    const markup = render({ to: 'builder-gateway', message: MESSAGE, phase: { kind: 'sending' } });
+
+    expect({
+      close: markup.includes('aria-label="Close" disabled=""'),
+      clear: markup.includes('aria-label="Clear builder-gateway" disabled=""'),
+      cancel: /<button type="button" disabled=""[^>]*>Cancel</.test(markup),
+      message: /<textarea[^>]*disabled=""/.test(markup),
+    }).toEqual({ close: false, clear: false, cancel: true, message: true });
+  });
+
+  it.each([
+    ['while it sends', { kind: 'sending' } as const],
+    ['once the fleet did not answer', { kind: 'failed', failure: { kind: 'noAnswer' } } as const],
+  ])("no longer says the ship was filled in from the alert %s", (_, phase) => {
+    expect(render({ to: 'builder-gateway', isFromAlert: true, message: MESSAGE, phase })).not.toContain('Filled in from the alert');
+  });
 });
