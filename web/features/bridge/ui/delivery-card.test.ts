@@ -299,9 +299,10 @@ describe('an opened item’s heading, text and screen (aeolus-fleet#1538)', () =
   });
 
   it('shows a question’s options by their labels alone on a phone, their details from a desktop up', () => {
-    const detail = /<span class="([^"]*)">Harbour is built once\.<\/span>/.exec(render(aQuestion()))?.[1] ?? '';
+    const markup = render(aQuestion());
+    const classesOf = (detail: string) => (new RegExp(`<span class="([^"]*)">${detail}</span>`).exec(markup)?.[1] ?? '').split(' ');
 
-    expect(detail.split(' ')).toContain('max-md:hidden');
+    expect([classesOf('Harbour is built once\\.').includes('max-md:hidden'), classesOf('Answer with your note alone\\.').includes('max-md:hidden')]).toEqual([true, true]);
   });
 
   it('is its own screen on a phone, titled by its job, back to the list by its chevron, and has no Back beside the list on a desktop', () => {
