@@ -40,7 +40,7 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
       main={<KeptRead readAt={readAt}>{read.kind === 'unreadable' ? null : <HomePanel fleetId={fleetId} home={home} />}</KeptRead>}
       aside={
         <KeptRead readAt={fleetRead.kind === 'unreadable' ? undefined : new Date().toISOString()}>
-          <YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} />
+          <YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} isRecordUnreadable={read.kind === 'unreadable'} />
         </KeptRead>
       }
     />

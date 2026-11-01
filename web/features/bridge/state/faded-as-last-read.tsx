@@ -7,7 +7,8 @@ import { useLastReadAt } from './kept-read';
 
 /**
  * A page's list as last read while the record cannot be read (states.html):
- * faded and not to be acted on, since acting goes through the fleet, with
+ * faded, its buttons left out and the rest inert, since acting goes through
+ * the fleet, with
  * when it was read under it; untouched while it is read now.
  */
 export function FadedAsLastRead({ children }: { children: ReactNode }) {
@@ -17,7 +18,7 @@ export function FadedAsLastRead({ children }: { children: ReactNode }) {
   }
   return (
     <div className="grid gap-3">
-      <div inert className="opacity-60">
+      <div inert className="opacity-60 [&_button]:hidden">
         {children}
       </div>
       <p className="text-caption text-muted-foreground">{`Shown as last read, at ${lastReadTimeOf(lastReadAt)}.`}</p>
