@@ -319,3 +319,71 @@ describe('a person opens a question its asker withdrew or replaced: their look a
     });
   });
 });
+
+describe('a person opens a step its asker withdrew or replaced: as a question, their look at it is all it asks (Bridge, CC14)', () => {
+  const STEP_ID = '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10';
+  const ASKING = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0s01', messageId: 'msg_01m3tbfspe96yf1rnr4ank0s01', contentType: 'application/vnd.aeolus.step+json', payload: '{}', headline: 'Sign in to linear', askedQuestionId: null, stepId: STEP_ID });
+  const WITHDRAWAL = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0006',
+    messageId: 'msg_01m3tbfspe96yf1rnr4ank0006',
+    contentType: 'application/vnd.aeolus.step-withdrawal+json',
+    payload: JSON.stringify({ stepId: STEP_ID }),
+    headline: null,
+    askedQuestionId: null,
+    withdrawnStepId: STEP_ID,
+  });
+  const REPLACEMENT = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0007',
+    messageId: 'msg_01m3tbfspe96yf1rnr4ank0007',
+    contentType: 'application/vnd.aeolus.step-replacement+json',
+    headline: 'Sign in to linear with the team account',
+    askedQuestionId: null,
+    stepId: '7a2d3b51-6e2c-4c9f-8b62-1d9f4a3b8e21',
+    withdrawnStepId: STEP_ID,
+  });
+
+  function asked(calls: string[]): string[] {
+    return calls.filter((call) => call !== 'inbox' && !call.startsWith('pushReceive'));
+  }
+
+  it('shows a withdrawn step stale, with nothing to do, and is done with it and its withdrawal', async () => {
+    const { openDelivery, calls } = opening([ASKING, WITHDRAWAL]);
+
+    const shown = await openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
+
+    expect({ stale: shown.isOk ? shown.value.stale : shown, calls: asked(calls), kinds: outcomes.held.map(({ deliveryId, kind }) => ({ deliveryId, kind })), opened: [...opened.held.values()] }).toEqual({
+      stale: { kind: 'withdrawn', replacementId: null },
+      calls: [`ack(${ASKING.deliveryId})`, `handled(${ASKING.deliveryId})`, `ack(${WITHDRAWAL.deliveryId})`, `handled(${WITHDRAWAL.deliveryId})`],
+      kinds: [
+        { deliveryId: ASKING.deliveryId, kind: 'withdrawn' },
+        { deliveryId: WITHDRAWAL.deliveryId, kind: 'seen' },
+      ],
+      opened: [],
+    });
+  });
+
+  it('shows a replaced step stale, linked to its replacement, and is done with it alone: the replacement is a new item that still waits', async () => {
+    const { openDelivery, calls } = opening([ASKING, REPLACEMENT]);
+
+    const shown = await openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
+
+    expect({ stale: shown.isOk ? shown.value.stale : shown, calls: asked(calls), kinds: outcomes.held.map(({ deliveryId, kind }) => ({ deliveryId, kind })) }).toEqual({
+      stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId },
+      calls: [`ack(${ASKING.deliveryId})`, `handled(${ASKING.deliveryId})`],
+      kinds: [{ deliveryId: ASKING.deliveryId, kind: 'replaced' }],
+    });
+  });
+
+  it('is done with the step a replacement replaces once the person opens the replacement, which still waits on them', async () => {
+    const { openDelivery, calls } = opening([ASKING, REPLACEMENT]);
+
+    const shown = await openDelivery({ caller: CALLER, deliveryId: REPLACEMENT.deliveryId, place: 'bridge' });
+
+    expect({ stale: shown.isOk ? shown.value.stale : shown, calls: asked(calls), kinds: outcomes.held.map(({ deliveryId, kind }) => ({ deliveryId, kind })), opened: [...opened.held.keys()] }).toEqual({
+      stale: null,
+      calls: [`ack(${REPLACEMENT.deliveryId})`, `ack(${ASKING.deliveryId})`, `handled(${ASKING.deliveryId})`],
+      kinds: [{ deliveryId: ASKING.deliveryId, kind: 'replaced' }],
+      opened: [`${FLEET_ID}/${PERSON_SHIP_ID}/${REPLACEMENT.deliveryId}`],
+    });
+  });
+});
