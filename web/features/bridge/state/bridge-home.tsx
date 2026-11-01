@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { NoSignIn } from '../../sign-in/ui/no-sign-in';
-import { readBasketCount, readBridgeHome } from '../hooks/read-bridge';
+import { readBasketCount, readBridgeHome, readDecidePlaces } from '../hooks/read-bridge';
 import { BRIDGE_PATH } from '../paths';
 import { BridgeNav } from '../ui/bridge-nav';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
@@ -15,10 +15,10 @@ import { RecordUnreadable } from './record-unreadable';
 const NOTHING = { waiting: { count: 0, items: [] }, stayAware: [] };
 
 async function HomeParts({ api, fleetId }: { api: GatewayApi; fleetId: string }) {
-  const read = await readBridgeHome(api);
+  const [read, decidePlaces] = await Promise.all([readBridgeHome(api), readDecidePlaces(api)]);
   switch (read.kind) {
     case 'read':
-      return <HomePanel fleetId={fleetId} home={read.value} />;
+      return <HomePanel fleetId={fleetId} home={read.value} decidePlaces={decidePlaces} />;
     case 'none':
       return <HomePanel fleetId={fleetId} home={NOTHING} />;
     case 'unreadable':
