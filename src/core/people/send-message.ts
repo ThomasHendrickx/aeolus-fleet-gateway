@@ -6,6 +6,9 @@ import type { CrewPersonShip } from './crew-person-ship.js';
 import { asPersonCrew, withOwnRefusal, type PersonCaller, type PersonCrewError } from './person-crew.js';
 import type { PersonCrews, PersonSelector, PersonShipDoor } from './ports.js';
 
+/** The fleet's code for a call it gave no answer to: the message may be stored, so the same key sends it once. */
+const NO_ANSWER = 'UNAVAILABLE';
+
 /** Outbound port: a new key for a message the person gave none. */
 export interface SendKeys {
   newIdempotencyKey(): string;
@@ -24,7 +27,9 @@ export type SendMessage = (input: {
  * #1046), to a ship by its name or any ship of a type. The fleet checks the
  * ship's scopes and the network rules at send time, so the gateway adds no
  * rule of its own and passes the fleet's reason on when it refuses. The
- * person's own key, when given, makes a send tried again go once.
+ * person's own key, when given, makes a send tried again go once. A send
+ * the fleet gave no answer to is said as such, not as a refusal: it may be
+ * stored, and sending again under the same key stores it once.
  */
 export function createSendMessage(deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; keys: SendKeys }): SendMessage {
   return async ({ caller, to, contentType, payload, idempotencyKey }) => {
@@ -34,6 +39,9 @@ export function createSendMessage(deps: { crewPersonShip: CrewPersonShip; crews:
       return sent;
     }
     const taken = sent.value.value;
-    return taken.isOk ? ok(taken.value) : refuse('SEND_REFUSED', `The fleet did not take your message: ${taken.error.message}`);
+    if (taken.isOk) {
+      return ok(taken.value);
+    }
+    return taken.error.code === NO_ANSWER ? refuse('FLEET_UNAVAILABLE', taken.error.message) : refuse('SEND_REFUSED', `The fleet did not take your message: ${taken.error.message}`);
   };
 }

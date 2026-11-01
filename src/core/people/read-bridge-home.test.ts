@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { anAttioParty } from '../../../test/support/party-grant-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import type { RecordedPersonDelivery } from './ports.js';
@@ -17,6 +19,7 @@ let entries: ReturnType<typeof memoryBasketEntries>;
 let connections: ReturnType<typeof memoryConnectionStore>;
 let routes: Route[];
 let outcomes: ReturnType<typeof memoryItemOutcomes>;
+let parties: ReturnType<typeof memoryPartyStore>;
 
 /** The gateway's own ship in the fleet, which sends the person its own steps (CC14). */
 const GATEWAY_SHIP_ID = 'shp_01m3tbfspe96yf1rnr4ank0gat';
@@ -36,13 +39,13 @@ beforeEach(async () => {
   connections = memoryConnectionStore();
   routes = [];
   outcomes = memoryItemOutcomes();
+  parties = memoryPartyStore();
   await connections.save({ fleetId: FLEET_ID, shipId: GATEWAY_SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-01T00:00:00.000Z') });
 });
 
-/** The gateway's own words for its own step's action, by the step's link: its sign-in page's party. */
-function ownStepActionOf(href: string): string | undefined {
-  const party = /\/outside-parties\/([^/?]+)/.exec(href)?.[1];
-  return party === undefined ? undefined : `Sign in to ${party}`;
+/** The party of the gateway's own step, by the step's link: its sign-in page's party. */
+function ownStepPartyOf(href: string): string | undefined {
+  return /\/outside-parties\/([^/?]+)/.exec(href)?.[1];
 }
 
 function readHome(deliveries: PersonDelivery[], options: { offered?: { isEmailOffered: boolean; isWebPushOffered: boolean }; record?: RecordedPersonDelivery[] } = {}) {
@@ -50,7 +53,7 @@ function readHome(deliveries: PersonDelivery[], options: { offered?: { isEmailOf
   const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries, record });
   return {
     ...ship,
-    readHome: createReadBridgeHome({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, entries, outcomes, connections, routes: memoryRoutes(routes), defaults: CHAT_ON, ownStepActionOf, ...offered }),
+    readHome: createReadBridgeHome({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, entries, outcomes, connections, routes: memoryRoutes(routes), defaults: CHAT_ON, parties, ownStepPartyOf, ...offered }),
   };
 }
 
@@ -443,6 +446,14 @@ describe('Bridge home: what each row says and acts on in place (aeolus-fleet#153
     const home = await readHome([OWN_STEP]).readHome(CHARLOTTE_GRANT);
 
     expect(actsOf(home)).toEqual([{ deliveryId: OWN_STEP.deliveryId, actInPlace: { kind: 'ownStep', href: 'https://gateway.example.com/outside-parties/linear?fleet=flt_1', label: 'Sign in to linear' } }]);
+  });
+
+  it("says Sign in to the party's server's own title, when the gateway keeps one (aeolus-fleet#1535)", async () => {
+    await parties.save(anAttioParty({ name: 'linear', displayName: 'Linear' }));
+
+    const home = await readHome([OWN_STEP]).readHome(CHARLOTTE_GRANT);
+
+    expect(actsOf(home)).toEqual([{ deliveryId: OWN_STEP.deliveryId, actInPlace: { kind: 'ownStep', href: 'https://gateway.example.com/outside-parties/linear?fleet=flt_1', label: 'Sign in to Linear' } }]);
   });
 
   it('offers the gateway\'s own step by its title when the gateway has no words of its own for it', async () => {

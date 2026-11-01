@@ -13,7 +13,7 @@ import { z } from 'zod';
 
 import { SHARED_SIGN_IN_COOKIE } from '../../core/account-sign-in/ports.js';
 import type { CompletePartySignIn, CompletePartySignInRefusal } from '../../core/party-grants/complete-party-sign-in.js';
-import type { OwnStepActionOf } from '../../core/people/act-in-place.js';
+import type { OwnStepPartyOf } from '../../core/people/act-in-place.js';
 import type { PageUrlOf } from '../../core/party-grants/tell-sign-in-needed.js';
 import { cookieValueOf } from './account-sign-in-routes.js';
 
@@ -28,12 +28,11 @@ const HTTP_FOUND = 302;
 const PARTY_PAGE = new RegExp(`^${OUTSIDE_PARTIES_PATH}/([^/]+)$`);
 
 /**
- * The action of the gateway's own sign-in step in its own words (Bridge,
- * CC14; aeolus-fleet#1535): its link is a party's page at the gateway's
- * public address, so the action is to sign in to that party. Any other link
- * has none.
+ * The party of the gateway's own sign-in step (Bridge, CC14;
+ * aeolus-fleet#1535): its link is a party's page at the gateway's public
+ * address. Any other link has none.
  */
-export function ownStepActionOf(publicUrl: string): OwnStepActionOf {
+export function ownStepPartyOf(publicUrl: string): OwnStepPartyOf {
   const { origin } = new URL(publicUrl);
   return (href) => {
     if (!URL.canParse(href)) {
@@ -41,7 +40,7 @@ export function ownStepActionOf(publicUrl: string): OwnStepActionOf {
     }
     const link = new URL(href);
     const party = link.origin === origin ? PARTY_PAGE.exec(link.pathname)?.[1] : undefined;
-    return party === undefined ? undefined : `Sign in to ${decodeURIComponent(party)}`;
+    return party === undefined ? undefined : decodeURIComponent(party);
   };
 }
 

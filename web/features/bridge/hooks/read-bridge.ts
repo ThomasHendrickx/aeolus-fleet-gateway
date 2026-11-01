@@ -13,7 +13,7 @@ import type { WakeChannels } from '../services/deliveries';
 import type { BasketView } from '../services/basket';
 import type { BridgeHome, RecordPage } from '../services/items';
 import type { ShownRequest } from '../services/requests';
-import type { RoutingView } from '../services/routing';
+import { decidePlacesOf, type RoutedPlace, type RoutingView } from '../services/routing';
 
 /**
  * What Bridge read of the person ship: what it answered; none, for an account
@@ -68,6 +68,15 @@ async function personRead<T>(call: Promise<T>): Promise<BridgeRead<T>> {
 
 export function readBridgeHome(api: GatewayApi): Promise<BridgeRead<BridgeHome>> {
   return personRead(api.people.home.query());
+}
+
+/** The places besides Bridge that show a question, for an opened question to name; none while routing cannot be read, as the question shows without them. */
+export async function readDecidePlaces(api: GatewayApi): Promise<RoutedPlace[] | undefined> {
+  try {
+    return decidePlacesOf(await api.people.routing.query());
+  } catch {
+    return undefined;
+  }
 }
 
 export function readBasket(api: GatewayApi): Promise<BridgeRead<BasketView>> {
