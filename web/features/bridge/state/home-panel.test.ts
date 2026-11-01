@@ -112,6 +112,10 @@ describe('Bridge home as last read, while the record cannot be read (states.html
     }).toEqual({ title: true, lastRead: true, count: false });
   });
 
+  it("leaves the title row out on the phone, as the phone's frame draws it", () => {
+    expect(/<div class="[^"]*max-sm:hidden[^"]*"><h1[^>]*>Waiting on you<\/h1>/.test(markup)).toBe(true);
+  });
+
   it('shows what waited as last read, faded and not to be opened, saying so under it', () => {
     expect({
       rows: (markup.match(/data-testid="bridge-item"/g) ?? []).length,
