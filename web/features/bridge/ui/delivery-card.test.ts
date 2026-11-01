@@ -249,6 +249,7 @@ describe('an alert opened in Bridge offers to send its ship a message (aeolus-fl
         meetingHref: undefined,
         basketHref: '/bridge/basket?fleet=flt_01',
         inBasket: null,
+        finished: null,
         note: '',
         working: undefined,
         failure: undefined,
