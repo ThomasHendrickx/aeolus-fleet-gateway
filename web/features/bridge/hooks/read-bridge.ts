@@ -17,7 +17,7 @@ import type { BasketView } from '../services/basket';
 import type { BridgeHome, RecordPage } from '../services/items';
 import type { ShownRequest } from '../services/requests';
 import { decidePlacesOf, type RoutedPlace, type RoutingView } from '../services/routing';
-import type { ShellCounts } from '../ui/bridge-sidebar';
+import { shellCountsOf, type ShellCounts } from '../services/shell';
 
 /**
  * What Bridge read of the person ship: what it answered; none, for an account
@@ -100,15 +100,7 @@ export async function readBasketCount(api: GatewayApi): Promise<number> {
  */
 export async function readShellCounts(api: GatewayApi): Promise<ShellCounts> {
   const [home, basket, fleet] = await Promise.all([readBridgeHome(api), readBasketCount(api), readYourFleet(api)]);
-  const fleetAlerts = fleet.kind === 'read' ? fleet.value.counts.alert : undefined;
-  switch (home.kind) {
-    case 'read':
-      return { waiting: home.value.waiting.count, stayAware: home.value.stayAware.length, basket, fleetAlerts };
-    case 'none':
-      return { waiting: 0, stayAware: 0, basket, fleetAlerts };
-    case 'unreadable':
-      return { waiting: undefined, stayAware: undefined, basket, fleetAlerts };
-  }
+  return shellCountsOf({ home, basket, fleetAlerts: fleet.kind === 'read' ? fleet.value.counts.alert : undefined });
 }
 
 export function readRecordPage(api: GatewayApi, cursor: string | null): Promise<BridgeRead<RecordPage>> {

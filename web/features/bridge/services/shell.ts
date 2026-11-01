@@ -45,3 +45,29 @@ export function screenOf(screen: BridgeScreen): ScreenNaming {
 export function openedScreenOf(job: HomeItem['job']): string {
   return OPENED[job];
 }
+
+/** The counts the shell shows: what waits, the unseen to stay aware of, the basket's answers and the ships with an alert; one not known now is left out. */
+export interface ShellCounts {
+  readonly waiting: number | undefined;
+  readonly stayAware: number | undefined;
+  readonly basket: number;
+  readonly fleetAlerts: number | undefined;
+}
+
+/** Bridge home as the shell reads it: its counts, none for an account with no person ship, or not readable now. */
+export type HomeForCounts =
+  | { readonly kind: 'read'; readonly value: { readonly waiting: { readonly count: number }; readonly stayAware: readonly { readonly state: string }[] } }
+  | { readonly kind: 'none' }
+  | { readonly kind: 'unreadable' };
+
+/** What waits as home counts it; of the stay-aware feed only the alerts and notices not seen yet (CC16). */
+export function shellCountsOf({ home, basket, fleetAlerts }: { home: HomeForCounts; basket: number; fleetAlerts: number | undefined }): ShellCounts {
+  switch (home.kind) {
+    case 'read':
+      return { waiting: home.value.waiting.count, stayAware: home.value.stayAware.filter(({ state }) => state === 'new').length, basket, fleetAlerts };
+    case 'none':
+      return { waiting: 0, stayAware: 0, basket, fleetAlerts };
+    case 'unreadable':
+      return { waiting: undefined, stayAware: undefined, basket, fleetAlerts };
+  }
+}
