@@ -15,12 +15,12 @@ function countsOf(items: readonly HomeItem[]): string {
  * Bridge home's title row (home.html, states.html): what waits on the
  * person with its one count, and how many to decide and to do; as last
  * read, while the record cannot be read, when it was read in place of the
- * count.
+ * count, and on the phone nothing, as its frame draws it (states.html).
  */
 export function WaitingHeading({ waiting }: { waiting: BridgeHome['waiting'] }) {
   const lastReadAt = useLastReadAt();
   return (
-    <div>
+    <div className={lastReadAt === undefined ? undefined : 'max-sm:hidden'}>
       <h1 id="bridge-waiting-heading" className="text-heading font-semibold">
         Waiting on you
         {lastReadAt === undefined ? (
