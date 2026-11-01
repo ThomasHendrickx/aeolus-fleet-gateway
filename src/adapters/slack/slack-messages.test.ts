@@ -72,7 +72,7 @@ describe("a bot's message only one person sees", () => {
   });
 
   it('posts a Seen button under an item with no other, naming its fleet message', async () => {
-    await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'U0MATHILDE', threadTs: null, text: 'Release 0.36 is out', buttons: [{ text: 'Seen', seen: true }] });
+    await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'U0MATHILDE', threadTs: null, text: 'Release 0.36 is out', buttons: [{ text: 'Seen', isSeen: true }] });
 
     const blocks: unknown = JSON.parse(slack.posted[0]?.form.blocks ?? 'null');
     expect(blocks).toEqual([

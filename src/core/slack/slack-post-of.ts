@@ -1,5 +1,6 @@
 import { QUESTION_CONTENT_TYPE, questionSchema } from '@aeolus-fleet/common';
 
+import { jobOf } from '../people/item-job.js';
 import type { PersonDelivery } from '../people/ports.js';
 import type { SlackButton } from './ports.js';
 
@@ -9,8 +10,21 @@ export const MESSAGE_MAX_LENGTH = 40_000;
 /** The most one block of a Slack message shows. */
 export const BLOCK_MAX_LENGTH = 3_000;
 
-/** What a delivery shows as in Slack: its text in Slack's markup and a button per option, or a link to the gateway for what Slack does not show in full. */
-export type SlackShown = { readonly kind: 'shown'; readonly text: string; readonly buttons: readonly SlackButton[] } | { readonly kind: 'link'; readonly text: string };
+/** What a delivery shows as in Slack: its text in Slack's markup, or a link to the gateway for what Slack does not show in full; with a button per option, or Seen. */
+export interface SlackShown {
+  readonly kind: 'shown' | 'link';
+  readonly text: string;
+  readonly buttons: readonly SlackButton[];
+}
+
+/** The button under an item with no other: seeing it is what it asks, or all the person does with it in Slack (Bridge, section 6). */
+export const SEEN: SlackButton = { text: 'Seen', isSeen: true };
+
+/** The buttons of an item that shows no option: Seen, but for a question or a step, which seeing does not end. */
+function seenOf(contentType: string): SlackButton[] {
+  const job = jobOf(contentType);
+  return job === 'stay-aware' || job === 'everything-else' ? [SEEN] : [];
+}
 
 /** The content type's essence, its parameters gone. */
 function essenceOf(contentType: string): string {
@@ -38,15 +52,16 @@ function slackMarkupOf(markdown: string): string {
  * context, one button per option; JSON as a code block. Another content
  * type, or more than Slack shows in full (40,000 characters, a block 3,000),
  * goes as a link to the gateway's pages. The gateway's own bot heads it
- * with the sender's name.
+ * with the sender's name. An item with no other button, an alert, a notice
+ * or any other message, gets Seen.
  */
 export function slackPostOf(delivery: PersonDelivery, shown: { bridgeUrl: string; isHeadedBySender: boolean }): SlackShown {
   const { senderName, contentType, payload } = delivery;
-  const link: SlackShown = { kind: 'link', text: `${escaped(senderName)} sent you a message Slack does not show in full: <${shown.bridgeUrl}|open it in the gateway>` };
+  const link: SlackShown = { kind: 'link', text: `${escaped(senderName)} sent you a message Slack does not show in full: <${shown.bridgeUrl}|open it in the gateway>`, buttons: seenOf(contentType) };
   const headed = (text: string) => (shown.isHeadedBySender ? `*${escaped(senderName)}*\n${text}` : text);
   const essence = essenceOf(contentType);
   let text: string;
-  let buttons: SlackButton[] = [];
+  let buttons = seenOf(contentType);
   if (essence === 'text/plain') {
     text = escaped(payload);
   } else if (essence === 'text/markdown') {

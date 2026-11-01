@@ -120,7 +120,7 @@ export function createShowInSlack(deps: {
       }
       const app = await deps.apps.find(post.fleetId, post.appId);
       const shown = slackPostOf(delivery, { bridgeUrl: deps.bridgeUrlOf(post.fleetId), isHeadedBySender: app?.shipId === null });
-      const ts = isInSlack(app) ? await posted({ app, channel: post.channel, threadTs: post.threadTs }, { messageId: post.messageId, text: shown.text, buttons: shown.kind === 'shown' ? shown.buttons : [] }) : undefined;
+      const ts = isInSlack(app) ? await posted({ app, channel: post.channel, threadTs: post.threadTs }, { messageId: post.messageId, text: shown.text, buttons: shown.buttons }) : undefined;
       if (ts === undefined) {
         await deps.posts.remove(post.fleetId, post);
         return 'notShown';

@@ -10,10 +10,13 @@
 import { z } from 'zod';
 
 import { err, ok } from '../../core/shared/result.js';
-import type { SlackMessages } from '../../core/slack/ports.js';
+import type { SlackButton, SlackMessages } from '../../core/slack/ports.js';
 import { createSlackCall } from './slack-call.js';
 
 const postedSchema = z.object({ ok: z.literal(true) });
+
+/** What a press of Seen says it pressed, as the actions route reads it. */
+export const SEEN_ACTION = 'seen';
 
 const postedMessageSchema = z.object({ ok: z.literal(true), channel: z.string(), ts: z.string() });
 
@@ -21,6 +24,12 @@ const messagesSchema = z.object({ ok: z.literal(true), messages: z.array(z.objec
 
 /** What the gateway says when Slack answers no message at the time asked, as Slack names a message it does not have. */
 const MESSAGE_NOT_FOUND = 'message_not_found';
+
+/** A button as Slack shows it: an option, named by its number, or Seen. */
+function elementOf(button: SlackButton) {
+  const text = { type: 'plain_text', text: button.text };
+  return 'option' in button ? { type: 'button', action_id: `answer-${String(button.option)}`, text, value: String(button.option) } : { type: 'button', action_id: SEEN_ACTION, text, value: SEEN_ACTION };
+}
 
 /** Slack's refusal of a reaction the message carries already: what was asked holds. */
 const ALREADY_REACTED = 'already_reacted';
@@ -47,7 +56,7 @@ export function createSlackMessages(options: { apiUrl: string }): SlackMessages 
       if (buttons.length > 0) {
         form.blocks = JSON.stringify([
           { type: 'section', text: { type: 'mrkdwn', text } },
-          { type: 'actions', block_id: messageId, elements: buttons.map(({ text: label, option }) => ({ type: 'button', action_id: `answer-${String(option)}`, text: { type: 'plain_text', text: label }, value: String(option) })) },
+          { type: 'actions', block_id: messageId, elements: buttons.map(elementOf) },
         ]);
       }
       const posted = await call({ method: 'chat.postMessage', form, token: botToken }, postedMessageSchema);

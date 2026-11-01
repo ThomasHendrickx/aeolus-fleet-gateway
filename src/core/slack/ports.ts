@@ -213,11 +213,8 @@ export interface SlackEvents {
   remove(fleetId: FleetId, eventId: string): Promise<void>;
 }
 
-/** A button under a posted question: its option's label, and the option it answers. */
-export interface SlackButton {
-  readonly text: string;
-  readonly option: number;
-}
+/** A button under a post: under a question, its option's label and the option it answers; or Seen, under an item with no other (Bridge, section 6). */
+export type SlackButton = { readonly text: string; readonly option: number } | { readonly text: string; readonly isSeen: true };
 
 /** Outbound port: the fleet messages in Slack, by person ship. */
 export interface SlackPosts {
