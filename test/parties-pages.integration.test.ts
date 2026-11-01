@@ -398,7 +398,7 @@ describe('the parties pages, as the account signed in', () => {
   }, 60_000);
 
   it("shows Bridge's pages in Bridge's shell, its sidebar and the phone's tabs, and not the gateway's top bar (aeolus-fleet#1536)", async () => {
-    const pages = ['/bridge', '/bridge/basket', '/bridge/stay-aware', '/bridge/done', '/bridge/settings', '/bridge/settings/routing'];
+    const pages = ['/bridge', '/bridge/basket', '/bridge/stay-aware', '/bridge/done', '/bridge/fleet', '/bridge/settings', '/bridge/settings/routing'];
     const bodies = await Promise.all(pages.map(async (page) => (await fetch(`${address}${page}?fleet=${FLEET}`, { headers: PAGE })).text()));
 
     expect(bodies.map((body) => ({ sidebar: body.includes('data-testid="bridge-sidebar"'), tabs: body.includes('data-testid="bridge-tab-waiting"'), header: body.includes('data-testid="frame-header"') }))).toEqual(
