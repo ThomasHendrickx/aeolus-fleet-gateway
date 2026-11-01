@@ -98,7 +98,7 @@ async function seenNow(deps: DealDeps, seen: { caller: PersonCaller; kept: Opene
  * done as replaced. A replacement is done with the question it replaces.
  * What the fleet does not take now waits for the next look.
  */
-async function doneIfStale(deps: DealDeps, look: { caller: PersonCaller; crew: PersonCrewToken; looked: OpenedDelivery; waiting: readonly PersonDelivery[]; place: Place }): Promise<Stale | null> {
+export async function doneIfStale(deps: DealDeps, look: { caller: PersonCaller; crew: PersonCrewToken; looked: OpenedDelivery; waiting: readonly PersonDelivery[]; place: Place }): Promise<Stale | null> {
   const { caller, crew, looked, waiting, place } = look;
   const opened = await deps.opened.list(caller.fleetId, crew.shipId);
   const among: Asking[] = [...waiting, ...opened.filter(({ deliveryId }) => deliveryId !== looked.deliveryId)];
