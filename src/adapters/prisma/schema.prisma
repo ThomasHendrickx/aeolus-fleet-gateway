@@ -217,6 +217,7 @@ model IssuedToken {
   @@index([fleetId])
   @@index([familyId])
   @@index([codeHash])
+  @@index([fleetId, grantId, state])
   @@map("issued_tokens")
 }
 
@@ -327,6 +328,7 @@ model AccountGrant {
   accountTokenExpiresAt DateTime @map("account_token_expires_at") @db.Timestamptz(3)
 
   @@index([fleetId])
+  @@index([fleetId, personShipId])
   @@map("account_grants")
 }
 
