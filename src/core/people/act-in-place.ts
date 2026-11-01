@@ -19,6 +19,9 @@ export type ActInPlace =
 /** The gateway's own words for the action of a step of its own, by the step's link; none where it has none, and the step's title says it. */
 export type OwnStepActionOf = (href: string) => string | undefined;
 
+/** The party a step of the gateway's own asks the person to sign in to, by the step's link; none for any other step. */
+export type OwnStepPartyOf = (href: string) => string | undefined;
+
 /** What a row knows of its item to act on it in place. */
 export interface ActingItem {
   readonly job: ItemJob;

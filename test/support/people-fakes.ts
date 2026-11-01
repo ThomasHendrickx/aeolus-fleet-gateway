@@ -142,17 +142,17 @@ export const SENT_MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank0sen';
  * past the ones it is told to leave out unless it keeps no exclusions, as a
  * core before excluding does, with the last number the gateway handed it with;
  * the ones it acknowledged, read again until handled; what its discover
- * answers; its record, newest first by delivery id; the crew token it
- * takes, and the calls the gateway made.
+ * answers; its record, newest first by delivery id; its name, as whoami
+ * answers it; the crew token it takes, and the calls the gateway made.
  */
-export function fakePersonShipDoor(ship: { crewToken: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[]; isExcludingIgnored?: boolean }) {
+export function fakePersonShipDoor(ship: { crewToken: string; name?: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[]; isExcludingIgnored?: boolean }) {
   const calls: string[] = [];
   /** The replies the fleet took, as sent. */
   const replies: Parameters<PersonShipDoor['reply']>[1][] = [];
   /** The messages the fleet took, as sent. */
   const sent: Parameters<PersonShipDoor['send']>[1][] = [];
   /** The fleet's answers to come for each call, before it takes them. */
-  const refusals: { pushReceive: FleetRefusal[]; record: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[] } = { pushReceive: [], record: [], reply: [], handled: [], discover: [], send: [], delivery: [] };
+  const refusals: { pushReceive: FleetRefusal[]; record: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[]; whoami: FleetRefusal[] } = { pushReceive: [], record: [], reply: [], handled: [], discover: [], send: [], delivery: [], whoami: [] };
   /** The hand-overs the gateway reported, in order. */
   const handOvers: Parameters<PersonShipDoor['handed']>[1][] = [];
   /** The deliveries the ship acknowledged and has not handled yet. */
@@ -230,6 +230,11 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
         handOvers.push(handOver);
         return 'handed' as const;
       });
+    },
+    whoami: (crewToken) => {
+      calls.push('whoami');
+      const refused = refusals.whoami.shift();
+      return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => ({ name: ship.name ?? 'charlotte' }));
     },
     discover: (crewToken) => {
       calls.push('discover');

@@ -14,7 +14,7 @@ const APPROVER: Actor = { fleetId: FLEET_ID, kind: 'account', accountId: 'acc-1'
 const CRM: McpServerParty = {
   fleetId: FLEET_ID,
   name: 'crm',
-  kind: 'mcpServer',
+  kind: 'mcpServer', displayName: null,
   url: 'https://crm.example.com/mcp',
   credential: { kind: 'none' },
   concurrencyLimit: 4,

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { MOCK_CRM_BEARER, MOCK_CRM_CLIENT, startMockCrm, type MockCrm } from '../../../test/fixtures/mock-crm/mock-crm.js';
 import type { McpServerConnection } from '../../core/mcp-out/ports.js';
 import { createMcpServers } from './mcp-servers.js';
@@ -168,5 +169,47 @@ describe('calling a tool of an outside MCP server (interop 5.2)', () => {
     await crm.close();
     const outcome = await servers.callTool(withBearer(), { name: 'list_contacts', arguments: {}, timeoutMs: TIMEOUT_MS });
     expect(outcome.kind).toBe('notSent');
+  });
+});
+
+describe("an outside MCP server's own title, told on each connect (aeolus-fleet#1535, Thomas: serverInfo.title only)", () => {
+  const PARTY = { fleetId: FLEET_ID, name: 'linear' };
+  let told: { party: unknown; title: string | null }[];
+  let telling: ReturnType<typeof createMcpServers>;
+
+  beforeEach(async () => {
+    await crm.close();
+    crm = await startMockCrm({ serverTitle: 'Linear' });
+    told = [];
+    telling = createMcpServers({
+      onConnected: (connection, server) => {
+        told.push({ party: connection.party, title: server.title });
+        return Promise.resolve();
+      },
+    });
+  });
+
+  it('tells the title on listing its tools and on calling one', async () => {
+    await telling.listTools({ ...withBearer(), party: PARTY });
+    await telling.callTool({ ...withBearer(), party: PARTY }, { name: 'list_contacts', arguments: {}, timeoutMs: TIMEOUT_MS });
+
+    expect(told).toEqual([{ party: PARTY, title: 'Linear' }, { party: PARTY, title: 'Linear' }]);
+  });
+
+  it('tells no title for a server that gives none, never its technical name', async () => {
+    await crm.close();
+    crm = await startMockCrm({});
+
+    await telling.listTools({ ...withBearer(), party: PARTY });
+
+    expect(told).toEqual([{ party: PARTY, title: null }]);
+  });
+
+  it('tells nothing when it did not connect', async () => {
+    await crm.close();
+
+    await telling.listTools({ ...withBearer(), party: PARTY });
+
+    expect(told).toEqual([]);
   });
 });

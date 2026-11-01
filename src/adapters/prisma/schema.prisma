@@ -80,6 +80,8 @@ model Party {
   concurrencyLimit         Int?     @map("concurrency_limit")
   /// An MCP server's tool switches, by tool name (aeolus-fleet#1151); none kept yet means every tool it lists is on.
   toolSwitches             Json?    @map("tool_switches")
+  /// An MCP server's display name: the title its serverInfo gave on the gateway's last connect, none if it gave none.
+  displayName              String?  @map("display_name")
   /// The scopes a calling ship needs (gateway scopes, 4.2): the party's set and each tool's, by scope text and tool name; none set yet needs nothing.
   scopeRequirements        Json?    @map("scope_requirements")
   /// The version the requirements were last changed to, so a change made on an older one is refused.

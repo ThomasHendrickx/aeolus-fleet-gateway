@@ -75,6 +75,16 @@ describe('a person sends a message as their person ship', () => {
     });
   });
 
+  it('says the fleet did not answer, not that it refused, so the person may send again under the same key', async () => {
+    const { sendMessage, refusals } = sending();
+    refusals.send.push({ code: 'UNAVAILABLE', message: 'The fleet did not answer: fetch failed' });
+
+    await expect(sendMessage({ caller: CHARLOTTE_GRANT, to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'Hello', idempotencyKey: 'charlotte-4' })).resolves.toEqual({
+      isOk: false,
+      error: { kind: 'FLEET_UNAVAILABLE', message: 'The fleet did not answer: fetch failed' },
+    });
+  });
+
   it('refuses an account with no person ship, sending nothing', async () => {
     const { sendMessage, calls } = sending();
 

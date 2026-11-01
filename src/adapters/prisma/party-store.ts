@@ -57,6 +57,7 @@ interface Row {
   credential: unknown;
   concurrencyLimit: number | null;
   toolSwitches: unknown;
+  displayName: string | null;
   clientId: string | null;
   bearerHash: string | null;
   isRepeatable: boolean | null;
@@ -86,7 +87,7 @@ function partyOf(row: Row): Party {
   const kind = kindSchema.parse(row.kind);
   switch (kind) {
     case 'mcpServer':
-      return { ...base, kind, url: z.string().parse(row.url), credential: serverCredentialSchema.parse(row.credential), concurrencyLimit: z.int().parse(row.concurrencyLimit), toolSwitches: toolSwitchesOf(row.toolSwitches) };
+      return { ...base, kind, url: z.string().parse(row.url), credential: serverCredentialSchema.parse(row.credential), concurrencyLimit: z.int().parse(row.concurrencyLimit), toolSwitches: toolSwitchesOf(row.toolSwitches), displayName: row.displayName };
     case 'mcpClient':
       return { ...base, kind, clientId: z.string().parse(row.clientId) };
     case 'a2aClient':
@@ -151,6 +152,9 @@ export function createPrismaPartyStore(db: Db): PartyStore & { crewed(): Promise
     remove: async (fleetId, name) => {
       // One transaction: a party added again under the name finds no notice of the earlier one.
       await db.$transaction([db.party.deleteMany({ where: { fleetId, name } }), db.partySignInNotice.deleteMany({ where: { fleetId, party: name } })]);
+    },
+    keepDisplayName: async ({ fleetId, name }, displayName) => {
+      await db.party.updateMany({ where: { fleetId, name, kind: 'mcpServer' }, data: { displayName } });
     },
   };
 }

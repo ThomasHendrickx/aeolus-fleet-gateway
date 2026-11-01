@@ -2,6 +2,8 @@
  * The outside MCP server behind an app proxy ship, as MCP out sees it
  * (interop 3.3, 5.2): its tools, and one call at a time.
  */
+import type { FleetId } from '@aeolus-fleet/common';
+
 import type { Result } from '../shared/result.js';
 import type { McpServerPartyCredential } from '../vault/credential.js';
 
@@ -10,6 +12,13 @@ export interface McpServerConnection {
   /** Its Streamable HTTP endpoint. */
   readonly url: string;
   readonly credential: McpServerPartyCredential;
+  /** The party it is, whose display name each connect keeps; none for a server checked before it is a party. */
+  readonly party?: { readonly fleetId: FleetId; readonly name: string };
+}
+
+/** The server as it named itself on connecting: its serverInfo's title, none if it gave none, never its technical name. */
+export interface ConnectedServer {
+  readonly title: string | null;
 }
 
 /** MCP's tool annotations (2026-07-28), as the server states them: hints, never trusted on their own. */

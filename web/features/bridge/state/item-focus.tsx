@@ -1,5 +1,6 @@
 'use client';
 
+import { Toast } from '@base-ui/react/toast';
 import { useState, useTransition, type ReactNode } from 'react';
 
 import { meetingPathOf } from '../../meeting/paths';
@@ -8,9 +9,12 @@ import { answerDelivery, doneDelivery, openDelivery, putInBasket, putPickInBaske
 import { BRIDGE_BASKET_PATH } from '../paths';
 import type { FocusedDelivery } from '../services/deliveries';
 import type { HomeItem } from '../services/items';
+import type { RoutedPlace } from '../services/routing';
+import { BasketToasts, putToastOf } from '../ui/basket-toast';
 import { DeliveryCard, type DeliveryControl, type InBasket, type Opened, type StepFinished } from '../ui/delivery-card';
 import { ItemSplit } from '../ui/item-split';
 import { Notice } from '../ui/notice';
+import { SendMessageProvider, useSendMessage } from './send-message';
 
 /** An item to open: by its delivery, with its job, whether an alert, whether it was new, and the answer to it in the basket, if any. A replacement opened from its stale item is new. */
 export interface ToOpen {
@@ -45,12 +49,28 @@ export interface ItemOpening {
  * done at once (CC16), so it shows with no answer to give, as does a
  * question its asker withdrew or replaced; a replaced one opens its
  * replacement. A step ends done or cannot with the note, sent at once,
- * never through the basket (CC23), and stays open showing its outcome. A question's answer goes in the basket (CC24), and comes
- * out of it there; from its row, a new question's pick goes in it at once, opened by the same press. Answering, being done or putting in the basket says so
- * in place, and the page reads itself again. The open item shows beside its
- * list on a desktop, and on its own screen on a phone (aeolus-fleet#1538).
+ * never through the basket (CC23), and stays open showing its outcome. A question's answer goes in the basket (CC24): the
+ * question stays open saying so, with a toast (basket.html), and comes out
+ * of it there; from its row, a new question's pick goes in it at once, opened by the same press. Answering or being done says so in place, and the page reads
+ * itself again. A question names where it shows when the page read its places.
+ * An opened alert offers to send its ship a message, as home offers to send
+ * any ship one (aeolus-fleet #1547). The open item shows beside its list on
+ * a desktop, and on its own screen on a phone (aeolus-fleet#1538).
  */
-export function ItemFocus({ fleetId, children }: { fleetId: string; children: (opening: ItemOpening) => ReactNode }) {
+export function ItemFocus({ fleetId, decidePlaces, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; children: (opening: ItemOpening) => ReactNode }) {
+  return (
+    <SendMessageProvider fleetId={fleetId}>
+      <Toast.Provider>
+        <FocusedItems fleetId={fleetId} decidePlaces={decidePlaces}>{children}</FocusedItems>
+        <BasketToasts />
+      </Toast.Provider>
+    </SendMessageProvider>
+  );
+}
+
+function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; children: (opening: ItemOpening) => ReactNode }) {
+  const toasts = Toast.useToastManager();
+  const sendMessage = useSendMessage();
   const [focus, setFocus] = useState<{ delivery: FocusedDelivery; opened: Opened; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
   const [note, setNote] = useState('');
   const [openingId, setOpeningId] = useState<string | undefined>();
@@ -98,14 +118,14 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
     });
   };
 
-  const settle = ({ control, action, onSettled }: { control: DeliveryControl; action: () => Promise<ActionOutcome<undefined>>; onSettled: () => void }) => {
+  const settle = <T,>({ control, action, onSettled }: { control: DeliveryControl; action: () => Promise<ActionOutcome<T>>; onSettled: (value: T) => void }) => {
     setWorking(control);
     setFailure(undefined);
     startTransition(async () => {
       const outcome = await action();
       setWorking(undefined);
       if (outcome.isOk) {
-        onSettled();
+        onSettled(outcome.value);
       } else {
         setFailure(outcome.message);
       }
@@ -129,13 +149,17 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
         basketHref={inFleet(BRIDGE_BASKET_PATH, fleetId)}
         inBasket={inBasket}
         finished={finished}
+        places={decidePlaces}
         note={note}
         working={working}
         failure={failure}
         onNoteChange={setNote}
         onAnswer={(option) => { settle({ control: option === undefined ? { kind: 'note' } : { kind: 'option', option }, action: () => answerDelivery({ fleet: fleetId, deliveryId: delivery.deliveryId, input: { questionId: delivery.question?.id, option, note } }), onSettled: leave(`Your answer went to ${delivery.from}.`) }); }
         }
-        onPut={(option) => { settle({ control: option === null ? { kind: 'note' } : { kind: 'option', option }, action: () => putInBasket({ fleet: fleetId, deliveryId: delivery.deliveryId, option, note }), onSettled: leave(`${option === null ? 'Your note alone' : `Option ${String(option)}`} is in the basket, not sent: ${delivery.from} receives it when you send the basket.`) }); }}
+        onPut={(option) => { settle({ control: option === null ? { kind: 'note' } : { kind: 'option', option }, action: () => putInBasket({ fleet: fleetId, deliveryId: delivery.deliveryId, option, note }), onSettled: (put) => {
+              setFocus({ delivery, opened, finished, inBasket: put });
+              toasts.add(putToastOf(put.option));
+            } }); }}
         onRemove={() => {
           if (questionId !== undefined) {
             settle({ control: { kind: 'remove' }, action: () => removeFromBasket(fleetId, questionId), onSettled: leave(`Your answer to “${delivery.title}” is out of the basket; the question still waits on you.`) });
@@ -150,6 +174,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
           });
         }}
         onOpen={(deliveryId) => { open({ deliveryId, job: opened.job }); }}
+        onSendMessage={delivery.alertShip === undefined || sendMessage === undefined ? undefined : (alertShip) => { sendMessage({ alertShip }); }}
         onBack={() => { setFocus(undefined); }}
       />
     );
