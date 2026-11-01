@@ -141,7 +141,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readInbox: (caller) =>
         Promise.resolve(
           [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
-            ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }], opened: [] })
+            ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, pick: null }], opened: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       readBridgeHome: (caller) =>
@@ -898,7 +898,7 @@ describe("a person reads and deals with their person ship's deliveries through t
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).resolves.toEqual({
       waiting: 1,
-      deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }],
+      deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide', pick: null }],
       opened: [],
     });
   });
