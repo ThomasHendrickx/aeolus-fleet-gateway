@@ -1,11 +1,10 @@
 import { readOf, signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { readRequestToDecide } from '../hooks/read-bridge';
 import { BRIDGE_SETTINGS_PATH } from '../paths';
-import { NoSignIn } from '../../sign-in/ui/no-sign-in';
 import { subjectKind, subjectName } from '../services/requests';
 import { RequestsList } from '../ui/requests-list';
 import { DecisionPanel } from './decision-panel';
-import { LiveRefresh } from './live-refresh';
+import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 
 /**
  * One request to decide, with its decision beside the queue (decision
@@ -15,7 +14,7 @@ import { LiveRefresh } from './live-refresh';
 export async function RequestToDecide({ requestId, searchParams }: { requestId: string; searchParams: SearchParams }) {
   const page = await signedInPage({ path: `${BRIDGE_SETTINGS_PATH}/requests/${encodeURIComponent(requestId)}`, searchParams });
   if (page.kind === 'noSignIn') {
-    return <NoSignIn />;
+    return <BridgeNoSignIn />;
   }
   const { fleetId, scopes } = page;
   const { request, toDecide } = await readRequestToDecide(page.api, requestId);
@@ -25,8 +24,7 @@ export async function RequestToDecide({ requestId, searchParams }: { requestId: 
   );
   if (request === undefined) {
     return (
-      <div className="grid gap-6">
-        <LiveRefresh fleetId={fleetId} />
+      <BridgeShell api={page.api} fleetId={fleetId} screen="settings">
         <section data-testid="bridge-no-longer-waits" className="rounded-lg border border-border bg-card p-6 text-card-foreground shadow-sm">
           <h2 className="text-heading font-semibold">This request no longer waits for a decision</h2>
           <div className="mt-4">
@@ -35,27 +33,28 @@ export async function RequestToDecide({ requestId, searchParams }: { requestId: 
             </a>
           </div>
         </section>
-      </div>
+      </BridgeShell>
     );
   }
   const owners = await readOf(page.api.parties.ownerChoices.query());
   const requesters = request.requesters.length;
   return (
-    <div className="grid gap-6">
-      <LiveRefresh fleetId={fleetId} />
-      <h1 className="text-heading font-semibold">To decide</h1>
-      <div className="grid gap-6 md:grid-cols-[1fr_18rem]">
-        <div className="grid content-start gap-4">
-          <section className="grid justify-items-center gap-1 rounded-lg border border-border bg-card p-6 text-center">
-            <span className="text-section font-semibold">{subjectName(request)}</span>
-            <span className="text-caption text-muted-foreground">
-              {subjectKind(request)} · {requesters} {requesters === 1 ? 'requester' : 'requesters'}
-            </span>
-          </section>
-          <DecisionPanel fleetId={fleetId} request={request} heldScopes={scopes} owners={owners} />
+    <BridgeShell api={page.api} fleetId={fleetId} screen="settings">
+      <div className="grid gap-6">
+        <h1 className="text-heading font-semibold">To decide</h1>
+        <div className="grid gap-6 md:grid-cols-[1fr_18rem]">
+          <div className="grid content-start gap-4">
+            <section className="grid justify-items-center gap-1 rounded-lg border border-border bg-card p-6 text-center">
+              <span className="text-section font-semibold">{subjectName(request)}</span>
+              <span className="text-caption text-muted-foreground">
+                {subjectKind(request)} · {requesters} {requesters === 1 ? 'requester' : 'requesters'}
+              </span>
+            </section>
+            <DecisionPanel fleetId={fleetId} request={request} heldScopes={scopes} owners={owners} />
+          </div>
+          <aside>{queue}</aside>
         </div>
-        <aside>{queue}</aside>
       </div>
-    </div>
+    </BridgeShell>
   );
 }

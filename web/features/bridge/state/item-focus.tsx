@@ -8,6 +8,7 @@ import { inFleet } from '../../../lib/gateway-api/page-account';
 import { answerDelivery, doneDelivery, openDelivery, putInBasket, putPickInBasket, removeFromBasket, type ActionOutcome } from '../hooks/bridge-actions';
 import { BRIDGE_BASKET_PATH } from '../paths';
 import type { FocusedDelivery } from '../services/deliveries';
+import { openedScreenOf } from '../services/shell';
 import type { HomeItem } from '../services/items';
 import type { RoutedPlace } from '../services/routing';
 import { BasketToasts, putToastOf } from '../ui/basket-toast';
@@ -15,6 +16,7 @@ import { DeliveryCard, type DeliveryControl, type InBasket, type Opened, type St
 import { ItemSplit } from '../ui/item-split';
 import { Notice } from '../ui/notice';
 import { SendMessageProvider, useSendMessage } from './send-message';
+import { useOpenedItem } from './opened-item';
 
 /** An item to open: by its delivery, with its job, whether an alert, whether it was new, and the answer to it in the basket, if any. A replacement opened from its stale item is new. */
 export interface ToOpen {
@@ -82,6 +84,9 @@ function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; de
   const [, startTransition] = useTransition();
   // Each pick put from a row shows the list anew, as it is after a card: it reads the page as the action left it.
   const [shownTimes, setShownTimes] = useState(0);
+  useOpenedItem(focus === undefined ? undefined : openedScreenOf(focus.opened.job), () => {
+    setFocus(undefined);
+  });
 
   const open = (item: ToOpen) => {
     setOpeningId(item.deliveryId);
