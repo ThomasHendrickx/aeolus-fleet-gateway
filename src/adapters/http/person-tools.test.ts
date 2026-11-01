@@ -7,6 +7,7 @@ import { HEADS_MEETING_ID, aMeetingRead } from '../../../test/support/meeting-fa
 import { CHARLOTTE_GRANT, SENT_MESSAGE_ID } from '../../../test/support/people-fakes.js';
 import type { ChangeOwnMic } from '../../core/meetings/change-own-mic.js';
 import type { ReadMeeting } from '../../core/meetings/read-meeting.js';
+import type { DoneDelivery } from '../../core/people/done-delivery.js';
 import type { PersonDiscovery } from '../../core/people/ports.js';
 import type { SendMessage } from '../../core/people/send-message.js';
 import { err, ok } from '../../core/shared/result.js';
@@ -148,6 +149,57 @@ describe("a person's MCP client starts a message", () => {
     await expect(mcp.callTool({ name: 'aeolus_send', arguments: { ship: 'nobody', contentType: 'text/plain', payload: 'Hello' } })).resolves.toEqual({
       content: [{ type: 'text', text: 'The fleet did not take your message: No active ship is named nobody' }],
       isError: true,
+    });
+  });
+});
+
+describe("a person's MCP client finishes a step with aeolus_done (Bridge, CC14)", () => {
+  /** The person tools, with what aeolus_done asked. */
+  function finishing() {
+    const done: Parameters<DoneDelivery>[0][] = [];
+    const { deps } = personTools({
+      doneDelivery: (input) => {
+        done.push(input);
+        return Promise.resolve(ok({ deliveryId: input.deliveryId, isHandled: true as const }));
+      },
+    });
+    return { deps, done };
+  }
+
+  it('says done or cannot with a note, in a chat', async () => {
+    const { deps, done } = finishing();
+    const mcp = await connected(deps);
+
+    await mcp.callTool({ name: 'aeolus_done', arguments: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0s01', outcome: 'cannot', note: 'I have no right to create repositories there' } });
+
+    expect(done).toEqual([{ caller: CHARLOTTE_GRANT, place: 'chat', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0s01', outcome: 'cannot', note: 'I have no right to create repositories there' }]);
+  });
+
+  it('is done with a delivery by its id alone, as before', async () => {
+    const { deps, done } = finishing();
+    const mcp = await connected(deps);
+
+    await mcp.callTool({ name: 'aeolus_done', arguments: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' } });
+
+    expect(done).toEqual([{ caller: CHARLOTTE_GRANT, place: 'chat', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' }]);
+  });
+
+  it('refuses an outcome other than done or cannot, asking nothing', async () => {
+    const { deps, done } = finishing();
+    const mcp = await connected(deps);
+
+    const called = await mcp.callTool({ name: 'aeolus_done', arguments: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0s01', outcome: 'maybe' } });
+
+    expect({ isError: called.isError, done }).toEqual({ isError: true, done: [] });
+  });
+
+  it('says a step outcome and a note in its description, so a chat knows to finish a step with them', async () => {
+    const listed = await (await connected(personTools().deps)).listTools();
+
+    expect(listed.tools.find(({ name }) => name === 'aeolus_done')?.inputSchema.properties).toEqual({
+      deliveryId: { type: 'string' },
+      outcome: { type: 'string', enum: ['done', 'cannot'] },
+      note: { type: 'string' },
     });
   });
 });
