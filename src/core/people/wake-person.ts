@@ -36,11 +36,15 @@ export type WakePerson = (
  * Use case: wakes a person for what waits on their person ship (wake a
  * person, W3, W8). It takes the ship's deliveries with the gateway as their
  * waker, leaving the handed ones out so ten held deliveries never shut a new
- * one out; those never handed are fresh. Each channel the person turned on
- * whose window has passed sends one wake for all of them; each fresh
- * delivery is then handed no. 1, naming the first channel that went out, so
- * a delivery is woken once. A wake held back by a window, or that no
- * channel sent, hands nothing. Each channel's window is kept after the
+ * one out; those never handed are fresh. Where each job shows is read anew
+ * at every wake (Bridge, section 8), so a change applies at once. Each
+ * channel whose window has passed sends one wake for the fresh deliveries
+ * of the jobs on for it that arrived since it was turned on (CC20); each is
+ * then handed no. 1, naming the first of its channels that went out, so a
+ * delivery is woken once (CC13). One no channel shows waits in Bridge,
+ * unhanded. A wake held back by a window, or that no channel sent, hands
+ * nothing, and while a delivery only a failing channel shows is left, the
+ * wake counts as failed. Each channel's window is kept after the
  * hand-overs, so a gateway that stopped in between wakes again: one wake
  * more, nothing lost. A fresh delivery sent before a channel's last wake
  * that is still inside its window is one that wake covers: a hand-over the
@@ -50,8 +54,8 @@ export type WakePerson = (
  * tried again, that channel is not asked again. While a page of the person is in focus, the page
  * shows what arrives (W6): each fresh delivery is handed through it and no
  * wake goes out. Before all that, a place beyond the pages that shows
- * deliveries itself, as Slack does for a linked person, shows what it
- * shows, even while a page is in focus; nothing wakes for those
+ * deliveries itself, as Slack does for a linked person, shows what the
+ * person routed there, even while a page is in focus; nothing wakes for those
  * (gateway scopes 9.5 step 5). It is asked at every wake, fresh deliveries
  * or none, so what it left unfinished is finished, and while anything is
  * left the wake counts as failed, so it is tried again.

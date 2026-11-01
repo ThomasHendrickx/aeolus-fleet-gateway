@@ -229,7 +229,7 @@ export interface WakeChannel {
   readonly name: WakeChannelName;
   /** The least time between two wakes it sends one person ship, from the gateway's configuration (W10). */
   readonly windowMs: number;
-  /** Whether the person turned it on (W8): nothing is on by default. */
+  /** Whether it reaches the person now, as web push does while a browser of theirs takes wakes; which jobs it wakes for is routed per job (Bridge, section 8). */
   isOn(ship: PersonShip): Promise<boolean>;
   /**
    * Sends the wake: whether it went out. A refusal for good (refused) cannot be fixed by trying again; unavailable can succeed later.
