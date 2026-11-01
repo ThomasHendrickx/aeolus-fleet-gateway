@@ -23,11 +23,16 @@ function useTimeZone(): string {
   return useSyncExternalStore(unchanging, () => Intl.DateTimeFormat().resolvedOptions().timeZone, () => SERVER_TIME_ZONE);
 }
 
-/** The items in their order, a run per day they arrived on. */
+/** When an item was done: when what came of it was kept, or when it arrived for one the fleet ended with none kept. */
+function doneAtOf(item: RecordItem): string {
+  return item.outcome?.at ?? item.sentAt;
+}
+
+/** The items in their order, a run per day they were done on. */
 function byDay(items: readonly RecordItem[], of: { now: Date; timeZone: string }): { day: string; items: RecordItem[] }[] {
   const days: { day: string; items: RecordItem[] }[] = [];
   for (const item of items) {
-    const day = dayOf(item.sentAt, of);
+    const day = dayOf(doneAtOf(item), of);
     const last = days.at(-1);
     if (last?.day === day) {
       last.items.push(item);
@@ -52,7 +57,7 @@ function DoneOutcome({ item }: { item: RecordItem }) {
 
 /**
  * Done (Bridge, CC4; done.html): everything done that reached the person,
- * newest first, under the day it arrived, each with the time of day, the
+ * newest first, under the day it was done, each with the time of day, the
  * places that showed it and what came of it and where. Its title opens it,
  * read back whole beside the list, with nothing acknowledged. The next page
  * is read only when they ask for it.
@@ -108,7 +113,7 @@ export function DonePanel({ fleetId, first, now }: { fleetId: string; first: Rec
                       isOpen={item.deliveryId === openId}
                       outcome={undefined}
                       failure={undefined}
-                      time={clockTimeOf(item.sentAt, timeZone)}
+                      time={{ at: doneAtOf(item), said: clockTimeOf(doneAtOf(item), timeZone) }}
                       detail={<DoneOutcome item={item} />}
                       onOpen={() => { setOpenId(item.deliveryId); }}
                     />
