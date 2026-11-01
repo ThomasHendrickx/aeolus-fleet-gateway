@@ -11,7 +11,7 @@ function fleetWith(counts: YourFleet['counts']): YourFleet {
 
 function numberTile(counts: YourFleet['counts'], state: string): string {
   const markup = renderToStaticMarkup(createElement(FleetNumbers, { fleet: fleetWith(counts), isShipCountShown: true }));
-  return markup.match(new RegExp(`<div data-testid="fleet-number-${state}"[^>]*>`))?.[0] ?? '';
+  return new RegExp(`<div data-testid="fleet-number-${state}"[^>]*>`).exec(markup)?.[0] ?? '';
 }
 
 // The tone tokens switch with the theme (light and dark), so a tile that
