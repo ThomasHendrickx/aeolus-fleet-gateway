@@ -22,17 +22,18 @@ const QUESTION = {
 };
 
 function aQuestion(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
-  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, step: undefined, meetingId: undefined, stale: null, ...overrides };
+  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, step: undefined, alert: undefined, meetingId: undefined, stale: null, ...overrides };
 }
 
-function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string; finished?: StepFinished | null } = {}): string {
-  const { inBasket = null, note = '', finished = null } = shown;
+function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string; finished?: StepFinished | null; isDoneOnSeeing?: boolean } = {}): string {
+  const { inBasket = null, note = '', finished = null, isDoneOnSeeing = false } = shown;
   const noop = () => undefined;
   return renderToStaticMarkup(
     createElement(DeliveryCard, {
       delivery,
-      isDoneOnSeeing: false,
+      isDoneOnSeeing,
       meetingHref: undefined,
+      consoleUrl: 'https://fleet.aeolus-fleet.dev',
       basketHref: '/bridge/basket?fleet=flt_01',
       inBasket,
       finished,
@@ -234,5 +235,26 @@ describe('a step opened in Bridge (CC14)', () => {
     const markup = render(aStep({ stale: { kind: 'replaced', replacementId: 'dlv_04', at: '2026-10-31T21:11:00.000Z', replacementTitle: 'Sign in to attio with the team account' } }));
 
     expect({ stale: markup.includes('Replaced by orchestrator-1 at 21:11 UTC with “Sign in to attio with the team account”. Do the new step.'), icon: markup.includes('aria-label="Replaced"'), link: markup.includes('Open the new step'), done: markup.includes('data-testid="bridge-step-done"') }).toEqual({ stale: true, icon: true, link: true, done: false });
+  });
+});
+
+describe('an alert or a notice opened in Bridge (stay-aware.html)', () => {
+  const ship = { id: 'shp_01m6bw3rg8n3xmqe91x19xm3y7', name: 'builder-gateway' };
+
+  it("shows an alert's ship as the alert left it, its Health in the console and what clears it", () => {
+    const markup = render(aQuestion({ from: 'watch', title: 'builder-gateway: no report change for 2 h', question: undefined, alert: { ship, signal: 'report-unchanged' } }), { isDoneOnSeeing: true });
+
+    expect({
+      tile: markup.includes('data-testid="bridge-alert-tile"'),
+      health: markup.includes('href="https://fleet.aeolus-fleet.dev/ships/shp_01m6bw3rg8n3xmqe91x19xm3y7"'),
+      clears: markup.includes('The alert clears when builder-gateway reports again'),
+      answer: markup.includes('data-testid="bridge-note"'),
+    }).toEqual({ tile: true, health: true, clears: true, answer: false });
+  });
+
+  it('shows a notice with no ship, Health or info line', () => {
+    const markup = render(aQuestion({ from: 'trierarch', title: 'trierarch plugin 0.35.1 released', question: undefined }), { isDoneOnSeeing: true });
+
+    expect({ tile: markup.includes('data-testid="bridge-alert-tile"'), health: markup.includes('Health'), clears: markup.includes('data-testid="bridge-alert-clears"') }).toEqual({ tile: false, health: false, clears: false });
   });
 });
