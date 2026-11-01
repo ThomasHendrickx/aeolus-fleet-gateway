@@ -568,6 +568,19 @@ model SlackLink {
   @@map("slack_links")
 }
 
+/// A person's open ask to link Slack (Bridge, BG7): one per person ship while open, its uuid the step's and keying the message; a link closes it.
+model SlackLinkStep {
+  fleetId       String  @map("fleet_id")
+  personShipId  String  @map("person_ship_id")
+  stepId        String  @map("step_id")
+  isTold        Boolean @default(false) @map("is_told")
+  /// The message of the step that asked the person; null until told, or when the fleet refused it.
+  stepMessageId String? @map("step_message_id")
+
+  @@id([fleetId, personShipId])
+  @@map("slack_link_steps")
+}
+
 /// A linked person's Slack message, kept by Slack's event id until core takes it (gateway scopes 9.4 step 3); then only its id, for an hour.
 model SlackEvent {
   fleetId      String    @map("fleet_id")
