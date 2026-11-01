@@ -37,8 +37,8 @@ function InBasketNotice({ inBasket, basketHref, isRemoving, isWorking, onRemove 
   );
 }
 
-/** The options of a question, one to choose, the asker's pick marked; none to choose once it is stale. */
-function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Question; chosen: number | undefined; isStale: boolean; onChoose: (option: number) => void }) {
+/** The options of a question, one to choose, the asker's pick marked, and No option, only the note, for a note alone; none to choose once it is stale. */
+function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Question; chosen: number | null | undefined; isStale: boolean; onChoose: (option: number | null) => void }) {
   return (
     <fieldset className={`grid gap-2 ${isStale ? 'opacity-60' : ''}`} disabled={isStale}>
       <legend className="sr-only">Options</legend>
@@ -54,6 +54,13 @@ function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Qu
           {option.key === question.pick.option ? <span className="rounded-sm border border-border px-1.5 text-caption">Their pick</span> : null}
         </label>
       ))}
+      <label className={`flex items-start gap-3 rounded-md border p-3 ${chosen === null && !isStale ? 'border-ring bg-accent' : 'border-border'}`}>
+        <input type="radio" name="option" value="" checked={chosen === null && !isStale} onChange={() => { onChoose(null); }} className="mt-1" />
+        <span className="grid flex-1 gap-0.5">
+          <span className="font-medium">No option, only the note</span>
+          <span className="text-caption text-muted-foreground">Answer with your note alone.</span>
+        </span>
+      </label>
     </fieldset>
   );
 }
@@ -121,10 +128,10 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
 
 /**
  * One item in focus (design B, Signal). A question opens with the asker's
- * pick chosen (CC11), or the option in the basket; its button puts that
- * option in the basket with the note, if any, and once the note has text
- * another puts the note alone there; neither sends anything (CC24): the
- * person sends the basket. A step (CC14) shows why and its link, then its
+ * pick chosen (CC11), or what is in the basket; its one button puts that
+ * option in the basket with the note, if any, or, with No option, only the
+ * note chosen, the note alone, and sends nothing (CC24): the person sends
+ * the basket. A step (CC14) shows why and its link, then its
  * note field before Done and Cannot, each sending its outcome at once with
  * the note. Any other item may get a note as its answer, and may
  * be done with; one of a meeting leads to the meeting. An alert or a notice
@@ -177,7 +184,7 @@ export function DeliveryCard({
   onBack: () => void;
 }) {
   const { question, step, stale } = delivery;
-  const [chosen, setChosen] = useState(inBasket?.option ?? question?.pick.option);
+  const [chosen, setChosen] = useState<number | null | undefined>(inBasket === null ? question?.pick.option : inBasket.option);
   const isWorking = working !== undefined;
   return (
     <section data-testid="bridge-delivery" className="grid gap-3 rounded-lg border border-border bg-card p-6 text-card-foreground shadow-sm">
@@ -236,16 +243,9 @@ export function DeliveryCard({
             </div>
           ) : chosen === undefined ? null : (
             <div className="grid gap-1">
-              <div className="flex flex-wrap gap-2">
-                <ActionButton data-testid="bridge-put-in-basket" variant="primary" isPending={working?.kind === 'option'} pendingLabel="Putting in the basket..." disabled={isWorking} onClick={() => { onPut(chosen); }}>
-                  Put option {chosen} in the basket
-                </ActionButton>
-                {note.trim() === '' ? null : (
-                  <ActionButton data-testid="bridge-put-note-alone" isPending={working?.kind === 'note'} pendingLabel="Putting in the basket..." disabled={isWorking} onClick={() => { onPut(null); }}>
-                    Put the note alone in the basket
-                  </ActionButton>
-                )}
-              </div>
+              <ActionButton data-testid="bridge-put-in-basket" variant="primary" className="justify-self-start" isPending={working?.kind === (chosen === null ? 'note' : 'option')} pendingLabel="Putting in the basket..." disabled={isWorking || (chosen === null && note.trim() === '')} onClick={() => { onPut(chosen); }}>
+                {chosen === null ? 'Put the note alone in the basket' : `Put option ${String(chosen)} in the basket`}
+              </ActionButton>
               <span className="text-caption text-muted-foreground">Nothing is sent yet. {delivery.from} receives this answer when you send the basket.</span>
             </div>
           )}
