@@ -4,11 +4,13 @@ import { Send, ShoppingBasket } from 'lucide-react';
 
 import { staleSaidOf } from '../services/deliveries';
 import { seenTextOf, type BridgeHome, type HomeItem } from '../services/items';
+import { lastReadTimeOf } from '../services/last-read';
 import type { RoutedPlace } from '../services/routing';
 import { ActionButton } from '../ui/action-button';
 import { ItemRow } from '../ui/item-row';
 import { RowLink } from '../ui/row-link';
 import { ItemFocus, type ItemOpening } from './item-focus';
+import { useLastReadAt } from './kept-read';
 import { useSendMessage } from './send-message';
 
 function countsOf(items: readonly HomeItem[]): string {
@@ -219,8 +221,34 @@ export function HomeLists({ home, now, opening }: { home: BridgeHome; now: strin
   );
 }
 
-/** Bridge home: its lists, with one item in focus at a time. */
+/**
+ * What waited when Bridge home was last read, while the record cannot be
+ * read (states.html): the rows faded and not to be opened, since opening
+ * one acknowledges it through the fleet, and that they show as last read.
+ * The stay-aware feed and sending a message wait for the fleet.
+ */
+function WaitingAsLastRead({ items, lastReadAt }: { items: readonly HomeItem[]; lastReadAt: string }) {
+  const readAt = new Date(lastReadAt);
+  return (
+    <section className="grid gap-3" aria-label="Waiting on you, as last read">
+      {items.length === 0 ? null : (
+        <ul inert className="overflow-hidden rounded-lg border border-border bg-card opacity-60">
+          {items.map((item) => (
+            <ItemRow key={item.deliveryId} item={item} now={readAt} isNew={item.state === 'new'} isOpen={false} staleKind={item.stale?.kind} outcome={rowOutcomeOf(item)} failure={undefined} onOpen={undefined} />
+          ))}
+        </ul>
+      )}
+      <p className="text-caption text-muted-foreground">{`Shown as last read, at ${lastReadTimeOf(lastReadAt)}.`}</p>
+    </section>
+  );
+}
+
+/** Bridge home: its lists, with one item in focus at a time; as last read, what waited then. */
 export function HomePanel({ fleetId, home, now, decidePlaces }: { fleetId: string; home: BridgeHome; now: string; decidePlaces?: readonly RoutedPlace[] }) {
+  const lastReadAt = useLastReadAt();
+  if (lastReadAt !== undefined) {
+    return <WaitingAsLastRead items={home.waiting.items} lastReadAt={lastReadAt} />;
+  }
   return (
     <ItemFocus fleetId={fleetId} decidePlaces={decidePlaces}>
       {(opening) => <HomeLists home={home} now={now} opening={opening} />}

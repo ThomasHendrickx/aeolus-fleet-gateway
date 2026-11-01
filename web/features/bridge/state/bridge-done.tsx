@@ -1,16 +1,16 @@
-import { Suspense } from 'react';
+import { Suspense, type ReactNode } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
-import { readRecordPage } from '../hooks/read-bridge';
+import { readRecordPage, type BridgeRead } from '../hooks/read-bridge';
+import type { RecordPage } from '../services/items';
 import { BRIDGE_DONE_PATH } from '../paths';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
+import { PageAsLastRead } from './page-as-last-read';
 import { DonePanel } from './done-panel';
-import { RecordUnreadable } from './record-unreadable';
 
-async function DoneParts({ api, fleetId }: { api: GatewayApi; fleetId: string }) {
-  const read = await readRecordPage(api, null);
+function doneListOf(fleetId: string, read: BridgeRead<RecordPage>): ReactNode {
   switch (read.kind) {
     case 'read':
       // A change to the record reads the first page again, in place of what was shown.
@@ -18,8 +18,13 @@ async function DoneParts({ api, fleetId }: { api: GatewayApi; fleetId: string })
     case 'none':
       return <DonePanel fleetId={fleetId} first={{ items: [], nextCursor: null }} now={new Date().toISOString()} />;
     case 'unreadable':
-      return <RecordUnreadable message={read.message} />;
+      return null;
   }
+}
+
+async function DoneParts({ api, fleetId }: { api: GatewayApi; fleetId: string }) {
+  const read = await readRecordPage(api, null);
+  return <PageAsLastRead read={read}>{doneListOf(fleetId, read)}</PageAsLastRead>;
 }
 
 /** Done (docs/design/bridge, CC4, CC12): the person ship's record, read from core a page at a time, each item with what came of it and where. */

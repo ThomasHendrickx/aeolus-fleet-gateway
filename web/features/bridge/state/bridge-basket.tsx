@@ -6,19 +6,16 @@ import { readBasket } from '../hooks/read-bridge';
 import { BRIDGE_BASKET_PATH } from '../paths';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
+import { PageAsLastRead } from './page-as-last-read';
 import { BasketPanel } from './basket-panel';
-import { RecordUnreadable } from './record-unreadable';
 
 async function BasketParts({ api, fleetId }: { api: GatewayApi; fleetId: string }) {
   const read = await readBasket(api);
-  switch (read.kind) {
-    case 'read':
-      return <BasketPanel fleetId={fleetId} basket={read.value} />;
-    case 'none':
-      return <BasketPanel fleetId={fleetId} basket={{ count: 0, toSend: 0, entries: [] }} />;
-    case 'unreadable':
-      return <RecordUnreadable message={read.message} />;
-  }
+  return (
+    <PageAsLastRead read={read}>
+      {read.kind === 'unreadable' ? null : <BasketPanel fleetId={fleetId} basket={read.kind === 'read' ? read.value : { count: 0, toSend: 0, entries: [] }} />}
+    </PageAsLastRead>
+  );
 }
 
 /**

@@ -6,8 +6,8 @@ import { readHeader } from '../../frame/hooks/read-header';
 import { readBridgeHome } from '../hooks/read-bridge';
 import { BRIDGE_STAY_AWARE_PATH } from '../paths';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
+import { PageAsLastRead } from './page-as-last-read';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
-import { RecordUnreadable } from './record-unreadable';
 import { StayAwarePanel } from './stay-aware-panel';
 
 /** The fleet's console, where an alert's ship shows its Health; none while the account's apps cannot be read or name none. */
@@ -17,14 +17,11 @@ async function readConsoleUrl(fleetId: string): Promise<string | undefined> {
 
 async function StayAwareParts({ api, fleetId }: { api: GatewayApi; fleetId: string }) {
   const [read, consoleUrl] = await Promise.all([readBridgeHome(api), readConsoleUrl(fleetId)]);
-  switch (read.kind) {
-    case 'read':
-      return <StayAwarePanel fleetId={fleetId} consoleUrl={consoleUrl} stayAware={read.value.stayAware} now={new Date().toISOString()} />;
-    case 'none':
-      return <StayAwarePanel fleetId={fleetId} consoleUrl={consoleUrl} stayAware={[]} now={new Date().toISOString()} />;
-    case 'unreadable':
-      return <RecordUnreadable message={read.message} />;
-  }
+  return (
+    <PageAsLastRead read={read}>
+      {read.kind === 'unreadable' ? null : <StayAwarePanel fleetId={fleetId} consoleUrl={consoleUrl} stayAware={read.kind === 'read' ? read.value.stayAware : []} now={new Date().toISOString()} />}
+    </PageAsLastRead>
+  );
 }
 
 /**

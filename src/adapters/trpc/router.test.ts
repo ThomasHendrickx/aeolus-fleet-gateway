@@ -23,9 +23,9 @@ import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
 import { createFocusPage } from '../../core/people/focus-page.js';
-import { memoryFocusedPages } from '../../../test/support/people-fakes.js';
+import { memoryFocusedPages, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { createChangeHub, type ChangeHub } from '../http/live.js';
-import { fakeProxyShipKinds, fakeShipNames, fakeSlackShips, fakeSlackSignIn, fakeSlackTooling, memorySlackApps, memorySlackLinks, memorySlackLinkSteps, memorySlackWorkspaces, plainInstallStates, plainLinkStates, SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
+import { aSlackApp, aSlackLink, fakeProxyShipKinds, fakeShipNames, fakeSlackShips, fakeSlackSignIn, fakeSlackTooling, memorySlackApps, memorySlackLinks, memorySlackLinkSteps, memorySlackWorkspaces, plainInstallStates, plainLinkStates, SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
 import type { CredentialOf } from '../../core/actors/credential-of.js';
 import { createExposeShip } from '../../core/slack/expose-ship.js';
 import { createListExposable } from '../../core/slack/list-exposable.js';
@@ -34,6 +34,8 @@ import { createConnectSlack } from '../../core/slack/connect-slack.js';
 import { createDisconnectSlack } from '../../core/slack/disconnect-slack.js';
 import { createReadSlack } from '../../core/slack/read-slack.js';
 import { createAskToLinkSlack } from '../../core/slack/ask-to-link-slack.js';
+import { routingDefaultsOf } from '../../core/people/routing.js';
+import { createReadSlackDroppedOut } from '../../core/slack/read-slack-dropped-out.js';
 import { createReadSlackLink } from '../../core/slack/read-slack-link.js';
 import { createStartLink } from '../../core/slack/start-link.js';
 import { createUnlinkSlack } from '../../core/slack/unlink-slack.js';
@@ -107,7 +109,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   answers: Record<string, string>[];
   changes: ChangeHub;
   focused: ReturnType<typeof memoryFocusedPages>;
-  slack: { tooling: ReturnType<typeof fakeSlackTooling>; workspaces: ReturnType<typeof memorySlackWorkspaces>; apps: ReturnType<typeof memorySlackApps> };
+  slack: { tooling: ReturnType<typeof fakeSlackTooling>; workspaces: ReturnType<typeof memorySlackWorkspaces>; apps: ReturnType<typeof memorySlackApps>; links: ReturnType<typeof memorySlackLinks> };
 } {
   const focused = memoryFocusedPages();
   const approvals: Parameters<ApproveParty>[0][] = [];
@@ -125,6 +127,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
   const slackTooling = fakeSlackTooling({ now: () => SLACK_NOW });
   const slackWorkspaces = memorySlackWorkspaces();
   const slackApps = memorySlackApps();
+  const slackLinks = memorySlackLinks();
   const context: Context = {
     cookie,
     crewToken,
@@ -400,7 +403,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       }
       return Promise.resolve(ok({ requirements: { version: 3, party: input.party ?? ['crm:use'], tools: input.tools }, statementRefusal: null }));
     },
-    slack: slackOf({ tooling: slackTooling, workspaces: slackWorkspaces, apps: slackApps }),
+    slack: slackOf({ tooling: slackTooling, workspaces: slackWorkspaces, apps: slackApps, links: slackLinks }),
     readOutsideParties: () => Promise.resolve({ isOn: false }),
     setOutsideParties: (input) => {
       switched.push(input);
@@ -421,20 +424,19 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ state: 'denied' as const, party: null }));
     },
   };
-  return { context, approvals, marks, toolSwitches, requirementChanges, agentAdditions, agentMarks, decisions, switched, answers, changes, additions, focused, slack: { tooling: slackTooling, workspaces: slackWorkspaces, apps: slackApps } };
+  return { context, approvals, marks, toolSwitches, requirementChanges, agentAdditions, agentMarks, decisions, switched, answers, changes, additions, focused, slack: { tooling: slackTooling, workspaces: slackWorkspaces, apps: slackApps, links: slackLinks } };
 }
 
 const SLACK_NOW = new Date('2026-10-27T09:00:00.000Z');
 const SLACK_SHIP: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9r1n';
 
 /** The Slack procedures' use cases over Slack and the vault in memory. */
-function slackOf({ tooling, workspaces, apps }: { tooling: ReturnType<typeof fakeSlackTooling>; workspaces: ReturnType<typeof memorySlackWorkspaces>; apps: ReturnType<typeof memorySlackApps> }): Context['slack'] {
+function slackOf({ tooling, workspaces, apps, links }: { tooling: ReturnType<typeof fakeSlackTooling>; workspaces: ReturnType<typeof memorySlackWorkspaces>; apps: ReturnType<typeof memorySlackApps>; links: ReturnType<typeof memorySlackLinks> }): Context['slack'] {
   const clock = { now: () => SLACK_NOW };
   const takeAccessToken = createTakeAccessToken({ slack: tooling.slack, workspaces, clock });
   const ships = fakeSlackShips([{ shipId: SLACK_SHIP, name: 'release-notes', kind: 'agent', status: 'crewed', summary: 'Writes the release notes' }]).port;
   const credentialOf: CredentialOf = (_actor, sent) => Promise.resolve(ok(sent));
   const addresses = SLACK_ADDRESSES;
-  const links = memorySlackLinks();
   return {
     readSlack: createReadSlack({ workspaces, apps, ships }),
     listExposable: createListExposable({ ships, apps, proxyShips: fakeProxyShipKinds(), credentialOf }),
@@ -446,6 +448,7 @@ function slackOf({ tooling, workspaces, apps }: { tooling: ReturnType<typeof fak
     readSlackLink: createReadSlackLink({ workspaces, apps, links, askToLink: createAskToLinkSlack({ steps: memorySlackLinkSteps(), connections: memoryConnectionStore(), sender: fakeCallSender(), newStepId: () => 'step-1', linkUrlOf: () => 'https://gateway.acme.test/slack/link' }) }),
     startLink: createStartLink({ workspaces, apps, signIn: fakeSlackSignIn().signIn, states: plainLinkStates(), crewPersonShip: (caller) => Promise.resolve('signedIn' in caller && caller.signedIn.personShipId !== null ? ok({ shipId: caller.signedIn.personShipId, crewToken: 'crew-person' }) : err({ kind: 'noPersonShip' as const })), clock, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' }),
     unlinkSlack: createUnlinkSlack({ links }),
+    readSlackDroppedOut: createReadSlackDroppedOut({ apps, links, routes: memoryRoutes(), defaults: routingDefaultsOf([{ job: 'decide', place: 'slack' }]) }),
   };
 }
 
@@ -1524,6 +1527,24 @@ describe("an actor holding gateway:slack connects the fleet's Slack through the 
 
   it('refuses Install while the fleet is connected to no workspace', async () => {
     await expect(asCharlotte(['gateway:slack']).caller.slack.install({})).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('Slack dropped out, as Bridge reads it', () => {
+  it("says the fleet's own bot was removed in Slack, by its name, to the person signed in", async () => {
+    const { context, slack } = aContext(PERSON_COOKIE);
+    await slack.apps.save(aSlackApp({ fleetId: FLEET, name: 'Aeolus fleet', bot: null, removedInSlackAt: SLACK_NOW }));
+    await slack.links.add(aSlackLink({ fleetId: FLEET, accountId: 'acc-charlotte', personShipId: OWNER }));
+
+    await expect(gatewayRouter.createCaller(context).slack.droppedOut()).resolves.toEqual({ botName: 'Aeolus fleet' });
+  });
+
+  it("says nothing while the fleet's own bot is in Slack", async () => {
+    const { context, slack } = aContext(PERSON_COOKIE);
+    await slack.apps.save(aSlackApp({ fleetId: FLEET, bot: { token: 'xoxb-A01', userId: 'U0A01' } }));
+    await slack.links.add(aSlackLink({ fleetId: FLEET, accountId: 'acc-charlotte', personShipId: OWNER }));
+
+    await expect(gatewayRouter.createCaller(context).slack.droppedOut()).resolves.toBeNull();
   });
 });
 

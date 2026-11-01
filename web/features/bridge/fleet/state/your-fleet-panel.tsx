@@ -16,8 +16,9 @@ export type PhoneHome = 'numbers' | 'hidden';
  * the four numbers and a tile per ship in its group; the heading leads to the
  * whole fleet. Left out for an account the fleet does not let read it.
  */
-export function YourFleetPanel({ fleetId, read, phone }: { fleetId: string; read: FleetRead; phone: PhoneHome }) {
-  if (read.kind === 'forbidden') {
+export function YourFleetPanel({ fleetId, read, phone, isRecordUnreadable = false }: { fleetId: string; read: FleetRead; phone: PhoneHome; isRecordUnreadable?: boolean }) {
+  // While the record cannot be read either, the banner over home says it, once and without core's words (states.html).
+  if (read.kind === 'forbidden' || (read.kind === 'unreadable' && isRecordUnreadable)) {
     return null;
   }
   return (

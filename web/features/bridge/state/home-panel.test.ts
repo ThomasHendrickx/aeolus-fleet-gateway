@@ -1,10 +1,12 @@
-import { createElement } from 'react';
+import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { BridgeHome, HomeItem } from '../services/items';
 import type { ItemOpening } from './item-focus';
 import { HomeLists, HomePanel } from './home-panel';
+import { AsLastRead } from './kept-read';
+import { LastReadHeading } from './last-read-heading';
 
 function anItem(overrides: Partial<HomeItem> = {}): HomeItem {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', isAlert: false, state: 'new', stale: null, inBasket: null, seenIn: null, places: [], actInPlace: null, ...overrides };
@@ -199,5 +201,46 @@ describe('the list beside an open item (decide.html, stay-aware.html, aeolus-fle
     const markup = renderOpen(undefined);
 
     expect({ sentence: markup.includes('1 to decide, 1 to do. Newest on top; nothing else is in this count.'), feed: markup.includes('1 unseen, outside the count'), open: markup.includes('data-testid="bridge-open"') }).toEqual({ sentence: true, feed: true, open: true });
+  });
+});
+
+describe('Bridge home as last read, while the record cannot be read (states.html)', () => {
+  const home: BridgeHome = {
+    waiting: { count: 2, items: [anItem(), anItem({ deliveryId: 'dlv_02', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin' })] },
+    stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', from: 'watch', title: 'builder-gateway: no report change for 2 h' })],
+  };
+  const markup = renderToStaticMarkup(
+    createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(Fragment, null, createElement(LastReadHeading), createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW })) }),
+  );
+
+  it('says when it was last read under the title, in place of the count', () => {
+    expect({
+      title: /<h1[^>]*>Waiting on you<\/h1>/.test(markup),
+      lastRead: markup.includes('data-testid="bridge-last-read">Last read 20:14 UTC<'),
+      count: markup.includes('data-testid="bridge-count"'),
+    }).toEqual({ title: true, lastRead: true, count: false });
+  });
+
+  it("leaves the title row out on the phone, as the phone's frame draws it", () => {
+    expect(/<div class="[^"]*max-sm:hidden[^"]*"><h1[^>]*>Waiting on you<\/h1>/.test(markup)).toBe(true);
+  });
+
+  it('shows what waited as last read, faded and not to be opened, saying so under it', () => {
+    expect({
+      rows: (markup.match(/data-testid="bridge-item"/g) ?? []).length,
+      faded: /<ul[^>]*inert=""[^>]*class="[^"]*opacity-60/.test(markup),
+      open: markup.includes('data-testid="bridge-open"'),
+      shown: markup.includes('Shown as last read, at 20:14 UTC.'),
+    }).toEqual({ rows: 2, faded: true, open: false, shown: true });
+  });
+
+  it('leaves out the stay-aware feed and sending a ship a message', () => {
+    expect({ feed: markup.includes('builder-gateway: no report change for 2 h'), send: markup.includes('data-testid="bridge-send-message"') }).toEqual({ feed: false, send: false });
+  });
+});
+
+describe("Bridge home's title row while read now", () => {
+  it('is left to its lists: the heading above them says nothing', () => {
+    expect(renderToStaticMarkup(createElement(LastReadHeading))).toBe('');
   });
 });
