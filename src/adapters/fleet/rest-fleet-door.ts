@@ -371,6 +371,10 @@ export function createRestFleetDoor(
     },
     // A person ship's crew calls, as the gateway makes them for the person (decision 0057).
     person: {
+      whoami: async (crewToken) => {
+        const who = await call({ path: '/ship/whoami', method: 'GET', crewToken, answers: z.object({ name: z.string() }) });
+        return who.isOk ? ok({ name: who.value.name }) : who;
+      },
       inbox: async (crewToken, wait) => {
         const counted = await call({
           path: '/ship/inbox',

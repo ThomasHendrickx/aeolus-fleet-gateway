@@ -43,6 +43,12 @@ describe('Bridge home (CC18)', () => {
     expect({ feed: markup.includes('builder-gateway: no report change for 2 h'), outside: markup.includes('1 unseen, outside the count') }).toEqual({ feed: true, outside: true });
   });
 
+  it('offers to send a ship a message beside the count (aeolus-fleet #1547)', () => {
+    const markup = render({ waiting: { count: 0, items: [] }, stayAware: [] });
+
+    expect(markup).toContain('aria-label="Send a ship a message"');
+  });
+
   it('says nothing waits, and nothing new reached the person, when nothing does', () => {
     const markup = render({ waiting: { count: 0, items: [] }, stayAware: [] });
 
