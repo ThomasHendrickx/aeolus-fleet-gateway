@@ -15,8 +15,10 @@ export type AccountOfSignIn = ((asked: { signIn: string; fleetId: FleetId }) => 
  * H5, accounts design A3). pagasae answers a fresh one at every exchange; the
  * gateway keeps it per sign-in and fleet until a minute before it ends, so a
  * page's many calls make one exchange, and a sign-out anywhere or a change of
- * rights lands at the next. A refusal is never kept, and a sign-out here
- * drops what was kept at once.
+ * rights lands at the next. A refusal is never kept, nor a token naming no
+ * person ship, as core commissions one with the account's first ship and
+ * pagasae within a minute (aeolus-fleet#1583); a sign-out here drops what
+ * was kept at once.
  */
 export function createAccountOfSignIn(deps: { signIns: Pick<SharedSignIn, 'accountToken'>; clock: Clock }): AccountOfSignIn {
   const kept = new Map<string, SharedAccountToken>();
@@ -30,7 +32,7 @@ export function createAccountOfSignIn(deps: { signIns: Pick<SharedSignIn, 'accou
     }
     kept.delete(key);
     const exchanged = await deps.signIns.accountToken({ signIn, fleetId });
-    if (exchanged.isOk) {
+    if (exchanged.isOk && exchanged.value.personShipId !== null) {
       for (const [other, token] of kept) {
         if (!isFresh(token)) {
           kept.delete(other);
