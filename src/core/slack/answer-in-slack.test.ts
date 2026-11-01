@@ -20,6 +20,7 @@ const QUESTION = aPersonDelivery({
   messageId: 'msg_01m3tbfspe96yf1rnr4ank0002',
   senderShipId: BUDGET_CHECK,
   senderName: 'budget-check',
+  headline: 'Cut travel?',
   payload: JSON.stringify({ id: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', title: 'Cut travel?', context: 'Over by 10%', options: [{ key: 1, label: 'Cut', detail: '' }, { key: 2, label: 'Keep', detail: '' }], pick: { option: 1, why: 'over' } }),
 });
 
@@ -63,17 +64,95 @@ function press(option: number, sent: { signature?: string; userId?: string } = {
     slack: slack.messages,
     signatures,
     clock: { now: () => NOW },
+    bridgeUrlOf: (fleetId) => `https://gateway.acme.test/bridge?fleet=${fleetId}`,
   })({ appId: 'A01', teamId: 'T0ACME', userId: sent.userId ?? 'U0MATHILDE', channel: 'D0MATHILDE', messageTs: '1730020000.000001', messageId: QUESTION.messageId, option, body, timestamp: NOW_SECONDS, signature: sent.signature ?? `signing-A01:${NOW_SECONDS}:${body}` });
 }
 
 describe("a press of a question's button in Slack", () => {
-  it('sends the answer as the person ship in reply to the question, hands the delivery, and reacts to the question', async () => {
+  it('sends the answer as the person ship in reply to the question and hands the delivery', async () => {
     const answered = await press(1);
 
     expect(answered).toEqual({ isOk: true, value: { kind: 'answered' } });
     expect(fleet.replies).toEqual([{ to: BUDGET_CHECK, inReplyTo: QUESTION.messageId, contentType: 'application/vnd.aeolus.answer+json', payload: '{"questionId":"5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11","option":1}', idempotencyKey: 'answer-5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11' }]);
     expect(fleet.calls).toContain(`handled(${QUESTION.deliveryId})`);
-    expect(slack.state.reactions).toEqual([{ botToken: 'xoxb-1', channel: 'D0MATHILDE', ts: '1730020000.000001', name: 'white_check_mark' }]);
+  });
+
+  describe('the post, as the press goes (aeolus-fleet#1573)', () => {
+    it('shows the option it sends and to whom before the answer goes, its buttons gone', async () => {
+      const reply = fleet.door.reply.bind(fleet.door);
+      let editsAsSent: typeof slack.state.edits = [];
+      fleet.door.reply = (crewToken, message) => {
+        editsAsSent = [...slack.state.edits];
+        return reply(crewToken, message);
+      };
+
+      await press(2);
+
+      expect(editsAsSent.map(({ botToken, channel, ts, message }) => ({ botToken, channel, ts, aside: message.item?.aside, tone: message.item?.tone, buttons: message.buttons }))).toEqual([
+        { botToken: 'xoxb-1', channel: 'D0MATHILDE', ts: '1730020000.000001', aside: 'Sending *2. Keep* to budget-check…', tone: 'asking', buttons: [] },
+      ]);
+    });
+
+    it('is edited to the answer once sent, as views.html draws it: what was answered, when and to whom, and where it shows, its buttons gone', async () => {
+      await press(2);
+
+      expect(slack.state.edits.at(-1)?.message).toEqual({
+        text: 'Question from budget-check: Cut travel?',
+        item: {
+          asker: 'budget-check',
+          heading: 'Question from budget-check · Decide',
+          title: 'Cut travel?',
+          body: '✅ You answered at <!date^1793091600^{time}|09:00 UTC>: *2. Keep*, sent to budget-check',
+          aside: null,
+          footer: 'Bridge and the chat show it answered in Slack · <https://gateway.acme.test/bridge?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv|Open in Bridge>',
+          tone: 'done',
+        },
+        buttons: [],
+      });
+    });
+
+    it('says on the post that the answer was not sent and why, its buttons back to press again', async () => {
+      fleet.refusals.reply.push({ code: 'NOT_REACHABLE', message: 'No rule' });
+
+      const answered = await press(2);
+
+      const post = slack.state.edits.at(-1)?.message;
+      expect({ answered, thread: slack.state.inThread, body: post?.item?.body, aside: post?.item?.aside, tone: post?.item?.tone, buttons: post?.buttons }).toEqual({
+        answered: { isOk: true, value: { kind: 'refused' } },
+        thread: [],
+        body: 'Over by 10%',
+        aside: '⚠️ Not sent: No rule. Press an option to try again.',
+        tone: 'asking',
+        buttons: [{ text: '1. Cut', option: 1, isPicked: true }, { text: '2. Keep', option: 2, isPicked: false }],
+      });
+    });
+
+    it("names an option longer than its button in full, in the sending line and the answered post (PR 181 review)", async () => {
+      const label = "Nothing changes there: the console's count stays as it is, and argo sees the same count as before";
+      fleet = fakePersonShipDoor({ crewToken: 'crew-mathilde', deliveries: [{ ...QUESTION, payload: JSON.stringify({ id: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', title: 'Cut travel?', context: 'Over by 10%', options: [{ key: 1, label: 'Cut', detail: '' }, { key: 2, label, detail: '' }], pick: { option: 1, why: 'over' } }) }] });
+      await fleet.door.ack('crew-mathilde', QUESTION.deliveryId);
+
+      await press(2);
+
+      expect(slack.state.edits.map(({ message }) => [message.item?.aside, message.item?.body])).toEqual([
+        [`Sending *2. ${label}* to budget-check…`, 'Over by 10%\n\n*1.* Cut\n*2.* ' + label],
+        [null, `✅ You answered at <!date^1793091600^{time}|09:00 UTC>: *2. ${label}*, sent to budget-check`],
+      ]);
+    });
+
+    it('says on the post that the answer was not sent when the fleet cannot read the question, its buttons left to press again (PR 181 review)', async () => {
+      const posted = { text: 'Question from budget-check: Cut travel?', item: { asker: 'budget-check', heading: 'Question from budget-check · Decide', title: 'Cut travel?', body: 'Over by 10%', aside: 'budget-check picks 1: over', footer: 'Open in Bridge', tone: 'asking' as const }, buttons: [{ text: '1. Cut', option: 1, isPicked: true }, { text: '2. Keep', option: 2, isPicked: false }] };
+      await slack.messages.post('xoxb-1', { messageId: QUESTION.messageId, channel: 'D0MATHILDE', threadTs: null, message: posted });
+      fleet.refusals.delivery.push({ code: 'FLEET_UNREACHABLE', message: 'The fleet did not answer' });
+
+      const answered = await press(2);
+
+      expect({ answered, replies: fleet.replies, post: slack.state.edits.at(-1)?.message }).toEqual({
+        answered: { isOk: true, value: { kind: 'refused' } },
+        replies: [],
+        post: { ...posted, item: { ...posted.item, aside: '⚠️ Not sent: The fleet did not answer. Press an option to try again.' } },
+      });
+    });
   });
 
   it('keeps it answered in Slack with the option pressed, so Bridge says where it was answered (Bridge, CC4)', async () => {
@@ -141,12 +220,12 @@ describe("a press of a question's button in Slack", () => {
     });
   });
 
-  it("says in the thread why core did not take the answer", async () => {
-    fleet.refusals.reply.push({ code: 'NOT_REACHABLE', message: 'No rule' });
+  it("answers a press in the person's direct messages on a question kept by their user id, before Slack named the conversation (aeolus-fleet#1573)", async () => {
+    await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: QUESTION.messageId, deliveryId: QUESTION.deliveryId, senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'U0MATHILDE', ts: null, threadTs: null });
 
-    await press(2);
+    const answered = await press(2);
 
-    expect(slack.state.inThread.map(({ threadTs, text }) => ({ threadTs, text }))).toEqual([{ threadTs: '1730020000.000001', text: 'budget-check did not take your answer: No rule' }]);
+    expect({ answered, replies: fleet.replies.map(({ payload }) => payload) }).toEqual({ answered: { isOk: true, value: { kind: 'answered' } }, replies: ['{"questionId":"5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11","option":2}'] });
   });
 
   it('refuses a press not signed with the app\'s signing secret, answering nothing', async () => {

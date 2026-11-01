@@ -43,7 +43,7 @@ export function createEditSlackPosts(deps: { posts: Pick<SlackPosts, 'toEdit' | 
     if (edited === undefined) {
       return 'edited';
     }
-    const updated = await deps.slack.update(app.bot.token, { ...where, message: edited });
+    const updated = await deps.slack.update(app.bot.token, { ...where, messageId: post.messageId, message: edited });
     if (!updated.isOk && isForLater(updated.error)) {
       return 'kept';
     }

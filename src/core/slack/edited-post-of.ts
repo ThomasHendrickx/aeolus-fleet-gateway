@@ -8,7 +8,7 @@
  */
 import { outcomeTextOf, type ItemOutcome, type OutcomeKind } from '../people/item-outcome.js';
 import type { SlackItem, SlackMessage, SlackTone } from './ports.js';
-import { escaped } from './slack-post-of.js';
+import { escaped, listedOptionOf } from './slack-post-of.js';
 
 /** What came of the item, where and when. */
 export type EditedOutcome = Pick<ItemOutcome, 'place' | 'kind' | 'option' | 'at'>;
@@ -26,8 +26,12 @@ function slackTimeOf(at: Date): string {
 /** Whether the item's job ended as asked: answered, done or seen; anything else ended it another way. */
 const TONES: Record<OutcomeKind, SlackTone> = { answered: 'done', done: 'done', seen: 'done', cannot: 'ended', withdrawn: 'ended', replaced: 'ended', notSent: 'ended' };
 
-/** The option answered with, as its button named it, or by its number once the button is gone. */
-function optionTextOf(message: SlackMessage, option: number): string {
+/** The option answered with: in full as its post lists it, else as its button named it, or by its number once the button is gone. */
+export function optionTextOf(message: SlackMessage, option: number): string {
+  const listed = listedOptionOf(message.item?.body ?? null, option);
+  if (listed !== undefined) {
+    return listed;
+  }
   const button = message.buttons.find((each) => 'option' in each && each.option === option);
   return escaped(button?.text ?? `option ${String(option)}`);
 }

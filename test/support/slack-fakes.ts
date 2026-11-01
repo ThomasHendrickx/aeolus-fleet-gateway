@@ -329,13 +329,19 @@ export function memorySlackLinkSteps(): SlackLinkSteps & { held: (SlackLinkStep 
 }
 
 /** Slack's posts in memory: each message only one person sees, with the bot token it went with. */
+/** The conversation a post to the channel goes into, as Slack answers it: a person's user id names their direct messages with the bot. */
+export function conversationOf(channel: string): string {
+  return channel.startsWith('U') ? `D${channel.slice(1)}` : channel;
+}
+
 export function fakeSlackMessages() {
   const noRefusal = (): SlackRefusal | undefined => undefined;
   const state = {
     onlyTo: new Array<{ botToken: string; channel: string; user: string; text: string; button?: { text: string; url: string } }>(),
     inThread: new Array<{ botToken: string; channel: string; threadTs: string; text: string }>(),
     reactions: new Array<{ botToken: string; channel: string; ts: string; name: string }>(),
-    posts: new Array<{ botToken: string; messageId: MessageId; channel: string; threadTs: string | null; ts: string } & SlackMessage>(),
+    /** Each post Slack took: the channel asked, and the conversation Slack answered it is in. */
+    posts: new Array<{ botToken: string; messageId: MessageId; channel: string; conversation: string; threadTs: string | null; ts: string } & SlackMessage>(),
     /** Each edit Slack took, in order: a message given a new item or text, its buttons gone. */
     edits: new Array<{ botToken: string; channel: string; ts: string; message: SlackMessage }>(),
     refusal: noRefusal(),
@@ -361,11 +367,12 @@ export function fakeSlackMessages() {
         return Promise.resolve(err(refused));
       }
       const ts = `1730020000.${String(state.posts.length + 1).padStart(6, '0')}`;
-      state.posts.push({ botToken, messageId: message.messageId, channel: message.channel, threadTs: message.threadTs, ...message.message, ts });
-      return Promise.resolve(ok({ channel: message.channel, ts }));
+      const conversation = conversationOf(message.channel);
+      state.posts.push({ botToken, messageId: message.messageId, channel: message.channel, conversation, threadTs: message.threadTs, ...message.message, ts });
+      return Promise.resolve(ok({ channel: conversation, ts }));
     },
     messageOf: (_botToken, { channel, ts }) => {
-      const posted = state.posts.find((each) => each.channel === channel && each.ts === ts);
+      const posted = state.posts.find((each) => each.conversation === channel && each.ts === ts);
       const message = state.edits.findLast((each) => each.channel === channel && each.ts === ts)?.message ?? posted;
       return Promise.resolve(message === undefined ? err({ kind: 'refused', error: 'message_not_found' }) : ok({ text: message.text, item: message.item, buttons: message.buttons }));
     },

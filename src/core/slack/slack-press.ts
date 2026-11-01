@@ -6,7 +6,7 @@ import { err, ok, type Result } from '../shared/result.js';
 import type { SlackApps, SlackLinks, SlackPosts, SlackSignatures } from './ports.js';
 import type { SlackApp } from './slack-app.js';
 import { isSignedBy, type SignedRequest } from './slack-request.js';
-import type { SlackPost } from './slack-post.js';
+import { isPostIn, type SlackPost } from './slack-post.js';
 
 /** A press of a button under a post of the gateway's: the app, who pressed it, the Slack message it is under, and the fleet message its buttons name. */
 export interface SlackPress extends SignedRequest {
@@ -43,7 +43,7 @@ export async function pressedOf(
   }
   const link = await deps.links.find(app.fleetId, { teamId, userId });
   const kept = link?.stoppedAt === null ? await deps.posts.ofMessage(app.fleetId, { personShipId: link.personShipId, messageId }) : undefined;
-  const post = kept?.appId === appId && kept.channel === channel ? kept : undefined;
+  const post = kept !== undefined && isPostIn(kept, { appId, channel }) ? kept : undefined;
   const crew = post === undefined ? undefined : await deps.crews.find(app.fleetId, post.personShipId);
   const { bot } = app;
   if (post === undefined || post.deliveryId === null || post.senderShipId === null || crew === undefined || bot === null) {

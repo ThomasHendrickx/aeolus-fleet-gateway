@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 
 import { FLEET_HEADER, idSchema, type FleetId } from '@aeolus-fleet/common';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
@@ -345,19 +345,19 @@ describe('linking a Slack account (gateway scopes S7)', () => {
 
   /** Sends as release-notes-s7 to charlotte, through the fleet. */
   async function releaseNotesSends(message: { contentType: string; payload: string; inReplyTo?: string }): Promise<string> {
-    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${releaseNotesCrew}` }, body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, idempotencyKey: `s9-${String(Date.now())}`, model: 'test-model', ...message }) });
+    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${releaseNotesCrew}` }, body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, idempotencyKey: `s9-${randomUUID()}`, model: 'test-model', ...message }) });
     expect(sent.status, await sent.clone().text()).toBe(200);
     return z.object({ messageId: z.string() }).parse(await sent.json()).messageId;
   }
 
   /** Waits until the gateway kept this many of the bot's posts to charlotte with their Slack message: Slack has the post before the gateway keeps its message, and a press or a reply before then finds no post. */
   async function waitForKeptPosts(count: number): Promise<void> {
-    await expect.poll(() => prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'U0CHARLOTTE', ts: { not: null } } }), { timeout: 30_000 }).toBe(count);
+    await expect.poll(() => prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'D0CHARLOTTE', ts: { not: null } } }), { timeout: 30_000 }).toBe(count);
   }
 
   /** Charlotte presses an option's button under a question release-notes-s7 asked, as Slack sends it: the button's block names the question's fleet message. */
   async function press(pressed: { messageTs: string; messageId: string; option: number }): Promise<Response> {
-    const payload = { type: 'block_actions', api_app_id: releaseNotesAppId, team: { id: 'T0ACME' }, user: { id: 'U0CHARLOTTE' }, container: { type: 'message', channel_id: 'U0CHARLOTTE', message_ts: pressed.messageTs }, actions: [{ action_id: `answer-${String(pressed.option)}`, block_id: pressed.messageId, value: String(pressed.option) }] };
+    const payload = { type: 'block_actions', api_app_id: releaseNotesAppId, team: { id: 'T0ACME' }, user: { id: 'U0CHARLOTTE' }, container: { type: 'message', channel_id: 'D0CHARLOTTE', message_ts: pressed.messageTs }, actions: [{ action_id: `answer-${String(pressed.option)}`, block_id: pressed.messageId, value: String(pressed.option) }] };
     const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
     const timestamp = String(Math.floor(Date.now() / 1000));
     return fetch(`${address}/gw/slack/actions`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-slack-request-timestamp': timestamp, 'x-slack-signature': `v0=${createHmac('sha256', `signing-${releaseNotesAppId}`).update(`v0:${timestamp}:${body}`).digest('hex')}` }, body });
@@ -376,7 +376,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
   it("shows a bot ship's message to a linked person in that bot's direct messages once, handed, and their answers by button and in the thread reach the ship (gateway scopes S9)", async () => {
     await releaseNotesReceives();
     const posted = slack.posted.length;
-    const kept = await prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'U0CHARLOTTE' } });
+    const kept = await prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'D0CHARLOTTE' } });
 
     await releaseNotesSends({ contentType: 'text/markdown', payload: '**Friday**' });
     await expect.poll(() => slack.posted.slice(posted).map(({ botToken, form }) => ({ botToken, channel: form.channel, text: form.text })), { timeout: 30_000 }).toEqual([{ botToken: `xoxb-${releaseNotesAppId}`, channel: 'U0CHARLOTTE', text: '*Friday*' }]);
@@ -391,7 +391,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     const pressed = await press({ messageTs: questionTs, messageId: questionMessageId, option: 2 });
     expect(pressed.status).toBe(200);
 
-    await slackEvent(releaseNotesAppId, { event: { type: 'message', channel_type: 'im', channel: 'U0CHARLOTTE', user: 'U0CHARLOTTE', text: 'Friday works', ts: '1730019900.000400', thread_ts: shownTs }, eventId: 'Ev-s9-thread' });
+    await slackEvent(releaseNotesAppId, { event: { type: 'message', channel_type: 'im', channel: 'D0CHARLOTTE', user: 'U0CHARLOTTE', text: 'Friday works', ts: '1730019900.000400', thread_ts: shownTs }, eventId: 'Ev-s9-thread' });
     await expect.poll(async () => (received = [...received, ...(await releaseNotesReceives())]).length, { timeout: 30_000 }).toBe(2);
 
     expect(received.map(({ contentType, payload: text }) => ({ contentType, text }))).toEqual(expect.arrayContaining([
@@ -412,7 +412,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     await expect.poll(() => slack.posted.length, { timeout: 30_000 }).toBe(posted + 1);
     const questionTs = `1730019600.${String(posted + 1).padStart(6, '0')}`;
     const pressed = await press({ messageTs: questionTs, messageId: questionMessageId, option: 1 });
-    const replied = await slackEvent(releaseNotesAppId, { event: { type: 'message', channel_type: 'im', channel: 'U0CHARLOTTE', user: 'U0CHARLOTTE', text: 'Tag it today', ts: '1730019950.000500', thread_ts: questionTs }, eventId: 'Ev-1382-thread' });
+    const replied = await slackEvent(releaseNotesAppId, { event: { type: 'message', channel_type: 'im', channel: 'D0CHARLOTTE', user: 'U0CHARLOTTE', text: 'Tag it today', ts: '1730019950.000500', thread_ts: questionTs }, eventId: 'Ev-1382-thread' });
     const isInSlackYet = (await prisma.slackPost.count({ where: { fleetId, messageId: questionMessageId, ts: { not: null } } })) > 0;
     releasePosts();
 
@@ -428,6 +428,24 @@ describe('linking a Slack account (gateway scopes S7)', () => {
       { contentType: 'text/markdown', payload: 'Tag it today', inReplyTo: questionMessageId },
     ]));
     expect(answers).toHaveLength(2);
+  }, 120_000);
+
+  it('posts every question sent at once, each with its pick, one with options longer than a button shows among them (aeolus-fleet#1574)', async () => {
+    await releaseNotesReceives();
+    const posted = slack.posted.length;
+    const questionOf = (id: string, labels: readonly string[]) => JSON.stringify({ id, title: `Which, ${id.slice(0, 4)}?`, context: 'Asked at once', options: labels.map((label, at) => ({ key: at + 1, label, detail: '' })), pick: { option: 1, why: `the first, ${id.slice(0, 4)}` } });
+
+    await Promise.all([
+      releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: questionOf('a1b2c3d4-0000-4000-8000-000000000001', ['Now', 'Later']) }),
+      releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: questionOf('b1b2c3d4-0000-4000-8000-000000000002', ["Nothing changes there: the console's count stays as it is, and argo sees the same count", 'Count again']) }),
+      releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: questionOf('c1b2c3d4-0000-4000-8000-000000000003', ['Yes', 'No']) }),
+    ]);
+
+    const asideOf = ({ form }: { form: Record<string, string> }) => {
+      const [attachment] = z.array(z.object({ blocks: z.array(z.object({ block_id: z.string().optional(), elements: z.array(z.object({ text: z.unknown() })).optional() })) })).parse(JSON.parse(form.attachments ?? '[]'));
+      return z.object({ text: z.string() }).safeParse(attachment?.blocks.find(({ block_id: blockId }) => blockId === 'aside')?.elements?.[0]).data?.text;
+    };
+    await expect.poll(() => slack.posted.slice(posted).map(asideOf).sort(), { timeout: 30_000 }).toEqual(['release-notes-s7 picks 1: the first, a1b2', 'release-notes-s7 picks 1: the first, b1b2', 'release-notes-s7 picks 1: the first, c1b2']);
   }, 120_000);
 
   describe('view sync (Bridge B8)', () => {
@@ -509,9 +527,14 @@ describe('linking a Slack account (gateway scopes S7)', () => {
           isAnswered: /^✅ You answered at <!date\^\d+\^\{time\}\|\d\d:\d\d UTC>: \*2\. Harbour\*, sent to release-notes-s7$/.test(textOf('body')?.text?.text ?? ''),
           isWhere: /^Bridge and the chat show it answered in Slack · <http[^|]+\|Open in Bridge>$/.test(textOf('footer')?.elements?.[0]?.text ?? ''),
           hasButtons: attachment?.blocks.some(({ type }) => type === 'actions'),
+          aside: textOf('aside')?.elements?.[0]?.text,
         };
       };
-      await expect.poll(() => slack.updated.filter(({ form }) => form.ts === questionTs).map(editedOf), { timeout: 45_000 }).toEqual([{ title: '*Which design?*', isAnswered: true, isWhere: true, hasButtons: false }]);
+      // Shown sending as the press goes, then the answer once sent (aeolus-fleet#1573); the view sync round finds it edited already.
+      await expect.poll(() => slack.updated.filter(({ form }) => form.ts === questionTs).map(editedOf), { timeout: 45_000 }).toEqual([
+        { title: '*Which design?*', isAnswered: false, isWhere: false, hasButtons: false, aside: 'Sending *2. Harbour* to release-notes-s7…' },
+        { title: '*Which design?*', isAnswered: true, isWhere: true, hasButtons: false, aside: undefined },
+      ]);
     }, 120_000);
   });
 });

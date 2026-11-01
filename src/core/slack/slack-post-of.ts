@@ -11,6 +11,29 @@ export const MESSAGE_MAX_LENGTH = 40_000;
 /** The most one block of a Slack message shows. */
 export const BLOCK_MAX_LENGTH = 3_000;
 
+/** The most characters Slack takes in a button's text: it refuses the whole post for one longer. */
+export const BUTTON_TEXT_MAX_LENGTH = 75;
+
+/** About the most characters of a button's text Slack shows on a phone before it cuts the rest: a question with a longer one lists its options in full. */
+const BUTTON_TEXT_SHOWN_LENGTH = 30;
+
+const ELLIPSIS = '…';
+
+/** How an option listed in full under a question's context begins: its number, bold. */
+const LISTED_OPTION_PREFIX = (key: number): string => `*${String(key)}.* `;
+
+/**
+ * The option as its question's post lists it in full, in Slack's markup,
+ * numbered as its button is: so an edit names it whole from the post alone,
+ * though its button cut it. None when the post lists no options: then every
+ * button's text is short enough to be whole.
+ */
+export function listedOptionOf(body: string | null, key: number): string | undefined {
+  const prefix = LISTED_OPTION_PREFIX(key);
+  const line = body?.split('\n').find((each) => each.startsWith(prefix));
+  return line === undefined ? undefined : `${String(key)}. ${line.slice(prefix.length)}`;
+}
+
 /** What a delivery shows as in Slack: an item framed as views.html draws it, its text in Slack's markup, or a link to the gateway for what Slack does not show in full; with its buttons. */
 export interface SlackShown extends SlackMessage {
   readonly kind: 'shown' | 'link';
@@ -87,11 +110,15 @@ function askingOf(delivery: PersonDelivery, bridgeUrl: string): Asking | undefin
     if (question === undefined) {
       return undefined;
     }
+    const options = question.options.map(({ key, label }) => ({ key, label, text: `${String(key)}. ${label}` }));
+    // Slack cuts a long button's text where it shows it, and refuses a post for one over its limit: such options read in full in the body.
+    const isAnyCut = options.some(({ text }) => text.length > BUTTON_TEXT_SHOWN_LENGTH);
+    const listed = isAnyCut ? `\n\n${options.map(({ key, label }) => `${LISTED_OPTION_PREFIX(key)}${escaped(label)}`).join('\n')}` : '';
     return {
-      body: slackMarkupOf(question.context),
+      body: `${slackMarkupOf(question.context)}${listed}`,
       aside: `${escaped(senderName)} picks ${String(question.pick.option)}: ${escaped(question.pick.why)}`,
       footer: `${openInBridge} · reply in the thread to add a note`,
-      buttons: question.options.map(({ key, label }) => ({ text: `${String(key)}. ${label}`, option: key, isPicked: key === question.pick.option })),
+      buttons: options.map(({ key, text }) => ({ text: text.length > BUTTON_TEXT_MAX_LENGTH ? `${text.slice(0, BUTTON_TEXT_MAX_LENGTH - ELLIPSIS.length)}${ELLIPSIS}` : text, option: key, isPicked: key === question.pick.option })),
     };
   }
   const stepSchemaOf = STEP_SCHEMAS.get(essence);
@@ -109,8 +136,10 @@ function askingOf(delivery: PersonDelivery, bridgeUrl: string): Asking | undefin
 /**
  * An item as its post shows it (Bridge, views.html): headed by its asker
  * and job, its title, then what it asks with. A question: its context, the
- * asker's pick, a button per option numbered with the pick's filled, and
- * Open in Bridge with a thread reply as a note; a step: its why, Open on its
+ * asker's pick, a button per option numbered with the pick's filled, its
+ * text cut at Slack's limit, the options listed in full under the context
+ * once a button's text is longer than Slack shows on a phone, and Open in
+ * Bridge with a thread reply as a note; a step: its why, Open on its
  * link and Done; an alert or a notice: its headline and Seen. None for any
  * other message, one with no headline, or one whose payload does not read.
  */

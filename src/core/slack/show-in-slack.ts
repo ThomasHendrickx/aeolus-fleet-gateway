@@ -88,12 +88,12 @@ export function createShowInSlack(deps: {
     return isInSlack(gatewayBot) ? { app: gatewayBot, channel: slackUserId, threadTs: null } : undefined;
   };
 
-  /** Posts it, waiting out Slack's rate limits: the Slack message, or none when Slack refused it. */
-  const posted = async (where: Where, shown: { messageId: MessageId; message: SlackMessage }): Promise<string | undefined> => {
+  /** Posts it, waiting out Slack's rate limits: the conversation Slack answered it is in and its Slack message, or none when Slack refused it. */
+  const posted = async (where: Where, shown: { messageId: MessageId; message: SlackMessage }): Promise<{ channel: string; ts: string } | undefined> => {
     for (let tried = 1; ; tried += 1) {
       const answered = await deps.slack.post(where.app.bot.token, { messageId: shown.messageId, channel: where.channel, threadTs: where.threadTs, message: shown.message });
       if (answered.isOk) {
-        return answered.value.ts;
+        return answered.value;
       }
       if (answered.error.kind !== 'rateLimited' || tried >= RATE_LIMITED_TRIES) {
         return undefined;
@@ -120,12 +120,13 @@ export function createShowInSlack(deps: {
       }
       const app = await deps.apps.find(post.fleetId, post.appId);
       const { text, item, buttons } = slackPostOf(delivery, { bridgeUrl: deps.bridgeUrlOf(post.fleetId), isHeadedBySender: app?.shipId === null });
-      const ts = isInSlack(app) ? await posted({ app, channel: post.channel, threadTs: post.threadTs }, { messageId: post.messageId, message: { text, item, buttons } }) : undefined;
-      if (ts === undefined) {
+      const inSlack = isInSlack(app) ? await posted({ app, channel: post.channel, threadTs: post.threadTs }, { messageId: post.messageId, message: { text, item, buttons } }) : undefined;
+      if (inSlack === undefined) {
         await deps.posts.remove(post.fleetId, post);
         return 'notShown';
       }
-      await deps.posts.save({ ...post, ts });
+      // Kept in the conversation Slack answered: a post to a person's user id is in their direct messages, which Slack names by an id of its own.
+      await deps.posts.save({ ...post, ...inSlack });
     }
     return 'shown';
   };
