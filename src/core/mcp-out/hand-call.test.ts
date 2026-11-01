@@ -182,7 +182,7 @@ describe('the gateway hands a call to its outside MCP server (interop 5.2)', () 
   it('hands it over, calls the tool with the arguments and the vault credential, and replies with the result naming the request', async () => {
     await expect(handCall({ party: CRM, delivery: aPushedDelivery() })).resolves.toEqual({ kind: 'handled' });
 
-    expect(servers.called).toEqual([{ connection: { url: CRM.url, credential: CRM.credential }, call: { name: 'list_deals', arguments: { contactId: 'c1' }, timeoutMs: 60_000 } }]);
+    expect(servers.called).toEqual([{ connection: { url: CRM.url, credential: CRM.credential, party: { fleetId: FLEET_ID, name: 'crm' } }, call: { name: 'list_deals', arguments: { contactId: 'c1' }, timeoutMs: 60_000 } }]);
     expect(crew.log).toEqual([
       ['handed', { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d01', handOverNumber: 1, channel: 'mcp' }],
       [
@@ -357,7 +357,7 @@ describe('a call to a server where each person signs in goes out under its askin
 
     await expect(handCall({ party: ATTIO, delivery: SEARCH })).resolves.toEqual({ kind: 'handled' });
 
-    expect(servers.called.map(({ connection }) => connection)).toEqual([{ url: ATTIO.url, credential: { kind: 'bearer', token: 'access-mathilde' } }]);
+    expect(servers.called.map(({ connection }) => connection)).toEqual([{ url: ATTIO.url, credential: { kind: 'bearer', token: 'access-mathilde' }, party: { fleetId: FLEET_ID, name: 'attio' } }]);
     expect(repliedTexts()).toEqual([RECORDS]);
   });
 

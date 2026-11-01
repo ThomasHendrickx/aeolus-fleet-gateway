@@ -56,7 +56,7 @@ describe("an outside MCP server's tools, as it lists them now", () => {
         ],
       },
     });
-    expect(servers.listedWith).toEqual([{ url: LINEAR.url, credential: LINEAR.credential }]);
+    expect(servers.listedWith).toEqual([{ url: LINEAR.url, credential: LINEAR.credential, party: { fleetId: FLEET_ID, name: 'linear' } }]);
   });
 
   it("answers each tool's switch, a tool the server listed after the switches were kept off and new (aeolus-fleet#1151)", async () => {
@@ -76,7 +76,7 @@ describe("an outside MCP server's tools, as it lists them now", () => {
     await grants.keep(aPartyGrant({ fleetId: FLEET_ID }));
 
     await expect(readPartyTools({ fleetId: FLEET_ID, name: 'attio' })).resolves.toMatchObject({ isOk: true });
-    expect(servers.listedWith).toEqual([{ url: 'https://mcp.attio.com/mcp', credential: { kind: 'bearer', token: 'access-mathilde' } }]);
+    expect(servers.listedWith).toEqual([{ url: 'https://mcp.attio.com/mcp', credential: { kind: 'bearer', token: 'access-mathilde' }, party: { fleetId: FLEET_ID, name: 'attio' } }]);
   });
 
   it('says nobody signed in to a server where each person signs in, listing nothing', async () => {

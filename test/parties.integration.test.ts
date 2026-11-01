@@ -77,6 +77,19 @@ describe("the gateway's parties and their vault in Postgres", () => {
     await expect(store.find(SWITCHED_FLEET, 'sales')).resolves.toMatchObject({ state: 'crewed', toolSwitches: new Map([['list_contacts', true], ['create_deal', true]]) });
   });
 
+  it("keeps a server's own title as its display name, refreshed on each connect, and a save after leaves it as it is", async () => {
+    const store = createPrismaPartyStore(prisma);
+    await store.save(aParty({ fleetId: SWITCHED_FLEET, name: 'linear' }));
+    const first = await store.find(SWITCHED_FLEET, 'linear');
+
+    await store.keepDisplayName({ fleetId: SWITCHED_FLEET, name: 'linear' }, 'Linear');
+    await store.save(aParty({ fleetId: SWITCHED_FLEET, name: 'linear', state: 'crewed', proxyShipId: PROXY, crewToken: 'aeolus_ct_v1_proxy' }));
+    const kept = await store.find(SWITCHED_FLEET, 'linear');
+    await store.keepDisplayName({ fleetId: SWITCHED_FLEET, name: 'linear' }, null);
+
+    expect([first, kept, await store.find(SWITCHED_FLEET, 'linear')].map((party) => party?.kind === 'mcpServer' && party.displayName)).toEqual([null, 'Linear', null]);
+  });
+
   it('switches one tool of a server with no switches kept, keeping every other tool listed on', async () => {
     const store = createPrismaPartyStore(prisma);
     await store.save(aParty({ fleetId: SWITCHED_FLEET, name: 'old' }));

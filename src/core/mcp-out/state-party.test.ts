@@ -79,7 +79,7 @@ describe('the gateway states what a proxy ship offers, as its crew (decision 004
     await grants.keep(aPartyGrant({ fleetId: FLEET_ID, party: 'attio', accessToken: 'access-mathilde', accessTokenEndsAt: new Date('2026-10-18T15:00:00.000Z') }));
 
     await expect(stateParty({ fleetId: FLEET_ID, name: 'attio' })).resolves.toEqual({ isOk: true, value: { capabilities: ['list_contacts', 'create_deal'] } });
-    expect(servers.listedWith).toEqual([{ url: 'https://crm.example.com/mcp', credential: { kind: 'bearer', token: 'access-mathilde' } }]);
+    expect(servers.listedWith).toEqual([{ url: 'https://crm.example.com/mcp', credential: { kind: 'bearer', token: 'access-mathilde' }, party: { fleetId: FLEET_ID, name: 'attio' } }]);
   });
 
   it('leaves it unstated while the only grant has an access token that ended, listing nothing', async () => {
