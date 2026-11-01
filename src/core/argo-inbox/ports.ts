@@ -6,7 +6,7 @@
 import type { DeliveryId, DeliveryState, FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
-import type { PersonShip, WakeChannelName } from '../people/ports.js';
+import type { PersonShip, WakeChannelName } from '../people/person-wakes.js';
 import type { Result } from '../shared/result.js';
 
 /** An account allowed as argo in a fleet, as its latest account token said, and the person ship it is reached at. */

@@ -188,6 +188,7 @@ import { createArgoInboxDoor } from './adapters/fleet/argo-inbox-door.js';
 import { createFollowArgoInbox } from './core/argo-inbox/follow-argo-inbox.js';
 import { createReadArgoInboxNotice } from './core/argo-inbox/read-argo-inbox-notice.js';
 import { createWakeForArgo } from './core/argo-inbox/wake-for-argo.js';
+import { createPersonWakes } from './core/people/person-wakes.js';
 import { createPrismaArgoWakes } from './adapters/prisma/argo-wakes.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createExchangeIdJag } from './core/oauth/exchange-id-jag.js';
@@ -801,7 +802,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // A wake of its own for what waits at argo, for every person allowed as argo, at once after each read of argo's inbox and as windows pass (argo's inbox, AI5).
   const argoWakes = createRoundWorker({
     name: "argo's wakes",
-    round: createWakeForArgo({ connections, accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, channels: wakeChannels, routes, defaults: routingDefaults, argoWakes: createPrismaArgoWakes(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock }),
+    round: createWakeForArgo({ connections, accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, people: createPersonWakes({ channels: wakeChannels, routes, defaults: routingDefaults, focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock }), argoWakes: createPrismaArgoWakes(prisma), clock }),
     sleep,
     intervalMs: POLL_MS,
     log: server.log,

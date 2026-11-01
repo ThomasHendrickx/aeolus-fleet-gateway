@@ -5,6 +5,7 @@ import { FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/
 import { memoryFocusedPages, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { PersonShip, WakeChannel, WakeChannelName, WakeWindow } from '../people/ports.js';
+import { createPersonWakes } from '../people/person-wakes.js';
 import { ITEM_JOBS, routingDefaultsOf, type Route } from '../people/routing.js';
 import { ok } from '../shared/result.js';
 import { createFollowArgoInbox } from './follow-argo-inbox.js';
@@ -67,12 +68,8 @@ function waking(channels: WakeChannel[], routes: Route[] = []) {
     connections,
     accounts,
     inboxOf: follow.inboxOf,
-    channels,
-    routes: memoryRoutes(routes),
-    defaults: EVERY_JOB_WAKES,
+    people: createPersonWakes({ channels, routes: memoryRoutes(routes), defaults: EVERY_JOB_WAKES, focused, focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => now } }),
     argoWakes,
-    focused,
-    focusFreshMs: FOCUS_FRESH_MS,
     clock: { now: () => now },
   });
 }
