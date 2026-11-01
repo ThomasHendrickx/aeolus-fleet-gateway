@@ -34,13 +34,30 @@ export interface PostToEdit {
   readonly outcome: Pick<ItemOutcome, 'place' | 'kind' | 'option' | 'at'>;
 }
 
+/** How Slack's ids begin: a person's user id, and the conversation id of direct messages. */
+const USER_ID = /^[UW]/;
+const DIRECT_MESSAGES_PREFIX = 'D';
+
+/**
+ * Whether the post is in the conversation, through the bot's app. A post
+ * to a person's direct messages goes by their user id, and Slack names the
+ * conversation by an id of its own only once it answers: until then, the
+ * post kept by a user id is in the direct messages of its person ship's
+ * person with that bot, the only ones a person ship's posts go to by user
+ * id (aeolus-fleet#1573).
+ */
+export function isPostIn(post: SlackPost, conversation: { appId: string; channel: string }): boolean {
+  const isInDirectMessages = USER_ID.test(post.channel) && conversation.channel.startsWith(DIRECT_MESSAGES_PREFIX);
+  return post.appId === conversation.appId && (post.channel === conversation.channel || isInDirectMessages);
+}
+
 /**
  * Whether the post is a delivery not yet in Slack that starts a thread in
  * the conversation: a reply in a thread there that matches no post may be
  * under it, before the gateway keeps its Slack message.
  */
 export function isAwaitingSlackIn(post: SlackPost, conversation: { appId: string; channel: string }): boolean {
-  return post.deliveryId !== null && post.ts === null && post.threadTs === null && post.appId === conversation.appId && post.channel === conversation.channel;
+  return post.deliveryId !== null && post.ts === null && post.threadTs === null && isPostIn(post, conversation);
 }
 
 /** Whether the post is a delivery the gateway did not finish: not yet in Slack. */

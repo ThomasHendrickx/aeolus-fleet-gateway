@@ -66,7 +66,7 @@ describe("a bot's message only one person sees", () => {
   it("posts an item as views.html draws it: its side's colour, heading, title, what it asks with, a button per option naming its fleet message, the pick's filled, then the line under them", async () => {
     const posted = await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'U0MATHILDE', threadTs: null, message: QUESTION_POST });
 
-    expect(posted).toEqual({ isOk: true, value: { channel: 'U0MATHILDE', ts: '1730019600.000001' } });
+    expect(posted).toEqual({ isOk: true, value: { channel: 'D0MATHILDE', ts: '1730019600.000001' } });
     const form = slack.posted[0]?.form;
     const attachments: unknown = JSON.parse(form?.attachments ?? 'null');
     expect({ channel: form?.channel, threadTs: form?.thread_ts, text: form?.text, blocks: form?.blocks, attachments }).toEqual({
