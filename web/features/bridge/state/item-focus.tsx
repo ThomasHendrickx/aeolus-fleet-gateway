@@ -9,6 +9,7 @@ import { BRIDGE_BASKET_PATH } from '../paths';
 import type { FocusedDelivery } from '../services/deliveries';
 import type { HomeItem } from '../services/items';
 import { DeliveryCard, type DeliveryControl, type InBasket, type Opened, type StepFinished } from '../ui/delivery-card';
+import { ItemSplit } from '../ui/item-split';
 import { Notice } from '../ui/notice';
 
 /** An item to open: by its delivery, with its job, whether an alert, whether it was new, and the answer to it in the basket, if any. A replacement opened from its stale item is new. */
@@ -33,6 +34,8 @@ export interface ItemOpening {
   readonly putPick: (item: ToPut, option: number) => void;
   readonly puttingId: string | undefined;
   readonly failure: { deliveryId: string; message: string } | undefined;
+  /** The item open beside the list, by its delivery and job; none while the list is shown alone. */
+  readonly opened: { readonly deliveryId: string; readonly job: HomeItem['job'] } | undefined;
 }
 
 /**
@@ -44,7 +47,8 @@ export interface ItemOpening {
  * replacement. A step ends done or cannot with the note, sent at once,
  * never through the basket (CC23), and stays open showing its outcome. A question's answer goes in the basket (CC24), and comes
  * out of it there; from its row, a new question's pick goes in it at once, opened by the same press. Answering, being done or putting in the basket says so
- * in place, and the page reads itself again.
+ * in place, and the page reads itself again. The open item shows beside its
+ * list on a desktop, and on its own screen on a phone (aeolus-fleet#1538).
  */
 export function ItemFocus({ fleetId, children }: { fleetId: string; children: (opening: ItemOpening) => ReactNode }) {
   const [focus, setFocus] = useState<{ delivery: FocusedDelivery; opened: Opened; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
@@ -114,18 +118,17 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
     setDone(said);
   };
 
-  if (focus !== undefined) {
-    const { delivery, inBasket } = focus;
+  const cardOf = ({ delivery, inBasket, opened, finished }: NonNullable<typeof focus>) => {
     const questionId = delivery.question?.id;
     return (
       <DeliveryCard
         key={delivery.deliveryId}
         delivery={delivery}
-        opened={focus.opened}
+        opened={opened}
         meetingHref={delivery.meetingId === undefined ? undefined : meetingPathOf({ fleetId, meetingId: delivery.meetingId })}
         basketHref={inFleet(BRIDGE_BASKET_PATH, fleetId)}
         inBasket={inBasket}
-        finished={focus.finished}
+        finished={finished}
         note={note}
         working={working}
         failure={failure}
@@ -143,18 +146,25 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
           settle({
             control: { kind: outcome },
             action: () => doneDelivery({ fleet: fleetId, deliveryId: delivery.deliveryId, step: { outcome, note } }),
-            onSettled: () => { setFocus({ ...focus, finished: { outcome, note: note.trim(), at: new Date().toISOString() } }); },
+            onSettled: () => { setFocus({ delivery, inBasket, opened, finished: { outcome, note: note.trim(), at: new Date().toISOString() } }); },
           });
         }}
-        onOpen={(deliveryId) => { open({ deliveryId, job: focus.opened.job }); }}
+        onOpen={(deliveryId) => { open({ deliveryId, job: opened.job }); }}
         onBack={() => { setFocus(undefined); }}
       />
     );
-  }
+  };
+
+  const opened = focus === undefined ? undefined : { deliveryId: focus.delivery.deliveryId, job: focus.opened.job };
   return (
-    <div key={shownTimes} className="grid gap-4">
-      {done === undefined ? null : <Notice message={done} isFailure={false} />}
-      {children({ open, openingId, putPick, puttingId, failure: openFailure })}
-    </div>
+    <ItemSplit
+      list={
+        <div key={shownTimes} className="grid gap-4">
+          {done === undefined ? null : <Notice message={done} isFailure={false} />}
+          {children({ open, openingId, putPick, puttingId, failure: openFailure, opened })}
+        </div>
+      }
+      item={focus === undefined ? undefined : cardOf(focus)}
+    />
   );
 }

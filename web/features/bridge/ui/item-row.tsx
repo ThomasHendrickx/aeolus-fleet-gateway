@@ -49,19 +49,28 @@ function Places({ places }: { places: readonly Place[] }) {
   );
 }
 
+/** A row's ground: the open item on the active tone with a bar at its side, a stale one muted. */
+function groundOf({ isOpen, isStale }: { isOpen: boolean; isStale: boolean }): string {
+  if (isOpen) {
+    return 'border-l-2 border-l-primary bg-tone-active-bg pl-2.5';
+  }
+  return isStale ? 'bg-muted' : '';
+}
+
 /**
  * One item in a Bridge list (Bridge mockups, home; aeolus-fleet#1535): its
  * job's icon, a dot while new, its title, then the job's word in its tone,
  * who sent it, its state, and the places that show it; how long ago it
  * arrived on the right; and its actions beneath, the one that acts in place
  * beside Open. Pressing the title opens it too. Struck through, on muted
- * ground and marked, when stale (basket.html). The row
+ * ground and marked, when stale (basket.html); marked on the active tone when it is the item open beside the list. The row
  * and its title shrink to a phone's width (aeolus-fleet#1238).
  */
 export function ItemRow({
   item,
   now,
   isNew,
+  isOpen = false,
   staleKind,
   outcome,
   failure,
@@ -72,6 +81,8 @@ export function ItemRow({
   /** When the page read its items: the age is from it. */
   now: Date;
   isNew: boolean;
+  /** Whether it is the item open beside the list, marked so (decide.html). */
+  isOpen?: boolean;
   /** How its asker made it stale, withdrawn or replaced, outside the count; none while it stands. */
   staleKind?: Stale['kind'];
   /** What the row says of where the item stands, such as Seen or In the basket: option 2; nothing while new. */
@@ -88,7 +99,7 @@ export function ItemRow({
   const titleClass = 'min-w-0 break-words text-left text-body-touch font-medium sm:truncate sm:text-body';
   const title = staleKind === undefined ? item.title : <s className="decoration-muted-foreground">{item.title}</s>;
   return (
-    <li data-testid="bridge-item" data-stale={staleKind !== undefined} className={`grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1.5 border-t border-border px-3 py-2.5 first:border-t-0 ${staleKind === undefined ? '' : 'bg-muted'}`}>
+    <li data-testid="bridge-item" data-stale={staleKind !== undefined} aria-current={isOpen ? true : undefined} className={`grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1.5 border-t border-border px-3 py-2.5 first:border-t-0 ${groundOf({ isOpen, isStale: staleKind !== undefined })}`}>
       <JobIcon aria-hidden="true" className={`mt-0.5 size-4 ${look.tone}`} />
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex min-w-0 items-baseline sm:items-center">

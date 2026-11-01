@@ -88,71 +88,118 @@ function openerOf(item: HomeItem, opening: ItemOpening): (() => void) | undefine
   return opening.openingId === undefined ? () => { opening.open(item); } : undefined;
 }
 
+/** The rows of what waits: each with its actions while the list is shown alone, without them beside an open item, the open one marked. */
+function WaitingRows({ items, readAt, opening }: { items: readonly HomeItem[]; readAt: Date; opening: ItemOpening }) {
+  const isBeside = opening.opened !== undefined;
+  return (
+    <ul className={isBeside ? 'border-t border-border' : 'overflow-hidden rounded-lg border border-border bg-card'}>
+      {items.map((item) => (
+        <ItemRow
+          key={item.deliveryId}
+          item={item}
+          now={readAt}
+          isNew={item.state === 'new'}
+          isOpen={opening.opened?.deliveryId === item.deliveryId}
+          staleKind={item.stale?.kind}
+          outcome={rowOutcomeOf(item)}
+          failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}
+          onOpen={openerOf(item, opening)}
+          actions={isBeside ? undefined : <WaitingActions item={item} opening={opening} />}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function StayAwareRows({ items, readAt, opening }: { items: readonly HomeItem[]; readAt: Date; opening: ItemOpening }) {
+  return (
+    <ul className={opening.opened === undefined ? 'overflow-hidden rounded-lg border border-border bg-card' : 'border-t border-border'}>
+      {items.map((item) => (
+        <ItemRow key={item.deliveryId} item={item} now={readAt} isNew={item.state === 'new'} isOpen={opening.opened?.deliveryId === item.deliveryId} outcome={undefined} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined} onOpen={openerOf(item, opening)} />
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * The list beside an open item (decide.html, stay-aware.html): the one it
+ * was opened from, headed with its count, its rows without their buttons;
+ * pressing a title opens that item in its place.
+ */
+function ListBeside({ home, readAt, opening, isStayAware }: { home: BridgeHome; readAt: Date; opening: ItemOpening; isStayAware: boolean }) {
+  const { waiting, stayAware } = home;
+  return isStayAware ? (
+    <section aria-labelledby="bridge-stay-aware-heading">
+      <div className="flex items-baseline justify-between gap-3 px-3 py-2.5">
+        <h2 id="bridge-stay-aware-heading" className="font-semibold">
+          Stay aware
+        </h2>
+        <span className="text-caption text-muted-foreground">{stayAware.filter(({ state }) => state === 'new').length} unseen</span>
+      </div>
+      <StayAwareRows items={stayAware} readAt={readAt} opening={opening} />
+    </section>
+  ) : (
+    <section aria-labelledby="bridge-waiting-heading">
+      <h1 id="bridge-waiting-heading" className="px-3 py-2.5 font-semibold">
+        Waiting on you <span data-testid="bridge-count" className="text-tone-waiting-fg">{waiting.count}</span>
+      </h1>
+      <WaitingRows items={waiting.items} readAt={readAt} opening={opening} />
+    </section>
+  );
+}
+
 /**
  * Bridge home's lists (CC18): what waits on the person, decide and do, with
  * one count, a dot on what is new, a question or step its asker withdrew or replaced
  * struck through and outside the count, a replaced one leading to its replacement; and the stay-aware feed beside it, the
  * alerts and notices, a dot on those not seen, which alone it counts, outside the count. Opening one of
- * the feed is all it asks (CC16): it stays in the feed, seen.
+ * the feed is all it asks (CC16): it stays in the feed, seen. Beside an
+ * open item, only the list it was opened from (aeolus-fleet#1538).
  */
-export function HomePanel({ fleetId, home, now }: { fleetId: string; home: BridgeHome; now: string }) {
+export function HomeLists({ home, now, opening }: { home: BridgeHome; now: string; opening: ItemOpening }) {
   const { waiting, stayAware } = home;
   const readAt = new Date(now);
+  if (opening.opened !== undefined) {
+    return <ListBeside home={home} readAt={readAt} opening={opening} isStayAware={opening.opened.job === 'stay-aware'} />;
+  }
   return (
-    <ItemFocus fleetId={fleetId}>
-      {(opening) => (
-        <div className="grid gap-8">
-          <section className="grid gap-3" aria-labelledby="bridge-waiting-heading">
-            <div>
-              <h1 id="bridge-waiting-heading" className="text-heading font-semibold">
-                Waiting on you <span data-testid="bridge-count" className="text-tone-waiting-fg">{waiting.count}</span>
-              </h1>
-              <p className="text-muted-foreground">{waiting.count === 0 ? 'Nothing waits on you.' : countsOf(waiting.items)}</p>
-            </div>
-            {waiting.items.length === 0 ? (
-              <div data-testid="bridge-nothing-waits" className="grid justify-items-center gap-1 rounded-lg border border-border bg-card p-6 text-center">
-                <span className="font-semibold">Nothing waits on you</span>
-                <span className="text-muted-foreground">Your ships have what they need from you. A question or a step shows here the moment one arrives.</span>
-              </div>
-            ) : (
-              <ul className="overflow-hidden rounded-lg border border-border bg-card">
-                {waiting.items.map((item) => (
-                  <ItemRow
-                    key={item.deliveryId}
-                    item={item}
-                    now={readAt}
-                    isNew={item.state === 'new'}
-                    staleKind={item.stale?.kind}
-                    outcome={rowOutcomeOf(item)}
-                    failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}
-                    onOpen={openerOf(item, opening)}
-                    actions={<WaitingActions item={item} opening={opening} />}
-                  />
-                ))}
-              </ul>
-            )}
-          </section>
-          <section className="grid gap-3" aria-labelledby="bridge-stay-aware-heading">
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 id="bridge-stay-aware-heading" className="text-section font-semibold">
-                Stay aware
-              </h2>
-              <span className="text-caption text-muted-foreground">{stayAware.filter(({ state }) => state === 'new').length} unseen, outside the count</span>
-            </div>
-            {stayAware.length === 0 ? (
-              <p data-testid="bridge-nothing-new" className="rounded-md border border-border bg-card p-3 text-muted-foreground">
-                Nothing new. What you saw is in Done.
-              </p>
-            ) : (
-              <ul className="overflow-hidden rounded-lg border border-border bg-card">
-                {stayAware.map((item) => (
-                  <ItemRow key={item.deliveryId} item={item} now={readAt} isNew={item.state === 'new'} outcome={undefined} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined} onOpen={openerOf(item, opening)} />
-                ))}
-              </ul>
-            )}
-          </section>
+    <div className="grid gap-8">
+      <section className="grid gap-3" aria-labelledby="bridge-waiting-heading">
+        <div>
+          <h1 id="bridge-waiting-heading" className="text-heading font-semibold">
+            Waiting on you <span data-testid="bridge-count" className="text-tone-waiting-fg">{waiting.count}</span>
+          </h1>
+          <p className="text-muted-foreground">{waiting.count === 0 ? 'Nothing waits on you.' : countsOf(waiting.items)}</p>
         </div>
-      )}
-    </ItemFocus>
+        {waiting.items.length === 0 ? (
+          <div data-testid="bridge-nothing-waits" className="grid justify-items-center gap-1 rounded-lg border border-border bg-card p-6 text-center">
+            <span className="font-semibold">Nothing waits on you</span>
+            <span className="text-muted-foreground">Your ships have what they need from you. A question or a step shows here the moment one arrives.</span>
+          </div>
+        ) : (
+          <WaitingRows items={waiting.items} readAt={readAt} opening={opening} />
+        )}
+      </section>
+      <section className="grid gap-3" aria-labelledby="bridge-stay-aware-heading">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="bridge-stay-aware-heading" className="text-section font-semibold">
+            Stay aware
+          </h2>
+          <span className="text-caption text-muted-foreground">{stayAware.filter(({ state }) => state === 'new').length} unseen, outside the count</span>
+        </div>
+        {stayAware.length === 0 ? (
+          <p data-testid="bridge-nothing-new" className="rounded-md border border-border bg-card p-3 text-muted-foreground">
+            Nothing new. What you saw is in Done.
+          </p>
+        ) : (
+          <StayAwareRows items={stayAware} readAt={readAt} opening={opening} />
+        )}
+      </section>
+    </div>
   );
+}
+
+/** Bridge home: its lists, with one item in focus at a time. */
+export function HomePanel({ fleetId, home, now }: { fleetId: string; home: BridgeHome; now: string }) {
+  return <ItemFocus fleetId={fleetId}>{(opening) => <HomeLists home={home} now={now} opening={opening} />}</ItemFocus>;
 }

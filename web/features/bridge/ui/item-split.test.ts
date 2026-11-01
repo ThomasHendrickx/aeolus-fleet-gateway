@@ -17,8 +17,8 @@ describe('the split of a list and its open item (aeolus-fleet#1538)', () => {
 
   it('puts the list beside the open item on a desktop, and the item alone on a phone', () => {
     const markup = renderToStaticMarkup(createElement(ItemSplit, { list: LIST, item: ITEM }));
-    const split = /<div data-testid="bridge-split" class="([^"]*)"/.exec(markup)?.[1].split(' ') ?? [];
-    const list = /<div data-testid="bridge-split-list" class="([^"]*)"/.exec(markup)?.[1].split(' ') ?? [];
+    const split = (/<div data-testid="bridge-split" class="([^"]*)"/.exec(markup)?.[1] ?? '').split(' ');
+    const list = (/<div data-testid="bridge-split-list" class="([^"]*)"/.exec(markup)?.[1] ?? '').split(' ');
 
     expect({
       beside: split.some((name) => name.startsWith('md:grid-cols-')),
