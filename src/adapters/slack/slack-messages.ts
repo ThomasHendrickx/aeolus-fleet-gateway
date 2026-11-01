@@ -26,7 +26,7 @@ export const DONE_ACTION = 'done';
 const OPEN_ACTION = 'open';
 
 /** The colour at an item's side, as views.html draws it. */
-const TONE_COLORS = { asking: '#4a6fa5', aware: '#9a9b9e', done: '#2eb67d', ended: '#9a9b9e' } as const satisfies Record<SlackTone, string>;
+const TONE_COLORS = { asking: '#4a6fa5', aware: '#dddddd', done: '#2eb67d', ended: '#dddddd' } as const satisfies Record<SlackTone, string>;
 
 /** An item's colour back to its side: grey reads as aware, as an ended item's post shows nothing else that differs. */
 const COLOR_TONES = new Map<string, SlackTone>([
