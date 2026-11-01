@@ -4,26 +4,35 @@ import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { readYourFleet, type FleetRead } from '../fleet/hooks/read-your-fleet';
 import { YourFleetPanel } from '../fleet/state/your-fleet-panel';
-import { readBridgeHome } from '../hooks/read-bridge';
+import { readBridgeHome, readTimeOf } from '../hooks/read-bridge';
 import { BRIDGE_PATH } from '../paths';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { HomeColumns } from '../ui/home-columns';
 import { HomePanel } from './home-panel';
+import { KeptRead } from './kept-read';
 import { RecordUnreadable } from './record-unreadable';
 
 /** For an account with no person ship nothing waits, and nothing reaches it unasked. */
 const NOTHING = { waiting: { count: 0, items: [] }, stayAware: [] };
 
-/** Your fleet beside home once both are read; the fleet was asked for at the same time as home, so neither waits on the other. */
+/**
+ * Your fleet beside home once both are read; the fleet was asked for at the
+ * same time as home, so neither waits on the other. While either cannot be
+ * read, the browser shows it as last read (states.html).
+ */
 async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: string; fleet: Promise<FleetRead> }) {
   const [read, fleetRead] = await Promise.all([readBridgeHome(api), fleet]);
   const isNothingWaiting = read.kind !== 'unreadable' && (read.kind === 'none' || read.value.waiting.items.length === 0);
   return (
     <HomeColumns
-      banner={read.kind === 'unreadable' ? <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} /> : undefined}
-      main={read.kind === 'unreadable' ? null : <HomePanel fleetId={fleetId} home={read.kind === 'read' ? read.value : NOTHING} />}
-      aside={<YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} />}
+      banner={read.kind === 'unreadable' ? <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} /> : null}
+      main={<KeptRead readAt={readTimeOf(read)}>{read.kind === 'unreadable' ? null : <HomePanel fleetId={fleetId} home={read.kind === 'read' ? read.value : NOTHING} />}</KeptRead>}
+      aside={
+        <KeptRead readAt={fleetRead.kind === 'unreadable' ? undefined : new Date().toISOString()}>
+          <YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} />
+        </KeptRead>
+      }
     />
   );
 }
