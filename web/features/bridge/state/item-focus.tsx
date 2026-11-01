@@ -38,7 +38,7 @@ export interface ItemOpening {
  * out of it there. Answering, being done or putting in the basket says so
  * in place, and the page reads itself again.
  */
-export function ItemFocus({ fleetId, children }: { fleetId: string; children: (opening: ItemOpening) => ReactNode }) {
+export function ItemFocus({ fleetId, consoleUrl, children }: { fleetId: string; /** The fleet's console, where an opened alert's ship shows its Health. */ consoleUrl?: string; children: (opening: ItemOpening) => ReactNode }) {
   const [focus, setFocus] = useState<{ delivery: FocusedDelivery; job: ToOpen['job']; isDoneOnSeeing: boolean; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
   const [note, setNote] = useState('');
   const [openingId, setOpeningId] = useState<string | undefined>();
@@ -98,6 +98,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
         delivery={delivery}
         isDoneOnSeeing={focus.isDoneOnSeeing}
         meetingHref={delivery.meetingId === undefined ? undefined : meetingPathOf({ fleetId, meetingId: delivery.meetingId })}
+        consoleUrl={consoleUrl}
         basketHref={inFleet(BRIDGE_BASKET_PATH, fleetId)}
         inBasket={inBasket}
         finished={focus.finished}

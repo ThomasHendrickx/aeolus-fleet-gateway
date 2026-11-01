@@ -12,9 +12,9 @@ export function AlertShip({ alert, healthHref }: { alert: AlertView; healthHref:
   const { name } = alert.ship;
   return (
     <div className="grid gap-3">
-      <div data-testid="bridge-alert-tile" className="grid h-13 w-25 content-between rounded-md border border-tone-attention-border bg-tone-attention-bg px-2 py-1.5 text-tone-attention-fg">
+      <div data-testid="bridge-alert-tile" className="grid h-18 w-34 content-between rounded-md border border-tone-attention-border bg-tone-attention-bg px-2.5 py-2 text-tone-attention-fg">
         <span className="truncate text-caption font-semibold text-card-foreground">{name}</span>
-        <span className="flex items-center gap-1 text-[11px]">
+        <span className="flex items-center gap-1 text-caption font-medium">
           <CircleAlert aria-hidden="true" className="size-3 shrink-0" />
           Alert
         </span>

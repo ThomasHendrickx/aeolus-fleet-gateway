@@ -4,7 +4,9 @@ import { useState } from 'react';
 import type { Question } from '@aeolus-fleet/common';
 
 import { staleSaidOf, type FocusedDelivery, type Stale, type StepView } from '../services/deliveries';
+import { healthHrefOf } from '../services/stay-aware';
 import { ActionButton } from './action-button';
+import { AlertShip } from './alert-ship';
 import { Notice } from './notice';
 import { StaleIcon } from './stale-icon';
 
@@ -197,6 +199,7 @@ export function DeliveryCard({
   delivery,
   isDoneOnSeeing,
   meetingHref,
+  consoleUrl,
   basketHref,
   inBasket,
   finished,
@@ -217,6 +220,8 @@ export function DeliveryCard({
   isDoneOnSeeing: boolean;
   /** The page of the meeting it belongs to, if it belongs to one. */
   meetingHref: string | undefined;
+  /** The fleet's console, where an alert's ship shows its Health; none when the fleet names no console. */
+  consoleUrl: string | undefined;
   /** Bridge's basket. */
   basketHref: string;
   /** The answer to the question in the basket, if any. */
@@ -270,9 +275,12 @@ export function DeliveryCard({
       {stale === null ? null : <StaleNotice stale={stale} from={delivery.from} isStep={step !== undefined} onOpen={onOpen} />}
       {inBasket === null || stale !== null ? null : <InBasketNotice inBasket={inBasket} basketHref={basketHref} isRemoving={working?.kind === 'remove'} isWorking={isWorking} onRemove={onRemove} />}
       {isDoneOnSeeing ? (
-        <p data-testid="bridge-seen-done" className="text-muted-foreground">
-          Seen now, so done: it asks nothing more.
-        </p>
+        <>
+          {delivery.alert === undefined ? null : <AlertShip alert={delivery.alert} healthHref={consoleUrl === undefined ? undefined : healthHrefOf({ consoleUrl, shipId: delivery.alert.ship.id })} />}
+          <p data-testid="bridge-seen-done" className="text-muted-foreground">
+            Seen now, so done: it asks nothing more.
+          </p>
+        </>
       ) : stale !== null ? null : step !== undefined ? (
         finished === null ? <StepControls from={delivery.from} note={note} working={working} failure={failure} onNoteChange={onNoteChange} onFinish={onFinishStep} /> : <StepOutcomeNotice from={delivery.from} finished={finished} />
       ) : (

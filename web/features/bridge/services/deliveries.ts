@@ -7,6 +7,7 @@ import { z } from 'zod';
 import type { inferRouterOutputs } from '@trpc/server';
 
 import type { GatewayRouter } from '../../../../src/adapters/trpc/router.js';
+import type { AlertView } from './stay-aware';
 
 /** The channels that wake a person when something waits for their person ship, as the API shows them (wake a person, W8). */
 export type WakeChannels = inferRouterOutputs<GatewayRouter>['people']['wakeChannels'];
@@ -26,6 +27,8 @@ export interface FocusedDelivery {
   readonly question: Question | undefined;
   /** The step it asks (CC14), when it is one. */
   readonly step: StepView | undefined;
+  /** The alert it carries (decision 0071): the ship it is about, when it is one. */
+  readonly alert: AlertView | undefined;
   /** The meeting it was contributed to or tells of, when it belongs to one. */
   readonly meetingId: string | undefined;
   /** Whether its asker withdrew or replaced the question or step it asks, with the replacement, a new item. */

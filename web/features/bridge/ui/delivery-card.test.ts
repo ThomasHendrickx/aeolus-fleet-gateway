@@ -119,7 +119,7 @@ describe('a step opened in Bridge (CC14)', () => {
   const STEP = { title: 'Create the GitHub repository aeolus-fleet-memory-plugin', why: 'No ship can create a repository under your account.', link: { href: 'https://github.com/new', address: 'github.com/new', isOutside: true } };
 
   function aStep(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
-    return { deliveryId: 'dlv_03', from: 'orchestrator-1', title: STEP.title, sentAt: '2026-10-31T20:00:00.000Z', payload: '{}', body: '{}', question: undefined, step: STEP, meetingId: undefined, stale: null, ...overrides };
+    return { deliveryId: 'dlv_03', from: 'orchestrator-1', title: STEP.title, sentAt: '2026-10-31T20:00:00.000Z', payload: '{}', body: '{}', question: undefined, step: STEP, alert: undefined, meetingId: undefined, stale: null, ...overrides };
   }
 
   it('shows why, and the link in its box: where it is done, its host and path, that it opens outside Aeolus, and Open, opened only by the person', () => {

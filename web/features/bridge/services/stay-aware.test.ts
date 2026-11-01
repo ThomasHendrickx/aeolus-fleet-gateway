@@ -20,7 +20,7 @@ const ALERT = {
   facts: { reportChangedAt: '2026-10-31T17:46:00.000Z', state: 'working', minutes: 45, setBy: 'shp_01m3tb1zhjs6kthtcs2zvksacv' },
 };
 
-function anItem(deliveryId: string, sentAt: string) {
+function anItem(deliveryId: `dlv_${string}`, sentAt: string) {
   return { deliveryId, from: 'watch', title: `Item ${deliveryId}`, sentAt, job: 'stay-aware' as const };
 }
 
