@@ -6,7 +6,7 @@ import type { Result } from '../shared/result.js';
 import type { KeptSlackEvent } from './kept-slack-event.js';
 import type { SlackApp, SlackAppDescription } from './slack-app.js';
 import type { SlackLink } from './slack-link.js';
-import type { SlackPost } from './slack-post.js';
+import type { PostToEdit, SlackPost } from './slack-post.js';
 import type { ConfigurationToken, SlackWorkspace } from './slack-workspace.js';
 
 /**
@@ -187,6 +187,10 @@ export interface SlackMessages {
   postInThread(botToken: string, message: { channel: string; threadTs: string; text: string }): Promise<Result<undefined, SlackRefusal>>;
   /** A reaction on a message (reactions.add); one already there is no refusal. */
   react(botToken: string, reaction: { channel: string; ts: string; name: string }): Promise<Result<undefined, SlackRefusal>>;
+  /** A message's text as Slack holds it, in a conversation or a thread of it (conversations.history, conversations.replies). */
+  textOf(botToken: string, message: { channel: string; ts: string; threadTs: string | null }): Promise<Result<string, SlackRefusal>>;
+  /** Gives a message the text given, its buttons gone (chat.update). */
+  update(botToken: string, message: { channel: string; ts: string; text: string }): Promise<Result<undefined, SlackRefusal>>;
 }
 
 /**
@@ -209,11 +213,8 @@ export interface SlackEvents {
   remove(fleetId: FleetId, eventId: string): Promise<void>;
 }
 
-/** A button under a posted question: its option's label, and the option it answers. */
-export interface SlackButton {
-  readonly text: string;
-  readonly option: number;
-}
+/** A button under a post: under a question, its option's label and the option it answers; or Seen, under an item with no other (Bridge, section 6). */
+export type SlackButton = { readonly text: string; readonly option: number } | { readonly text: string; readonly isSeen: true };
 
 /** Outbound port: the fleet messages in Slack, by person ship. */
 export interface SlackPosts {
@@ -225,4 +226,8 @@ export interface SlackPosts {
   /** The person ship's posts of deliveries the gateway did not finish. */
   unfinished(fleetId: FleetId, personShipId: ShipId): Promise<SlackPost[]>;
   remove(fleetId: FleetId, post: { personShipId: ShipId; messageId: MessageId }): Promise<void>;
+  /** Posts in Slack, of every fleet, whose item something came of and that are not edited to say so yet, oldest outcome first. */
+  toEdit(page: { limit: number }): Promise<PostToEdit[]>;
+  /** Keeps that the post is edited, or that it never will be, so no round edits it again. */
+  markEdited(fleetId: FleetId, post: { personShipId: ShipId; messageId: MessageId }): Promise<void>;
 }

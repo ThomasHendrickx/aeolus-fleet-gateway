@@ -71,6 +71,16 @@ describe("a bot's message only one person sees", () => {
     });
   });
 
+  it('posts a Seen button under an item with no other, naming its fleet message', async () => {
+    await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'U0MATHILDE', threadTs: null, text: 'Release 0.36 is out', buttons: [{ text: 'Seen', isSeen: true }] });
+
+    const blocks: unknown = JSON.parse(slack.posted[0]?.form.blocks ?? 'null');
+    expect(blocks).toEqual([
+      { type: 'section', text: { type: 'mrkdwn', text: 'Release 0.36 is out' } },
+      { type: 'actions', block_id: 'msg_01m3tbfspe96yf1rnr4ank0002', elements: [{ type: 'button', action_id: 'seen', text: { type: 'plain_text', text: 'Seen' }, value: 'seen' }] },
+    ]);
+  });
+
   it('posts text alone in a thread', async () => {
     await createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A02', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', channel: 'C0LAUNCH', threadTs: '1730019600.000100', text: 'Friday', buttons: [] });
 
@@ -81,5 +91,34 @@ describe("a bot's message only one person sees", () => {
     slack.rateLimit('chat.postMessage', 7);
 
     await expect(createSlackMessages({ apiUrl: slack.apiUrl }).post('xoxb-A02', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', channel: 'U0MATHILDE', threadTs: null, text: 'Friday', buttons: [] })).resolves.toEqual({ isOk: false, error: { kind: 'rateLimited', retryAfterSeconds: 7 } });
+  });
+});
+
+describe("a bot's post edited once something came of its item (Bridge, view sync)", () => {
+  it("reads a message's text as Slack holds it, in a conversation", async () => {
+    const messages = createSlackMessages({ apiUrl: slack.apiUrl });
+    await messages.post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'D0MATHILDE', threadTs: null, text: '*Cut travel?*\nOver by 10%', buttons: [{ text: 'Cut', option: 1 }] });
+
+    await expect(messages.textOf('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', threadTs: null })).resolves.toEqual({ isOk: true, value: '*Cut travel?*\nOver by 10%' });
+  });
+
+  it("reads a message's text in a thread", async () => {
+    const messages = createSlackMessages({ apiUrl: slack.apiUrl });
+    await messages.post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'D0MATHILDE', threadTs: '1730019000.000100', text: 'Friday', buttons: [] });
+
+    await expect(messages.textOf('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', threadTs: '1730019000.000100' })).resolves.toEqual({ isOk: true, value: 'Friday' });
+  });
+
+  it('answers refused for a message Slack does not have', async () => {
+    await expect(createSlackMessages({ apiUrl: slack.apiUrl }).textOf('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000009', threadTs: null })).resolves.toEqual({ isOk: false, error: { kind: 'refused', error: 'message_not_found' } });
+  });
+
+  it('gives a message new text, its buttons gone', async () => {
+    const messages = createSlackMessages({ apiUrl: slack.apiUrl });
+    await messages.post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'D0MATHILDE', threadTs: null, text: '*Cut travel?*', buttons: [{ text: 'Cut', option: 1 }] });
+
+    const updated = await messages.update('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', text: '*Cut travel?*\n\n_Answered in Bridge: option 1_' });
+
+    expect({ updated, form: slack.updated[0]?.form }).toEqual({ updated: { isOk: true, value: undefined }, form: { channel: 'D0MATHILDE', ts: '1730019600.000001', text: '*Cut travel?*\n\n_Answered in Bridge: option 1_', blocks: '[]' } });
   });
 });

@@ -10,6 +10,7 @@ import { createTakeSlackEvent } from '../../core/slack/take-slack-event.js';
 import { createSlackSignatures } from '../crypto/slack-signatures.js';
 import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_LINK_PATH } from './slack-routes.js';
 import type { AnswerInSlack } from '../../core/slack/answer-in-slack.js';
+import type { SeeInSlack } from '../../core/slack/see-in-slack.js';
 import type { CompleteLink } from '../../core/slack/complete-link.js';
 
 // Slack's events door (gateway scopes 9.2, 9.4 step 1): Slack checks the
@@ -32,6 +33,7 @@ async function aServer(completeLink: CompleteLink = () => Promise.resolve(err({ 
   const events = memorySlackEvents();
   const posts = memorySlackPosts();
   const pressed: Parameters<AnswerInSlack>[0][] = [];
+  const seen: Parameters<SeeInSlack>[0][] = [];
   const server = Fastify();
   registerSlackRoutes(server, {
     completeInstall: () => Promise.resolve(err({ kind: 'INSTALL_REFUSED' as const, message: 'unused' })),
@@ -40,9 +42,13 @@ async function aServer(completeLink: CompleteLink = () => Promise.resolve(err({ 
       pressed.push(press);
       return Promise.resolve(ok({ kind: 'answered' as const }));
     },
+    seeInSlack: (press) => {
+      seen.push(press);
+      return Promise.resolve(ok({ kind: 'seen' as const }));
+    },
     takeSlackEvent: createTakeSlackEvent({ apps, links, events, posts, sendNow: () => undefined, slack: slack.messages, signatures: createSlackSignatures(), clock: { now: () => NOW }, linkPageUrl: 'https://gateway.acme.test/slack/link' }),
   });
-  return { server, apps, slack, links, events, pressed };
+  return { server, apps, slack, links, events, pressed, seen };
 }
 
 describe("Slack's events door", () => {
@@ -95,6 +101,16 @@ describe("Slack's actions door", () => {
 
     expect(answer.statusCode).toBe(200);
     expect(pressed.map(({ appId, teamId, userId, channel, messageTs, messageId, option, body: raw }) => ({ appId, teamId, userId, channel, messageTs, messageId, option, raw }))).toEqual([{ appId: 'A01', teamId: 'T0ACME', userId: 'U0MATHILDE', channel: 'D0MATHILDE', messageTs: '1730020000.000001', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', option: 2, raw: body }]);
+  });
+
+  it('reads a press of Seen under an item with no other button, answering nothing', async () => {
+    const { server, pressed, seen } = await aServer();
+    const payload = { type: 'block_actions', api_app_id: 'A01', team: { id: 'T0ACME' }, user: { id: 'U0MATHILDE' }, container: { type: 'message', channel_id: 'D0MATHILDE', message_ts: '1730020000.000001' }, actions: [{ action_id: 'seen', block_id: 'msg_01m3tbfspe96yf1rnr4ank0005', value: 'seen' }] };
+    const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+
+    const answer = await server.inject({ method: 'POST', url: SLACK_ACTIONS_PATH, headers: { ...signed(body, 'signing-A01'), 'content-type': 'application/x-www-form-urlencoded' }, payload: body });
+
+    expect({ status: answer.statusCode, answered: pressed.length, seen: seen.map(({ messageId, body: raw }) => ({ messageId, raw })) }).toEqual({ status: 200, answered: 0, seen: [{ messageId: 'msg_01m3tbfspe96yf1rnr4ank0005', raw: body }] });
   });
 });
 

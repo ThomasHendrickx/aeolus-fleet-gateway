@@ -129,7 +129,7 @@ import { createPingWorker } from './ping-worker.js';
 import { createSlackTokenWorker } from './slack-token-worker.js';
 import { createGrantWorker } from './grant-worker.js';
 import { createSlackEventWorker } from './slack-event-worker.js';
-import { createBasketWorker } from './basket-worker.js';
+import { createRoundWorker } from './round-worker.js';
 import { createPrismaSlackEvents } from './adapters/prisma/slack-events.js';
 import { createSendSlackEvents } from './core/slack/send-slack-events.js';
 import { createSlackInstallSeals } from './adapters/crypto/slack-install-seals.js';
@@ -137,6 +137,8 @@ import { createSlackLinkSeals } from './adapters/crypto/slack-link-seals.js';
 import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_INSTALL_PATH, SLACK_LINK_PATH } from './adapters/http/slack-routes.js';
 import { createPrismaSlackPosts } from './adapters/prisma/slack-posts.js';
 import { createAnswerInSlack } from './core/slack/answer-in-slack.js';
+import { createEditSlackPosts } from './core/slack/edit-slack-posts.js';
+import { createSeeInSlack } from './core/slack/see-in-slack.js';
 import { createShowInSlack } from './core/slack/show-in-slack.js';
 import { createPrismaSlackLinks } from './adapters/prisma/slack-links.js';
 import { createSlackMessages } from './adapters/slack/slack-messages.js';
@@ -345,6 +347,9 @@ const SLACK_EVENT_ROUND_MS = 5_000;
 
 /** How often the gateway sends again the basket's answers stored as sending, as while core does not answer (Bridge, section 9). */
 const BASKET_ROUND_MS = 5_000;
+
+/** How often the Slack posts' editor looks for a post to edit though no change was heard (view sync): a change missed, or Slack rate limited an edit. */
+const SLACK_EDIT_ROUND_MS = 30_000;
 
 /** How often the gateway expires due requests and tells outcomes still to tell (P5-1 a). */
 const OUTCOME_ROUND_MS = 60_000;
@@ -762,10 +767,19 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const openedDeliveries = createPrismaOpenedDeliveries(prisma);
   const itemOutcomes = createPrismaItemOutcomes(prisma);
   const basketEntries = createPrismaBasketEntries(prisma);
-  const basketSends = createBasketWorker({
-    send: createSendStoredAnswers({ entries: basketEntries, crews: personCrews, door: door.person, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock }),
+  const basketSends = createRoundWorker({
+    name: 'basket',
+    round: createSendStoredAnswers({ entries: basketEntries, crews: personCrews, door: door.person, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock }),
     sleep,
     intervalMs: BASKET_ROUND_MS,
+    log: server.log,
+  });
+  // View sync in Slack (Bridge, section 7): each post edited once something came of its item, at once when an inbox change is heard.
+  const slackEdits = createRoundWorker({
+    name: 'slack edits',
+    round: createEditSlackPosts({ posts: slackPosts, apps: slackApps, slack: slackMessages }),
+    sleep,
+    intervalMs: SLACK_EDIT_ROUND_MS,
     log: server.log,
   });
   // A signed-in person's messaging, as the crew of their person ship (decision 0057).
@@ -792,7 +806,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       readBasket: createReadBasket({ ...asCrew, opened, entries, outcomes }),
       countBasket: createCountBasket({ crewPersonShip: asCrew.crewPersonShip, entries }),
-      putInBasket: createPutInBasket({ crewPersonShip: asCrew.crewPersonShip, opened, entries, changes, clock }),
+      putInBasket: createPutInBasket({ crewPersonShip: asCrew.crewPersonShip, opened, entries, outcomes, changes, clock }),
       removeFromBasket: createRemoveFromBasket({ ...asCrew, opened, entries, outcomes, changes, clock }),
       sendBasket: createSendBasket({ ...asCrew, opened, entries, outcomes, changes, clock, sendNow: () => { basketSends.wake(); } }),
       readWakeChannels: createReadWakeChannels({
@@ -921,7 +935,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
   registerSlackRoutes(server, {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
-    answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: createPrismaItemOutcomes(prisma), slack: slackMessages, signatures: createSlackSignatures(), clock }),
+    answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
+    seeInSlack: createSeeInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
     completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl }),
     takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, posts: slackPosts, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl: `${issuer}/slack/link` }),
   });
@@ -1047,7 +1062,18 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   registerFrontDoor(server, options.web === undefined ? {} : { web: options.web });
   let changes: { close(): Promise<void> } | undefined;
   server.addHook('onReady', async () => {
-    changes = await listenToChanges(options.databaseUrl, { onChange: hub.publish, onResync: hub.resync });
+    changes = await listenToChanges(options.databaseUrl, {
+      onChange: (change) => {
+        hub.publish(change);
+        if (change.topic === 'inbox') {
+          slackEdits.wake();
+        }
+      },
+      onResync: () => {
+        hub.resync();
+        slackEdits.wake();
+      },
+    });
   });
 
   server.addHook('onClose', async () => {
@@ -1085,6 +1111,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       slackTokens.start();
       slackSends.start();
       basketSends.start();
+      slackEdits.start();
       grantKeeper.start();
       return restored;
     },
@@ -1095,6 +1122,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       await slackTokens.stop();
       await slackSends.stop();
       await basketSends.stop();
+      await slackEdits.stop();
       await grantKeeper.stop();
       await workers.stop();
       await server.close();

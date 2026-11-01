@@ -590,7 +590,7 @@ model SlackEvent {
   @@map("slack_events")
 }
 
-/// A fleet message as it is in Slack, for a person ship (gateway scopes 9.5): a delivery posted there, or the person's own message sent from there.
+/// A fleet message as it is in Slack, for a person ship (gateway scopes 9.5): a delivery posted there, or the person's own message sent from there. The posts not edited yet are found by the partial index slack_posts_to_edit, in its migration.
 model SlackPost {
   fleetId      String    @map("fleet_id")
   personShipId String    @map("person_ship_id")
@@ -602,6 +602,8 @@ model SlackPost {
   /// The Slack message, once Slack accepted the post.
   ts           String?
   threadTs     String?   @map("thread_ts")
+  /// When it was edited to say what came of its item, or given up; none until then.
+  editedAt     DateTime? @map("edited_at") @db.Timestamptz(3)
 
   @@id([fleetId, personShipId, messageId])
   @@index([fleetId, appId, channel, ts])

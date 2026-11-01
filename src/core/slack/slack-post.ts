@@ -1,5 +1,7 @@
 import type { DeliveryId, FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
+import type { ItemOutcome } from '../people/item-outcome.js';
+
 /**
  * A fleet message as it is in Slack, for a person ship (gateway scopes
  * 9.5): a delivery the gateway posts there, or the person's own message
@@ -24,6 +26,12 @@ export interface SlackPost {
   readonly ts: string | null;
   /** The thread it is in, if any. */
   readonly threadTs: string | null;
+}
+
+/** A post in Slack whose item something came of, in any place, with what came of it, to edit so (Bridge, section 7, view sync). */
+export interface PostToEdit {
+  readonly post: SlackPost & { readonly deliveryId: DeliveryId; readonly ts: string };
+  readonly outcome: Pick<ItemOutcome, 'place' | 'kind' | 'option'>;
 }
 
 /**

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'v
 
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgetter.js';
+import { createPrismaItemOutcomes } from '../src/adapters/prisma/item-outcomes.js';
 import { createPrismaSlackLinks } from '../src/adapters/prisma/slack-links.js';
 import { createPrismaSlackPosts } from '../src/adapters/prisma/slack-posts.js';
 import type { SlackPost } from '../src/core/slack/slack-post.js';
@@ -28,6 +29,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await prisma.slackPost.deleteMany();
+  await prisma.itemOutcome.deleteMany();
 });
 
 afterAll(async () => {
@@ -79,5 +81,52 @@ describe("the fleet messages in Slack, in the gateway's database", () => {
     await createPrismaFleetForgetter(prisma).forget(ACME);
 
     await expect(prisma.slackPost.count()).resolves.toBe(0);
+  });
+});
+
+describe('the posts to edit once something came of their item (Bridge, view sync)', () => {
+  const AT = new Date('2026-10-31T19:58:00.000Z');
+  const outcomeOf = (deliveryId: `dlv_${string}`, at: Date) => ({ fleetId: ACME, shipId: MATHILDE_SHIP, deliveryId, place: 'bridge' as const, kind: 'answered' as const, option: 2, at });
+
+  it('finds the posts in Slack whose item something came of, with what came of it, oldest outcome first', async () => {
+    const posts = createPrismaSlackPosts(prisma);
+    const outcomes = createPrismaItemOutcomes(prisma);
+    const second = aPost({ messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', ts: '1730020000.000002' });
+    await posts.save(aPost());
+    await posts.save(second);
+    await posts.save(aPost({ messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003', ts: '1730020000.000003' }));
+    await outcomes.save(outcomeOf('dlv_01m3tbfspe96yf1rnr4ank0002', AT));
+    await outcomes.save(outcomeOf('dlv_01m3tbfspe96yf1rnr4ank0001', new Date(AT.getTime() + 1000)));
+
+    await expect(posts.toEdit({ limit: 10 })).resolves.toEqual([
+      { post: second, outcome: { place: 'bridge', kind: 'answered', option: 2 } },
+      { post: aPost(), outcome: { place: 'bridge', kind: 'answered', option: 2 } },
+    ]);
+  });
+
+  it('leaves out a post edited, one not yet in Slack, and the person ship of another', async () => {
+    const posts = createPrismaSlackPosts(prisma);
+    const outcomes = createPrismaItemOutcomes(prisma);
+    await posts.save(aPost());
+    await posts.save(aPost({ messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', ts: null }));
+    await posts.save(aPost({ personShipId: 'shp_01m3tbfspe96yf1rnr4ank9j0r', messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003' }));
+    await outcomes.save(outcomeOf('dlv_01m3tbfspe96yf1rnr4ank0001', AT));
+    await outcomes.save(outcomeOf('dlv_01m3tbfspe96yf1rnr4ank0002', AT));
+    await outcomes.save(outcomeOf('dlv_01m3tbfspe96yf1rnr4ank0003', AT));
+
+    await posts.markEdited(ACME, { personShipId: MATHILDE_SHIP, messageId: 'msg_01m3tbfspe96yf1rnr4ank0001' });
+
+    await expect(posts.toEdit({ limit: 10 })).resolves.toEqual([]);
+  });
+
+  it('finds no more than the limit', async () => {
+    const posts = createPrismaSlackPosts(prisma);
+    const outcomes = createPrismaItemOutcomes(prisma);
+    await posts.save(aPost());
+    await posts.save(aPost({ messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002' }));
+    await outcomes.save(outcomeOf('dlv_01m3tbfspe96yf1rnr4ank0001', AT));
+    await outcomes.save(outcomeOf('dlv_01m3tbfspe96yf1rnr4ank0002', AT));
+
+    await expect(posts.toEdit({ limit: 1 })).resolves.toHaveLength(1);
   });
 });

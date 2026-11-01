@@ -1,15 +1,15 @@
 /**
- * The gateway's sender of the basket (docs/design/bridge, section 9): a round
- * at its start, so a restart goes on with what was stored as sending, a round
- * every interval while the fleet does not answer, and one at once when a
- * person presses Send, one round at a time, until it stops.
+ * A worker of rounds, one at a time, until it stops: a round at its start, so
+ * a restart goes on with what was stored, one every interval, and one at once
+ * when woken. The basket's sender (docs/design/bridge, section 9) is woken
+ * when a person presses Send; the Slack posts' editor (section 7, view sync)
+ * when a person's inbox changed.
  */
 import type { FastifyBaseLogger } from 'fastify';
 
 import type { Sleep } from './core/mcp-out/run-party.js';
-import type { SendStoredAnswers } from './core/people/send-stored-answers.js';
 
-export interface BasketWorker {
+export interface RoundWorker {
   start(): void;
   /** Runs the next round now, not at the next interval. */
   wake(): void;
@@ -17,7 +17,7 @@ export interface BasketWorker {
   stop(): Promise<void>;
 }
 
-export function createBasketWorker(deps: { send: SendStoredAnswers; sleep: Sleep; intervalMs: number; log: FastifyBaseLogger }): BasketWorker {
+export function createRoundWorker(deps: { name: string; round: () => Promise<unknown>; sleep: Sleep; intervalMs: number; log: FastifyBaseLogger }): RoundWorker {
   const stopping = new AbortController();
   let waking = new AbortController();
   /** Whether a wake came during a round: the next round runs at once. */
@@ -31,9 +31,9 @@ export function createBasketWorker(deps: { send: SendStoredAnswers; sleep: Sleep
         while (!stopping.signal.aborted) {
           isWoken = false;
           try {
-            await deps.send();
+            await deps.round();
           } catch (error) {
-            deps.log.error({ err: error }, 'basket round failed');
+            deps.log.error({ err: error }, `${deps.name} round failed`);
           }
           if (isToGoOn()) {
             continue;

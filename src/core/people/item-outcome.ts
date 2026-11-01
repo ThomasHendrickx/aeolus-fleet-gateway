@@ -34,3 +34,26 @@ export interface ItemOutcomes {
   /** The outcomes of these deliveries of the person ship that are kept. */
   findMany(fleetId: FleetId, asked: { shipId: ShipId; deliveryIds: readonly DeliveryId[] }): Promise<ItemOutcome[]>;
 }
+
+const PLACES: Record<Place, string> = {
+  bridge: 'in Bridge',
+  chat: 'in a chat',
+  slack: 'in Slack',
+  gateway: 'by the gateway',
+};
+
+const KINDS: Record<OutcomeKind, string> = {
+  seen: 'Seen',
+  answered: 'Answered',
+  done: 'Done',
+  cannot: 'Marked cannot',
+  withdrawn: 'Withdrawn by its asker, seen',
+  replaced: 'Replaced by its asker, seen',
+  notSent: 'Not sent, removed',
+};
+
+/** What came of an item and where, in words, as Bridge says it: such as Answered in Slack: option 2. */
+export function outcomeTextOf(outcome: Pick<ItemOutcome, 'place' | 'kind' | 'option'>): string {
+  const said = `${KINDS[outcome.kind]} ${PLACES[outcome.place]}`;
+  return outcome.option === null ? said : `${said}: option ${String(outcome.option)}`;
+}

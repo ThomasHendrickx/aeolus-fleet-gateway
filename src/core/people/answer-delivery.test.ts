@@ -56,19 +56,41 @@ beforeEach(async () => {
 });
 
 describe('a person answers a delivery they opened', () => {
-  it('replies to its sender, in reply to its message, under a key of the delivery, then it is handled', async () => {
+  it("replies to its sender, in reply to its message, under its question's key, as the basket and Slack key it, then it is handled", async () => {
     const answered = await answerDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId, ...ANSWER });
 
     expect(answered).toEqual({ isOk: true, value: { deliveryId: OPENED.deliveryId, isHandled: true } });
-    expect(ship.replies).toEqual([{ to: OPENED.senderShipId, inReplyTo: OPENED.messageId, ...ANSWER, idempotencyKey: `answer-${OPENED.deliveryId}` }]);
+    expect(ship.replies).toEqual([{ to: OPENED.senderShipId, inReplyTo: OPENED.messageId, ...ANSWER, idempotencyKey: 'answer-9b2f' }]);
     expect(ship.calls).toEqual([`reply(${OPENED.messageId})`, `handled(${OPENED.deliveryId})`]);
   });
 
   it('forgets what it kept of the delivery once handled, so it is answered once', async () => {
     await answerDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId, ...ANSWER });
 
-    await expect(answerDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId, ...ANSWER })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
+    await expect(answerDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId, ...ANSWER })).resolves.toMatchObject({ isOk: false, error: { kind: 'ALREADY_DECIDED' } });
     expect(opened.held.size).toBe(0);
+  });
+
+  it('replies to a message that asks no question under a key of the delivery', async () => {
+    await opened.save({ ...OPENED, contentType: 'text/plain', askedQuestionId: null });
+
+    await answerDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId, contentType: 'text/plain', payload: 'Thanks' });
+
+    expect(ship.replies.map(({ idempotencyKey }) => idempotencyKey)).toEqual([`answer-${OPENED.deliveryId}`]);
+  });
+
+  it('sends nothing for a question answered in Slack first, saying where: one answer per question', async () => {
+    await outcomes.save({ fleetId: OPENED.fleetId, shipId: OPENED.shipId, deliveryId: OPENED.deliveryId, place: 'slack', kind: 'answered', option: 2, at: AT });
+
+    const answered = await answerDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId, ...ANSWER });
+
+    expect({ answered, replies: ship.replies }).toEqual({ answered: { isOk: false, error: { kind: 'ALREADY_DECIDED', message: 'Already answered in Slack: option 2. Nothing is sent.' } }, replies: [] });
+  });
+
+  it('is done with an item seen elsewhere, as seeing it does not end its job', async () => {
+    await outcomes.save({ fleetId: OPENED.fleetId, shipId: OPENED.shipId, deliveryId: OPENED.deliveryId, place: 'slack', kind: 'seen', option: null, at: AT });
+
+    await expect(doneDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId })).resolves.toMatchObject({ isOk: true });
   });
 
   it('sends the same answer under the same key when the person tries again after the fleet did not take handled, so it is sent once', async () => {
@@ -76,7 +98,7 @@ describe('a person answers a delivery they opened', () => {
 
     await expect(answerDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId, ...ANSWER })).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
     await expect(answerDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId, ...ANSWER })).resolves.toMatchObject({ isOk: true });
-    expect(new Set(ship.replies.map(({ idempotencyKey }) => idempotencyKey))).toEqual(new Set([`answer-${OPENED.deliveryId}`]));
+    expect(new Set(ship.replies.map(({ idempotencyKey }) => idempotencyKey))).toEqual(new Set(['answer-9b2f']));
   });
 
   it("says why the fleet refused the answer, keeping the delivery to answer again, not handled", async () => {

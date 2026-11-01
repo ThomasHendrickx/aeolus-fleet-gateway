@@ -5,6 +5,7 @@ import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import { answerOf, type BasketEntries } from './basket.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
+import type { ItemOutcomes } from './item-outcome.js';
 import { openedOf, type DealtError } from './opened-of.js';
 import type { PersonCaller } from './person-crew.js';
 import type { InboxChanges, OpenedDeliveries } from './ports.js';
@@ -24,10 +25,11 @@ export type PutInBasket = (input: { caller: PersonCaller; deliveryId: string; op
  * one. Nothing is sent; the question still waits on them. One entry per
  * question: picking again changes it, in its place in the order added. An
  * entry being sent goes as stored, and one the fleet refused is removed,
- * not sent again, so neither changes. Every page of the person reads the
+ * not sent again, so neither changes. A question answered elsewhere first
+ * is refused saying where. Every page of the person reads the
  * basket again.
  */
-export function createPutInBasket(deps: { crewPersonShip: CrewPersonShip; opened: OpenedDeliveries; entries: BasketEntries; changes: InboxChanges; clock: Clock }): PutInBasket {
+export function createPutInBasket(deps: { crewPersonShip: CrewPersonShip; opened: OpenedDeliveries; entries: BasketEntries; outcomes: Pick<ItemOutcomes, 'findMany'>; changes: InboxChanges; clock: Clock }): PutInBasket {
   return async ({ caller, deliveryId, option, note }) => {
     const opened = await openedOf(deps, { caller, deliveryId });
     if (!opened.isOk) {

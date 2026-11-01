@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { CHARLOTTE_GRANT, fakeCrewPersonShip, memoryBasketEntries, memoryInboxChanges, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { CHARLOTTE_GRANT, fakeCrewPersonShip, memoryBasketEntries, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { BasketEntry } from './basket.js';
 import type { OpenedDelivery } from './ports.js';
@@ -36,6 +36,7 @@ let now: Date;
 let opened: ReturnType<typeof memoryOpenedDeliveries>;
 let entries: ReturnType<typeof memoryBasketEntries>;
 let changes: ReturnType<typeof memoryInboxChanges>;
+let outcomes: ReturnType<typeof memoryItemOutcomes>;
 let putInBasket: ReturnType<typeof createPutInBasket>;
 
 beforeEach(async () => {
@@ -45,7 +46,8 @@ beforeEach(async () => {
   await opened.save(OPENED);
   entries = memoryBasketEntries();
   changes = memoryInboxChanges();
-  putInBasket = createPutInBasket({ crewPersonShip: fakeCrewPersonShip(crews), opened, entries, changes, clock: { now: () => now } });
+  outcomes = memoryItemOutcomes();
+  putInBasket = createPutInBasket({ crewPersonShip: fakeCrewPersonShip(crews), opened, entries, outcomes, changes, clock: { now: () => now } });
 });
 
 /** The entry Charlotte's pick of option 2 with a note keeps. */
@@ -75,6 +77,14 @@ describe('a person puts an answer to a question in the basket', () => {
 
     expect(put).toEqual({ isOk: true, value: { questionId: QUESTION_ID, option: 2, note: 'Harbour first: the demo on 12 Nov needs it.' } });
     expect([...entries.held.values()]).toEqual([anEntry()]);
+  });
+
+  it('puts nothing in the basket for a question answered in Slack first, saying where: a later press in Bridge sends nothing', async () => {
+    await outcomes.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: OPENED.deliveryId, place: 'slack', kind: 'answered', option: 2, at: AT });
+
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 1, note: '' });
+
+    expect({ put, entries: [...entries.held.values()] }).toEqual({ put: { isOk: false, error: { kind: 'ALREADY_DECIDED', message: 'Already answered in Slack: option 2. Nothing is sent.' } }, entries: [] });
   });
 
   it('keeps no note when the person wrote none, or only spaces', async () => {

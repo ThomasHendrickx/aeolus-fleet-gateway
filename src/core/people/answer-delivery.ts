@@ -2,6 +2,7 @@ import { answerChoiceSchema, isAnswerContentType } from '@aeolus-fleet/common';
 
 import { refuse, type DomainError } from '../shared/errors.js';
 import type { Result } from '../shared/result.js';
+import { answerKeyOf } from './basket.js';
 import type { Place } from './item-outcome.js';
 import { handledOf, openedOf, type Dealt, type DealDeps, type DealtError } from './opened-of.js';
 import { asPersonCrew, withOwnRefusal, type PersonCaller } from './person-crew.js';
@@ -24,8 +25,10 @@ function optionOf({ contentType, payload }: { contentType: string; payload: stri
 /**
  * Use case: a person answers a delivery they opened (Q20): a reply to its
  * sender, in reply to its message, then it is handled, answered where they
- * answered it. The reply's key is the delivery's, so an answer tried again
- * after the fleet did not take handled is sent once.
+ * answered it. An answer to a question is keyed by the question's uuid, as
+ * the basket and Slack key it, so the fleet stores one answer per question
+ * whichever place sends it; any other reply by the delivery's. Either way an
+ * answer tried again after the fleet did not take handled is sent once.
  */
 export function createAnswerDelivery(deps: DealDeps): AnswerDelivery {
   return async ({ caller, place, deliveryId, contentType, payload }) => {
@@ -34,7 +37,7 @@ export function createAnswerDelivery(deps: DealDeps): AnswerDelivery {
       return opened;
     }
     const delivery = opened.value;
-    const reply = { to: delivery.senderShipId, inReplyTo: delivery.messageId, contentType, payload, idempotencyKey: `answer-${delivery.deliveryId}` };
+    const reply = { to: delivery.senderShipId, inReplyTo: delivery.messageId, contentType, payload, idempotencyKey: delivery.askedQuestionId === null ? `answer-${delivery.deliveryId}` : answerKeyOf({ questionId: delivery.askedQuestionId }) };
     const sent = await asPersonCrew(deps, { caller, run: (crew) => withOwnRefusal(deps.door.reply(crew.crewToken, reply)) });
     if (!sent.isOk) {
       return sent;

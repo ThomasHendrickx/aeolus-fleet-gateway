@@ -8,6 +8,7 @@ import { isUnfinished, type SlackPost } from '../../src/core/slack/slack-post.js
 import type { SlackApp, SlackAppDescription } from '../../src/core/slack/slack-app.js';
 import type { SlackWorkspace } from '../../src/core/slack/slack-workspace.js';
 import { err, ok } from '../../src/core/shared/result.js';
+import type { ItemOutcome } from '../../src/core/people/item-outcome.js';
 
 /** The gateway's addresses Slack calls, as a test gateway names them. */
 export const SLACK_ADDRESSES = {
@@ -304,7 +305,11 @@ export function fakeSlackMessages() {
     inThread: new Array<{ botToken: string; channel: string; threadTs: string; text: string }>(),
     reactions: new Array<{ botToken: string; channel: string; ts: string; name: string }>(),
     posts: new Array<{ botToken: string; channel: string; threadTs: string | null; text: string; buttons: readonly SlackButton[]; ts: string }>(),
+    /** Each edit Slack took, in order: a message given new text, its buttons gone. */
+    edits: new Array<{ botToken: string; channel: string; ts: string; text: string }>(),
     refusal: noRefusal(),
+    /** Slack's answers to the next edits, before it takes one. */
+    editRefusals: new Array<SlackRefusal>(),
     /** Slack's answers to the next posts, before it takes one. */
     postRefusals: new Array<SlackRefusal>(),
   };
@@ -327,6 +332,19 @@ export function fakeSlackMessages() {
       const ts = `1730020000.${String(state.posts.length + 1).padStart(6, '0')}`;
       state.posts.push({ botToken, ...message, ts });
       return Promise.resolve(ok({ channel: message.channel, ts }));
+    },
+    textOf: (_botToken, { channel, ts }) => {
+      const posted = state.posts.find((each) => each.channel === channel && each.ts === ts);
+      const text = state.edits.findLast((each) => each.channel === channel && each.ts === ts)?.text ?? posted?.text;
+      return Promise.resolve(text === undefined ? err({ kind: 'refused', error: 'message_not_found' }) : ok(text));
+    },
+    update: (botToken, message) => {
+      const refused = state.editRefusals.shift() ?? state.refusal;
+      if (refused !== undefined) {
+        return Promise.resolve(err(refused));
+      }
+      state.edits.push({ botToken, ...message });
+      return Promise.resolve(ok(undefined));
     },
   };
   return { state, messages };
@@ -421,11 +439,15 @@ export function savingAfterFirstRead(posts: ReturnType<typeof memorySlackPosts>,
 }
 
 /** The fleet messages in Slack, in memory, by fleet, person ship and message. */
-export function memorySlackPosts(): SlackPosts & { held: SlackPost[] } {
+/** Fleet messages in Slack in memory; what came of each item is read from the outcomes given, as the database joins them. */
+export function memorySlackPosts(outcomes: { held: readonly ItemOutcome[] } = { held: [] }): SlackPosts & { held: SlackPost[]; edited: Set<string> } {
   const held = new Array<SlackPost>();
+  const edited = new Set<string>();
+  const keyOf = (fleetId: FleetId, { personShipId, messageId }: { personShipId: string; messageId: string }) => `${fleetId}/${personShipId}/${messageId}`;
   const indexOf = (fleetId: FleetId, { personShipId, messageId }: { personShipId: string; messageId: string }) => held.findIndex((post) => post.fleetId === fleetId && post.personShipId === personShipId && post.messageId === messageId);
   return {
     held,
+    edited,
     save: (post) => {
       const index = indexOf(post.fleetId, post);
       if (index === -1) {
@@ -444,6 +466,21 @@ export function memorySlackPosts(): SlackPosts & { held: SlackPost[] } {
       if (index !== -1) {
         held.splice(index, 1);
       }
+      return Promise.resolve();
+    },
+    toEdit: ({ limit }) =>
+      Promise.resolve(
+        held
+          .flatMap(({ deliveryId, ts, ...rest }) => {
+            const outcome = outcomes.held.find((each) => each.fleetId === rest.fleetId && each.shipId === rest.personShipId && each.deliveryId === deliveryId);
+            return deliveryId === null || ts === null || outcome === undefined || edited.has(keyOf(rest.fleetId, rest)) ? [] : [{ post: { ...rest, deliveryId, ts }, outcome, at: outcome.at }];
+          })
+          .sort((a, b) => a.at.getTime() - b.at.getTime())
+          .slice(0, limit)
+          .map(({ post, outcome: { place, kind, option } }) => ({ post, outcome: { place, kind, option } })),
+      ),
+    markEdited: (fleetId, post) => {
+      edited.add(keyOf(fleetId, post));
       return Promise.resolve();
     },
   };
