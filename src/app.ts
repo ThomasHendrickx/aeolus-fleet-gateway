@@ -137,6 +137,7 @@ import { createSlackLinkSeals } from './adapters/crypto/slack-link-seals.js';
 import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_INSTALL_PATH, SLACK_LINK_PATH } from './adapters/http/slack-routes.js';
 import { createPrismaSlackPosts } from './adapters/prisma/slack-posts.js';
 import { createAnswerInSlack } from './core/slack/answer-in-slack.js';
+import { createDoneInSlack } from './core/slack/done-in-slack.js';
 import { createEditSlackPosts } from './core/slack/edit-slack-posts.js';
 import { createSeeInSlack } from './core/slack/see-in-slack.js';
 import { createShowInSlack } from './core/slack/show-in-slack.js';
@@ -200,6 +201,7 @@ import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadBridgeHome } from './core/people/read-bridge-home.js';
 import { createReadRecord } from './core/people/read-record.js';
+import { createReadYourFleet } from './core/people/read-your-fleet.js';
 import { createReadInbox } from './core/people/read-inbox.js';
 import type { ItemJob } from './core/people/item-job.js';
 import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/routing.js';
@@ -253,6 +255,7 @@ import { createAuthenticateActor, type Actor } from './core/actors/authenticate-
 import { createRetireParty } from './core/parties/retire-party.js';
 import { createChangePartyOwner, createChangePartyScopes } from './core/parties/change-party.js';
 import { logRefusedFacts } from './adapters/fleet/logged-verified-facts.js';
+import { createActiveShips } from './adapters/fleet/active-ships.js';
 import { createFleetShips } from './adapters/fleet/fleet-ships.js';
 import { createProxyShipReads } from './adapters/fleet/proxy-ship-reads.js';
 import { createShipNames } from './adapters/fleet/ship-names.js';
@@ -597,6 +600,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const listParties = createListParties({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   const readParty = createReadParty({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   const listOwnerChoices = createListOwnerChoices({ ships: createFleetShips(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const readYourFleet = createReadYourFleet({ ships: createActiveShips(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // An account's credential needs its account token, set up with the sign-in below.
   const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // Off stops the fleet's workers; on starts its crewed parties' workers again.
@@ -782,7 +786,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // View sync in Slack (Bridge, section 7): each post edited once something came of its item, at once when an inbox change is heard.
   const slackEdits = createRoundWorker({
     name: 'slack edits',
-    round: createEditSlackPosts({ posts: slackPosts, apps: slackApps, slack: slackMessages }),
+    round: createEditSlackPosts({ posts: slackPosts, apps: slackApps, slack: slackMessages, bridgeUrlOf }),
     sleep,
     intervalMs: SLACK_EDIT_ROUND_MS,
     log: server.log,
@@ -949,6 +953,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
     answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
     seeInSlack: createSeeInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
+    doneInSlack: createDoneInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
     completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl, steps: slackLinkSteps, finishStep: finishOwnStep }),
     takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, posts: slackPosts, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl }),
   });
@@ -1029,6 +1034,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     changePartyScopes,
     readParty,
     listOwnerChoices,
+    readYourFleet,
     checkServer,
     readPartyTools,
     stateParty,

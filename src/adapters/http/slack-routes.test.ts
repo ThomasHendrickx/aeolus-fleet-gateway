@@ -10,6 +10,7 @@ import { createTakeSlackEvent } from '../../core/slack/take-slack-event.js';
 import { createSlackSignatures } from '../crypto/slack-signatures.js';
 import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_LINK_PATH } from './slack-routes.js';
 import type { AnswerInSlack } from '../../core/slack/answer-in-slack.js';
+import type { DoneInSlack } from '../../core/slack/done-in-slack.js';
 import type { SeeInSlack } from '../../core/slack/see-in-slack.js';
 import type { CompleteLink } from '../../core/slack/complete-link.js';
 
@@ -34,6 +35,7 @@ async function aServer(completeLink: CompleteLink = () => Promise.resolve(err({ 
   const posts = memorySlackPosts();
   const pressed: Parameters<AnswerInSlack>[0][] = [];
   const seen: Parameters<SeeInSlack>[0][] = [];
+  const done: Parameters<DoneInSlack>[0][] = [];
   const server = Fastify();
   registerSlackRoutes(server, {
     completeInstall: () => Promise.resolve(err({ kind: 'INSTALL_REFUSED' as const, message: 'unused' })),
@@ -46,9 +48,13 @@ async function aServer(completeLink: CompleteLink = () => Promise.resolve(err({ 
       seen.push(press);
       return Promise.resolve(ok({ kind: 'seen' as const }));
     },
+    doneInSlack: (press) => {
+      done.push(press);
+      return Promise.resolve(ok({ kind: 'done' as const }));
+    },
     takeSlackEvent: createTakeSlackEvent({ apps, links, events, posts, sendNow: () => undefined, slack: slack.messages, signatures: createSlackSignatures(), clock: { now: () => NOW }, linkPageUrl: 'https://gateway.acme.test/slack/link' }),
   });
-  return { server, apps, slack, links, events, pressed, seen };
+  return { server, apps, slack, links, events, pressed, seen, done };
 }
 
 describe("Slack's events door", () => {
@@ -184,5 +190,18 @@ describe("Sign in with Slack's way back", () => {
     const answer = await server.inject({ method: 'GET', url: `${SLACK_LINK_PATH}?error=access_denied&state=sealed` });
 
     expect(answer.headers.location).toBe('/bridge/settings/routing?slack=cancelled');
+  });
+
+  it("reads a press of a step's Done, and answers a press of its Open, which Slack opens, with nothing done", async () => {
+    const { server, pressed, seen, done } = await aServer();
+    const pressOf = (action: { action_id: string; value: string }) => {
+      const payload = { type: 'block_actions', api_app_id: 'A01', team: { id: 'T0ACME' }, user: { id: 'U0MATHILDE' }, container: { type: 'message', channel_id: 'D0MATHILDE', message_ts: '1730020000.000001' }, actions: [{ ...action, block_id: 'msg_01m3tbfspe96yf1rnr4ank0005' }] };
+      const body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+      return server.inject({ method: 'POST', url: SLACK_ACTIONS_PATH, headers: { ...signed(body, 'signing-A01'), 'content-type': 'application/x-www-form-urlencoded' }, payload: body });
+    };
+
+    const answers = [await pressOf({ action_id: 'done', value: 'done' }), await pressOf({ action_id: 'open', value: 'open' })];
+
+    expect({ statuses: answers.map(({ statusCode }) => statusCode), done: done.map(({ messageId }) => messageId), others: pressed.length + seen.length }).toEqual({ statuses: [200, 200], done: ['msg_01m3tbfspe96yf1rnr4ank0005'], others: 0 });
   });
 });

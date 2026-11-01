@@ -31,7 +31,7 @@ export interface SlackPost {
 /** A post in Slack whose item something came of, in any place, with what came of it, to edit so (Bridge, section 7, view sync). */
 export interface PostToEdit {
   readonly post: SlackPost & { readonly deliveryId: DeliveryId; readonly ts: string };
-  readonly outcome: Pick<ItemOutcome, 'place' | 'kind' | 'option'>;
+  readonly outcome: Pick<ItemOutcome, 'place' | 'kind' | 'option' | 'at'>;
 }
 
 /**

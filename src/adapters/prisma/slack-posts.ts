@@ -23,6 +23,7 @@ const toEditSchema = z.object({
   place: placeSchema,
   kind: kindSchema,
   option: z.number().int().nullable(),
+  at: z.date(),
 });
 
 function postOf(row: SlackPostRow): SlackPost {
@@ -63,15 +64,15 @@ export function createPrismaSlackPosts(db: PrismaClient): SlackPosts {
       const rows: unknown[] = await db.$queryRaw`
         SELECT p."fleet_id" AS "fleetId", p."person_ship_id" AS "personShipId", p."message_id" AS "messageId", p."delivery_id" AS "deliveryId",
                p."sender_ship_id" AS "senderShipId", p."app_id" AS "appId", p."channel", p."ts", p."thread_ts" AS "threadTs",
-               o."place", o."kind", o."option"
+               o."place", o."kind", o."option", o."at"
         FROM "slack_posts" p
         JOIN "item_outcomes" o ON o."fleet_id" = p."fleet_id" AND o."ship_id" = p."person_ship_id" AND o."delivery_id" = p."delivery_id"
         WHERE p."edited_at" IS NULL AND p."delivery_id" IS NOT NULL AND p."ts" IS NOT NULL
         ORDER BY o."at", p."fleet_id", p."person_ship_id", p."message_id"
         LIMIT ${limit}`;
       return rows.map((row) => {
-        const { place, kind, option, ...post } = toEditSchema.parse(row);
-        return { post, outcome: { place, kind, option } };
+        const { place, kind, option, at, ...post } = toEditSchema.parse(row);
+        return { post, outcome: { place, kind, option, at } };
       });
     },
     markEdited: async (fleetId, { personShipId, messageId }) => {

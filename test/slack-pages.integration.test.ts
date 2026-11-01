@@ -467,7 +467,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
       };
     }
 
-    it('shows a question answered in Slack as answered in Slack with option 2 in an open Bridge without a reload and on its basket entry; a later press in Bridge sends nothing, and the Slack post is edited, its buttons gone', async () => {
+    it('shows a question answered in Slack as answered in Slack with option 2 in an open Bridge without a reload and on its basket entry; a later press in Bridge sends nothing, and the Slack post is edited to the answer and where, its buttons gone', async () => {
       await releaseNotesReceives();
       const posted = slack.posted.length;
       const question = JSON.stringify({ id: '7d1e2f3a-4b5c-4d6e-8f70-819a2b3c4d5e', title: 'Which design?', context: 'Three in the PR', options: [{ key: 1, label: 'Compact', detail: '' }, { key: 2, label: 'Harbour', detail: '' }, { key: 3, label: 'Both', detail: '' }], pick: { option: 2, why: 'demo' } });
@@ -501,7 +501,17 @@ describe('linking a Slack account (gateway scopes S7)', () => {
       const answers = (await releaseNotesReceives()).filter(({ inReplyTo }) => inReplyTo === questionMessageId);
       expect(answers.map(({ payload }) => payload)).toEqual(['{"questionId":"7d1e2f3a-4b5c-4d6e-8f70-819a2b3c4d5e","option":2}']);
 
-      await expect.poll(() => slack.updated.filter(({ form }) => form.ts === questionTs).map(({ form }) => ({ text: form.text, blocks: form.blocks })), { timeout: 45_000 }).toEqual([{ text: '*Which design?*\nThree in the PR\n\n_Answered in Slack: option 2_', blocks: '[]' }]);
+      const editedOf = ({ form }: { form: Record<string, string> }) => {
+        const [attachment] = z.array(z.object({ blocks: z.array(z.object({ block_id: z.string(), type: z.string(), text: z.object({ text: z.string() }).optional(), elements: z.array(z.object({ text: z.string() }).partial()).optional() })) })).parse(JSON.parse(form.attachments ?? '[]'));
+        const textOf = (blockId: string) => attachment?.blocks.find((block) => block.block_id === blockId);
+        return {
+          title: textOf('title')?.text?.text,
+          isAnswered: /^✅ You answered at <!date\^\d+\^\{time\}\|\d\d:\d\d UTC>: \*2\. Harbour\*, sent to release-notes-s7$/.test(textOf('body')?.text?.text ?? ''),
+          isWhere: /^Bridge and the chat show it answered in Slack · <http[^|]+\|Open in Bridge>$/.test(textOf('footer')?.elements?.[0]?.text ?? ''),
+          hasButtons: attachment?.blocks.some(({ type }) => type === 'actions'),
+        };
+      };
+      await expect.poll(() => slack.updated.filter(({ form }) => form.ts === questionTs).map(editedOf), { timeout: 45_000 }).toEqual([{ title: '*Which design?*', isAnswered: true, isWhere: true, hasButtons: false }]);
     }, 120_000);
   });
 });
