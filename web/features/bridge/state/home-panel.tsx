@@ -8,13 +8,6 @@ import { ItemRow } from '../ui/item-row';
 import { ItemFocus, type ItemOpening } from './item-focus';
 import { useLastReadAt } from './kept-read';
 
-function countsOf(items: readonly HomeItem[]): string {
-  const counted = items.filter(({ stale }) => stale === null);
-  const toDecide = counted.filter(({ job }) => job === 'decide').length;
-  const toDo = counted.filter(({ job }) => job === 'do').length;
-  return `${String(toDecide)} to decide, ${String(toDo)} to do. Newest on top; nothing else is in this count.`;
-}
-
 /** What a row says of its item: stale, in the basket, seen and not done, or nothing while new. */
 function rowOutcomeOf(item: HomeItem): string | undefined {
   const { stale, inBasket } = item;
@@ -51,20 +44,13 @@ function OpenButton({ item, opening }: { item: HomeItem; opening: ItemOpening })
 
 /**
  * What waited when Bridge home was last read, while the record cannot be
- * read (states.html): when, the rows faded and not to be opened, since
+ * read (states.html): the rows faded and not to be opened, since
  * opening one acknowledges it through the fleet, and that they show as last
  * read. The stay-aware feed and sending a message wait for the fleet.
  */
 function WaitingAsLastRead({ items, lastReadAt }: { items: readonly HomeItem[]; lastReadAt: string }) {
-  const at = lastReadTimeOf(lastReadAt);
   return (
     <section className="grid gap-3" aria-labelledby="bridge-waiting-heading">
-      <div>
-        <h1 id="bridge-waiting-heading" className="text-heading font-semibold">
-          Waiting on you
-        </h1>
-        <p className="text-muted-foreground" data-testid="bridge-last-read">{`Last read ${at}`}</p>
-      </div>
       {items.length === 0 ? null : (
         <ul inert className="grid gap-2 opacity-60">
           {items.map((item) => (
@@ -74,14 +60,14 @@ function WaitingAsLastRead({ items, lastReadAt }: { items: readonly HomeItem[]; 
           ))}
         </ul>
       )}
-      <p className="text-caption text-muted-foreground">{`Shown as last read, at ${at}.`}</p>
+      <p className="text-caption text-muted-foreground">{`Shown as last read, at ${lastReadTimeOf(lastReadAt)}.`}</p>
     </section>
   );
 }
 
 /**
- * Bridge home's lists (CC18): what waits on the person, decide and do, with
- * one count, a dot on what is new, a question or step its asker withdrew or replaced
+ * Bridge home's lists (CC18), under its title row: what waits on the
+ * person, decide and do, a dot on what is new, a question or step its asker withdrew or replaced
  * faded and outside the count, a replaced one leading to its replacement; and the stay-aware feed beside it, the
  * alerts and notices they have not seen, outside the count. Opening one of
  * the feed is all it asks (CC16).
@@ -97,12 +83,6 @@ export function HomePanel({ fleetId, home }: { fleetId: string; home: BridgeHome
       {(opening) => (
         <div className="grid gap-8">
           <section className="grid gap-3" aria-labelledby="bridge-waiting-heading">
-            <div>
-              <h1 id="bridge-waiting-heading" className="text-heading font-semibold">
-                Waiting on you <span data-testid="bridge-count" className="text-tone-waiting-fg">{waiting.count}</span>
-              </h1>
-              <p className="text-muted-foreground">{waiting.count === 0 ? 'Nothing waits on you.' : countsOf(waiting.items)}</p>
-            </div>
             {waiting.items.length === 0 ? (
               <div data-testid="bridge-nothing-waits" className="grid justify-items-center gap-1 rounded-lg border border-border bg-card p-6 text-center">
                 <span className="font-semibold">Nothing waits on you</span>

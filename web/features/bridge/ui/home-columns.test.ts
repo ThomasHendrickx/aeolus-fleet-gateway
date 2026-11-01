@@ -18,6 +18,6 @@ describe("Bridge home's title row (home.html, states.html)", () => {
   it('runs the whole width above the banner, home and Your fleet', () => {
     const markup = renderToStaticMarkup(createElement(HomeColumns, { heading: createElement('p', null, 'heading'), banner: createElement('p', null, 'banner'), main: createElement('p', null, 'home'), aside: createElement('p', null, 'fleet') }));
 
-    expect(markup.indexOf('<p>heading</p>') >= 0 && markup.indexOf('<p>heading</p>') < markup.indexOf('<p>banner</p>')).toBe(true);
+    expect(markup.includes('<p>heading</p>') && markup.indexOf('<p>heading</p>') < markup.indexOf('<p>banner</p>')).toBe(true);
   });
 });

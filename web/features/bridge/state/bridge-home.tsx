@@ -12,6 +12,7 @@ import { HomeColumns } from '../ui/home-columns';
 import { SlackDroppedOut } from '../ui/slack-dropped-out';
 import { HomePanel } from './home-panel';
 import { KeptRead } from './kept-read';
+import { WaitingHeading } from './waiting-heading';
 import { RecordUnreadable } from './record-unreadable';
 
 /** For an account with no person ship nothing waits, and nothing reaches it unasked. */
@@ -25,15 +26,18 @@ const NOTHING = { waiting: { count: 0, items: [] }, stayAware: [] };
 async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: string; fleet: Promise<FleetRead> }) {
   const [read, fleetRead, slackDroppedOut] = await Promise.all([readBridgeHome(api), fleet, readSlackDroppedOut(api)]);
   const isNothingWaiting = read.kind !== 'unreadable' && (read.kind === 'none' || read.value.waiting.items.length === 0);
+  const readAt = readTimeOf(read);
+  const home = read.kind === 'read' ? read.value : NOTHING;
   return (
     <HomeColumns
+      heading={<KeptRead readAt={readAt}>{read.kind === 'unreadable' ? null : <WaitingHeading waiting={home.waiting} />}</KeptRead>}
       banner={
         <>
           {read.kind === 'unreadable' ? <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} /> : null}
           <KeptRead readAt={slackDroppedOut === undefined ? undefined : new Date().toISOString()}>{slackDroppedOut === undefined || slackDroppedOut === null ? null : <SlackDroppedOut fleetId={fleetId} botName={slackDroppedOut.botName} />}</KeptRead>
         </>
       }
-      main={<KeptRead readAt={readTimeOf(read)}>{read.kind === 'unreadable' ? null : <HomePanel fleetId={fleetId} home={read.kind === 'read' ? read.value : NOTHING} />}</KeptRead>}
+      main={<KeptRead readAt={readAt}>{read.kind === 'unreadable' ? null : <HomePanel fleetId={fleetId} home={home} />}</KeptRead>}
       aside={
         <KeptRead readAt={fleetRead.kind === 'unreadable' ? undefined : new Date().toISOString()}>
           <YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} />

@@ -1,17 +1,23 @@
-import { createElement } from 'react';
+import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { BridgeHome, HomeItem } from '../services/items';
 import { HomePanel } from './home-panel';
 import { AsLastRead } from './kept-read';
+import { WaitingHeading } from './waiting-heading';
 
 function anItem(overrides: Partial<HomeItem> = {}): HomeItem {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', state: 'new', stale: null, inBasket: null, ...overrides };
 }
 
+/** Home as the person reads it: its title row, then its lists. */
+function homeOf(home: BridgeHome) {
+  return createElement(Fragment, null, createElement(WaitingHeading, { waiting: home.waiting }), createElement(HomePanel, { fleetId: 'flt_01', home }));
+}
+
 function render(home: BridgeHome): string {
-  return renderToStaticMarkup(createElement(HomePanel, { fleetId: 'flt_01', home }));
+  return renderToStaticMarkup(homeOf(home));
 }
 
 describe('Bridge home (CC18)', () => {
@@ -96,7 +102,7 @@ describe('Bridge home as last read, while the record cannot be read (states.html
     waiting: { count: 2, items: [anItem(), anItem({ deliveryId: 'dlv_02', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin' })] },
     stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', from: 'watch', title: 'builder-gateway: no report change for 2 h' })],
   };
-  const markup = renderToStaticMarkup(createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(HomePanel, { fleetId: 'flt_01', home }) }));
+  const markup = renderToStaticMarkup(createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: homeOf(home) }));
 
   it('says when it was last read under the title, in place of the count', () => {
     expect({
