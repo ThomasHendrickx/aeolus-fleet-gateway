@@ -716,3 +716,19 @@ model ArgoAccount {
   @@id([fleetId, accountId])
   @@map("argo_accounts")
 }
+
+/// A message open at argo as it is in Slack, for a person ship of an account allowed as argo (argo's inbox, AI4): kept before Slack is asked, forgotten once done at argo and its post edited.
+model ArgoSlackPost {
+  fleetId      String  @map("fleet_id")
+  personShipId String  @map("person_ship_id")
+  messageId    String  @map("message_id")
+  appId        String  @map("app_id")
+  channel      String
+  /// The Slack message, once Slack took the post.
+  ts           String?
+  /// Slack refused the post: it is never posted again.
+  isGivenUp    Boolean @default(false) @map("is_given_up")
+
+  @@id([fleetId, personShipId, messageId])
+  @@map("argo_slack_posts")
+}
