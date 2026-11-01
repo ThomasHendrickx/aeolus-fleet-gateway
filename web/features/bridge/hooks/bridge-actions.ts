@@ -10,6 +10,7 @@
  */
 import { idSchema } from '@aeolus-fleet/common';
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
@@ -49,12 +50,13 @@ export async function readMoreRecord(fleet: string, cursor: string): Promise<Act
   return attempt(fleet, (api) => api.people.record.query({ cursor }));
 }
 
-/** Opens an item: the gateway acknowledges it for the person, and it is shown whole, once; an alert or a notice seen is done (CC16). */
+/** Opens an item: the gateway acknowledges it for the person, and it is shown whole, once; an alert or a notice seen is done (CC16). A step's link leads outside Aeolus unless it leads to the host this page was asked on. */
 export async function openDelivery(fleet: string, deliveryId: string): Promise<ActionOutcome<FocusedDelivery>> {
+  const bridgeHost = (await headers()).get('host') ?? '';
   return attempt(fleet, async (api) => {
     const opened = await api.people.open.mutate({ deliveryId });
     const { contentType, payload, meetingId, ...entry } = opened;
-    return { ...entry, payload, body: bodyOf({ contentType, payload }), question: questionOf({ contentType, payload }), step: stepOf({ contentType, payload }), meetingId: meetingId ?? undefined };
+    return { ...entry, payload, body: bodyOf({ contentType, payload }), question: questionOf({ contentType, payload }), step: stepOf({ contentType, payload }, bridgeHost), meetingId: meetingId ?? undefined };
   });
 }
 
