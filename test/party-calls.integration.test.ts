@@ -179,7 +179,7 @@ describe("a ship calls an outside MCP server under its owner's grant", () => {
     expect(attio.calledAs).toEqual([]);
   });
 
-  it("tells the owner once with the page's link, and not again at another of their ships' call (scenario 12, 13)", async () => {
+  it("asks the owner once, by a step with the page as its link, and not again at another of their ships' call (scenario 12, 13; Bridge, CC14)", async () => {
     await attioAdded();
     const leadScout = await aShip('lead-scout', joris.shipId);
     const otherScout = await aShip('other-scout', joris.shipId);
@@ -190,7 +190,7 @@ describe("a ship calls an outside MCP server under its owner's grant", () => {
 
     await expect(replyTo(otherScout)).resolves.toMatchObject({ text: noSignIn('joris') });
     const told = await receiveOne(fleet, joris.crewToken);
-    expect({ contentType: told?.contentType, isLinked: told?.payload.includes(PAGE()) }).toEqual({ contentType: 'text/plain', isLinked: true });
+    expect({ contentType: told?.contentType, isLinked: told?.payload.includes(PAGE()) }).toEqual({ contentType: 'application/vnd.aeolus.step+json', isLinked: true });
     await expect(receiveOne(fleet, joris.crewToken)).resolves.toBeUndefined();
   });
 
