@@ -3,7 +3,9 @@ import { ALERT_CONTENT_TYPE, QUESTION_CONTENT_TYPE, type ShipId } from '@aeolus-
 import type { ConnectionStore } from '../connection/ports.js';
 import { refuse } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import { actInPlaceOf, type ActInPlace, type ActingItem, type OwnStepActionOf } from './act-in-place.js';
+import type { Party } from '../parties/party.js';
+import type { PartyStore } from '../parties/ports.js';
+import { actInPlaceOf, type ActInPlace, type ActingItem, type OwnStepActionOf, type OwnStepPartyOf } from './act-in-place.js';
 import type { BasketEntries, BasketEntry } from './basket.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import { inboxEntryOf, openedEntryOf, type InboxEntry } from './inbox-entry.js';
@@ -66,6 +68,18 @@ function placesOf(routing: Routing, offered: { isEmailOffered: boolean; isWebPus
   return (item) => ROUTING_PLACES.filter((place) => isOfferedPlace(place, offered) && routing.isShowing(place, item));
 }
 
+/** The gateway's own words for its sign-in step's action: Sign in to the party's server's own title where it keeps one, else to its name (aeolus-fleet#1535). */
+function signInActionOf({ partyOf, parties }: { partyOf: OwnStepPartyOf; parties: readonly Party[] }): OwnStepActionOf {
+  return (href) => {
+    const name = partyOf(href);
+    if (name === undefined) {
+      return undefined;
+    }
+    const server = parties.find((party) => party.name === name);
+    return `Sign in to ${server?.kind === 'mcpServer' && server.displayName !== null ? server.displayName : name}`;
+  };
+}
+
 function newestFirst(a: HomeItem, b: HomeItem): number {
   return b.sentAt.localeCompare(a.sentAt);
 }
@@ -96,7 +110,8 @@ export function createReadBridgeHome(deps: {
   connections: Pick<ConnectionStore, 'binding'>;
   routes: Routes;
   defaults: RoutingDefaults;
-  ownStepActionOf: OwnStepActionOf;
+  parties: Pick<PartyStore, 'list'>;
+  ownStepPartyOf: OwnStepPartyOf;
   isEmailOffered: boolean;
   isWebPushOffered: boolean;
 }): ReadBridgeHome {
@@ -116,17 +131,18 @@ export function createReadBridgeHome(deps: {
     const ship = { fleetId: caller.fleetId, shipId: waiting.value.crew.shipId };
     const isTaken = new Set<string>(waiting.value.deliveries.map(({ deliveryId }) => deliveryId));
     const seenAware = page.value.items.filter((delivery) => !isTaken.has(delivery.deliveryId) && jobOf(delivery.contentType) === 'stay-aware' && itemStateOf(delivery.state) === 'done');
-    const [opened, entries, routes, gateway, outcomes] = await Promise.all([
+    const [opened, entries, routes, gateway, outcomes, parties] = await Promise.all([
       deps.opened.list(ship.fleetId, ship.shipId),
       deps.entries.list(ship.fleetId, ship.shipId),
       deps.routes.list(ship),
       deps.connections.binding(ship.fleetId),
       deps.outcomes.findMany(ship.fleetId, { shipId: ship.shipId, deliveryIds: seenAware.map(({ deliveryId }) => deliveryId) }),
+      deps.parties.list(ship.fleetId),
     ]);
     const asking: Asking[] = [...waiting.value.deliveries.map(askingOf), ...opened];
     const inBasket = inBasketOf(entries);
     const showingIn = placesOf(ownStepsInBridgeOnly(routingOf(routes, deps.defaults), gateway?.shipId), deps);
-    const own = { gatewayShipId: gateway?.shipId, actionOf: deps.ownStepActionOf };
+    const own = { gatewayShipId: gateway?.shipId, actionOf: signInActionOf({ partyOf: deps.ownStepPartyOf, parties }) };
     /** What the row shows of an item besides its entry: an alert or not, the places that show it, and what it does in place. */
     const rowOf = (item: Omit<ActingItem, 'senderShipId' | 'pick' | 'stepLink'>, of: { contentType: string; sentAt: Date; senderShipId: ShipId; pick: number | null; stepLink: string | null }) => ({
       isAlert: essenceOf(of.contentType) === ALERT_CONTENT_TYPE,

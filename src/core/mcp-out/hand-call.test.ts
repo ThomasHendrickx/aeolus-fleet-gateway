@@ -16,7 +16,7 @@ import { createHandCall } from './hand-call.js';
 const CRM: McpServerParty = {
   fleetId: FLEET_ID,
   name: 'crm',
-  kind: 'mcpServer',
+  kind: 'mcpServer', displayName: null,
   url: 'https://crm.example.com/mcp',
   credential: { kind: 'bearer', token: 'crm-token' },
   concurrencyLimit: 4,
@@ -69,7 +69,7 @@ beforeEach(async () => {
   attio = fakePartySignIns();
   sender = fakeCallSender();
   const clock = { now: () => NOW };
-  const tellSignInNeeded = createTellSignInNeeded({ notices: memorySignInNotices(), connections, sender, newNoticeId: () => 'notice-1', pageUrlOf });
+  const tellSignInNeeded = createTellSignInNeeded({ notices: memorySignInNotices(), connections, parties, sender, newNoticeId: () => 'notice-1', pageUrlOf });
   const grantCalls = createGrantCalls({
     callGrantOf: createCallGrantOf({ connections, door: ships.door, grants }),
     refreshGrant: createRefreshGrant({ signIns: attio.signIns, grants, tellSignInNeeded, clock }),

@@ -11,7 +11,7 @@ import { createReadPartyTools } from './read-party-tools.js';
 const LINEAR: McpServerParty = {
   fleetId: FLEET_ID,
   name: 'linear',
-  kind: 'mcpServer',
+  kind: 'mcpServer', displayName: null,
   url: 'https://mcp.linear.app/mcp',
   credential: { kind: 'bearer', token: 'linear-token' },
   concurrencyLimit: 4,

@@ -25,6 +25,8 @@ export interface PartyStore {
    */
   switchTools(party: { fleetId: FleetId; name: string }, change: { listed: readonly string[]; switched: ToolSwitches }): Promise<void>;
   remove(fleetId: FleetId, name: string): Promise<void>;
+  /** Keeps a server's display name as it gave it on connecting, none if it gave none; a save leaves it as it is. */
+  keepDisplayName(party: { fleetId: FleetId; name: string }, displayName: string | null): Promise<void>;
 }
 
 /** Outbound port: each party's required scopes (design gateway-scopes, 4.2), kept with the party and gone with it. */

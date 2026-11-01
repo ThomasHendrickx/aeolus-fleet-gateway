@@ -25,7 +25,7 @@ function aParty(overrides: Partial<McpServerParty>): McpServerParty {
   return {
     fleetId: FLEET_ID,
     name: 'crm',
-    kind: 'mcpServer',
+    kind: 'mcpServer', displayName: null,
     url: 'https://crm.example.com/mcp',
     credential: { kind: 'bearer', token: 'crm-token' },
     concurrencyLimit: 4,

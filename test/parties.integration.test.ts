@@ -33,7 +33,7 @@ function aParty(overrides: Partial<McpServerParty> = {}): McpServerParty {
   return {
     fleetId: FLEET,
     name: 'crm',
-    kind: 'mcpServer',
+    kind: 'mcpServer', displayName: null,
     url: 'https://crm.example.com/mcp',
     credential: { kind: 'clientCredentials', clientId: 'gw', clientSecret: 's', issuer: 'https://auth.example.com', scope: 'crm.read' },
     concurrencyLimit: 4,

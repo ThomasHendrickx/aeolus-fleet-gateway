@@ -96,7 +96,7 @@ export function createGrantCalls(deps: {
   };
 
   const callWith = async ({ server, grant, person }: GrantedCall, call: ToolCall): Promise<ToolCallOutcome> => {
-    const outcome = await deps.servers.callTool({ url: server.url, credential: { kind: 'bearer', token: grant.accessToken } }, call);
+    const outcome = await deps.servers.callTool({ url: server.url, credential: { kind: 'bearer', token: grant.accessToken }, party: { fleetId: server.fleetId, name: server.name } }, call);
     if (outcome.kind === 'answered') {
       await deps.grants.markUsed(grant, deps.clock.now());
     }

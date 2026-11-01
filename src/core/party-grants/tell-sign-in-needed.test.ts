@@ -74,9 +74,16 @@ describe('the person whose sign-in a call needs is told once per party (decision
     await parties.save(anAttioParty({ displayName: 'Attio' }));
 
     await tellJoris();
+
+    expect(sender.sent.map(({ payload }) => z.object({ title: z.string() }).parse(JSON.parse(payload)).title)).toEqual(['Sign in to Attio for the outside party attio']);
+  });
+
+  it("asks them to sign in again by the server's own title first, when the gateway keeps one", async () => {
+    await parties.save(anAttioParty({ displayName: 'Attio' }));
+
     await tell({ fleetId: FLEET_ID, party: 'attio', personShipId: JORIS_SHIP_ID, lost: { at: new Date('2026-10-28T16:00:00.000Z'), why: 'invalid_grant' } });
 
-    expect(sender.sent.map(({ payload }) => z.object({ title: z.string() }).parse(JSON.parse(payload)).title)).toEqual(['Sign in to Attio for the outside party attio', 'Sign in to Attio again for the outside party attio']);
+    expect(sender.sent.map(({ payload }) => z.object({ title: z.string() }).parse(JSON.parse(payload)).title)).toEqual(['Sign in to Attio again for the outside party attio']);
   });
 
   it('keeps its words when the server gives no title', async () => {
