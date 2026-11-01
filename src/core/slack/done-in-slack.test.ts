@@ -81,7 +81,7 @@ describe("a press of a step's Done in Slack", () => {
   });
 
   it("keeps it done in Slack, forgets it as opened and tells the person's pages, so Bridge shows where it was done and its post is edited", async () => {
-    await opened.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: STEP.deliveryId, messageId: STEP.messageId, senderShipId: ORCHESTRATOR, from: 'orchestrator-1', title: 'Create the repository', contentType: STEP.contentType, askedQuestionId: null, withdrawnQuestionId: null, stepId: STEP_ID, withdrawnStepId: null, sentAt: STEP.sentAt, openedAt: NOW });
+    await opened.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: STEP.deliveryId, messageId: STEP.messageId, senderShipId: ORCHESTRATOR, from: 'orchestrator-1', title: 'Create the repository', contentType: STEP.contentType, askedQuestionId: null, withdrawnQuestionId: null, stepId: STEP_ID, withdrawnStepId: null, stepLink: null, sentAt: STEP.sentAt, openedAt: NOW, openedIn: null });
 
     await pressDone();
 

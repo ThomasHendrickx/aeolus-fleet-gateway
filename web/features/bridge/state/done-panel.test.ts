@@ -10,7 +10,7 @@ function anItem(overrides: Partial<RecordItem> = {}): RecordItem {
 }
 
 function render(first: RecordPage): string {
-  return renderToStaticMarkup(createElement(DonePanel, { fleetId: 'flt_01', first }));
+  return renderToStaticMarkup(createElement(DonePanel, { fleetId: 'flt_01', first, now: '2026-11-01T20:00:00.000Z' }));
 }
 
 describe('Done (Bridge, CC4)', () => {

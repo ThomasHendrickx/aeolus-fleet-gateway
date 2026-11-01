@@ -24,7 +24,7 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
   return (
     <HomeColumns
       banner={read.kind === 'unreadable' ? <RecordUnreadable message={read.message} /> : undefined}
-      main={read.kind === 'unreadable' ? null : read.kind === 'read' ? <HomePanel fleetId={fleetId} home={read.value} decidePlaces={decidePlaces} /> : <HomePanel fleetId={fleetId} home={NOTHING} />}
+      main={read.kind === 'unreadable' ? null : read.kind === 'read' ? <HomePanel fleetId={fleetId} home={read.value} now={new Date().toISOString()} decidePlaces={decidePlaces} /> : <HomePanel fleetId={fleetId} home={NOTHING} now={new Date().toISOString()} />}
       aside={<YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} />}
     />
   );

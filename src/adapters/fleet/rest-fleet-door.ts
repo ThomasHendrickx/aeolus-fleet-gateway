@@ -141,6 +141,8 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     withdrawnQuestionId: withdrawalOf({ contentType, payload })?.questionId ?? null,
     stepId: replacingStep?.step.id ?? (jobOf(contentType) === 'do' ? (parsedOf(stepIdSchema, payload) ?? null) : null),
     withdrawnStepId: replacingStep?.stepId ?? (isStepWithdrawal(contentType) ? (parsedOf(stepWithdrawalSchema, payload) ?? null) : null),
+    pick: asked?.pick.option ?? null,
+    stepLink: (replacingStep === undefined ? (jobOf(contentType) === 'do' ? parsedOf(stepLinkSchema, payload) : undefined) : parsedOf(replacingStepLinkSchema, payload)) ?? null,
     sentAt: new Date(sentAt),
     inReplyTo,
     meetingId,
@@ -222,6 +224,12 @@ function isStepWithdrawal(contentType: string): boolean {
 function isStepReplacement(contentType: string): boolean {
   return essenceOf(contentType) === STEP_REPLACEMENT_CONTENT_TYPE;
 }
+
+/** The link where a step is done, read as stepSchema words it there: an http or https URL; none of a step without one. */
+const stepLinkSchema = z.object({ link: z.url({ protocol: /^https?$/ }) }).transform(({ link }) => link);
+
+/** The link of the new step a step replacement asks, read as the step's own. */
+const replacingStepLinkSchema = z.object({ step: z.object({ link: z.url({ protocol: /^https?$/ }) }) }).transform(({ step }) => step.link);
 
 /** What a step's title, or an alert's or a notice's headline, is read from: nothing else of its payload is read here. */
 const titledSchema = z.object({ title: z.string().min(1) }).transform(({ title }) => title);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { jobLabelOf, outcomeTextOf, type RecordItem } from './items';
+import { ageOf, jobLabelOf, jobWordOf, outcomeTextOf, type RecordItem } from './items';
 
 function anItem(overrides: Partial<RecordItem> = {}): RecordItem {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', state: 'done', outcome: null, ...overrides };
@@ -37,5 +37,39 @@ describe("an item's job, as Bridge labels it (CC10)", () => {
     ['everything-else', 'Message'],
   ] as const)('labels %s as %s', (job, label) => {
     expect(jobLabelOf(job)).toBe(label);
+  });
+});
+
+describe("an item's job word on its row, an alert told from a notice (aeolus-fleet#1535)", () => {
+  it.each([
+    [{ job: 'decide', isAlert: false }, 'Decide'],
+    [{ job: 'do', isAlert: false }, 'Do'],
+    [{ job: 'stay-aware', isAlert: true }, 'Alert'],
+    [{ job: 'stay-aware', isAlert: false }, 'Notice'],
+    [{ job: 'everything-else', isAlert: false }, 'Message'],
+  ] as const)('words %o as %s', (item, word) => {
+    expect(jobWordOf(item)).toBe(word);
+  });
+});
+
+describe('how long ago an item arrived, on its row (aeolus-fleet#1535)', () => {
+  const NOW = new Date('2026-11-01T20:00:00.000Z');
+
+  it.each([
+    ['2026-11-01T19:59:31.000Z', 'now'],
+    ['2026-11-01T19:59:00.000Z', '1 min'],
+    ['2026-11-01T19:48:00.000Z', '12 min'],
+    ['2026-11-01T19:00:01.000Z', '59 min'],
+    ['2026-11-01T19:00:00.000Z', '1 h'],
+    ['2026-10-31T20:00:01.000Z', '23 h'],
+    ['2026-10-31T20:00:00.000Z', 'yesterday'],
+    ['2026-10-30T20:00:01.000Z', 'yesterday'],
+    ['2026-10-30T20:00:00.000Z', '2 d'],
+  ])('says one sent at %s as %s', (sentAt, age) => {
+    expect(ageOf(sentAt, NOW)).toBe(age);
+  });
+
+  it('says now for one sent a moment after the page read the time', () => {
+    expect(ageOf('2026-11-01T20:00:02.000Z', NOW)).toBe('now');
   });
 });

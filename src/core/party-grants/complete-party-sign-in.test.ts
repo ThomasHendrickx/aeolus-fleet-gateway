@@ -90,7 +90,7 @@ describe('a person comes back from signing in to an outside MCP server (decision
   it("states the proxy ship from the grant, listing its tools under the grant's access token (scenario 4, Q15)", async () => {
     await back();
 
-    expect(servers.listedWith).toEqual([{ url: 'https://mcp.attio.com/mcp', credential: { kind: 'bearer', token: 'access-mathilde' } }]);
+    expect(servers.listedWith).toEqual([{ url: 'https://mcp.attio.com/mcp', credential: { kind: 'bearer', token: 'access-mathilde' }, party: { fleetId: FLEET_ID, name: 'attio' } }]);
     expect(door.stated.map(({ crewToken, statement }) => [crewToken, statement.capabilities.map((capability) => capability.name)])).toEqual([['aeolus_ct_v1_attio', ['list_contacts', 'create_deal']]]);
   });
 

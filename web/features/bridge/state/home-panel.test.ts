@@ -6,11 +6,14 @@ import type { BridgeHome, HomeItem } from '../services/items';
 import { HomePanel } from './home-panel';
 
 function anItem(overrides: Partial<HomeItem> = {}): HomeItem {
-  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', state: 'new', stale: null, inBasket: null, ...overrides };
+  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', isAlert: false, state: 'new', stale: null, inBasket: null, seenIn: null, places: [], actInPlace: null, ...overrides };
 }
 
+/** When the page read Bridge home: the items' ages are from it. */
+const NOW = '2026-10-31T20:00:00.000Z';
+
 function render(home: BridgeHome): string {
-  return renderToStaticMarkup(createElement(HomePanel, { fleetId: 'flt_01', home }));
+  return renderToStaticMarkup(createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW }));
 }
 
 describe('Bridge home (CC18)', () => {
@@ -24,7 +27,7 @@ describe('Bridge home (CC18)', () => {
       count: markup.includes('data-testid="bridge-count" class="text-tone-waiting-fg">2<'),
       counts: markup.includes('1 to decide, 1 to do.'),
       rows: (markup.match(/data-testid="bridge-item"/g) ?? []).length,
-      seen: markup.includes('Seen, not done yet'),
+      seen: markup.includes('>Seen<'),
     }).toEqual({ count: true, counts: true, rows: 2, seen: true });
   });
 
@@ -93,5 +96,69 @@ describe('Bridge home (CC18)', () => {
     const markup = render({ waiting: { count: 1, items: [anItem({ state: 'seen', inBasket: { option: 2, note: null } })] }, stayAware: [] });
 
     expect({ inBasket: markup.includes('In the basket: option 2'), seen: markup.includes('Seen, not done yet'), count: markup.includes('data-testid="bridge-count" class="text-tone-waiting-fg">1<') }).toEqual({ inBasket: true, seen: false, count: true });
+  });
+});
+
+describe('Bridge home: each row as the mockups draw it (aeolus-fleet#1535)', () => {
+  it('says the job in its word, who asked, and how long ago, with no full date', () => {
+    const markup = render({ waiting: { count: 1, items: [anItem()] }, stayAware: [] });
+
+    expect({ word: markup.includes('text-tone-active-fg">Decide<'), from: markup.includes('>orchestrator-1<'), age: markup.includes('>12 min<'), date: markup.includes('2026-10-31 19:48 UTC<') }).toEqual({ word: true, from: true, age: true, date: false });
+  });
+
+  it('names the places that show an item, Bridge first', () => {
+    const markup = render({ waiting: { count: 1, items: [anItem({ places: ['slack', 'chat'] })] }, stayAware: [] });
+
+    expect(markup.includes('aria-label="Shows in Bridge, Slack and a chat"')).toBe(true);
+  });
+
+  it("offers to put the asker's pick in the basket beside Open on a question still new", () => {
+    const markup = render({ waiting: { count: 1, items: [anItem({ actInPlace: { kind: 'putPick', option: 1 } })] }, stayAware: [] });
+
+    expect({ put: markup.includes('Put option 1 in the basket'), open: (markup.match(/data-testid="bridge-open"/g) ?? []).length }).toEqual({ put: true, open: 1 });
+  });
+
+  it('leads a step to its link by its host, beside Open', () => {
+    const markup = render({ waiting: { count: 1, items: [anItem({ job: 'do', actInPlace: { kind: 'openLink', href: 'https://github.com/new', host: 'github.com' } })] }, stayAware: [] });
+
+    expect({ link: markup.includes('href="https://github.com/new"'), host: markup.includes('Open github.com'), open: (markup.match(/data-testid="bridge-open"/g) ?? []).length }).toEqual({ link: true, host: true, open: 1 });
+  });
+
+  it("shows the gateway's own step as its action alone, where the gateway finishes it", () => {
+    const markup = render({
+      waiting: { count: 1, items: [anItem({ job: 'do', from: 'gateway', state: 'seen', title: 'Sign in to the outside party linear', actInPlace: { kind: 'ownStep', href: 'https://gateway.example.com/outside-parties/linear', label: 'Sign in to linear' } })] },
+      stayAware: [],
+    });
+
+    expect({ action: markup.includes('href="https://gateway.example.com/outside-parties/linear"'), open: markup.includes('data-testid="bridge-open"') }).toEqual({ action: true, open: false });
+  });
+
+  it('shows an alert and a notice by their words, with no button: the title opens each', () => {
+    const markup = render({
+      waiting: { count: 0, items: [] },
+      stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', isAlert: true, from: 'watch' }), anItem({ deliveryId: 'dlv_04', job: 'stay-aware', from: 'builder-core' })],
+    });
+
+    expect({
+      alert: markup.includes('text-tone-attention-fg">Alert<'),
+      notice: markup.includes('>Notice<'),
+      open: markup.includes('data-testid="bridge-open"'),
+      titles: (markup.match(/data-testid="bridge-item-title"/g) ?? []).length,
+    }).toEqual({ alert: true, notice: true, open: false, titles: 2 });
+  });
+
+  it('says where a seen item was seen, and Seen alone where the gateway did not keep it', () => {
+    const markup = render({ waiting: { count: 2, items: [anItem({ state: 'seen', seenIn: 'bridge' }), anItem({ deliveryId: 'dlv_02', state: 'seen' })] }, stayAware: [] });
+
+    expect({ bridge: markup.includes('>Seen in Bridge<'), alone: markup.includes('>Seen<') }).toEqual({ bridge: true, alone: true });
+  });
+
+  it('keeps a seen alert or notice in the feed without its dot, counting only the unseen', () => {
+    const markup = render({
+      waiting: { count: 0, items: [] },
+      stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', isAlert: true, from: 'watch' }), anItem({ deliveryId: 'dlv_04', job: 'stay-aware', from: 'builder-core', state: 'done', seenIn: 'bridge' })],
+    });
+
+    expect({ rows: (markup.match(/data-testid="bridge-item"/g) ?? []).length, dots: (markup.match(/aria-label="New"/g) ?? []).length, unseen: markup.includes('1 unseen, outside the count') }).toEqual({ rows: 2, dots: 1, unseen: true });
   });
 });
