@@ -138,7 +138,7 @@ describe('a person who turned web push on, as a delivery reaches their person sh
     await trackerSendsCharlotte();
 
     await expect.poll(() => pushService.taken.map(({ text }) => text), { timeout: WOKEN_WITHIN_MS }).toEqual([
-      JSON.stringify({ fleetName: 'Acme', bridgeUrl: `${address}/bridge?fleet=${fleetId}` }),
+      JSON.stringify({ fleetName: 'Acme', bridgeUrl: `${address}/bridge?fleet=${fleetId}`, waitsAt: 'personShip' }),
     ]);
   });
 
