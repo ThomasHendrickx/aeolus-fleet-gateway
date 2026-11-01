@@ -41,7 +41,6 @@ function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number 
       delivery,
       opened,
       timeZone: 'UTC',
-      isDoneOnSeeing: opened.job === 'stay-aware',
       meetingHref: undefined,
       basketHref: '/bridge/basket?fleet=flt_01',
       inBasket,
@@ -114,13 +113,13 @@ describe('a question opened in Bridge (CC11)', () => {
   it('shows a withdrawn question stale: nothing to choose or send', () => {
     const markup = render(aQuestion({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } }));
 
-    expect({ stale: markup.includes('Withdrawn by orchestrator-1 at 20:09 UTC. Nothing to answer: it is done.'), send: markup.includes('in the basket'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, send: false, note: false });
+    expect({ stale: markup.includes('Withdrawn by orchestrator-1 at 20:09. Nothing to answer: it is done.'), send: markup.includes('in the basket'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, send: false, note: false });
   });
 
   it('links a replaced question to its replacement', () => {
     const markup = render(aQuestion({ stale: { kind: 'replaced', replacementId: 'dlv_02', at: '2026-10-31T20:10:00.000Z', replacementTitle: 'Which goes first, now that U4 slipped?' } }));
 
-    expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:10 UTC with “Which goes first, now that U4 slipped?”. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('in the basket') }).toEqual({ stale: true, link: true, send: false });
+    expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:10 with “Which goes first, now that U4 slipped?”. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('in the basket') }).toEqual({ stale: true, link: true, send: false });
   });
 });
 
@@ -296,7 +295,7 @@ describe('an opened item’s heading, text and screen (aeolus-fleet#1538)', () =
     const screenBar = /<div data-testid="bridge-item-screen-bar" class="([^"]*)"[^>]*>(.*?)<\/div>/.exec(markup);
 
     expect({
-      phoneOnly: screenBar?.[1].split(' ').includes('md:hidden') ?? false,
+      phoneOnly: (screenBar?.[1] ?? '').split(' ').includes('md:hidden'),
       back: /<button[^>]*aria-label="Back to the list"/.test(screenBar?.[2] ?? ''),
       chevron: (screenBar?.[2] ?? '').includes('lucide-chevron-left'),
       title: (screenBar?.[2] ?? '').includes('>Question<'),

@@ -25,7 +25,7 @@ function rowOutcomeOf(item: HomeItem): string | undefined {
   if (stale === null) {
     return item.state === 'seen' ? seenTextOf(item.seenIn) : undefined;
   }
-  const said = staleSaidOf(stale, item.from);
+  const said = staleSaidOf(stale, { from: item.from });
   return stale.kind === 'withdrawn' ? `${said}: open it to clear it` : said;
 }
 

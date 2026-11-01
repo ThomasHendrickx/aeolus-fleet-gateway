@@ -8,13 +8,15 @@ import { answerDelivery, doneDelivery, openDelivery, putInBasket, putPickInBaske
 import { BRIDGE_BASKET_PATH } from '../paths';
 import type { FocusedDelivery } from '../services/deliveries';
 import type { HomeItem } from '../services/items';
-import { DeliveryCard, type DeliveryControl, type InBasket, type StepFinished } from '../ui/delivery-card';
+import { DeliveryCard, type DeliveryControl, type InBasket, type Opened, type StepFinished } from '../ui/delivery-card';
 import { Notice } from '../ui/notice';
 
-/** An item to open: by its delivery, with its job, and the answer to it in the basket, if any. */
+/** An item to open: by its delivery, with its job, whether an alert, whether it was new, and the answer to it in the basket, if any. A replacement opened from its stale item is new. */
 export interface ToOpen {
   readonly deliveryId: string;
   readonly job: HomeItem['job'];
+  readonly isAlert?: boolean;
+  readonly state?: HomeItem['state'];
   readonly inBasket?: InBasket | null;
 }
 
@@ -45,7 +47,7 @@ export interface ItemOpening {
  * in place, and the page reads itself again.
  */
 export function ItemFocus({ fleetId, children }: { fleetId: string; children: (opening: ItemOpening) => ReactNode }) {
-  const [focus, setFocus] = useState<{ delivery: FocusedDelivery; isDoneOnSeeing: boolean; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
+  const [focus, setFocus] = useState<{ delivery: FocusedDelivery; opened: Opened; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
   const [note, setNote] = useState('');
   const [openingId, setOpeningId] = useState<string | undefined>();
   const [puttingId, setPuttingId] = useState<string | undefined>();
@@ -66,7 +68,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
       setOpeningId(undefined);
       if (outcome.isOk) {
         const inBasket = item.inBasket ?? null;
-        setFocus({ delivery: outcome.value, isDoneOnSeeing: item.job === 'stay-aware', inBasket, finished: null });
+        setFocus({ delivery: outcome.value, opened: { job: item.job, isAlert: item.isAlert ?? false, wasNew: item.state !== 'seen' }, inBasket, finished: null });
         setNote(inBasket?.note ?? '');
         setFailure(undefined);
       } else {
@@ -119,7 +121,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
       <DeliveryCard
         key={delivery.deliveryId}
         delivery={delivery}
-        isDoneOnSeeing={focus.isDoneOnSeeing}
+        opened={focus.opened}
         meetingHref={delivery.meetingId === undefined ? undefined : meetingPathOf({ fleetId, meetingId: delivery.meetingId })}
         basketHref={inFleet(BRIDGE_BASKET_PATH, fleetId)}
         inBasket={inBasket}
@@ -144,7 +146,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
             onSettled: () => { setFocus({ ...focus, finished: { outcome, note: note.trim(), at: new Date().toISOString() } }); },
           });
         }}
-        onOpen={(deliveryId) => { open({ deliveryId, job: 'decide' }); }}
+        onOpen={(deliveryId) => { open({ deliveryId, job: focus.opened.job }); }}
         onBack={() => { setFocus(undefined); }}
       />
     );

@@ -1,22 +1,13 @@
-import { Bell, CircleQuestionMark, Hand, Hash, Mail, Megaphone, MessageSquare, Ship, Sparkles, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { Bell, Hash, Mail, Ship, Sparkles, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { Stale } from '../services/deliveries';
 import { ageOf, jobWordOf, type HomeItem } from '../services/items';
+import { jobLookOf } from './job-looks';
 import { Notice } from './notice';
 import { StaleIcon } from './stale-icon';
 
-type Job = HomeItem['job'];
 type Place = HomeItem['places'][number];
-
-/** Each job's icon and tone on a row (Bridge mockups, home): Decide blue, Do amber, Alert red, a notice and a message muted. */
-const JOB_LOOKS: Record<Job | 'alert', { readonly icon: LucideIcon; readonly tone: string }> = {
-  decide: { icon: CircleQuestionMark, tone: 'text-tone-active-fg' },
-  do: { icon: Hand, tone: 'text-tone-waiting-fg' },
-  alert: { icon: TriangleAlert, tone: 'text-tone-attention-fg' },
-  'stay-aware': { icon: Megaphone, tone: 'text-muted-foreground' },
-  'everything-else': { icon: MessageSquare, tone: 'text-muted-foreground' },
-};
 
 /** The places as a row draws them, Bridge first, as Where things show names them. */
 const PLACES: Record<Place | 'bridge', { readonly icon: LucideIcon; readonly name: string }> = {
@@ -91,7 +82,7 @@ export function ItemRow({
   actions?: ReactNode;
 }) {
   const isAlert = item.isAlert ?? false;
-  const look = JOB_LOOKS[isAlert ? 'alert' : item.job];
+  const look = jobLookOf({ job: item.job, isAlert });
   const JobIcon = look.icon;
   // A phone wraps the title, at a thumb's text size; a desktop cuts it to one line (Bridge mockups, home).
   const titleClass = 'min-w-0 break-words text-left text-body-touch font-medium sm:truncate sm:text-body';
