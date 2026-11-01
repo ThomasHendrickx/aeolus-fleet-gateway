@@ -201,6 +201,7 @@ import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadBridgeHome } from './core/people/read-bridge-home.js';
 import { createReadRecord } from './core/people/read-record.js';
+import { createReadYourFleet } from './core/people/read-your-fleet.js';
 import { createReadInbox } from './core/people/read-inbox.js';
 import type { ItemJob } from './core/people/item-job.js';
 import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/routing.js';
@@ -211,6 +212,7 @@ import { createTurnRoute } from './core/people/turn-route.js';
 import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
 import { createReadMeeting } from './core/meetings/read-meeting.js';
+import { createReadSendTo } from './core/people/read-send-to.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
 import { createWakePerson } from './core/people/wake-person.js';
@@ -254,6 +256,7 @@ import { createAuthenticateActor, type Actor } from './core/actors/authenticate-
 import { createRetireParty } from './core/parties/retire-party.js';
 import { createChangePartyOwner, createChangePartyScopes } from './core/parties/change-party.js';
 import { logRefusedFacts } from './adapters/fleet/logged-verified-facts.js';
+import { createActiveShips } from './adapters/fleet/active-ships.js';
 import { createFleetShips } from './adapters/fleet/fleet-ships.js';
 import { createProxyShipReads } from './adapters/fleet/proxy-ship-reads.js';
 import { createShipNames } from './adapters/fleet/ship-names.js';
@@ -598,6 +601,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const listParties = createListParties({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   const readParty = createReadParty({ parties, fleet: proxyShipReads, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   const listOwnerChoices = createListOwnerChoices({ ships: createFleetShips(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const readYourFleet = createReadYourFleet({ ships: createActiveShips(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // An account's credential needs its account token, set up with the sign-in below.
   const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // Off stops the fleet's workers; on starts its crewed parties' workers again.
@@ -827,6 +831,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       turnOffWebPush: createTurnOffWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions }),
       focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
       listShips: createListShips(asCrew),
+      readSendTo: createReadSendTo(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
       readMeeting: createReadMeeting({ ...asCrew, door: door.meetings }),
       changeOwnMic: createChangeOwnMic({ ...asCrew, door: door.meetings }),
@@ -1031,6 +1036,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     changePartyScopes,
     readParty,
     listOwnerChoices,
+    readYourFleet,
     checkServer,
     readPartyTools,
     stateParty,
