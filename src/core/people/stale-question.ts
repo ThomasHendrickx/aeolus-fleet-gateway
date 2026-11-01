@@ -33,8 +33,19 @@ export function withdrawerOf(question: Asking, among: readonly Asking[]): Asking
 /** Whether the question this one asks is withdrawn or replaced by one of these, and by which replacement. */
 export function staleOf(question: Asking, among: readonly Asking[]): Stale | null {
   const withdrawer = withdrawerOf(question, among);
-  if (withdrawer === undefined) {
-    return null;
-  }
+  return withdrawer === undefined ? null : staleBy(withdrawer);
+}
+
+/** How a question is stale by the delivery that withdraws or replaces it. */
+export function staleBy(withdrawer: Asking): Stale {
   return withdrawer.askedQuestionId === null ? { kind: 'withdrawn', replacementId: null } : { kind: 'replaced', replacementId: withdrawer.deliveryId };
+}
+
+/** The question a replacement replaces, among these, from the same asker; none for any other delivery. */
+export function replacedBy(replacement: Asking, among: readonly Asking[]): Asking | undefined {
+  const { askedQuestionId, withdrawnQuestionId } = replacement;
+  if (askedQuestionId === null || withdrawnQuestionId === null) {
+    return undefined;
+  }
+  return among.find(({ deliveryId, senderShipId, askedQuestionId: asked }) => deliveryId !== replacement.deliveryId && senderShipId === replacement.senderShipId && asked === withdrawnQuestionId);
 }
