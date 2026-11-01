@@ -6,7 +6,7 @@ import type { Actor } from '../actors/authenticate-actor.js';
 import { err } from '../shared/result.js';
 import { createShowAllInSlack } from './show-all-in-slack.js';
 
-// The Overview's switch, Show everything that waits in Slack (gateway
+// Bridge's settings' switch, Show everything that waits in Slack (gateway
 // scopes 9.6, B5): off until the person turns it on (W8); only a linked
 // account has it.
 

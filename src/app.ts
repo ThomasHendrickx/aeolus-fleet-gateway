@@ -187,6 +187,8 @@ import { createCrewPersonShip } from './core/people/crew-person-ship.js';
 import { createDoneDelivery } from './core/people/done-delivery.js';
 import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
+import { createReadBridgeHome } from './core/people/read-bridge-home.js';
+import { createReadRecord } from './core/people/read-record.js';
 import { createReadInbox } from './core/people/read-inbox.js';
 import { createReadWakeChannels } from './core/people/read-wake-channels.js';
 import { createTurnEmailChannel } from './core/people/turn-email-channel.js';
@@ -206,6 +208,7 @@ import { createWebPush } from './adapters/web-push/web-push.js';
 import { createWebPushChannel } from './core/people/web-push-channel.js';
 import { createTurnOffWebPush } from './core/people/turn-off-web-push.js';
 import { createTurnOnWebPush } from './core/people/turn-on-web-push.js';
+import { createPrismaItemOutcomes } from './adapters/prisma/item-outcomes.js';
 import { createPrismaOpenedDeliveries } from './adapters/prisma/opened-deliveries.js';
 import { createPrismaPersonCrews } from './adapters/prisma/person-crews.js';
 import { createPostgresWaiterLocks } from './adapters/prisma/waiter-locks.js';
@@ -699,7 +702,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             webPush: createWebPush({ ...options.webPush, timeoutMs: WEB_PUSH_TIMEOUT_MS, addressesOf: (host) => systemHostResolver.addressesOf(host), isAllowedAddress: options.isAllowedPushAddress ?? isPublicAddress }),
             clock,
             windowMs: options.webPushWakeWindowMs ?? WEB_PUSH_WAKE_WINDOW_MS,
-            overviewUrlOf: (fleetId) => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`,
+            bridgeUrlOf: (fleetId) => `${issuer}/bridge?fleet=${encodeURIComponent(fleetId)}`,
           }),
         ]),
   ];
@@ -709,8 +712,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const slackLinks = createPrismaSlackLinks(prisma);
   const slackPosts = createPrismaSlackPosts(prisma);
   const slackMessages = createSlackMessages({ apiUrl: slackApiUrl });
-  const overviewUrlOf = (fleetId: FleetId): string => `${issuer}/overview?fleet=${encodeURIComponent(fleetId)}`;
-  const showInSlack = createShowInSlack({ links: slackLinks, apps: slackApps, posts: slackPosts, slack: slackMessages, door: door.person, sleep, clock, overviewUrlOf });
+  const bridgeUrlOf = (fleetId: FleetId): string => `${issuer}/bridge?fleet=${encodeURIComponent(fleetId)}`;
+  const showInSlack = createShowInSlack({ links: slackLinks, apps: slackApps, posts: slackPosts, slack: slackMessages, door: door.person, sleep, clock, bridgeUrlOf });
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
   const personCrews = createPrismaPersonCrews(prisma);
   // A person's pages in focus, on every instance: while one is, what arrives is handed through it (wake a person, W6).
@@ -745,13 +748,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       },
     };
     const opened = createPrismaOpenedDeliveries(prisma);
+    const outcomes = createPrismaItemOutcomes(prisma);
     const changes = inboxChanges;
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
       readInbox: createReadInbox({ ...asCrew, opened }),
-      openDelivery: createOpenDelivery({ ...asCrew, opened, changes, clock }),
-      answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes }),
-      doneDelivery: createDoneDelivery({ ...asCrew, opened, changes }),
+      readBridgeHome: createReadBridgeHome({ ...asCrew, opened }),
+      readRecord: createReadRecord({ ...asCrew, outcomes }),
+      openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
+      answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes, outcomes, clock }),
+      doneDelivery: createDoneDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       readWakeChannels: createReadWakeChannels({
         crewPersonShip: asCrew.crewPersonShip,
         emailChannels,
@@ -832,7 +838,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const outcomes = createOutcomeWorker({
     expireRequests: createExpireRequests({ requests: pendingRequests, clock }),
     tellOutcomes: createTellOutcomes({ notices: createPrismaOutcomeNotices(prisma), requests: pendingRequests, connections, sender: door }),
-    askOwners: createAskOwners({ questions: createPrismaOwnerQuestions(prisma), connections, owners: door, sender: door, newQuestionId: randomUUID, clock, overviewUrl: `${issuer}/overview` }),
+    askOwners: createAskOwners({ questions: createPrismaOwnerQuestions(prisma), connections, owners: door, sender: door, newQuestionId: randomUUID, clock, settingsUrl: `${issuer}/bridge/settings` }),
     sleep,
     intervalMs: OUTCOME_ROUND_MS,
     log: server.log,
@@ -879,7 +885,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
   registerSlackRoutes(server, {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
-    answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, slack: slackMessages, signatures: createSlackSignatures(), clock }),
+    answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: createPrismaItemOutcomes(prisma), slack: slackMessages, signatures: createSlackSignatures(), clock }),
     completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl }),
     takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, posts: slackPosts, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl: `${issuer}/slack/link` }),
   });

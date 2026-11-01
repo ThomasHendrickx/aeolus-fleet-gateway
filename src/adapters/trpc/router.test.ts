@@ -142,6 +142,19 @@ function aContext(cookie: string | undefined, crewToken?: string): {
             ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }], opened: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
+      readBridgeHome: (caller) =>
+        Promise.resolve(
+          grantOf(caller) === PERSON_TOKEN
+            ? ok({ waiting: { count: 1, items: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, state: 'new' as const }] }, stayAware: [] })
+            : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
+        ),
+      readRecord: ({ cursor }) =>
+        Promise.resolve(
+          ok({
+            items: [{ deliveryId: DELIVERY, from: 'watch', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-20T09:00:00.000Z', job: 'stay-aware' as const, state: 'done' as const, outcome: { place: 'bridge' as const, kind: 'seen' as const, option: null, at: '2026-10-20T09:05:00.000Z' } }],
+            nextCursor: cursor,
+          }),
+        ),
       openDelivery: ({ caller, deliveryId }) =>
         Promise.resolve(
           deliveryId === DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
@@ -853,6 +866,24 @@ describe("a person reads and deals with their person ship's deliveries through t
       deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z' }],
       opened: [],
     });
+  });
+
+  it('reads Bridge home: what waits with its count, and the stay-aware feed (Bridge, CC18)', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.home()).resolves.toMatchObject({ waiting: { count: 1 }, stayAware: [] });
+  });
+
+  it('reads a page of the record after the cursor it names (Bridge, CC12)', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.record({ cursor: 'dlv_01m3tbfspe96yf1rnr4ank0001' })).resolves.toMatchObject({ items: [{ state: 'done', outcome: { place: 'bridge', kind: 'seen' } }], nextCursor: 'dlv_01m3tbfspe96yf1rnr4ank0001' });
+  });
+
+  it('refuses a record cursor that is no delivery id', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.record({ cursor: 'msg_01m3tbfspe96yf1rnr4ank0001' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
   it('opens one, whole', async () => {

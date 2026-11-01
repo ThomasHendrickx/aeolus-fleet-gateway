@@ -1,0 +1,79 @@
+/**
+ * An item that reached a person, as Bridge shows it once opened, and the
+ * answer its form sends: pure view logic, no React and no API client.
+ */
+import { ALERT_CONTENT_TYPE, ANSWER_CONTENT_TYPE, answerSchema, isQuestionContentType, questionSchema, type Question } from '@aeolus-fleet/common';
+import { z } from 'zod';
+import type { inferRouterOutputs } from '@trpc/server';
+
+import type { GatewayRouter } from '../../../../src/adapters/trpc/router.js';
+
+/** The channels that wake a person when something waits for their person ship, as the API shows them (wake a person, W8). */
+export type WakeChannels = inferRouterOutputs<GatewayRouter>['people']['wakeChannels'];
+
+/**
+ * A delivery in focus: whole, as the person opened it or opened it again,
+ * with its question when it is one.
+ */
+export interface FocusedDelivery {
+  readonly deliveryId: string;
+  readonly from: string;
+  readonly title: string;
+  readonly sentAt: string;
+  readonly payload: string;
+  /** What it shows of its payload: an alert's or a notice's body, any other payload as it came. */
+  readonly body: string;
+  readonly question: Question | undefined;
+  /** The meeting it was contributed to or tells of, when it belongs to one. */
+  readonly meetingId: string | undefined;
+}
+
+/** A question, when the delivery is one the fleet's question content type carries. */
+export function questionOf(opened: { contentType: string; payload: string }): Question | undefined {
+  if (!isQuestionContentType(opened.contentType)) {
+    return undefined;
+  }
+  try {
+    const question = questionSchema.safeParse(JSON.parse(opened.payload));
+    return question.success ? question.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The notice content type (CC15), as common names it from its release after 0.35.0; it moves to common's constant then. */
+const NOTICE_CONTENT_TYPE = 'application/vnd.aeolus.notice+json';
+
+const BODIED = new Set([ALERT_CONTENT_TYPE, NOTICE_CONTENT_TYPE]);
+
+const bodiedSchema = z.object({ body: z.string() });
+
+/** An alert's or a notice's body; any other payload, or one that does not read, as it came. */
+export function bodyOf(opened: { contentType: string; payload: string }): string {
+  const [essence = ''] = opened.contentType.split(';');
+  if (!BODIED.has(essence.trim().toLowerCase())) {
+    return opened.payload;
+  }
+  try {
+    return bodiedSchema.safeParse(JSON.parse(opened.payload)).data?.body ?? opened.payload;
+  } catch {
+    return opened.payload;
+  }
+}
+
+/** What the person sends: an option they tapped and a note, or a note alone. */
+export interface AnswerInput {
+  readonly questionId: string | undefined;
+  readonly option: number | undefined;
+  readonly note: string;
+}
+
+/** The answer a form sends: an option and a note, or a note alone, for a question; a note as plain text otherwise. */
+export function answerOf(input: AnswerInput): { isOk: true; value: { contentType: string; payload: string } } | { isOk: false; message: string } {
+  const note = input.note.trim();
+  if (input.questionId === undefined) {
+    return note === '' ? { isOk: false, message: 'Write your answer first' } : { isOk: true, value: { contentType: 'text/plain', payload: note } };
+  }
+  const answer = answerSchema.safeParse({ questionId: input.questionId, ...(input.option === undefined ? {} : { option: input.option }), ...(note === '' ? {} : { note }) });
+  return answer.success ? { isOk: true, value: { contentType: ANSWER_CONTENT_TYPE, payload: JSON.stringify(answer.data) } } : { isOk: false, message: 'Tap an option, or write a note' };
+}

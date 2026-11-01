@@ -46,7 +46,7 @@ function started(returnTo?: string) {
 
 describe('a person starts signing in to the pages', () => {
   it("is sent to pagasae with the gateway's own PKCE challenge, naming no fleet, and holds a new secret", () => {
-    expect(startSignIn()({ returnTo: '/overview' })).toEqual({ redirectTo: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)`, browserSecret: 'secret-2' });
+    expect(startSignIn()({ returnTo: '/bridge' })).toEqual({ redirectTo: `${PAGASAE_URL}/oauth/authorize?state=sealed-1&code_challenge=S256(secret-1)`, browserSecret: 'secret-2' });
   });
 
   it('keeps the path, query and hash of a page of its own', () => {
@@ -56,15 +56,15 @@ describe('a person starts signing in to the pages', () => {
   });
 
   it('seals the page to go back to for 10 minutes, with the verifier and the browser secret', () => {
-    startSignIn()({ returnTo: '/overview?fleet=flt_1' });
+    startSignIn()({ returnTo: '/bridge?fleet=flt_1' });
 
-    expect([...seals.held.values()]).toEqual([{ returnTo: '/overview?fleet=flt_1', verifier: 'secret-1', browserSecret: 'secret-2', expiresAt: new Date('2026-10-21T09:10:00.000Z') }]);
+    expect([...seals.held.values()]).toEqual([{ returnTo: '/bridge?fleet=flt_1', verifier: 'secret-1', browserSecret: 'secret-2', expiresAt: new Date('2026-10-21T09:10:00.000Z') }]);
   });
 
   it.each([
     { what: 'no page', returnTo: undefined },
-    { what: 'another site', returnTo: 'https://evil.example.com/overview' },
-    { what: 'another site without a scheme', returnTo: '//evil.example.com/overview' },
+    { what: 'another site', returnTo: 'https://evil.example.com/bridge' },
+    { what: 'another site without a scheme', returnTo: '//evil.example.com/bridge' },
     { what: 'another site behind a backslash', returnTo: '/\\evil.example.com' },
     { what: 'another site behind a tab a browser drops', returnTo: '/\t/evil.example.com' },
     { what: 'another site behind a newline a browser drops', returnTo: '/\n/evil.example.com' },
@@ -79,16 +79,16 @@ describe('a person starts signing in to the pages', () => {
     { what: 'another site behind an encoded parent segment', returnTo: '/a/%2e%2e//evil.example.com' },
     { what: 'another site behind a dot segment and a backslash', returnTo: '/./\\evil.example.com' },
     { what: 'another site behind an encoded dot segment and a backslash', returnTo: '/%2e/\\evil.example.com' },
-  ])('goes back to the Overview for $what', ({ returnTo }) => {
+  ])('goes back to Bridge for $what', ({ returnTo }) => {
     startSignIn()({ returnTo });
 
-    expect([...seals.held.values()].map((signIn) => signIn.returnTo)).toEqual(['/overview']);
+    expect([...seals.held.values()].map((signIn) => signIn.returnTo)).toEqual(['/bridge']);
   });
 });
 
 describe('pagasae sends the person back', () => {
   it('goes back to the page asked for once pagasae redeems its code', async () => {
-    expect(await completeSignIn()(started('/overview?fleet=flt_1'))).toEqual({ isOk: true, value: { redirectTo: '/overview?fleet=flt_1' } });
+    expect(await completeSignIn()(started('/bridge?fleet=flt_1'))).toEqual({ isOk: true, value: { redirectTo: '/bridge?fleet=flt_1' } });
   });
 
   it('refuses a state the gateway did not seal', async () => {

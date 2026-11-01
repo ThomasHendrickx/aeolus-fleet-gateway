@@ -13,8 +13,8 @@ export type AskOwners = () => Promise<{ asked: number; withdrawn: number; kept: 
 
 const dayOf = (at: Date) => at.toISOString().slice(0, 'yyyy-mm-dd'.length);
 
-/** The question about one request: it points to the overview, where any approver decides (Q5 b, P6-2 b). */
-function questionOf(request: PendingRequest, ids: { questionId: string; overviewUrl: string }) {
+/** The question about one request: it points to Bridge's settings, where any approver decides (Q5 b, P6-2 b). */
+function questionOf(request: PendingRequest, ids: { questionId: string; settingsUrl: string }) {
   const { subject } = request;
   const people = request.requesters.length === 1 ? '1 person' : `${String(request.requesters.length)} people`;
   const about =
@@ -24,8 +24,8 @@ function questionOf(request: PendingRequest, ids: { questionId: string; overview
   return {
     id: ids.questionId,
     title: about.title,
-    context: `${about.what} Asked by ${people} on ${dayOf(request.askedAt)}; it waits until ${dayOf(request.expiresAt)}, then expires. Any holder of gateway:approve decides on ${ids.overviewUrl}.`,
-    options: [{ key: 1, label: "Decide on the gateway's page", detail: ids.overviewUrl }],
+    context: `${about.what} Asked by ${people} on ${dayOf(request.askedAt)}; it waits until ${dayOf(request.expiresAt)}, then expires. Any holder of gateway:approve decides on ${ids.settingsUrl}.`,
+    options: [{ key: 1, label: "Decide on the gateway's page", detail: ids.settingsUrl }],
     pick: { option: 1, why: 'Approving names the outside party, its owner and its scopes, which the page asks for.' },
   };
 }
@@ -45,7 +45,7 @@ export function createAskOwners(deps: {
   sender: CallSender;
   newQuestionId: () => string;
   clock: Clock;
-  overviewUrl: string;
+  settingsUrl: string;
 }): AskOwners {
   return async () => {
     const now = deps.clock.now();
@@ -65,7 +65,7 @@ export function createAskOwners(deps: {
           : await deps.sender.send(gateway.crewToken, {
               to: asked,
               contentType: QUESTION_CONTENT_TYPE,
-              payload: JSON.stringify(questionOf(request, { questionId, overviewUrl: deps.overviewUrl })),
+              payload: JSON.stringify(questionOf(request, { questionId, settingsUrl: deps.settingsUrl })),
               idempotencyKey: `${request.requestId}:question`,
             });
       if (sent !== undefined && !sent.isOk && sent.error.code === 'UNAVAILABLE') {

@@ -3,7 +3,7 @@
  * messaging (decisions 0054, 0057): the fleet's calls it makes as their
  * account, and the one crew every client of the person shares.
  */
-import type { DeliveryId, FleetId, MeetingId, MessageId, ShipId, ShipKind } from '@aeolus-fleet/common';
+import type { DeliveryId, DeliveryState, FleetId, MeetingId, MessageId, ShipId, ShipKind } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { DiscoveredStatement } from '../mcp-in/ports.js';
@@ -79,8 +79,8 @@ export interface PersonDelivery {
   readonly senderName: string;
   readonly contentType: string;
   readonly payload: string;
-  /** The title of a question (the question content type), read at the edge; none for any other message. */
-  readonly questionTitle: string | null;
+  /** The headline of a question (its title), a step (its title), an alert or a notice, read at the edge; none for any other message. */
+  readonly headline: string | null;
   readonly sentAt: Date;
   readonly inReplyTo: MessageId | null;
   /** The meeting its message was contributed to or tells of; none outside a meeting (decision 0061). */
@@ -90,6 +90,18 @@ export interface PersonDelivery {
 /** A delivery as the person ship's push receive hands it: with the last number it was handed with under this lease, null while never handed (decision 0040). */
 export interface PushedPersonDelivery extends PersonDelivery {
   readonly handOverNumber: number | null;
+}
+
+/** A delivery as the person ship's record answers it: with its state; in a sealed fleet, a payload whose key cannot be had is empty and marked unreadable. */
+export interface RecordedPersonDelivery extends PersonDelivery {
+  readonly state: DeliveryState;
+  readonly isPayloadUnreadable: boolean;
+}
+
+/** A page of the person ship's record, newest first, and the cursor of the next; null on the last. */
+export interface RecordPage {
+  readonly items: readonly RecordedPersonDelivery[];
+  readonly nextCursor: DeliveryId | null;
 }
 
 /** What a person ship may send to now, as the fleet's discover answers it: each ship by name, with what it offers, and each type. */
@@ -114,6 +126,8 @@ export interface PersonShipDoor {
   inbox(crewToken: string, wait?: { knownWaiting: number; signal: AbortSignal; atMostMs?: number }): Promise<Result<{ waiting: number }, FleetRefusal>>;
   /** The ship's deliveries, up to max, its own held ones again first; shouldSkipHanded leaves the handed ones out before the limit, so a new one is not shut out by held ones. */
   pushReceive(crewToken: string, take: { max: number; shouldSkipHanded?: boolean }): Promise<Result<PushedPersonDelivery[], FleetRefusal>>;
+  /** A page of the ship's record (Bridge, CC12): its deliveries in every state and across its leases, newest first, after the cursor; records nothing. */
+  record(crewToken: string, page: { cursor: DeliveryId | null; limit: number }): Promise<Result<RecordPage, FleetRefusal>>;
   /** Acknowledges a delivery the person opened: their own act confirms it (interop 5.1). */
   ack(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
   /** Reads a delivery the ship acknowledged again, whole, while it is not handled, recording nothing (decision 0040). */
@@ -145,6 +159,8 @@ export interface OpenedDelivery {
   readonly senderShipId: ShipId;
   readonly from: string;
   readonly title: string;
+  /** Its content type, which names its job (Bridge, CC10); none for one opened before the gateway kept it. */
+  readonly contentType: string | null;
   readonly sentAt: Date;
   readonly openedAt: Date;
 }
@@ -193,7 +209,7 @@ export interface WakeWindow {
 
 /**
  * Outbound port: one way to wake a person (wake a person, W1, W4): it says
- * only that something waits in the fleet, with the overview's link, and
+ * only that something waits in the fleet, with Bridge's link, and
  * goes out at most once per its window (W3, W10).
  */
 export interface WakeChannel {
@@ -242,7 +258,7 @@ export interface FocusedPages {
  * A browser a person turned web push on in (wake a person, W8): its push
  * service's endpoint and keys, and the fleet's name its wakes say, as the
  * person's sign-in named it when they turned it on. A subscription its push
- * service said is gone takes no wake again, and the overview says so.
+ * service said is gone takes no wake again, and Bridge's settings say so.
  */
 export interface WebPushSubscription {
   readonly fleetId: FleetId;
@@ -266,10 +282,10 @@ export interface WebPushSubscriptions {
   remove(fleetId: FleetId, removed: { shipId: ShipId; endpoint: string }): Promise<void>;
 }
 
-/** What a wake says (W4): something waits in the fleet, by its name, and the link to the gateway's overview. Nothing else. */
+/** What a wake says (W4): something waits in the fleet, by its name, and the link to Bridge. Nothing else. */
 export interface Wake {
   readonly fleetName: string;
-  readonly overviewUrl: string;
+  readonly bridgeUrl: string;
 }
 
 /** How a push service took a wake: sent, gone (it answered 404 or 410: the subscription ended), or failed otherwise. */

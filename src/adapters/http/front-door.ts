@@ -1,6 +1,6 @@
 /**
  * The gateway's address as a person opens it: the address itself sends them
- * to the Overview, and the gateway's web app (Next.js, header design H3)
+ * to Bridge, and the gateway's web app (Next.js, header design H3)
  * answers an address with no page of the server's own, its own files and its
  * pages' forms (server actions). A
  * client that calls an unknown address (no page asked for: not a GET that
@@ -16,7 +16,7 @@ const HTTP_SEE_OTHER = 303;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
 
-const OVERVIEW = '/overview';
+const BRIDGE = '/bridge';
 
 /** Where the web app's built files are served from. */
 const WEB_APP_FILES = '/_next/*';
@@ -58,7 +58,7 @@ function isPageAsked(request: FastifyRequest): boolean {
 }
 
 export function registerFrontDoor(server: FastifyInstance, deps: { web?: WebApp }): void {
-  server.get('/', (_request, reply) => reply.code(HTTP_SEE_OTHER).header('location', OVERVIEW).send());
+  server.get('/', (_request, reply) => reply.code(HTTP_SEE_OTHER).header('location', BRIDGE).send());
 
   const { web } = deps;
   if (web !== undefined) {

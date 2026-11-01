@@ -7,21 +7,21 @@ import type { PersonShip, WakeChannel, WebPush, WebPushSubscription, WebPushSubs
 /**
  * Web push, a channel that wakes a person (wake a person, W1, W4, W8). It is
  * on while a browser they turned it on in still takes wakes. A wake goes to
- * each such browser, saying only the fleet by its name and the overview
+ * each such browser, saying only the fleet by its name and the Bridge
  * link; it went out once one push service took it. A subscription its push
  * service says is gone takes no wake again.
  */
-export function createWebPushChannel(deps: { subscriptions: WebPushSubscriptions; webPush: WebPush; clock: Clock; windowMs: number; overviewUrlOf: (fleetId: FleetId) => string }): WakeChannel {
+export function createWebPushChannel(deps: { subscriptions: WebPushSubscriptions; webPush: WebPush; clock: Clock; windowMs: number; bridgeUrlOf: (fleetId: FleetId) => string }): WakeChannel {
   const takingWakes = async ({ fleetId, shipId }: PersonShip): Promise<WebPushSubscription[]> => (await deps.subscriptions.list(fleetId, shipId)).filter(({ goneAt }) => goneAt === null);
   return {
     name: 'web-push',
     windowMs: deps.windowMs,
     isOn: async (ship) => (await takingWakes(ship)).length > 0,
     wake: async (ship) => {
-      const overviewUrl = deps.overviewUrlOf(ship.fleetId);
+      const bridgeUrl = deps.bridgeUrlOf(ship.fleetId);
       let isTaken = false;
       for (const subscription of await takingWakes(ship)) {
-        const sent = await deps.webPush.send(subscription, { fleetName: subscription.fleetName, overviewUrl });
+        const sent = await deps.webPush.send(subscription, { fleetName: subscription.fleetName, bridgeUrl });
         switch (sent) {
           case 'sent':
             isTaken = true;

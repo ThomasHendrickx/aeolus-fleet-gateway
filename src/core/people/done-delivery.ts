@@ -1,15 +1,14 @@
 import type { Result } from '../shared/result.js';
-import type { CrewPersonShip } from './crew-person-ship.js';
-import { handledOf, openedOf, type Dealt, type DealtError } from './opened-of.js';
+import type { Place } from './item-outcome.js';
+import { handledOf, openedOf, type Dealt, type DealDeps, type DealtError } from './opened-of.js';
 import type { PersonCaller } from './person-crew.js';
-import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from './ports.js';
 
-export type DoneDelivery = (input: { caller: PersonCaller; deliveryId: string }) => Promise<Result<Dealt, DealtError>>;
+export type DoneDelivery = (input: { caller: PersonCaller; place: Place; deliveryId: string }) => Promise<Result<Dealt, DealtError>>;
 
-/** Use case: a person is done with a delivery they opened, with no answer (Q20): it is handled. */
-export function createDoneDelivery(deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; opened: OpenedDeliveries; changes: InboxChanges }): DoneDelivery {
-  return async (asked) => {
-    const opened = await openedOf(deps, asked);
-    return opened.isOk ? handledOf(deps, { caller: asked.caller, delivery: opened.value }) : opened;
+/** Use case: a person is done with a delivery they opened, with no answer (Q20): it is handled, done where they were. */
+export function createDoneDelivery(deps: DealDeps): DoneDelivery {
+  return async ({ caller, place, deliveryId }) => {
+    const opened = await openedOf(deps, { caller, deliveryId });
+    return opened.isOk ? handledOf(deps, { caller, delivery: opened.value, as: { place, kind: 'done', option: null } }) : opened;
   };
 }

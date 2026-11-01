@@ -9,7 +9,7 @@ export type ListMine = (actor: Actor) => Promise<Result<PendingRequest[], Domain
 
 /**
  * Use case: the requests an account asked, in any state, the newest first
- * (decision 0056: Your requests on the overview). One still pending past its
+ * (decision 0056: Your requests, in Bridge's settings). One still pending past its
  * 7 days reads as expired, as the store marks it only when it is next
  * opened. Only an account asks, so any other actor has none.
  */

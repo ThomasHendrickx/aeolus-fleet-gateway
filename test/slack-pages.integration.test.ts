@@ -231,7 +231,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     return done.headers.get('location') ?? '';
   }
 
-  async function overview(signIn: string, path = `/overview?fleet=${fleetId}`): Promise<string> {
+  async function bridgeSettings(signIn: string, path = `/bridge/settings?fleet=${fleetId}`): Promise<string> {
     return textOf(await (await fetch(`${address}${path}`, { headers: pageHeaders(signIn) })).text());
   }
 
@@ -280,24 +280,24 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     await fetch(installed.headers.get('location') ?? '', { redirect: 'manual' });
   }, 60_000);
 
-  it('links a Slack account from the Overview, refuses a second link of it naming the first, and unlinks', async () => {
+  it('links a Slack account from Bridge, refuses a second link of it naming the first, and unlinks', async () => {
     slack.signInAs({ userId: 'U0CHARLOTTE', name: 'charlotte.d' });
 
-    const unlinked = await overview(HOLDER_SIGN_IN);
+    const unlinked = await bridgeSettings(HOLDER_SIGN_IN);
     const charlottes = await linked(HOLDER_SIGN_IN);
-    const linkedPage = await overview(HOLDER_SIGN_IN, charlottes);
+    const linkedPage = await bridgeSettings(HOLDER_SIGN_IN, charlottes);
     const joris = await linked(JORIS_SIGN_IN);
-    const refusedPage = await overview(JORIS_SIGN_IN, joris);
+    const refusedPage = await bridgeSettings(JORIS_SIGN_IN, joris);
 
     expect(unlinked).toContain('Not linked in Acme');
-    expect(charlottes).toBe(`/overview?fleet=${fleetId}&slack=linked`);
+    expect(charlottes).toBe(`/bridge/settings?fleet=${fleetId}&slack=linked`);
     expect(['Slack linked as @charlotte.d in Acme', "Your Slack account is linked: message the fleet's bots in Slack"].map((text) => linkedPage.includes(text) || text)).toEqual([true, true]);
-    expect(joris).toBe(`/overview?fleet=${fleetId}&slack=slack-user-linked&name=charlotte`);
+    expect(joris).toBe(`/bridge/settings?fleet=${fleetId}&slack=slack-user-linked&name=charlotte`);
     expect(refusedPage).toContain('This Slack account is linked to charlotte in this fleet already');
 
     const unlink = await fetch(`${address}/trpc/slack.unlink`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: `aeolus_account_session=${HOLDER_SIGN_IN}`, [FLEET_HEADER]: fleetId }, body: '{}' });
     expect(unlink.status).toBe(200);
-    expect(await overview(HOLDER_SIGN_IN)).toContain('Not linked in Acme');
+    expect(await bridgeSettings(HOLDER_SIGN_IN)).toContain('Not linked in Acme');
   }, 60_000);
 
   it("refuses a link started by one account and followed in another's browser, linking neither", async () => {
@@ -305,8 +305,8 @@ describe('linking a Slack account (gateway scopes S7)', () => {
 
     const followed = await linked(HOLDER_SIGN_IN, JORIS_SIGN_IN);
 
-    expect(followed).toBe('/overview?slack=refused');
-    expect([await overview(HOLDER_SIGN_IN), await overview(JORIS_SIGN_IN)].map((page) => page.includes('Not linked in Acme'))).toEqual([true, true]);
+    expect(followed).toBe('/bridge/settings?slack=refused');
+    expect([await bridgeSettings(HOLDER_SIGN_IN), await bridgeSettings(JORIS_SIGN_IN)].map((page) => page.includes('Not linked in Acme'))).toEqual([true, true]);
   }, 60_000);
 
   it("answers an unlinked person's message to a bot only they see, with a button to link, and the message never reaches the fleet", async () => {

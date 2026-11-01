@@ -1,0 +1,119 @@
+import type { FocusedDelivery } from '../services/deliveries';
+import { ActionButton } from './action-button';
+import { Notice } from './notice';
+
+/** Which of the card's controls is working: an option of the question, the note alone, or done. */
+export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'note' } | { kind: 'done' };
+
+/**
+ * One item in focus (design B, Signal). A question is answered with one tap
+ * on a button that names the option it sends, the asker's pick on a dashed
+ * edge; any other item may get a note as its answer, and may be done with;
+ * one of a meeting leads to the meeting. An alert or a notice is done once
+ * seen (Bridge, CC16): it asks nothing more.
+ */
+export function DeliveryCard({
+  delivery,
+  isDoneOnSeeing,
+  meetingHref,
+  note,
+  working,
+  failure,
+  onNoteChange,
+  onAnswer,
+  onDone,
+  onBack,
+}: {
+  delivery: FocusedDelivery;
+  /** Whether seeing it was all it asked, so it is done: an alert or a notice. */
+  isDoneOnSeeing: boolean;
+  /** The page of the meeting it belongs to, if it belongs to one. */
+  meetingHref: string | undefined;
+  note: string;
+  working: DeliveryControl | undefined;
+  failure: string | undefined;
+  onNoteChange: (note: string) => void;
+  onAnswer: (option: number | undefined) => void;
+  onDone: () => void;
+  onBack: () => void;
+}) {
+  const { question } = delivery;
+  const isWorking = working !== undefined;
+  const picked = question?.options.find((option) => option.key === question.pick.option);
+  return (
+    <section data-testid="bridge-delivery" className="grid gap-3 rounded-lg border border-border bg-card p-6 text-card-foreground shadow-sm">
+      <span className="text-caption text-muted-foreground">
+        {delivery.from} · {new Date(delivery.sentAt).toUTCString()}
+      </span>
+      <h2 className="text-heading font-semibold">{question?.title ?? delivery.title}</h2>
+      {meetingHref === undefined ? null : (
+        <a data-testid="bridge-meeting" href={meetingHref} className="inline-flex h-9 items-center justify-self-start rounded-md bg-primary px-4 text-primary-foreground hover:bg-primary-hover">
+          Go to the meeting
+        </a>
+      )}
+      {question === undefined ? (
+        <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-caption">{delivery.body}</pre>
+      ) : (
+        <>
+          <p className="whitespace-pre-wrap">{question.context}</p>
+          <div className="flex flex-wrap gap-2">
+            {question.options.map((option) => (
+              <ActionButton
+                key={option.key}
+                title={option.detail}
+                variant={option.key === question.pick.option ? 'primary' : 'secondary'}
+                className={option.key === question.pick.option ? 'outline-2 outline-offset-2 outline-dashed outline-ring' : ''}
+                isPending={working?.kind === 'option' && working.option === option.key}
+                pendingLabel="Sending..."
+                disabled={isWorking}
+                onClick={() => { onAnswer(option.key); }}
+              >
+                {option.label}
+              </ActionButton>
+            ))}
+          </div>
+          {picked === undefined ? null : (
+            <p className="text-muted-foreground">
+              {picked.label} is the pick of {delivery.from}: {question.pick.why}
+            </p>
+          )}
+        </>
+      )}
+      {isDoneOnSeeing ? (
+        <p data-testid="bridge-seen-done" className="text-muted-foreground">
+          Seen now, so done: it asks nothing more.
+        </p>
+      ) : (
+        <>
+          <label className="grid gap-1">
+            <span>{question === undefined ? 'Your answer' : 'Note'}</span>
+            <textarea
+              data-testid="bridge-note"
+              rows={2}
+              value={note}
+              onChange={(event) => { onNoteChange(event.target.value); }}
+              placeholder={question === undefined ? '' : 'Optional, sent with your answer'}
+              className="rounded-md border border-input bg-background p-2"
+            />
+          </label>
+          {failure === undefined ? null : <Notice message={failure} isFailure />}
+          <div className="flex flex-wrap gap-2">
+            <ActionButton data-testid="bridge-answer" variant={question === undefined ? 'primary' : 'secondary'} isPending={working?.kind === 'note'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onAnswer(undefined); }}>
+              {question === undefined ? 'Answer' : 'Send the note alone'}
+            </ActionButton>
+            {question === undefined ? (
+              <ActionButton data-testid="bridge-done" isPending={working?.kind === 'done'} pendingLabel="Marking done..." disabled={isWorking} onClick={onDone}>
+                Done
+              </ActionButton>
+            ) : null}
+          </div>
+        </>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={onBack} disabled={isWorking} className="inline-flex h-9 items-center rounded-md px-4 text-muted-foreground hover:bg-accent disabled:opacity-70">
+          Back
+        </button>
+      </div>
+    </section>
+  );
+}

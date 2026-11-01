@@ -40,9 +40,9 @@ function slackMarkupOf(markdown: string): string {
  * goes as a link to the gateway's pages. The gateway's own bot heads it
  * with the sender's name.
  */
-export function slackPostOf(delivery: PersonDelivery, shown: { overviewUrl: string; isHeadedBySender: boolean }): SlackShown {
+export function slackPostOf(delivery: PersonDelivery, shown: { bridgeUrl: string; isHeadedBySender: boolean }): SlackShown {
   const { senderName, contentType, payload } = delivery;
-  const link: SlackShown = { kind: 'link', text: `${escaped(senderName)} sent you a message Slack does not show in full: <${shown.overviewUrl}|open it in the gateway>` };
+  const link: SlackShown = { kind: 'link', text: `${escaped(senderName)} sent you a message Slack does not show in full: <${shown.bridgeUrl}|open it in the gateway>` };
   const headed = (text: string) => (shown.isHeadedBySender ? `*${escaped(senderName)}*\n${text}` : text);
   const essence = essenceOf(contentType);
   let text: string;

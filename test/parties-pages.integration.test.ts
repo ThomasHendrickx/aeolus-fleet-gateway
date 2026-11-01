@@ -386,8 +386,8 @@ describe('the parties pages, as the account signed in', () => {
     expect(body).toContain('data-testid="avatar-menu"');
   });
 
-  it("links the overview, the outside parties, the parties and Slack of the fleet in view from the header, the page shown current (aeolus-fleet#1120, #1119; gateway scopes 9.6)", async () => {
-    const pages = ['/overview', '/outside-parties', '/parties', '/slack'];
+  it("links Bridge, the outside parties, the parties and Slack of the fleet in view from the header, the page shown current (aeolus-fleet#1120, #1119; gateway scopes 9.6)", async () => {
+    const pages = ['/bridge', '/outside-parties', '/parties', '/slack'];
     const bodies = await Promise.all(pages.map(async (page) => (await fetch(`${address}${page}?fleet=${FLEET}`, { headers: PAGE })).text()));
 
     // The desktop header and the phone bar each show the tabs: each tab is read once.

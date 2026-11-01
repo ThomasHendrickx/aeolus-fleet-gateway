@@ -7,7 +7,7 @@ import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createTurnOffWebPush } from './turn-off-web-push.js';
 import { createTurnOnWebPush } from './turn-on-web-push.js';
 
-// A person turns web push on for a browser on the overview, and removes a
+// A person turns web push on for a browser in Bridge's settings, and removes a
 // browser (wake a person, W8). Nothing is on by default.
 
 const SHIP = { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID };

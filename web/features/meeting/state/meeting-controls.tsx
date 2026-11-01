@@ -3,9 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
-import { ActionButton } from '../../overview/ui/action-button';
-import { Notice } from '../../overview/ui/notice';
-import type { ActionOutcome } from '../../overview/hooks/overview-actions';
+import { ActionButton } from '../../bridge/ui/action-button';
+import { Notice } from '../../bridge/ui/notice';
+import type { ActionOutcome } from '../../bridge/hooks/bridge-actions';
 import { changeMic, contribute, type OwnMicChange } from '../hooks/meeting-actions';
 import type { MeetingControl } from '../services/meeting';
 

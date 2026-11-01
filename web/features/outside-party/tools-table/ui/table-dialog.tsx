@@ -4,7 +4,7 @@ import { Dialog } from '@base-ui/react/dialog';
 import type { ReactNode } from 'react';
 
 import { BUTTONS } from '../../../forms/ui/look';
-import { ActionButton } from '../../../overview/ui/action-button';
+import { ActionButton } from '../../../bridge/ui/action-button';
 
 /** Why the API refused a change in a dialog: said inline, CONFLICT with Reload, at the requirements' version the change was made on. */
 export interface DialogRefusal {

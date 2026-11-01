@@ -56,7 +56,7 @@ describe('aeolus-gateway start and migrate', () => {
     expect(page.status).toBe(404);
     expect(body).toContain('This page does not exist');
     expect(body).toContain('data-testid="frame-header"');
-    expect(body).toContain('href="/overview"');
+    expect(body).toContain('href="/bridge"');
   }, 60_000);
 
   it("start answers a sign-in that did not go through with the web app's page saying why, and the way to sign in again", async () => {
@@ -79,31 +79,31 @@ describe('aeolus-gateway start and migrate', () => {
     expect(answers).toEqual(pages.map((page) => `/sign-in/start?return_to=${encodeURIComponent(`${page}?fleet=${FLEET}`)}`));
   }, 120_000);
 
-  it("start sends a person with no sign-in who opens the web app's Overview to sign in, and back to it", async () => {
+  it("start sends a person with no sign-in who opens the web app's Bridge to sign in, and back to it", async () => {
     await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
 
-    const page = await fetch(`${address}/overview?fleet=${FLEET}`, { headers: { accept: 'text/html' }, redirect: 'manual' });
+    const page = await fetch(`${address}/bridge?fleet=${FLEET}`, { headers: { accept: 'text/html' }, redirect: 'manual' });
 
-    expect(page.headers.get('location')).toBe(`/sign-in/start?return_to=${encodeURIComponent(`/overview?fleet=${FLEET}`)}`);
+    expect(page.headers.get('location')).toBe(`/sign-in/start?return_to=${encodeURIComponent(`/bridge?fleet=${FLEET}`)}`);
   }, 60_000);
 
-  it("start shows a signed-in person the web app's Overview, read through the gateway's API as their account", async () => {
+  it("start shows a signed-in person the web app's Bridge, read through the gateway's API as their account", async () => {
     await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
 
-    const page = await fetch(`${address}/overview?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${SIGN_IN}` } });
+    const page = await fetch(`${address}/bridge?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${SIGN_IN}` } });
     const body = await page.text();
 
     expect({ status: page.status, nothing: body.includes('Nothing waits on you') }).toEqual({ status: 200, nothing: true });
   }, 60_000);
 
-  it("start shows a signed-in person a meeting's page, saying why it could not be read, with the way back to the Overview", async () => {
+  it("start shows a signed-in person a meeting's page, saying why it could not be read, with the way back to Bridge", async () => {
     await expect.poll(async () => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: 30_000 }).toBe(200);
 
     const page = await fetch(`${address}/meetings/mtg_01m5qa5j85mgd4z61d9c2k4mtg?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${SIGN_IN}` } });
     const body = await page.text();
 
     // The gateway is connected to no fleet here, so it crews no person ship: the page says the API's refusal in its place.
-    expect({ status: page.status, isAlert: body.includes('role="alert"'), hasWayBack: body.includes('← Overview') }).toEqual({ status: 200, isAlert: true, hasWayBack: true });
+    expect({ status: page.status, isAlert: body.includes('role="alert"'), hasWayBack: body.includes('← Bridge') }).toEqual({ status: 200, isAlert: true, hasWayBack: true });
   }, 60_000);
 
   it("start sends a browser connecting an unknown MCP client to the web app's page saying why", async () => {

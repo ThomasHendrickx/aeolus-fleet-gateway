@@ -15,7 +15,7 @@ export type StartLinkRefusal = DomainError<'NOT_A_PERSON' | 'SLACK_NOT_CONNECTED
 export type StartLink = (input: { actor: Actor }) => Promise<Result<{ url: string }, StartLinkRefusal>>;
 
 /**
- * Use case: a person presses Link Slack, on the Overview or in the answer a
+ * Use case: a person presses Link Slack, in Bridge's settings or in the answer a
  * bot gave them in Slack (gateway scopes 9.3): Sign in with Slack through
  * the fleet's own bot's app, for the fleet's workspace, with the link's
  * state sealed for ten minutes. Only an account with a person ship in the

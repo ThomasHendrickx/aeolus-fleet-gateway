@@ -78,7 +78,7 @@ export interface Config {
   /**
    * The gateway's push keys (VAPID), which sign each web push wake, and the
    * subject a push service may contact about them, a mailto: or https: URL.
-   * Unset, the overview offers no web push (wake a person, S3).
+   * Unset, Bridge's settings offer no web push (wake a person, S3).
    */
   webPush: { publicKey: string; privateKey: string; subject: string } | undefined;
   /** The least time between two wakes web push sends one person ship (wake a person, W3, W10). */

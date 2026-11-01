@@ -71,7 +71,9 @@ import type { MeetingRead } from '../../core/meetings/ports.js';
 import type { PersonMeeting, ReadMeeting } from '../../core/meetings/read-meeting.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { SendMessage } from '../../core/people/send-message.js';
+import type { ReadBridgeHome } from '../../core/people/read-bridge-home.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
+import type { ReadRecord } from '../../core/people/read-record.js';
 import type { ReadWakeChannels } from '../../core/people/read-wake-channels.js';
 import type { FocusPage } from '../../core/people/focus-page.js';
 import type { TurnOffWebPush } from '../../core/people/turn-off-web-push.js';
@@ -168,6 +170,8 @@ export interface Context {
   /** A person's own person ship's deliveries; unset where no pagasae signs anyone in. */
   person?: {
     readInbox: ReadInbox;
+    readBridgeHome: ReadBridgeHome;
+    readRecord: ReadRecord;
     openDelivery: OpenDelivery;
     answerDelivery: AnswerDelivery;
     doneDelivery: DoneDelivery;
@@ -1210,14 +1214,20 @@ export const gatewayRouter = t.router({
   people: t.router({
     /** What waits for the person's own ship, by titles only (Q20). */
     inbox: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readInbox(ctx.caller))),
+    /** Bridge home (CC18): what waits on the person with its count, decide and do, and the stay-aware feed. */
+    home: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readBridgeHome(ctx.caller))),
+    /** A page of the person ship's record (CC12), newest first, after the cursor the last page answered. */
+    record: personProcedure
+      .input(z.strictObject({ cursor: idSchema('delivery').nullable() }))
+      .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readRecord({ caller: ctx.caller, cursor: input.cursor }))),
     /** Opens one delivery, whole; the gateway acknowledges it for them. */
-    open: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.openDelivery({ caller: ctx.caller, ...input }))),
+    open: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.openDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
     /** Answers a delivery they opened, to its sender. */
     answer: personProcedure
       .input(z.strictObject({ deliveryId: z.string().min(1), contentType: z.string().min(1), payload: payloadSchema }))
-      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.answerDelivery({ caller: ctx.caller, ...input }))),
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.answerDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
     /** Is done with a delivery they opened, with no answer. */
-    done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, ...input }))),
+    done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
     /** The channels that wake them when something waits for their person ship, each offered or not and on or not (wake a person, W8). */
     wakeChannels: personProcedure.query(async ({ ctx }) => {
       const { email, webPush } = personAnswerOf(await ctx.person.readWakeChannels(ctx.caller));
@@ -1388,11 +1398,11 @@ export const gatewayRouter = t.router({
         slackAnswerOf(await ctx.slack.removeBot({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken }, appId: input.appId }));
         return {};
       }),
-    /** The person's Slack link as the Overview shows it (9.6): the workspace and the Slack name linked; none while the fleet's own bot is not in Slack. */
+    /** The person's Slack link as Bridge's settings show it (9.6): the workspace and the Slack name linked; none while the fleet's own bot is not in Slack. */
     link: servedProcedure
       .output(z.object({ workspaceName: z.string(), link: z.object({ slackName: z.string(), isShowingAll: z.boolean() }).nullable() }).nullable())
       .query(({ ctx }) => ctx.slack.readSlackLink({ actor: ctx.actor })),
-    /** Sign in with Slack to link the person's Slack account, from the Overview or Slack's answer to an unlinked person (9.3). */
+    /** Sign in with Slack to link the person's Slack account, from Bridge's settings or Slack's answer to an unlinked person (9.3). */
     startLink: servedProcedure.output(z.object({ url: z.string() })).mutation(async ({ ctx }) => slackAnswerOf(await ctx.slack.startLink({ actor: ctx.actor }))),
     /** Turns Show everything that waits in Slack on or off for the person's own link (9.6, B5). */
     showAll: servedProcedure

@@ -3,7 +3,7 @@ import type { CrewPersonShip } from './crew-person-ship.js';
 import { personCrewOf, type PersonCaller, type PersonCrewError } from './person-crew.js';
 import type { EmailChannels, WebPushSubscriptions } from './ports.js';
 
-/** A browser a person turned web push on in, as the overview lists it: gone once its push service ended the subscription. */
+/** A browser a person turned web push on in, as Bridge's settings list it: gone once its push service ended the subscription. */
 export interface WebPushBrowser {
   readonly endpoint: string;
   readonly browser: string;
@@ -12,7 +12,7 @@ export interface WebPushBrowser {
 }
 
 /**
- * The channels that wake a person, as their overview shows them: email
+ * The channels that wake a person, as Bridge's settings show them: email
  * offered or not, and on or not; web push with the gateway's public push
  * key a browser subscribes with, none where it is not offered, and the
  * browsers they turned it on in.

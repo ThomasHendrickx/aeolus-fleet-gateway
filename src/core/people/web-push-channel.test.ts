@@ -8,12 +8,12 @@ import { createWebPushChannel } from './web-push-channel.js';
 
 // Web push, a channel that wakes a person (wake a person, W1, W4, W8): on
 // while they turned it on in a browser, it sends each such browser a wake
-// that says only the fleet by its name and the overview link.
+// that says only the fleet by its name and the Bridge link.
 
 const SHIP = { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID };
 const NOW = new Date('2026-10-23T10:00:00.000Z');
 const WINDOW_MS = 10 * 60 * 1000;
-const OVERVIEW_URL = `https://gateway.example/overview?fleet=${FLEET_ID}`;
+const OVERVIEW_URL = `https://gateway.example/bridge?fleet=${FLEET_ID}`;
 
 let subscriptions: ReturnType<typeof memoryWebPushSubscriptions>;
 let push: ReturnType<typeof fakeWebPush>;
@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 function webPushChannel() {
-  return createWebPushChannel({ subscriptions, webPush: push.webPush, clock: { now: () => NOW }, windowMs: WINDOW_MS, overviewUrlOf: (fleetId) => `https://gateway.example/overview?fleet=${fleetId}` });
+  return createWebPushChannel({ subscriptions, webPush: push.webPush, clock: { now: () => NOW }, windowMs: WINDOW_MS, bridgeUrlOf: (fleetId) => `https://gateway.example/bridge?fleet=${fleetId}` });
 }
 
 describe('the web push channel', () => {
@@ -50,15 +50,15 @@ describe('the web push channel', () => {
     await expect(webPushChannel().isOn(SHIP)).resolves.toBe(false);
   });
 
-  it('wakes each browser they turned on: the fleet by its name and the overview link, nothing else', async () => {
+  it('wakes each browser they turned on: the fleet by its name and the Bridge link, nothing else', async () => {
     await subscriptions.save(aWebPushSubscription({ endpoint: 'https://push.example/firefox' }));
     await subscriptions.save(aWebPushSubscription({ endpoint: 'https://push.example/chrome', browser: 'Chrome on macOS' }));
 
     await expect(webPushChannel().wake(SHIP, { key: 'window-1' })).resolves.toEqual(ok(undefined));
 
     expect(push.sent).toEqual([
-      { endpoint: 'https://push.example/firefox', wake: { fleetName: 'Acme', overviewUrl: OVERVIEW_URL } },
-      { endpoint: 'https://push.example/chrome', wake: { fleetName: 'Acme', overviewUrl: OVERVIEW_URL } },
+      { endpoint: 'https://push.example/firefox', wake: { fleetName: 'Acme', bridgeUrl: OVERVIEW_URL } },
+      { endpoint: 'https://push.example/chrome', wake: { fleetName: 'Acme', bridgeUrl: OVERVIEW_URL } },
     ]);
   });
 

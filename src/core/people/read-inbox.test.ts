@@ -32,6 +32,7 @@ const OPENED: OpenedDelivery = {
   senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
   from: 'tracker',
   title: 'The build is red',
+  contentType: 'text/plain',
   sentAt: new Date('2026-10-19T07:00:00.000Z'),
   openedAt: new Date('2026-10-19T07:30:00.000Z'),
 };
@@ -46,7 +47,7 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
   });
 
   it("titles a message that is no question by its payload's first line", async () => {
-    const read = await readInbox([aPersonDelivery({ contentType: 'text/plain', payload: 'The build is red\n\nThree tests fail on main.', questionTitle: null })]).readInbox(CHARLOTTE_GRANT);
+    const read = await readInbox([aPersonDelivery({ contentType: 'text/plain', payload: 'The build is red\n\nThree tests fail on main.', headline: null })]).readInbox(CHARLOTTE_GRANT);
 
     expect(read.isOk ? read.value.deliveries.map(({ title }) => title) : []).toEqual(['The build is red']);
   });
@@ -56,7 +57,7 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
     ['application/vnd.aeolus.meeting.mic+json', 'You hold the mic of a meeting'],
     ['application/vnd.aeolus.meeting.ended+json', 'A meeting you took part in ended'],
   ])('titles a meeting notice of %s in words, not by its payload', async (contentType, title) => {
-    const notice = aPersonDelivery({ contentType, payload: '{"meetingId":"mtg_01m5qa5j85mgd4z61d9c2k4mtg"}', questionTitle: null, meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
+    const notice = aPersonDelivery({ contentType, payload: '{"meetingId":"mtg_01m5qa5j85mgd4z61d9c2k4mtg"}', headline: null, meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
 
     const read = await readInbox([notice]).readInbox(CHARLOTTE_GRANT);
 
@@ -66,7 +67,7 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
   it('cuts a first line at 80 characters, and keeps one of exactly 80', async () => {
     const eighty = 'a'.repeat(80);
 
-    const read = await readInbox([aPersonDelivery({ contentType: 'text/plain', payload: eighty, questionTitle: null }), aPersonDelivery({ contentType: 'text/plain', payload: `${eighty}b`, questionTitle: null })]).readInbox(CHARLOTTE_GRANT);
+    const read = await readInbox([aPersonDelivery({ contentType: 'text/plain', payload: eighty, headline: null }), aPersonDelivery({ contentType: 'text/plain', payload: `${eighty}b`, headline: null })]).readInbox(CHARLOTTE_GRANT);
 
     expect(read.isOk ? read.value.deliveries.map(({ title }) => title) : []).toEqual([eighty, `${'a'.repeat(79)}…`]);
   });

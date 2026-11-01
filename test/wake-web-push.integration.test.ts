@@ -132,11 +132,11 @@ async function charlottesPageInFocus() {
 }
 
 describe('a person who turned web push on, as a delivery reaches their person ship', () => {
-  it('is woken in their browser: the fleet by its name and the overview link, nothing else', async () => {
+  it('is woken in their browser: the fleet by its name and the Bridge link, nothing else', async () => {
     await trackerSendsCharlotte();
 
     await expect.poll(() => pushService.taken.map(({ text }) => text), { timeout: WOKEN_WITHIN_MS }).toEqual([
-      JSON.stringify({ fleetName: 'Acme', overviewUrl: `${address}/overview?fleet=${fleetId}` }),
+      JSON.stringify({ fleetName: 'Acme', bridgeUrl: `${address}/bridge?fleet=${fleetId}` }),
     ]);
   });
 

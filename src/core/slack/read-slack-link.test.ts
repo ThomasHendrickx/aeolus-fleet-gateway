@@ -5,7 +5,7 @@ import { aSlackApp, aSlackLink, aSlackWorkspace, memorySlackApps, memorySlackLin
 import type { Actor } from '../actors/authenticate-actor.js';
 import { createReadSlackLink } from './read-slack-link.js';
 
-// The Overview shows each person their Slack link (gateway scopes 9.6):
+// Bridge's settings show each person their Slack link (gateway scopes 9.6):
 // "Slack linked as @mathilde in Acme", or Link Slack, once the fleet's own
 // bot is in its workspace.
 
@@ -27,7 +27,7 @@ function readSlackLink(actor: Actor = MATHILDE) {
   return createReadSlackLink({ workspaces, apps, links })({ actor });
 }
 
-describe("a person's Slack link on the Overview", () => {
+describe("a person's Slack link on Bridge", () => {
   it('shows the Slack name it is linked as, in the workspace', async () => {
     await links.add(aSlackLink());
 

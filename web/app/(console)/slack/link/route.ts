@@ -1,4 +1,4 @@
-import { startSlackLink } from '../../../../features/overview/hooks/start-slack-link';
+import { startSlackLink } from '../../../../features/bridge/hooks/start-slack-link';
 
 export const dynamic = 'force-dynamic';
 

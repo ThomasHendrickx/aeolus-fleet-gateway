@@ -71,7 +71,7 @@ export function createCompleteLink(deps: {
     }
     const own = await deps.links.ofAccount(fleetId, accountId);
     if (own !== undefined && own.slackUserId !== userId) {
-      return err({ kind: 'ACCOUNT_LINKED', message: `Your account is linked to Slack as @${own.slackName} already: unlink it on the Overview first`, fleetId, name: own.slackName });
+      return err({ kind: 'ACCOUNT_LINKED', message: `Your account is linked to Slack as @${own.slackName} already: unlink it in Bridge's settings first`, fleetId, name: own.slackName });
     }
     if (own !== undefined) {
       await deps.links.remove(fleetId, accountId);
@@ -79,7 +79,7 @@ export function createCompleteLink(deps: {
     const added = await deps.links.add({ fleetId, teamId, slackUserId: userId, slackName: name, accountId, personShipId, linkedAt: now, stoppedAt: null, isShowingAll: false });
     if (added === 'taken') {
       // Another link of the Slack user or the account was kept meanwhile.
-      return refuse('LINK_REFUSED', 'This Slack account or your account was linked meanwhile: reload the Overview');
+      return refuse('LINK_REFUSED', "This Slack account or your account was linked meanwhile: reload Bridge's settings");
     }
     return ok({ fleetId });
   };

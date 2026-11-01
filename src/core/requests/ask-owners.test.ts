@@ -12,12 +12,12 @@ import type { PendingRequest } from './ports.js';
 
 // The gateway asks its owner by question when a request opens (decision
 // 0056, 0038): the owner of the gateway's ship, read from the fleet. The
-// question points to the gateway's overview, where any approver decides
+// question points to the gateway's Bridge settings, where any approver decides
 // (Q5 b), and is withdrawn once the request is decided or expired. Neither
 // is lost: one the fleet did not store is sent again under the same key.
 
 const NOW = new Date('2026-10-21T09:00:00.000Z');
-const OVERVIEW = 'https://gateway.example.com/overview';
+const OVERVIEW = 'https://gateway.example.com/bridge/settings';
 const QUESTION = 'application/vnd.aeolus.question+json';
 const WITHDRAWAL = 'application/vnd.aeolus.question-withdrawal+json';
 const QUESTION_ID = '0b5f3c1e-7d4a-4c2b-9f1e-2a6d8c4b1e01';
@@ -68,11 +68,11 @@ const sender: CallSender = {
 };
 
 function askOwners() {
-  return createAskOwners({ questions, connections, owners: fakeOwners({ [SHIP_ID]: OWNER_SHIP_ID }), sender, newQuestionId: () => QUESTION_ID, clock: { now: () => now }, overviewUrl: OVERVIEW })();
+  return createAskOwners({ questions, connections, owners: fakeOwners({ [SHIP_ID]: OWNER_SHIP_ID }), sender, newQuestionId: () => QUESTION_ID, clock: { now: () => now }, settingsUrl: OVERVIEW })();
 }
 
 describe("the gateway asks its owner when a request opens", () => {
-  it("sends the owner of the gateway's ship one question pointing to the overview, under a key of the request, and keeps that it asked", async () => {
+  it("sends the owner of the gateway's ship one question pointing to Bridge's settings, under a key of the request, and keeps that it asked", async () => {
     requests.held.push(aRequest());
 
     await expect(askOwners()).resolves.toEqual({ asked: 1, withdrawn: 0, kept: 0, refused: 0 });

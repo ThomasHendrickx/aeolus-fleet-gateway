@@ -371,6 +371,8 @@ model OpenedDelivery {
   senderShipId String   @map("sender_ship_id")
   from         String
   title        String
+  /// Its content type, which names its job (Bridge, CC10); null for one opened before the gateway kept it.
+  contentType  String?  @map("content_type")
   sentAt       DateTime @map("sent_at") @db.Timestamptz(3)
   openedAt     DateTime @map("opened_at") @db.Timestamptz(3)
 
@@ -616,4 +618,21 @@ model PartySignInNotice {
 
   @@id([fleetId, party, personShipId])
   @@map("party_sign_in_notices")
+}
+
+/// What came of an item of a person ship and where (Bridge, CC4): kept when the person acts on a delivery; the first per delivery stays.
+model ItemOutcome {
+  fleetId    String   @map("fleet_id")
+  shipId     String   @map("ship_id")
+  deliveryId String   @map("delivery_id")
+  /// bridge, chat or slack.
+  place      String
+  /// seen, answered or done.
+  kind       String
+  /// The option of a question answered with one; null otherwise.
+  option     Int?
+  at         DateTime @db.Timestamptz(3)
+
+  @@id([fleetId, shipId, deliveryId])
+  @@map("item_outcomes")
 }

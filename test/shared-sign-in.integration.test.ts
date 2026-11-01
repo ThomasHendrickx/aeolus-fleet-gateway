@@ -66,13 +66,13 @@ async function accountInView(sent: { cookie: string; fleet?: string }): Promise<
 
 describe("signing in to the gateway's pages with the shared sign-in", () => {
   it('goes to pagasae and back to the page asked for', async () => {
-    const started = await fetch(`${address}/sign-in/start?return_to=${encodeURIComponent(`/overview?fleet=${FLEET}`)}`, { redirect: 'manual' });
+    const started = await fetch(`${address}/sign-in/start?return_to=${encodeURIComponent(`/bridge?fleet=${FLEET}`)}`, { redirect: 'manual' });
     const browserSecret = (started.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
     const atPagasae = await fetch(started.headers.get('location') ?? '', { redirect: 'manual' });
 
     const back = await fetch(atPagasae.headers.get('location') ?? '', { redirect: 'manual', headers: { cookie: browserSecret } });
 
-    expect({ status: back.status, location: back.headers.get('location') }).toEqual({ status: 302, location: `/overview?fleet=${FLEET}` });
+    expect({ status: back.status, location: back.headers.get('location') }).toEqual({ status: 302, location: `/bridge?fleet=${FLEET}` });
   });
 
   it('knows the account in the fleet the page names, with the scopes pagasae gives it there', async () => {

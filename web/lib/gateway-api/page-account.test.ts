@@ -22,7 +22,7 @@ describe('the account a page of the web app shows its fleet as', () => {
   });
 
   it('shows an account that may open the gateway in none of its fleets that the gateway is off for its fleet, and the way back to its account', () => {
-    expect(pageAccountOf({ inView: { kind: 'off', fleetName: 'Acme', accountUrl: 'https://account.aeolus-fleet.dev/account' } }, '/overview')).toEqual({
+    expect(pageAccountOf({ inView: { kind: 'off', fleetName: 'Acme', accountUrl: 'https://account.aeolus-fleet.dev/account' } }, '/bridge')).toEqual({
       kind: 'off',
       fleetName: 'Acme',
       accountUrl: 'https://account.aeolus-fleet.dev/account',

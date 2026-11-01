@@ -2,7 +2,7 @@ import type { ShipId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, fakePersonShipDoor } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, fakePersonShipDoor, memoryItemOutcomes } from '../../../test/support/people-fakes.js';
 import { aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackLinks, memorySlackPosts } from '../../../test/support/slack-fakes.js';
 import { createAnswerInSlack } from './answer-in-slack.js';
 
@@ -28,12 +28,14 @@ let links: ReturnType<typeof memorySlackLinks>;
 let posts: ReturnType<typeof memorySlackPosts>;
 let slack: ReturnType<typeof fakeSlackMessages>;
 let fleet: ReturnType<typeof fakePersonShipDoor>;
+let outcomes: ReturnType<typeof memoryItemOutcomes>;
 
 beforeEach(async () => {
   apps = memorySlackApps();
   links = memorySlackLinks();
   posts = memorySlackPosts();
   slack = fakeSlackMessages();
+  outcomes = memoryItemOutcomes();
   fleet = fakePersonShipDoor({ crewToken: 'crew-mathilde', deliveries: [QUESTION] });
   await fleet.door.ack('crew-mathilde', QUESTION.deliveryId);
   await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
@@ -51,6 +53,7 @@ function press(option: number, sent: { signature?: string; userId?: string } = {
     posts,
     crews: { find: (_fleetId, shipId) => Promise.resolve(shipId === MATHILDE_SHIP ? { fleetId: FLEET_ID, shipId, crewToken: 'crew-mathilde', crewedAt: NOW } : undefined) },
     door: fleet.door,
+    outcomes,
     slack: slack.messages,
     signatures,
     clock: { now: () => NOW },
@@ -65,6 +68,20 @@ describe("a press of a question's button in Slack", () => {
     expect(fleet.replies).toEqual([{ to: BUDGET_CHECK, inReplyTo: QUESTION.messageId, contentType: 'application/vnd.aeolus.answer+json', payload: '{"questionId":"5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11","option":1}', idempotencyKey: `answer-${QUESTION.deliveryId}` }]);
     expect(fleet.calls).toContain(`handled(${QUESTION.deliveryId})`);
     expect(slack.state.reactions).toEqual([{ botToken: 'xoxb-1', channel: 'D0MATHILDE', ts: '1730020000.000001', name: 'white_check_mark' }]);
+  });
+
+  it('keeps it answered in Slack with the option pressed, so Bridge says where it was answered (Bridge, CC4)', async () => {
+    await press(2);
+
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, place: 'slack', kind: 'answered', option: 2, at: NOW }]);
+  });
+
+  it('keeps nothing while the fleet did not take handled', async () => {
+    fleet.refusals.handled.push({ code: 'FLEET_UNREACHABLE', message: 'The fleet did not answer' });
+
+    await press(2);
+
+    expect(outcomes.held).toEqual([]);
   });
 
   it("says in the question's thread that the message is sealed and the key not reachable, answering nothing, when the fleet cannot unseal the question", async () => {

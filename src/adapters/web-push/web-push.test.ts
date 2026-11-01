@@ -8,7 +8,7 @@ import { createWebPush } from './web-push.js';
 // The gateway's web push: a wake to one browser through its push service,
 // encrypted for that browser and signed with the gateway's push keys (VAPID).
 
-const WAKE = { fleetName: 'Acme', overviewUrl: 'https://gateway.example/overview?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv' };
+const WAKE = { fleetName: 'Acme', bridgeUrl: 'https://gateway.example/bridge?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv' };
 const keys = webPushLibrary.generateVAPIDKeys();
 
 let service: Awaited<ReturnType<typeof startPushService>>;
@@ -37,10 +37,10 @@ function subscriptionOf(path: string) {
 }
 
 describe('a wake sent to a browser through its push service', () => {
-  it('says only the fleet by its name and the overview link, as the browser reads it', async () => {
+  it('says only the fleet by its name and the Bridge link, as the browser reads it', async () => {
     const sent = await webPush().send(subscriptionOf('/firefox'), WAKE);
 
-    expect({ sent, read: service.taken.map(({ text }) => text) }).toEqual({ sent: 'sent', read: ['{"fleetName":"Acme","overviewUrl":"https://gateway.example/overview?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv"}'] });
+    expect({ sent, read: service.taken.map(({ text }) => text) }).toEqual({ sent: 'sent', read: ['{"fleetName":"Acme","bridgeUrl":"https://gateway.example/bridge?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv"}'] });
   });
 
   it("is signed with the gateway's push keys", async () => {

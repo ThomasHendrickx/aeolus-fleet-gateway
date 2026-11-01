@@ -2,7 +2,7 @@
 export function PlainHeader() {
   return (
     <header data-testid="plain-header" className="flex h-14 items-center border-b border-border px-4">
-      <a href="/overview" className="text-section font-semibold">
+      <a href="/bridge" className="text-section font-semibold">
         Aeolus
       </a>
     </header>
