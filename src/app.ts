@@ -137,6 +137,7 @@ import { createSlackLinkSeals } from './adapters/crypto/slack-link-seals.js';
 import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_INSTALL_PATH, SLACK_LINK_PATH } from './adapters/http/slack-routes.js';
 import { createPrismaSlackPosts } from './adapters/prisma/slack-posts.js';
 import { createAnswerInSlack } from './core/slack/answer-in-slack.js';
+import { createDoneInSlack } from './core/slack/done-in-slack.js';
 import { createEditSlackPosts } from './core/slack/edit-slack-posts.js';
 import { createSeeInSlack } from './core/slack/see-in-slack.js';
 import { createShowInSlack } from './core/slack/show-in-slack.js';
@@ -782,7 +783,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // View sync in Slack (Bridge, section 7): each post edited once something came of its item, at once when an inbox change is heard.
   const slackEdits = createRoundWorker({
     name: 'slack edits',
-    round: createEditSlackPosts({ posts: slackPosts, apps: slackApps, slack: slackMessages }),
+    round: createEditSlackPosts({ posts: slackPosts, apps: slackApps, slack: slackMessages, bridgeUrlOf }),
     sleep,
     intervalMs: SLACK_EDIT_ROUND_MS,
     log: server.log,
@@ -949,6 +950,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
     answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
     seeInSlack: createSeeInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
+    doneInSlack: createDoneInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
     completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl, steps: slackLinkSteps, finishStep: finishOwnStep }),
     takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, posts: slackPosts, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl }),
   });

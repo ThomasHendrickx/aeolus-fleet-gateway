@@ -88,7 +88,7 @@ describe('the posts to edit once something came of their item (Bridge, view sync
   const AT = new Date('2026-10-31T19:58:00.000Z');
   const outcomeOf = (deliveryId: `dlv_${string}`, at: Date) => ({ fleetId: ACME, shipId: MATHILDE_SHIP, deliveryId, place: 'bridge' as const, kind: 'answered' as const, option: 2, at });
 
-  it('finds the posts in Slack whose item something came of, with what came of it, oldest outcome first', async () => {
+  it('finds the posts in Slack whose item something came of, with what came of it and when, oldest outcome first', async () => {
     const posts = createPrismaSlackPosts(prisma);
     const outcomes = createPrismaItemOutcomes(prisma);
     const second = aPost({ messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', ts: '1730020000.000002' });
@@ -99,8 +99,8 @@ describe('the posts to edit once something came of their item (Bridge, view sync
     await outcomes.save(outcomeOf('dlv_01m3tbfspe96yf1rnr4ank0001', new Date(AT.getTime() + 1000)));
 
     await expect(posts.toEdit({ limit: 10 })).resolves.toEqual([
-      { post: second, outcome: { place: 'bridge', kind: 'answered', option: 2 } },
-      { post: aPost(), outcome: { place: 'bridge', kind: 'answered', option: 2 } },
+      { post: second, outcome: { place: 'bridge', kind: 'answered', option: 2, at: AT } },
+      { post: aPost(), outcome: { place: 'bridge', kind: 'answered', option: 2, at: new Date(AT.getTime() + 1000) } },
     ]);
   });
 

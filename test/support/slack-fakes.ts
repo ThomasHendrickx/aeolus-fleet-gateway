@@ -1,7 +1,7 @@
-import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
+import { idSchema, type FleetId, type MessageId, type ShipId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
-import type { InstallState, InstallStates, LinkState, LinkStates, MadeApp, ProxyShipKinds, ShipNames, ShipToExpose, SlackApps, SlackButton, SlackEvents, SlackIdentity, SlackLinks, SlackLinkStep, SlackLinkSteps, SlackMessages, SlackPosts, SlackRefusal, SlackShips, SlackSignIn, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
+import type { InstallState, InstallStates, LinkState, LinkStates, MadeApp, ProxyShipKinds, ShipNames, ShipToExpose, SlackApps, SlackEvents, SlackIdentity, SlackLinks, SlackLinkStep, SlackLinkSteps, SlackMessage, SlackMessages, SlackPosts, SlackRefusal, SlackShips, SlackSignIn, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
 import type { KeptSlackEvent } from '../../src/core/slack/kept-slack-event.js';
 import type { SlackLink } from '../../src/core/slack/slack-link.js';
 import { isUnfinished, type SlackPost } from '../../src/core/slack/slack-post.js';
@@ -335,9 +335,9 @@ export function fakeSlackMessages() {
     onlyTo: new Array<{ botToken: string; channel: string; user: string; text: string; button?: { text: string; url: string } }>(),
     inThread: new Array<{ botToken: string; channel: string; threadTs: string; text: string }>(),
     reactions: new Array<{ botToken: string; channel: string; ts: string; name: string }>(),
-    posts: new Array<{ botToken: string; channel: string; threadTs: string | null; text: string; buttons: readonly SlackButton[]; ts: string }>(),
-    /** Each edit Slack took, in order: a message given new text, its buttons gone. */
-    edits: new Array<{ botToken: string; channel: string; ts: string; text: string }>(),
+    posts: new Array<{ botToken: string; messageId: MessageId; channel: string; threadTs: string | null; ts: string } & SlackMessage>(),
+    /** Each edit Slack took, in order: a message given a new item or text, its buttons gone. */
+    edits: new Array<{ botToken: string; channel: string; ts: string; message: SlackMessage }>(),
     refusal: noRefusal(),
     /** Slack's answers to the next edits, before it takes one. */
     editRefusals: new Array<SlackRefusal>(),
@@ -361,13 +361,13 @@ export function fakeSlackMessages() {
         return Promise.resolve(err(refused));
       }
       const ts = `1730020000.${String(state.posts.length + 1).padStart(6, '0')}`;
-      state.posts.push({ botToken, ...message, ts });
+      state.posts.push({ botToken, messageId: message.messageId, channel: message.channel, threadTs: message.threadTs, ...message.message, ts });
       return Promise.resolve(ok({ channel: message.channel, ts }));
     },
-    textOf: (_botToken, { channel, ts }) => {
+    messageOf: (_botToken, { channel, ts }) => {
       const posted = state.posts.find((each) => each.channel === channel && each.ts === ts);
-      const text = state.edits.findLast((each) => each.channel === channel && each.ts === ts)?.text ?? posted?.text;
-      return Promise.resolve(text === undefined ? err({ kind: 'refused', error: 'message_not_found' }) : ok(text));
+      const message = state.edits.findLast((each) => each.channel === channel && each.ts === ts)?.message ?? posted;
+      return Promise.resolve(message === undefined ? err({ kind: 'refused', error: 'message_not_found' }) : ok({ text: message.text, item: message.item, buttons: message.buttons }));
     },
     update: (botToken, message) => {
       const refused = state.editRefusals.shift() ?? state.refusal;
@@ -508,7 +508,7 @@ export function memorySlackPosts(outcomes: { held: readonly ItemOutcome[] } = { 
           })
           .sort((a, b) => a.at.getTime() - b.at.getTime())
           .slice(0, limit)
-          .map(({ post, outcome: { place, kind, option } }) => ({ post, outcome: { place, kind, option } })),
+          .map(({ post, outcome: { place, kind, option, at } }) => ({ post, outcome: { place, kind, option, at } })),
       ),
     markEdited: (fleetId, post) => {
       edited.add(keyOf(fleetId, post));

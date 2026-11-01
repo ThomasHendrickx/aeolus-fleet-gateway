@@ -87,7 +87,9 @@ export async function startFakeSlack(): Promise<FakeSlack> {
   const messageAt = (channel: string | null, ts: string | null) => {
     const index = posted.findIndex((each, at) => each.form.channel === channel && `1730019600.${String(at + 1).padStart(6, '0')}` === ts);
     const post = posted[index];
-    return post === undefined ? undefined : { ts: ts ?? '', thread_ts: post.form.thread_ts, text: updated.findLast((each) => each.form.channel === channel && each.form.ts === ts)?.form.text ?? post.form.text ?? '' };
+    const held = updated.findLast((each) => each.form.channel === channel && each.form.ts === ts)?.form ?? post?.form;
+    const attachments: unknown = JSON.parse(held?.attachments ?? '[]');
+    return post === undefined ? undefined : { ts: ts ?? '', thread_ts: post.form.thread_ts, text: held?.text ?? '', attachments };
   };
   let signingInAs = { userId: 'U0MATHILDE', name: 'mathilde', teamId: SLACK_TEAM.id };
   let rotations = 0;
