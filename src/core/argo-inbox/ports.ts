@@ -6,6 +6,7 @@
 import type { DeliveryId, DeliveryState, FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
+import type { PersonShip, WakeChannelName } from '../people/ports.js';
 import type { Result } from '../shared/result.js';
 
 /** An account allowed as argo in a fleet, as its latest account token said, and the person ship it is reached at. */
@@ -51,4 +52,19 @@ export interface ArgoInboxDoor {
   entry(crewToken: string, read: { argo: ShipId; messageId: MessageId }): Promise<Result<ArgoInboxEntry | null, FleetRefusal>>;
   /** The messages whose delivery to argo changed after the position, waiting while none did until the signal aborts, and the position to follow from next. */
   changes(crewToken: string, follow: { argo: ShipId; afterSeq: number; signal: AbortSignal }): Promise<Result<{ messageIds: readonly MessageId[]; lastSeq: number }, FleetRefusal>>;
+}
+
+/**
+ * Outbound port: argo's wakes of each person ship, apart from its own (argo's
+ * inbox, AI4, AI5): the messages to argo a wake or a page in focus already
+ * covered, so each is woken once per person, and when each channel last woke
+ * the person ship for argo, so the window holds across restarts and instances.
+ */
+export interface ArgoWakes {
+  coveredOf(ship: PersonShip): Promise<ReadonlySet<MessageId>>;
+  cover(ship: PersonShip, messageIds: readonly MessageId[]): Promise<void>;
+  /** Forgets the covered messages no longer open at argo: done there, they never open again. */
+  forgetAllBut(ship: PersonShip, open: readonly MessageId[]): Promise<void>;
+  lastSentAt(ship: PersonShip, channel: WakeChannelName): Promise<Date | undefined>;
+  record(wake: { ship: PersonShip; channel: WakeChannelName; sentAt: Date }): Promise<void>;
 }

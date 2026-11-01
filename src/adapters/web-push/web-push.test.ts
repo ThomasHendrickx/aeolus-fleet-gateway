@@ -8,7 +8,7 @@ import { createWebPush } from './web-push.js';
 // The gateway's web push: a wake to one browser through its push service,
 // encrypted for that browser and signed with the gateway's push keys (VAPID).
 
-const WAKE = { fleetName: 'Acme', bridgeUrl: 'https://gateway.example/bridge?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv' };
+const WAKE = { fleetName: 'Acme', bridgeUrl: 'https://gateway.example/bridge?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv', waitsAt: 'personShip' as const };
 const keys = webPushLibrary.generateVAPIDKeys();
 
 let service: Awaited<ReturnType<typeof startPushService>>;
