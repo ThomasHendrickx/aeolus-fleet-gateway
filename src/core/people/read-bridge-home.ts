@@ -83,8 +83,8 @@ function newestFirst(a: HomeItem, b: HomeItem): number {
  * question whose answer is in the basket says so, and still waits until the
  * basket is sent (section 9, rule 1). Each item names where it was seen, the
  * places besides Bridge that show it, and what its row does in place; the
- * gateway's own step, told apart by its sender, the gateway's ship, shows in
- * Bridge alone, as its own action in the gateway's words.
+ * gateway's own step, told apart by its sender, the gateway's ship, is its
+ * own action in the gateway's words.
  */
 export function createReadBridgeHome(deps: {
   crewPersonShip: CrewPersonShip;
@@ -127,11 +127,10 @@ export function createReadBridgeHome(deps: {
     const inBasket = inBasketOf(entries);
     const showingIn = placesOf(routingOf(routes, deps.defaults), deps);
     const own = { gatewayShipId: gateway?.shipId, actionOf: deps.ownStepActionOf };
-    const isOwn = (senderShipId: ShipId) => senderShipId === gateway?.shipId;
     /** What the row shows of an item besides its entry: an alert or not, the places that show it, and what it does in place. */
     const rowOf = (item: Omit<ActingItem, 'senderShipId' | 'pick' | 'stepLink'>, of: { contentType: string; sentAt: Date; senderShipId: ShipId; pick: number | null; stepLink: string | null }) => ({
       isAlert: essenceOf(of.contentType) === ALERT_CONTENT_TYPE,
-      places: isOwn(of.senderShipId) ? [] : showingIn(of),
+      places: showingIn(of),
       actInPlace: actInPlaceOf({ ...item, senderShipId: of.senderShipId, pick: of.pick, stepLink: of.stepLink }, own),
     });
     const taken: HomeItem[] = waiting.value.deliveries.map((delivery) => {
