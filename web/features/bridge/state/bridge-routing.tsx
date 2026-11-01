@@ -2,14 +2,12 @@ import { Suspense } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
-import { NoSignIn } from '../../sign-in/ui/no-sign-in';
-import { readBasketCount, readBridgeRouting } from '../hooks/read-bridge';
+import { readBridgeRouting } from '../hooks/read-bridge';
 import { BRIDGE_ROUTING_PATH } from '../paths';
 import { slackLinkOutcomeOf } from '../services/slack-link-outcomes';
-import { BridgeNav } from '../ui/bridge-nav';
+import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { Notice } from '../ui/notice';
-import { LiveRefresh } from './live-refresh';
 import { RoutingPanel } from './routing-panel';
 import { SlackLinkPanel } from './slack-link-panel';
 import { WebPushPanel } from './web-push-panel';
@@ -59,19 +57,19 @@ async function RoutingParts({ api, fleetId }: { api: GatewayApi; fleetId: string
 export async function BridgeRoutingPage({ searchParams }: { searchParams: SearchParams }) {
   const page = await signedInPage({ path: BRIDGE_ROUTING_PATH, searchParams });
   if (page.kind === 'noSignIn') {
-    return <NoSignIn />;
+    return <BridgeNoSignIn />;
   }
   const linked = slackLinkOutcomeOf(searchParams);
   return (
-    <div className="grid gap-6">
-      <LiveRefresh fleetId={page.fleetId} />
-      <BridgeNav fleetId={page.fleetId} current="settings" basketCount={await readBasketCount(page.api)} />
-      <h1 className="text-heading font-semibold">Where things show</h1>
-      <p className="text-muted-foreground">Per job, the places that show it besides Bridge. Bridge always keeps every item; a change applies at once and loses nothing.</p>
-      {linked === undefined ? null : <Notice message={linked.message} isFailure={linked.isFailure} />}
-      <Suspense fallback={<BridgeSkeleton />}>
-        <RoutingParts api={page.api} fleetId={page.fleetId} />
-      </Suspense>
-    </div>
+    <BridgeShell api={page.api} fleetId={page.fleetId} screen="routing">
+      <div className="grid gap-6">
+        <h1 className="text-heading font-semibold">Where things show</h1>
+        <p className="text-muted-foreground">Per job, the places that show it besides Bridge. Bridge always keeps every item; a change applies at once and loses nothing.</p>
+        {linked === undefined ? null : <Notice message={linked.message} isFailure={linked.isFailure} />}
+        <Suspense fallback={<BridgeSkeleton />}>
+          <RoutingParts api={page.api} fleetId={page.fleetId} />
+        </Suspense>
+      </div>
+    </BridgeShell>
   );
 }

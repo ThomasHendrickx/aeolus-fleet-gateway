@@ -2,13 +2,11 @@ import { Suspense } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
-import { NoSignIn } from '../../sign-in/ui/no-sign-in';
-import { readBasket, readBasketCount } from '../hooks/read-bridge';
+import { readBasket } from '../hooks/read-bridge';
 import { BRIDGE_BASKET_PATH } from '../paths';
-import { BridgeNav } from '../ui/bridge-nav';
+import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { BasketPanel } from './basket-panel';
-import { LiveRefresh } from './live-refresh';
 import { RecordUnreadable } from './record-unreadable';
 
 async function BasketParts({ api, fleetId }: { api: GatewayApi; fleetId: string }) {
@@ -32,15 +30,15 @@ async function BasketParts({ api, fleetId }: { api: GatewayApi; fleetId: string 
 export async function BridgeBasketPage({ searchParams }: { searchParams: SearchParams }) {
   const page = await signedInPage({ path: BRIDGE_BASKET_PATH, searchParams });
   if (page.kind === 'noSignIn') {
-    return <NoSignIn />;
+    return <BridgeNoSignIn />;
   }
   return (
-    <div className="grid gap-6">
-      <LiveRefresh fleetId={page.fleetId} />
-      <BridgeNav fleetId={page.fleetId} current="basket" basketCount={await readBasketCount(page.api)} />
-      <Suspense fallback={<BridgeSkeleton />}>
-        <BasketParts api={page.api} fleetId={page.fleetId} />
-      </Suspense>
-    </div>
+    <BridgeShell api={page.api} fleetId={page.fleetId} screen="basket">
+      <div className="grid gap-6">
+        <Suspense fallback={<BridgeSkeleton />}>
+          <BasketParts api={page.api} fleetId={page.fleetId} />
+        </Suspense>
+      </div>
+    </BridgeShell>
   );
 }

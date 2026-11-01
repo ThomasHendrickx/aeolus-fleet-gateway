@@ -7,13 +7,17 @@
  * API refuses the account (FORBIDDEN) is not theirs to see, so it is left
  * out.
  */
+import { cache } from 'react';
+
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
+import { readYourFleet } from '../fleet/hooks/read-your-fleet';
 import { refusalCodeOf, refusalMessageOf } from '../../../lib/gateway-api/page-api';
 import type { WakeChannels } from '../services/deliveries';
 import type { BasketView } from '../services/basket';
 import type { BridgeHome, RecordPage } from '../services/items';
 import type { ShownRequest } from '../services/requests';
 import { decidePlacesOf, type RoutedPlace, type RoutingView } from '../services/routing';
+import { shellCountsOf, type ShellCounts } from '../services/shell';
 
 /**
  * What Bridge read of the person ship: what it answered; none, for an account
@@ -66,9 +70,8 @@ async function personRead<T>(call: Promise<T>): Promise<BridgeRead<T>> {
   }
 }
 
-export function readBridgeHome(api: GatewayApi): Promise<BridgeRead<BridgeHome>> {
-  return personRead(api.people.home.query());
-}
+/** Bridge home, read once per page: the shell's counts and home's lists share the read. */
+export const readBridgeHome = cache((api: GatewayApi): Promise<BridgeRead<BridgeHome>> => personRead(api.people.home.query()));
 
 /** The places besides Bridge that show a question, for an opened question to name; none while routing cannot be read, as the question shows without them. */
 export async function readDecidePlaces(api: GatewayApi): Promise<RoutedPlace[] | undefined> {
@@ -87,6 +90,17 @@ export function readBasket(api: GatewayApi): Promise<BridgeRead<BasketView>> {
 export async function readBasketCount(api: GatewayApi): Promise<number> {
   const read = await personRead(api.people.basketCount.query());
   return read.kind === 'read' ? read.value.count : 0;
+}
+
+/**
+ * The counts Bridge's shell shows on every page: what waits and the unseen
+ * to stay aware of, from Bridge home's read, the basket's answers, and the
+ * ships with an alert, from Your fleet's read. A count it cannot read now is
+ * left out.
+ */
+export async function readShellCounts(api: GatewayApi): Promise<ShellCounts> {
+  const [home, basket, fleet] = await Promise.all([readBridgeHome(api), readBasketCount(api), readYourFleet(api)]);
+  return shellCountsOf({ home, basket, fleetAlerts: fleet.kind === 'read' ? fleet.value.counts.alert : undefined });
 }
 
 export function readRecordPage(api: GatewayApi, cursor: string | null): Promise<BridgeRead<RecordPage>> {

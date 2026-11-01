@@ -127,7 +127,8 @@ function WaitingRows({ items, readAt, opening }: { items: readonly HomeItem[]; r
   );
 }
 
-function StayAwareRows({ items, readAt, opening }: { items: readonly HomeItem[]; readAt: Date; opening: ItemOpening }) {
+/** The stay-aware feed's rows, a dot on those not seen; home and the Stay aware page share them. */
+export function StayAwareRows({ items, readAt, opening }: { items: readonly HomeItem[]; readAt: Date; opening: ItemOpening }) {
   return (
     <ul className={opening.opened === undefined ? 'overflow-hidden rounded-lg border border-border bg-card' : 'border-t border-border'}>
       {items.map((item) => (
