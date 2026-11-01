@@ -86,4 +86,10 @@ describe('a done item read back whole (decide.html)', () => {
 
     expect([markup.includes('Alert'), markup.includes('<em>working</em>'), markup.includes('Seen in Bridge at 19:49')]).toEqual([true, true, true]);
   });
+
+  it('titles its own screen on a phone by what came of it, and keeps its history to a desktop, as drawn', () => {
+    const markup = render(anItem());
+
+    expect([/data-testid="bridge-item-screen-bar".*>Answered</.test(markup), /data-testid="bridge-done-history" class="[^"]*max-md:hidden/.test(markup)]).toEqual([true, true]);
+  });
 });
