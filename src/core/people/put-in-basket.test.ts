@@ -27,6 +27,7 @@ const OPENED: OpenedDelivery = {
   contentType: 'application/vnd.aeolus.question+json',
   askedQuestionId: QUESTION_ID,
   withdrawnQuestionId: null,
+  stepId: null,
   sentAt: new Date('2026-10-31T19:41:00.000Z'),
   openedAt: new Date('2026-10-31T19:50:00.000Z'),
 };

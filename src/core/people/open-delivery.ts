@@ -75,6 +75,7 @@ function keptOf(deps: DealDeps, opening: { caller: PersonCaller; shipId: OpenedD
     contentType: delivery.contentType,
     askedQuestionId: delivery.askedQuestionId,
     withdrawnQuestionId: delivery.withdrawnQuestionId,
+    stepId: delivery.stepId,
     sentAt: delivery.sentAt,
     openedAt: deps.clock.now(),
   };

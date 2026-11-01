@@ -95,6 +95,7 @@ async function answeredIntoTheBasket(asker: { shipId: ShipId; crewToken: string 
     contentType: QUESTION,
     askedQuestionId: question.id,
     withdrawnQuestionId: null,
+    stepId: null,
     sentAt: delivery.sentAt,
     openedAt: AT,
   });

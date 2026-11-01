@@ -11,10 +11,10 @@ export type Place = 'bridge' | 'chat' | 'slack';
 
 /**
  * What the person did: saw it, answered it (with the option they picked, if
- * any), or marked it done; saw a question its asker withdrew or replaced; or
+ * any), or marked it done, or a step that they cannot do it; saw a question its asker withdrew or replaced; or
  * removed an answer from the basket the fleet refused, so it was not sent.
  */
-export type OutcomeKind = 'seen' | 'answered' | 'done' | 'withdrawn' | 'replaced' | 'notSent';
+export type OutcomeKind = 'seen' | 'answered' | 'done' | 'cannot' | 'withdrawn' | 'replaced' | 'notSent';
 
 export interface ItemOutcome {
   readonly fleetId: FleetId;

@@ -39,6 +39,7 @@ const KINDS: Record<Outcome['kind'], string> = {
   seen: 'Seen',
   answered: 'Answered',
   done: 'Done',
+  cannot: 'Marked cannot',
   withdrawn: 'Withdrawn by its asker, seen',
   replaced: 'Replaced by its asker, seen',
   notSent: 'Not sent, removed',

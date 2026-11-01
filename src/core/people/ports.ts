@@ -170,6 +170,8 @@ export interface OpenedDelivery {
   /** The uuid of the question it asks, and of the one it withdraws or replaces (decision 0038), as its payload named them; none otherwise. */
   readonly askedQuestionId: string | null;
   readonly withdrawnQuestionId: string | null;
+  /** The uuid of the step it asks (Bridge, CC14), as its payload named it; none otherwise. */
+  readonly stepId: string | null;
   readonly sentAt: Date;
   readonly openedAt: Date;
 }
