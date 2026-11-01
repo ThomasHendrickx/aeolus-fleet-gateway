@@ -364,17 +364,21 @@ model WakeSent {
 
 /// A delivery a person opened, kept until they deal with it, so their answer finds its message and sender and their inbox lists it (Q28 (a)).
 model OpenedDelivery {
-  fleetId      String   @map("fleet_id")
-  shipId       String   @map("ship_id")
-  deliveryId   String   @map("delivery_id")
-  messageId    String   @map("message_id")
-  senderShipId String   @map("sender_ship_id")
-  from         String
-  title        String
+  fleetId             String   @map("fleet_id")
+  shipId              String   @map("ship_id")
+  deliveryId          String   @map("delivery_id")
+  messageId           String   @map("message_id")
+  senderShipId        String   @map("sender_ship_id")
+  from                String
+  title               String
   /// Its content type, which names its job (Bridge, CC10); null for one opened before the gateway kept it.
-  contentType  String?  @map("content_type")
-  sentAt       DateTime @map("sent_at") @db.Timestamptz(3)
-  openedAt     DateTime @map("opened_at") @db.Timestamptz(3)
+  contentType         String?  @map("content_type")
+  /// The uuid of the question it asks (decision 0038): a question's own, a replacement's new one; null otherwise.
+  askedQuestionId     String?  @map("asked_question_id")
+  /// The uuid of the question it withdraws or replaces; null otherwise.
+  withdrawnQuestionId String?  @map("withdrawn_question_id")
+  sentAt              DateTime @map("sent_at") @db.Timestamptz(3)
+  openedAt            DateTime @map("opened_at") @db.Timestamptz(3)
 
   @@id([fleetId, shipId, deliveryId])
   @@map("opened_deliveries")

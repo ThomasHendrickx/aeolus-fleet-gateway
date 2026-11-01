@@ -152,7 +152,7 @@ export interface PersonShipDoor {
  * A delivery a person opened, as the gateway keeps it until they deal with
  * it (Q28 (a)): what their answer needs once the delivery is acknowledged,
  * its message and sender, and what their inbox lists, its title and when it
- * was sent, never its payload. It is the person ship's, so every client of
+ * was sent, and the questions it asks and withdraws, never its payload. It is the person ship's, so every client of
  * the person finds it.
  */
 export interface OpenedDelivery {
@@ -165,6 +165,9 @@ export interface OpenedDelivery {
   readonly title: string;
   /** Its content type, which names its job (Bridge, CC10); none for one opened before the gateway kept it. */
   readonly contentType: string | null;
+  /** The uuid of the question it asks, and of the one it withdraws or replaces (decision 0038), as its payload named them; none otherwise. */
+  readonly askedQuestionId: string | null;
+  readonly withdrawnQuestionId: string | null;
   readonly sentAt: Date;
   readonly openedAt: Date;
 }

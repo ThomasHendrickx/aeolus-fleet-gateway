@@ -53,6 +53,8 @@ export function createOpenDelivery(deps: DealDeps): OpenDelivery {
       from: delivery.senderName,
       title: titleOf(delivery),
       contentType: delivery.contentType,
+      askedQuestionId: delivery.askedQuestionId,
+      withdrawnQuestionId: delivery.withdrawnQuestionId,
       sentAt: delivery.sentAt,
       openedAt: deps.clock.now(),
     };

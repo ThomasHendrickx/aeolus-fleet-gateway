@@ -15,6 +15,8 @@ function openedOf(row: OpenedDeliveryRow): OpenedDelivery {
     from: row.from,
     title: row.title,
     contentType: row.contentType,
+    askedQuestionId: row.askedQuestionId,
+    withdrawnQuestionId: row.withdrawnQuestionId,
     sentAt: row.sentAt,
     openedAt: row.openedAt,
   };
