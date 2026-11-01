@@ -10,14 +10,35 @@ import type { inferRouterOutputs } from '@trpc/server';
 import { z } from 'zod';
 
 import type { GatewayRouter } from '../../../../src/adapters/trpc/router.js';
+import { SHIP_STATES, type ShipState, type YourFleet } from '../fleet/services/your-fleet';
 
 /** Who the person can send a message to, as the API answers it: the ships their person ship may send to now, and the name it sends as. */
 export type SendTo = inferRouterOutputs<GatewayRouter>['people']['sendTo'];
 
+/** A ship the form offers: by name, with its state as Your fleet shows it, none where Your fleet does not show the ship. */
+export interface SendableShip {
+  readonly name: string;
+  readonly state: ShipState | null;
+}
+
+/**
+ * The ships the person ship may send to, each in its state as Your fleet
+ * shows it, in Your fleet's order: alerts first, then waiting, working and
+ * idle, ties by name; a ship Your fleet does not show, or every ship when it
+ * could not be read, comes after, with no state.
+ */
+export function sendableShipsOf(ships: readonly string[], fleet: YourFleet | undefined): readonly SendableShip[] {
+  const states = new Map((fleet?.groups ?? []).flatMap(({ tiles }) => tiles.map(({ name, state }) => [name, state] as const)));
+  const rank = (state: ShipState | null) => (state === null ? SHIP_STATES.length : SHIP_STATES.indexOf(state));
+  return ships
+    .map((name) => ({ name, state: states.get(name) ?? null }))
+    .toSorted((one, other) => rank(one.state) - rank(other.state) || one.name.localeCompare(other.name));
+}
+
 /** The ships whose name holds what the person typed, whatever its case; every ship while nothing is typed. */
-export function shipsMatching(ships: readonly string[], typed: string): readonly string[] {
+export function shipsMatching(ships: readonly SendableShip[], typed: string): readonly SendableShip[] {
   const sought = typed.trim().toLowerCase();
-  return sought === '' ? ships : ships.filter((ship) => ship.toLowerCase().includes(sought));
+  return sought === '' ? ships : ships.filter(({ name }) => name.toLowerCase().includes(sought));
 }
 
 /** Send is on once a ship is picked and something is written. */

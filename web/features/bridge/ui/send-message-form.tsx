@@ -5,13 +5,25 @@ import { CircleAlert, Info, LoaderCircle, RotateCw, Search, Send, Ship, X } from
 import { useState } from 'react';
 
 import { BUTTONS } from '../../forms/ui/look';
-import { isSendable, shipsMatching, type SendFailure, type SendTo } from '../services/send-message';
+import { STATE_LABELS, type ShipState } from '../fleet/services/your-fleet';
+import { isSendable, shipsMatching, type SendableShip, type SendFailure } from '../services/send-message';
 
 /** Where the form stands: written in, on its way to the fleet, or failed, kept for the person. */
 export type SendPhase = { readonly kind: 'writing' } | { readonly kind: 'sending' } | { readonly kind: 'failed'; readonly failure: SendFailure };
 
 /** Who the person can send to, as the form read it on opening: reading, read, or why it could not be read. */
-export type SendToRead = { readonly kind: 'reading' } | { readonly kind: 'read'; readonly value: SendTo } | { readonly kind: 'unreadable'; readonly message: string };
+export type SendToRead =
+  | { readonly kind: 'reading' }
+  | { readonly kind: 'read'; readonly value: { readonly sentAs: string; readonly ships: readonly SendableShip[] } }
+  | { readonly kind: 'unreadable'; readonly message: string };
+
+/** Each state's tone, as Your fleet colours its word. */
+const STATE_TONES: Record<ShipState, string> = {
+  alert: 'bg-tone-attention-bg text-tone-attention-fg',
+  waiting: 'bg-tone-waiting-bg text-tone-waiting-fg',
+  working: 'bg-tone-ok-bg text-tone-ok-fg',
+  idle: 'bg-tone-ended-bg text-tone-ended-fg',
+};
 
 const FIELD = 'flex min-h-9 w-full items-center gap-2 rounded-md border border-input bg-background px-2';
 
@@ -40,10 +52,11 @@ function ShipSearch({ sendTo, onPick }: { sendTo: SendToRead; onPick: (to: strin
       filteredItems={shipsMatching(ships, typed)}
       inputValue={typed}
       onInputValueChange={setTyped}
+      itemToStringLabel={(ship: SendableShip) => ship.name}
       value={null}
-      onValueChange={(picked: string | null) => {
+      onValueChange={(picked: SendableShip | null) => {
         if (picked !== null) {
-          onPick(picked);
+          onPick(picked.name);
         }
       }}
       autoHighlight
@@ -60,10 +73,11 @@ function ShipSearch({ sendTo, onPick }: { sendTo: SendToRead; onPick: (to: strin
               {sendTo.kind === 'reading' ? 'Reading the ships you can send to...' : sendTo.kind === 'unreadable' ? sendTo.message : 'No ship you can send to matches.'}
             </Combobox.Empty>
             <Combobox.List>
-              {(ship: string) => (
-                <Combobox.Item key={ship} value={ship} className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 data-highlighted:bg-accent">
+              {(ship: SendableShip) => (
+                <Combobox.Item key={ship.name} value={ship} className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 data-highlighted:bg-accent">
                   <Ship aria-hidden="true" className="size-4 text-muted-foreground" />
-                  {ship}
+                  <span className="flex-1">{ship.name}</span>
+                  {ship.state === null ? null : <span className={`rounded-sm px-1 text-caption ${STATE_TONES[ship.state]}`}>{STATE_LABELS[ship.state]}</span>}
                 </Combobox.Item>
               )}
             </Combobox.List>

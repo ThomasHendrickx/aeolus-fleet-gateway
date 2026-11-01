@@ -6,7 +6,17 @@ import { SendMessageForm, type SendPhase, type SendToRead } from './send-message
 
 // The form to send a ship a message, as send-message.html draws each state.
 
-const READ: SendToRead = { kind: 'read', value: { sentAs: 'argo', ships: ['builder-core', 'builder-gateway', 'builder-ui'] } };
+const READ: SendToRead = {
+  kind: 'read',
+  value: {
+    sentAs: 'argo',
+    ships: [
+      { name: 'builder-gateway', state: 'alert' },
+      { name: 'builder-core', state: 'working' },
+      { name: 'builder-ui', state: 'idle' },
+    ],
+  },
+};
 
 const MESSAGE = "You have not reported for 2 h. Are you stuck on the waiter's restart test?";
 

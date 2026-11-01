@@ -22,7 +22,7 @@ import { answerOf, bodyOf, questionOf, stepOf, type AnswerInput, type FocusedDel
 import type { SubscriptionInput } from '../services/web-push';
 import { EVERY_APP_SHIP_SCOPES, type DecisionInput } from '../services/requests';
 import type { BasketSent } from '../services/basket';
-import { alertShipOf, type SendTo } from '../services/send-message';
+import { alertShipOf, sendableShipsOf, type SendableShip } from '../services/send-message';
 import type { RecordPage } from '../services/items';
 import type { RoutedJob, RoutedPlace } from '../services/routing';
 import { BRIDGE_PATH } from '../paths';
@@ -103,9 +103,17 @@ export async function doneDelivery({ fleet, deliveryId, step }: { fleet: string;
   });
 }
 
-/** Who the person can send a message to (aeolus-fleet #1547): the ships their person ship may send to now, and the name it sends as. */
-export async function readSendTo(fleet: string): Promise<ActionOutcome<SendTo>> {
-  return attempt(fleet, (api) => api.people.sendTo.query());
+/**
+ * Who the person can send a message to (aeolus-fleet #1547): the ships their
+ * person ship may send to now, each in its state as Your fleet shows it, and
+ * the name it sends as. Your fleet that cannot be read leaves the ships with
+ * no state.
+ */
+export async function readSendTo(fleet: string): Promise<ActionOutcome<{ sentAs: string; ships: readonly SendableShip[] }>> {
+  return attempt(fleet, async (api) => {
+    const [sendTo, fleetRead] = await Promise.all([api.people.sendTo.query(), api.people.yourFleet.query().catch(() => undefined)]);
+    return { sentAs: sendTo.sentAs, ships: sendableShipsOf(sendTo.ships, fleetRead) };
+  });
 }
 
 /** Sends a ship a message as the person ship, under the form's key; it answers once the fleet stored it, with when the gateway heard so. */
