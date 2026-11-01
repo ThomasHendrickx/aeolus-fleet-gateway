@@ -31,12 +31,15 @@ function hostOf(href: string): string | undefined {
   return URL.canParse(href) ? new URL(href).host : undefined;
 }
 
-/** What the row does in place; nothing for a question opened or stale, a step without a link, or any other item. */
+/** What the row does in place; nothing for a question opened, a question or step stale, a step without a link, or any other item. */
 export function actInPlaceOf(item: ActingItem, gatewayShipId: ShipId | undefined): ActInPlace | null {
   switch (item.job) {
     case 'decide':
       return item.state === 'new' && item.stale === null && item.pick !== null ? { kind: 'putPick', option: item.pick } : null;
     case 'do': {
+      if (item.stale !== null) {
+        return null;
+      }
       const href = item.stepLink;
       const host = href === null ? undefined : hostOf(href);
       if (href === null || host === undefined) {
