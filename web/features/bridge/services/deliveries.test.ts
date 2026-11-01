@@ -62,7 +62,7 @@ describe('a step, as Bridge shows it (CC14)', () => {
   });
 
   it('reads a step with no link as one with none', () => {
-    const { link: _link, ...unlinked } = STEP;
+    const unlinked = { id: STEP.id, title: STEP.title, why: STEP.why };
 
     expect(stepOf({ contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(unlinked) })).toEqual({ title: 'Sign in to attio', why: 'A ship of yours called attio.', link: undefined });
   });

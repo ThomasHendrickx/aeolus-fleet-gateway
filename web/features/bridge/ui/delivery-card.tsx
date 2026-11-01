@@ -2,12 +2,15 @@ import { useState } from 'react';
 
 import type { Question } from '@aeolus-fleet/common';
 
-import type { FocusedDelivery, Stale } from '../services/deliveries';
+import type { FocusedDelivery, Stale, StepView } from '../services/deliveries';
 import { ActionButton } from './action-button';
 import { Notice } from './notice';
 
-/** Which of the card's controls is working: an option of the question put in the basket, its entry removed, the note alone, or done. */
-export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'remove' } | { kind: 'note' } | { kind: 'done' };
+/** Which of the card's controls is working: an option of the question put in the basket, its entry removed, the note alone, done, or a step's cannot. */
+export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'remove' } | { kind: 'note' } | { kind: 'done' } | { kind: 'cannot' };
+
+/** How the person ends a step: they did it, or cannot. */
+export type StepOutcome = 'done' | 'cannot';
 
 /** The answer to a question in the basket (Bridge, section 9): its option and its note, none when the person wrote none. */
 export interface InBasket {
@@ -70,11 +73,59 @@ function StaleNotice({ stale, from, onOpen }: { stale: Stale; from: string; onOp
   );
 }
 
+/** What a step asks: why, and the link where it is done, shown with its host and opened only by the person's own press (Bridge, section 9). */
+function StepAsked({ step }: { step: StepView }) {
+  return (
+    <>
+      <p className="whitespace-pre-wrap">{step.why}</p>
+      {step.link === undefined ? null : (
+        <a data-testid="bridge-step-link" href={step.link.href} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center justify-self-start rounded-md border border-border px-4 hover:bg-accent">
+          Open on {step.link.host}
+        </a>
+      )}
+    </>
+  );
+}
+
+/** A step's note field, shown before Done or Cannot is pressed, and the two: the outcome goes to the asker at once, with the note (CC14, CC23). */
+function StepControls({ from, note, working, failure, onNoteChange, onFinish }: { from: string; note: string; working: DeliveryControl | undefined; failure: string | undefined; onNoteChange: (note: string) => void; onFinish: (outcome: StepOutcome) => void }) {
+  const isWorking = working !== undefined;
+  return (
+    <>
+      <label className="grid gap-1">
+        <span>Note</span>
+        <textarea
+          data-testid="bridge-note"
+          rows={2}
+          value={note}
+          onChange={(event) => { onNoteChange(event.target.value); }}
+          placeholder="Optional, goes with Done or Cannot"
+          className="rounded-md border border-input bg-background p-2"
+        />
+      </label>
+      {failure === undefined ? null : <Notice message={failure} isFailure />}
+      <div className="grid gap-1">
+        <div className="flex flex-wrap gap-2">
+          <ActionButton data-testid="bridge-step-done" variant="primary" isPending={working?.kind === 'done'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onFinish('done'); }}>
+            Done
+          </ActionButton>
+          <ActionButton data-testid="bridge-step-cannot" isPending={working?.kind === 'cannot'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onFinish('cannot'); }}>
+            Cannot
+          </ActionButton>
+        </div>
+        <span className="text-caption text-muted-foreground">{from} is told at once, with your note.</span>
+      </div>
+    </>
+  );
+}
+
 /**
  * One item in focus (design B, Signal). A question opens with the asker's
  * pick chosen (CC11), or the option in the basket; its one button puts that
  * option in the basket with the note, if any, and sends nothing (CC24): the
- * person sends the basket. Any other item may get a note as its answer, and may
+ * person sends the basket. A step (CC14) shows why and its link, then its
+ * note field before Done and Cannot, each sending its outcome at once with
+ * the note. Any other item may get a note as its answer, and may
  * be done with; one of a meeting leads to the meeting. An alert or a notice
  * is done once seen (Bridge, CC16): it asks nothing more. So is a question
  * its asker withdrew or replaced: stale, nothing to send, a replaced one
@@ -94,6 +145,7 @@ export function DeliveryCard({
   onPut,
   onRemove,
   onDone,
+  onFinishStep,
   onOpen,
   onBack,
 }: {
@@ -117,11 +169,13 @@ export function DeliveryCard({
   /** Takes the question's answer out of the basket. */
   onRemove: () => void;
   onDone: () => void;
+  /** Ends a step done or cannot, with the note. */
+  onFinishStep: (outcome: StepOutcome) => void;
   /** Opens another item: a replaced question's replacement. */
   onOpen: (deliveryId: string) => void;
   onBack: () => void;
 }) {
-  const { question, stale } = delivery;
+  const { question, step, stale } = delivery;
   const [chosen, setChosen] = useState(inBasket?.option ?? question?.pick.option);
   const isWorking = working !== undefined;
   return (
@@ -135,7 +189,9 @@ export function DeliveryCard({
           Go to the meeting
         </a>
       )}
-      {question === undefined ? (
+      {step !== undefined ? (
+        <StepAsked step={step} />
+      ) : question === undefined ? (
         <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-caption">{delivery.body}</pre>
       ) : (
         <>
@@ -152,7 +208,9 @@ export function DeliveryCard({
         <p data-testid="bridge-seen-done" className="text-muted-foreground">
           Seen now, so done: it asks nothing more.
         </p>
-      ) : stale !== null ? null : (
+      ) : stale !== null ? null : step !== undefined ? (
+        <StepControls from={delivery.from} note={note} working={working} failure={failure} onNoteChange={onNoteChange} onFinish={onFinishStep} />
+      ) : (
         <>
           <label className="grid gap-1">
             <span>{question === undefined ? 'Your answer' : 'Note'}</span>

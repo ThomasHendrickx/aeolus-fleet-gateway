@@ -25,7 +25,8 @@ function aQuestion(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, step: undefined, meetingId: undefined, stale: null, ...overrides };
 }
 
-function render(delivery: FocusedDelivery, inBasket: { option: number; note: string | null } | null = null, note = ''): string {
+function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number; note: string | null } | null; note?: string } = {}): string {
+  const { inBasket = null, note = '' } = shown;
   const noop = () => undefined;
   return renderToStaticMarkup(
     createElement(DeliveryCard, {
@@ -42,6 +43,7 @@ function render(delivery: FocusedDelivery, inBasket: { option: number; note: str
       onPut: noop,
       onRemove: noop,
       onDone: noop,
+      onFinishStep: noop,
       onOpen: noop,
       onBack: noop,
     }),
@@ -63,7 +65,7 @@ describe('a question opened in Bridge (CC11)', () => {
   });
 
   it('says a question whose answer is in the basket is in it, not sent, with its note, its option picked, the basket and Remove beside it', () => {
-    const markup = render(aQuestion(), { option: 1, note: 'U4 first, then Harbour.' });
+    const markup = render(aQuestion(), { inBasket: { option: 1, note: 'U4 first, then Harbour.' } });
 
     expect({
       inBasket: markup.includes('In the basket: option 1, not sent'),
@@ -105,7 +107,7 @@ describe('a step opened in Bridge (CC14)', () => {
   });
 
   it('shows its note field before Done or Cannot, for either, with no answer to send', () => {
-    const markup = render(aStep(), null, 'It asked for read access only');
+    const markup = render(aStep(), { note: 'It asked for read access only' });
 
     expect({
       noteFirst: markup.indexOf('data-testid="bridge-note"') < markup.indexOf('data-testid="bridge-step-done"'),

@@ -24,6 +24,8 @@ export interface FocusedDelivery {
   /** What it shows of its payload: an alert's or a notice's body, any other payload as it came. */
   readonly body: string;
   readonly question: Question | undefined;
+  /** The step it asks (CC14), when it is one. */
+  readonly step: StepView | undefined;
   /** The meeting it was contributed to or tells of, when it belongs to one. */
   readonly meetingId: string | undefined;
   /** Whether its asker withdrew or replaced the question it asks, with the replacement, a new item. */
@@ -44,6 +46,37 @@ export function questionOf(opened: { contentType: string; payload: string }): Qu
   try {
     const question = questionSchema.safeParse(JSON.parse(opened.payload));
     return question.success ? question.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A step as Bridge shows it (CC14): its title, why, and its link with the host it leads to, when it has one. */
+export interface StepView {
+  readonly title: string;
+  readonly why: string;
+  readonly link: { readonly href: string; readonly host: string } | undefined;
+}
+
+/** The step content type (CC14), as common names it from its release after 0.35.0; it moves to common's constant then. */
+const STEP_CONTENT_TYPE = 'application/vnd.aeolus.step+json';
+
+/** What Bridge reads of a step, as common's stepSchema words it from its release after 0.35.0 (Bridge B2); it moves to common's then. */
+const stepSchema = z.object({ title: z.string().min(1), why: z.string(), link: z.url({ protocol: /^https?$/ }).optional() });
+
+/** The step a delivery asks; none for any other message, or one whose payload does not read. */
+export function stepOf(opened: { contentType: string; payload: string }): StepView | undefined {
+  const [essence = ''] = opened.contentType.split(';');
+  if (essence.trim().toLowerCase() !== STEP_CONTENT_TYPE) {
+    return undefined;
+  }
+  try {
+    const step = stepSchema.safeParse(JSON.parse(opened.payload));
+    if (!step.success) {
+      return undefined;
+    }
+    const { title, why, link } = step.data;
+    return { title, why, link: link === undefined ? undefined : { href: link, host: new URL(link).host } };
   } catch {
     return undefined;
   }
