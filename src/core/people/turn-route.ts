@@ -6,7 +6,7 @@ import type { ItemJob } from './item-job.js';
 import { personCrewOf, type PersonCaller, type PersonCrewError } from './person-crew.js';
 import { routingOf, type RoutingDefaults, type RoutingPlace, type Routes } from './routing.js';
 
-export type TurnRoute = (turn: { caller: PersonCaller; job: ItemJob; place: RoutingPlace; isOn: boolean }) => Promise<Result<undefined, PersonCrewError | DomainError<'PLACE_NOT_OFFERED'>>>;
+export type TurnRoute = (turn: { caller: PersonCaller; job: ItemJob; place: RoutingPlace; isOn: boolean }) => Promise<Result<undefined, PersonCrewError | DomainError<'CHANNEL_NOT_OFFERED'>>>;
 
 /** Whether the gateway can show anything in the place: email where it asks pagasae to send it, web push where it holds push keys. */
 export function isOfferedPlace(place: RoutingPlace, offered: { isEmailOffered: boolean; isWebPushOffered: boolean }): boolean {
@@ -32,7 +32,7 @@ export function isOfferedPlace(place: RoutingPlace, offered: { isEmailOffered: b
 export function createTurnRoute(deps: { crewPersonShip: CrewPersonShip; routes: Routes; defaults: RoutingDefaults; isEmailOffered: boolean; isWebPushOffered: boolean; clock: Clock }): TurnRoute {
   return async ({ caller, job, place, isOn }) => {
     if (isOn && !isOfferedPlace(place, deps)) {
-      return refuse('PLACE_NOT_OFFERED', place === 'email' ? 'This gateway sends no email' : 'This gateway sends no web push');
+      return refuse('CHANNEL_NOT_OFFERED', place === 'email' ? 'This gateway sends no email' : 'This gateway sends no web push');
     }
     const crew = await personCrewOf(deps.crewPersonShip, caller);
     if (!crew.isOk) {

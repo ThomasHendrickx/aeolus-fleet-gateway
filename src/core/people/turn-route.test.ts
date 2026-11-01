@@ -68,13 +68,13 @@ describe('a person turns a place on or off for a job', () => {
   it('refuses to turn email on where the gateway sends no email, keeping nothing', async () => {
     const turned = await turnRoute({ isEmailOffered: false })({ caller: CHARLOTTE_GRANT, job: 'decide', place: 'email', isOn: true });
 
-    expect({ kind: turned.isOk ? undefined : turned.error.kind, held: routes.held }).toEqual({ kind: 'PLACE_NOT_OFFERED', held: [] });
+    expect({ kind: turned.isOk ? undefined : turned.error.kind, held: routes.held }).toEqual({ kind: 'CHANNEL_NOT_OFFERED', held: [] });
   });
 
   it('refuses to turn web push on where the gateway holds no push keys, keeping nothing', async () => {
     const turned = await turnRoute({ isWebPushOffered: false })({ caller: CHARLOTTE_GRANT, job: 'stay-aware', place: 'web-push', isOn: true });
 
-    expect({ kind: turned.isOk ? undefined : turned.error.kind, held: routes.held }).toEqual({ kind: 'PLACE_NOT_OFFERED', held: [] });
+    expect({ kind: turned.isOk ? undefined : turned.error.kind, held: routes.held }).toEqual({ kind: 'CHANNEL_NOT_OFFERED', held: [] });
   });
 
   it('is refused without a person ship, keeping nothing', async () => {
