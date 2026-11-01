@@ -13,9 +13,9 @@ export type BridgePage = (typeof PAGES)[number]['key'];
 /**
  * Bridge's pages a person goes between: what waits on them, the basket with
  * its count while it holds any (section 9, rule 2), Done, and Bridge's
- * settings; the page shown current.
+ * settings; the page shown current, none for a page outside them (Your fleet).
  */
-export function BridgeNav({ fleetId, current, basketCount }: { fleetId: string; current: BridgePage; basketCount: number }) {
+export function BridgeNav({ fleetId, current, basketCount }: { fleetId: string; current: BridgePage | null; basketCount: number }) {
   return (
     <nav aria-label="Bridge" className="flex min-w-0 items-center gap-1 overflow-x-auto border-b border-border pb-2">
       {PAGES.filter(({ key }) => key !== 'basket' || basketCount > 0 || current === 'basket').map(({ key, label, path }) => (
