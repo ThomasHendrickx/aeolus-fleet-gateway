@@ -282,7 +282,7 @@ export function aBasketEntry(overrides: Partial<BasketEntry> = {}): BasketEntry 
     questionId: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e',
     deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
     messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
-    senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9orc',
+    senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9qrc',
     from: 'orchestrator-1',
     title: 'Which goes first: the Compact look (U4) or Harbour?',
     sentAt: new Date('2026-10-31T19:41:00.000Z'),

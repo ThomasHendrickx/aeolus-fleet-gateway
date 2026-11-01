@@ -14,7 +14,7 @@ const PRICING = aBasketEntry({
   questionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b',
   deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002',
   messageId: 'msg_01m3tbfspe96yf1rnr4ank0002',
-  senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9com',
+  senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9cqm',
   from: 'commercial',
   title: 'Pricing page: a price per ship, or plans only?',
   sentAt: new Date('2026-10-31T19:13:00.000Z'),
@@ -26,7 +26,7 @@ const RETENTION = aBasketEntry({
   questionId: '7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d',
   deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003',
   messageId: 'msg_01m3tbfspe96yf1rnr4ank0003',
-  senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9cor',
+  senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9cqr',
   from: 'builder-core',
   title: 'Record retention for person ships: 90 days or 1 year?',
   sentAt: new Date('2026-10-31T19:28:00.000Z'),
@@ -91,7 +91,7 @@ describe('the basket open', () => {
 
   it('ignores a withdrawal from another ship than the asker', async () => {
     await entries.save(aBasketEntry());
-    const withdrawal = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0w02', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9oth', contentType: 'application/vnd.aeolus.question-withdrawal+json', askedQuestionId: null, withdrawnQuestionId: aBasketEntry().questionId });
+    const withdrawal = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0w02', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9qth', contentType: 'application/vnd.aeolus.question-withdrawal+json', askedQuestionId: null, withdrawnQuestionId: aBasketEntry().questionId });
 
     const basket = await readBasketWith([withdrawal])(CHARLOTTE_GRANT);
 

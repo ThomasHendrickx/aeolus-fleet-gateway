@@ -21,7 +21,7 @@ const PRICING = aBasketEntry({
   questionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b',
   deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002',
   messageId: 'msg_01m3tbfspe96yf1rnr4ank0002',
-  senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9com',
+  senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9cqm',
   from: 'commercial',
   title: 'Pricing page: a price per ship, or plans only?',
   option: 1,
