@@ -14,7 +14,7 @@ export interface HomeItem extends InboxEntry {
   readonly job: ItemJob;
   readonly state: Exclude<ItemState, 'done'>;
   readonly stale: Stale | null;
-  readonly inBasket: { readonly option: number; readonly note: string | null } | null;
+  readonly inBasket: { readonly option: number | null; readonly note: string | null } | null;
 }
 
 /** Bridge home: what waits on the person, decide and do, with its count, a stale question listed outside it; and the stay-aware feed, outside the count. */

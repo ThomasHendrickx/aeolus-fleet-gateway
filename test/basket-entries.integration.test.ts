@@ -69,6 +69,14 @@ describe('the basket in Postgres', () => {
     await expect(entries.list(FLEET, shipId)).resolves.toEqual([anEntry({ shipId, option: 3, note: null, state: 'refused', refusal: 'orchestrator-1 did not take the answer: retired' })]);
   });
 
+  it('keeps an entry with a note and no option, answering with the note alone', async () => {
+    const entries = createPrismaBasketEntries(prisma);
+    const shipId: ShipId = 'shp_01m3tb1zgr5h2ffee12xnch8p7';
+    await entries.save(anEntry({ shipId, option: null, note: 'Neither: ask me after the demo.' }));
+
+    await expect(entries.list(FLEET, shipId)).resolves.toEqual([anEntry({ shipId, option: null, note: 'Neither: ask me after the demo.' })]);
+  });
+
   it("lists a person ship's entries in the order added, and counts them, none of another ship or fleet", async () => {
     const entries = createPrismaBasketEntries(prisma);
     const shipId: ShipId = 'shp_01m3tb1zgr5h2ffee12xnch8p3';

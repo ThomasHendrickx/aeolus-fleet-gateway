@@ -12,9 +12,9 @@ export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'remo
 /** How the person ends a step: they did it, or cannot. */
 export type StepOutcome = 'done' | 'cannot';
 
-/** The answer to a question in the basket (Bridge, section 9): its option and its note, none when the person wrote none. */
+/** The answer to a question in the basket (Bridge, section 9): its option, none for a note alone, and its note, none when the person wrote none. */
 export interface InBasket {
-  readonly option: number;
+  readonly option: number | null;
   readonly note: string | null;
 }
 
