@@ -1,3 +1,4 @@
+import type { ShipId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { anArgoEntry, DONE_AT, fakeArgoInboxFleet, MATHILDE_ACCOUNT_ID, memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
@@ -12,10 +13,10 @@ import { createReadArgoSection } from './read-argo-section.js';
 // console, signed in as argo; one done at argo leaves it for everyone.
 
 const THOMAS = { fleetId: FLEET_ID, accountId: 'acc-thomas' };
-const MATHILDE_SHIP_ID = 'shp_01m3tbfspe96yf1rnr4ank9mat';
+const MATHILDE_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9mat';
 const QUESTION = 'application/vnd.aeolus.question+json';
 const QUESTION_ID = 'b3f1c6a2-0d7e-4c55-9a51-6f0e4e2d9a11';
-const BUILDER_MEMORY = { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bme', name: 'builder-memory' };
+const BUILDER_MEMORY: { shipId: ShipId; name: string } = { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bme', name: 'builder-memory' };
 const signal = new AbortController().signal;
 
 let accounts: ReturnType<typeof memoryArgoAccounts>;
