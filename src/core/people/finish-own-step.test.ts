@@ -49,6 +49,7 @@ const OPENED: OpenedDelivery = {
   stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d11',
   withdrawnStepId: null,
   stepLink: null,
+  openedIn: null,
   sentAt: new Date('2026-10-31T21:00:00.000Z'),
   openedAt: new Date('2026-10-31T21:10:00.000Z'),
 };

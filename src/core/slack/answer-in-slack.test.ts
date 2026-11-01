@@ -89,7 +89,7 @@ describe("a press of a question's button in Slack", () => {
   });
 
   it('forgets the question as opened, so a chat no longer lists it at its next aeolus_inbox', async () => {
-    await opened.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, messageId: QUESTION.messageId, senderShipId: BUDGET_CHECK, from: 'budget-check', title: 'Cut travel?', contentType: QUESTION.contentType, askedQuestionId: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', withdrawnQuestionId: null, stepId: null, withdrawnStepId: null, stepLink: null, sentAt: QUESTION.sentAt, openedAt: NOW });
+    await opened.save({ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: QUESTION.deliveryId, messageId: QUESTION.messageId, senderShipId: BUDGET_CHECK, from: 'budget-check', title: 'Cut travel?', contentType: QUESTION.contentType, askedQuestionId: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', withdrawnQuestionId: null, stepId: null, withdrawnStepId: null, stepLink: null, openedIn: null, sentAt: QUESTION.sentAt, openedAt: NOW });
 
     await press(2);
 

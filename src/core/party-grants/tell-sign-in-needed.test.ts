@@ -43,7 +43,7 @@ describe('the person whose sign-in a call needs is told once per party (decision
         contentType: 'application/vnd.aeolus.step+json',
         payload: JSON.stringify({
           id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d11',
-          title: 'Sign in to attio',
+          title: 'Sign in to the outside party attio',
           why: "A ship of yours called attio, which calls under each person's own sign-in, and you are not signed in to it. Until you sign in, your ships' calls to attio are refused.",
           link: PAGE,
         }),
@@ -58,7 +58,7 @@ describe('the person whose sign-in a call needs is told once per party (decision
     expect(sender.sent.map(({ payload }): unknown => JSON.parse(payload))).toEqual([
       {
         id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d11',
-        title: 'Sign in to attio again',
+        title: 'Sign in to the outside party attio again',
         why: "Your sign-in to attio ended: attio refused to refresh it (invalid_grant: the refresh token is revoked). Until you sign in again, your ships' calls to attio are refused.",
         link: PAGE,
       },

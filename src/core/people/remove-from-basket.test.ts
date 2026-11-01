@@ -31,6 +31,7 @@ function openedOf(entry: BasketEntry): OpenedDelivery {
     stepId: null,
     withdrawnStepId: null,
     stepLink: null,
+    openedIn: null,
     sentAt: entry.sentAt,
     openedAt: new Date('2026-10-31T19:50:00.000Z'),
   };

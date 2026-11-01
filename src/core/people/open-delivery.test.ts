@@ -71,6 +71,7 @@ describe('a person opens a delivery that waits for their person ship', () => {
         stepId: null,
         withdrawnStepId: null,
         stepLink: null,
+        openedIn: 'chat',
         sentAt: QUESTION.sentAt,
         openedAt: AT,
       },

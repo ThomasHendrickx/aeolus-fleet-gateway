@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
-import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
+import type { RecordedPersonDelivery } from './ports.js';
 import { createReadBridgeHome } from './read-bridge-home.js';
 import { routingDefaultsOf, type Route } from './routing.js';
 
@@ -15,6 +16,7 @@ let opened: ReturnType<typeof memoryOpenedDeliveries>;
 let entries: ReturnType<typeof memoryBasketEntries>;
 let connections: ReturnType<typeof memoryConnectionStore>;
 let routes: Route[];
+let outcomes: ReturnType<typeof memoryItemOutcomes>;
 
 /** The gateway's own ship in the fleet, which sends the person its own steps (CC14). */
 const GATEWAY_SHIP_ID = 'shp_01m3tbfspe96yf1rnr4ank0gat';
@@ -33,14 +35,21 @@ beforeEach(async () => {
   entries = memoryBasketEntries();
   connections = memoryConnectionStore();
   routes = [];
+  outcomes = memoryItemOutcomes();
   await connections.save({ fleetId: FLEET_ID, shipId: GATEWAY_SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-01T00:00:00.000Z') });
 });
 
-function readHome(deliveries: PersonDelivery[], offered: { isEmailOffered: boolean; isWebPushOffered: boolean } = { isEmailOffered: false, isWebPushOffered: true }) {
-  const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries });
+/** The gateway's own words for its own step's action, by the step's link: its sign-in page's party. */
+function ownStepActionOf(href: string): string | undefined {
+  const party = /\/outside-parties\/([^/?]+)/.exec(href)?.[1];
+  return party === undefined ? undefined : `Sign in to ${party}`;
+}
+
+function readHome(deliveries: PersonDelivery[], offered: { isEmailOffered: boolean; isWebPushOffered: boolean } = { isEmailOffered: false, isWebPushOffered: true }, record: RecordedPersonDelivery[] = []) {
+  const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries, record });
   return {
     ...ship,
-    readHome: createReadBridgeHome({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, entries, connections, routes: memoryRoutes(routes), defaults: CHAT_ON, ...offered }),
+    readHome: createReadBridgeHome({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, entries, outcomes, connections, routes: memoryRoutes(routes), defaults: CHAT_ON, ownStepActionOf, ...offered }),
   };
 }
 
@@ -73,6 +82,7 @@ function anOpened(overrides: Partial<OpenedDelivery> = {}): OpenedDelivery {
     stepId: null,
     withdrawnStepId: null,
     stepLink: null,
+    openedIn: null,
     sentAt: new Date('2026-10-31T19:20:00.000Z'),
     openedAt: new Date('2026-10-31T19:30:00.000Z'),
     ...overrides,
@@ -171,7 +181,7 @@ describe('Bridge home: what waits on the person, with one count (CC18)', () => {
 
     await reading.readHome(CHARLOTTE_GRANT);
 
-    expect(reading.calls).toEqual(['inbox']);
+    expect(reading.calls).toEqual(['inbox', 'record(newest)']);
   });
 
   it('says the fleet did not answer when it cannot read what waits', async () => {
@@ -359,10 +369,10 @@ describe('Bridge home: what each row says and acts on in place (aeolus-fleet#153
     senderShipId: GATEWAY_SHIP_ID,
     senderName: 'gateway',
     contentType: 'application/vnd.aeolus.step+json',
-    headline: 'Sign in to linear',
+    headline: 'Sign in to the outside party linear',
     askedQuestionId: null,
     stepId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
-    stepLink: 'https://gateway.example.com/parties/linear/sign-in?fleet=flt_1',
+    stepLink: 'https://gateway.example.com/outside-parties/linear?fleet=flt_1',
   });
 
   function actsOf(home: Awaited<ReturnType<ReturnType<typeof readHome>['readHome']>>) {
@@ -428,10 +438,64 @@ describe('Bridge home: what each row says and acts on in place (aeolus-fleet#153
     expect(actsOf(home)).toEqual([{ deliveryId: STEP.deliveryId, actInPlace: null }]);
   });
 
-  it('offers the gateway\'s own step as its own action, by its title, where it is done', async () => {
+  it('offers the gateway\'s own step as its own action, in the gateway\'s words, where it is done', async () => {
     const home = await readHome([OWN_STEP]).readHome(CHARLOTTE_GRANT);
 
-    expect(actsOf(home)).toEqual([{ deliveryId: OWN_STEP.deliveryId, actInPlace: { kind: 'ownStep', href: 'https://gateway.example.com/parties/linear/sign-in?fleet=flt_1', title: 'Sign in to linear' } }]);
+    expect(actsOf(home)).toEqual([{ deliveryId: OWN_STEP.deliveryId, actInPlace: { kind: 'ownStep', href: 'https://gateway.example.com/outside-parties/linear?fleet=flt_1', label: 'Sign in to linear' } }]);
+  });
+
+  it('offers the gateway\'s own step by its title when the gateway has no words of its own for it', async () => {
+    const linkSlack = aPersonDelivery({ ...OWN_STEP, headline: 'Link Slack', stepLink: 'https://gateway.example.com/slack/link?fleet=flt_1' });
+
+    const home = await readHome([linkSlack]).readHome(CHARLOTTE_GRANT);
+
+    expect(actsOf(home)).toEqual([{ deliveryId: OWN_STEP.deliveryId, actInPlace: { kind: 'ownStep', href: 'https://gateway.example.com/slack/link?fleet=flt_1', label: 'Link Slack' } }]);
+  });
+
+  it('names no place besides Bridge for the gateway\'s own step', async () => {
+    const home = await readHome([OWN_STEP, LINKED_STEP]).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? home.value.waiting.items.map(({ from, places }) => ({ from, places })) : home).toEqual([
+      { from: 'gateway', places: [] },
+      { from: 'orchestrator-1', places: ['chat'] },
+    ]);
+  });
+
+  it('says where the person saw an item they opened', async () => {
+    await opened.save(anOpened({ openedIn: 'bridge' }));
+
+    const home = await readHome([]).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? home.value.waiting.items.map(({ state, seenIn }) => ({ state, seenIn })) : home).toEqual([{ state: 'seen', seenIn: 'bridge' }]);
+  });
+
+  it('says nowhere for an item opened before the gateway kept where', async () => {
+    await opened.save(anOpened());
+
+    const home = await readHome([]).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? home.value.waiting.items.map(({ seenIn }) => seenIn) : home).toEqual([null]);
+  });
+
+  it('keeps the alerts and notices seen on the record\'s newest page in the feed, done, with where they were seen, among the unseen newest first', async () => {
+    const seenNotice: RecordedPersonDelivery = { ...NOTICE, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0020', sentAt: new Date('2026-10-31T19:52:00.000Z'), state: 'handled', isPayloadUnreadable: false };
+    const answered: RecordedPersonDelivery = { ...QUESTION, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0021', state: 'handled', isPayloadUnreadable: false };
+    await outcomes.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: seenNotice.deliveryId, place: 'bridge', kind: 'seen', option: null, at: new Date('2026-10-31T19:53:00.000Z') });
+
+    const home = await readHome([ALERT, NOTICE], undefined, [{ ...ALERT, state: 'received', isPayloadUnreadable: false }, { ...NOTICE, state: 'received', isPayloadUnreadable: false }, seenNotice, answered]).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? home.value.stayAware.map(({ deliveryId, state, seenIn }) => ({ deliveryId, state, seenIn })) : home).toEqual([
+      { deliveryId: ALERT.deliveryId, state: 'new', seenIn: null },
+      { deliveryId: seenNotice.deliveryId, state: 'done', seenIn: 'bridge' },
+      { deliveryId: NOTICE.deliveryId, state: 'new', seenIn: null },
+    ]);
+  });
+
+  it('says the record cannot be read when the fleet does not answer for it', async () => {
+    const reading = readHome([QUESTION]);
+    reading.refusals.record.push({ code: 'FLEET_UNREACHABLE', message: 'The fleet did not answer' });
+
+    await expect(reading.readHome(CHARLOTTE_GRANT)).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
   });
 
   it('tells an alert from a notice in the stay-aware feed', async () => {
