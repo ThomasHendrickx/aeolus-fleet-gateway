@@ -1,4 +1,4 @@
-import type { ShipId } from '@aeolus-fleet/common';
+import { QUESTION_CONTENT_TYPE, type ShipId } from '@aeolus-fleet/common';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { createArgoInboxDoor } from '../src/adapters/fleet/argo-inbox-door.js';
@@ -68,7 +68,20 @@ describe("argo's inbox as the gateway's ship reads it from core", () => {
 
     const changes = await door().changes(gateway.crewToken, { argo, afterSeq, signal: AbortSignal.timeout(30_000) });
 
-    expect(changes).toMatchObject({ isOk: true, value: { messageIds: [messageId] } });
+    expect(changes).toMatchObject({ isOk: true, value: { changes: [{ messageId, accountId: null }] } });
+  });
+
+  it('reads a message to argo whole with its headline: its first line, or the title of a question', async () => {
+    const reportId = await send(fleet, { crewToken: trierarch, to: argo, contentType: 'text/markdown', payload: 'thomas-mac is low on disk: 4% free\n\nFree some disk.' });
+    const question = { id: crypto.randomUUID(), title: 'Which repository?', context: 'builder-memory', options: [{ key: 1, label: 'aeolus-fleet' }], pick: { option: 1, why: 'it holds the docs' } };
+    const questionId = await send(fleet, { crewToken: trierarch, to: argo, contentType: QUESTION_CONTENT_TYPE, payload: JSON.stringify(question) });
+
+    const [report, asked] = await Promise.all([door().entry(gateway.crewToken, { argo, messageId: reportId }), door().entry(gateway.crewToken, { argo, messageId: questionId })]);
+
+    expect([report, asked]).toMatchObject([
+      { isOk: true, value: { headline: 'thomas-mac is low on disk: 4% free' } },
+      { isOk: true, value: { headline: 'Which repository?' } },
+    ]);
   });
 
   it('answers a message argo marked done in the console as done, and the change it made', async () => {
@@ -80,7 +93,8 @@ describe("argo's inbox as the gateway's ship reads it from core", () => {
 
     const changes = await door().changes(gateway.crewToken, { argo, afterSeq: position.isOk ? position.value : -1, signal: AbortSignal.timeout(30_000) });
     const done = await door().entry(gateway.crewToken, { argo, messageId });
-    expect({ changed: changes.isOk && changes.value.messageIds.includes(messageId), state: done.isOk ? done.value?.deliveryState : done.error }).toEqual({ changed: true, state: 'acknowledged' });
+    const change = changes.isOk ? changes.value.changes.findLast((each) => each.messageId === messageId) : undefined;
+    expect({ isDatedChange: change?.at instanceof Date, state: done.isOk ? done.value?.deliveryState : done.error }).toEqual({ isDatedChange: true, state: 'acknowledged' });
   });
 
   it('reads no message argo sent as one to argo', async () => {

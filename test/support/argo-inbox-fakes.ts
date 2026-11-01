@@ -87,7 +87,7 @@ export function fakeArgoInboxFleet() {
     markDone: (messageId: MessageId, by: Partial<Omit<ArgoInboxChange, 'messageId'>> = {}) => {
       const entry = state.entries.get(messageId);
       if (entry !== undefined) {
-        change({ ...entry, deliveryState: 'handled' }, { at: new Date('2026-11-01T20:14:00.000Z'), accountId: null, ...by });
+        change({ ...entry, deliveryState: 'acknowledged' }, { at: new Date('2026-11-01T20:14:00.000Z'), accountId: null, ...by });
       }
     },
   };

@@ -35,6 +35,19 @@ export interface ArgoInboxEntry extends ArgoMessage {
   readonly deliveryState: DeliveryState;
 }
 
+/** A message to argo read whole: its entry, and its headline, as a person reads it first. */
+export interface ArgoMessageRead extends ArgoInboxEntry {
+  /** A question's or a step's title, an alert's or a notice's headline, or else the payload's first line (#1570). */
+  readonly headline: string;
+}
+
+/** A change to a delivery to argo, as the fleet's event says it: the message, when, and the account that made it, as argo or itself; none for a ship's or the system's. */
+export interface ArgoInboxChange {
+  readonly messageId: MessageId;
+  readonly at: Date;
+  readonly accountId: string | null;
+}
+
 /**
  * Outbound port: what the gateway's own ship reads of argo's inbox, by its
  * crew token, within its read reach (decision 0034): nothing of argo's
@@ -48,7 +61,7 @@ export interface ArgoInboxDoor {
   /** Every message to argo, with its delivery's state. */
   entries(crewToken: string, argo: ShipId): Promise<Result<readonly ArgoInboxEntry[], FleetRefusal>>;
   /** One message to argo with its delivery's state; null when it is no message to argo the ship reads. */
-  entry(crewToken: string, read: { argo: ShipId; messageId: MessageId }): Promise<Result<ArgoInboxEntry | null, FleetRefusal>>;
-  /** The messages whose delivery to argo changed after the position, waiting while none did until the signal aborts, and the position to follow from next. */
-  changes(crewToken: string, follow: { argo: ShipId; afterSeq: number; signal: AbortSignal }): Promise<Result<{ messageIds: readonly MessageId[]; lastSeq: number }, FleetRefusal>>;
+  entry(crewToken: string, read: { argo: ShipId; messageId: MessageId }): Promise<Result<ArgoMessageRead | null, FleetRefusal>>;
+  /** Each change to a delivery to argo after the position, in order, waiting while none came until the signal aborts, and the position to follow from next. */
+  changes(crewToken: string, follow: { argo: ShipId; afterSeq: number; signal: AbortSignal }): Promise<Result<{ changes: readonly ArgoInboxChange[]; lastSeq: number }, FleetRefusal>>;
 }

@@ -136,7 +136,7 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     senderName,
     contentType,
     payload,
-    headline: asked?.title ?? replacingStep?.step.title ?? headlineOf({ contentType, payload }),
+    headline: itemHeadlineOf({ contentType, payload }),
     askedQuestionId: asked?.id ?? null,
     withdrawnQuestionId: withdrawalOf({ contentType, payload })?.questionId ?? null,
     stepId: replacingStep?.step.id ?? (jobOf(contentType) === 'do' ? (parsedOf(stepIdSchema, payload) ?? null) : null),
@@ -183,6 +183,12 @@ function meetingReadOf(read: MeetingOutput): MeetingRead {
       nextCursor: read.contributions.nextCursor,
     },
   };
+}
+
+/** The headline of an item (Bridge, CC10): a question's title, the new one's of a replacement, a step's title, an alert's or a notice's headline; none for any other message, or one whose payload does not read. */
+export function itemHeadlineOf(carried: { contentType: string; payload: string }): string | null {
+  const replacingStep = isStepReplacement(carried.contentType) ? parsedOf(stepReplacementSchema, carried.payload) : undefined;
+  return askedQuestionOf(carried)?.title ?? replacingStep?.step.title ?? headlineOf(carried);
 }
 
 /** The question a message asks (decision 0038): a question's own, or a replacement's new one; none for any other message, or one whose payload does not read. */
