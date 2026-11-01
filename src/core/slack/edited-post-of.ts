@@ -8,7 +8,7 @@
  */
 import { outcomeTextOf, type ItemOutcome, type OutcomeKind } from '../people/item-outcome.js';
 import type { SlackItem, SlackMessage, SlackTone } from './ports.js';
-import { escaped } from './slack-post-of.js';
+import { escaped, listedOptionOf } from './slack-post-of.js';
 
 /** What came of the item, where and when. */
 export type EditedOutcome = Pick<ItemOutcome, 'place' | 'kind' | 'option' | 'at'>;
@@ -26,24 +26,23 @@ function slackTimeOf(at: Date): string {
 /** Whether the item's job ended as asked: answered, done or seen; anything else ended it another way. */
 const TONES: Record<OutcomeKind, SlackTone> = { answered: 'done', done: 'done', seen: 'done', cannot: 'ended', withdrawn: 'ended', replaced: 'ended', notSent: 'ended' };
 
-/** The option answered with, as its button named it, or by its number once the button is gone. */
+/** The option answered with: in full as its post lists it, else as its button named it, or by its number once the button is gone. */
 export function optionTextOf(message: SlackMessage, option: number): string {
+  const listed = listedOptionOf(message.item?.body ?? null, option);
+  if (listed !== undefined) {
+    return listed;
+  }
   const button = message.buttons.find((each) => 'option' in each && each.option === option);
   return escaped(button?.text ?? `option ${String(option)}`);
 }
 
-/** The option as its question names it in full, numbered as its button is: a button cuts a long one. */
-export function fullOptionTextOf(option: { key: number; label: string }): string {
-  return escaped(`${String(option.key)}. ${option.label}`);
-}
-
 /** What was done, when and to whom, as the edited post says it. */
-function doneLineOf(message: SlackMessage & { item: SlackItem }, { outcome, optionText }: { outcome: EditedOutcome; optionText: string | undefined }): string {
+function doneLineOf(message: SlackMessage & { item: SlackItem }, outcome: EditedOutcome): string {
   const at = slackTimeOf(outcome.at);
   const asker = escaped(message.item.asker);
   switch (outcome.kind) {
     case 'answered':
-      return outcome.option === null ? `✅ You answered at ${at} with your note, sent to ${asker}` : `✅ You answered at ${at}: *${optionText ?? optionTextOf(message, outcome.option)}*, sent to ${asker}`;
+      return outcome.option === null ? `✅ You answered at ${at} with your note, sent to ${asker}` : `✅ You answered at ${at}: *${optionTextOf(message, outcome.option)}*, sent to ${asker}`;
     case 'done':
       // The gateway's own step is done by what it saw, so nothing is sent for it.
       return outcome.place === 'gateway' ? `✅ Done at ${at}` : `✅ Done at ${at}, sent to ${asker}`;
@@ -72,8 +71,8 @@ function isEditedAlready(item: SlackItem): boolean {
   return item.tone === 'done' || item.tone === 'ended';
 }
 
-/** The post edited to say what came of its item; none when it says so already. The option answered with is named as given, in full where the question is at hand, or by its button. */
-export function editedPostOf(message: SlackMessage, edit: { outcome: EditedOutcome; bridgeUrl: string; optionText?: string }): SlackMessage | undefined {
+/** The post edited to say what came of its item; none when it says so already. */
+export function editedPostOf(message: SlackMessage, edit: { outcome: EditedOutcome; bridgeUrl: string }): SlackMessage | undefined {
   const { item } = message;
   if (item === null) {
     const line = `_${outcomeTextOf(edit.outcome)}_`;
@@ -84,7 +83,7 @@ export function editedPostOf(message: SlackMessage, edit: { outcome: EditedOutco
   }
   return {
     text: message.text,
-    item: { ...item, body: doneLineOf({ ...message, item }, { outcome: edit.outcome, optionText: edit.optionText }), aside: null, footer: whereLineOf(edit.outcome, edit.bridgeUrl), tone: TONES[edit.outcome.kind] },
+    item: { ...item, body: doneLineOf({ ...message, item }, edit.outcome), aside: null, footer: whereLineOf(edit.outcome, edit.bridgeUrl), tone: TONES[edit.outcome.kind] },
     buttons: [],
   };
 }

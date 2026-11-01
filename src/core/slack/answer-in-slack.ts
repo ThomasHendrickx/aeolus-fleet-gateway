@@ -8,7 +8,7 @@ import { KEY_UNAVAILABLE, SEALED_MESSAGE } from '../people/person-crew.js';
 import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from '../people/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { ok, type Result } from '../shared/result.js';
-import { editedPostOf, fullOptionTextOf } from './edited-post-of.js';
+import { editedPostOf } from './edited-post-of.js';
 import type { SlackApps, SlackLinks, SlackMessage, SlackMessages, SlackPosts, SlackSignatures } from './ports.js';
 import { notSentPostOf, sendingPostOf, type ItemPost } from './pressed-post-of.js';
 import { slackPostOf } from './slack-post-of.js';
@@ -97,25 +97,22 @@ export function createAnswerInSlack(deps: {
       return ok({ kind: 'refused' });
     }
     const question = questionOf(delivery.value.payload);
-    const pressedOption = question?.options.find(({ key }) => key === option);
-    if (question === undefined || pressedOption === undefined) {
+    if (question === undefined) {
       return ok({ kind: 'ignored' });
     }
     const questionId = question.id;
-    // Named in full: a button cuts a long label.
-    const optionText = fullOptionTextOf(pressedOption);
     const bridgeUrl = deps.bridgeUrlOf(app.fleetId);
     const posted = slackPostOf(delivery.value, { bridgeUrl, isHeadedBySender: app.shipId === null });
     // A question too long for Slack is posted as a link, with no item to show it on.
     const shown: ItemPost | undefined = posted.item === null ? undefined : { ...posted, item: posted.item };
-    await edit(shown && sendingPostOf(shown, optionText));
+    await edit(shown && sendingPostOf(shown, option));
     const replied = await deps.door.reply(crew.crewToken, { to: post.senderShipId, inReplyTo: post.messageId, contentType: ANSWER_CONTENT_TYPE, payload: JSON.stringify({ questionId, option }), idempotencyKey: answerKeyOf({ questionId }) });
     if (!replied.isOk) {
       await edit(shown && notSentPostOf(shown, replied.error.message));
       return ok({ kind: 'refused' });
     }
     const at = deps.clock.now();
-    await edit(shown && editedPostOf(shown, { outcome: { place: 'slack', kind: 'answered', option, at }, bridgeUrl, optionText }));
+    await edit(shown && editedPostOf(shown, { outcome: { place: 'slack', kind: 'answered', option, at }, bridgeUrl }));
     const handled = await deps.door.handled(crew.crewToken, post.deliveryId);
     if (handled.isOk) {
       await deps.outcomes.save({ fleetId: app.fleetId, shipId: post.personShipId, deliveryId: post.deliveryId, place: 'slack', kind: 'answered', option, at });
