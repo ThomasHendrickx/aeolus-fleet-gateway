@@ -48,6 +48,8 @@ export function standingTextOf(item: BasketItem): string | undefined {
       return undefined;
     case 'sending':
       return 'Sending... The gateway keeps sending what is stored as sending, with the same key, until it is stored; you can close Bridge.';
+    case 'sent':
+      return 'Sent and stored. Done.';
     case 'refused':
       return `Not sent: ${standing.reason}. The others were sent.`;
     case 'withdrawn':

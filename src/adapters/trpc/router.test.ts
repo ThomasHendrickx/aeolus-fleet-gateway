@@ -175,6 +175,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readBasket: () =>
         Promise.resolve(
           ok({
+            count: 1,
             toSend: 1,
             entries: [{ questionId: QUESTION_ID, deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', option: 2, optionLabel: 'Publish it', note: null, standing: { kind: 'waiting' as const } }],
           }),

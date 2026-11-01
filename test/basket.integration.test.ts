@@ -116,6 +116,8 @@ async function answeredIntoTheBasket(asker: { shipId: ShipId; crewToken: string 
     addedAt: question.addedAt,
     state: 'sending',
     refusal: null,
+    isUnanswered: false,
+    storedAt: null,
   };
   await createPrismaBasketEntries(prisma).save(entry);
   return entry;
@@ -148,6 +150,11 @@ async function crewCharlotte() {
   await createPrismaPersonCrews(prisma).save({ fleetId, shipId: charlotte.shipId, crewToken: charlotte.crewToken, crewedAt: AT });
 }
 
+/** What each of Charlotte's entries stands as, in the order added. */
+async function stateOfEach(): Promise<string[]> {
+  return (await createPrismaBasketEntries(prisma).list(fleetId, charlotte.shipId)).map(({ state }) => state);
+}
+
 describe('the basket sent through a real core', () => {
   it('gives each asker one answer to its question, in reply to it, sent twice at once and once more after a restart', async () => {
     await crewCharlotte();
@@ -160,7 +167,7 @@ describe('the basket sent through a real core', () => {
 
     const answerTo = (entry: BasketEntry) => [{ senderName: 'charlotte', contentType: ANSWER, payload: JSON.stringify({ questionId: entry.questionId, option: 1 }), inReplyTo: entry.messageId }];
     await expect(Promise.all([received(askers.orchestrator), received(askers.commercial), received(askers.builder)])).resolves.toEqual([answerTo(harbour), answerTo(pricing), answerTo(retention)]);
-    await expect(createPrismaBasketEntries(prisma).list(fleetId, charlotte.shipId)).resolves.toEqual([]);
+    await expect(stateOfEach()).resolves.toEqual(['sent', 'sent', 'sent']);
     expect((await door.delivery(charlotte.crewToken, harbour.deliveryId)).isOk).toBe(false);
   });
 
@@ -173,11 +180,11 @@ describe('the basket sent through a real core', () => {
     await aSender()();
 
     await expect(received(askers.orchestrator)).resolves.toHaveLength(1);
-    await expect(createPrismaBasketEntries(prisma).list(fleetId, charlotte.shipId)).resolves.toEqual([]);
+    await expect(stateOfEach()).resolves.toEqual(['sent']);
     await expect(createPrismaItemOutcomes(prisma).findMany(fleetId, { shipId: charlotte.shipId, deliveryIds: [harbour.deliveryId] })).resolves.toMatchObject([{ place: 'bridge', kind: 'answered', option: 1 }]);
   });
 
-  it('keeps an answer to a retired asker in the basket, refused and saying why, and sends the others', async () => {
+  it('keeps an answer to a retired asker in the basket, refused and saying why in words, and sends the others', async () => {
     await crewCharlotte();
     const harbour = await answeredIntoTheBasket(askers.orchestrator, { id: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e', title: 'Which goes first: the Compact look (U4) or Harbour?', addedAt: new Date('2026-10-31T19:53:00.000Z') });
     const pricing = await answeredIntoTheBasket(askers.commercial, { id: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', title: 'Pricing page: a price per ship, or plans only?', addedAt: new Date('2026-10-31T19:55:00.000Z') });
@@ -187,8 +194,9 @@ describe('the basket sent through a real core', () => {
 
     await expect(received(askers.orchestrator)).resolves.toHaveLength(1);
     const left = await createPrismaBasketEntries(prisma).list(fleetId, charlotte.shipId);
-    expect(left.map(({ questionId, state }) => ({ questionId, state }))).toEqual([{ questionId: pricing.questionId, state: 'refused' }]);
-    expect(left[0]?.refusal).toMatch(/^commercial did not take the answer: ./);
-    expect(harbour.questionId).not.toBe(pricing.questionId);
+    expect(left.map(({ questionId, state, refusal }) => ({ questionId, state, refusal }))).toEqual([
+      { questionId: harbour.questionId, state: 'sent', refusal: null },
+      { questionId: pricing.questionId, state: 'refused', refusal: 'commercial was retired, so it cannot receive an answer' },
+    ]);
   });
 });

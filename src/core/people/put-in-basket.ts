@@ -27,8 +27,8 @@ export type PutInBasket = (input: { caller: PersonCaller; deliveryId: string; op
  * question: picking again changes it, in its place in the order added. An
  * entry being sent goes as stored, and one the fleet refused is removed,
  * not sent again, so neither changes. A question answered elsewhere first
- * is refused saying where. Every page of the person reads the
- * basket again.
+ * is refused saying where. The answers sent before are cleared, as a new
+ * basket starts. Every page of the person reads the basket again.
  */
 export function createPutInBasket(deps: { crewPersonShip: CrewPersonShip; opened: OpenedDeliveries; entries: BasketEntries; outcomes: Pick<ItemOutcomes, 'findMany'>; changes: InboxChanges; clock: Clock }): PutInBasket {
   return async ({ caller, deliveryId, option, optionLabel, note }) => {
@@ -57,6 +57,9 @@ export function createPutInBasket(deps: { crewPersonShip: CrewPersonShip; opened
     if (kept?.state === 'refused') {
       return refuse('CONFLICT', 'The fleet refused this answer: remove it from the basket');
     }
+    for (const sent of (await deps.entries.list(question.fleetId, question.shipId)).filter(({ state }) => state === 'sent')) {
+      await deps.entries.remove(sent.fleetId, { shipId: sent.shipId, questionId: sent.questionId });
+    }
     await deps.entries.save({
       fleetId: question.fleetId,
       shipId: question.shipId,
@@ -71,6 +74,8 @@ export function createPutInBasket(deps: { crewPersonShip: CrewPersonShip; opened
       addedAt: kept?.addedAt ?? deps.clock.now(),
       state: 'waiting',
       refusal: null,
+      isUnanswered: false,
+      storedAt: null,
     });
     await deps.changes.tell({ fleetId: question.fleetId, shipId: question.shipId });
     return ok(entry);

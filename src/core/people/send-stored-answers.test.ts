@@ -165,12 +165,12 @@ describe('the gateway sends the answers stored as sending', () => {
 
   it('keeps one the fleet refused in the basket, not sent, with why, not handled; the others are sent', async () => {
     await store(HARBOUR, PRICING);
-    ship.refusals.reply.push({ code: 'NOT_FOUND', message: 'Ship commercial was retired' });
+    ship.refusals.reply.push({ code: 'BAD_REQUEST', message: 'The answer is not valid' });
     await entries.save({ ...HARBOUR, addedAt: new Date('2026-10-31T19:59:00.000Z') });
 
     await expect(aSender()()).resolves.toEqual({ sent: 1, kept: 0, refused: 1 });
 
-    expect(unsent()).toEqual([{ ...PRICING, state: 'refused', refusal: 'commercial did not take the answer: Ship commercial was retired' }]);
+    expect(unsent()).toEqual([{ ...PRICING, state: 'refused', refusal: 'commercial did not take the answer: The answer is not valid' }]);
     expect(ship.calls).not.toContain(`handled(${PRICING.deliveryId})`);
     expect(outcomes.held.map(({ deliveryId }) => deliveryId)).toEqual([HARBOUR.deliveryId]);
   });
@@ -208,7 +208,7 @@ describe('the gateway sends the answers stored as sending', () => {
 
   it('says in words that the asker was retired, so it cannot receive an answer', async () => {
     await store(PRICING);
-    ship.refusals.reply.push({ code: 'UNRESOLVABLE_SELECTOR', message: 'commercial is retired: a retired ship is never addressed again' });
+    ship.refusals.reply.push({ code: 'NOT_FOUND', message: 'commercial is retired: a retired ship is never addressed again' });
 
     await aSender()();
 
@@ -217,7 +217,7 @@ describe('the gateway sends the answers stored as sending', () => {
 
   it('says in words that the person may not reach the asker', async () => {
     await store(PRICING);
-    ship.refusals.reply.push({ code: 'NOT_REACHABLE', message: 'The network rules do not let you reach commercial' });
+    ship.refusals.reply.push({ code: 'FORBIDDEN', message: 'The network rules do not let you reach commercial' });
 
     await aSender()();
 

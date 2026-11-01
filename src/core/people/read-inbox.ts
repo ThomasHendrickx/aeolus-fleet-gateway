@@ -1,5 +1,6 @@
 import { RECEIVE_MAX_UPPER_BOUND } from '@aeolus-fleet/common';
 
+import type { FleetRefusal } from '../connection/ports.js';
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import { chatInboxEntryOf, chatOpenedEntryOf, type ChatInboxEntry } from './inbox-entry.js';
@@ -51,6 +52,33 @@ export async function waitingFor(
     deliveries = [...deliveries, ...fresh];
   }
   return ok({ crew, waiting, deliveries });
+}
+
+/**
+ * What waits for a person ship, read with a crew token the gateway holds, as
+ * its own workers read it with no person calling: taken as waitingFor takes
+ * it, and refused as the fleet refuses, a crew that no longer works included.
+ */
+export async function waitingOn(door: Pick<PersonShipDoor, 'inbox' | 'pushReceive'>, crewToken: string): Promise<Result<PersonDelivery[], FleetRefusal>> {
+  const counted = await door.inbox(crewToken);
+  if (!counted.isOk) {
+    return counted;
+  }
+  let deliveries: PersonDelivery[] = [];
+  while (deliveries.length < counted.value.waiting) {
+    const excluding = deliveries.map(({ deliveryId }) => deliveryId);
+    const taken = await door.pushReceive(crewToken, { max: RECEIVE_MAX_UPPER_BOUND, ...(excluding.length === 0 ? {} : { excluding }) });
+    if (!taken.isOk) {
+      return taken;
+    }
+    const isTaken = new Set<string>(excluding);
+    const fresh = taken.value.filter(({ deliveryId }) => !isTaken.has(deliveryId));
+    if (fresh.length === 0) {
+      break;
+    }
+    deliveries = [...deliveries, ...fresh];
+  }
+  return ok(deliveries);
 }
 
 /**

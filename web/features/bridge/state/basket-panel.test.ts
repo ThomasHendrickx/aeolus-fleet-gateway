@@ -30,7 +30,7 @@ function render(basket: BasketView): string {
 
 describe('the basket open', () => {
   it('lists each entry with its question, asker, option and note, Change and Remove, and Send naming how many answers it sends', () => {
-    const markup = render({ toSend: 2, entries: [anEntry(), anEntry({ questionId: 'q2', deliveryId: 'dlv_02', from: 'commercial', title: 'Pricing page: a price per ship, or plans only?', option: 1, note: null })] });
+    const markup = render({ count: 0, toSend: 2, entries: [anEntry(), anEntry({ questionId: 'q2', deliveryId: 'dlv_02', from: 'commercial', title: 'Pricing page: a price per ship, or plans only?', option: 1, note: null })] });
 
     expect({
       rows: (markup.match(/data-testid="bridge-basket-entry"/g) ?? []).length,
@@ -44,19 +44,20 @@ describe('the basket open', () => {
   });
 
   it('lists an entry with only a note as the note alone, with no option', () => {
-    const markup = render({ toSend: 1, entries: [anEntry({ option: null, note: 'Neither: ask me after the demo.' })] });
+    const markup = render({ count: 0, toSend: 1, entries: [anEntry({ option: null, note: 'Neither: ask me after the demo.' })] });
 
     expect({ noteAlone: markup.includes('Note alone'), option: markup.includes('Option'), note: markup.includes('“Neither: ask me after the demo.”') }).toEqual({ noteAlone: true, option: false, note: true });
   });
 
   it('says a withdrawn, a replaced, a refused and a sending entry as they stand, with no Change, and counts only what Send sends', () => {
     const markup = render({
+      count: 0,
       toSend: 1,
       entries: [
         anEntry({ questionId: 'q1', standing: { kind: 'withdrawn', at: '2026-10-31T20:09:00.000Z' } }),
         anEntry({ questionId: 'q2', standing: { kind: 'replaced', replacementId: 'dlv_09', at: '2026-10-31T20:11:00.000Z', replacementTitle: 'Pricing page: plans only?' } }),
         anEntry({ questionId: 'q3', standing: { kind: 'refused', reason: 'orchestrator-1 did not take the answer: retired' } }),
-        anEntry({ questionId: 'q4', standing: { kind: 'sending' } }),
+        anEntry({ questionId: 'q4', standing: { kind: 'sending', isUnanswered: false } }),
         anEntry({ questionId: 'q5' }),
       ],
     });
@@ -72,7 +73,7 @@ describe('the basket open', () => {
   });
 
   it('says the basket is empty, with nothing to send', () => {
-    const markup = render({ toSend: 0, entries: [] });
+    const markup = render({ count: 0, toSend: 0, entries: [] });
 
     expect({ empty: markup.includes('The basket is empty'), send: markup.includes('data-testid="bridge-basket-send"') }).toEqual({ empty: true, send: false });
   });

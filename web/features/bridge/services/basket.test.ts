@@ -17,7 +17,7 @@ describe("the basket's words", () => {
   it('says what each entry not waiting stands as, and nothing for one waiting', () => {
     expect([
       standingTextOf(anItem({ kind: 'waiting' })),
-      standingTextOf(anItem({ kind: 'sending' })),
+      standingTextOf(anItem({ kind: 'sending', isUnanswered: false })),
       standingTextOf(anItem({ kind: 'refused', reason: 'commercial did not take the answer: Ship commercial was retired' })),
       standingTextOf(anItem({ kind: 'withdrawn', at: '2026-10-31T20:09:00.000Z' })),
       standingTextOf(anItem({ kind: 'replaced', replacementId: 'dlv_02', at: '2026-10-31T20:11:00.000Z', replacementTitle: 'Pricing page: plans only?' })),

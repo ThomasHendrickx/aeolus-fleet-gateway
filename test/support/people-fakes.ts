@@ -320,7 +320,7 @@ export function memoryBasketEntries(): BasketEntries & { held: Map<string, Baske
     },
     find: (fleetId, asked) => Promise.resolve(held.get(key(fleetId, asked))),
     list: (fleetId, shipId) => Promise.resolve(ofShip(fleetId, shipId)),
-    count: (fleetId, shipId) => Promise.resolve(ofShip(fleetId, shipId).length),
+    count: (fleetId, shipId) => Promise.resolve(ofShip(fleetId, shipId).filter(({ state }) => state !== 'sent').length),
     remove: (fleetId, removed) => {
       held.delete(key(fleetId, removed));
       return Promise.resolve();

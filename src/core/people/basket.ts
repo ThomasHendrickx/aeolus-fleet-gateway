@@ -10,10 +10,10 @@
 import type { DeliveryId, FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { ItemOutcome, Place } from './item-outcome.js';
-import type { Stale } from './stale-item.js';
+import type { Asking, Stale } from './stale-item.js';
 
-/** Where an entry is: waiting for Send, stored as sending, or refused by the fleet, not sent. */
-export type BasketEntryState = 'waiting' | 'sending' | 'refused';
+/** Where an entry is: waiting for Send, stored as sending, sent and stored by the fleet, or refused by the fleet, not sent. */
+export type BasketEntryState = 'waiting' | 'sending' | 'sent' | 'refused';
 
 export interface BasketEntry {
   readonly fleetId: FleetId;
@@ -37,8 +37,12 @@ export interface BasketEntry {
   /** When it was put in the basket: entries are sent in this order, and changing one keeps its place. */
   readonly addedAt: Date;
   readonly state: BasketEntryState;
-  /** Why the fleet refused it, while refused. */
+  /** Why the fleet refused it, in words, while refused. */
   readonly refusal: string | null;
+  /** Whether the fleet did not answer its last send: it is sent again under the same key until stored. */
+  readonly isUnanswered: boolean;
+  /** When the fleet stored its answer, once sent: it stays in the basket, not counted, until the next Put or Send clears it. */
+  readonly storedAt: Date | null;
 }
 
 /** Outbound port: the basket of each person ship, by fleet, person ship and question. */
@@ -48,7 +52,7 @@ export interface BasketEntries {
   find(fleetId: FleetId, asked: { shipId: ShipId; questionId: string }): Promise<BasketEntry | undefined>;
   /** The person ship's, in the order added. */
   list(fleetId: FleetId, shipId: ShipId): Promise<BasketEntry[]>;
-  /** How many entries the person ship's basket holds. */
+  /** How many entries the person ship's basket holds, the sent ones not counted. */
   count(fleetId: FleetId, shipId: ShipId): Promise<number>;
   remove(fleetId: FleetId, removed: { shipId: ShipId; questionId: string }): Promise<void>;
   /** The person ships with an entry stored as sending, of every fleet, by fleet and ship, after the one given. */
@@ -63,7 +67,8 @@ export interface BasketEntries {
  */
 export type BasketStanding =
   | { readonly kind: 'waiting' }
-  | { readonly kind: 'sending' }
+  | { readonly kind: 'sending'; readonly isUnanswered: boolean }
+  | { readonly kind: 'sent'; readonly at: string }
   | { readonly kind: 'refused'; readonly reason: string }
   | { readonly kind: 'withdrawn'; readonly at: string }
   | { readonly kind: 'replaced'; readonly replacementId: DeliveryId | null; readonly at: string; readonly replacementTitle: string | null }
@@ -76,6 +81,9 @@ export type BasketStanding =
  */
 export function standingOf(entry: BasketEntry, known: { outcome: ItemOutcome | undefined; stale: Stale | null }): BasketStanding {
   const { outcome, stale } = known;
+  if (entry.state === 'sent') {
+    return { kind: 'sent', at: (entry.storedAt ?? entry.addedAt).toISOString() };
+  }
   if (outcome !== undefined) {
     switch (outcome.kind) {
       case 'withdrawn':
@@ -92,7 +100,7 @@ export function standingOf(entry: BasketEntry, known: { outcome: ItemOutcome | u
   }
   switch (entry.state) {
     case 'sending':
-      return { kind: 'sending' };
+      return { kind: 'sending', isUnanswered: entry.isUnanswered };
     case 'refused':
       return { kind: 'refused', reason: entry.refusal ?? 'The fleet refused it' };
     case 'waiting':
@@ -101,6 +109,26 @@ export function standingOf(entry: BasketEntry, known: { outcome: ItemOutcome | u
       }
       return stale.kind === 'withdrawn' ? { kind: 'withdrawn', at: stale.at } : { kind: 'replaced', replacementId: stale.replacementId, at: stale.at, replacementTitle: stale.replacementTitle };
   }
+}
+
+/** Whether an entry counts as what will be sent: waiting, sending, or refused until removed; not one sent, nor one withdrawn, replaced or answered elsewhere. */
+export function isCounted(standing: BasketStanding): boolean {
+  switch (standing.kind) {
+    case 'waiting':
+    case 'sending':
+    case 'refused':
+      return true;
+    case 'sent':
+    case 'withdrawn':
+    case 'replaced':
+    case 'dealtElsewhere':
+      return false;
+  }
+}
+
+/** The question an entry answers, as a withdrawal or a replacement names it. */
+export function askingOfEntry(entry: BasketEntry): Asking {
+  return { deliveryId: entry.deliveryId, senderShipId: entry.senderShipId, sentAt: entry.sentAt, title: entry.title, askedQuestionId: entry.questionId, withdrawnQuestionId: null, stepId: null, withdrawnStepId: null };
 }
 
 /** The answer an entry sends (decision 0038): its question's uuid, its option if any, and its note if any. */
