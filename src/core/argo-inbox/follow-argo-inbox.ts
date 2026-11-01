@@ -1,8 +1,8 @@
 import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { ConnectionStore, GatewayCrew } from '../connection/ports.js';
-import { isOpenAtArgo, type ArgoInbox } from './argo-inbox.js';
-import type { ArgoInboxDoor, ArgoInboxEntry, ArgoMessage } from './ports.js';
+import { argoTitleOf, isOpenAtArgo, type ArgoInbox, type DoneAtArgo } from './argo-inbox.js';
+import type { ArgoInboxChange, ArgoInboxDoor, ArgoInboxEntry, ArgoMessage } from './ports.js';
 
 /**
  * What the ship holds of argo's inbox in a fleet, each message open there by
@@ -10,8 +10,8 @@ import type { ArgoInboxDoor, ArgoInboxEntry, ArgoMessage } from './ports.js';
  * until the next round reads it whole again; or not let read.
  */
 type Held =
-  | { readonly kind: 'following'; readonly argo: ShipId; readonly afterSeq: number; readonly messages: ReadonlyMap<MessageId, ArgoMessage> }
-  | { readonly kind: 'stale'; readonly messages: ReadonlyMap<MessageId, ArgoMessage> }
+  | { readonly kind: 'following'; readonly argo: ShipId; readonly afterSeq: number; readonly messages: ReadonlyMap<MessageId, ArgoMessage>; readonly lastDone: DoneAtArgo | null }
+  | { readonly kind: 'stale'; readonly messages: ReadonlyMap<MessageId, ArgoMessage>; readonly lastDone: DoneAtArgo | null }
   | { readonly kind: 'notLetRead' };
 
 type Following = Extract<Held, { kind: 'following' }>;
@@ -23,8 +23,22 @@ export interface FollowArgoInbox {
   readonly inboxOf: (fleetId: FleetId) => ArgoInbox | undefined;
 }
 
-function messageOf({ messageId, deliveryId, sender, contentType, sentAt }: ArgoInboxEntry): ArgoMessage {
-  return { messageId, deliveryId, sender, contentType, sentAt };
+function messageOf(entry: ArgoInboxEntry): ArgoMessage {
+  const { messageId, deliveryId, sender, contentType, sentAt, askedQuestionId, withdrawnQuestionId } = entry;
+  return { messageId, deliveryId, sender, contentType, sentAt, title: argoTitleOf(entry), askedQuestionId, withdrawnQuestionId };
+}
+
+/** What a fleet's page shows of argo's inbox, to tell whether a round changed it. */
+function shownOf(held: Held | undefined): string {
+  if (held === undefined || held.kind === 'notLetRead') {
+    return held?.kind ?? 'none';
+  }
+  return JSON.stringify({ messageIds: [...held.messages.keys()], lastDone: held.lastDone });
+}
+
+/** Who did a message done at argo, by the newest change to it. */
+function doneOf(message: ArgoMessage, change: ArgoInboxChange): DoneAtArgo {
+  return { title: message.title, at: change.occurredAt, byShipId: change.actorShipId, signedInAccountId: change.signedInAccountId };
 }
 
 function oldestFirst(messages: Iterable<ArgoMessage>): ArgoMessage[] {
@@ -41,19 +55,31 @@ function oldestFirst(messages: Iterable<ArgoMessage>): ArgoMessage[] {
  * reads it whole again, as it followed nothing meanwhile. While the fleet
  * does not answer it keeps what it read, and reads it whole again when
  * following fails. argo's inbox stays the one record: what the ship read
- * lives in memory only, and core sends it nothing.
+ * lives in memory only, and core sends it nothing. It keeps the newest
+ * message it saw leave the open inbox, and who did it, and tells each round
+ * that changed what it holds, so the pages that show it read it again.
  */
-export function createFollowArgoInbox(deps: { connections: Pick<ConnectionStore, 'connected'>; door: ArgoInboxDoor }): FollowArgoInbox {
+export function createFollowArgoInbox(deps: { connections: Pick<ConnectionStore, 'connected'>; door: ArgoInboxDoor; onChanged?: (fleetId: FleetId) => void }): FollowArgoInbox {
   const held = new Map<FleetId, Held>();
 
-  const readWhole = async (crewToken: string, argo: ShipId): Promise<Following | undefined> => {
+  const readWhole = async ({ crewToken, argo, lastDone }: { crewToken: string; argo: ShipId; lastDone: DoneAtArgo | null }): Promise<Following | undefined> => {
     const position = await deps.door.position(crewToken);
-    const entries = position.isOk ? await deps.door.entries(crewToken, argo) : position;
-    if (!position.isOk || !entries.isOk) {
+    const listed = position.isOk ? await deps.door.entries(crewToken, argo) : position;
+    if (!position.isOk || !listed.isOk) {
       return undefined;
     }
-    const open = entries.value.filter(({ deliveryState }) => isOpenAtArgo(deliveryState));
-    return { kind: 'following', argo, afterSeq: position.value, messages: new Map(open.map((entry) => [entry.messageId, messageOf(entry)])) };
+    // Only the open messages are read whole, for their titles: argo's done ones may be many.
+    const read = await Promise.all(listed.value.filter(({ deliveryState }) => isOpenAtArgo(deliveryState)).map(({ messageId }) => deps.door.entry(crewToken, { argo, messageId })));
+    const messages = new Map<MessageId, ArgoMessage>();
+    for (const entry of read) {
+      if (!entry.isOk) {
+        return undefined;
+      }
+      if (entry.value !== null && isOpenAtArgo(entry.value.deliveryState)) {
+        messages.set(entry.value.messageId, messageOf(entry.value));
+      }
+    }
+    return { kind: 'following', argo, afterSeq: position.value, messages, lastDone };
   };
 
   const followOn = async ({ crewToken, following, signal }: { crewToken: string; following: Following; signal: AbortSignal }): Promise<Following | undefined> => {
@@ -63,37 +89,47 @@ export function createFollowArgoInbox(deps: { connections: Pick<ConnectionStore,
       return undefined;
     }
     const messages = new Map(following.messages);
-    for (const messageId of new Set(changes.value.messageIds)) {
+    let { lastDone } = following;
+    const newest = new Map(changes.value.changes.map((change) => [change.messageId, change]));
+    for (const [messageId, change] of newest) {
       const entry = await deps.door.entry(crewToken, { argo, messageId });
       if (!entry.isOk) {
         return undefined;
       }
+      const held = messages.get(messageId);
       if (entry.value !== null && isOpenAtArgo(entry.value.deliveryState)) {
         messages.set(messageId, messageOf(entry.value));
-      } else {
+      } else if (held !== undefined) {
         messages.delete(messageId);
+        lastDone = lastDone !== null && lastDone.at > change.occurredAt ? lastDone : doneOf(held, change);
       }
     }
-    return { kind: 'following', argo, afterSeq: changes.value.lastSeq, messages };
+    return { kind: 'following', argo, afterSeq: changes.value.lastSeq, messages, lastDone };
+  };
+
+  const nextOf = async ({ crewToken, before }: { crewToken: string; before: Held | undefined }, signal: AbortSignal): Promise<Held | undefined> => {
+    const argo = await deps.door.argoInReach(crewToken);
+    if (!argo.isOk) {
+      return before;
+    }
+    if (argo.value === null) {
+      return { kind: 'notLetRead' };
+    }
+    if (before?.kind === 'following' && before.argo === argo.value) {
+      return (await followOn({ crewToken, following: before, signal })) ?? { kind: 'stale', messages: before.messages, lastDone: before.lastDone };
+    }
+    return (await readWhole({ crewToken, argo: argo.value, lastDone: before === undefined || before.kind === 'notLetRead' ? null : before.lastDone })) ?? before;
   };
 
   const roundOf = async ({ fleetId, crewToken }: GatewayCrew, signal: AbortSignal): Promise<void> => {
-    const argo = await deps.door.argoInReach(crewToken);
-    if (!argo.isOk) {
-      return;
-    }
-    if (argo.value === null) {
-      held.set(fleetId, { kind: 'notLetRead' });
-      return;
-    }
     const before = held.get(fleetId);
-    if (before?.kind === 'following' && before.argo === argo.value) {
-      held.set(fleetId, (await followOn({ crewToken, following: before, signal })) ?? { kind: 'stale', messages: before.messages });
+    const next = await nextOf({ crewToken, before }, signal);
+    if (next === undefined) {
       return;
     }
-    const read = await readWhole(crewToken, argo.value);
-    if (read !== undefined) {
-      held.set(fleetId, read);
+    held.set(fleetId, next);
+    if (shownOf(next) !== shownOf(before)) {
+      deps.onChanged?.(fleetId);
     }
   };
 
@@ -113,7 +149,7 @@ export function createFollowArgoInbox(deps: { connections: Pick<ConnectionStore,
       if (inbox === undefined) {
         return undefined;
       }
-      return inbox.kind === 'notLetRead' ? { kind: 'notLetRead' } : { kind: 'read', messages: oldestFirst(inbox.messages.values()) };
+      return inbox.kind === 'notLetRead' ? { kind: 'notLetRead' } : { kind: 'read', messages: oldestFirst(inbox.messages.values()), lastDone: inbox.lastDone };
     },
   };
 }

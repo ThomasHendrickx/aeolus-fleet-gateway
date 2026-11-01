@@ -67,4 +67,16 @@ describe("the phone's basket bar", () => {
   it('is left out on the basket itself', () => {
     expect(basketBarOf(tabsOf({ screen: 'basket', counts: { ...COUNTS, basket: 1 } }))).toBeUndefined();
   });
+
+  it("adds argo's tab beside Waiting, with its own count, for an account allowed as argo", () => {
+    const tabs = phoneTabsOf(tabsOf({ counts: { ...COUNTS, argo: 4 } }));
+
+    expect(tabs.map(({ key, text, href }) => ({ key, text, href }))).toEqual([
+      { key: 'waiting', text: 'Waiting4', href: '/bridge?fleet=flt_01' },
+      { key: 'argo', text: 'argo4', href: '/bridge?fleet=flt_01#argo' },
+      { key: 'aware', text: 'Aware2', href: '/bridge/stay-aware?fleet=flt_01' },
+      { key: 'done', text: 'Done', href: '/bridge/done?fleet=flt_01' },
+      { key: 'fleet', text: 'Fleet1', href: '/bridge/fleet?fleet=flt_01' },
+    ]);
+  });
 });

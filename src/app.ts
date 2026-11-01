@@ -187,6 +187,7 @@ import { createPrismaArgoAccounts } from './adapters/prisma/argo-accounts.js';
 import { createArgoInboxDoor } from './adapters/fleet/argo-inbox-door.js';
 import { createFollowArgoInbox } from './core/argo-inbox/follow-argo-inbox.js';
 import { createReadArgoInboxNotice } from './core/argo-inbox/read-argo-inbox-notice.js';
+import { createReadArgoSection } from './core/argo-inbox/read-argo-section.js';
 import { createWakeForArgo } from './core/argo-inbox/wake-for-argo.js';
 import { createPersonWakes } from './core/people/person-wakes.js';
 import { createPrismaArgoWakes } from './adapters/prisma/argo-wakes.js';
@@ -799,7 +800,14 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     log: server.log,
   });
   // The gateway's own ship reads argo's open inbox by the read rule argo adds, whole at the start, then following each change (argo's inbox, AI9).
-  const followArgoInbox = createFollowArgoInbox({ connections, door: createArgoInboxDoor({ fleetUrl: options.fleetUrl }) });
+  // Each change to what it holds has the pages of that fleet read themselves again, so what was done at argo leaves them at once.
+  const followArgoInbox = createFollowArgoInbox({
+    connections,
+    door: createArgoInboxDoor({ fleetUrl: options.fleetUrl }),
+    onChanged: (fleetId) => {
+      hub.publish({ fleetId, topic: 'argoInbox' });
+    },
+  });
   const argoInboxStopping = new AbortController();
   // A wake of its own for what waits at argo, for every person allowed as argo, at once after each read of argo's inbox, and on its own round as windows pass (argo's inbox, AI5).
   const argoWakes = createRoundWorker({
@@ -820,6 +828,20 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     log: server.log,
   });
   const readArgoInboxNotice = createReadArgoInboxNotice({ accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, connections });
+  // Bridge's argo section (argo's inbox, AI2 to AI4): each item opens in the console, at the fleet's address, through the sign-in as argo.
+  const readArgoSection = createReadArgoSection({
+    accounts: argoAccounts,
+    inboxOf: followArgoInbox.inboxOf,
+    shipNames: {
+      nameOf: async (fleetId, shipId) => {
+        const crew = await connections.find(fleetId);
+        const ship = crew === undefined ? undefined : await door.getShip(crew.crewToken, { shipId });
+        return ship?.isOk === true ? ship.value.name : undefined;
+      },
+    },
+    clock,
+    consoleUrlOf: (deliveryId) => `${options.fleetUrl}/inbox?message=${encodeURIComponent(deliveryId)}`,
+  });
   // View sync in Slack (Bridge, section 7): each post edited once something came of its item, at once when an inbox change is heard.
   const slackEdits = createRoundWorker({
     name: 'slack edits',
@@ -1074,6 +1096,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     listOwnerChoices,
     readYourFleet,
     readArgoInboxNotice,
+    readArgoSection,
     checkServer,
     readPartyTools,
     stateParty,

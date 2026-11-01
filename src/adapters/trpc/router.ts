@@ -17,6 +17,7 @@ import { z } from 'zod';
 
 import type { ChangeHub } from '../http/live.js';
 import type { ArgoInboxNotice, ReadArgoInboxNotice } from '../../core/argo-inbox/read-argo-inbox-notice.js';
+import type { ArgoSection, ReadArgoSection } from '../../core/argo-inbox/read-argo-section.js';
 import type { AccountInView } from '../../core/account-sign-in/account-in-view.js';
 import type { SharedSignIn } from '../../core/account-sign-in/ports.js';
 import type { Connect } from '../../core/connection/connect.js';
@@ -150,6 +151,7 @@ export interface Context {
   readYourFleet: ReadYourFleet;
   /** What the overview tells an account of argo's inbox (argo's inbox, section 4). */
   readArgoInboxNotice: ReadArgoInboxNotice;
+  readArgoSection: ReadArgoSection;
   retireParty: RetireParty;
   changePartyOwner: ChangePartyOwner;
   changePartyScopes: ChangePartyScopes;
@@ -1251,6 +1253,13 @@ export const gatewayRouter = t.router({
      */
     argoInboxNotice: actorProcedure.query(({ ctx }): Promise<ArgoInboxNotice> =>
       ctx.actor.kind === 'account' ? ctx.readArgoInboxNotice({ fleetId: ctx.actor.fleetId, accountId: ctx.actor.accountId }) : Promise.resolve({ kind: 'none' }),
+    ),
+    /**
+     * Bridge's argo section (argo's inbox, AI2 to AI4): what waits at argo,
+     * with its own count, for an account allowed as argo; none for anyone else.
+     */
+    argoSection: actorProcedure.query(({ ctx }): Promise<ArgoSection | null> =>
+      ctx.actor.kind === 'account' ? ctx.readArgoSection({ fleetId: ctx.actor.fleetId, accountId: ctx.actor.accountId }) : Promise.resolve(null),
     ),
     /**
      * Your fleet (Bridge home, as Harbour draws it): every active ship the

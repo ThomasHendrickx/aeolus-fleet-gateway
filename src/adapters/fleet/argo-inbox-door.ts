@@ -2,18 +2,20 @@
  * argo's inbox as the gateway's own ship reads it through core's public
  * ship contract, by its crew token and within its read reach (argo's inbox,
  * AI9; decision 0034): argo by fleet.list, the fleet's events by
- * fleet.follow, and argo's messages by fleet.shipMessages and fleet.message,
+ * fleet.follow, with who caused each change, and argo's messages by
+ * fleet.shipMessages and, read whole with their payloads, fleet.message,
  * which have no REST door, so they go over tRPC with the crew token.
  */
 import { FOLLOW_MAX_LIMIT, FOLLOW_WAIT_MAX_SECONDS, followFleetOutputSchema, messageOutputSchema, shipMessagesOutputSchema, type MessageId, type ShipId } from '@aeolus-fleet/common';
 import { PAGE_SIZE_MAX } from '@aeolus-fleet/common/rules';
 import type { z } from 'zod';
 
-import type { ArgoInboxDoor, ArgoInboxEntry } from '../../core/argo-inbox/ports.js';
+import type { ArgoInboxDoor, ArgoInboxListed } from '../../core/argo-inbox/ports.js';
 import type { FleetRefusal } from '../../core/connection/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
 import { readAs } from './actor-door.js';
 import { everyListedShip } from './every-listed-ship.js';
+import { questionPartsOf } from './rest-fleet-door.js';
 
 /** The code tRPC answers for a message the fleet does not show the reader: none, or one outside its read reach (core's MESSAGE_NOT_FOUND). */
 const MESSAGE_NOT_FOUND = 'NOT_FOUND';
@@ -26,7 +28,7 @@ interface Listed extends Pick<ListedMessage, 'id' | 'sender' | 'recipient' | 'co
 }
 
 /** A message as the fleet lists it, when it is one to argo. */
-function entryOf(argo: ShipId, { id, sender, recipient, contentType, sentAt, delivery }: Listed): ArgoInboxEntry | null {
+function listedOf(argo: ShipId, { id, sender, recipient, contentType, sentAt, delivery }: Listed): ArgoInboxListed | null {
   if (recipient.kind !== 'ship' || recipient.ship.id !== argo) {
     return null;
   }
@@ -53,7 +55,7 @@ export function createArgoInboxDoor(options: { fleetUrl: string }): ArgoInboxDoo
       return followed.isOk ? ok(followed.value.lastSeq) : followed;
     },
     entries: async (crewToken, argo) => {
-      const entries: ArgoInboxEntry[] = [];
+      const entries: ArgoInboxListed[] = [];
       let cursor: MessageId | null = null;
       do {
         const input: { shipId: ShipId; limit: number; cursor?: MessageId } = { shipId: argo, limit: PAGE_SIZE_MAX, ...(cursor === null ? {} : { cursor }) };
@@ -61,7 +63,7 @@ export function createArgoInboxDoor(options: { fleetUrl: string }): ArgoInboxDoo
         if (!page.isOk) {
           return page;
         }
-        entries.push(...page.value.items.flatMap((listed) => entryOf(argo, listed) ?? []));
+        entries.push(...page.value.items.flatMap((listed) => listedOf(argo, listed) ?? []));
         cursor = page.value.nextCursor;
       } while (cursor !== null);
       return ok(entries);
@@ -71,7 +73,9 @@ export function createArgoInboxDoor(options: { fleetUrl: string }): ArgoInboxDoo
       if (!read.isOk) {
         return read.error.code === MESSAGE_NOT_FOUND ? ok(null) : read;
       }
-      return ok(entryOf(argo, read.value));
+      const listed = listedOf(argo, read.value);
+      const { contentType, payload } = read.value;
+      return ok(listed === null ? null : { ...listed, payload, ...questionPartsOf({ contentType, payload }) });
     },
     changes: async (crewToken, { argo, afterSeq, signal }) => {
       const input = { afterSeq, max: FOLLOW_MAX_LIMIT, waitSeconds: FOLLOW_WAIT_MAX_SECONDS };
@@ -79,8 +83,10 @@ export function createArgoInboxDoor(options: { fleetUrl: string }): ArgoInboxDoo
       if (!followed.isOk) {
         return followed;
       }
-      const messageIds = followed.value.events.flatMap(({ shipId, messageId }) => (shipId === argo && messageId !== null ? [messageId] : []));
-      return ok({ messageIds, lastSeq: followed.value.lastSeq });
+      const changes = followed.value.events.flatMap(({ shipId, messageId, occurredAt, actorShipId, actorSignedInAccountId }) =>
+        shipId === argo && messageId !== null ? [{ messageId, occurredAt: new Date(occurredAt), actorShipId, signedInAccountId: actorSignedInAccountId }] : [],
+      );
+      return ok({ changes, lastSeq: followed.value.lastSeq });
     },
   };
 }

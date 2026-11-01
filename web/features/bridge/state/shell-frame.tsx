@@ -26,7 +26,7 @@ export interface ShellAccount {
  * The person at the sidebar's foot (home.html): the avatar opens the
  * avatar menu, beside the account's email and the fleet in view.
  */
-export function SidebarPerson({ account: { email, accountUrl, theme }, fleetName }: { account: ShellAccount; fleetName: string | undefined }) {
+export function SidebarPerson({ account: { email, accountUrl, theme }, fleetName, isAllowedAsArgo = false }: { account: ShellAccount; fleetName: string | undefined; isAllowedAsArgo?: boolean }) {
   const { account, signOutForm } = useAccountMenu({ email, accountUrl, theme });
   return (
     <>
@@ -36,7 +36,7 @@ export function SidebarPerson({ account: { email, accountUrl, theme }, fleetName
         <span data-testid="bridge-person" className="truncate font-medium">
           {email}
         </span>
-        <span className="truncate text-caption text-muted-foreground">{fleetName}</span>
+        <span className="truncate text-caption text-muted-foreground">{isAllowedAsArgo ? `${fleetName ?? ''} · allowed as argo` : fleetName}</span>
       </span>
     </>
   );

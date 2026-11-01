@@ -78,4 +78,21 @@ describe("Bridge's sidebar", () => {
   it('leaves Fleets and account out while the account app is not known', () => {
     expect(entriesOf(sidebarOf({ accountUrl: null })).account).toBeUndefined();
   });
+
+  it('shows Waits at argo under For argo, with its own count, to an account allowed as argo, leading to the argo section', () => {
+    const markup = sidebarOf({ counts: { ...COUNTS, argo: 4 } });
+    const entries = entriesOf(markup);
+
+    expect({ isHeaded: markup.includes('>For argo<'), argo: entries.argo, home: entries.home?.text }).toEqual({
+      isHeaded: true,
+      argo: { href: '/bridge?fleet=flt_01#argo', text: 'Waits at argo4', isCurrent: false },
+      home: 'Waiting on you4',
+    });
+  });
+
+  it('shows nothing for argo to an account not allowed as argo', () => {
+    const markup = sidebarOf();
+
+    expect({ isHeaded: markup.includes('For argo'), argo: entriesOf(markup).argo }).toEqual({ isHeaded: false, argo: undefined });
+  });
 });

@@ -22,18 +22,40 @@ export interface ArgoAccounts {
   list(fleetId: FleetId): Promise<readonly ArgoAccount[]>;
 }
 
-/** A message to argo as the gateway reads it from argo's inbox: who sent what, when, and its delivery. */
-export interface ArgoMessage {
+/** A message to argo as the fleet lists it: who sent it, when, and its delivery, with the delivery's state. */
+export interface ArgoInboxListed {
   readonly messageId: MessageId;
   readonly deliveryId: DeliveryId;
   readonly sender: { readonly shipId: ShipId; readonly name: string };
   readonly contentType: string;
   readonly sentAt: Date;
+  readonly deliveryState: DeliveryState;
 }
 
-/** A message to argo and its delivery's state as the fleet answers it. */
-export interface ArgoInboxEntry extends ArgoMessage {
-  readonly deliveryState: DeliveryState;
+/** A message to argo read whole: listed, with its payload, its headline, and the question it asks or withdraws, read from it. */
+export interface ArgoInboxEntry extends ArgoInboxListed {
+  readonly payload: string;
+  /** A question's title, or a step's, an alert's or a notice's headline; none for any other message. */
+  readonly headline: string | null;
+  readonly askedQuestionId: string | null;
+  readonly withdrawnQuestionId: string | null;
+}
+
+/** A message to argo as the gateway holds it: listed, titled as an inbox lists it, and the question it asks or withdraws. */
+export interface ArgoMessage extends Omit<ArgoInboxListed, 'deliveryState'> {
+  readonly title: string;
+  readonly askedQuestionId: string | null;
+  readonly withdrawnQuestionId: string | null;
+}
+
+/** A change to a delivery to argo, as the fleet's event says it: when, and who caused it, the account signed in to the console as argo included (decision 0054). */
+export interface ArgoInboxChange {
+  readonly messageId: MessageId;
+  readonly occurredAt: Date;
+  /** The ship that caused it; none for any other actor. */
+  readonly actorShipId: ShipId | null;
+  /** The account signed in to the console as argo when argo caused it; none otherwise. */
+  readonly signedInAccountId: string | null;
 }
 
 /**
@@ -46,12 +68,12 @@ export interface ArgoInboxDoor {
   argoInReach(crewToken: string): Promise<Result<ShipId | null, FleetRefusal>>;
   /** The position of the fleet's last event: a follow from there misses nothing after it. */
   position(crewToken: string): Promise<Result<number, FleetRefusal>>;
-  /** Every message to argo, with its delivery's state. */
-  entries(crewToken: string, argo: ShipId): Promise<Result<readonly ArgoInboxEntry[], FleetRefusal>>;
-  /** One message to argo with its delivery's state; null when it is no message to argo the ship reads. */
+  /** Every message to argo, listed with its delivery's state. */
+  entries(crewToken: string, argo: ShipId): Promise<Result<readonly ArgoInboxListed[], FleetRefusal>>;
+  /** One message to argo read whole, with its delivery's state; null when it is no message to argo the ship reads. */
   entry(crewToken: string, read: { argo: ShipId; messageId: MessageId }): Promise<Result<ArgoInboxEntry | null, FleetRefusal>>;
-  /** The messages whose delivery to argo changed after the position, waiting while none did until the signal aborts, and the position to follow from next. */
-  changes(crewToken: string, follow: { argo: ShipId; afterSeq: number; signal: AbortSignal }): Promise<Result<{ messageIds: readonly MessageId[]; lastSeq: number }, FleetRefusal>>;
+  /** Each change to a delivery to argo after the position, oldest first, waiting while none came until the signal aborts, and the position to follow from next. */
+  changes(crewToken: string, follow: { argo: ShipId; afterSeq: number; signal: AbortSignal }): Promise<Result<{ changes: readonly ArgoInboxChange[]; lastSeq: number }, FleetRefusal>>;
 }
 
 /**
