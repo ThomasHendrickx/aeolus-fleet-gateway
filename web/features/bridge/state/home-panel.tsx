@@ -12,9 +12,12 @@ function countsOf(items: readonly HomeItem[]): string {
   return `${String(toDecide)} to decide, ${String(toDo)} to do. Newest on top; nothing else is in this count.`;
 }
 
-/** What a row says of its item: stale, seen and not done, or nothing while new. */
+/** What a row says of its item: stale, in the basket, seen and not done, or nothing while new. */
 function rowOutcomeOf(item: HomeItem, items: readonly HomeItem[]): string | undefined {
-  const { stale } = item;
+  const { stale, inBasket } = item;
+  if (stale === null && inBasket !== null) {
+    return `In the basket: option ${String(inBasket.option)}`;
+  }
   if (stale === null) {
     return item.state === 'seen' ? 'Seen, not done yet' : undefined;
   }
