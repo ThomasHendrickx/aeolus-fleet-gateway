@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import type { Question } from '@aeolus-fleet/common';
 
 import { staleSaidOf, type FocusedDelivery, type Stale, type StepView } from '../services/deliveries';
+import { clockTimeOf } from '../services/clock-time';
 import { shownInOf, type RoutedPlace } from '../services/routing';
 import { ActionButton } from './action-button';
 import { Notice } from './notice';
@@ -133,11 +134,6 @@ function StaleNotice({ stale, from, isStep, onOpen }: { stale: Stale; from: stri
       )}
     </div>
   );
-}
-
-/** The time of day an outcome was sent, in UTC to the minute, as the stale notice says its time. */
-function clockTimeOf(at: string): string {
-  return `${new Date(at).toISOString().slice(11, 16)} UTC`;
 }
 
 /** What a step asks: why, and the link where it is done in its box, with where it leads and whether that is outside Aeolus, opened only by the person's own Open; the box stays once the step is ended, without Open, and goes once it is stale (Bridge, section 9). */

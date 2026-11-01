@@ -45,7 +45,7 @@ describe('the basket open', () => {
     expect({
       rows: countOf(markup, 'bridge-basket-entry'),
       asker: markup.includes('>commercial</b>'),
-      askedAt: markup.includes('asked at 19:41 UTC'),
+      askedAt: /asked at <time[^>]*>19:41 UTC<\/time>/.test(markup),
       answer: markup.includes('2. Harbour first, on today&#x27;s look'),
       note: markup.includes('&quot;Harbour first: the demo on 12 Nov needs it.&quot;'),
       change: countOf(markup, 'bridge-basket-change'),
