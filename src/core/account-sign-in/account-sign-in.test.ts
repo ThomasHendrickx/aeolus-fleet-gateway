@@ -1,3 +1,4 @@
+import type { FleetId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, fakeAccountSignInSeals, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
@@ -5,7 +6,7 @@ import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeSecrets } from '../../../test/support/oauth-fakes.js';
 import { PAGASAE_URL, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createAccountOfSignIn } from './account-of-sign-in.js';
-import type { SharedSignIn } from './ports.js';
+import type { SharedAccountToken, SharedSignIn } from './ports.js';
 import { createCompleteAccountSignIn } from './complete-account-sign-in.js';
 import { createSignOutAccount } from './sign-out-account.js';
 import { createStartAccountSignIn } from './start-account-sign-in.js';
@@ -160,7 +161,7 @@ describe('the account token a shared sign-in has in a fleet', () => {
   });
 
   it('is exchanged again while it names no person ship, so the one commissioned meanwhile is known at the next call (aeolus-fleet#1583)', async () => {
-    const tokens = new Map([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, personShipId: null }]]);
+    const tokens = new Map<FleetId, SharedAccountToken>([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, personShipId: null }]]);
     const accountOf = createAccountOfSignIn({ signIns: fakeSharedSignIn({ tokens }), clock });
     await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
 

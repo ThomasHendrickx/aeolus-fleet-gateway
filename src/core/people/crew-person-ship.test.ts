@@ -1,3 +1,4 @@
+import type { FleetId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
@@ -5,6 +6,7 @@ import { FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../../test/support/
 import { fakePersonShipFleet, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createAccountOfSignIn } from '../account-sign-in/account-of-sign-in.js';
+import type { SharedAccountToken } from '../account-sign-in/ports.js';
 import { err, ok } from '../shared/result.js';
 import type { AccountTokenOf } from '../sign-in/account-token.js';
 import { createCrewPersonShip } from './crew-person-ship.js';
@@ -49,7 +51,7 @@ describe("a signed-in person's person ship", () => {
   });
 
   it('gets its lease once commissioned after the person signed in, as in a fleet just made (aeolus-fleet#1583)', async () => {
-    const tokens = new Map([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, personShipId: null }]]);
+    const tokens = new Map<FleetId, SharedAccountToken>([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, personShipId: null }]]);
     const accountOf = createAccountOfSignIn({ signIns: fakeSharedSignIn({ tokens }), clock: { now: () => new Date('2026-10-21T09:00:00.000Z') } });
     const { fleet, crewPersonShip: crew } = crewPersonShip();
     const crewAsSignedIn = async () => {
