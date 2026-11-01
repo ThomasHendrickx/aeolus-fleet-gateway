@@ -1,7 +1,7 @@
 'use client';
 
 import type { Theme } from '@aeolus-fleet/common';
-import { AvatarMenu, AvatarMenuSheet } from '@aeolus-fleet/common/header';
+import { AvatarMenu, AvatarMenuSheet, type AppSwitcherModel } from '@aeolus-fleet/common/header';
 import { Globe, Route, SlidersHorizontal } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -68,14 +68,14 @@ function PhoneAvatar({ fleetId, account: { email, accountUrl, theme } }: { fleet
  * naming an item open in place of its list. It keeps the page live, and
  * tells the gateway while it is in focus (wake a person, W6).
  */
-export function ShellFrame({ fleetId, fleetName, screen, account, children }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; account: ShellAccount | undefined; children: ReactNode }) {
+export function ShellFrame({ fleetId, fleetName, screen, account, switcher, children }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; account: ShellAccount | undefined; switcher?: AppSwitcherModel; children: ReactNode }) {
   const isLive = useLiveRefresh(fleetId);
   useFocusReport(fleetId);
   return (
     <OpenedItemProvider>
       {(opened) => (
         <>
-          <BridgeTopBar fleetId={fleetId} fleetName={fleetName} screen={screen} isLive={isLive} opened={opened} avatar={account === undefined ? null : <PhoneAvatar fleetId={fleetId} account={account} />} />
+          <BridgeTopBar switcher={switcher} fleetId={fleetId} fleetName={fleetName} screen={screen} isLive={isLive} opened={opened} avatar={account === undefined ? null : <PhoneAvatar fleetId={fleetId} account={account} />} />
           <main className="w-full max-w-5xl flex-1 px-4 py-5 sm:px-6">{children}</main>
         </>
       )}
