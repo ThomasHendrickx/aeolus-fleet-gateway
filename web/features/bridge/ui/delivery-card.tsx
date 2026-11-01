@@ -80,7 +80,7 @@ function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Qu
         <input type="radio" name="option" value="" checked={chosen === null && !isStale} onChange={() => { onChoose(null); }} className="mt-1" />
         <span className="grid flex-1 gap-0.5">
           <span className="font-medium">No option, only the note</span>
-          <span className="text-caption text-muted-foreground">Answer with your note alone.</span>
+          <span className="text-caption text-muted-foreground max-md:hidden">Answer with your note alone.</span>
         </span>
       </label>
     </fieldset>
