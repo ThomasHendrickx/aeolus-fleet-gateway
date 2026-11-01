@@ -42,13 +42,12 @@ afterEach(async () => {
   await new Promise((resolve) => server.close(resolve));
 });
 
-function channel(options: { url?: string; isOn?: boolean } = {}) {
+function channel(options: { url?: string } = {}) {
   return createEmailChannel({
     url: options.url ?? base,
     installationToken: INSTALLATION_TOKEN,
     timeoutMs: 1000,
     windowMs: WINDOW_MS,
-    emailChannels: { isOn: () => Promise.resolve(options.isOn ?? true), turn: () => Promise.resolve() },
   });
 }
 
@@ -84,9 +83,9 @@ describe('the email channel, through pagasae (wake a person, W2)', () => {
     await expect(channel({ url: 'http://127.0.0.1:9' }).wake(SHIP, { key: 'window-1' })).resolves.toEqual(err({ kind: 'unavailable', reason: 'pagasae did not answer' }));
   });
 
-  it('is on where the person turned email on, with its window from the configuration', async () => {
-    const off = channel({ isOn: false });
+  it('reaches every person, the jobs it wakes for routed per job (Bridge, section 8), with its window from the configuration', async () => {
+    const email = channel();
 
-    expect({ name: off.name, windowMs: off.windowMs, isOn: await off.isOn(SHIP) }).toEqual({ name: 'email', windowMs: WINDOW_MS, isOn: false });
+    expect({ name: email.name, windowMs: email.windowMs, isOn: await email.isOn(SHIP) }).toEqual({ name: 'email', windowMs: WINDOW_MS, isOn: true });
   });
 });
