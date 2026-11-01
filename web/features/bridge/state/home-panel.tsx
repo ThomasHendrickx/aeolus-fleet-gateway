@@ -4,6 +4,7 @@ import { Send } from 'lucide-react';
 
 import { staleSaidOf } from '../services/deliveries';
 import type { BridgeHome, HomeItem } from '../services/items';
+import type { RoutedPlace } from '../services/routing';
 import { ActionButton } from '../ui/action-button';
 import { ItemRow } from '../ui/item-row';
 import { ItemFocus, type ItemOpening } from './item-focus';
@@ -72,10 +73,10 @@ function SendMessageButton() {
  * the feed is all it asks (CC16). Beside the count, the person sends any
  * ship a message.
  */
-export function HomePanel({ fleetId, home }: { fleetId: string; home: BridgeHome }) {
+export function HomePanel({ fleetId, home, decidePlaces }: { fleetId: string; home: BridgeHome; decidePlaces?: readonly RoutedPlace[] }) {
   const { waiting, stayAware } = home;
   return (
-    <ItemFocus fleetId={fleetId}>
+    <ItemFocus fleetId={fleetId} decidePlaces={decidePlaces}>
       {(opening) => (
         <div className="grid gap-8">
           <section className="grid gap-3" aria-labelledby="bridge-waiting-heading">

@@ -3,6 +3,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 const VARIANTS = {
   primary: 'bg-primary text-primary-foreground hover:bg-primary-hover',
   secondary: 'border border-border bg-card text-card-foreground hover:bg-accent',
+  ghost: 'text-foreground hover:bg-accent',
 } as const;
 
 /**
