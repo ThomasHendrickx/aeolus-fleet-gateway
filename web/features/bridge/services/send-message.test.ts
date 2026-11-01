@@ -1,18 +1,64 @@
 import { describe, expect, it } from 'vitest';
 
-import { alertShipOf, isSendable, keyToSend, sendFailureOf, sentNoticeOf, shipsMatching } from './send-message';
+import type { YourFleet } from '../fleet/services/your-fleet';
+import { alertShipOf, isSendable, keyToSend, sendableShipsOf, sendFailureOf, sentNoticeOf, shipsMatching } from './send-message';
 
 // Bridge's form to send a ship a message (aeolus-fleet #1547, send-message.html).
 
 describe('the ships the form offers as the person types', () => {
-  const ships = ['builder-core', 'builder-gateway', 'orchestrator-1'];
+  const ships = [
+    { name: 'builder-core', state: 'working' as const },
+    { name: 'builder-gateway', state: 'alert' as const },
+    { name: 'orchestrator-1', state: null },
+  ];
 
   it('offers every ship the person ship may send to while nothing is typed', () => {
     expect(shipsMatching(ships, '')).toEqual(ships);
   });
 
   it('offers the ships whose name holds what is typed, whatever its case', () => {
-    expect(shipsMatching(ships, ' Build')).toEqual(['builder-core', 'builder-gateway']);
+    expect(shipsMatching(ships, ' Build').map(({ name }) => name)).toEqual(['builder-core', 'builder-gateway']);
+  });
+});
+
+describe('each ship the form offers, with its state as Your fleet shows it', () => {
+  /** Your fleet as the person reads it: builder-ui is idle, builder-core working, builder-gateway has an alert, orchestrator-1 waits. */
+  const FLEET: YourFleet = {
+    shipCount: 4,
+    counts: { alert: 1, waiting: 1, working: 1, idle: 1 },
+    groups: [
+      {
+        group: 'agents',
+        tiles: [
+          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bgw', name: 'builder-gateway', state: 'alert', note: null },
+          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9or1', name: 'orchestrator-1', state: 'waiting', note: null },
+          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bco', name: 'builder-core', state: 'working', note: null },
+          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bui', name: 'builder-ui', state: 'idle', note: null },
+        ],
+      },
+    ],
+  };
+
+  it("offers only the ships the person ship may send to, each in Your fleet's state, alerts first, then waiting, working and idle", () => {
+    expect(sendableShipsOf(['builder-core', 'builder-gateway', 'builder-ui'], FLEET)).toEqual([
+      { name: 'builder-gateway', state: 'alert' },
+      { name: 'builder-core', state: 'working' },
+      { name: 'builder-ui', state: 'idle' },
+    ]);
+  });
+
+  it('offers a ship Your fleet does not show with no state, after the others', () => {
+    expect(sendableShipsOf(['argo', 'builder-ui'], FLEET)).toEqual([
+      { name: 'builder-ui', state: 'idle' },
+      { name: 'argo', state: null },
+    ]);
+  });
+
+  it('offers every ship with no state when Your fleet could not be read', () => {
+    expect(sendableShipsOf(['builder-ui', 'argo'], undefined)).toEqual([
+      { name: 'argo', state: null },
+      { name: 'builder-ui', state: null },
+    ]);
   });
 });
 
