@@ -55,7 +55,7 @@ describe('the person whose sign-in a call needs is told once per party (decision
   it('asks them to sign in again, with why their sign-in ended, when their grant was lost (scenario 19)', async () => {
     await tell({ fleetId: FLEET_ID, party: 'attio', personShipId: JORIS_SHIP_ID, lost: { at: new Date('2026-10-28T16:00:00.000Z'), why: 'invalid_grant: the refresh token is revoked' } });
 
-    expect(sender.sent.map(({ payload }) => JSON.parse(payload))).toEqual([
+    expect(sender.sent.map(({ payload }): unknown => JSON.parse(payload))).toEqual([
       {
         id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d11',
         title: 'Sign in to attio again',

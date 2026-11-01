@@ -956,7 +956,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     remove: createRemoveGrant({ ...approvingDeps, grants: partyGrants, signIns: partySignIns }),
   };
   registerPartySignInRoutes(server, {
-    complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, notices: signInNotices, accountOf, stateParty, clock, redirectUri: partySignInRedirectUri }),
+    complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, notices: signInNotices, accountOf, stateParty, finishStep: () => Promise.resolve(), clock, redirectUri: partySignInRedirectUri }),
     log: server.log,
   });
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined; waitingSecret: string | undefined }): Context => ({

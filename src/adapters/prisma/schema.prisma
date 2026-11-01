@@ -647,6 +647,8 @@ model PartySignInNotice {
   personShipId String    @map("person_ship_id")
   noticeId     String    @map("notice_id")
   isTold       Boolean   @default(false) @map("is_told")
+  /// The message of the step that told the person (Bridge, CC14); null until told, or when the fleet refused it.
+  stepMessageId String?  @map("step_message_id")
 
   @@id([fleetId, party, personShipId])
   @@map("party_sign_in_notices")

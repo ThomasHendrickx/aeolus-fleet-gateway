@@ -3,7 +3,7 @@
  * an OAuth sign-in (decision 0067): the grants the gateway keeps, the sign-in
  * under way sealed into its state, and the party's authorization server.
  */
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
@@ -23,6 +23,13 @@ export interface SignInServers {
   /** The outside MCP server of this name; none when the name is no outside MCP server. */
   find(fleetId: FleetId, name: string): Promise<SignInServer | undefined>;
 }
+
+/**
+ * Outbound port: finishes a step the gateway's ship sent a person once the
+ * gateway sees it complete, as their sign-in (Bridge, CC14): it is done
+ * with no press.
+ */
+export type FinishesOwnStep = (step: { fleetId: FleetId; personShipId: ShipId; stepMessageId: MessageId }) => Promise<void>;
 
 /** Outbound port: states what a server's proxy ship offers, from the grants now kept (Q15); the refusal says why the statement waits. */
 export type StatesProxyShip = (input: { fleetId: FleetId; name: string }) => Promise<Result<unknown, { readonly message: string }>>;
@@ -123,13 +130,16 @@ export interface PartySignIns {
 export interface SignInNotice {
   readonly noticeId: string;
   readonly isTold: boolean;
+  /** The message of the step that told the person (Bridge, CC14); none until told, or when the fleet refused it. */
+  readonly stepMessageId: MessageId | null;
 }
 
 /** Outbound port: the notices of a missing sign-in, one per person and party while open. */
 export interface SignInNotices {
   /** The person's open notice for the party, opened under this id unless one is open already, as two calls at once find. */
   open(fleetId: FleetId, notice: { party: string; personShipId: ShipId; noticeId: string }): Promise<SignInNotice>;
-  markTold(fleetId: FleetId, notice: { party: string; personShipId: ShipId }): Promise<void>;
-  /** Closes it at a sign-in, so a later loss tells the person again (Q6). */
-  close(fleetId: FleetId, notice: { party: string; personShipId: ShipId }): Promise<void>;
+  /** Marks it told, with the message of the step that told the person, none when the fleet refused it. */
+  markTold(fleetId: FleetId, notice: { party: string; personShipId: ShipId; stepMessageId: MessageId | null }): Promise<void>;
+  /** Closes it at a sign-in, so a later loss tells the person again (Q6): the notice closed, none when none was open. */
+  close(fleetId: FleetId, notice: { party: string; personShipId: ShipId }): Promise<SignInNotice | undefined>;
 }

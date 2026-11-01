@@ -250,6 +250,8 @@ describe("the party grants in the gateway's database", () => {
 
 describe("the notices of a missing sign-in in the gateway's database (Q6)", () => {
   const joris = { party: 'attio', personShipId: JORIS_SHIP_ID };
+  /** The message of the step the gateway's ship sent Joris, asking him to sign in. */
+  const STEP_MESSAGE_ID = 'msg_01m3tbfspe96yf1rnr4ank0stp';
 
   it('opens one notice per person and party, the first id kept when two calls open it at once', async () => {
     const notices = createPrismaSignInNotices(prisma);
@@ -264,22 +266,32 @@ describe("the notices of a missing sign-in in the gateway's database (Q6)", () =
     const notices = createPrismaSignInNotices(prisma);
     await notices.open(ACME, { ...joris, noticeId: 'notice-1' });
 
-    await notices.markTold(ACME, joris);
+    await notices.markTold(ACME, { ...joris, stepMessageId: STEP_MESSAGE_ID });
 
     await expect(Promise.all([notices.open(ACME, { ...joris, noticeId: 'notice-2' }), notices.open(LABS, { ...joris, noticeId: 'notice-3' })])).resolves.toEqual([
-      { noticeId: 'notice-1', isTold: true },
-      { noticeId: 'notice-3', isTold: false },
+      { noticeId: 'notice-1', isTold: true, stepMessageId: STEP_MESSAGE_ID },
+      { noticeId: 'notice-3', isTold: false, stepMessageId: null },
     ]);
+  });
+
+  it('answers the notice a sign-in closes, with the message of the step that told the person, and none when none was open (Bridge, CC14)', async () => {
+    const notices = createPrismaSignInNotices(prisma);
+    await notices.open(ACME, { ...joris, noticeId: 'notice-1' });
+    await notices.markTold(ACME, { ...joris, stepMessageId: STEP_MESSAGE_ID });
+
+    const closed = [await notices.close(ACME, joris), await notices.close(ACME, joris)];
+
+    expect(closed).toEqual([{ noticeId: 'notice-1', isTold: true, stepMessageId: STEP_MESSAGE_ID }, undefined]);
   });
 
   it('opens a new notice after a sign-in closed the told one', async () => {
     const notices = createPrismaSignInNotices(prisma);
     await notices.open(ACME, { ...joris, noticeId: 'notice-1' });
-    await notices.markTold(ACME, joris);
+    await notices.markTold(ACME, { ...joris, stepMessageId: STEP_MESSAGE_ID });
 
     await notices.close(ACME, joris);
 
-    await expect(notices.open(ACME, { ...joris, noticeId: 'notice-2' })).resolves.toEqual({ noticeId: 'notice-2', isTold: false });
+    await expect(notices.open(ACME, { ...joris, noticeId: 'notice-2' })).resolves.toEqual({ noticeId: 'notice-2', isTold: false, stepMessageId: null });
   });
 
   it("forgets a forgotten fleet's notices", async () => {

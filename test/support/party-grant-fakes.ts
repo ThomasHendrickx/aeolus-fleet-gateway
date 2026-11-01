@@ -248,25 +248,23 @@ export function memorySignInNotices(): SignInNotices & { held: (SignInNotice & {
     open: (fleetId, { party, personShipId, noticeId }) => {
       const at = indexOf(fleetId, { party, personShipId });
       if (at === -1) {
-        held.push({ fleetId, party, personShipId, noticeId, isTold: false });
-        return Promise.resolve({ noticeId, isTold: false });
+        held.push({ fleetId, party, personShipId, noticeId, isTold: false, stepMessageId: null });
+        return Promise.resolve({ noticeId, isTold: false, stepMessageId: null });
       }
-      const { noticeId: openId, isTold } = held[at] ?? { noticeId, isTold: false };
-      return Promise.resolve({ noticeId: openId, isTold });
+      const { noticeId: openId, isTold, stepMessageId } = held[at] ?? { noticeId, isTold: false, stepMessageId: null };
+      return Promise.resolve({ noticeId: openId, isTold, stepMessageId });
     },
     markTold: (fleetId, of) => {
       const notice = held[indexOf(fleetId, of)];
       if (notice !== undefined) {
-        held[indexOf(fleetId, of)] = { ...notice, isTold: true };
+        held[indexOf(fleetId, of)] = { ...notice, isTold: true, stepMessageId: of.stepMessageId };
       }
       return Promise.resolve();
     },
     close: (fleetId, of) => {
       const at = indexOf(fleetId, of);
-      if (at !== -1) {
-        held.splice(at, 1);
-      }
-      return Promise.resolve();
+      const [closed] = at === -1 ? [] : held.splice(at, 1);
+      return Promise.resolve(closed === undefined ? undefined : { noticeId: closed.noticeId, isTold: closed.isTold, stepMessageId: closed.stepMessageId });
     },
   };
 }
