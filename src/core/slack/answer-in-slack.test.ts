@@ -126,6 +126,33 @@ describe("a press of a question's button in Slack", () => {
         buttons: [{ text: '1. Cut', option: 1, isPicked: true }, { text: '2. Keep', option: 2, isPicked: false }],
       });
     });
+
+    it("names an option longer than its button in full, in the sending line and the answered post (PR 181 review)", async () => {
+      const label = "Nothing changes there: the console's count stays as it is, and argo sees the same count as before";
+      fleet = fakePersonShipDoor({ crewToken: 'crew-mathilde', deliveries: [{ ...QUESTION, payload: JSON.stringify({ id: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', title: 'Cut travel?', context: 'Over by 10%', options: [{ key: 1, label: 'Cut', detail: '' }, { key: 2, label, detail: '' }], pick: { option: 1, why: 'over' } }) }] });
+      await fleet.door.ack('crew-mathilde', QUESTION.deliveryId);
+
+      await press(2);
+
+      expect(slack.state.edits.map(({ message }) => [message.item?.aside, message.item?.body])).toEqual([
+        [`Sending *2. ${label}* to budget-check…`, 'Over by 10%\n\n*1.* Cut\n*2.* ' + label],
+        [null, `✅ You answered at <!date^1793091600^{time}|09:00 UTC>: *2. ${label}*, sent to budget-check`],
+      ]);
+    });
+
+    it('says on the post that the answer was not sent when the fleet cannot read the question, its buttons left to press again (PR 181 review)', async () => {
+      const posted = { text: 'Question from budget-check: Cut travel?', item: { asker: 'budget-check', heading: 'Question from budget-check · Decide', title: 'Cut travel?', body: 'Over by 10%', aside: 'budget-check picks 1: over', footer: 'Open in Bridge', tone: 'asking' as const }, buttons: [{ text: '1. Cut', option: 1, isPicked: true }, { text: '2. Keep', option: 2, isPicked: false }] };
+      await slack.messages.post('xoxb-1', { messageId: QUESTION.messageId, channel: 'D0MATHILDE', threadTs: null, message: posted });
+      fleet.refusals.delivery.push({ code: 'FLEET_UNREACHABLE', message: 'The fleet did not answer' });
+
+      const answered = await press(2);
+
+      expect({ answered, replies: fleet.replies, post: slack.state.edits.at(-1)?.message }).toEqual({
+        answered: { isOk: true, value: { kind: 'refused' } },
+        replies: [],
+        post: { ...posted, item: { ...posted.item, aside: '⚠️ Not sent: The fleet did not answer. Press an option to try again.' } },
+      });
+    });
   });
 
   it('keeps it answered in Slack with the option pressed, so Bridge says where it was answered (Bridge, CC4)', async () => {
