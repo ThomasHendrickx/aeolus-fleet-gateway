@@ -66,7 +66,7 @@ const INBOX_TOOL = {
 const OPEN_TOOL = {
   name: 'aeolus_open',
   title: 'Open a delivery',
-  description: 'Opens one delivery your inbox lists, by its deliveryId: who sent it, when, its title, content type and content. Opening it confirms you got it, so it waits no more. One you opened opens again, from any of your clients, until you answer it or are done with it.',
+  description: 'Opens one delivery your inbox lists, by its deliveryId: who sent it, when, its title, content type and content. Opening it confirms you got it, so it waits no more. One you opened opens again, from any of your clients, until you answer it or are done with it. An alert (application/vnd.aeolus.alert+json) or a notice (application/vnd.aeolus.notice+json) asks nothing more: opening it deals with it at once.',
   inputSchema: { type: 'object' as const, properties: { deliveryId: { type: 'string' } }, required: ['deliveryId'] },
   annotations: CHANGES_OWN,
 };
