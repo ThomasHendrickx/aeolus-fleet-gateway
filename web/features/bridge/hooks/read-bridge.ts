@@ -10,6 +10,7 @@
 import { cache } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
+import { readYourFleet } from '../fleet/hooks/read-your-fleet';
 import { refusalCodeOf, refusalMessageOf } from '../../../lib/gateway-api/page-api';
 import type { WakeChannels } from '../services/deliveries';
 import type { BasketView } from '../services/basket';
@@ -93,13 +94,13 @@ export async function readBasketCount(api: GatewayApi): Promise<number> {
 
 /**
  * The counts Bridge's shell shows on every page: what waits and the unseen
- * to stay aware of, from Bridge home's read, and the basket's answers. A
- * count it cannot read now is left out. Your fleet's alerts are not read
- * here yet.
+ * to stay aware of, from Bridge home's read, the basket's answers, and the
+ * ships with an alert, from Your fleet's read. A count it cannot read now is
+ * left out.
  */
 export async function readShellCounts(api: GatewayApi): Promise<ShellCounts> {
-  const [home, basket] = await Promise.all([readBridgeHome(api), readBasketCount(api)]);
-  const fleetAlerts = undefined;
+  const [home, basket, fleet] = await Promise.all([readBridgeHome(api), readBasketCount(api), readYourFleet(api)]);
+  const fleetAlerts = fleet.kind === 'read' ? fleet.value.counts.alert : undefined;
   switch (home.kind) {
     case 'read':
       return { waiting: home.value.waiting.count, stayAware: home.value.stayAware.length, basket, fleetAlerts };
