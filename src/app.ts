@@ -187,6 +187,9 @@ import { createPrismaArgoAccounts } from './adapters/prisma/argo-accounts.js';
 import { createArgoInboxDoor } from './adapters/fleet/argo-inbox-door.js';
 import { createFollowArgoInbox } from './core/argo-inbox/follow-argo-inbox.js';
 import { createReadArgoInboxNotice } from './core/argo-inbox/read-argo-inbox-notice.js';
+import { createWakeForArgo } from './core/argo-inbox/wake-for-argo.js';
+import { createPersonWakes } from './core/people/person-wakes.js';
+import { createPrismaArgoWakes } from './adapters/prisma/argo-wakes.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createExchangeIdJag } from './core/oauth/exchange-id-jag.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
@@ -346,6 +349,8 @@ const BEARER = 'Bearer ';
 
 /** How often a proxy ship's worker looks again while the fleet hands it only what it holds, or does not answer. */
 const POLL_MS = 2_000;
+/** How often argo's wakes look for windows that passed; what arrives at argo wakes them at once. A wake held back by a window goes out at most this much after it passed, against windows of 10 and 60 minutes. */
+const ARGO_WAKES_ROUND_MS = 30_000;
 
 /** How often the gateway rotates the Slack configuration tokens due, well within the hour before one ends (gateway scopes 9.1). */
 const SLACK_TOKEN_ROUND_MS = 10 * 60_000;
@@ -796,7 +801,24 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // The gateway's own ship reads argo's open inbox by the read rule argo adds, whole at the start, then following each change (argo's inbox, AI9).
   const followArgoInbox = createFollowArgoInbox({ connections, door: createArgoInboxDoor({ fleetUrl: options.fleetUrl }) });
   const argoInboxStopping = new AbortController();
-  const argoInboxFollower = createRoundWorker({ name: "argo's inbox", round: () => followArgoInbox.round(argoInboxStopping.signal), sleep, intervalMs: POLL_MS, log: server.log });
+  // A wake of its own for what waits at argo, for every person allowed as argo, at once after each read of argo's inbox, and on its own round as windows pass (argo's inbox, AI5).
+  const argoWakes = createRoundWorker({
+    name: "argo's wakes",
+    round: createWakeForArgo({ connections, accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, people: createPersonWakes({ channels: wakeChannels, routes, defaults: routingDefaults, focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock }), argoWakes: createPrismaArgoWakes(prisma), clock }),
+    sleep,
+    intervalMs: ARGO_WAKES_ROUND_MS,
+    log: server.log,
+  });
+  const argoInboxFollower = createRoundWorker({
+    name: "argo's inbox",
+    round: async () => {
+      await followArgoInbox.round(argoInboxStopping.signal);
+      argoWakes.wake();
+    },
+    sleep,
+    intervalMs: POLL_MS,
+    log: server.log,
+  });
   const readArgoInboxNotice = createReadArgoInboxNotice({ accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, connections });
   // View sync in Slack (Bridge, section 7): each post edited once something came of its item, at once when an inbox change is heard.
   const slackEdits = createRoundWorker({
@@ -1148,6 +1170,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       basketSends.start();
       slackEdits.start();
       argoInboxFollower.start();
+      argoWakes.start();
       grantKeeper.start();
       return restored;
     },
@@ -1162,6 +1185,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       // A follow waits up to 25 s while argo's inbox does not change: aborted, the round under way ends at once.
       argoInboxStopping.abort();
       await argoInboxFollower.stop();
+      await argoWakes.stop();
       await grantKeeper.stop();
       await workers.stop();
       await server.close();

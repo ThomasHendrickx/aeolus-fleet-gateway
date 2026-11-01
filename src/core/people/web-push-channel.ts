@@ -17,11 +17,11 @@ export function createWebPushChannel(deps: { subscriptions: WebPushSubscriptions
     name: 'web-push',
     windowMs: deps.windowMs,
     isOn: async (ship) => (await takingWakes(ship)).length > 0,
-    wake: async (ship) => {
+    wake: async (ship, { waitsAt }) => {
       const bridgeUrl = deps.bridgeUrlOf(ship.fleetId);
       let isTaken = false;
       for (const subscription of await takingWakes(ship)) {
-        const sent = await deps.webPush.send(subscription, { fleetName: subscription.fleetName, bridgeUrl });
+        const sent = await deps.webPush.send(subscription, { fleetName: subscription.fleetName, bridgeUrl, waitsAt });
         switch (sent) {
           case 'sent':
             isTaken = true;

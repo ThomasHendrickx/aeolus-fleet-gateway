@@ -55,6 +55,12 @@ describe("the gateway's address as a person opens it (#1030)", () => {
     expect(worker.body).toBe('<p>the web app answered /wake-worker.js</p>');
   });
 
+  it("hands the icon of argo's wake to the web app, as the browser asks for it to show the wake (argo's inbox, AI4)", async () => {
+    const icon = await server.inject({ url: '/argo-wake-icon.svg', headers: { accept: 'image/avif,image/webp,*/*' } });
+
+    expect(icon.body).toBe('<p>the web app answered /argo-wake-icon.svg</p>');
+  });
+
   it("hands the app mark's icon files to the web app, as the browser asks for them", async () => {
     const icons = await Promise.all(['/icon.svg', '/apple-icon.png'].map((url) => server.inject({ url, headers: { accept: 'image/avif,image/webp,*/*' } })));
 
