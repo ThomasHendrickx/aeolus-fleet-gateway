@@ -351,6 +351,21 @@ model EmailChannel {
   @@map("email_channels")
 }
 
+/// A person's own choice of where a job shows besides Bridge (Bridge, section 8): on or off, and when they made it; where none is kept, the gateway's default holds.
+model Route {
+  fleetId   String   @map("fleet_id")
+  shipId    String   @map("ship_id")
+  /// decide, do, stay-aware or everything-else.
+  job       String
+  /// slack, chat, web-push or email.
+  place     String
+  isOn      Boolean  @map("is_on")
+  changedAt DateTime @map("changed_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId, job, place])
+  @@map("routes")
+}
+
 /// When a channel last woke a person ship, so it sends at most one wake per its window (wake a person, W3).
 model WakeSent {
   fleetId String   @map("fleet_id")
