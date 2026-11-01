@@ -274,6 +274,27 @@ export function memoryOpenedDeliveries(): OpenedDeliveries & { held: Map<string,
   };
 }
 
+/** An entry of Charlotte's basket: option 2 to orchestrator-1's question, waiting for Send. */
+export function aBasketEntry(overrides: Partial<BasketEntry> = {}): BasketEntry {
+  return {
+    fleetId: FLEET_ID,
+    shipId: PERSON_SHIP_ID,
+    questionId: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e',
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+    messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+    senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9orc',
+    from: 'orchestrator-1',
+    title: 'Which goes first: the Compact look (U4) or Harbour?',
+    sentAt: new Date('2026-10-31T19:41:00.000Z'),
+    option: 2,
+    note: 'Harbour first: the demo on 12 Nov needs it.',
+    addedAt: new Date('2026-10-31T19:53:00.000Z'),
+    state: 'waiting',
+    refusal: null,
+    ...overrides,
+  };
+}
+
 /** The basket of each person ship, in memory, by fleet, person ship and question. */
 export function memoryBasketEntries(): BasketEntries & { held: Map<string, BasketEntry> } {
   const held = new Map<string, BasketEntry>();
