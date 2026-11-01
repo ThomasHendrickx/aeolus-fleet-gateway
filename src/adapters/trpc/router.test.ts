@@ -196,7 +196,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readWakeChannels: (caller) =>
         Promise.resolve(
           ok({
-            email: { isOffered: true, isOn: answers.some(({ email }) => email === 'on') && grantOf(caller) === PERSON_TOKEN },
+            email: { isOffered: grantOf(caller) === PERSON_TOKEN },
             webPush: {
               publicKey: WEB_PUSH_KEY,
               browsers: answers.flatMap(({ webPushOn, browser }) => (webPushOn === undefined || browser === undefined ? [] : [{ endpoint: webPushOn, browser, addedAt: FOCUSED_AT, isGone: false }])),
@@ -214,8 +214,18 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         answers.push({ grantId: grantOf(caller), webPushOff: endpoint });
         return Promise.resolve(ok(undefined));
       },
-      turnEmailChannel: ({ caller, isOn }) => {
-        answers.push({ grantId: grantOf(caller), email: isOn ? 'on' : 'off' });
+      readRouting: (caller) =>
+        Promise.resolve(
+          ok({
+            offered: { slack: true, chat: true, 'web-push': true, email: false },
+            jobs: [{ job: 'decide' as const, places: { slack: answers.some(({ route }) => route === 'decide:slack:on') && grantOf(caller) === PERSON_TOKEN, chat: true, 'web-push': false, email: false } }],
+          }),
+        ),
+      turnRoute: ({ caller, job, place, isOn }) => {
+        if (isOn && place === 'email') {
+          return Promise.resolve(err({ kind: 'CHANNEL_NOT_OFFERED' as const, message: 'This gateway sends no email' }));
+        }
+        answers.push({ grantId: grantOf(caller), route: `${job}:${place}:${isOn ? 'on' : 'off'}` });
         return Promise.resolve(ok(undefined));
       },
       // Seen again only once the page lets go, as the test reads what it held meanwhile.
@@ -1027,14 +1037,10 @@ describe("a person reads and deals with their person ship's deliveries through t
 describe('a person turns on the channels that wake them, through the API (wake a person, W8)', () => {
   const FIREFOX = { endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/firefox-1', keys: { p256dh: `B${'A'.repeat(86)}`, auth: 'A'.repeat(22) }, browser: 'Firefox on Linux' };
 
-  it('turns email on as its own account, and reads it on', async () => {
-    const { context, answers } = aContext(PERSON_COOKIE);
-    const caller = gatewayRouter.createCaller(context);
+  it('reads whether email is offered, and web push with its key', async () => {
+    const { context } = aContext(PERSON_COOKIE);
 
-    await caller.people.turnEmail({ isOn: true });
-
-    await expect(caller.people.wakeChannels()).resolves.toEqual({ email: { isOffered: true, isOn: true }, webPush: { publicKey: WEB_PUSH_KEY, browsers: [] } });
-    expect(answers).toEqual([{ grantId: PERSON_TOKEN, email: 'on' }]);
+    await expect(gatewayRouter.createCaller(context).people.wakeChannels()).resolves.toEqual({ email: { isOffered: true }, webPush: { publicKey: WEB_PUSH_KEY, browsers: [] } });
   });
 
   it('turns web push on for a browser, with the fleet name their shared sign-in states, and reads it with when it was turned on', async () => {
@@ -1075,7 +1081,42 @@ describe('a person turns on the channels that wake them, through the API (wake a
   it('refuses any other actor: only a person is woken', async () => {
     const { context } = aContext(ARGO_COOKIE);
 
-    await expect(gatewayRouter.createCaller(context).people.turnEmail({ isOn: true })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(gatewayRouter.createCaller(context).people.wakeChannels()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe('a person routes each job to the places that show it, through the API (Bridge, section 8)', () => {
+  it('turns Slack on for decide as its own account, and reads it on', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+    const caller = gatewayRouter.createCaller(context);
+
+    await caller.people.turnRoute({ job: 'decide', place: 'slack', isOn: true });
+
+    await expect(caller.people.routing()).resolves.toEqual({
+      offered: { slack: true, chat: true, 'web-push': true, email: false },
+      jobs: [{ job: 'decide', places: { slack: true, chat: true, 'web-push': false, email: false } }],
+    });
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, route: 'decide:slack:on' }]);
+  });
+
+  it('refuses a job or a place it does not know, turning nothing', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    // @ts-expect-error -- a job a page could send that Bridge does not know, which the type rules out.
+    await expect(gatewayRouter.createCaller(context).people.turnRoute({ job: 'gossip', place: 'slack', isOn: true })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(answers).toEqual([]);
+  });
+
+  it('says a place is not offered, turning nothing', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.turnRoute({ job: 'decide', place: 'email', isOn: true })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: 'This gateway sends no email' });
+  });
+
+  it('refuses any other actor: only a person routes their jobs', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.routing()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 
