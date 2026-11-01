@@ -99,6 +99,16 @@ describe("what came of a person ship's items, in Postgres (Bridge, CC4)", () => 
     await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [asked.deliveryId] })).resolves.toEqual([asked]);
   });
 
+  it('keeps a question its asker withdrew or replaced as withdrawn or replaced (Bridge, CC11)', async () => {
+    const outcomes = createPrismaItemOutcomes(prisma);
+    const withdrawn = { ...outcome, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch805', place: 'bridge', kind: 'withdrawn', option: null } as const;
+    const replaced = { ...withdrawn, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch806', kind: 'replaced' } as const;
+    await outcomes.save(withdrawn);
+    await outcomes.save(replaced);
+
+    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [withdrawn.deliveryId, replaced.deliveryId] })).resolves.toEqual(expect.arrayContaining([withdrawn, replaced]));
+  });
+
   it('forgets a fleet with what came of its items (decision 0021)', async () => {
     const outcomes = createPrismaItemOutcomes(prisma);
     const forgotten = { ...outcome, fleetId: OTHER_FLEET, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch804' } as const;
