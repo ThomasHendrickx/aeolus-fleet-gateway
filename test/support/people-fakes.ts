@@ -1,6 +1,7 @@
 import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
+import type { BasketEntries, BasketEntry } from '../../src/core/people/basket.js';
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { ItemOutcome, ItemOutcomes } from '../../src/core/people/item-outcome.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
@@ -269,6 +270,40 @@ export function memoryOpenedDeliveries(): OpenedDeliveries & { held: Map<string,
     remove: (fleetId, opened) => {
       held.delete(key(fleetId, opened));
       return Promise.resolve();
+    },
+  };
+}
+
+/** The basket of each person ship, in memory, by fleet, person ship and question. */
+export function memoryBasketEntries(): BasketEntries & { held: Map<string, BasketEntry> } {
+  const held = new Map<string, BasketEntry>();
+  const key = (fleetId: FleetId, { shipId, questionId }: { shipId: string; questionId: string }) => `${fleetId}/${shipId}/${questionId}`;
+  const ofShip = (fleetId: FleetId, shipId: ShipId) => [...held.values()].filter((entry) => entry.fleetId === fleetId && entry.shipId === shipId).sort((a, b) => a.addedAt.getTime() - b.addedAt.getTime());
+  return {
+    held,
+    save: (entry) => {
+      held.set(key(entry.fleetId, entry), entry);
+      return Promise.resolve();
+    },
+    find: (fleetId, asked) => Promise.resolve(held.get(key(fleetId, asked))),
+    list: (fleetId, shipId) => Promise.resolve(ofShip(fleetId, shipId)),
+    count: (fleetId, shipId) => Promise.resolve(ofShip(fleetId, shipId).length),
+    remove: (fleetId, removed) => {
+      held.delete(key(fleetId, removed));
+      return Promise.resolve();
+    },
+    sendingShips: ({ after, limit }) => {
+      const ships = [...new Set([...held.values()].filter(({ state }) => state === 'sending').map(({ fleetId, shipId }) => `${fleetId}/${shipId}`))].sort();
+      const from = after === null ? ships : ships.filter((ship) => ship > `${after.fleetId}/${after.shipId}`);
+      return Promise.resolve(
+        from.slice(0, limit).map((ship) => {
+          const sending = [...held.values()].find(({ fleetId, shipId }) => `${fleetId}/${shipId}` === ship);
+          if (sending === undefined) {
+            throw new Error(`No entry of ${ship}`);
+          }
+          return { fleetId: sending.fleetId, shipId: sending.shipId };
+        }),
+      );
     },
   };
 }
