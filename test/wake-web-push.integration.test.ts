@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
+import { createPrismaRoutes } from '../src/adapters/prisma/routes.js';
 import { createPrismaPersonCrews } from '../src/adapters/prisma/person-crews.js';
 import { createPrismaWakesSent } from '../src/adapters/prisma/wakes-sent.js';
 import { createPrismaWebPushSubscriptions } from '../src/adapters/prisma/web-push-subscriptions.js';
@@ -52,8 +53,9 @@ beforeEach(async () => {
   charlotte = { shipId: who.value.shipId, crewToken: charlotteCrew };
   const databaseUrl = await migratedDatabase(inject('postgresUrl'));
   prisma = createPrismaClient(databaseUrl);
-  // The gateway crewed Charlotte's person ship at an earlier sign-in, and they turned web push on in one browser.
+  // The gateway crewed Charlotte's person ship at an earlier sign-in, and they turned web push on in one browser, for everything else, the job of the tracker's plain messages (Bridge, section 8).
   await createPrismaPersonCrews(prisma).save({ fleetId, shipId: charlotte.shipId, crewToken: charlotteCrew, crewedAt: new Date() });
+  await createPrismaRoutes(prisma).save({ fleetId, shipId: charlotte.shipId, job: 'everything-else', place: 'web-push', isOn: true, changedAt: new Date() });
   pushService = await startPushService();
   const browser = pushService.browser(FIREFOX);
   await createPrismaWebPushSubscriptions(prisma).save(aWebPushSubscription({ fleetId, shipId: charlotte.shipId, endpoint: browser.endpoint, keys: browser.keys, fleetName: 'Acme' }));

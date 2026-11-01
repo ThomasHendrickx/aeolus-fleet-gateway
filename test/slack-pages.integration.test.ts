@@ -4,6 +4,7 @@ import { FLEET_HEADER, idSchema, type FleetId } from '@aeolus-fleet/common';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
+import { createPrismaRoutes } from '../src/adapters/prisma/routes.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { commission, register, signIn } from './support/argo.js';
 import { charlotteIn, PAGASAE_APP_CLIENT, PAGASAE_CLIENT, startFakePagasae, type FakePagasae } from './support/fake-pagasae.js';
@@ -269,6 +270,8 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     for (const ship of [charlotteShip, joris]) {
       await prisma.personCrew.create({ data: { fleetId, shipId: ship.shipId, crewToken: await register(fleet, ship), crewedAt: new Date() } });
     }
+    // Charlotte turned Slack on for decide before anything was sent, so her bot's questions show there (Bridge, section 8).
+    await createPrismaRoutes(prisma).save({ fleetId, shipId: charlotteShip.shipId, job: 'decide', place: 'slack', isOn: true, changedAt: new Date() });
     pagasae.sharedSignIn(JORIS_SIGN_IN, { ...charlotteIn(pagasae, fleetId), sub: 'acc-joris', person_ship: joris.shipId });
     const releaseNotes = await commission(fleet, { cookie: argoCookie, ship: { name: 'release-notes-s7', type: 'agent' } });
     const admin = await register(fleet, await commission(fleet, { cookie: argoCookie, ship: { name: 'slack-admin-s7', type: 'agent', scopes: ['fleet:read', 'fleet:manage', 'gateway:slack'] } }));
@@ -370,7 +373,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     return deliveries.map(({ contentType, payload, inReplyTo }) => ({ contentType, payload, inReplyTo: inReplyTo ?? null }));
   }
 
-  it("shows a bot ship's message to a linked person in that bot's direct messages once, acknowledged, and their answers by button and in the thread reach the ship (gateway scopes S9)", async () => {
+  it("shows a bot ship's message to a linked person in that bot's direct messages once, handed, and their answers by button and in the thread reach the ship (gateway scopes S9)", async () => {
     await releaseNotesReceives();
     const posted = slack.posted.length;
     const kept = await prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'U0CHARLOTTE' } });
