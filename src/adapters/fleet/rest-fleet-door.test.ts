@@ -74,6 +74,13 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     expect(sent()).toEqual([{ url: '/api/v1/ship/inbox', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { waitSeconds: 0 } }]);
   });
 
+  it("reads the person ship's own name, as the fleet's whoami answers it", async () => {
+    answer = { status: 200, body: { shipId: 'shp_01m3tbfspe96yf1rnr4ank0per', fleetId: 'flt_01m3tbfspe96yf1rnr4ank0flt', name: 'charlotte', type: 'person' } };
+
+    await expect(createRestFleetDoor(base).person.whoami('aeolus_ct_v1_charlotte')).resolves.toEqual({ isOk: true, value: { name: 'charlotte' } });
+    expect(received.map(({ url, headers }) => ({ url, authorization: headers.authorization }))).toEqual([{ url: '/api/v1/ship/whoami', authorization: 'Bearer aeolus_ct_v1_charlotte' }]);
+  });
+
   it('waits while the count is the one the crew knows, up to the fleet\'s longest wait, or less when told, in whole seconds', async () => {
     answer = { status: 200, body: { waiting: 3, forced: 0 } };
     const door = createRestFleetDoor(base).person;

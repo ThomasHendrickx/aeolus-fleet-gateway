@@ -86,6 +86,13 @@ const ORDERBOT_REQUEST: PendingRequest = {
 };
 
 /** A context with only what the parties procedures read; every approval it is asked for is recorded. */
+/** Your fleet as the fleet answers Charlotte's account: one agent at work. */
+const YOUR_FLEET = {
+  shipCount: 1,
+  counts: { alert: 0, waiting: 0, working: 1, idle: 0 },
+  groups: [{ group: 'agents' as const, tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9rev' as const, name: 'reviewer', state: 'working' as const, note: 'reviewing #165' }] }],
+};
+
 function aContext(cookie: string | undefined, crewToken?: string): {
   context: Context;
   approvals: Parameters<ApproveParty>[0][];
@@ -248,6 +255,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
             ? ok({ meeting: aMeetingRead(), mic: { kind: 'requested' as const, place: 1 } })
             : err({ kind: 'NO_SUCH_MEETING' as const, message: `The fleet did not read the meeting to you: Meeting ${meetingId} does not exist` }),
         ),
+      readSendTo: (caller) => Promise.resolve(grantOf(caller) === PERSON_TOKEN ? ok({ sentAs: 'charlotte', ships: ['builder-core', 'tracker'] }) : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' })),
       sendMessage: (input) => {
         answers.push({ grantId: grantOf(input.caller), to: JSON.stringify(input.to), contentType: input.contentType, payload: input.payload, idempotencyKey: input.idempotencyKey ?? '' });
         return Promise.resolve(ok({ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0009' as const }));
@@ -294,6 +302,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     },
     listParties: () => Promise.resolve([]),
     listOwnerChoices: () => Promise.resolve(ok([])),
+    readYourFleet: () => Promise.resolve(ok(YOUR_FLEET)),
     retireParty: unused,
     changePartyOwner: unused,
     changePartyScopes: unused,
@@ -1043,6 +1052,28 @@ describe("a person reads and deals with their person ship's deliveries through t
   });
 });
 
+describe("a person reads Your fleet through the gateway's API (Bridge home)", () => {
+  it('reads the numbers and the tiles by group, as the fleet answers their account', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.yourFleet()).resolves.toEqual(YOUR_FLEET);
+  });
+
+  it('is forbidden to an account the fleet does not let read it', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+    const refused = { ...context, readYourFleet: () => Promise.resolve(err({ kind: 'SCOPE_NOT_HELD' as const, message: 'fleet.list needs the fleet:read scope' })) };
+
+    await expect(gatewayRouter.createCaller(refused).people.yourFleet()).rejects.toMatchObject({ code: 'FORBIDDEN', message: 'fleet.list needs the fleet:read scope' });
+  });
+
+  it('says why when the fleet does not list its ships', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+    const unavailable = { ...context, readYourFleet: () => Promise.resolve(err({ kind: 'FLEET_UNAVAILABLE' as const, message: 'The fleet did not list its ships: The fleet did not answer' })) };
+
+    await expect(gatewayRouter.createCaller(unavailable).people.yourFleet()).rejects.toMatchObject({ code: 'BAD_GATEWAY', message: 'The fleet did not list its ships: The fleet did not answer' });
+  });
+});
+
 describe('a person turns on the channels that wake them, through the API (wake a person, W8)', () => {
   const FIREFOX = { endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/firefox-1', keys: { p256dh: `B${'A'.repeat(86)}`, auth: 'A'.repeat(22) }, browser: 'Firefox on Linux' };
 
@@ -1479,5 +1510,30 @@ describe("an actor holding gateway:slack connects the fleet's Slack through the 
 
   it('refuses Install while the fleet is connected to no workspace', async () => {
     await expect(asCharlotte(['gateway:slack']).caller.slack.install({})).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe("a person sends a ship a message from Bridge through the gateway's API (aeolus-fleet #1547)", () => {
+  it('reads who they can send a message to in Bridge as their own account', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.sendTo()).resolves.toEqual({ sentAs: 'charlotte', ships: ['builder-core', 'tracker'] });
+  });
+
+  it('sends a ship a message from Bridge as their own account, as Markdown, once under the key the page gives', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.send({ to: 'builder-gateway', payload: 'Report where you are', idempotencyKey: 'page-2' })).resolves.toEqual({ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0009' });
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, to: JSON.stringify({ kind: 'ship', name: 'builder-gateway' }), contentType: 'text/markdown', payload: 'Report where you are', idempotencyKey: 'page-2' }]);
+  });
+
+  it.each([
+    ['an empty message', ''],
+    ["a message over the fleet's payload limit in UTF-8 bytes, though under it in characters", 'é'.repeat(PAYLOAD_MAX_BYTES / 2 + 1)],
+  ])('refuses %s from Bridge, sending nothing', async (_, payload) => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.send({ to: 'builder-gateway', payload, idempotencyKey: 'page-2' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(answers).toEqual([]);
   });
 });

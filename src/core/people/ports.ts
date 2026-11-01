@@ -5,10 +5,12 @@
  */
 import type { DeliveryId, DeliveryState, FleetId, MeetingId, MessageId, ShipId, ShipKind } from '@aeolus-fleet/common';
 
+import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { DiscoveredStatement } from '../mcp-in/ports.js';
 import type { Result } from '../shared/result.js';
 import type { Routing } from './routing.js';
+import type { ListedShip } from './your-fleet.js';
 
 /** A call the gateway makes for an account: the account's token beside the gateway's own crew token, so the account acts through the gateway's ship. */
 export interface AccountCall {
@@ -152,6 +154,8 @@ export interface PersonShipDoor {
   handled(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
   /** Hands the delivery over to the person with its number, naming the channel the wake went through (interop 5.1). */
   handed(crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: HandOverChannel }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>>;
+  /** The ship's own name, as the fleet knows it. */
+  whoami(crewToken: string): Promise<Result<{ name: string }, FleetRefusal>>;
   /** The ships and types the ship may send to now: the fleet checks its scopes and the network rules. */
   discover(crewToken: string): Promise<Result<PersonDiscovery, FleetRefusal>>;
   /** Sends the person's own message, once under its key. */
@@ -309,4 +313,9 @@ export type WebPushSent = 'sent' | 'gone' | 'failed';
 /** Outbound port: sends a wake to one browser through its push service. */
 export interface WebPush {
   send(subscription: WebPushSubscription, wake: Wake): Promise<WebPushSent>;
+}
+
+/** Outbound port: the fleet's active ships as the actor reads them (fleet.list), each with its kind, its crew's report and its open alerts; retired ships are not read. */
+export interface ActiveShips {
+  list(as: ActorCredential): Promise<Result<ListedShip[], FleetRefusal>>;
 }

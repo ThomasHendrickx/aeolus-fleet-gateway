@@ -13,6 +13,7 @@ import type { RoutedPlace } from '../services/routing';
 import { BasketToasts, putToastOf } from '../ui/basket-toast';
 import { DeliveryCard, type DeliveryControl, type InBasket, type StepFinished } from '../ui/delivery-card';
 import { Notice } from '../ui/notice';
+import { SendMessageProvider, useSendMessage } from './send-message';
 
 /** An item to open: by its delivery, with its job, and the answer to it in the basket, if any. */
 export interface ToOpen {
@@ -39,18 +40,23 @@ export interface ItemOpening {
  * question stays open saying so, with a toast (basket.html), and comes out
  * of it there. Answering or being done says so in place, and the page reads
  * itself again. A question names where it shows when the page read its places.
+ * An opened alert offers to send its ship a message, as home offers to send
+ * any ship one (aeolus-fleet #1547).
  */
-export function ItemFocus(props: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; children: (opening: ItemOpening) => ReactNode }) {
+export function ItemFocus({ fleetId, decidePlaces, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; children: (opening: ItemOpening) => ReactNode }) {
   return (
-    <Toast.Provider>
-      <FocusedItems {...props} />
-      <BasketToasts />
-    </Toast.Provider>
+    <SendMessageProvider fleetId={fleetId}>
+      <Toast.Provider>
+        <FocusedItems fleetId={fleetId} decidePlaces={decidePlaces}>{children}</FocusedItems>
+        <BasketToasts />
+      </Toast.Provider>
+    </SendMessageProvider>
   );
 }
 
 function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; children: (opening: ItemOpening) => ReactNode }) {
   const toasts = Toast.useToastManager();
+  const sendMessage = useSendMessage();
   const [focus, setFocus] = useState<{ delivery: FocusedDelivery; isDoneOnSeeing: boolean; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
   const [note, setNote] = useState('');
   const [openingId, setOpeningId] = useState<string | undefined>();
@@ -135,6 +141,7 @@ function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; de
           });
         }}
         onOpen={(deliveryId) => { open({ deliveryId, job: 'decide' }); }}
+        onSendMessage={delivery.alertShip === undefined || sendMessage === undefined ? undefined : (alertShip) => { sendMessage({ alertShip }); }}
         onBack={() => { setFocus(undefined); }}
       />
     );

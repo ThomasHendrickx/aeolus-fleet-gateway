@@ -76,9 +76,11 @@ import type { MeetingRead } from '../../core/meetings/ports.js';
 import type { PersonMeeting, ReadMeeting } from '../../core/meetings/read-meeting.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { SendMessage } from '../../core/people/send-message.js';
+import type { ReadSendTo } from '../../core/people/read-send-to.js';
 import type { ReadBridgeHome } from '../../core/people/read-bridge-home.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { ReadRecord } from '../../core/people/read-record.js';
+import type { ReadYourFleet } from '../../core/people/read-your-fleet.js';
 import type { ReadWakeChannels } from '../../core/people/read-wake-channels.js';
 import type { FocusPage } from '../../core/people/focus-page.js';
 import type { TurnOffWebPush } from '../../core/people/turn-off-web-push.js';
@@ -143,6 +145,8 @@ export interface Context {
   crewParty: CrewParty;
   listParties: ListParties;
   listOwnerChoices: ListOwnerChoices;
+  /** Your fleet on Bridge home, read as the actor. */
+  readYourFleet: ReadYourFleet;
   retireParty: RetireParty;
   changePartyOwner: ChangePartyOwner;
   changePartyScopes: ChangePartyScopes;
@@ -192,6 +196,7 @@ export interface Context {
     turnOnWebPush: TurnOnWebPush;
     turnOffWebPush: TurnOffWebPush;
     focusPage: FocusPage;
+    readSendTo: ReadSendTo;
     sendMessage: SendMessage;
     readMeeting: ReadMeeting;
     changeOwnMic: ChangeOwnMic;
@@ -626,6 +631,9 @@ const PERSON_CODES = {
   NO_SUCH_MEETING: 'NOT_FOUND',
   MIC_REFUSED: 'CONFLICT',
 } as const satisfies Record<string, TRPCError['code']>;
+
+/** A message a person writes to a ship in Bridge: text or Markdown, as its form says. */
+const MESSAGE_CONTENT_TYPE = 'text/markdown';
 
 /** A contribution a person writes on the pages: plain text. */
 const CONTRIBUTION_CONTENT_TYPE = 'text/plain';
@@ -1233,6 +1241,18 @@ export const gatewayRouter = t.router({
     inbox: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readInbox(ctx.caller))),
     /** Bridge home (CC18): what waits on the person with its count, decide and do, and the stay-aware feed. */
     home: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readBridgeHome(ctx.caller))),
+    /**
+     * Your fleet (Bridge home, as Harbour draws it): every active ship the
+     * actor reads, in its state and group, with the numbers on top. The fleet
+     * decides which ships they read; one it refuses holds no fleet:read.
+     */
+    yourFleet: servedProcedure.query(async ({ ctx }) => {
+      const read = await ctx.readYourFleet({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken } });
+      if (!read.isOk) {
+        throw new TRPCError({ code: read.error.kind === 'SCOPE_NOT_HELD' ? 'FORBIDDEN' : 'BAD_GATEWAY', message: read.error.message });
+      }
+      return read.value;
+    }),
     /** A page of the person ship's record (CC12), newest first, after the cursor the last page answered. */
     record: personProcedure
       .input(z.strictObject({ cursor: idSchema('delivery').nullable() }))
@@ -1312,6 +1332,14 @@ export const gatewayRouter = t.router({
       .input(z.strictObject({ meetingId: idSchema('meeting'), payload: payloadSchema.min(1), idempotencyKey: z.string().min(1) }))
       .mutation(async ({ ctx, input: { meetingId, payload, idempotencyKey } }) =>
         personAnswerOf(await ctx.person.sendMessage({ caller: ctx.caller, to: { kind: 'meeting', meetingId }, contentType: CONTRIBUTION_CONTENT_TYPE, payload, idempotencyKey })),
+      ),
+    /** Who they can send a message to from Bridge (aeolus-fleet #1547): the ships their person ship may send to now, and its name. */
+    sendTo: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readSendTo(ctx.caller))),
+    /** Sends a ship a message from Bridge as their person ship, once under the page's key; it answers once the fleet stored it. */
+    send: personProcedure
+      .input(z.strictObject({ to: z.string().min(1), payload: payloadSchema.min(1), idempotencyKey: z.string().min(1) }))
+      .mutation(async ({ ctx, input: { to, payload, idempotencyKey } }) =>
+        personAnswerOf(await ctx.person.sendMessage({ caller: ctx.caller, to: { kind: 'ship', name: to }, contentType: MESSAGE_CONTENT_TYPE, payload, idempotencyKey })),
       ),
     /** Their own mic call: request it, withdraw the request, or release the mic they hold. */
     mic: personProcedure
