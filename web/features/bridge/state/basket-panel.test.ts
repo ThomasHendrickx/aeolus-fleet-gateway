@@ -42,6 +42,12 @@ describe('the basket open', () => {
     }).toEqual({ rows: 2, asker: true, option: true, note: true, change: 2, remove: 2, send: true });
   });
 
+  it('lists an entry with only a note as the note alone, with no option', () => {
+    const markup = render({ toSend: 1, entries: [anEntry({ option: null, note: 'Neither: ask me after the demo.' })] });
+
+    expect({ noteAlone: markup.includes('Note alone'), option: markup.includes('Option'), note: markup.includes('“Neither: ask me after the demo.”') }).toEqual({ noteAlone: true, option: false, note: true });
+  });
+
   it('says a withdrawn, a replaced, a refused and a sending entry as they stand, with no Change, and counts only what Send sends', () => {
     const markup = render({
       toSend: 1,

@@ -65,6 +65,12 @@ describe('Bridge home (CC18)', () => {
     expect({ stale: markup.includes('Replaced by orchestrator-1 with “Which goes first, now that U4 slipped?”'), link: (markup.match(/data-testid="bridge-replacement"/g) ?? []).length }).toEqual({ stale: true, link: 1 });
   });
 
+  it('says on its row that a question is in the basket with the note alone', () => {
+    const markup = render({ waiting: { count: 1, items: [anItem({ state: 'seen', inBasket: { option: null, note: 'Ask me after the demo.' } })] }, stayAware: [] });
+
+    expect(markup.includes('In the basket: the note alone')).toBe(true);
+  });
+
   it('says on its row that a question is in the basket with its option, still counted (section 9, rule 1)', () => {
     const markup = render({ waiting: { count: 1, items: [anItem({ state: 'seen', inBasket: { option: 2, note: null } })] }, stayAware: [] });
 

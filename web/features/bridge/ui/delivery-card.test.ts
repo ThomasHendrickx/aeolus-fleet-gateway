@@ -76,6 +76,24 @@ describe('a question opened in Bridge (CC11)', () => {
     }).toEqual({ inBasket: true, note: true, picked: true, basket: true, remove: true });
   });
 
+  it('offers to put the note alone in the basket once the note has text, beside the option', () => {
+    const markup = render(aQuestion(), { note: 'Neither: ask me after the demo.' });
+
+    expect({ noteAlone: markup.includes('>Put the note alone in the basket<'), option: markup.includes('>Put option 2 in the basket<') }).toEqual({ noteAlone: true, option: true });
+  });
+
+  it('offers no note alone while the note is empty', () => {
+    const markup = render(aQuestion());
+
+    expect(markup.includes('data-testid="bridge-put-note-alone"')).toBe(false);
+  });
+
+  it('says a question whose note alone is in the basket is in it, not sent, with its note', () => {
+    const markup = render(aQuestion(), { inBasket: { option: null, note: 'Neither: ask me after the demo.' } });
+
+    expect({ inBasket: markup.includes('In the basket: the note alone, not sent'), note: markup.includes('“Neither: ask me after the demo.”') }).toEqual({ inBasket: true, note: true });
+  });
+
   it('shows a withdrawn question stale: nothing to choose or send', () => {
     const markup = render(aQuestion({ stale: { kind: 'withdrawn', replacementId: null } }));
 
