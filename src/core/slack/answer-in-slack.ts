@@ -1,15 +1,21 @@
 import { ANSWER_CONTENT_TYPE, questionSchema, type MessageId } from '@aeolus-fleet/common';
 
-import type { ItemOutcomes } from '../people/item-outcome.js';
+import { outcomeTextOf, type ItemOutcomes } from '../people/item-outcome.js';
+import { answerKeyOf } from '../people/basket.js';
 import { KEY_UNAVAILABLE, SEALED_MESSAGE } from '../people/person-crew.js';
-import type { PersonCrews, PersonShipDoor } from '../people/ports.js';
+import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from '../people/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { SlackApps, SlackLinks, SlackMessages, SlackPosts, SlackSignatures } from './ports.js';
 import { isSignedBy, type SignedRequest } from './slack-request.js';
 import { STORED_REACTION } from './send-slack-events.js';
 
-export type AnswerInSlack = (press: SignedRequest & { appId: string; teamId: string; userId: string; channel: string; messageTs: string; messageId: MessageId; option: number }) => Promise<Result<{ kind: 'answered' | 'refused' | 'ignored' }, { kind: 'notSigned' }>>;
+export type AnswerInSlack = (press: SignedRequest & { appId: string; teamId: string; userId: string; channel: string; messageTs: string; messageId: MessageId; option: number }) => Promise<Result<{ kind: 'answered' | 'answeredElsewhere' | 'refused' | 'ignored' }, { kind: 'notSigned' }>>;
+
+/** The words with their first letter small, as they go on in a sentence. */
+function lowerFirst(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
 
 /** The question's id in a delivery's payload; none when it is no question. */
 function questionIdOf(payload: string): string | undefined {
@@ -32,6 +38,12 @@ function questionIdOf(payload: string): string | undefined {
  * message, as its button carries it, so a press that comes before the
  * gateway kept the post's Slack message is answered too. The press, the
  * person's own act, acknowledges the delivery: Slack posts it without.
+ * One answer per question (Bridge, section 9): a question answered in
+ * another place first is sent nothing, and the thread says where it was
+ * answered; the answer is keyed by the question's uuid, as the basket's is,
+ * so two presses at once in two places are stored once. Once handled, the
+ * question is no longer opened anywhere, and every page of the person is
+ * told, so Bridge and a chat show it answered in Slack (view sync).
  */
 export function createAnswerInSlack(deps: {
   apps: Pick<SlackApps, 'findByAppId'>;
@@ -39,7 +51,9 @@ export function createAnswerInSlack(deps: {
   posts: Pick<SlackPosts, 'ofMessage'>;
   crews: Pick<PersonCrews, 'find'>;
   door: Pick<PersonShipDoor, 'ack' | 'delivery' | 'reply' | 'handled'>;
-  outcomes: Pick<ItemOutcomes, 'save'>;
+  outcomes: ItemOutcomes;
+  opened: Pick<OpenedDeliveries, 'remove'>;
+  changes: InboxChanges;
   slack: Pick<SlackMessages, 'react' | 'postInThread'>;
   signatures: SlackSignatures;
   clock: Clock;
@@ -56,6 +70,11 @@ export function createAnswerInSlack(deps: {
     if (post === undefined || post.deliveryId === null || post.senderShipId === null || crew === undefined || app.bot === null) {
       return ok({ kind: 'ignored' });
     }
+    const [earlier] = await deps.outcomes.findMany(app.fleetId, { shipId: post.personShipId, deliveryIds: [post.deliveryId] });
+    if (earlier !== undefined) {
+      await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: `Already ${lowerFirst(outcomeTextOf(earlier))}. Nothing is sent.` });
+      return ok({ kind: 'answeredElsewhere' });
+    }
     // The press, the person's own act, acknowledges it (Bridge, CC6); core reads a delivery again only once acknowledged, so a refusal leaves it unread, and the press ignored.
     await deps.door.ack(crew.crewToken, post.deliveryId);
     const delivery = await deps.door.delivery(crew.crewToken, post.deliveryId);
@@ -67,7 +86,7 @@ export function createAnswerInSlack(deps: {
     if (!delivery.isOk || questionId === undefined) {
       return ok({ kind: 'ignored' });
     }
-    const replied = await deps.door.reply(crew.crewToken, { to: post.senderShipId, inReplyTo: post.messageId, contentType: ANSWER_CONTENT_TYPE, payload: JSON.stringify({ questionId, option }), idempotencyKey: `answer-${post.deliveryId}` });
+    const replied = await deps.door.reply(crew.crewToken, { to: post.senderShipId, inReplyTo: post.messageId, contentType: ANSWER_CONTENT_TYPE, payload: JSON.stringify({ questionId, option }), idempotencyKey: answerKeyOf({ questionId }) });
     if (!replied.isOk) {
       await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: `${delivery.value.senderName} did not take your answer: ${replied.error.message}` });
       return ok({ kind: 'refused' });
@@ -75,6 +94,8 @@ export function createAnswerInSlack(deps: {
     const handled = await deps.door.handled(crew.crewToken, post.deliveryId);
     if (handled.isOk) {
       await deps.outcomes.save({ fleetId: app.fleetId, shipId: post.personShipId, deliveryId: post.deliveryId, place: 'slack', kind: 'answered', option, at: deps.clock.now() });
+      await deps.opened.remove(app.fleetId, { shipId: post.personShipId, deliveryId: post.deliveryId });
+      await deps.changes.tell({ fleetId: app.fleetId, shipId: post.personShipId });
     }
     await deps.slack.react(app.bot.token, { channel, ts: messageTs, name: STORED_REACTION });
     return ok({ kind: 'answered' });
