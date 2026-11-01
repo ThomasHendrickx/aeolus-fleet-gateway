@@ -70,6 +70,7 @@ const MANAGING_APPROVER_CREW = 'aeolus_ct_v1_managing_approver';
 const REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0001';
 const CURSOR_CLIENT = 'https://cursor.example.com/client.json';
 const DELIVERY = 'dlv_01m3tbfspe96yf1rnr4ank9dlv';
+const QUESTION_ID = '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e';
 const DECIDED = 'req_01m5c7hmbt9f1vrkwb37az0002';
 const ORDERBOT_REQUEST: PendingRequest = {
   fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8sv',
@@ -168,6 +169,29 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       doneDelivery: (input) => {
         answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
+      },
+      readBasket: () =>
+        Promise.resolve(
+          ok({
+            toSend: 1,
+            entries: [{ questionId: QUESTION_ID, deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', option: 2, note: null, standing: { kind: 'waiting' as const } }],
+          }),
+        ),
+      countBasket: () => Promise.resolve(ok({ count: 1 })),
+      putInBasket: (input) => {
+        if (input.deliveryId !== DELIVERY) {
+          return Promise.resolve(err({ kind: 'NOT_A_QUESTION' as const, message: 'Only an answer to a question goes in the basket' }));
+        }
+        answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId, option: String(input.option), note: input.note });
+        return Promise.resolve(ok({ questionId: QUESTION_ID, option: input.option, note: input.note === '' ? null : input.note }));
+      },
+      removeFromBasket: ({ questionId }) =>
+        Promise.resolve(
+          questionId === QUESTION_ID ? err({ kind: 'CONFLICT' as const, message: 'This answer is being sent' }) : err({ kind: 'NOT_IN_BASKET' as const, message: 'That answer is not in your basket' }),
+        ),
+      sendBasket: (caller) => {
+        answers.push({ grantId: grantOf(caller), sent: 'basket' });
+        return Promise.resolve(ok({ sending: 1, skipped: [] }));
       },
       readWakeChannels: (caller) =>
         Promise.resolve(
@@ -911,6 +935,40 @@ describe("a person reads and deals with their person ship's deliveries through t
 
     await expect(gatewayRouter.createCaller(context).people.answer({ deliveryId: DELIVERY, contentType: 'text/plain', payload: overInBytes })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(answers).toEqual([]);
+  });
+
+  it('reads the basket, and its count for the navigation (Bridge, section 9)', async () => {
+    const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
+
+    await expect(caller.people.basket()).resolves.toMatchObject({ toSend: 1, entries: [{ questionId: QUESTION_ID, option: 2, standing: { kind: 'waiting' } }] });
+    await expect(caller.people.basketCount()).resolves.toEqual({ count: 1 });
+  });
+
+  it('puts an answer in the basket, and sends the basket, as its own account', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+    const caller = gatewayRouter.createCaller(context);
+
+    await expect(caller.people.putInBasket({ deliveryId: DELIVERY, option: 2, note: 'Harbour first' })).resolves.toEqual({ questionId: QUESTION_ID, option: 2, note: 'Harbour first' });
+    await expect(caller.people.sendBasket()).resolves.toEqual({ sending: 1, skipped: [] });
+    expect(answers).toEqual([
+      { grantId: PERSON_TOKEN, deliveryId: DELIVERY, option: '2', note: 'Harbour first' },
+      { grantId: PERSON_TOKEN, sent: 'basket' },
+    ]);
+  });
+
+  it('refuses an option that is no whole number from 1, putting nothing in the basket', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.putInBasket({ deliveryId: DELIVERY, option: 1.5, note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(answers).toEqual([]);
+  });
+
+  it('says a delivery that asks no question goes in no basket, an entry being sent cannot be removed, and one not in the basket is not found', async () => {
+    const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
+
+    await expect(caller.people.putInBasket({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9txt', option: 1, note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller.people.removeFromBasket({ questionId: QUESTION_ID })).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(caller.people.removeFromBasket({ questionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('says a delivery that no longer waits is not found', async () => {
