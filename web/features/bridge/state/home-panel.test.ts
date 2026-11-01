@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BridgeHome, HomeItem } from '../services/items';
 import { HomePanel } from './home-panel';
+import { AsLastRead } from './kept-read';
 
 function anItem(overrides: Partial<HomeItem> = {}): HomeItem {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', state: 'new', stale: null, inBasket: null, ...overrides };
@@ -87,5 +88,34 @@ describe('Bridge home (CC18)', () => {
     const markup = render({ waiting: { count: 1, items: [anItem({ state: 'seen', inBasket: { option: 2, note: null } })] }, stayAware: [] });
 
     expect({ inBasket: markup.includes('In the basket: option 2'), seen: markup.includes('Seen, not done yet'), count: markup.includes('data-testid="bridge-count" class="text-tone-waiting-fg">1<') }).toEqual({ inBasket: true, seen: false, count: true });
+  });
+});
+
+describe('Bridge home as last read, while the record cannot be read (states.html)', () => {
+  const home: BridgeHome = {
+    waiting: { count: 2, items: [anItem(), anItem({ deliveryId: 'dlv_02', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin' })] },
+    stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', from: 'watch', title: 'builder-gateway: no report change for 2 h' })],
+  };
+  const markup = renderToStaticMarkup(createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z' }, createElement(HomePanel, { fleetId: 'flt_01', home })));
+
+  it('says when it was last read under the title, in place of the count', () => {
+    expect({
+      title: /<h1[^>]*>Waiting on you<\/h1>/.test(markup),
+      lastRead: markup.includes('data-testid="bridge-last-read">Last read 20:14 UTC<'),
+      count: markup.includes('data-testid="bridge-count"'),
+    }).toEqual({ title: true, lastRead: true, count: false });
+  });
+
+  it('shows what waited as last read, faded and not to be opened, saying so under it', () => {
+    expect({
+      rows: (markup.match(/data-testid="bridge-item"/g) ?? []).length,
+      faded: /<ul[^>]*inert=""[^>]*class="[^"]*opacity-60/.test(markup),
+      open: markup.includes('data-testid="bridge-open"'),
+      shown: markup.includes('Shown as last read, at 20:14 UTC.'),
+    }).toEqual({ rows: 2, faded: true, open: false, shown: true });
+  });
+
+  it('leaves out the stay-aware feed and sending a ship a message', () => {
+    expect({ feed: markup.includes('builder-gateway: no report change for 2 h'), send: markup.includes('data-testid="bridge-send-message"') }).toEqual({ feed: false, send: false });
   });
 });
