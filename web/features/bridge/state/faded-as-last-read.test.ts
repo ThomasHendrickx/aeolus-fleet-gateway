@@ -23,3 +23,11 @@ describe('a page as last read', () => {
     expect({ faded: markup.includes('<div inert="" class="opacity-60"><ul>the list</ul></div>'), shown: markup.includes('Shown as last read, at 20:14 UTC.') }).toEqual({ faded: true, shown: true });
   });
 });
+
+describe('acting on a page as last read', () => {
+  it('leaves out its buttons, such as Open, since acting goes through the fleet', () => {
+    const markup = renderToStaticMarkup(createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(FadedAsLastRead, { children: createElement('button', null, 'Open') }) }));
+
+    expect(markup.includes('[&amp;_button]:hidden')).toBe(true);
+  });
+});
