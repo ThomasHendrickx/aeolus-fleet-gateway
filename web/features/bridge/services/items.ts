@@ -172,6 +172,21 @@ export function endedOf(item: Pick<RecordItem, 'from' | 'outcome'>, timeZone?: s
   return { isOk: isEndedWell(outcome.kind), text, sent: isSentAsPerson(outcome) ? `${note}Sent to ${item.from} as you.` : undefined };
 }
 
+const ENDED_TITLES: Record<Outcome['kind'], string> = {
+  seen: 'Seen',
+  answered: 'Answered',
+  done: 'Done',
+  cannot: 'Cannot',
+  withdrawn: 'Withdrawn',
+  replaced: 'Replaced',
+  notSent: 'Not sent',
+};
+
+/** The title of a done item's own screen on a phone: what came of it, such as Answered (decide.html); Done when none was kept. */
+export function endedTitleOf(item: Pick<RecordItem, 'outcome'>): string {
+  return item.outcome === null ? 'Done' : ENDED_TITLES[item.outcome.kind];
+}
+
 /** The places a row and a history name, as Where things show names them. */
 const PLACE_NAMES: Record<RecordItem['places'][number] | 'bridge', string> = {
   bridge: 'Bridge',

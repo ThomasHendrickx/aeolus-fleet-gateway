@@ -3,7 +3,7 @@ import { CircleCheck, CircleX } from 'lucide-react';
 import type { Question } from '@aeolus-fleet/common';
 
 import { bodyOf, questionOf, stepOf } from '../services/deliveries';
-import { endedOf, historyOf, type RecordItem } from '../services/items';
+import { endedOf, endedTitleOf, historyOf, type RecordItem } from '../services/items';
 import { ItemHeading, PROSE, ScreenBar, StepAsked } from './delivery-card';
 import { Markdown } from './markdown';
 
@@ -46,7 +46,7 @@ function EndedNotice({ ended }: { ended: NonNullable<ReturnType<typeof endedOf>>
 /** Its history, a line per moment: when it arrived and where it showed, where it was seen, and what came of it (decide.html). */
 function History({ item, timeZone }: { item: RecordItem; timeZone: string | undefined }) {
   return (
-    <ol data-testid="bridge-done-history" className="grid gap-1.5 text-caption">
+    <ol data-testid="bridge-done-history" className="grid gap-1.5 text-caption max-md:hidden">
       {historyOf(item, timeZone).map((line) => (
         <li key={`${line.at} ${line.text}`} className="grid grid-cols-[3rem_0.5rem_minmax(0,1fr)] items-center gap-2">
           <span className="text-muted-foreground tabular-nums">{line.at}</span>
@@ -66,7 +66,8 @@ function History({ item, timeZone }: { item: RecordItem; timeZone: string | unde
  * whole from the record, nothing acknowledged and nothing to send. A
  * question shows its options with the one answered marked, a step why and
  * where it was done, anything else what it says; then what came of it and
- * its history. A phone shows it on its own screen.
+ * its history. A phone shows it on its own screen, titled by what came of
+ * it, without its history, as drawn.
  */
 export function DoneCard({ item, timeZone, bridgeHost, onBack }: { item: RecordItem; timeZone: string | undefined; bridgeHost: string; onBack: () => void }) {
   const question = questionOf(item);
@@ -75,7 +76,7 @@ export function DoneCard({ item, timeZone, bridgeHost, onBack }: { item: RecordI
   const opened = { job: item.job, isAlert: item.isAlert, wasNew: false };
   return (
     <section data-testid="bridge-done-item" className="grid min-w-0 content-start gap-3 text-card-foreground md:p-5">
-      <ScreenBar opened={opened} isWorking={false} onBack={onBack} />
+      <ScreenBar opened={opened} title={endedTitleOf(item)} isWorking={false} onBack={onBack} />
       <ItemHeading delivery={item} opened={opened} timeZone={timeZone} />
       <h2 className="text-heading font-semibold">{question?.title ?? item.title}</h2>
       {step !== undefined ? (

@@ -226,13 +226,13 @@ function Separator() {
 }
 
 /** An opened item's own screen on a phone: back to the list by its chevron, titled by its job (decide.html, do.html). A desktop shows the list beside it instead. */
-export function ScreenBar({ opened, isWorking, onBack }: { opened: Opened; isWorking: boolean; onBack: () => void }) {
+export function ScreenBar({ opened, title = screenTitleOf(opened), isWorking, onBack }: { opened: Opened; title?: string; isWorking: boolean; onBack: () => void }) {
   return (
     <div data-testid="bridge-item-screen-bar" className="-mx-1 flex items-center gap-1 md:hidden">
       <button type="button" data-testid="bridge-back" aria-label="Back to the list" onClick={onBack} disabled={isWorking} className="inline-flex size-9 items-center justify-center rounded-md hover:bg-accent disabled:opacity-70">
         <ChevronLeft aria-hidden="true" className="size-5" />
       </button>
-      <span className="text-section font-semibold">{screenTitleOf(opened)}</span>
+      <span className="text-section font-semibold">{title}</span>
     </div>
   );
 }
