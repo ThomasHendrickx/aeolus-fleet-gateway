@@ -172,6 +172,23 @@ export interface SlackLinks {
   stop(fleetId: FleetId, stopped: { accountId: string; at: Date }): Promise<void>;
 }
 
+/** A person's ask to link Slack (Bridge, CC14): its step's uuid, whether the step was sent, and its message, none until sent or when the fleet refused it. */
+export interface SlackLinkStep {
+  readonly stepId: string;
+  readonly isTold: boolean;
+  readonly stepMessageId: MessageId | null;
+}
+
+/** Outbound port: each person's open ask to link Slack, in the gateway's database. */
+export interface SlackLinkSteps {
+  /** The person's open ask, opened under this uuid unless one is open already, as two reads at once find. */
+  open(fleetId: FleetId, step: { personShipId: ShipId; stepId: string }): Promise<SlackLinkStep>;
+  /** Marks it told, with the message of the step, none when the fleet refused it. */
+  markTold(fleetId: FleetId, step: { personShipId: ShipId; stepMessageId: MessageId | null }): Promise<void>;
+  /** Closes it at a link, so a later unlinked read asks again: the ask closed, none when none was open. */
+  close(fleetId: FleetId, personShipId: ShipId): Promise<SlackLinkStep | undefined>;
+}
+
 /** Outbound port: a bot's posts and reactions in Slack, with its bot token. */
 export interface SlackMessages {
   /** A message only one person sees, in a conversation (chat.postEphemeral), with a button that opens an address. */
