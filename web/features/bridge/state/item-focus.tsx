@@ -11,14 +11,17 @@ import type { FocusedDelivery } from '../services/deliveries';
 import type { HomeItem } from '../services/items';
 import type { RoutedPlace } from '../services/routing';
 import { BasketToasts, putToastOf } from '../ui/basket-toast';
-import { DeliveryCard, type DeliveryControl, type InBasket, type StepFinished } from '../ui/delivery-card';
+import { DeliveryCard, type DeliveryControl, type InBasket, type Opened, type StepFinished } from '../ui/delivery-card';
+import { ItemSplit } from '../ui/item-split';
 import { Notice } from '../ui/notice';
 import { SendMessageProvider, useSendMessage } from './send-message';
 
-/** An item to open: by its delivery, with its job, and the answer to it in the basket, if any. */
+/** An item to open: by its delivery, with its job, whether an alert, whether it was new, and the answer to it in the basket, if any. A replacement opened from its stale item is new. */
 export interface ToOpen {
   readonly deliveryId: string;
   readonly job: HomeItem['job'];
+  readonly isAlert?: boolean;
+  readonly state?: HomeItem['state'];
   readonly inBasket?: InBasket | null;
 }
 
@@ -35,6 +38,8 @@ export interface ItemOpening {
   readonly putPick: (item: ToPut, option: number) => void;
   readonly puttingId: string | undefined;
   readonly failure: { deliveryId: string; message: string } | undefined;
+  /** The item open beside the list, by its delivery and job; none while the list is shown alone. */
+  readonly opened: { readonly deliveryId: string; readonly job: HomeItem['job'] } | undefined;
 }
 
 /**
@@ -49,7 +54,8 @@ export interface ItemOpening {
  * of it there; from its row, a new question's pick goes in it at once, opened by the same press. Answering or being done says so in place, and the page reads
  * itself again. A question names where it shows when the page read its places.
  * An opened alert offers to send its ship a message, as home offers to send
- * any ship one (aeolus-fleet #1547).
+ * any ship one (aeolus-fleet #1547). The open item shows beside its list on
+ * a desktop, and on its own screen on a phone (aeolus-fleet#1538).
  */
 export function ItemFocus({ fleetId, decidePlaces, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; children: (opening: ItemOpening) => ReactNode }) {
   return (
@@ -65,7 +71,7 @@ export function ItemFocus({ fleetId, decidePlaces, children }: { fleetId: string
 function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; children: (opening: ItemOpening) => ReactNode }) {
   const toasts = Toast.useToastManager();
   const sendMessage = useSendMessage();
-  const [focus, setFocus] = useState<{ delivery: FocusedDelivery; isDoneOnSeeing: boolean; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
+  const [focus, setFocus] = useState<{ delivery: FocusedDelivery; opened: Opened; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
   const [note, setNote] = useState('');
   const [openingId, setOpeningId] = useState<string | undefined>();
   const [puttingId, setPuttingId] = useState<string | undefined>();
@@ -86,7 +92,7 @@ function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; de
       setOpeningId(undefined);
       if (outcome.isOk) {
         const inBasket = item.inBasket ?? null;
-        setFocus({ delivery: outcome.value, isDoneOnSeeing: item.job === 'stay-aware', inBasket, finished: null });
+        setFocus({ delivery: outcome.value, opened: { job: item.job, isAlert: item.isAlert ?? false, wasNew: item.state !== 'seen' }, inBasket, finished: null });
         setNote(inBasket?.note ?? '');
         setFailure(undefined);
       } else {
@@ -132,18 +138,17 @@ function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; de
     setDone(said);
   };
 
-  if (focus !== undefined) {
-    const { delivery, inBasket } = focus;
+  const cardOf = ({ delivery, inBasket, opened, finished }: NonNullable<typeof focus>) => {
     const questionId = delivery.question?.id;
     return (
       <DeliveryCard
         key={delivery.deliveryId}
         delivery={delivery}
-        isDoneOnSeeing={focus.isDoneOnSeeing}
+        opened={opened}
         meetingHref={delivery.meetingId === undefined ? undefined : meetingPathOf({ fleetId, meetingId: delivery.meetingId })}
         basketHref={inFleet(BRIDGE_BASKET_PATH, fleetId)}
         inBasket={inBasket}
-        finished={focus.finished}
+        finished={finished}
         places={decidePlaces}
         note={note}
         working={working}
@@ -152,7 +157,7 @@ function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; de
         onAnswer={(option) => { settle({ control: option === undefined ? { kind: 'note' } : { kind: 'option', option }, action: () => answerDelivery({ fleet: fleetId, deliveryId: delivery.deliveryId, input: { questionId: delivery.question?.id, option, note } }), onSettled: leave(`Your answer went to ${delivery.from}.`) }); }
         }
         onPut={(option) => { settle({ control: option === null ? { kind: 'note' } : { kind: 'option', option }, action: () => putInBasket({ fleet: fleetId, deliveryId: delivery.deliveryId, option, optionLabel: delivery.question?.options.find(({ key }) => key === option)?.label ?? null, note }), onSettled: (put) => {
-              setFocus({ ...focus, inBasket: put });
+              setFocus({ delivery, opened, finished, inBasket: put });
               toasts.add(putToastOf(put.option));
             } }); }}
         onRemove={() => {
@@ -165,19 +170,26 @@ function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; de
           settle({
             control: { kind: outcome },
             action: () => doneDelivery({ fleet: fleetId, deliveryId: delivery.deliveryId, step: { outcome, note } }),
-            onSettled: () => { setFocus({ ...focus, finished: { outcome, note: note.trim(), at: new Date().toISOString() } }); },
+            onSettled: () => { setFocus({ delivery, inBasket, opened, finished: { outcome, note: note.trim(), at: new Date().toISOString() } }); },
           });
         }}
-        onOpen={(deliveryId) => { open({ deliveryId, job: 'decide' }); }}
+        onOpen={(deliveryId) => { open({ deliveryId, job: opened.job }); }}
         onSendMessage={delivery.alertShip === undefined || sendMessage === undefined ? undefined : (alertShip) => { sendMessage({ alertShip }); }}
         onBack={() => { setFocus(undefined); }}
       />
     );
-  }
+  };
+
+  const opened = focus === undefined ? undefined : { deliveryId: focus.delivery.deliveryId, job: focus.opened.job };
   return (
-    <div key={shownTimes} className="grid gap-4">
-      {done === undefined ? null : <Notice message={done} isFailure={false} />}
-      {children({ open, openingId, putPick, puttingId, failure: openFailure })}
-    </div>
+    <ItemSplit
+      list={
+        <div key={shownTimes} className="grid gap-4">
+          {done === undefined ? null : <Notice message={done} isFailure={false} />}
+          {children({ open, openingId, putPick, puttingId, failure: openFailure, opened })}
+        </div>
+      }
+      item={focus === undefined ? undefined : cardOf(focus)}
+    />
   );
 }

@@ -4,6 +4,7 @@ import type { FleetRefusal } from '../connection/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { answerKeyOf, answerOf, askingOfEntry, type BasketEntries, type BasketEntry } from './basket.js';
 import type { ItemOutcomes } from './item-outcome.js';
+import { sightingOf } from './opened-of.js';
 import { isEndedCrew, KEY_UNAVAILABLE } from './person-crew.js';
 import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from './ports.js';
 import { waitingOn } from './read-inbox.js';
@@ -158,7 +159,8 @@ async function sendEntry(deps: SendDeps, sending: { crewToken: string; entry: Ba
     return keepUnanswered(deps, entry);
   }
   const at = deps.clock.now();
-  await deps.outcomes.save({ fleetId: entry.fleetId, shipId: entry.shipId, deliveryId: entry.deliveryId, place: 'bridge', kind: 'answered', option: entry.option, at });
+  const opened = await deps.opened.find(entry.fleetId, { shipId: entry.shipId, deliveryId: entry.deliveryId });
+  await deps.outcomes.save({ fleetId: entry.fleetId, shipId: entry.shipId, deliveryId: entry.deliveryId, place: 'bridge', kind: 'answered', option: entry.option, note: entry.note, seen: opened === undefined ? null : sightingOf(opened), at });
   await deps.opened.remove(entry.fleetId, { shipId: entry.shipId, deliveryId: entry.deliveryId });
   await deps.entries.save({ ...entry, state: 'sent', isUnanswered: false, storedAt: at });
   return 'sent';

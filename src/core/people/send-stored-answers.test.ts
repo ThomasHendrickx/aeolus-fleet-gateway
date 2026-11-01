@@ -118,9 +118,19 @@ describe('the gateway sends the answers stored as sending', () => {
     await expect(aSender()()).resolves.toEqual({ sent: 1, kept: 0, refused: 0 });
 
     expect(ship.calls.filter((call) => !call.startsWith('inbox'))).toEqual([`reply(${HARBOUR.messageId})`, `handled(${HARBOUR.deliveryId})`]);
-    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: HARBOUR.deliveryId, place: 'bridge', kind: 'answered', option: 2, at: AT }]);
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: HARBOUR.deliveryId, place: 'bridge', kind: 'answered', option: 2, note: 'Harbour first: the demo on 12 Nov needs it.', seen: null, at: AT }]);
     expect({ basket: [...entries.held.values()], opened: opened.held.size }).toEqual({ basket: [{ ...HARBOUR, state: 'sent', storedAt: AT }], opened: 0 });
     expect(changes.told).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }]);
+  });
+
+  it('keeps where and when the person opened the question, so Done tells its history', async () => {
+    const entry = aBasketEntry({ state: 'sending' });
+    await entries.save(entry);
+    await opened.save({ ...openedOf(entry), openedIn: 'bridge' });
+
+    await aSender()();
+
+    expect(outcomes.held.map(({ seen }) => seen)).toEqual([{ place: 'bridge', at: new Date('2026-10-31T19:50:00.000Z') }]);
   });
 
   it('sends an entry with only a note as an answer with the note and no option, kept answered in Bridge with no option', async () => {
@@ -130,7 +140,7 @@ describe('the gateway sends the answers stored as sending', () => {
     await aSender()();
 
     expect(ship.replies).toEqual([{ to: noteAlone.senderShipId, inReplyTo: noteAlone.messageId, contentType: ANSWER, payload: JSON.stringify({ questionId: noteAlone.questionId, note: 'Neither: ask me after the demo.' }), idempotencyKey: `answer-${noteAlone.questionId}` }]);
-    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: noteAlone.deliveryId, place: 'bridge', kind: 'answered', option: null, at: AT }]);
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: noteAlone.deliveryId, place: 'bridge', kind: 'answered', option: null, note: 'Neither: ask me after the demo.', seen: null, at: AT }]);
   });
 
   it('sends no entry waiting for Send: no clock sends the basket', async () => {
@@ -185,7 +195,7 @@ describe('the gateway sends the answers stored as sending', () => {
 
     expect(ship.replies).toEqual([]);
     expect(entries.held.size).toBe(0);
-    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: HARBOUR.deliveryId, place: 'slack', kind: 'answered', option: 3, at: AT }]);
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: HARBOUR.deliveryId, place: 'slack', kind: 'answered', option: 3, note: null, seen: null, at: AT }]);
   });
 
   it('keeps sending while the person ship has no crew, sending nothing', async () => {

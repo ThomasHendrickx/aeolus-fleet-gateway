@@ -352,9 +352,14 @@ export function memoryItemOutcomes(): ItemOutcomes & { held: ItemOutcome[] } {
   const held: ItemOutcome[] = [];
   return {
     held,
-    save: (outcome) => {
-      if (!held.some((kept) => kept.fleetId === outcome.fleetId && kept.shipId === outcome.shipId && kept.deliveryId === outcome.deliveryId)) {
-        held.push(outcome);
+    save: ({ note = null, seen = null, ...outcome }) => {
+      const kept = held.findIndex((each) => each.fleetId === outcome.fleetId && each.shipId === outcome.shipId && each.deliveryId === outcome.deliveryId);
+      const sighting = outcome.kind === 'seen' ? { place: outcome.place, at: outcome.at } : seen;
+      if (kept === -1) {
+        held.push({ ...outcome, note, seen: sighting });
+      } else if (held[kept]?.kind === 'seen' && outcome.kind !== 'seen') {
+        // What came of an item seen before takes the place of seen, still saying where and when it was seen.
+        held[kept] = { ...outcome, note, seen: held[kept].seen };
       }
       return Promise.resolve();
     },

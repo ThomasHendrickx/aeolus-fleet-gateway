@@ -811,7 +811,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     return {
       readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults, connections }),
       readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries, outcomes, connections, routes, defaults: routingDefaults, parties, ownStepPartyOf: ownStepPartyOf(options.publicUrl ?? DEFAULT_PUBLIC_URL), ...placesOffered }),
-      readRecord: createReadRecord({ ...asCrew, outcomes }),
+      readRecord: createReadRecord({ ...asCrew, outcomes, connections, routes, defaults: routingDefaults, ...placesOffered }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes, outcomes, clock }),

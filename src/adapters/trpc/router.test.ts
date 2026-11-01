@@ -160,7 +160,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readRecord: ({ cursor }) =>
         Promise.resolve(
           ok({
-            items: [{ deliveryId: DELIVERY, from: 'watch', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-20T09:00:00.000Z', job: 'stay-aware' as const, state: 'done' as const, outcome: { place: 'bridge' as const, kind: 'seen' as const, option: null, at: '2026-10-20T09:05:00.000Z' } }],
+            items: [{ deliveryId: DELIVERY, from: 'watch', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-20T09:00:00.000Z', job: 'stay-aware' as const, isAlert: true, state: 'done' as const, places: [], contentType: 'application/vnd.aeolus.alert+json', payload: '{}', outcome: { place: 'bridge' as const, kind: 'seen' as const, option: null, optionLabel: null, note: null, seen: { place: 'bridge' as const, at: '2026-10-20T09:05:00.000Z' }, replacementTitle: null, at: '2026-10-20T09:05:00.000Z' } }],
             nextCursor: cursor,
           }),
         ),

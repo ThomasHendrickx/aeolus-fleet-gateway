@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { FocusedDelivery } from '../services/deliveries';
 import type { RoutedPlace } from '../services/routing';
-import { DeliveryCard, infoLinesOf, putOf, type StepFinished } from './delivery-card';
+import { DeliveryCard, infoLinesOf, putOf, type Opened, type StepFinished } from './delivery-card';
 
 // A question opened in Bridge (CC11): the asker's pick preselected, one
 // button putting it in the basket (CC24), naming the option; one its asker
@@ -26,13 +26,22 @@ function aQuestion(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, step: undefined, meetingId: undefined, stale: null, ...overrides };
 }
 
-function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string; finished?: StepFinished | null; places?: readonly RoutedPlace[] } = {}): string {
-  const { inBasket = null, note = '', finished = null, places } = shown;
+/** How an item was opened: its job, whether an alert, and whether it was new; a step's, a question's or an alert's by default. */
+function openedOf(delivery: FocusedDelivery): Opened {
+  if (delivery.step !== undefined) {
+    return { job: 'do', isAlert: false, wasNew: true };
+  }
+  return delivery.question === undefined ? { job: 'stay-aware', isAlert: true, wasNew: true } : { job: 'decide', isAlert: false, wasNew: true };
+}
+
+function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string; finished?: StepFinished | null; places?: readonly RoutedPlace[]; opened?: Opened } = {}): string {
+  const { inBasket = null, note = '', finished = null, places, opened = openedOf(delivery) } = shown;
   const noop = () => undefined;
   return renderToStaticMarkup(
     createElement(DeliveryCard, {
       delivery,
-      isDoneOnSeeing: false,
+      opened,
+      timeZone: 'UTC',
       meetingHref: undefined,
       basketHref: '/bridge/basket?fleet=flt_01',
       inBasket,
@@ -99,13 +108,13 @@ describe('a question opened in Bridge (CC11)', () => {
   it('shows a withdrawn question stale: nothing to choose or send', () => {
     const markup = render(aQuestion({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } }));
 
-    expect({ stale: markup.includes('Withdrawn by orchestrator-1 at 20:09 UTC. Nothing to answer: it is done.'), send: markup.includes('in the basket'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, send: false, note: false });
+    expect({ stale: markup.includes('Withdrawn by orchestrator-1 at 20:09. Nothing to answer: it is done.'), send: markup.includes('in the basket'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, send: false, note: false });
   });
 
   it('links a replaced question to its replacement', () => {
     const markup = render(aQuestion({ stale: { kind: 'replaced', replacementId: 'dlv_02', at: '2026-10-31T20:10:00.000Z', replacementTitle: 'Which goes first, now that U4 slipped?' } }));
 
-    expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:10 UTC with “Which goes first, now that U4 slipped?”. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('in the basket') }).toEqual({ stale: true, link: true, send: false });
+    expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:10 with “Which goes first, now that U4 slipped?”. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('in the basket') }).toEqual({ stale: true, link: true, send: false });
   });
 });
 
@@ -290,7 +299,7 @@ describe('a step opened in Bridge (CC14)', () => {
     const markup = render(aStep(), { finished: { outcome: 'done', note: 'Created private and empty.', at: '2026-10-31T20:03:00.000Z' } });
 
     expect({
-      title: markup.includes('Done in Bridge at 20:03 UTC'),
+      title: markup.includes('Done in Bridge at 20:03'),
       note: markup.includes('“Created private and empty.”'),
       sent: markup.includes('Sent to orchestrator-1 as you, with the outcome done.'),
       tone: /data-testid="bridge-step-outcome"[^>]*tone-ok/.test(markup),
@@ -305,7 +314,7 @@ describe('a step opened in Bridge (CC14)', () => {
     const markup = render(aStep(), { finished: { outcome: 'cannot', note: 'The name is taken.', at: '2026-10-31T20:05:00.000Z' } });
 
     expect({
-      title: markup.includes('Cannot, in Bridge at 20:05 UTC'),
+      title: markup.includes('Cannot, in Bridge at 20:05'),
       note: markup.includes('“The name is taken.”'),
       sent: markup.includes('Sent to orchestrator-1 as you, with the outcome cannot.'),
       ended: /data-testid="bridge-step-outcome"[^>]*border-tone-ended-border bg-tone-ended-bg/.test(markup) && /lucide-circle-x[^"]*text-tone-ended-fg/.test(markup),
@@ -344,7 +353,7 @@ describe('a step opened in Bridge (CC14)', () => {
     const markup = render(aStep({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T21:09:00.000Z', replacementTitle: null } }));
 
     expect({
-      stale: markup.includes('Withdrawn by orchestrator-1 at 21:09 UTC. Nothing to do: it is done.'),
+      stale: markup.includes('Withdrawn by orchestrator-1 at 21:09. Nothing to do: it is done.'),
       struck: /<s[^>]*>Create the GitHub repository aeolus-fleet-memory-plugin<\/s>/.test(markup),
       icon: markup.includes('aria-label="Withdrawn"'),
       done: markup.includes('data-testid="bridge-step-done"'),
@@ -356,7 +365,80 @@ describe('a step opened in Bridge (CC14)', () => {
   it('links a replaced step to its replacement, named with when it was replaced', () => {
     const markup = render(aStep({ stale: { kind: 'replaced', replacementId: 'dlv_04', at: '2026-10-31T21:11:00.000Z', replacementTitle: 'Sign in to attio with the team account' } }));
 
-    expect({ stale: markup.includes('Replaced by orchestrator-1 at 21:11 UTC with “Sign in to attio with the team account”. Do the new step.'), icon: markup.includes('aria-label="Replaced"'), link: markup.includes('Open the new step'), done: markup.includes('data-testid="bridge-step-done"') }).toEqual({ stale: true, icon: true, link: true, done: false });
+    expect({ stale: markup.includes('Replaced by orchestrator-1 at 21:11 with “Sign in to attio with the team account”. Do the new step.'), icon: markup.includes('aria-label="Replaced"'), link: markup.includes('Open the new step'), done: markup.includes('data-testid="bridge-step-done"') }).toEqual({ stale: true, icon: true, link: true, done: false });
+  });
+});
+
+// An opened item (aeolus-fleet#1538): its heading names the job, who sent it, the time of day and whether it was
+// seen; its text is Markdown; on a phone it is its own screen, back to the list by its chevron (decide.html, do.html,
+// stay-aware.html).
+describe('an opened item’s heading, text and screen (aeolus-fleet#1538)', () => {
+  const ALERT_BODY = 'Its last report, 17:46: *Working: slice W9, the waiter’s restart test.* You expect a report change within 45 min.';
+
+  function anAlert(): FocusedDelivery {
+    return { deliveryId: 'dlv_05', from: 'watch', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-31T19:47:00.000Z', payload: '{}', body: ALERT_BODY, question: undefined, step: undefined, meetingId: undefined, stale: null };
+  }
+
+  /** The heading line above the title, as text. */
+  function headingOf(markup: string): string {
+    return (/<p data-testid="bridge-item-heading"[^>]*>(.*?)<\/p>/.exec(markup)?.[1] ?? '').replaceAll(/<[^>]+>/g, '');
+  }
+
+  it('heads a new question with its job, who asked, the time of day and that it is seen just now, with no date', () => {
+    const markup = render(aQuestion());
+
+    expect({ heading: headingOf(markup), asker: markup.includes('<strong class="font-semibold text-foreground">orchestrator-1</strong>'), date: /GMT|UTC|2026/.test(headingOf(markup)) }).toEqual({ heading: 'Decide·question from orchestrator-1·19:41·Seen just now', asker: true, date: false });
+  });
+
+  it('heads a step seen before with no word of seeing it', () => {
+    expect(headingOf(render(aQuestion({ question: undefined, step: { title: 'Create the repository', why: 'No ship can.', link: undefined } }), { opened: { job: 'do', isAlert: false, wasNew: false } }))).toBe('Do·step from orchestrator-1·19:41');
+  });
+
+  it('heads an alert in its tone, seen now, so done, and says no more of it below', () => {
+    const markup = render(anAlert());
+
+    expect({ heading: headingOf(markup), tone: /data-testid="bridge-item-heading"(?:(?!<\/p>).)*text-tone-attention-fg[^>]*>(?:<svg(?:(?!<\/svg>).)*<\/svg>)?Alert/.test(markup), below: markup.includes('it asks nothing more') }).toEqual({ heading: 'Alert·from watch·19:47·Seen now, so done', tone: true, below: false });
+  });
+
+  it('shows an alert’s body as Markdown, not as code', () => {
+    const markup = render(anAlert());
+
+    expect({ italics: markup.includes('<em>Working: slice W9, the waiter’s restart test.</em>'), pre: markup.includes('<pre') }).toEqual({ italics: true, pre: false });
+  });
+
+  it('shows a question’s context and a step’s why as Markdown', () => {
+    const question = render(aQuestion({ question: { ...QUESTION, context: 'Both touch `@aeolus-fleet/ui`.' } }));
+    const step = render(aQuestion({ question: undefined, step: { title: 'Create the repository', why: 'Create it with `main` as its default branch.', link: undefined } }));
+
+    expect({ context: /<code[^>]*>@aeolus-fleet\/ui<\/code>/.test(question), why: /<code[^>]*>main<\/code>/.test(step) }).toEqual({ context: true, why: true });
+  });
+
+  it('shows only the first paragraph of a question’s context and a step’s why on a phone, as the sheets draw them', () => {
+    const question = render(aQuestion({ question: { ...QUESTION, context: 'One.\n\nTwo.' } }));
+    const step = render(aQuestion({ question: undefined, step: { title: 'Create the repository', why: 'One.\n\nTwo.', link: undefined } }));
+    const firstOnly = /<div class="[^"]*max-md:\[&amp;_p\+p\]:hidden[^"]*"><div[^>]*><p[^>]*>One\.<\/p>/;
+
+    expect({ context: firstOnly.test(question), why: firstOnly.test(step) }).toEqual({ context: true, why: true });
+  });
+
+  it('shows a question’s options by their labels alone on a phone, their details from a desktop up', () => {
+    const markup = render(aQuestion());
+    const classesOf = (detail: string) => (new RegExp(`<span class="([^"]*)">${detail}</span>`).exec(markup)?.[1] ?? '').split(' ');
+
+    expect([classesOf('Harbour is built once\\.').includes('max-md:hidden'), classesOf('Answer with your note alone\\.').includes('max-md:hidden')]).toEqual([true, true]);
+  });
+
+  it('is its own screen on a phone, titled by its job, back to the list by its chevron, and has no Back beside the list on a desktop', () => {
+    const markup = render(aQuestion());
+    const screenBar = /<div data-testid="bridge-item-screen-bar" class="([^"]*)"[^>]*>(.*?)<\/div>/.exec(markup);
+
+    expect({
+      phoneOnly: (screenBar?.[1] ?? '').split(' ').includes('md:hidden'),
+      back: /<button[^>]*aria-label="Back to the list"/.test(screenBar?.[2] ?? ''),
+      chevron: (screenBar?.[2] ?? '').includes('lucide-chevron-left'),
+      title: (screenBar?.[2] ?? '').includes('>Question<'),
+      backs: (markup.match(/>Back</g) ?? []).length,
+    }).toEqual({ phoneOnly: true, back: true, chevron: true, title: true, backs: 0 });
   });
 });
 
@@ -368,7 +450,8 @@ describe('an alert opened in Bridge offers to send its ship a message (aeolus-fl
     return renderToStaticMarkup(
       createElement(DeliveryCard, {
         delivery,
-        isDoneOnSeeing: true,
+        opened: { job: 'stay-aware', isAlert: true, wasNew: true },
+        timeZone: 'UTC',
         meetingHref: undefined,
         basketHref: '/bridge/basket?fleet=flt_01',
         inBasket: null,
