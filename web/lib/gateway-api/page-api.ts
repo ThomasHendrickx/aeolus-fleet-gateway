@@ -29,7 +29,7 @@ export interface SignedInPage {
 export const GATEWAY_OFF_PATH = '/gateway-off';
 
 /** Where the page that says the gateway is off sends an account once it may open the gateway. */
-const OVERVIEW_PATH = '/overview';
+const BRIDGE_PATH = '/bridge';
 
 /** The gateway's own address, where the API answers. */
 export function apiUrl(): string {
@@ -111,15 +111,15 @@ export async function signedInPage(page: { path: string; searchParams: SearchPar
 /**
  * The page that says the gateway is off for the account's fleet: its name
  * and the way back to its account; once the account may open the gateway,
- * the browser goes to the Overview.
+ * the browser goes to Bridge.
  */
 export async function gatewayOffPage(): Promise<{ kind: 'off'; fleetName: string; accountUrl: string } | { kind: 'noSignIn' }> {
-  const account = pageAccountOf(await inViewOf(await requestApi(undefined)), OVERVIEW_PATH);
+  const account = pageAccountOf(await inViewOf(await requestApi(undefined)), BRIDGE_PATH);
   switch (account.kind) {
     case 'goTo':
       return redirect(account.location);
     case 'signedIn':
-      return redirect(inFleet(OVERVIEW_PATH, account.fleetId));
+      return redirect(inFleet(BRIDGE_PATH, account.fleetId));
     case 'off':
     case 'noSignIn':
       return account;

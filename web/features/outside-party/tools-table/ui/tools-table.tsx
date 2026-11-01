@@ -7,7 +7,7 @@ import { useState, useTransition } from 'react';
 
 import { BUTTONS, INPUT } from '../../../forms/ui/look';
 import { Switch } from '../../../forms/ui/switch';
-import { ActionButton } from '../../../overview/ui/action-button';
+import { ActionButton } from '../../../bridge/ui/action-button';
 import { StatusBadge, Tag } from '../../../outside-parties/ui/status-badge';
 import { setPartyScopes, switchPartyTools, type TableOutcome } from '../../actions';
 import { switchedMessageOf } from '../../switched-message';

@@ -10,7 +10,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { refusalCodeOf, refusalMessageOf, requestApi } from '../../../lib/gateway-api/page-api';
-import type { ActionOutcome } from '../../overview/hooks/overview-actions';
+import type { ActionOutcome } from '../../bridge/hooks/bridge-actions';
 import { contributionOf } from '../services/meeting';
 import { MEETINGS_PATH, meetingPathOf } from '../paths';
 

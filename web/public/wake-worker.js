@@ -1,13 +1,13 @@
 /*
  * The gateway's service worker (wake a person, W4): it shows a wake, which
  * says only that something waits in the fleet, by its name, and opens the
- * gateway's overview when the person presses it. It holds nothing else.
+ * gateway's Bridge when the person presses it. It holds nothing else.
  */
 /* global self -- the service worker's own global scope. */
 self.addEventListener('push', (event) => {
   const wake = event.data === null ? {} : event.data.json();
   const fleetName = typeof wake.fleetName === 'string' ? wake.fleetName : 'Your fleet';
-  const bridgeUrl = typeof wake.bridgeUrl === 'string' ? wake.bridgeUrl : '/overview';
+  const bridgeUrl = typeof wake.bridgeUrl === 'string' ? wake.bridgeUrl : '/bridge';
   event.waitUntil(self.registration.showNotification(fleetName, { body: 'Something waits for you.', data: { bridgeUrl }, tag: 'aeolus-wake' }));
 });
 

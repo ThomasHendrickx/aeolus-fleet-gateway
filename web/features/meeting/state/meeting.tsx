@@ -1,5 +1,5 @@
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
-import { Notice } from '../../overview/ui/notice';
+import { Notice } from '../../bridge/ui/notice';
 import { NoSignIn } from '../../sign-in/ui/no-sign-in';
 import { readMeeting } from '../hooks/read-meeting';
 import { MEETINGS_PATH, meetingPathOf } from '../paths';
@@ -21,13 +21,13 @@ export async function Meeting({ meetingId, searchParams }: { meetingId: string; 
   }
   const { cursor } = searchParams;
   const read = await readMeeting(page.api, { meetingId, cursor: typeof cursor === 'string' ? cursor : undefined });
-  const overview = `/overview?fleet=${encodeURIComponent(page.fleetId)}`;
+  const bridge = `/bridge?fleet=${encodeURIComponent(page.fleetId)}`;
   if (!read.isOk) {
     return (
       <div className="grid gap-4">
         <Notice message={read.refusal} isFailure />
-        <a href={overview} className="text-muted-foreground hover:underline">
-          ← Overview
+        <a href={bridge} className="text-muted-foreground hover:underline">
+          ← Bridge
         </a>
       </div>
     );
@@ -37,8 +37,8 @@ export async function Meeting({ meetingId, searchParams }: { meetingId: string; 
   const here = meetingPathOf({ fleetId: page.fleetId, meetingId });
   return (
     <div data-testid="meeting" className="grid gap-6">
-      <a href={overview} className="text-muted-foreground hover:underline">
-        ← Overview
+      <a href={bridge} className="text-muted-foreground hover:underline">
+        ← Bridge
       </a>
       <header className="grid gap-1">
         <h1 className="text-heading font-semibold">{meeting.title ?? 'Meeting'}</h1>
