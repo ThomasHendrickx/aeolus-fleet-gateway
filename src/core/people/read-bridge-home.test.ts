@@ -405,6 +405,23 @@ describe('Bridge home: what each row says and acts on in place (aeolus-fleet#153
     expect(actsOf(home)).toEqual([{ deliveryId: anOpened().deliveryId, actInPlace: { kind: 'openLink', href: 'https://github.com/new', host: 'github.com' } }]);
   });
 
+  it('offers nothing in place on a step its asker withdrew', async () => {
+    const withdrawal = aPersonDelivery({
+      deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0014',
+      senderShipId: LINKED_STEP.senderShipId,
+      contentType: 'application/vnd.aeolus.step-withdrawal+json',
+      payload: JSON.stringify({ stepId: LINKED_STEP.stepId }),
+      headline: null,
+      askedQuestionId: null,
+      stepId: null,
+      withdrawnStepId: LINKED_STEP.stepId,
+    });
+
+    const home = await readHome([LINKED_STEP, withdrawal]).readHome(CHARLOTTE_GRANT);
+
+    expect(actsOf(home)).toEqual([{ deliveryId: LINKED_STEP.deliveryId, actInPlace: null }]);
+  });
+
   it('offers nothing in place on a step with no link', async () => {
     const home = await readHome([STEP]).readHome(CHARLOTTE_GRANT);
 
