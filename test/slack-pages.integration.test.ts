@@ -506,7 +506,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
         const textOf = (blockId: string) => attachment?.blocks.find((block) => block.block_id === blockId);
         return {
           title: textOf('title')?.text?.text,
-          isAnswered: /^✅ You answered at <!date\^\d+\^\{time\}\|\d\d:\d\d UTC>: \*2\. Harbour\*, sent to release-notes$/.test(textOf('body')?.text?.text ?? ''),
+          isAnswered: /^✅ You answered at <!date\^\d+\^\{time\}\|\d\d:\d\d UTC>: \*2\. Harbour\*, sent to release-notes-s7$/.test(textOf('body')?.text?.text ?? ''),
           isWhere: /^Bridge and the chat show it answered in Slack · <http[^|]+\|Open in Bridge>$/.test(textOf('footer')?.elements?.[0]?.text ?? ''),
           hasButtons: attachment?.blocks.some(({ type }) => type === 'actions'),
         };
