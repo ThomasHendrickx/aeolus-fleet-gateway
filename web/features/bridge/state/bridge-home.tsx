@@ -2,16 +2,14 @@ import { Suspense } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
-import { NoSignIn } from '../../sign-in/ui/no-sign-in';
 import { readYourFleet, type FleetRead } from '../fleet/hooks/read-your-fleet';
 import { YourFleetPanel } from '../fleet/state/your-fleet-panel';
-import { readBasketCount, readBridgeHome } from '../hooks/read-bridge';
+import { readBridgeHome } from '../hooks/read-bridge';
 import { BRIDGE_PATH } from '../paths';
-import { BridgeNav } from '../ui/bridge-nav';
+import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { HomeColumns } from '../ui/home-columns';
 import { HomePanel } from './home-panel';
-import { LiveRefresh } from './live-refresh';
 import { RecordUnreadable } from './record-unreadable';
 
 /** For an account with no person ship nothing waits, and nothing reaches it unasked. */
@@ -41,15 +39,15 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
 export async function BridgeHomePage({ searchParams }: { searchParams: SearchParams }) {
   const page = await signedInPage({ path: BRIDGE_PATH, searchParams });
   if (page.kind === 'noSignIn') {
-    return <NoSignIn />;
+    return <BridgeNoSignIn />;
   }
   return (
-    <div className="grid gap-6">
-      <LiveRefresh fleetId={page.fleetId} />
-      <BridgeNav fleetId={page.fleetId} current="home" basketCount={await readBasketCount(page.api)} />
-      <Suspense fallback={<BridgeSkeleton />}>
-        <HomeParts api={page.api} fleetId={page.fleetId} fleet={readYourFleet(page.api)} />
-      </Suspense>
-    </div>
+    <BridgeShell api={page.api} fleetId={page.fleetId} screen="home">
+      <div className="grid gap-6">
+        <Suspense fallback={<BridgeSkeleton />}>
+          <HomeParts api={page.api} fleetId={page.fleetId} fleet={readYourFleet(page.api)} />
+        </Suspense>
+      </div>
+    </BridgeShell>
   );
 }

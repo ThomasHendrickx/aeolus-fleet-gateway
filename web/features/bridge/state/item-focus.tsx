@@ -7,9 +7,11 @@ import { inFleet } from '../../../lib/gateway-api/page-account';
 import { answerDelivery, doneDelivery, openDelivery, putInBasket, removeFromBasket, type ActionOutcome } from '../hooks/bridge-actions';
 import { BRIDGE_BASKET_PATH } from '../paths';
 import type { FocusedDelivery } from '../services/deliveries';
+import { openedScreenOf } from '../services/shell';
 import type { HomeItem } from '../services/items';
 import { DeliveryCard, type DeliveryControl, type InBasket, type StepFinished } from '../ui/delivery-card';
 import { Notice } from '../ui/notice';
+import { useOpenedItem } from './opened-item';
 
 /** An item to open: by its delivery, with its job, and the answer to it in the basket, if any. */
 export interface ToOpen {
@@ -37,7 +39,7 @@ export interface ItemOpening {
  * in place, and the page reads itself again.
  */
 export function ItemFocus({ fleetId, children }: { fleetId: string; children: (opening: ItemOpening) => ReactNode }) {
-  const [focus, setFocus] = useState<{ delivery: FocusedDelivery; isDoneOnSeeing: boolean; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
+  const [focus, setFocus] = useState<{ delivery: FocusedDelivery; job: ToOpen['job']; isDoneOnSeeing: boolean; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
   const [note, setNote] = useState('');
   const [openingId, setOpeningId] = useState<string | undefined>();
   const [working, setWorking] = useState<DeliveryControl | undefined>();
@@ -45,6 +47,9 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
   const [failure, setFailure] = useState<string | undefined>();
   const [done, setDone] = useState<string | undefined>();
   const [, startTransition] = useTransition();
+  useOpenedItem(focus === undefined ? undefined : openedScreenOf(focus.job), () => {
+    setFocus(undefined);
+  });
 
   const open = (item: ToOpen) => {
     setOpeningId(item.deliveryId);
@@ -55,7 +60,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
       setOpeningId(undefined);
       if (outcome.isOk) {
         const inBasket = item.inBasket ?? null;
-        setFocus({ delivery: outcome.value, isDoneOnSeeing: item.job === 'stay-aware', inBasket, finished: null });
+        setFocus({ delivery: outcome.value, job: item.job, isDoneOnSeeing: item.job === 'stay-aware', inBasket, finished: null });
         setNote(inBasket?.note ?? '');
         setFailure(undefined);
       } else {

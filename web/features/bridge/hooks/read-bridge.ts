@@ -7,12 +7,15 @@
  * API refuses the account (FORBIDDEN) is not theirs to see, so it is left
  * out.
  */
+import { cache } from 'react';
+
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { refusalCodeOf, refusalMessageOf } from '../../../lib/gateway-api/page-api';
 import type { WakeChannels } from '../services/deliveries';
 import type { BasketView } from '../services/basket';
 import type { BridgeHome, RecordPage } from '../services/items';
 import type { ShownRequest } from '../services/requests';
+import type { ShellCounts } from '../ui/bridge-sidebar';
 import type { RoutingView } from '../services/routing';
 
 /**
@@ -66,9 +69,8 @@ async function personRead<T>(call: Promise<T>): Promise<BridgeRead<T>> {
   }
 }
 
-export function readBridgeHome(api: GatewayApi): Promise<BridgeRead<BridgeHome>> {
-  return personRead(api.people.home.query());
-}
+/** Bridge home, read once per page: the shell's counts and home's lists share the read. */
+export const readBridgeHome = cache((api: GatewayApi): Promise<BridgeRead<BridgeHome>> => personRead(api.people.home.query()));
 
 export function readBasket(api: GatewayApi): Promise<BridgeRead<BasketView>> {
   return personRead(api.people.basket.query());
@@ -78,6 +80,25 @@ export function readBasket(api: GatewayApi): Promise<BridgeRead<BasketView>> {
 export async function readBasketCount(api: GatewayApi): Promise<number> {
   const read = await personRead(api.people.basketCount.query());
   return read.kind === 'read' ? read.value.count : 0;
+}
+
+/**
+ * The counts Bridge's shell shows on every page: what waits and the unseen
+ * to stay aware of, from Bridge home's read, and the basket's answers. A
+ * count it cannot read now is left out. Your fleet's alerts are not read
+ * here yet.
+ */
+export async function readShellCounts(api: GatewayApi): Promise<ShellCounts> {
+  const [home, basket] = await Promise.all([readBridgeHome(api), readBasketCount(api)]);
+  const fleetAlerts = undefined;
+  switch (home.kind) {
+    case 'read':
+      return { waiting: home.value.waiting.count, stayAware: home.value.stayAware.length, basket, fleetAlerts };
+    case 'none':
+      return { waiting: 0, stayAware: 0, basket, fleetAlerts };
+    case 'unreadable':
+      return { waiting: undefined, stayAware: undefined, basket, fleetAlerts };
+  }
 }
 
 export function readRecordPage(api: GatewayApi, cursor: string | null): Promise<BridgeRead<RecordPage>> {
