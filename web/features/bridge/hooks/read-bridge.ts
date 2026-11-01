@@ -55,6 +55,11 @@ async function unlessForbidden<T>(call: Promise<T>): Promise<T | undefined> {
   }
 }
 
+/** When a part was read, now, for the browser to keep it as last read; none while the record cannot be read. */
+export function readTimeOf(read: BridgeRead<unknown>): string | undefined {
+  return read.kind === 'unreadable' ? undefined : new Date().toISOString();
+}
+
 /** A read of the person ship: a sign-in that ended is thrown on, so the page sends the person to sign in again. */
 async function personRead<T>(call: Promise<T>): Promise<BridgeRead<T>> {
   try {

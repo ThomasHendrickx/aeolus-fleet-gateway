@@ -5,20 +5,17 @@ import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-a
 import { readBridgeHome } from '../hooks/read-bridge';
 import { BRIDGE_STAY_AWARE_PATH } from '../paths';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
+import { PageAsLastRead } from './page-as-last-read';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
-import { RecordUnreadable } from './record-unreadable';
 import { StayAwarePanel } from './stay-aware-panel';
 
 async function StayAwareParts({ api, fleetId }: { api: GatewayApi; fleetId: string }) {
   const read = await readBridgeHome(api);
-  switch (read.kind) {
-    case 'read':
-      return <StayAwarePanel fleetId={fleetId} stayAware={read.value.stayAware} />;
-    case 'none':
-      return <StayAwarePanel fleetId={fleetId} stayAware={[]} />;
-    case 'unreadable':
-      return <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} />;
-  }
+  return (
+    <PageAsLastRead read={read}>
+      {read.kind === 'unreadable' ? null : <StayAwarePanel fleetId={fleetId} stayAware={read.kind === 'read' ? read.value.stayAware : []} />}
+    </PageAsLastRead>
+  );
 }
 
 /**

@@ -96,7 +96,7 @@ describe('Bridge home as last read, while the record cannot be read (states.html
     waiting: { count: 2, items: [anItem(), anItem({ deliveryId: 'dlv_02', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin' })] },
     stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', from: 'watch', title: 'builder-gateway: no report change for 2 h' })],
   };
-  const markup = renderToStaticMarkup(createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z' }, createElement(HomePanel, { fleetId: 'flt_01', home })));
+  const markup = renderToStaticMarkup(createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(HomePanel, { fleetId: 'flt_01', home }) }));
 
   it('says when it was last read under the title, in place of the count', () => {
     expect({
