@@ -90,8 +90,16 @@ const ANSWER_TOOL = {
 const DONE_TOOL = {
   name: 'aeolus_done',
   title: 'Be done with a delivery',
-  description: 'Says you dealt with a delivery you opened, by its deliveryId, with no answer.',
-  inputSchema: { type: 'object' as const, properties: { deliveryId: { type: 'string' } }, required: ['deliveryId'] },
+  description: [
+    'Says you dealt with a delivery you opened, by its deliveryId, with no answer.',
+    'A step (application/vnd.aeolus.step+json) asks you to do what only a human can: give outcome done once you did it, or cannot when you cannot,',
+    'and a note if you want, for either; the outcome goes to its sender at once. Only a step takes an outcome of cannot or a note.',
+  ].join(' '),
+  inputSchema: {
+    type: 'object' as const,
+    properties: { deliveryId: { type: 'string' }, outcome: { type: 'string', enum: ['done', 'cannot'] }, note: { type: 'string' } },
+    required: ['deliveryId'],
+  },
   annotations: CHANGES_OWN,
 };
 
@@ -188,6 +196,7 @@ const SIGN_IN = [{ type: 'oauth2' as const }];
 export const PERSON_TOOLS = [INBOX_TOOL, OPEN_TOOL, ANSWER_TOOL, DONE_TOOL, SHIPS_TOOL, SEND_TOOL, MEETING_TOOL, REQUEST_MIC_TOOL, WITHDRAW_MIC_REQUEST_TOOL, RELEASE_MIC_TOOL, ASK_FOR_SERVER_TOOL].map((tool) => ({ ...tool, securitySchemes: SIGN_IN }));
 
 const deliveryArgumentsSchema = z.object({ deliveryId: z.string() });
+const doneArgumentsSchema = z.object({ deliveryId: z.string(), outcome: z.enum(['done', 'cannot']).optional(), note: z.string().optional() });
 const askForServerArgumentsSchema = z.object({ url: z.string() });
 const answerArgumentsSchema = z.object({ deliveryId: z.string(), contentType: z.string(), payload: z.string() });
 const message = { contentType: z.string(), payload: z.string(), idempotencyKey: z.string().optional() };
@@ -242,14 +251,21 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
         const read = await deps.readInbox(caller);
         return read.isOk ? answered(read.value) : refused(read.error);
       }
-      case OPEN_TOOL.name:
-      case DONE_TOOL.name: {
+      case OPEN_TOOL.name: {
         const sent = deliveryArgumentsSchema.safeParse(params.arguments);
         if (!sent.success) {
-          return toolError(`${params.name} takes the deliveryId your inbox lists`);
+          return toolError(`${OPEN_TOOL.name} takes the deliveryId your inbox lists`);
         }
-        const asked = { caller, place: CHAT, deliveryId: sent.data.deliveryId };
-        const dealt = params.name === OPEN_TOOL.name ? await deps.openDelivery(asked) : await deps.doneDelivery(asked);
+        const dealt = await deps.openDelivery({ caller, place: CHAT, deliveryId: sent.data.deliveryId });
+        return dealt.isOk ? answered(dealt.value) : refused(dealt.error);
+      }
+      case DONE_TOOL.name: {
+        const sent = doneArgumentsSchema.safeParse(params.arguments);
+        if (!sent.success) {
+          return toolError(`${DONE_TOOL.name} takes the deliveryId your inbox lists, and for a step an outcome of done or cannot and a note`);
+        }
+        const { deliveryId, outcome, note } = sent.data;
+        const dealt = await deps.doneDelivery({ caller, place: CHAT, deliveryId, ...(outcome === undefined ? {} : { outcome }), ...(note === undefined ? {} : { note }) });
         return dealt.isOk ? answered(dealt.value) : refused(dealt.error);
       }
       case ANSWER_TOOL.name: {
