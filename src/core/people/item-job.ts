@@ -4,7 +4,7 @@
  * and are counted in what waits; stay aware reaches them unasked, outside the
  * count; everything else is in the record only.
  */
-import { ALERT_CONTENT_TYPE, QUESTION_CONTENT_TYPE } from '@aeolus-fleet/common';
+import { ALERT_CONTENT_TYPE, QUESTION_CONTENT_TYPE, REPLACEMENT_CONTENT_TYPE } from '@aeolus-fleet/common';
 
 /** The step and notice content types (CC14, CC15), as common names them from its release after 0.35.0; they move to common's constants then. */
 export const STEP_CONTENT_TYPE = 'application/vnd.aeolus.step+json';
@@ -14,6 +14,8 @@ export type ItemJob = 'decide' | 'do' | 'stay-aware' | 'everything-else';
 
 const JOBS = new Map<string, ItemJob>([
   [QUESTION_CONTENT_TYPE, 'decide'],
+  // A replacement asks its new question: it is a new item to decide (Bridge, section 9).
+  [REPLACEMENT_CONTENT_TYPE, 'decide'],
   [STEP_CONTENT_TYPE, 'do'],
   [ALERT_CONTENT_TYPE, 'stay-aware'],
   [NOTICE_CONTENT_TYPE, 'stay-aware'],
