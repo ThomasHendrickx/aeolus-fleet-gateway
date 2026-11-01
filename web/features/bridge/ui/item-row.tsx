@@ -10,24 +10,27 @@ function sentAtOf(sentAt: string): string {
 
 /**
  * One item in a Bridge list: a dot while new, its title, its job and who
- * sent it, when, what came of it once said, and its action. The row and its
+ * sent it, when, what came of it once said, and its action; faded when stale. The row and its
  * title shrink to a phone's width (aeolus-fleet#1238).
  */
 export function ItemRow({
   item,
   isNew,
+  isStale = false,
   outcome,
   failure,
   children,
 }: {
   item: Pick<HomeItem, 'deliveryId' | 'from' | 'title' | 'sentAt' | 'job'>;
   isNew: boolean;
+  /** Whether it is a question its asker withdrew or replaced: shown faded, outside the count. */
+  isStale?: boolean;
   outcome: string | undefined;
   failure: string | undefined;
   children: ReactNode;
 }) {
   return (
-    <li data-testid="bridge-item" className="grid min-w-0 gap-2 rounded-md border border-border bg-card p-3">
+    <li data-testid="bridge-item" data-stale={isStale} className={`grid min-w-0 gap-2 rounded-md border border-border bg-card p-3 ${isStale ? 'opacity-60' : ''}`}>
       <div className="flex min-w-0 items-center gap-3">
         <span className="flex min-w-0 flex-1 flex-col text-left">
           <span className="flex min-w-0 items-center gap-2">

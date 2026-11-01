@@ -37,7 +37,7 @@ describe('a question opened in Bridge (CC11)', () => {
 
     expect({
       choices: (markup.match(/type="radio"/g) ?? []).length,
-      picked: /value="2"[^>]*checked=""/.test(markup),
+      picked: markup.includes('checked="" value="2"') && !markup.includes('checked="" value="1"'),
       theirPick: markup.includes('Their pick'),
       send: markup.includes('>Send option 2<'),
     }).toEqual({ choices: 2, picked: true, theirPick: true, send: true });

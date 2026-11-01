@@ -26,6 +26,14 @@ export interface FocusedDelivery {
   readonly question: Question | undefined;
   /** The meeting it was contributed to or tells of, when it belongs to one. */
   readonly meetingId: string | undefined;
+  /** Whether its asker withdrew or replaced the question it asks, with the replacement, a new item. */
+  readonly stale: Stale | null;
+}
+
+/** A question its asker withdrew or replaced (decision 0038), as the API says it. */
+export interface Stale {
+  readonly kind: 'withdrawn' | 'replaced';
+  readonly replacementId: string | null;
 }
 
 /** The question a delivery asks (decision 0038): a question's own, or the new question a replacement asks. */
