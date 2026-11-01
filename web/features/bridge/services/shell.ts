@@ -52,6 +52,8 @@ export interface ShellCounts {
   readonly stayAware: number | undefined;
   readonly basket: number;
   readonly fleetAlerts: number | undefined;
+  /** What waits at argo, apart from what waits on the person (argo's inbox, AI4); none for an account not allowed as argo. */
+  readonly argo?: number;
 }
 
 /** Bridge home as the shell reads it: its counts, none for an account with no person ship, or not readable now. */
@@ -60,14 +62,15 @@ export type HomeForCounts =
   | { readonly kind: 'none' }
   | { readonly kind: 'unreadable' };
 
-/** What waits as home counts it; of the stay-aware feed only the alerts and notices not seen yet (CC16). */
-export function shellCountsOf({ home, basket, fleetAlerts }: { home: HomeForCounts; basket: number; fleetAlerts: number | undefined }): ShellCounts {
+/** What waits as home counts it; of the stay-aware feed only the alerts and notices not seen yet (CC16); what waits at argo in a count of its own. */
+export function shellCountsOf({ home, basket, fleetAlerts, argo }: { home: HomeForCounts; basket: number; fleetAlerts: number | undefined; argo?: number | undefined }): ShellCounts {
+  const others = { basket, fleetAlerts, ...(argo === undefined ? {} : { argo }) };
   switch (home.kind) {
     case 'read':
-      return { waiting: home.value.waiting.count, stayAware: home.value.stayAware.filter(({ state }) => state === 'new').length, basket, fleetAlerts };
+      return { waiting: home.value.waiting.count, stayAware: home.value.stayAware.filter(({ state }) => state === 'new').length, ...others };
     case 'none':
-      return { waiting: 0, stayAware: 0, basket, fleetAlerts };
+      return { waiting: 0, stayAware: 0, ...others };
     case 'unreadable':
-      return { waiting: undefined, stayAware: undefined, basket, fleetAlerts };
+      return { waiting: undefined, stayAware: undefined, ...others };
   }
 }
