@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react';
 
 import type { OwnerChoices } from '../../forms/ui/owner-field';
 import { decideRequest } from '../hooks/bridge-actions';
-import { BRIDGE_SETTINGS_PATH } from '../hooks/read-bridge';
+import { BRIDGE_SETTINGS_PATH } from '../paths';
 import type { DecisionInput, ShownRequest } from '../services/requests';
 import { DecisionForm } from '../ui/decision-form';
 

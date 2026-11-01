@@ -19,7 +19,7 @@ import { answerOf, bodyOf, questionOf, type AnswerInput, type FocusedDelivery } 
 import type { SubscriptionInput } from '../services/web-push';
 import { EVERY_APP_SHIP_SCOPES, type DecisionInput } from '../services/requests';
 import type { RecordPage } from '../services/items';
-import { BRIDGE_PATH } from './read-bridge';
+import { BRIDGE_PATH } from '../paths';
 
 /** What an action says when the gateway gave no answer of its own. */
 const NO_ANSWER = 'The gateway did not answer: try again in a moment';

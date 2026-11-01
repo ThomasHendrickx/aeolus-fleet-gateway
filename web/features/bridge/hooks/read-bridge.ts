@@ -12,10 +12,6 @@ import type { WakeChannels } from '../services/deliveries';
 import type { BridgeHome, RecordPage } from '../services/items';
 import type { ShownRequest } from '../services/requests';
 
-export const BRIDGE_PATH = '/bridge';
-export const BRIDGE_DONE_PATH = '/bridge/done';
-export const BRIDGE_SETTINGS_PATH = '/bridge/settings';
-
 /**
  * What Bridge read of the person ship: what it answered; none, for an account
  * with no person ship, on which nothing waits; or that the record cannot be

@@ -1,5 +1,5 @@
 import { inFleet } from '../../../lib/gateway-api/page-account';
-import { BRIDGE_DONE_PATH, BRIDGE_PATH, BRIDGE_SETTINGS_PATH } from '../hooks/read-bridge';
+import { BRIDGE_DONE_PATH, BRIDGE_PATH, BRIDGE_SETTINGS_PATH } from '../paths';
 
 const PAGES = [
   { key: 'home', label: 'Waiting on you', path: BRIDGE_PATH },

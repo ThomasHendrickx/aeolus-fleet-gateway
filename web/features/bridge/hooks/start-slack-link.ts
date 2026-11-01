@@ -9,7 +9,7 @@ import { redirect } from 'next/navigation';
 
 import { FLEET_PARAMETER } from '../../../lib/gateway-api/page-account';
 import { refusalCodeOf, requestApi } from '../../../lib/gateway-api/page-api';
-import { BRIDGE_SETTINGS_PATH } from './read-bridge';
+import { BRIDGE_SETTINGS_PATH } from '../paths';
 import { SLACK_LINK_PATH } from './slack-link-path';
 
 /** What Bridge's settings say of a link that did not start, by the API's refusal. */

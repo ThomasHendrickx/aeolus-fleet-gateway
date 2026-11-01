@@ -1,5 +1,6 @@
 import { readOf, signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
-import { BRIDGE_SETTINGS_PATH, readRequestToDecide } from '../hooks/read-bridge';
+import { readRequestToDecide } from '../hooks/read-bridge';
+import { BRIDGE_SETTINGS_PATH } from '../paths';
 import { NoSignIn } from '../../sign-in/ui/no-sign-in';
 import { subjectKind, subjectName } from '../services/requests';
 import { RequestsList } from '../ui/requests-list';
