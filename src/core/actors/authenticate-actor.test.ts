@@ -1,6 +1,7 @@
 import type { ShipId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { FLEET_ID, OTHER_FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetDoor } from '../connection/ports.js';
@@ -61,7 +62,7 @@ beforeEach(async () => {
 
 function authenticate(sent: { cookie?: string; crewToken?: string; signIn?: string; fleetId?: typeof FLEET_ID }) {
   const clock = { now: () => new Date('2026-10-20T09:00:00.000Z') };
-  const accountOf = createAccountOfSignIn({ signIns: fakeSharedSignIn({ tokens: new Map([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, endsAt: new Date('2026-10-20T09:10:00.000Z') }]]) }), clock });
+  const accountOf = createAccountOfSignIn({ argoAccounts: memoryArgoAccounts(), signIns: fakeSharedSignIn({ tokens: new Map([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, endsAt: new Date('2026-10-20T09:10:00.000Z') }]]) }), clock });
   return createAuthenticateActor({ authenticateOperator: operator, door, connections, accountOf })(sent);
 }
 

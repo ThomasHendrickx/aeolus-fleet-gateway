@@ -706,3 +706,13 @@ model ItemOutcome {
   @@id([fleetId, shipId, deliveryId])
   @@map("item_outcomes")
 }
+
+/// An account allowed as argo in a fleet, as its latest account token said, with the person ship it is reached at (argo's inbox, AI9).
+model ArgoAccount {
+  fleetId      String @map("fleet_id")
+  accountId    String @map("account_id")
+  personShipId String @map("person_ship_id")
+
+  @@id([fleetId, accountId])
+  @@map("argo_accounts")
+}

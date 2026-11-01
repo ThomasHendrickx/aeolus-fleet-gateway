@@ -1,5 +1,7 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
+import { createNoteArgoAccount } from '../argo-inbox/note-argo-account.js';
+import type { ArgoAccounts } from '../argo-inbox/ports.js';
 import { issueCode, redirectWith } from '../oauth/issue-code.js';
 import type { AuthorizationCodes, OAuthSecrets } from '../oauth/ports.js';
 import type { AuthorizationRefusal, ReadAuthorization } from '../oauth/read-authorization.js';
@@ -37,13 +39,15 @@ export type CompleteSignIn = (back: Back) => Promise<Result<SignInAnswer, SignIn
  * picked: the account's grant is kept, and the client is sent back with the
  * gateway's own code for it, acting in the fleet as the account with no
  * approval (orchestrator-1, slice 7 Q1); or the account asks for access for
- * the client, as an outside party (decision 0056).
+ * the client, as an outside party (decision 0056). Either way the account's
+ * token is its latest word on being allowed as argo (argo's inbox, AI9).
  */
 export function createCompleteSignIn(deps: {
   readAuthorization: ReadAuthorization;
   seals: SignInSeals;
   pagasae: Pagasae;
   grants: AccountGrants;
+  argoAccounts: ArgoAccounts;
   codes: AuthorizationCodes;
   secrets: OAuthSecrets;
   clock: Clock;
@@ -80,7 +84,8 @@ export function createCompleteSignIn(deps: {
     if (authorization.clientFleetId !== null && authorization.clientFleetId !== tokens.fleetId) {
       return err({ kind: 'invalidClient', message: `${authorization.clientName} is registered for another fleet` });
     }
-    const { fleetId, accountId, personShipId, scopes, refreshToken, accountToken, accountTokenExpiresAt } = tokens;
+    const { fleetId, accountId, personShipId, scopes, refreshToken, accountToken, accountTokenExpiresAt, isArgoAllowed } = tokens;
+    await createNoteArgoAccount({ accounts: deps.argoAccounts })(fleetId, { accountId, personShipId, isArgoAllowed });
     if (signIn.holder === 'party') {
       const asked = await deps.askForClient({ fleetId, requester: { accountId, personShipId }, authorization, request: signIn.request, browserSecret: signIn.browserSecret });
       return asked.isOk ? asked : err({ kind: 'outsidePartiesOff' });

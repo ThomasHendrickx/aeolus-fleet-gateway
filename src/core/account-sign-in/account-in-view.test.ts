@@ -95,7 +95,7 @@ describe('a page asked for with no fleet in its address', () => {
 describe('the account token of the fleet in view', () => {
   it('is exchanged once while it lasts, however many calls the pages make', async () => {
     const signIns = fakeSharedSignIn({ tokens: CHARLOTTE_IN_FLEET });
-    const accountOf = createAccountOfSignIn({ signIns, clock });
+    const accountOf = createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock });
 
     await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
     now = new Date('2026-10-21T09:08:59.000Z');
@@ -106,7 +106,7 @@ describe('the account token of the fleet in view', () => {
 
   it('is exchanged again a minute before it ends, so a change of rights lands then', async () => {
     const signIns = fakeSharedSignIn({ tokens: CHARLOTTE_IN_FLEET });
-    const accountOf = createAccountOfSignIn({ signIns, clock });
+    const accountOf = createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock });
 
     await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
     now = new Date('2026-10-21T09:09:00.000Z');
@@ -128,7 +128,7 @@ describe('the account token of the fleet in view', () => {
 
   it('is never kept when pagasae refused it', async () => {
     const signIns = fakeSharedSignIn({ tokens: new Map() });
-    const accountOf = createAccountOfSignIn({ signIns, clock });
+    const accountOf = createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock });
 
     await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
     await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
@@ -138,7 +138,7 @@ describe('the account token of the fleet in view', () => {
 
   it('is its own per sign-in, so another browser never acts as it', async () => {
     const signIns = fakeSharedSignIn({ tokens: CHARLOTTE_IN_FLEET });
-    const accountOf = createAccountOfSignIn({ signIns, clock });
+    const accountOf = createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock });
 
     await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
 

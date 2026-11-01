@@ -183,6 +183,7 @@ import { SHARED_SIGN_IN_COOKIE } from './core/account-sign-in/ports.js';
 import { createSignOutAccount } from './core/account-sign-in/sign-out-account.js';
 import { createStartAccountSignIn } from './core/account-sign-in/start-account-sign-in.js';
 import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
+import { createPrismaArgoAccounts } from './adapters/prisma/argo-accounts.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createExchangeIdJag } from './core/oauth/exchange-id-jag.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
@@ -633,6 +634,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // People sign in through pagasae where it is set (decision 0054); else no client connects, as only an account asks for one (A a).
   const pagasae = options.pagasae === undefined ? undefined : createPagasae({ ...options.pagasae, redirectUri: `${issuer}/pagasae/callback`, timeoutMs: PAGASAE_TIMEOUT_MS });
   const grants = createPrismaAccountGrants(prisma);
+  // The accounts allowed as argo, from each account's latest token (argo's inbox, AI9).
+  const argoAccounts = createPrismaArgoAccounts(prisma);
   const pendingRequests = createPrismaPendingRequests(prisma);
   const waitings = createWaitingSeals(options.gatewaySecret);
   const issuing = { codes: authorizationCodes, secrets: oauthSecrets, clock, issuer };
@@ -655,6 +658,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             seals,
             pagasae,
             grants,
+            argoAccounts,
             codes: authorizationCodes,
             secrets: oauthSecrets,
             clock,
@@ -701,13 +705,14 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
               resource,
               pagasae,
               grants,
+              argoAccounts,
               servesFleet: async (fleetId) => (await connections.find(fleetId)) !== undefined && (await isServed(fleetId)),
             }),
           }),
     }),
   });
   // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
-  const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });
+  const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, argoAccounts, clock });
   // pagasae sends the email, asked with the gateway's installation token (wake a person, W2); without either, email wakes no one.
   // The browsers people turned web push on in (wake a person, W8).
   const webPushSubscriptions = createPrismaWebPushSubscriptions(prisma);
@@ -884,7 +889,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       ? undefined
       : createSharedSignIn({ url: options.pagasae.url, ...options.pagasaeApp, redirectUri: `${issuer}/sign-in/done`, timeoutMs: PAGASAE_TIMEOUT_MS });
   const accountOf: AccountOfSignIn =
-    signIns === undefined ? Object.assign(() => Promise.resolve(err({ kind: 'signedOut' as const })), { forget: () => undefined }) : createAccountOfSignIn({ signIns, clock });
+    signIns === undefined ? Object.assign(() => Promise.resolve(err({ kind: 'signedOut' as const })), { forget: () => undefined }) : createAccountOfSignIn({ signIns, argoAccounts, clock });
   const accountInView = signIns === undefined ? undefined : createAccountInView({ signIns, accountOf, isServed });
   if (signIns !== undefined) {
     const accountSeals = createAccountSignInSeals(options.gatewaySecret);

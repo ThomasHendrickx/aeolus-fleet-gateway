@@ -1,5 +1,7 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
+import { createNoteArgoAccount } from '../argo-inbox/note-argo-account.js';
+import type { ArgoAccounts } from '../argo-inbox/ports.js';
 import type { AccountGrants, Pagasae } from '../sign-in/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
@@ -25,7 +27,8 @@ function refusal(error: OAuthErrorCode, description: string): Result<IssuedPair,
  * and the client gets an access token acting as the account, with no refresh
  * token: when it ends, the client asks its identity provider for a new
  * ID-JAG. Only a client registered for the code flow, with its secret if it
- * has one, posts one; there is no dynamic registration.
+ * has one, posts one; there is no dynamic registration. The account's token
+ * is its latest word on being allowed as argo (argo's inbox, AI9).
  */
 export function createExchangeIdJag(deps: {
   clients: OAuthClients;
@@ -35,6 +38,7 @@ export function createExchangeIdJag(deps: {
   resource: string;
   pagasae: Pick<Pagasae, 'exchangeIdJag'>;
   grants: Pick<AccountGrants, 'save'>;
+  argoAccounts: ArgoAccounts;
   /** Whether the gateway serves the fleet: connected to it, and switched on where an installation switches fleets (decision 0021). */
   servesFleet: (fleetId: FleetId) => Promise<boolean>;
 }): ExchangeToken {
@@ -57,10 +61,11 @@ export function createExchangeIdJag(deps: {
     if (!handed.isOk) {
       return handed.error.kind === 'unavailable' ? refusal('temporarily_unavailable', 'pagasae did not answer; try again') : refusal('invalid_grant', REFUSED_ID_JAG);
     }
-    const { fleetId, accountId, personShipId, scopes, refreshToken, accountToken, accountTokenExpiresAt } = handed.value;
+    const { fleetId, accountId, personShipId, scopes, refreshToken, accountToken, accountTokenExpiresAt, isArgoAllowed } = handed.value;
     if (fleetId !== client.fleetId || !(await deps.servesFleet(fleetId))) {
       return refusal('invalid_grant', `The account's fleet is not ${client.name}'s`);
     }
+    await createNoteArgoAccount({ accounts: deps.argoAccounts })(fleetId, { accountId, personShipId, isArgoAllowed });
     const grantId = deps.secrets.newSecret();
     await deps.grants.save({ grantId, fleetId, accountId, personShipId, scopes, refreshToken, accountToken, accountTokenExpiresAt });
     const accessToken = deps.secrets.newSecret();

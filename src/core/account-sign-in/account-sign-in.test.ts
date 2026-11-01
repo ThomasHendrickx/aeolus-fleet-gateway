@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, fakeAccountSignInSeals, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeSecrets } from '../../../test/support/oauth-fakes.js';
@@ -127,13 +128,13 @@ describe('a person signs out', () => {
   it('ends the shared sign-in at pagasae, so every app is signed out', async () => {
     const signIns = fakeSharedSignIn({});
 
-    expect(await createSignOutAccount({ signIns, accountOf: createAccountOfSignIn({ signIns, clock }) })(CHARLOTTE_SIGN_IN)).toEqual({ isOk: true, value: undefined });
+    expect(await createSignOutAccount({ signIns, accountOf: createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock }) })(CHARLOTTE_SIGN_IN)).toEqual({ isOk: true, value: undefined });
     expect(signIns.revoked).toEqual([CHARLOTTE_SIGN_IN]);
   });
 
   it('drops the account token the gateway kept for the sign-in, so its pages know the person no more at once', async () => {
     const signIns = fakeSharedSignIn({ tokens: new Map([[FLEET_ID, CHARLOTTE_ACCOUNT_TOKEN]]) });
-    const accountOf = createAccountOfSignIn({ signIns, clock });
+    const accountOf = createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock });
     await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
 
     await createSignOutAccount({ signIns, accountOf })(CHARLOTTE_SIGN_IN);
@@ -144,6 +145,6 @@ describe('a person signs out', () => {
   it('says so when pagasae does not answer, so the person can try again', async () => {
     const signIns = fakeSharedSignIn({ isAvailable: false });
 
-    expect(await createSignOutAccount({ signIns, accountOf: createAccountOfSignIn({ signIns, clock }) })(CHARLOTTE_SIGN_IN)).toEqual({ isOk: false, error: { kind: 'unavailable' } });
+    expect(await createSignOutAccount({ signIns, accountOf: createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock }) })(CHARLOTTE_SIGN_IN)).toEqual({ isOk: false, error: { kind: 'unavailable' } });
   });
 });
