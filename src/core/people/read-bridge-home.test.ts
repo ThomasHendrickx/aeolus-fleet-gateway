@@ -453,12 +453,12 @@ describe('Bridge home: what each row says and acts on in place (aeolus-fleet#153
     expect(actsOf(home)).toEqual([{ deliveryId: OWN_STEP.deliveryId, actInPlace: { kind: 'ownStep', href: 'https://gateway.example.com/slack/link?fleet=flt_1', label: 'Link Slack' } }]);
   });
 
-  it('names no place besides Bridge for the gateway\'s own step', async () => {
+  it('names the places the gateway\'s own step shows in as any step\'s: a chat lists it too (B6)', async () => {
     const home = await readHome([OWN_STEP, LINKED_STEP]).readHome(CHARLOTTE_GRANT);
 
     expect(home.isOk ? home.value.waiting.items.map(({ from, places }) => ({ from, places })) : home).toEqual([
       { from: 'orchestrator-1', places: ['chat'] },
-      { from: 'gateway', places: [] },
+      { from: 'gateway', places: ['chat'] },
     ]);
   });
 
