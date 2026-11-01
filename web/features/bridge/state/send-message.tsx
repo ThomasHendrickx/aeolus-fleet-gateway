@@ -32,7 +32,8 @@ interface Draft {
  * send-message.html), for the pages under it to open: from home, or from an
  * opened alert with its ship filled in. Opening reads who the person can
  * send to; Send goes as the person ship and waits until the fleet stored
- * it, then closes with a toast. A message is not an answer, so it never
+ * it, then closes with a toast. It opens on what the person fills in first:
+ * the ship from home, the message from an alert. A message is not an answer, so it never
  * goes through the basket. Cancel or close keeps nothing. A send sent again
  * with the same ship and message carries the same key, so it arrives once.
  */
@@ -89,6 +90,7 @@ function SendMessageDialog({ fleetId, children }: { fleetId: string; children: R
           <Dialog.Popup
             data-testid="bridge-send-dialog"
             aria-label="Send a ship a message"
+            initialFocus={() => document.getElementById(draft?.to === null ? 'bridge-send-to' : 'bridge-send-message')}
             className="fixed inset-0 z-50 bg-popover text-popover-foreground sm:inset-auto sm:top-[10vh] sm:left-1/2 sm:max-h-[80vh] sm:w-[min(34rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:overflow-auto sm:rounded-lg sm:border sm:border-border sm:shadow-lg"
           >
             {draft === undefined ? null : (
