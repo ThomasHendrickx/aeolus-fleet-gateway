@@ -198,6 +198,9 @@ import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadBridgeHome } from './core/people/read-bridge-home.js';
 import { createReadRecord } from './core/people/read-record.js';
 import { createReadInbox } from './core/people/read-inbox.js';
+import type { ItemJob } from './core/people/item-job.js';
+import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/routing.js';
+import { createPrismaRoutes } from './adapters/prisma/routes.js';
 import { createReadWakeChannels } from './core/people/read-wake-channels.js';
 import { createTurnEmailChannel } from './core/people/turn-email-channel.js';
 import type { PersonCrews, WakeChannel } from './core/people/ports.js';
@@ -297,7 +300,12 @@ export interface GatewayAppOptions {
   slackApiUrl?: string;
   /** How often the gateway looks for grants to keep alive, idle or near their end (decision 0067, Q7): 5 minutes unless set. */
   grantRoundMs?: number;
+  /** The jobs and places on while a person chose nothing of their own (Bridge, CC19): a chat for every job unless set. */
+  routingOnByDefault?: readonly { job: ItemJob; place: RoutingPlace }[];
 }
+
+/** What is on by default unless told: a chat for every job, nothing that pushes (Bridge, CC19). */
+const ROUTING_ON_BY_DEFAULT = ITEM_JOBS.map((job) => ({ job, place: 'chat' as const }));
 
 /** Within the fleet's 10 minutes a handed delivery may wait for its confirmation (decision 0040). */
 const TOOL_CALL_TIMEOUT_MS = 5 * 60_000;
@@ -718,6 +726,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           }),
         ]),
   ];
+  // Where each person routed each job besides Bridge, the configuration's defaults where they chose nothing (Bridge, section 8).
+  const routes = createPrismaRoutes(prisma);
+  const routingDefaults = routingDefaultsOf(options.routingOnByDefault ?? ROUTING_ON_BY_DEFAULT);
   // What waits for a linked person shows in Slack before anything wakes them (gateway scopes 9.5).
   const slackApiUrl = options.slackApiUrl ?? SLACK_API_URL;
   const slackApps = createPrismaSlackApps(prisma);
@@ -739,7 +750,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: door.person,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: door.person, shownElsewhere: { show: showInSlack }, channels: wakeChannels, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
+      wakePerson: createWakePerson({ door: door.person, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,

@@ -3,6 +3,8 @@ import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from "@aeolus-fleet/common";
 import type { FleetRefusal } from "../connection/ports.js";
 import type { Clock } from "../shared/clock.js";
 import { err, ok, type Result } from "../shared/result.js";
+import type { RoutingDefaults, Routing, Routes } from "./routing.js";
+import { routingOf } from "./routing.js";
 import type {
   FocusedPages,
   HandOverChannel,
@@ -59,6 +61,9 @@ export function createWakePerson(deps: {
   /** Slack, where the person linked it; none where nothing beyond the pages shows deliveries. */
   shownElsewhere?: ShownElsewhere;
   channels: readonly WakeChannel[];
+  /** Where each person routed each job (Bridge, section 8), and the defaults where they chose nothing. */
+  routes: Routes;
+  defaults: RoutingDefaults;
   wakesSent: WakesSent;
   focused: FocusedPages;
   /** How long a page counts in focus since it was last seen so. */
@@ -86,11 +91,13 @@ export function createWakePerson(deps: {
     const everyFresh = taken.value.filter(
       ({ handOverNumber }) => handOverNumber === null,
     );
+    // Read anew at every wake, so a change of where a job shows applies at once.
+    const routing = routingOf(await deps.routes.list(ship), deps.defaults);
     // Asked even with nothing fresh: it finishes what an earlier wake left unfinished, as after a restart.
     const shownElsewhere =
       deps.shownElsewhere === undefined
         ? ok({ shown: new Set<DeliveryId>(), isAnyUnfinished: false })
-        : await deps.shownElsewhere.show(ship, { crewToken, fresh: everyFresh });
+        : await deps.shownElsewhere.show(ship, { crewToken, fresh: everyFresh, routing });
     if (!shownElsewhere.isOk) {
       return shownElsewhere;
     }
@@ -98,16 +105,17 @@ export function createWakePerson(deps: {
     const woken = await wakeFor(ship, {
       crewToken,
       allFresh: everyFresh.filter(({ deliveryId }) => !shown.has(deliveryId)),
+      routing,
     });
     // What it left unfinished is finished at a wake tried again.
     return isAnyUnfinished && woken.isOk && woken.value.kind === "settled"
       ? ok({ kind: "failed" })
       : woken;
   };
-  /** Wakes the person for the fresh deliveries nothing beyond the pages showed. */
+  /** Wakes the person for the fresh deliveries nothing beyond the pages showed, each through the channels on for its job. */
   const wakeFor = async (
     ship: PersonShip,
-    { crewToken, allFresh }: { crewToken: string; allFresh: readonly PushedPersonDelivery[] },
+    { crewToken, allFresh, routing }: { crewToken: string; allFresh: readonly PushedPersonDelivery[]; routing: Routing },
   ): Promise<Result<WakeOutcome, FleetRefusal>> => {
     /** Hands each fresh delivery no. 1 through the channel, up to the first refusal: that refusal, or none. */
     const handEach = async (
@@ -138,10 +146,11 @@ export function createWakePerson(deps: {
       const refused = await handEach(allFresh, "page");
       return refused === undefined ? ok({ kind: "settled" }) : err(refused);
     }
+    const showsOf = (channel: WakeChannel) => (delivery: PushedPersonDelivery): boolean => routing.isShowing(channel.name, delivery);
     const turnedOn = (
       await Promise.all(
         deps.channels.map(async (channel) =>
-          (await channel.isOn(ship)) ? [channel] : [],
+          allFresh.some(showsOf(channel)) && (await channel.isOn(ship)) ? [channel] : [],
         ),
       )
     ).flat();
@@ -162,14 +171,15 @@ export function createWakePerson(deps: {
         };
       }),
     );
+    // Only what a channel turned on shows is woken for; the rest waits in Bridge.
+    let fresh = allFresh.filter((delivery) => turnedOn.some((channel) => showsOf(channel)(delivery)));
     // What a wake still inside its window covers was left unhanded by a refusal: hand it through that channel.
-    let fresh = allFresh;
     for (const { channel, lastSentAt, endsAt } of windows) {
       if (lastSentAt === undefined || endsAt.getTime() <= now.getTime()) {
         continue;
       }
       const covered = fresh.filter(
-        ({ sentAt }) => sentAt.getTime() <= lastSentAt.getTime(),
+        (delivery) => showsOf(channel)(delivery) && delivery.sentAt.getTime() <= lastSentAt.getTime(),
       );
       const refused = await handEach(covered, channel.name);
       if (refused !== undefined) {
@@ -182,35 +192,37 @@ export function createWakePerson(deps: {
     }
     const refusedBefore =
       refusedInAttempt.get(attemptKey(ship)) ?? new Set<WakeChannelName>();
-    const due = windows
-      .filter(
-        ({ channel, endsAt }) =>
-          endsAt.getTime() <= now.getTime() && !refusedBefore.has(channel.name),
-      )
+    /** The channels still asked that show any of these deliveries, with their windows. */
+    const askedFor = (deliveries: readonly PushedPersonDelivery[]) =>
+      windows.filter(
+        ({ channel }) => !refusedBefore.has(channel.name) && deliveries.some(showsOf(channel)),
+      );
+    /** Held back by the earliest window of a channel still asked that shows any of these deliveries, or settled when none is left. */
+    const heldBackFor = (deliveries: readonly PushedPersonDelivery[]): WakeOutcome => {
+      const waiting = askedFor(deliveries);
+      return waiting.length === 0
+        ? { kind: "settled" }
+        : {
+            kind: "inWindow",
+            until: new Date(
+              Math.min(...waiting.map(({ endsAt }) => endsAt.getTime())),
+            ),
+          };
+    };
+    const due = askedFor(fresh)
+      .filter(({ endsAt }) => endsAt.getTime() <= now.getTime())
       .map(({ channel }) => channel);
     if (due.length === 0) {
-      const waiting = windows.filter(
-        ({ channel }) => !refusedBefore.has(channel.name),
-      );
-      return ok(
-        waiting.length === 0
-          ? { kind: "settled" }
-          : {
-              kind: "inWindow",
-              until: new Date(
-                Math.min(...waiting.map(({ endsAt }) => endsAt.getTime())),
-              ),
-            },
-      );
+      return ok(heldBackFor(fresh));
     }
-    const wentOut: WakeChannelName[] = [];
+    const wentOut: WakeChannel[] = [];
     let isRetryable = false;
     for (const channel of due) {
       // The channel's last recorded wake names the window: every try before the next one is recorded asks with the same key.
       const lastSentAt = windows.find((window) => window.channel === channel)?.lastSentAt;
       const woken = await channel.wake(ship, { key: `${channel.name}:${lastSentAt === undefined ? 'first' : lastSentAt.toISOString()}` });
       if (woken.isOk) {
-        wentOut.push(channel.name);
+        wentOut.push(channel);
       } else if (woken.error.kind === "refused") {
         refusedBefore.add(channel.name);
         refusedInAttempt.set(attemptKey(ship), refusedBefore);
@@ -223,19 +235,28 @@ export function createWakePerson(deps: {
         isRetryable = true;
       }
     }
-    const [firstOut] = wentOut;
-    if (firstOut === undefined) {
-      return ok(isRetryable ? { kind: "failed" } : { kind: "settled" });
+    // Each delivery is handed once, naming the first channel on for its job that went out.
+    let refused: FleetRefusal | undefined;
+    const left: PushedPersonDelivery[] = [];
+    for (const delivery of fresh) {
+      const through = wentOut.find((channel) => showsOf(channel)(delivery));
+      if (through === undefined) {
+        left.push(delivery);
+      } else {
+        refused ??= await handEach([delivery], through.name);
+      }
     }
-    const refused = await handEach(fresh, firstOut);
     // The window is kept only after the hand-overs: a gateway that stopped in between wakes again, as the design says. A refusal keeps it, so no second email follows at once.
-    for (const channel of wentOut) {
-      await deps.wakesSent.record({ ship, channel, sentAt: now });
+    for (const { name } of wentOut) {
+      await deps.wakesSent.record({ ship, channel: name, sentAt: now });
     }
     if (refused !== undefined) {
       return err(refused);
     }
-    return ok({ kind: "settled" });
+    if (left.length === 0) {
+      return ok({ kind: "settled" });
+    }
+    return ok(isRetryable ? { kind: "failed" } : heldBackFor(left.filter((delivery) => !wentOut.some((channel) => showsOf(channel)(delivery)))));
   };
   return async (ship, crewToken) => {
     const woken = await wakePerson(ship, crewToken);

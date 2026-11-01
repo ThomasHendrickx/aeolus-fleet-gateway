@@ -8,6 +8,7 @@ import type { DeliveryId, DeliveryState, FleetId, MeetingId, MessageId, ShipId, 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { DiscoveredStatement } from '../mcp-in/ports.js';
 import type { Result } from '../shared/result.js';
+import type { Routing } from './routing.js';
 
 /** A call the gateway makes for an account: the account's token beside the gateway's own crew token, so the account acts through the gateway's ship. */
 export interface AccountCall {
@@ -198,10 +199,11 @@ export type WakeChannelName = 'email' | 'web-push';
 export interface ShownElsewhere {
   /**
    * Finishes what an earlier wake left unfinished, then shows what it shows
-   * of the fresh deliveries: the ones it showed, and whether any is left
-   * unfinished, so the wake is tried again.
+   * of the fresh deliveries, as the person routed their jobs (Bridge,
+   * section 8): the ones it showed, and whether any is left unfinished, so
+   * the wake is tried again.
    */
-  show(ship: PersonShip, wake: { crewToken: string; fresh: readonly PushedPersonDelivery[] }): Promise<Result<ShownThere, FleetRefusal>>;
+  show(ship: PersonShip, wake: { crewToken: string; fresh: readonly PushedPersonDelivery[]; routing: Routing }): Promise<Result<ShownThere, FleetRefusal>>;
 }
 
 /** What a place beyond the pages showed at a wake. */
