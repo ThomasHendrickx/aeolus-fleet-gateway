@@ -82,4 +82,8 @@ describe("the phone's Fleet tab", () => {
       tiles: (markup.match(/data-testid="fleet-tile"/g) ?? []).length,
     }).toEqual({ summary: true, numbers: [true, true, true, true, true], tiles: 4 });
   });
+
+  it('says the account may not read the fleet when the fleet does not let it', () => {
+    expect(renderToStaticMarkup(createElement(FleetPage, { read: { kind: 'forbidden' } })).includes('Your account may not read the fleet&#x27;s ships.')).toBe(true);
+  });
 });

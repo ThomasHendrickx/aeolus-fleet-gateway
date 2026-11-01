@@ -1,0 +1,45 @@
+import { Ship } from 'lucide-react';
+
+import { SHIP_STATES, STATE_LABELS, type ShipState, type YourFleet } from '../services/your-fleet';
+import { StateIcon } from './state-icon';
+
+/** Only Alert is filled in its tone; Waiting and Working say theirs in the number; Idle stays plain. */
+const NUMBER_TONES: Record<ShipState, string> = {
+  alert: 'border-tone-attention-border bg-tone-attention-bg text-tone-attention-fg',
+  waiting: 'border-border bg-card text-tone-waiting-fg',
+  working: 'border-border bg-card text-tone-ok-fg',
+  idle: 'border-border bg-card text-card-foreground',
+};
+
+function FleetNumber({ testId, tone, value, children }: { testId: string; tone: string; value: number; children: React.ReactNode }) {
+  return (
+    <div data-testid={testId} className={`grid min-w-0 gap-0.5 rounded-md border px-2 py-1.5 ${tone}`}>
+      <span className="text-xl leading-6 font-semibold">{value}</span>
+      <span className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">{children}</span>
+    </div>
+  );
+}
+
+/**
+ * The numbers on top of Your fleet: Alert, Waiting, Working and Idle, each
+ * with its icon and word; on the Fleet tab the ships first, as Harbour
+ * leads with them.
+ */
+export function FleetNumbers({ fleet, isShipCountShown }: { fleet: YourFleet; isShipCountShown: boolean }) {
+  return (
+    <div className={`grid gap-1.5 ${isShipCountShown ? 'grid-cols-5' : 'grid-cols-4'}`}>
+      {isShipCountShown ? (
+        <FleetNumber testId="fleet-number-ships" tone="border-border bg-card text-card-foreground" value={fleet.shipCount}>
+          <Ship aria-hidden="true" className="size-3 shrink-0" />
+          <span className="truncate">Ships</span>
+        </FleetNumber>
+      ) : null}
+      {SHIP_STATES.map((state) => (
+        <FleetNumber key={state} testId={`fleet-number-${state}`} tone={NUMBER_TONES[state]} value={fleet.counts[state]}>
+          <StateIcon state={state} />
+          <span className="truncate">{STATE_LABELS[state]}</span>
+        </FleetNumber>
+      ))}
+    </div>
+  );
+}
