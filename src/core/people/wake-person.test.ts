@@ -524,6 +524,15 @@ describe('waking a person per job (Bridge, section 8)', () => {
     ]);
   });
 
+  it('hands each delivery once with Slack and a chat on for its job: Slack hands it, a chat only lists it (CC13)', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const routes = [aRoute({ job: 'decide', place: 'slack' }), aRoute({ job: 'decide', place: 'chat' })];
+
+    await waking({ ship, channels: [aChannel('email').channel], defaults: NOTHING_ON, routes, shownElsewhere: slackShowing(ship) })(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers).toEqual([{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', handOverNumber: 1, channel: 'slack' }]);
+  });
+
   it('applies a change at once: the next wake reads where each job shows anew', async () => {
     const ship = aShip([aDelivery(1)]);
     const email = aChannel('email');
