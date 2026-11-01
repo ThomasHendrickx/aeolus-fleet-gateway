@@ -220,7 +220,7 @@ export function BasketPanel({ fleetId, basket }: { fleetId: string; basket: Bask
     <ItemFocus fleetId={fleetId}>
       {(opening) => (
         <section className="grid gap-4" aria-labelledby="bridge-basket-heading">
-          <div>
+          <div className="hidden sm:block">
             <h1 id="bridge-basket-heading" className="text-heading font-semibold">
               Basket <span data-testid="bridge-basket-count" className="text-primary">{basket.count}</span>
             </h1>

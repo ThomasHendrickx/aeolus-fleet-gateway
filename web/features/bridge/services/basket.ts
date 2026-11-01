@@ -99,7 +99,9 @@ function lineOf(item: BasketItem, context: { isAnySent: boolean; isSendingNow: b
       return context.isSendingNow ? { icon: 'sending', tone: 'waiting', words: same('Sending...') } : { icon: 'next', tone: 'waiting', words: { desktop: 'Next, in the order you added it', phone: 'Next' } };
     case 'refused': {
       const said = `Not sent: ${standing.reason}.`;
-      return { icon: 'refused', tone: 'attention', words: { desktop: context.isAnySent ? `${said} The others were sent.` : said, phone: said } };
+      // The phone says the reason without its consequence, as basket-7 draws it: Not sent: commercial was retired.
+      const [cause = standing.reason] = standing.reason.split(', so ');
+      return { icon: 'refused', tone: 'attention', words: { desktop: context.isAnySent ? `${said} The others were sent.` : said, phone: `Not sent: ${cause}.` } };
     }
     case 'withdrawn':
       return { icon: 'withdrawn', tone: 'off', words: { desktop: `Withdrawn by ${from} at ${clockTimeOf(standing.at)}. Not sent; Send skips it.`, phone: `Withdrawn by ${from}. Not sent.` } };
