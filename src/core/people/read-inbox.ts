@@ -3,7 +3,7 @@ import { RECEIVE_MAX_UPPER_BOUND } from '@aeolus-fleet/common';
 import type { ConnectionStore } from '../connection/ports.js';
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
-import { inboxEntryOf, openedEntryOf, type InboxEntry } from './inbox-entry.js';
+import { chatInboxEntryOf, chatOpenedEntryOf, type ChatInboxEntry } from './inbox-entry.js';
 import { asPersonCrew, type PersonCaller, type PersonCrewError, type PersonCrewToken } from './person-crew.js';
 import type { OpenedDeliveries, PersonCrews, PersonDelivery, PersonShipDoor } from './ports.js';
 import { ownStepsInBridgeOnly, routingOf, type RoutingDefaults, type Routes } from './routing.js';
@@ -11,8 +11,8 @@ import { ownStepsInBridgeOnly, routingOf, type RoutingDefaults, type Routes } fr
 /** A person's inbox: how many deliveries wait and each of them, and the ones they opened and have not answered or done yet. */
 export interface Inbox {
   readonly waiting: number;
-  readonly deliveries: InboxEntry[];
-  readonly opened: InboxEntry[];
+  readonly deliveries: ChatInboxEntry[];
+  readonly opened: ChatInboxEntry[];
 }
 
 export type ReadInbox = (caller: PersonCaller) => Promise<Result<Inbox, PersonCrewError>>;
@@ -79,9 +79,9 @@ export function createReadInbox(deps: { crewPersonShip: CrewPersonShip; crews: P
     const opened = await deps.opened.list(ship.fleetId, ship.shipId);
     return ok({
       waiting: waiting.value.waiting - (waiting.value.deliveries.length - listed.length),
-      deliveries: listed.map(inboxEntryOf),
+      deliveries: listed.map(chatInboxEntryOf),
       // One opened before the gateway kept its content type is everything else.
-      opened: opened.filter(({ deliveryId, contentType, sentAt, senderShipId }) => !isWaiting.has(deliveryId) && routing.isShowing('chat', { contentType: contentType ?? '', sentAt, senderShipId })).map(openedEntryOf),
+      opened: opened.filter(({ deliveryId, contentType, sentAt, senderShipId }) => !isWaiting.has(deliveryId) && routing.isShowing('chat', { contentType: contentType ?? '', sentAt, senderShipId })).map(chatOpenedEntryOf),
     });
   };
 }

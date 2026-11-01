@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { FocusedDelivery } from '../services/deliveries';
-import { DeliveryCard } from './delivery-card';
+import { DeliveryCard, type StepFinished } from './delivery-card';
 
 // A question opened in Bridge (CC11): the asker's pick preselected, one
 // button putting it in the basket (CC24), naming the option; one its asker
@@ -25,8 +25,8 @@ function aQuestion(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, step: undefined, meetingId: undefined, stale: null, ...overrides };
 }
 
-function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string } = {}): string {
-  const { inBasket = null, note = '' } = shown;
+function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string; finished?: StepFinished | null } = {}): string {
+  const { inBasket = null, note = '', finished = null } = shown;
   const noop = () => undefined;
   return renderToStaticMarkup(
     createElement(DeliveryCard, {
@@ -35,6 +35,7 @@ function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number 
       meetingHref: undefined,
       basketHref: '/bridge/basket?fleet=flt_01',
       inBasket,
+      finished,
       note,
       working: undefined,
       failure: undefined,
@@ -114,41 +115,114 @@ describe('a question opened in Bridge (CC11)', () => {
 });
 
 describe('a step opened in Bridge (CC14)', () => {
-  const STEP = { title: 'Sign in to attio', why: "Until you sign in, your ships' calls to attio are refused.", link: { href: 'https://gateway.example.com/outside-parties/attio?fleet=flt_01', host: 'gateway.example.com' } };
+  const STEP = { title: 'Create the GitHub repository aeolus-fleet-memory-plugin', why: 'No ship can create a repository under your account.', link: { href: 'https://github.com/new', address: 'github.com/new', isOutside: true } };
 
   function aStep(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
-    return { deliveryId: 'dlv_03', from: 'gateway', title: STEP.title, sentAt: '2026-10-31T21:00:00.000Z', payload: '{}', body: '{}', question: undefined, step: STEP, meetingId: undefined, stale: null, ...overrides };
+    return { deliveryId: 'dlv_03', from: 'orchestrator-1', title: STEP.title, sentAt: '2026-10-31T20:00:00.000Z', payload: '{}', body: '{}', question: undefined, step: STEP, meetingId: undefined, stale: null, ...overrides };
   }
 
-  it('shows why, and the link with the host it leads to, opened only by the person', () => {
+  it('shows why, and the link in its box: where it is done, its host and path, that it opens outside Aeolus, and Open, opened only by the person', () => {
     const markup = render(aStep());
 
     expect({
-      why: markup.includes("Until you sign in, your ships&#x27;"),
-      link: markup.includes('href="https://gateway.example.com/outside-parties/attio?fleet=flt_01"'),
-      host: markup.includes('Open on gateway.example.com'),
-    }).toEqual({ why: true, link: true, host: true });
+      why: markup.includes('No ship can create a repository under your account.'),
+      label: markup.includes('Where it is done'),
+      address: markup.includes('github.com/new · opens outside Aeolus'),
+      open: /<a[^>]*data-testid="bridge-step-link"[^>]*href="https:\/\/github.com\/new"[^>]*>Open<\/a>/.test(markup) || /<a[^>]*href="https:\/\/github.com\/new"[^>]*data-testid="bridge-step-link"[^>]*>Open<\/a>/.test(markup),
+      newTab: markup.includes('target="_blank"'),
+    }).toEqual({ why: true, label: true, address: true, open: true, newTab: true });
   });
 
-  it('shows its note field before Done or Cannot, for either, with no answer to send', () => {
-    const markup = render(aStep(), { note: 'It asked for read access only' });
+  it("says nothing of outside Aeolus for a link to Bridge's own host, as the gateway's own steps have", () => {
+    const markup = render(aStep({ step: { ...STEP, link: { href: 'https://gateway.example.com/outside-parties/attio', address: 'gateway.example.com/outside-parties/attio', isOutside: false } } }));
+
+    expect({ address: markup.includes('gateway.example.com/outside-parties/attio'), outside: markup.includes('opens outside Aeolus') }).toEqual({ address: true, outside: false });
+  });
+
+  it('shows its note field before Done or Cannot, in the words do.html gives it, for either, with no answer to send', () => {
+    const markup = render(aStep(), { note: 'Created private and empty.' });
 
     expect({
       noteFirst: markup.indexOf('data-testid="bridge-note"') < markup.indexOf('data-testid="bridge-step-done"'),
-      note: markup.includes('It asked for read access only'),
-      noteSays: markup.includes('Optional, goes with Done or Cannot'),
+      note: markup.includes('Created private and empty.'),
+      label: markup.includes('Note (optional)'),
+      placeholder: markup.includes('placeholder="Add a note for orchestrator-1: what you did, or why you cannot"'),
+      help: markup.includes('Sent with Done or Cannot, whichever you press.'),
       done: markup.includes('data-testid="bridge-step-done"'),
       cannot: markup.includes('data-testid="bridge-step-cannot"'),
       answer: markup.includes('data-testid="bridge-answer"'),
-    }).toEqual({ noteFirst: true, note: true, noteSays: true, done: true, cannot: true, answer: false });
+    }).toEqual({ noteFirst: true, note: true, label: true, placeholder: true, help: true, done: true, cannot: true, answer: false });
+  });
+
+  it('marks Done with its check, and says under the two what each tells the asker', () => {
+    const markup = render(aStep());
+
+    expect({
+      check: /data-testid="bridge-step-done"[^>]*>(?:(?!<\/button>).)*lucide-check/.test(markup),
+      info: markup.includes('Done tells orchestrator-1 you did it, Cannot that you could not; the note goes with either. Whether it worked is theirs to check.'),
+    }).toEqual({ check: true, info: true });
+  });
+
+  it('shows a step done in Bridge on the step: when, the note quoted, and what was sent; its Open, note and buttons gone', () => {
+    const markup = render(aStep(), { finished: { outcome: 'done', note: 'Created private and empty.', at: '2026-10-31T20:03:00.000Z' } });
+
+    expect({
+      title: markup.includes('Done in Bridge at 20:03 UTC'),
+      note: markup.includes('“Created private and empty.”'),
+      sent: markup.includes('Sent to orchestrator-1 as you, with the outcome done.'),
+      tone: /data-testid="bridge-step-outcome"[^>]*tone-ok/.test(markup),
+      address: markup.includes('github.com/new · opens outside Aeolus'),
+      open: markup.includes('data-testid="bridge-step-link"'),
+      noteField: markup.includes('data-testid="bridge-note"'),
+      done: markup.includes('data-testid="bridge-step-done"'),
+    }).toEqual({ title: true, note: true, sent: true, tone: true, address: true, open: false, noteField: false, done: false });
+  });
+
+  it('shows a step the person cannot do in the ended tone, with its X, when, the note quoted and what was sent', () => {
+    const markup = render(aStep(), { finished: { outcome: 'cannot', note: 'The name is taken.', at: '2026-10-31T20:05:00.000Z' } });
+
+    expect({
+      title: markup.includes('Cannot, in Bridge at 20:05 UTC'),
+      note: markup.includes('“The name is taken.”'),
+      sent: markup.includes('Sent to orchestrator-1 as you, with the outcome cannot.'),
+      ended: /data-testid="bridge-step-outcome"[^>]*border-tone-ended-border bg-tone-ended-bg/.test(markup) && /lucide-circle-x[^"]*text-tone-ended-fg/.test(markup),
+      icon: markup.includes('lucide-circle-x'),
+      cannot: markup.includes('data-testid="bridge-step-cannot"'),
+    }).toEqual({ title: true, note: true, sent: true, ended: true, icon: true, cannot: false });
+  });
+
+  it.each([
+    { outcome: 'done' as const, icon: 'lucide-circle-check', tone: 'text-tone-ok-fg' },
+    { outcome: 'cannot' as const, icon: 'lucide-circle-x', tone: 'text-tone-ended-fg' },
+  ])('words the $outcome box in the foreground, its sent line muted, only its icon in its tone', ({ outcome, icon, tone }) => {
+    const markup = render(aStep(), { finished: { outcome, note: 'A note.', at: '2026-10-31T20:03:00.000Z' } });
+    const box = /<div data-testid="bridge-step-outcome"[^>]*>/.exec(markup)?.[0] ?? '';
+
+    expect({
+      boxInTone: box.includes('text-tone-'),
+      iconInTone: new RegExp(`${icon}[^"]*${tone}`).test(markup),
+      sentMuted: /<span class="[^"]*text-muted-foreground[^"]*">“A note\.” Sent to orchestrator-1/.test(markup),
+    }).toEqual({ boxInTone: false, iconInTone: true, sentMuted: true });
+  });
+
+  it('grows the note field with its note, so a note of three lines shows whole', () => {
+    const markup = render(aStep(), { note: 'A note of three lines.' });
+
+    expect(/<textarea[^>]*data-testid="bridge-note"[^>]*class="[^"]*field-sizing-content/.test(markup)).toBe(true);
+  });
+
+  it('shows an outcome sent with no note without a quote', () => {
+    const markup = render(aStep(), { finished: { outcome: 'done', note: '', at: '2026-10-31T20:03:00.000Z' } });
+
+    expect({ quote: markup.includes('“'), sent: markup.includes('Sent to orchestrator-1 as you, with the outcome done.') }).toEqual({ quote: false, sent: true });
   });
 
   it('shows a withdrawn step stale, struck through with when it was withdrawn: nothing to do, no link, Done or Cannot', () => {
     const markup = render(aStep({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T21:09:00.000Z', replacementTitle: null } }));
 
     expect({
-      stale: markup.includes('Withdrawn by gateway at 21:09 UTC. Nothing to do: it is done.'),
-      struck: /<s[^>]*>Sign in to attio<\/s>/.test(markup),
+      stale: markup.includes('Withdrawn by orchestrator-1 at 21:09 UTC. Nothing to do: it is done.'),
+      struck: /<s[^>]*>Create the GitHub repository aeolus-fleet-memory-plugin<\/s>/.test(markup),
       icon: markup.includes('aria-label="Withdrawn"'),
       done: markup.includes('data-testid="bridge-step-done"'),
       note: markup.includes('data-testid="bridge-note"'),
@@ -159,6 +233,6 @@ describe('a step opened in Bridge (CC14)', () => {
   it('links a replaced step to its replacement, named with when it was replaced', () => {
     const markup = render(aStep({ stale: { kind: 'replaced', replacementId: 'dlv_04', at: '2026-10-31T21:11:00.000Z', replacementTitle: 'Sign in to attio with the team account' } }));
 
-    expect({ stale: markup.includes('Replaced by gateway at 21:11 UTC with “Sign in to attio with the team account”. Do the new step.'), icon: markup.includes('aria-label="Replaced"'), link: markup.includes('Open the new step'), done: markup.includes('data-testid="bridge-step-done"') }).toEqual({ stale: true, icon: true, link: true, done: false });
+    expect({ stale: markup.includes('Replaced by orchestrator-1 at 21:11 UTC with “Sign in to attio with the team account”. Do the new step.'), icon: markup.includes('aria-label="Replaced"'), link: markup.includes('Open the new step'), done: markup.includes('data-testid="bridge-step-done"') }).toEqual({ stale: true, icon: true, link: true, done: false });
   });
 });

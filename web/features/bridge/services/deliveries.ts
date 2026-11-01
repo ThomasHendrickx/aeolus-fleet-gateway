@@ -59,11 +59,23 @@ export function questionOf(opened: { contentType: string; payload: string }): Qu
   }
 }
 
-/** A step as Bridge shows it (CC14): its title, why, and its link with the host it leads to, when it has one. */
+/** A step as Bridge shows it (CC14): its title, why, and its link, when it has one. */
 export interface StepView {
   readonly title: string;
   readonly why: string;
-  readonly link: { readonly href: string; readonly host: string } | undefined;
+  readonly link: StepLink | undefined;
+}
+
+/** The link where a step is done, shown with where it leads (host and path, as do.html draws it), and whether that is outside Aeolus: any host but the one Bridge is served on (Bridge, section 9). */
+export interface StepLink {
+  readonly href: string;
+  readonly address: string;
+  readonly isOutside: boolean;
+}
+
+function stepLinkOf(href: string, bridgeHost: string): StepLink {
+  const url = new URL(href);
+  return { href, address: `${url.host}${url.pathname.replace(/\/$/, '')}`, isOutside: url.host !== bridgeHost };
 }
 
 /** The step and step replacement content types (CC14), as common names them from its release after 0.35.0; they move to common's constants then. */
@@ -79,8 +91,8 @@ const STEP_SCHEMAS = new Map<string, z.ZodType<z.infer<typeof stepSchema>>>([
   [STEP_REPLACEMENT_CONTENT_TYPE, z.object({ step: stepSchema }).transform(({ step }) => step)],
 ]);
 
-/** The step a delivery asks: a step's own, or the new step a step replacement asks; none for any other message, or one whose payload does not read. */
-export function stepOf(opened: { contentType: string; payload: string }): StepView | undefined {
+/** The step a delivery asks: a step's own, or the new step a step replacement asks; none for any other message, or one whose payload does not read. Its link is outside Aeolus unless it leads to the host Bridge is served on. */
+export function stepOf(opened: { contentType: string; payload: string }, bridgeHost: string): StepView | undefined {
   const [essence = ''] = opened.contentType.split(';');
   const schema = STEP_SCHEMAS.get(essence.trim().toLowerCase());
   if (schema === undefined) {
@@ -92,7 +104,7 @@ export function stepOf(opened: { contentType: string; payload: string }): StepVi
       return undefined;
     }
     const { title, why, link } = step.data;
-    return { title, why, link: link === undefined ? undefined : { href: link, host: new URL(link).host } };
+    return { title, why, link: link === undefined ? undefined : stepLinkOf(link, bridgeHost) };
   } catch {
     return undefined;
   }
