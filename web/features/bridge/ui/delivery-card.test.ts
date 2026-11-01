@@ -61,7 +61,7 @@ describe('a question opened in Bridge (CC11)', () => {
       put: markup.includes('>Put option 2 in the basket<'),
       said: markup.includes('Nothing is sent yet. orchestrator-1 receives this answer when you send the basket.'),
       sendsAtOnce: markup.includes('Send option') || markup.includes('Send the note alone'),
-    }).toEqual({ choices: 2, picked: true, theirPick: true, put: true, said: true, sendsAtOnce: false });
+    }).toEqual({ choices: 3, picked: true, theirPick: true, put: true, said: true, sendsAtOnce: false });
   });
 
   it('says a question whose answer is in the basket is in it, not sent, with its note, its option picked, the basket and Remove beside it', () => {
@@ -76,16 +76,22 @@ describe('a question opened in Bridge (CC11)', () => {
     }).toEqual({ inBasket: true, note: true, picked: true, basket: true, remove: true });
   });
 
-  it('offers to put the note alone in the basket once the note has text, beside the option', () => {
-    const markup = render(aQuestion(), { note: 'Neither: ask me after the demo.' });
-
-    expect({ noteAlone: markup.includes('>Put the note alone in the basket<'), option: markup.includes('>Put option 2 in the basket<') }).toEqual({ noteAlone: true, option: true });
-  });
-
-  it('offers no note alone while the note is empty', () => {
+  it('offers No option, only the note, among the options, for an answer with the note alone', () => {
     const markup = render(aQuestion());
 
-    expect(markup.includes('data-testid="bridge-put-note-alone"')).toBe(false);
+    expect({ choices: (markup.match(/type="radio"/g) ?? []).length, noteAlone: markup.includes('No option, only the note'), secondButton: markup.includes('data-testid="bridge-put-note-alone"') }).toEqual({ choices: 3, noteAlone: true, secondButton: false });
+  });
+
+  it('opens a question whose note alone is in the basket with No option, only the note chosen, its button putting the note alone', () => {
+    const markup = render(aQuestion(), { inBasket: { option: null, note: 'Neither: ask me after the demo.' }, note: 'Neither: ask me after the demo.' });
+
+    expect({ chosen: markup.includes('checked="" value=""'), put: markup.includes('>Put the note alone in the basket<') }).toEqual({ chosen: true, put: true });
+  });
+
+  it('puts no note alone while the note is empty', () => {
+    const markup = render(aQuestion(), { inBasket: { option: null, note: 'Neither: ask me after the demo.' }, note: '' });
+
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Put the note alone in the basket</);
   });
 
   it('says a question whose note alone is in the basket is in it, not sent, with its note', () => {
