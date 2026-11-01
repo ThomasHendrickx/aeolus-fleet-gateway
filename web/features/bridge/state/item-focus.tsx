@@ -54,6 +54,8 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
   const [failure, setFailure] = useState<string | undefined>();
   const [done, setDone] = useState<string | undefined>();
   const [, startTransition] = useTransition();
+  // Each pick put from a row shows the list anew, as it is after a card: it reads the page as the action left it.
+  const [shownTimes, setShownTimes] = useState(0);
 
   const open = (item: ToOpen) => {
     setOpeningId(item.deliveryId);
@@ -83,6 +85,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
       setPuttingId(undefined);
       if (outcome.isOk) {
         setDone(`Option ${String(option)} is in the basket, not sent: ${item.from} receives it when you send the basket.`);
+        setShownTimes((times) => times + 1);
       } else {
         setOpenFailure({ deliveryId: item.deliveryId, message: outcome.message });
       }
@@ -141,7 +144,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
     );
   }
   return (
-    <div className="grid gap-4">
+    <div key={shownTimes} className="grid gap-4">
       {done === undefined ? null : <Notice message={done} isFailure={false} />}
       {children({ open, openingId, putPick, puttingId, failure: openFailure })}
     </div>
