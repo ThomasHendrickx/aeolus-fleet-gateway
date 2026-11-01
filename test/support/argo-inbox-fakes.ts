@@ -1,7 +1,8 @@
 /** argo's inbox as the gateway reads it, in memory for a test. */
 import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
-import type { ArgoAccount, ArgoAccounts, ArgoInboxChange, ArgoInboxDoor, ArgoMessageRead } from '../../src/core/argo-inbox/ports.js';
+import type { ArgoSlackPost } from '../../src/core/argo-inbox/argo-slack-post.js';
+import type { ArgoAccount, ArgoAccounts, ArgoSlackPosts, ArgoInboxChange, ArgoInboxDoor, ArgoMessageRead } from '../../src/core/argo-inbox/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 /** The accounts allowed as argo, per fleet, held in memory. */
@@ -89,6 +90,38 @@ export function fakeArgoInboxFleet() {
       if (entry !== undefined) {
         change({ ...entry, deliveryState: 'acknowledged' }, { at: new Date('2026-11-01T20:14:00.000Z'), accountId: null, ...by });
       }
+    },
+  };
+}
+
+/** The messages open at argo in Slack, in memory, one per fleet, person ship and message. */
+export function memoryArgoSlackPosts(): ArgoSlackPosts & { held: ArgoSlackPost[] } {
+  const held = new Array<ArgoSlackPost>();
+  const indexOf = (fleetId: FleetId, { personShipId, messageId }: { personShipId: ShipId; messageId: MessageId }) =>
+    held.findIndex((post) => post.fleetId === fleetId && post.personShipId === personShipId && post.messageId === messageId);
+  return {
+    held,
+    list: (fleetId) => Promise.resolve(held.filter((post) => post.fleetId === fleetId)),
+    keep: (post) => {
+      if (indexOf(post.fleetId, post) !== -1) {
+        return Promise.resolve('known');
+      }
+      held.push(post);
+      return Promise.resolve('kept');
+    },
+    save: (post) => {
+      const index = indexOf(post.fleetId, post);
+      if (index !== -1) {
+        held[index] = post;
+      }
+      return Promise.resolve();
+    },
+    remove: (fleetId, post) => {
+      const index = indexOf(fleetId, post);
+      if (index !== -1) {
+        held.splice(index, 1);
+      }
+      return Promise.resolve();
     },
   };
 }
