@@ -11,6 +11,7 @@ import { ItemFocus } from './item-focus';
  * person, outside what waits, with how many they have not seen. Opening one
  * is all it asks (CC16): it is done, so the seen ones come from the record's
  * newest page, after it, with nothing more to open; older ones are in Done.
+ * On the phone the top bar names the page and the Aware tab its count.
  */
 export function StayAwarePanel({ fleetId, consoleUrl, unseen, record }: { fleetId: string; consoleUrl: string | undefined; unseen: readonly HomeItem[]; record: readonly RecordItem[] }) {
   const feed = feedOf({ unseen, record });
@@ -18,7 +19,7 @@ export function StayAwarePanel({ fleetId, consoleUrl, unseen, record }: { fleetI
     <ItemFocus fleetId={fleetId} consoleUrl={consoleUrl}>
       {(opening) => (
         <section className="grid gap-3" aria-labelledby="bridge-stay-aware-heading">
-          <div className="flex items-baseline justify-between gap-3">
+          <div className="flex items-baseline justify-between gap-3 max-sm:sr-only">
             <h1 id="bridge-stay-aware-heading" className="text-heading font-semibold">
               Stay aware
             </h1>
@@ -26,7 +27,7 @@ export function StayAwarePanel({ fleetId, consoleUrl, unseen, record }: { fleetI
               {unseenSaidOf(unseen.length)}
             </span>
           </div>
-          <p className="text-caption text-muted-foreground md:hidden">Not in the count. Seeing one is all it asks.</p>
+          <p className="text-caption text-muted-foreground sm:hidden">Not in the count. Seeing one is all it asks.</p>
           {feed.length === 0 ? (
             <p data-testid="bridge-nothing-new" className="rounded-md border border-border bg-card p-3 text-muted-foreground">
               Nothing new. What you saw earlier is in Done.
