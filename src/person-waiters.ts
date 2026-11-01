@@ -54,7 +54,9 @@ export function createPersonWaiters(deps: { crews: PersonCrews; locks: WaiterLoc
     }
   };
 
-  const wake = (ship: PersonShip): void => {
+  const wake = (crewed: PersonShip): void => {
+    // Only the ids: a crew handed over holds its token, and a waiter logs its ship.
+    const ship: PersonShip = { fleetId: crewed.fleetId, shipId: crewed.shipId };
     const key = keyOf(ship);
     if (running.has(key) || stopping.signal.aborted) {
       return;
