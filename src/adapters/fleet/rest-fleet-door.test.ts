@@ -318,6 +318,14 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     ]);
   });
 
+  it('forwards the deliveries to leave out to the push receive of a person ship', async () => {
+    answer = { status: 200, body: { deliveries: [] } };
+
+    await createRestFleetDoor(base).person.pushReceive('aeolus_ct_v1_charlotte', { max: 10, excluding: ['dlv_01m3tbfspe96yf1rnr4ank0001', 'dlv_01m3tbfspe96yf1rnr4ank0002'] });
+
+    expect(sent().map(({ body }) => body)).toEqual([{ max: 10, waker: 'gateway', excluding: ['dlv_01m3tbfspe96yf1rnr4ank0001', 'dlv_01m3tbfspe96yf1rnr4ank0002'] }]);
+  });
+
   it("replies to the sender's ship, in reply to its message, under the key given", async () => {
     answer = { status: 200, body: { messageId: 'msg_01m3tbfspe96yf1rnr4ank0009', isNew: true } };
 
