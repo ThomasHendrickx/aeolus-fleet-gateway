@@ -1,7 +1,8 @@
 /** argo's inbox as the gateway reads it, in memory for a test. */
 import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
-import type { ArgoAccount, ArgoAccounts, ArgoInboxDoor, ArgoInboxEntry } from '../../src/core/argo-inbox/ports.js';
+import type { ArgoAccount, ArgoAccounts, ArgoInboxDoor, ArgoInboxEntry, ArgoWakes } from '../../src/core/argo-inbox/ports.js';
+import type { PersonShip, WakeChannelName } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 /** The accounts allowed as argo, per fleet, held in memory. */
@@ -88,6 +89,32 @@ export function fakeArgoInboxFleet() {
       if (entry !== undefined) {
         change({ ...entry, deliveryState: 'acknowledged' });
       }
+    },
+  };
+}
+
+/** For each person ship, the messages to argo a wake or a page in focus covered, and when each channel last woke it for argo, in memory. */
+export function memoryArgoWakes(): ArgoWakes & { covered: Map<string, Set<MessageId>>; sent: { ship: PersonShip; channel: WakeChannelName; sentAt: Date }[] } {
+  const covered = new Map<string, Set<MessageId>>();
+  const sent: { ship: PersonShip; channel: WakeChannelName; sentAt: Date }[] = [];
+  const keyOf = ({ fleetId, shipId }: PersonShip) => `${fleetId}/${shipId}`;
+  const isShip = (ship: PersonShip) => (each: { ship: PersonShip }) => keyOf(each.ship) === keyOf(ship);
+  return {
+    covered,
+    sent,
+    coveredOf: (ship) => Promise.resolve(new Set(covered.get(keyOf(ship)))),
+    cover: (ship, messageIds) => {
+      covered.set(keyOf(ship), new Set([...(covered.get(keyOf(ship)) ?? []), ...messageIds]));
+      return Promise.resolve();
+    },
+    forgetAllBut: (ship, open) => {
+      covered.set(keyOf(ship), new Set([...(covered.get(keyOf(ship)) ?? [])].filter((messageId) => open.includes(messageId))));
+      return Promise.resolve();
+    },
+    lastSentAt: (ship, channel) => Promise.resolve(sent.filter(isShip(ship)).findLast((wake) => wake.channel === channel)?.sentAt),
+    record: (wake) => {
+      sent.push(wake);
+      return Promise.resolve();
     },
   };
 }
