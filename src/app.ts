@@ -184,6 +184,9 @@ import { createSignOutAccount } from './core/account-sign-in/sign-out-account.js
 import { createStartAccountSignIn } from './core/account-sign-in/start-account-sign-in.js';
 import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
 import { createPrismaArgoAccounts } from './adapters/prisma/argo-accounts.js';
+import { createArgoInboxDoor } from './adapters/fleet/argo-inbox-door.js';
+import { createFollowArgoInbox } from './core/argo-inbox/follow-argo-inbox.js';
+import { createReadArgoInboxNotice } from './core/argo-inbox/read-argo-inbox-notice.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createExchangeIdJag } from './core/oauth/exchange-id-jag.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
@@ -790,6 +793,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     intervalMs: BASKET_ROUND_MS,
     log: server.log,
   });
+  // The gateway's own ship reads argo's open inbox by the read rule argo adds, whole at the start, then following each change (argo's inbox, AI9).
+  const followArgoInbox = createFollowArgoInbox({ connections, door: createArgoInboxDoor({ fleetUrl: options.fleetUrl }) });
+  const argoInboxStopping = new AbortController();
+  const argoInboxFollower = createRoundWorker({ name: "argo's inbox", round: () => followArgoInbox.round(argoInboxStopping.signal), sleep, intervalMs: POLL_MS, log: server.log });
+  const readArgoInboxNotice = createReadArgoInboxNotice({ accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, connections });
   // View sync in Slack (Bridge, section 7): each post edited once something came of its item, at once when an inbox change is heard.
   const slackEdits = createRoundWorker({
     name: 'slack edits',
@@ -1043,6 +1051,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readParty,
     listOwnerChoices,
     readYourFleet,
+    readArgoInboxNotice,
     checkServer,
     readPartyTools,
     stateParty,
@@ -1138,6 +1147,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       slackSends.start();
       basketSends.start();
       slackEdits.start();
+      argoInboxFollower.start();
       grantKeeper.start();
       return restored;
     },
@@ -1149,6 +1159,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       await slackSends.stop();
       await basketSends.stop();
       await slackEdits.stop();
+      // A follow waits up to 25 s while argo's inbox does not change: aborted, the round under way ends at once.
+      argoInboxStopping.abort();
+      await argoInboxFollower.stop();
       await grantKeeper.stop();
       await workers.stop();
       await server.close();
