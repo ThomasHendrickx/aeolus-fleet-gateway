@@ -68,7 +68,7 @@ describe("argo's inbox as the gateway's ship reads it from core", () => {
 
     const changes = await door().changes(gateway.crewToken, { argo, afterSeq, signal: AbortSignal.timeout(30_000) });
 
-    expect(changes).toMatchObject({ isOk: true, value: { messageIds: [messageId] } });
+    expect(changes).toMatchObject({ isOk: true, value: { changes: [{ messageId }] } });
   });
 
   it('answers a message argo marked done in the console as done, and the change it made', async () => {
@@ -80,7 +80,17 @@ describe("argo's inbox as the gateway's ship reads it from core", () => {
 
     const changes = await door().changes(gateway.crewToken, { argo, afterSeq: position.isOk ? position.value : -1, signal: AbortSignal.timeout(30_000) });
     const done = await door().entry(gateway.crewToken, { argo, messageId });
-    expect({ changed: changes.isOk && changes.value.messageIds.includes(messageId), state: done.isOk ? done.value?.deliveryState : done.error }).toEqual({ changed: true, state: 'acknowledged' });
+    const change = changes.isOk ? changes.value.changes.find((each) => each.messageId === messageId) : undefined;
+    expect({ by: change?.actorShipId, state: done.isOk ? done.value?.deliveryState : done.error }).toEqual({ by: argo, state: 'acknowledged' });
+  });
+
+  it('reads a message to argo whole: its payload, and the title of the question it asks', async () => {
+    const question = { id: 'b3f1c6a2-0d7e-4c55-9a51-6f0e4e2d9a11', title: 'Which repository holds the memory plugin?', context: 'builder-memory', options: [{ key: 1, label: 'aeolus-fleet' }], pick: { option: 1, why: 'one place' } };
+    const messageId = await send(fleet, { crewToken: trierarch, to: argo, contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify(question) });
+
+    const read = await door().entry(gateway.crewToken, { argo, messageId });
+
+    expect(read).toMatchObject({ isOk: true, value: { payload: JSON.stringify(question), headline: question.title, askedQuestionId: question.id, withdrawnQuestionId: null } });
   });
 
   it('reads no message argo sent as one to argo', async () => {
