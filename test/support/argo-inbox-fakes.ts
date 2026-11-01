@@ -24,7 +24,8 @@ export function memoryArgoAccounts(): ArgoAccounts & { held: Map<FleetId, Map<st
 /** argo's ship in a test fleet. */
 export const ARGO_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9arg';
 /** The trierarch, which sends argo its biggest problems. */
-export const TRIERARCH = { shipId: 'shp_01m3tbfspe96yf1rnr4ank9trr' as ShipId, name: 'trierarch' };
+const TRIERARCH_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9trr';
+export const TRIERARCH = { shipId: TRIERARCH_SHIP_ID, name: 'trierarch' };
 
 /** A message to argo, numbered, from the trierarch unless told otherwise. */
 export function anArgoEntry(number: number, overrides: Partial<ArgoInboxEntry> = {}): ArgoInboxEntry {
@@ -78,7 +79,9 @@ export function fakeArgoInboxFleet() {
     state,
     door,
     /** A ship sends argo a message: core stores it Open and unread. */
-    send: (entry: ArgoInboxEntry) => change(entry),
+    send: (entry: ArgoInboxEntry) => {
+      change(entry);
+    },
     /** argo marks it done in the console. */
     markDone: (messageId: MessageId) => {
       const entry = state.entries.get(messageId);
