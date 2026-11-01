@@ -631,7 +631,7 @@ model ItemOutcome {
   deliveryId String   @map("delivery_id")
   /// bridge, chat or slack.
   place      String
-  /// seen, answered, done, withdrawn or replaced.
+  /// seen, answered, done, withdrawn, replaced or notSent.
   kind       String
   /// The option of a question answered with one; null otherwise.
   option     Int?
