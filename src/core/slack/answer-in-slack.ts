@@ -1,4 +1,4 @@
-import { ANSWER_CONTENT_TYPE, questionSchema, type MessageId } from '@aeolus-fleet/common';
+import { ANSWER_CONTENT_TYPE, questionSchema } from '@aeolus-fleet/common';
 
 import type { ItemOutcomes } from '../people/item-outcome.js';
 import { alreadyTextOf } from '../people/opened-of.js';
@@ -6,12 +6,12 @@ import { answerKeyOf } from '../people/basket.js';
 import { KEY_UNAVAILABLE, SEALED_MESSAGE } from '../people/person-crew.js';
 import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from '../people/ports.js';
 import type { Clock } from '../shared/clock.js';
-import { err, ok, type Result } from '../shared/result.js';
+import { ok, type Result } from '../shared/result.js';
 import type { SlackApps, SlackLinks, SlackMessages, SlackPosts, SlackSignatures } from './ports.js';
-import { isSignedBy, type SignedRequest } from './slack-request.js';
 import { STORED_REACTION } from './send-slack-events.js';
+import { pressedOf, type SlackPress } from './slack-press.js';
 
-export type AnswerInSlack = (press: SignedRequest & { appId: string; teamId: string; userId: string; channel: string; messageTs: string; messageId: MessageId; option: number }) => Promise<Result<{ kind: 'answered' | 'answeredElsewhere' | 'refused' | 'ignored' }, { kind: 'notSigned' }>>;
+export type AnswerInSlack = (press: SlackPress & { option: number }) => Promise<Result<{ kind: 'answered' | 'answeredElsewhere' | 'refused' | 'ignored' }, { kind: 'notSigned' }>>;
 
 /** The question's id in a delivery's payload; none when it is no question. */
 function questionIdOf(payload: string): string | undefined {
@@ -54,18 +54,16 @@ export function createAnswerInSlack(deps: {
   signatures: SlackSignatures;
   clock: Clock;
 }): AnswerInSlack {
-  return async ({ appId, teamId, userId, channel, messageTs, messageId, option, body, timestamp, signature }) => {
-    const app = await deps.apps.findByAppId(appId);
-    if (!isSignedBy(app, { request: { body, timestamp, signature }, signatures: deps.signatures, clock: deps.clock })) {
-      return err({ kind: 'notSigned' });
+  return async (press) => {
+    const { channel, messageTs, option } = press;
+    const pressed = await pressedOf(deps, press);
+    if (!pressed.isOk) {
+      return pressed;
     }
-    const link = await deps.links.find(app.fleetId, { teamId, userId });
-    const kept = link?.stoppedAt === null ? await deps.posts.ofMessage(app.fleetId, { personShipId: link.personShipId, messageId }) : undefined;
-    const post = kept?.appId === appId && kept.channel === channel ? kept : undefined;
-    const crew = post === undefined ? undefined : await deps.crews.find(app.fleetId, post.personShipId);
-    if (post === undefined || post.deliveryId === null || post.senderShipId === null || crew === undefined || app.bot === null) {
+    if (pressed.value === undefined) {
       return ok({ kind: 'ignored' });
     }
+    const { app, post, crew } = pressed.value;
     const [earlier] = await deps.outcomes.findMany(app.fleetId, { shipId: post.personShipId, deliveryIds: [post.deliveryId] });
     if (earlier !== undefined) {
       await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: alreadyTextOf(earlier) });
