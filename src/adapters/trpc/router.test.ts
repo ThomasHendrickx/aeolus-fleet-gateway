@@ -224,6 +224,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         answers.push({ grantId: grantOf(caller), webPushOff: endpoint });
         return Promise.resolve(ok(undefined));
       },
+      readChats: (caller) => Promise.resolve(ok({ names: grantOf(caller) === PERSON_TOKEN ? ['claude.ai'] : [] })),
       readRouting: (caller) =>
         Promise.resolve(
           ok({
@@ -1158,6 +1159,18 @@ describe('a person routes each job to the places that show it, through the API (
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.routing()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('reads the chats connected as its own account, by name', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.chats()).resolves.toEqual({ names: ['claude.ai'] });
+  });
+
+  it('refuses the chats to any other actor', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.chats()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 
