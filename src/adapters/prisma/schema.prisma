@@ -614,8 +614,6 @@ model SlackPost {
   /// The Slack message, once Slack accepted the post.
   ts           String?
   threadTs     String?   @map("thread_ts")
-  isLinkOnly   Boolean   @map("is_link_only")
-  ackedAt      DateTime? @map("acked_at") @db.Timestamptz(3)
 
   @@id([fleetId, personShipId, messageId])
   @@index([fleetId, appId, channel, ts])

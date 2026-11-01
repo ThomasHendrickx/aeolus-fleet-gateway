@@ -30,8 +30,8 @@ function questionIdOf(payload: string): string | undefined {
  * kept answered in Slack (Bridge, CC4), and the question reacted to, as a message core stored is. Core's refusal
  * is said in the question's thread. The press names the question's fleet
  * message, as its button carries it, so a press that comes before the
- * gateway kept the post's Slack message is answered too; the delivery not
- * acknowledged yet, the press, the person's own act, acknowledges it.
+ * gateway kept the post's Slack message is answered too. The press, the
+ * person's own act, acknowledges the delivery: Slack posts it without.
  */
 export function createAnswerInSlack(deps: {
   apps: Pick<SlackApps, 'findByAppId'>;
@@ -56,10 +56,8 @@ export function createAnswerInSlack(deps: {
     if (post === undefined || post.deliveryId === null || post.senderShipId === null || crew === undefined || app.bot === null) {
       return ok({ kind: 'ignored' });
     }
-    if (post.ackedAt === null) {
-      // Core reads a delivery again only once acknowledged; a refusal leaves it unread, and the press ignored.
-      await deps.door.ack(crew.crewToken, post.deliveryId);
-    }
+    // The press, the person's own act, acknowledges it (Bridge, CC6); core reads a delivery again only once acknowledged, so a refusal leaves it unread, and the press ignored.
+    await deps.door.ack(crew.crewToken, post.deliveryId);
     const delivery = await deps.door.delivery(crew.crewToken, post.deliveryId);
     if (!delivery.isOk && delivery.error.code === KEY_UNAVAILABLE) {
       await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: SEALED_MESSAGE });

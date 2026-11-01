@@ -347,9 +347,9 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     return z.object({ messageId: z.string() }).parse(await sent.json()).messageId;
   }
 
-  /** Waits until the gateway kept this many of the bot's posts to charlotte with their Slack message and acknowledged: Slack has the post before the gateway keeps its message, and a press or a reply before then finds no post. */
+  /** Waits until the gateway kept this many of the bot's posts to charlotte with their Slack message: Slack has the post before the gateway keeps its message, and a press or a reply before then finds no post. */
   async function waitForKeptPosts(count: number): Promise<void> {
-    await expect.poll(() => prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'U0CHARLOTTE', ts: { not: null }, ackedAt: { not: null } } }), { timeout: 30_000 }).toBe(count);
+    await expect.poll(() => prisma.slackPost.count({ where: { fleetId, appId: releaseNotesAppId, channel: 'U0CHARLOTTE', ts: { not: null } } }), { timeout: 30_000 }).toBe(count);
   }
 
   /** Charlotte presses an option's button under a question release-notes-s7 asked, as Slack sends it: the button's block names the question's fleet message. */

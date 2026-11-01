@@ -95,7 +95,7 @@ describe("a linked person's message from Slack into the fleet", () => {
   it("keeps the person's message as it is in Slack, so the ship's reply goes into that conversation", async () => {
     await sendRound();
 
-    expect(posts.held).toEqual([{ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: 'msg_01m3tb1zgr5h2ffee12xnch001', deliveryId: null, senderShipId: null, appId: 'A02', channel: 'D0MATHILDE', ts: '1730019600.000100', threadTs: null, isLinkOnly: false, ackedAt: null }]);
+    expect(posts.held).toEqual([{ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: 'msg_01m3tb1zgr5h2ffee12xnch001', deliveryId: null, senderShipId: null, appId: 'A02', channel: 'D0MATHILDE', ts: '1730019600.000100', threadTs: null }]);
   });
 
   it('sends an answer in the thread under a posted delivery in reply to its message, then hands the delivery', async () => {
@@ -109,7 +109,7 @@ describe("a linked person's message from Slack into the fleet", () => {
   });
 
   it('sends an answer kept before its thread\'s delivery was in Slack in reply to that delivery once it is, waiting meanwhile, then hands it', async () => {
-    const question = { fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null } as const;
+    const question = { fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null } as const;
     await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
     await events.remove(FLEET_ID, 'Ev01');
     await events.keep(aKeptSlackEvent({ eventId: 'Ev02', appId: 'A01', shipId: null, threadTs: '1730020000.000001', ts: '1730020100.000002', markdown: 'Cut the travel', receivedAt: NOW }));
@@ -129,7 +129,7 @@ describe("a linked person's message from Slack into the fleet", () => {
   });
 
   it("sends an answer kept unmatched in reply to its delivery, exactly once, when Slack answered the post between the gateway's reads", async () => {
-    const question = { fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null, isLinkOnly: false, ackedAt: null } as const;
+    const question = { fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'D0MATHILDE', ts: null, threadTs: null } as const;
     await apps.save(aSlackApp({ appId: 'A01', name: 'Acme', bot: { token: 'xoxb-1', userId: 'U01' } }));
     await events.remove(FLEET_ID, 'Ev01');
     await events.keep(aKeptSlackEvent({ eventId: 'Ev02', appId: 'A01', shipId: null, threadTs: '1730020000.000001', ts: '1730020100.000002', markdown: 'Cut the travel', receivedAt: NOW }));

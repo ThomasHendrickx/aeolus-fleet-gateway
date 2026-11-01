@@ -58,7 +58,8 @@ function aShip(deliveries: PersonDelivery[]) {
 }
 
 /** Shows what is fresh: by default each delivery never handed, as the wake hands them. */
-async function show(fleet: ReturnType<typeof aShip>, freshGiven?: readonly PushedPersonDelivery[], routes: readonly Route[] = []) {
+async function show(fleet: ReturnType<typeof aShip>, given: { fresh?: readonly PushedPersonDelivery[]; routes?: readonly Route[] } = {}) {
+  const { fresh: freshGiven, routes = [] } = given;
   const taken = await fleet.door.pushReceive(CREW, { max: 100 });
   const fresh = freshGiven ?? (taken.isOk ? taken.value.filter(({ handOverNumber }) => handOverNumber === null) : []);
   return createShowInSlack({
@@ -110,7 +111,7 @@ describe('a delivery to a linked person, in Slack', () => {
   it("shows a message from a ship that is not a bot through the gateway's own bot, headed by the sender, once the person turned Slack on for its job", async () => {
     const fleet = aShip([FROM_BUDGET_CHECK]);
 
-    await show(fleet, undefined, [slackOnFor('everything-else')]);
+    await show(fleet, { routes: [slackOnFor('everything-else')] });
 
     expect(slack.state.posts.map(({ botToken, channel, text }) => ({ botToken, channel, text }))).toEqual([{ botToken: 'xoxb-1', channel: 'U0MATHILDE', text: '*budget-check*\nOver budget' }]);
   });
@@ -126,7 +127,7 @@ describe('a delivery to a linked person, in Slack', () => {
   it('shows a question with one button per option, once Slack is on for decide', async () => {
     const fleet = aShip([A_QUESTION]);
 
-    await show(fleet, undefined, [slackOnFor('decide')]);
+    await show(fleet, { routes: [slackOnFor('decide')] });
 
     expect(slack.state.posts.map(({ text, buttons }) => ({ text, buttons }))).toEqual([{ text: '*Ship it?*\nReady', buttons: [{ text: 'Ship', option: 1 }] }]);
   });
@@ -146,7 +147,7 @@ describe('a delivery to a linked person, in Slack', () => {
     await apps.save(aSlackApp({ appId: 'A02', shipId: RELEASE_NOTES, name: 'release-notes', bot: null, removedInSlackAt: new Date('2026-10-27T08:00:00.000Z') }));
     const fleet = aShip([FROM_RELEASE_NOTES]);
 
-    await show(fleet, undefined, [slackOnFor('everything-else')]);
+    await show(fleet, { routes: [slackOnFor('everything-else')] });
 
     expect(slack.state.posts.map(({ botToken, text }) => ({ botToken, text }))).toEqual([{ botToken: 'xoxb-1', text: '*release-notes*\nFriday' }]);
   });
@@ -205,12 +206,12 @@ describe('a delivery to a linked person, in Slack', () => {
     await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: FROM_RELEASE_NOTES.messageId, deliveryId: FROM_RELEASE_NOTES.deliveryId, senderShipId: RELEASE_NOTES, appId: 'A02', channel: 'U0MATHILDE', ts: null, threadTs: null });
     await fleet.door.handed(CREW, { deliveryId: FROM_RELEASE_NOTES.deliveryId, handOverNumber: 1, channel: 'slack' });
 
-    const first = await show(fleet, []);
+    const first = await show(fleet, { fresh: [] });
     const keptPosts = posts.held.length;
     for (const other of others) {
       await fleet.door.ack(CREW, other.deliveryId);
     }
-    await show(fleet, []);
+    await show(fleet, { fresh: [] });
 
     expect({ isAnyUnfinished: first.isOk && first.value.isAnyUnfinished, keptPosts, posted: slack.state.posts.length, ts: posts.held[0]?.ts }).toEqual({ isAnyUnfinished: true, keptPosts: 1, posted: 1, ts: '1730020000.000001' });
   });
@@ -221,7 +222,7 @@ describe('a delivery to a linked person, in Slack', () => {
     await fleet.door.handed(CREW, { deliveryId: FROM_RELEASE_NOTES.deliveryId, handOverNumber: 1, channel: 'slack' });
     await fleet.door.ack(CREW, FROM_RELEASE_NOTES.deliveryId);
 
-    const shown = await show(fleet, []);
+    const shown = await show(fleet, { fresh: [] });
 
     expect({ posts: posts.held, posted: slack.state.posts.length, isAnyUnfinished: shown.isOk && shown.value.isAnyUnfinished }).toEqual({ posts: [], posted: 0, isAnyUnfinished: false });
   });
@@ -247,7 +248,7 @@ describe('a delivery to a linked person, in Slack', () => {
     const before = { ...A_QUESTION, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0009', messageId: 'msg_01m3tbfspe96yf1rnr4ank0009', sentAt: new Date('2026-10-19T07:59:59.999Z') } as const;
     const fleet = aShip([before, A_QUESTION]);
 
-    await show(fleet, undefined, [slackOnFor('decide', A_QUESTION.sentAt)]);
+    await show(fleet, { routes: [slackOnFor('decide', A_QUESTION.sentAt)] });
 
     expect(fleet.handOvers.map(({ deliveryId }) => deliveryId)).toEqual([A_QUESTION.deliveryId]);
   });

@@ -6,9 +6,9 @@ import type { DeliveryId, FleetId, MessageId, ShipId } from '@aeolus-fleet/commo
  * sent from there. It keeps where it is, by the bot's app, the conversation
  * and its Slack message, so a reply goes into that conversation or thread
  * and an answer in a thread replies to it. A delivery's post is kept before
- * it is handed, then given its Slack message once Slack accepted it, then
- * acknowledged: a post the gateway did not finish is finished at the next
- * wake.
+ * it is handed, then given its Slack message once Slack accepted it: a post
+ * the gateway did not finish is finished at the next wake. It is never
+ * acknowledged on post; only the person's action does that (Bridge, CC6).
  */
 export interface SlackPost {
   readonly fleetId: FleetId;
@@ -24,9 +24,6 @@ export interface SlackPost {
   readonly ts: string | null;
   /** The thread it is in, if any. */
   readonly threadTs: string | null;
-  /** A link posted for what Slack does not show in full: handed only, as a wake (B4). */
-  readonly isLinkOnly: boolean;
-  readonly ackedAt: Date | null;
 }
 
 /**
@@ -38,7 +35,7 @@ export function isAwaitingSlackIn(post: SlackPost, conversation: { appId: string
   return post.deliveryId !== null && post.ts === null && post.threadTs === null && post.appId === conversation.appId && post.channel === conversation.channel;
 }
 
-/** Whether the post is a delivery the gateway did not finish: not yet in Slack, or not yet acknowledged. */
+/** Whether the post is a delivery the gateway did not finish: not yet in Slack. */
 export function isUnfinished(post: SlackPost): boolean {
-  return post.deliveryId !== null && (post.ts === null || (!post.isLinkOnly && post.ackedAt === null));
+  return post.deliveryId !== null && post.ts === null;
 }
