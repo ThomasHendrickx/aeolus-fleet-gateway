@@ -10,6 +10,8 @@ const VARIANTS = {
 export const SIZES = {
   regular: 'h-9 gap-2 px-4',
   row: 'h-9 gap-2 px-4 text-body sm:h-6 sm:gap-1.5 sm:px-2.5 sm:text-meta',
+  /** A basket entry's buttons (basket.html). */
+  small: 'h-8 gap-2 px-3 text-meta',
 } as const;
 
 /**

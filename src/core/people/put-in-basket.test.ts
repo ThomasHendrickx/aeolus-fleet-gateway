@@ -66,31 +66,53 @@ function anEntry(overrides: Partial<BasketEntry> = {}): BasketEntry {
     title: 'Which goes first: the Compact look (U4) or Harbour?',
     sentAt: new Date('2026-10-31T19:41:00.000Z'),
     option: 2,
+    optionLabel: "Harbour first, on today's look",
     note: 'Harbour first: the demo on 12 Nov needs it.',
     addedAt: AT,
     state: 'waiting',
     refusal: null,
+    isUnanswered: false,
+    storedAt: null,
     ...overrides,
   };
 }
 
 describe('a person puts an answer to a question in the basket', () => {
   it('keeps the option and the note as an entry of the question, waiting, and sends nothing', async () => {
-    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 2, note: 'Harbour first: the demo on 12 Nov needs it.' });
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 2, optionLabel: "Harbour first, on today's look", note: 'Harbour first: the demo on 12 Nov needs it.' });
 
     expect(put).toEqual({ isOk: true, value: { questionId: QUESTION_ID, option: 2, note: 'Harbour first: the demo on 12 Nov needs it.' } });
     expect([...entries.held.values()]).toEqual([anEntry()]);
   });
 
   it('keeps a note with no option as an entry of the question, answering it with the note alone', async () => {
-    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: null, note: 'Neither: ask me after the demo.' });
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: null, optionLabel: null, note: 'Neither: ask me after the demo.' });
 
     expect(put).toEqual({ isOk: true, value: { questionId: QUESTION_ID, option: null, note: 'Neither: ask me after the demo.' } });
-    expect([...entries.held.values()]).toEqual([anEntry({ option: null, note: 'Neither: ask me after the demo.' })]);
+    expect([...entries.held.values()]).toEqual([anEntry({ option: null, optionLabel: null, note: 'Neither: ask me after the demo.' })]);
+  });
+
+  it("keeps the option's label as the question shows it, so the basket names the answer by its number and label", async () => {
+    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 3, optionLabel: '  Both at once ', note: '' });
+
+    expect([...entries.held.values()].map(({ option, optionLabel }) => ({ option, optionLabel }))).toEqual([{ option: 3, optionLabel: 'Both at once' }]);
+  });
+
+  it('keeps no label for a note alone, as it picks no option', async () => {
+    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: null, optionLabel: 'Both at once', note: 'Ask me after the demo.' });
+
+    expect([...entries.held.values()].map(({ optionLabel }) => optionLabel)).toEqual([null]);
+  });
+
+  it('refuses an option without its label, as the basket could not name the answer', async () => {
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 2, optionLabel: '  ', note: '' });
+
+    expect(put).toMatchObject({ isOk: false, error: { kind: 'INVALID_ARGUMENTS' } });
+    expect(entries.held.size).toBe(0);
   });
 
   it('refuses an entry with neither an option nor a note, as it answers nothing', async () => {
-    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: null, note: '   ' });
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: null, optionLabel: null, note: '   ' });
 
     expect(put).toMatchObject({ isOk: false, error: { kind: 'INVALID_ARGUMENTS' } });
     expect(entries.held.size).toBe(0);
@@ -99,34 +121,43 @@ describe('a person puts an answer to a question in the basket', () => {
   it('puts nothing in the basket for a question answered in Slack first, saying where: a later press in Bridge sends nothing', async () => {
     await outcomes.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: OPENED.deliveryId, place: 'slack', kind: 'answered', option: 2, at: AT });
 
-    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 1, note: '' });
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 1, optionLabel: 'Compact look first', note: '' });
 
     expect({ put, entries: [...entries.held.values()] }).toEqual({ put: { isOk: false, error: { kind: 'ALREADY_DECIDED', message: 'Already answered in Slack: option 2. Nothing is sent.' } }, entries: [] });
   });
 
   it('keeps no note when the person wrote none, or only spaces', async () => {
-    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 1, note: '   ' });
+    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 1, optionLabel: 'Compact look first', note: '   ' });
 
-    expect([...entries.held.values()]).toEqual([anEntry({ option: 1, note: null })]);
+    expect([...entries.held.values()]).toEqual([anEntry({ option: 1, optionLabel: 'Compact look first', note: null })]);
   });
 
   it("tells the person's pages, so every device shows the same basket", async () => {
-    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 2, note: '' });
+    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 2, optionLabel: "Harbour first, on today's look", note: '' });
 
     expect(changes.told).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }]);
   });
 
   it('changes the entry when the person picks again on the question, keeping its place in the order added', async () => {
-    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 2, note: 'Harbour first: the demo on 12 Nov needs it.' });
+    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 2, optionLabel: "Harbour first, on today's look", note: 'Harbour first: the demo on 12 Nov needs it.' });
     now = LATER;
 
-    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 3, note: '' });
+    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 3, optionLabel: 'Both at once', note: '' });
 
-    expect([...entries.held.values()]).toEqual([anEntry({ option: 3, note: null, addedAt: AT })]);
+    expect([...entries.held.values()]).toEqual([anEntry({ option: 3, optionLabel: 'Both at once', note: null, addedAt: AT })]);
+  });
+
+  it('clears the answers sent from the basket, as a new basket starts', async () => {
+    const sent = anEntry({ questionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', state: 'sent', storedAt: AT });
+    await entries.save(sent);
+
+    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 2, optionLabel: "Harbour first, on today's look", note: 'Harbour first: the demo on 12 Nov needs it.' });
+
+    expect([...entries.held.values()]).toEqual([anEntry()]);
   });
 
   it('refuses a delivery the person has not opened, as nothing of it is known', async () => {
-    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0404', option: 1, note: '' });
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0404', option: 1, optionLabel: 'Compact look first', note: '' });
 
     expect(put).toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
     expect(entries.held.size).toBe(0);
@@ -135,14 +166,14 @@ describe('a person puts an answer to a question in the basket', () => {
   it('refuses a delivery that asks no question: only answers to questions go in the basket', async () => {
     await opened.save({ ...OPENED, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0txt', contentType: 'text/plain', askedQuestionId: null });
 
-    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0txt', option: 1, note: '' });
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0txt', option: 1, optionLabel: 'Compact look first', note: '' });
 
     expect(put).toMatchObject({ isOk: false, error: { kind: 'NOT_A_QUESTION' } });
     expect(entries.held.size).toBe(0);
   });
 
   it('refuses an option below 1, as options are numbered from 1', async () => {
-    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 0, note: '' });
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 0, optionLabel: 'None', note: '' });
 
     expect(put).toMatchObject({ isOk: false, error: { kind: 'INVALID_ARGUMENTS' } });
   });
@@ -150,7 +181,7 @@ describe('a person puts an answer to a question in the basket', () => {
   it('refuses to change an entry being sent, which goes as stored', async () => {
     await entries.save(anEntry({ state: 'sending' }));
 
-    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 3, note: '' });
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 3, optionLabel: 'Both at once', note: '' });
 
     expect(put).toMatchObject({ isOk: false, error: { kind: 'CONFLICT' } });
     expect([...entries.held.values()]).toEqual([anEntry({ state: 'sending' })]);
@@ -159,7 +190,7 @@ describe('a person puts an answer to a question in the basket', () => {
   it('refuses to change an entry the fleet refused: it is removed, not sent again', async () => {
     await entries.save(anEntry({ state: 'refused', refusal: 'orchestrator-1 was retired' }));
 
-    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 3, note: '' });
+    const put = await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 3, optionLabel: 'Both at once', note: '' });
 
     expect(put).toMatchObject({ isOk: false, error: { kind: 'CONFLICT' } });
   });
@@ -167,7 +198,7 @@ describe('a person puts an answer to a question in the basket', () => {
   it("keeps the person ship's basket apart from another fleet's", async () => {
     await entries.save(anEntry({ fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8zz', option: 1 }));
 
-    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 2, note: 'Harbour first: the demo on 12 Nov needs it.' });
+    await putInBasket({ caller: CHARLOTTE_GRANT, deliveryId: OPENED.deliveryId, option: 2, optionLabel: "Harbour first, on today's look", note: 'Harbour first: the demo on 12 Nov needs it.' });
 
     await expect(entries.list(FLEET_ID, PERSON_SHIP_ID)).resolves.toEqual([anEntry()]);
   });

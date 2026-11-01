@@ -108,7 +108,7 @@ describe('Send N answers', () => {
     await Promise.all([sendStored(), sendStored()]);
 
     expect(new Set(replies.map(({ idempotencyKey }) => idempotencyKey))).toEqual(new Set([`answer-${HARBOUR.questionId}`, `answer-${PRICING.questionId}`]));
-    expect(entries.held.size).toBe(0);
+    expect([...entries.held.values()].map(({ state }) => state)).toEqual(['sent', 'sent']);
   });
 
   it('skips an entry whose question its asker withdrew, says so, takes it out and is done with the question as withdrawn', async () => {
@@ -155,5 +155,38 @@ describe('Send N answers', () => {
 
     expect(sent).toEqual({ isOk: true, value: { sending: 0, skipped: [] } });
     expect([...entries.held.values()]).toEqual([refused]);
+  });
+
+  it('clears the answers sent before from the basket, as a new send starts', async () => {
+    await store({ ...PRICING, state: 'sent', storedAt: AT }, HARBOUR);
+
+    await sendBasketWith([]).sendBasket(CHARLOTTE_GRANT);
+
+    expect([...entries.held.values()]).toEqual([{ ...HARBOUR, state: 'sending' }]);
+  });
+});
+
+describe('Send while the fleet does not answer (aeolus-fleet#1550)', () => {
+  it('stores each entry waiting as sending all the same and wakes the gateway, which checks each at send time', async () => {
+    await store(HARBOUR, PRICING);
+    const ship = sendBasketWith([]);
+    ship.refusals.inbox.push({ code: 'UNAVAILABLE', message: 'The fleet did not answer: fetch failed' });
+
+    const sent = await ship.sendBasket(CHARLOTTE_GRANT);
+
+    expect(sent).toEqual({ isOk: true, value: { sending: 2, skipped: [] } });
+    expect({ states: [...entries.held.values()].map(({ state }) => state), woken }).toEqual({ states: ['sending', 'sending'], woken: 1 });
+  });
+
+  it('stores as sending none answered elsewhere first, which the gateway knows itself, and takes it out', async () => {
+    await store(HARBOUR);
+    await outcomes.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: HARBOUR.deliveryId, place: 'slack', kind: 'answered', option: 3, at: AT });
+    const ship = sendBasketWith([]);
+    ship.refusals.inbox.push({ code: 'UNAVAILABLE', message: 'The fleet did not answer: fetch failed' });
+
+    const sent = await ship.sendBasket(CHARLOTTE_GRANT);
+
+    expect(sent).toEqual({ isOk: true, value: { sending: 0, skipped: [{ questionId: HARBOUR.questionId, title: HARBOUR.title, kind: 'dealtElsewhere' }] } });
+    expect(entries.held.size).toBe(0);
   });
 });

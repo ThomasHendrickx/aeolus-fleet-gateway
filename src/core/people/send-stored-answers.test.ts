@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aBasketEntry, fakePersonShipDoor, memoryBasketEntries, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { aBasketEntry, aPersonDelivery, fakePersonShipDoor, memoryBasketEntries, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { BasketEntry } from './basket.js';
 import type { OpenedDelivery } from './ports.js';
@@ -87,6 +87,11 @@ function aSender() {
   return createSendStoredAnswers({ entries, crews, door: ship.door, opened, outcomes, changes, clock: { now: () => AT } });
 }
 
+/** The entries the fleet has not stored an answer for yet. */
+function unsent(): BasketEntry[] {
+  return [...entries.held.values()].filter(({ state }) => state !== 'sent');
+}
+
 async function store(...stored: BasketEntry[]) {
   for (const entry of stored) {
     await entries.save(entry);
@@ -107,14 +112,14 @@ describe('the gateway sends the answers stored as sending', () => {
     ]);
   });
 
-  it('reports each one the fleet stored handled, answered in Bridge with its option, out of the basket, and tells the pages', async () => {
+  it('reports each one the fleet stored handled, answered in Bridge with its option, kept in the basket as sent with when, and tells the pages', async () => {
     await store(HARBOUR);
 
     await expect(aSender()()).resolves.toEqual({ sent: 1, kept: 0, refused: 0 });
 
-    expect(ship.calls).toEqual([`reply(${HARBOUR.messageId})`, `handled(${HARBOUR.deliveryId})`]);
+    expect(ship.calls.filter((call) => !call.startsWith('inbox'))).toEqual([`reply(${HARBOUR.messageId})`, `handled(${HARBOUR.deliveryId})`]);
     expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: HARBOUR.deliveryId, place: 'bridge', kind: 'answered', option: 2, note: 'Harbour first: the demo on 12 Nov needs it.', seen: null, at: AT }]);
-    expect({ basket: entries.held.size, opened: opened.held.size }).toEqual({ basket: 0, opened: 0 });
+    expect({ basket: [...entries.held.values()], opened: opened.held.size }).toEqual({ basket: [{ ...HARBOUR, state: 'sent', storedAt: AT }], opened: 0 });
     expect(changes.told).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }]);
   });
 
@@ -147,13 +152,13 @@ describe('the gateway sends the answers stored as sending', () => {
     expect([...entries.held.values()]).toEqual([aBasketEntry({ state: 'waiting' })]);
   });
 
-  it('keeps sending an entry the fleet did not answer, and goes on with the others', async () => {
+  it('keeps sending an entry the fleet did not answer, marked so, and goes on with the others', async () => {
     await store(HARBOUR, PRICING);
     ship.refusals.reply.push({ code: 'UNAVAILABLE', message: 'The fleet did not answer: fetch failed' });
 
     await expect(aSender()()).resolves.toEqual({ sent: 1, kept: 1, refused: 0 });
 
-    expect([...entries.held.values()]).toEqual([HARBOUR]);
+    expect(unsent()).toEqual([{ ...HARBOUR, isUnanswered: true }]);
     expect(ship.replies.map(({ idempotencyKey }) => idempotencyKey)).toEqual([`answer-${PRICING.questionId}`]);
   });
 
@@ -167,17 +172,17 @@ describe('the gateway sends the answers stored as sending', () => {
 
     expect(ship.calls.filter((call) => call.startsWith('reply'))).toEqual([`reply(${HARBOUR.messageId})`, `reply(${HARBOUR.messageId})`]);
     expect(ship.replies.map(({ idempotencyKey }) => idempotencyKey)).toEqual([`answer-${HARBOUR.questionId}`]);
-    expect(entries.held.size).toBe(0);
+    expect(unsent()).toEqual([]);
   });
 
   it('keeps one the fleet refused in the basket, not sent, with why, not handled; the others are sent', async () => {
     await store(HARBOUR, PRICING);
-    ship.refusals.reply.push({ code: 'NOT_FOUND', message: 'Ship commercial was retired' });
+    ship.refusals.reply.push({ code: 'BAD_REQUEST', message: 'The answer is not valid' });
     await entries.save({ ...HARBOUR, addedAt: new Date('2026-10-31T19:59:00.000Z') });
 
     await expect(aSender()()).resolves.toEqual({ sent: 1, kept: 0, refused: 1 });
 
-    expect([...entries.held.values()]).toEqual([{ ...PRICING, state: 'refused', refusal: 'commercial did not take the answer: Ship commercial was retired' }]);
+    expect(unsent()).toEqual([{ ...PRICING, state: 'refused', refusal: 'commercial did not take the answer: The answer is not valid' }]);
     expect(ship.calls).not.toContain(`handled(${PRICING.deliveryId})`);
     expect(outcomes.held.map(({ deliveryId }) => deliveryId)).toEqual([HARBOUR.deliveryId]);
   });
@@ -203,14 +208,71 @@ describe('the gateway sends the answers stored as sending', () => {
     expect([...entries.held.values()]).toEqual([HARBOUR]);
   });
 
-  it('takes out an answer the fleet stored whose delivery it will not report handled for good, as it was answered', async () => {
+  it('keeps as sent an answer the fleet stored whose delivery it will not report handled for good, as it was answered', async () => {
     await store(HARBOUR);
     ship.refusals.handled.push({ code: 'DELIVERY_NOT_FOUND', message: 'Delivery dlv_01m3tbfspe96yf1rnr4ank0001 does not exist' });
 
     await aSender()();
 
-    expect(entries.held.size).toBe(0);
+    expect(unsent()).toEqual([]);
     expect(outcomes.held).toMatchObject([{ deliveryId: HARBOUR.deliveryId, place: 'bridge', kind: 'answered', option: 2 }]);
+  });
+
+  it('says in words that the asker was retired, so it cannot receive an answer', async () => {
+    await store(PRICING);
+    ship.refusals.reply.push({ code: 'NOT_FOUND', message: 'commercial is retired: a retired ship is never addressed again' });
+
+    await aSender()();
+
+    expect(unsent()).toEqual([{ ...PRICING, state: 'refused', refusal: 'commercial was retired, so it cannot receive an answer' }]);
+  });
+
+  it('says in words that the person may not reach the asker', async () => {
+    await store(PRICING);
+    ship.refusals.reply.push({ code: 'FORBIDDEN', message: 'The network rules do not let you reach commercial' });
+
+    await aSender()();
+
+    expect(unsent()).toEqual([{ ...PRICING, state: 'refused', refusal: 'you may not reach commercial' }]);
+  });
+
+  it('sends nothing for a question its asker withdrew before it was sent, checked at send time, and puts it back to wait, shown withdrawn', async () => {
+    const withdrawal = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0w01', senderShipId: HARBOUR.senderShipId, contentType: 'application/vnd.aeolus.question-withdrawal+json', askedQuestionId: null, withdrawnQuestionId: HARBOUR.questionId });
+    ship = fakePersonShipDoor({ crewToken: CREW_TOKEN, deliveries: [withdrawal] });
+    await store(HARBOUR, PRICING);
+
+    await expect(aSender()()).resolves.toEqual({ sent: 1, kept: 0, refused: 0 });
+
+    expect(ship.replies.map(({ idempotencyKey }) => idempotencyKey)).toEqual([`answer-${PRICING.questionId}`]);
+    expect(unsent()).toEqual([{ ...HARBOUR, state: 'waiting' }]);
+    expect(changes.told).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }]);
+  });
+
+  it('sends nothing for a question its asker replaced before it was sent, and puts it back to wait, shown replaced', async () => {
+    const replacement = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0r01', senderShipId: PRICING.senderShipId, contentType: 'application/vnd.aeolus.question-replacement+json', askedQuestionId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d', withdrawnQuestionId: PRICING.questionId });
+    ship = fakePersonShipDoor({ crewToken: CREW_TOKEN, deliveries: [replacement] });
+    await store(PRICING);
+
+    await aSender()();
+
+    expect({ replies: ship.replies, unsent: unsent() }).toEqual({ replies: [], unsent: [{ ...PRICING, state: 'waiting' }] });
+  });
+
+  it('keeps each sending, marked not answered, while the fleet does not answer what waits, so nothing withdrawn is sent', async () => {
+    await store(HARBOUR, PRICING);
+    ship.refusals.inbox.push({ code: 'UNAVAILABLE', message: 'The fleet did not answer: fetch failed' });
+
+    await expect(aSender()()).resolves.toEqual({ sent: 0, kept: 2, refused: 0 });
+
+    expect({ replies: ship.replies, unsent: unsent() }).toEqual({ replies: [], unsent: [{ ...HARBOUR, isUnanswered: true }, { ...PRICING, isUnanswered: true }] });
+  });
+
+  it('sends nothing again for one kept as sent', async () => {
+    await store({ ...HARBOUR, state: 'sent', storedAt: AT });
+
+    await aSender()();
+
+    expect(ship.replies).toEqual([]);
   });
 });
 
@@ -223,7 +285,7 @@ describe('a gateway restart while sending', () => {
     await aSender()();
 
     expect(ship.replies.map(({ idempotencyKey }) => idempotencyKey)).toEqual([`answer-${HARBOUR.questionId}`, `answer-${PRICING.questionId}`]);
-    expect(entries.held.size).toBe(0);
+    expect(unsent()).toEqual([]);
   });
 
   it('sends one the fleet stored before the stop, and not reported handled, again under the same key, then reports it handled', async () => {
@@ -234,8 +296,8 @@ describe('a gateway restart while sending', () => {
     await aSender()();
 
     expect(new Set(ship.replies.map(({ idempotencyKey }) => idempotencyKey))).toEqual(new Set([`answer-${HARBOUR.questionId}`]));
-    expect(ship.calls).toEqual([`reply(${HARBOUR.messageId})`, `handled(${HARBOUR.deliveryId})`, `reply(${HARBOUR.messageId})`, `handled(${HARBOUR.deliveryId})`]);
-    expect(entries.held.size).toBe(0);
+    expect(ship.calls.filter((call) => !call.startsWith('inbox'))).toEqual([`reply(${HARBOUR.messageId})`, `handled(${HARBOUR.deliveryId})`, `reply(${HARBOUR.messageId})`, `handled(${HARBOUR.deliveryId})`]);
+    expect(unsent()).toEqual([]);
   });
 
   it('sends nothing again for one handled before the stop and not yet out of the basket', async () => {

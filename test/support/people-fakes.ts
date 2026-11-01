@@ -152,7 +152,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
   /** The messages the fleet took, as sent. */
   const sent: Parameters<PersonShipDoor['send']>[1][] = [];
   /** The fleet's answers to come for each call, before it takes them. */
-  const refusals: { pushReceive: FleetRefusal[]; record: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[]; whoami: FleetRefusal[] } = { pushReceive: [], record: [], reply: [], handled: [], discover: [], send: [], delivery: [], whoami: [] };
+  const refusals: { inbox: FleetRefusal[]; pushReceive: FleetRefusal[]; record: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[]; whoami: FleetRefusal[] } = { inbox: [], pushReceive: [], record: [], reply: [], handled: [], discover: [], send: [], delivery: [], whoami: [] };
   /** The hand-overs the gateway reported, in order. */
   const handOvers: Parameters<PersonShipDoor['handed']>[1][] = [];
   /** The deliveries the ship acknowledged and has not handled yet. */
@@ -162,6 +162,10 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
   const door: PersonShipDoor = {
     inbox: (crewToken) => {
       calls.push('inbox');
+      const refused = refusals.inbox.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
       return crewed(crewToken, () => ({ waiting: ship.deliveries.length }));
     },
     pushReceive: (crewToken, { max, excluding = [] }) => {
@@ -300,9 +304,12 @@ export function aBasketEntry(overrides: Partial<BasketEntry> = {}): BasketEntry 
     sentAt: new Date('2026-10-31T19:41:00.000Z'),
     option: 2,
     note: 'Harbour first: the demo on 12 Nov needs it.',
+    optionLabel: "Harbour first, on today's look",
     addedAt: new Date('2026-10-31T19:53:00.000Z'),
     state: 'waiting',
     refusal: null,
+    isUnanswered: false,
+    storedAt: null,
     ...overrides,
   };
 }
@@ -320,7 +327,6 @@ export function memoryBasketEntries(): BasketEntries & { held: Map<string, Baske
     },
     find: (fleetId, asked) => Promise.resolve(held.get(key(fleetId, asked))),
     list: (fleetId, shipId) => Promise.resolve(ofShip(fleetId, shipId)),
-    count: (fleetId, shipId) => Promise.resolve(ofShip(fleetId, shipId).length),
     remove: (fleetId, removed) => {
       held.delete(key(fleetId, removed));
       return Promise.resolve();

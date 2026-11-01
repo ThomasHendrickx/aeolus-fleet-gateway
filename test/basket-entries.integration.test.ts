@@ -36,10 +36,13 @@ function anEntry(overrides: Partial<BasketEntry> = {}): BasketEntry {
     title: 'Which goes first: the Compact look (U4) or Harbour?',
     sentAt: new Date('2026-10-31T19:41:00.000Z'),
     option: 2,
+    optionLabel: "Harbour first, on today's look",
     note: 'Harbour first: the demo on 12 Nov needs it.',
     addedAt: new Date('2026-10-31T19:53:00.000Z'),
     state: 'waiting',
     refusal: null,
+    isUnanswered: false,
+    storedAt: null,
     ...overrides,
   };
 }
@@ -72,12 +75,12 @@ describe('the basket in Postgres', () => {
   it('keeps an entry with a note and no option, answering with the note alone', async () => {
     const entries = createPrismaBasketEntries(prisma);
     const shipId: ShipId = 'shp_01m3tb1zgr5h2ffee12xnch8p7';
-    await entries.save(anEntry({ shipId, option: null, note: 'Neither: ask me after the demo.' }));
+    await entries.save(anEntry({ shipId, option: null, optionLabel: null, note: 'Neither: ask me after the demo.' }));
 
-    await expect(entries.list(FLEET, shipId)).resolves.toEqual([anEntry({ shipId, option: null, note: 'Neither: ask me after the demo.' })]);
+    await expect(entries.list(FLEET, shipId)).resolves.toEqual([anEntry({ shipId, option: null, optionLabel: null, note: 'Neither: ask me after the demo.' })]);
   });
 
-  it("lists a person ship's entries in the order added, and counts them, none of another ship or fleet", async () => {
+  it("lists a person ship's entries in the order added, none of another ship or fleet", async () => {
     const entries = createPrismaBasketEntries(prisma);
     const shipId: ShipId = 'shp_01m3tb1zgr5h2ffee12xnch8p3';
     const later = anEntry({ shipId, questionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', addedAt: new Date('2026-10-31T19:55:00.000Z') });
@@ -87,9 +90,18 @@ describe('the basket in Postgres', () => {
     await entries.save(anEntry({ shipId: 'shp_01m3tb1zgr5h2ffee12xnch8p4' }));
     await entries.save(anEntry({ fleetId: OTHER_FLEET, shipId }));
 
-    const [listed, counted] = await Promise.all([entries.list(FLEET, shipId), entries.count(FLEET, shipId)]);
+    await expect(entries.list(FLEET, shipId)).resolves.toEqual([earlier, later]);
+  });
 
-    expect({ listed, counted }).toEqual({ listed: [earlier, later], counted: 2 });
+  it('keeps an entry sent with when the fleet stored it, and one the fleet did not answer', async () => {
+    const entries = createPrismaBasketEntries(prisma);
+    const shipId: ShipId = 'shp_01m3tb1zgr5h2ffee12xnch8p8';
+    const sent = anEntry({ shipId, state: 'sent', storedAt: new Date('2026-10-31T20:16:00.000Z') });
+    const unanswered = anEntry({ shipId, questionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', addedAt: new Date('2026-10-31T19:55:00.000Z'), state: 'sending', isUnanswered: true });
+    await entries.save(sent);
+    await entries.save(unanswered);
+
+    await expect(entries.list(FLEET, shipId)).resolves.toEqual([sent, unanswered]);
   });
 
   it('removes an entry, and only that one', async () => {

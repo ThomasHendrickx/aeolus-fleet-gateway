@@ -5,9 +5,11 @@ import { describe, expect, it } from 'vitest';
 import type { BasketItem, BasketView } from '../services/basket';
 import { BasketPanel } from './basket-panel';
 
-// The basket open (Bridge, section 9, rule 2; the basket mockup): each entry
-// with its question, asker, option and note; Change and Remove; Send N
-// answers naming how many it sends.
+// The basket open (Bridge, section 9; basket.html, basket-3 to basket-7):
+// the heading counts what is or will be sent; each entry with its question,
+// asker and time, its answer by number and label, Change and Remove at the
+// top right, struck out when not sent; the foot naming the ships, Sending N
+// of M, or what came of the send; what was sent over the empty basket.
 
 function anEntry(overrides: Partial<BasketItem> = {}): BasketItem {
   return {
@@ -17,6 +19,7 @@ function anEntry(overrides: Partial<BasketItem> = {}): BasketItem {
     title: 'Which goes first: the Compact look (U4) or Harbour?',
     sentAt: '2026-10-31T19:41:00.000Z',
     option: 2,
+    optionLabel: "Harbour first, on today's look",
     note: 'Harbour first: the demo on 12 Nov needs it.',
     standing: { kind: 'waiting' },
     ...overrides,
@@ -27,52 +30,106 @@ function render(basket: BasketView): string {
   return renderToStaticMarkup(createElement(BasketPanel, { fleetId: 'flt_01', basket }));
 }
 
+function countOf(markup: string, testId: string): number {
+  return (markup.match(new RegExp(`data-testid="${testId}"`, 'g')) ?? []).length;
+}
+
 describe('the basket open', () => {
-  it('lists each entry with its question, asker, option and note, Change and Remove, and Send naming how many answers it sends', () => {
-    const markup = render({ toSend: 2, entries: [anEntry(), anEntry({ questionId: 'q2', deliveryId: 'dlv_02', from: 'commercial', title: 'Pricing page: a price per ship, or plans only?', option: 1, note: null })] });
+  it('heads the basket with the count of what is or will be sent', () => {
+    expect(render({ count: 2, toSend: 2, entries: [anEntry(), anEntry({ questionId: 'q2' })] })).toContain('<span data-testid="bridge-basket-count" class="text-primary">2</span>');
+  });
+
+  it('heads the basket on a desktop only, as the phone frames draw no heading nor intro (basket-3 to basket-7)', () => {
+    expect(render({ count: 1, toSend: 1, entries: [anEntry()] })).toMatch(/<div class="hidden sm:block"><h1 id="bridge-basket-heading"/);
+  });
+
+  it('lists each entry with its question, asker, time asked, answer by number and label, and quoted note, Change and Remove at its top right (basket-3)', () => {
+    const markup = render({ count: 2, toSend: 2, entries: [anEntry(), anEntry({ questionId: 'q2', deliveryId: 'dlv_02', from: 'commercial', title: 'Pricing page: a price per ship, or plans only?', option: 1, optionLabel: 'Plans only', note: null })] });
 
     expect({
-      rows: (markup.match(/data-testid="bridge-basket-entry"/g) ?? []).length,
-      asker: markup.includes('to commercial'),
-      option: markup.includes('Option 2'),
-      note: markup.includes('“Harbour first: the demo on 12 Nov needs it.”'),
-      change: (markup.match(/data-testid="bridge-basket-change"/g) ?? []).length,
-      remove: (markup.match(/data-testid="bridge-basket-remove"/g) ?? []).length,
-      send: markup.includes('>Send 2 answers<'),
-    }).toEqual({ rows: 2, asker: true, option: true, note: true, change: 2, remove: 2, send: true });
+      rows: countOf(markup, 'bridge-basket-entry'),
+      asker: markup.includes('>commercial</b>'),
+      askedAt: /asked at <time[^>]*>19:41 UTC<\/time>/.test(markup),
+      answer: markup.includes('2. Harbour first, on today&#x27;s look'),
+      note: markup.includes('&quot;Harbour first: the demo on 12 Nov needs it.&quot;'),
+      change: countOf(markup, 'bridge-basket-change'),
+      remove: countOf(markup, 'bridge-basket-remove'),
+      send: markup.includes('Send 2 answers'),
+      names: markup.includes('orchestrator-1 and commercial each receive their own answer, as you, as if sent one by one.'),
+    }).toEqual({ rows: 2, asker: true, askedAt: true, answer: true, note: true, change: 2, remove: 2, send: true, names: true });
   });
 
-  it('lists an entry with only a note as the note alone, with no option', () => {
-    const markup = render({ toSend: 1, entries: [anEntry({ option: null, note: 'Neither: ask me after the demo.' })] });
-
-    expect({ noteAlone: markup.includes('Note alone'), option: markup.includes('Option'), note: markup.includes('“Neither: ask me after the demo.”') }).toEqual({ noteAlone: true, option: false, note: true });
-  });
-
-  it('says a withdrawn, a replaced, a refused and a sending entry as they stand, with no Change, and counts only what Send sends', () => {
+  it('strikes out a withdrawn and a replaced entry, with Remove under it and Answer the new question for the replaced one, and no Change (basket-4)', () => {
     const markup = render({
+      count: 1,
       toSend: 1,
       entries: [
-        anEntry({ questionId: 'q1', standing: { kind: 'withdrawn' } }),
-        anEntry({ questionId: 'q2', standing: { kind: 'replaced', replacementId: 'dlv_09' } }),
-        anEntry({ questionId: 'q3', standing: { kind: 'refused', reason: 'orchestrator-1 did not take the answer: retired' } }),
-        anEntry({ questionId: 'q4', standing: { kind: 'sending' } }),
-        anEntry({ questionId: 'q5' }),
+        anEntry({ questionId: 'q1', standing: { kind: 'withdrawn', at: '2026-10-31T20:09:00.000Z' } }),
+        anEntry({ questionId: 'q2', standing: { kind: 'replaced', replacementId: 'dlv_09', at: '2026-10-31T20:11:00.000Z', replacementTitle: 'Pricing page: plans only?' } }),
+        anEntry({ questionId: 'q3' }),
       ],
     });
 
     expect({
-      withdrawn: markup.includes('Withdrawn by orchestrator-1. Not sent; Send skips it.'),
-      replacement: markup.includes('data-testid="bridge-replacement"'),
-      refused: markup.includes('Remove and mark done'),
-      sending: markup.includes('Sending...'),
-      change: (markup.match(/data-testid="bridge-basket-change"/g) ?? []).length,
-      send: markup.includes('>Send 1 answer<'),
-    }).toEqual({ withdrawn: true, replacement: true, refused: true, sending: true, change: 1, send: true });
+      struck: (markup.match(/line-through/g) ?? []).length,
+      withdrawn: markup.includes('Withdrawn by orchestrator-1 at 20:09 UTC. Not sent; Send skips it.'),
+      replacement: countOf(markup, 'bridge-replacement'),
+      change: countOf(markup, 'bridge-basket-change'),
+      remove: countOf(markup, 'bridge-basket-remove'),
+      foot: markup.includes('1 to send. The withdrawn and the replaced one are not sent.'),
+    }).toEqual({ struck: 4, withdrawn: true, replacement: 1, change: 1, remove: 3, foot: true });
+  });
+
+  it('says each entry as the send goes, with neither Change nor Remove, and Sending N of M in place of Send (basket-5)', () => {
+    const markup = render({
+      count: 3,
+      toSend: 0,
+      entries: [anEntry({ questionId: 'q1', standing: { kind: 'sent', at: '2026-10-31T20:16:00.000Z' } }), anEntry({ questionId: 'q2', standing: { kind: 'sending', isUnanswered: false } }), anEntry({ questionId: 'q3', standing: { kind: 'sending', isUnanswered: false } })],
+    });
+
+    expect({
+      sent: markup.includes('Sent at 20:16 UTC and stored. Done.'),
+      next: markup.includes('Next, in the order you added it'),
+      change: countOf(markup, 'bridge-basket-change'),
+      remove: countOf(markup, 'bridge-basket-remove'),
+      send: countOf(markup, 'bridge-basket-send'),
+      progress: /data-testid="bridge-basket-sending"[^>]*disabled=""[^>]*>.*Sending 2 of 3/.test(markup),
+      close: markup.includes('You can close Bridge: the gateway keeps sending what is stored as sending.'),
+    }).toEqual({ sent: true, next: true, change: 0, remove: 0, send: 0, progress: true, close: true });
+  });
+
+  it('sums up what was sent over the empty basket once every entry was sent (basket-6)', () => {
+    const markup = render({ count: 0, toSend: 0, entries: [anEntry({ standing: { kind: 'sent', at: '2026-10-31T20:16:00.000Z' } })] });
+
+    expect({
+      summary: markup.includes('1 answer sent'),
+      entries: countOf(markup, 'bridge-basket-entry'),
+      empty: markup.includes('Pick an option on a question and put it in the basket; it waits here until you send it.'),
+    }).toEqual({ summary: true, entries: 0, empty: true });
+  });
+
+  it('keeps the sent entry, says the refusal in words with Remove and mark done, and sums up the send (basket-7)', () => {
+    const markup = render({
+      count: 2,
+      toSend: 0,
+      entries: [
+        anEntry({ questionId: 'q1', standing: { kind: 'sent', at: '2026-10-31T20:16:00.000Z' } }),
+        anEntry({ questionId: 'q2', standing: { kind: 'sending', isUnanswered: true } }),
+        anEntry({ questionId: 'q3', from: 'commercial', standing: { kind: 'refused', reason: 'commercial was retired, so it cannot receive an answer' } }),
+      ],
+    });
+
+    expect({
+      refused: markup.includes('Not sent: commercial was retired, so it cannot receive an answer. The others were sent.'),
+      removeAndDone: markup.includes('Remove and mark done'),
+      summary: markup.includes('1 sent, 1 still sending, 1 not sent.'),
+      progress: countOf(markup, 'bridge-basket-sending'),
+    }).toEqual({ refused: true, removeAndDone: true, summary: true, progress: 0 });
   });
 
   it('says the basket is empty, with nothing to send', () => {
-    const markup = render({ toSend: 0, entries: [] });
+    const markup = render({ count: 0, toSend: 0, entries: [] });
 
-    expect({ empty: markup.includes('The basket is empty'), send: markup.includes('data-testid="bridge-basket-send"') }).toEqual({ empty: true, send: false });
+    expect({ empty: countOf(markup, 'bridge-basket-empty'), words: markup.includes('The basket is empty'), send: countOf(markup, 'bridge-basket-send') }).toEqual({ empty: 1, words: true, send: 0 });
   });
 });

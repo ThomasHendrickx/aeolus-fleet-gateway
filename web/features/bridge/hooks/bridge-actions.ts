@@ -74,19 +74,20 @@ export async function answerDelivery({ fleet, deliveryId, input }: { fleet: stri
   });
 }
 
-/** Puts the person's answer to a question in the basket, or changes it there: nothing is sent (Bridge, section 9). */
-export async function putInBasket({ fleet, deliveryId, option, note }: { fleet: string; deliveryId: string; option: number | null; note: string }): Promise<ActionOutcome<{ option: number | null; note: string | null }>> {
+/** Puts the person's answer to a question in the basket, or changes it there, with the option's label as the question shows it: nothing is sent (Bridge, section 9). */
+export async function putInBasket({ fleet, deliveryId, option, optionLabel, note }: { fleet: string; deliveryId: string; option: number | null; optionLabel: string | null; note: string }): Promise<ActionOutcome<{ option: number | null; note: string | null }>> {
   return attempt(fleet, async (api) => {
-    const { option: put, note: written } = await api.people.putInBasket.mutate({ deliveryId, option, note });
+    const { option: put, note: written } = await api.people.putInBasket.mutate({ deliveryId, option, optionLabel, note });
     return { option: put, note: written };
   });
 }
 
-/** From a question's row: opens it, as the person's own press, and puts its asker's pick in the basket with no note (aeolus-fleet#1535). */
+/** From a question's row: opens it, as the person's own press, and puts its asker's pick in the basket with no note, named by its label as the question shows it (aeolus-fleet#1535). */
 export async function putPickInBasket({ fleet, deliveryId, option }: { fleet: string; deliveryId: string; option: number }): Promise<ActionOutcome<undefined>> {
   return attempt(fleet, async (api) => {
-    await api.people.open.mutate({ deliveryId });
-    await api.people.putInBasket.mutate({ deliveryId, option, note: '' });
+    const opened = await api.people.open.mutate({ deliveryId });
+    const optionLabel = questionOf(opened)?.options.find(({ key }) => key === option)?.label ?? null;
+    await api.people.putInBasket.mutate({ deliveryId, option, optionLabel, note: '' });
     return undefined;
   });
 }
