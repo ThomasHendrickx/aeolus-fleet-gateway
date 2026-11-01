@@ -1,10 +1,11 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
 import type { AccountOfSignIn } from '../account-sign-in/account-of-sign-in.js';
+import type { FinishesOwnStep } from '../party-grants/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { LinkStates, ShipNames, SlackApps, SlackLinks, SlackSignIn, SlackWorkspaces } from './ports.js';
+import type { LinkStates, ShipNames, SlackApps, SlackLinks, SlackLinkSteps, SlackSignIn, SlackWorkspaces } from './ports.js';
 import { slackUnavailableMessage } from './take-access-token.js';
 
 /** Why no link was kept; a link refused for one kept already names the fleet, and the first link's account or Slack name. */
@@ -25,6 +26,8 @@ export type CompleteLink = (input: { code: string; state: string; signIn: string
  * disabled account's link stopped. The link completes only in a browser
  * whose shared sign-in names the account that started it, so a followed
  * link never attaches the follower's Slack user to the starter's account.
+ * A kept link closes the person's ask to link Slack and finishes the step
+ * that asked, with no press (Bridge, CC14, BG7).
  */
 export function createCompleteLink(deps: {
   workspaces: Pick<SlackWorkspaces, 'find'>;
@@ -36,6 +39,8 @@ export function createCompleteLink(deps: {
   shipNames: ShipNames;
   clock: Clock;
   linkRedirectUrl: string;
+  steps: Pick<SlackLinkSteps, 'close'>;
+  finishStep: FinishesOwnStep;
 }): CompleteLink {
   return async ({ code, state, signIn }) => {
     const now = deps.clock.now();
@@ -80,6 +85,10 @@ export function createCompleteLink(deps: {
     if (added === 'taken') {
       // Another link of the Slack user or the account was kept meanwhile.
       return refuse('LINK_REFUSED', "This Slack account or your account was linked meanwhile: reload Bridge's settings");
+    }
+    const asked = await deps.steps.close(fleetId, personShipId);
+    if (asked?.stepMessageId != null) {
+      await deps.finishStep({ fleetId, personShipId, stepMessageId: asked.stepMessageId });
     }
     return ok({ fleetId });
   };
