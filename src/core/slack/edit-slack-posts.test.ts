@@ -2,11 +2,12 @@ import type { ShipId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { memoryItemOutcomes } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, memoryItemOutcomes } from '../../../test/support/people-fakes.js';
 import { aSlackApp, fakeSlackMessages, memorySlackApps, memorySlackPosts } from '../../../test/support/slack-fakes.js';
 import type { ItemOutcome } from '../people/item-outcome.js';
 import { createEditSlackPosts } from './edit-slack-posts.js';
 import type { SlackButton, SlackItem } from './ports.js';
+import { slackPostOf } from './slack-post-of.js';
 
 // View sync (Bridge, section 7): after the person's action in any place, a
 // post of that item in Slack is edited to show what was done and where, its
@@ -93,6 +94,19 @@ describe("an item's post in Slack once something came of it (views.html)", () =>
     await editSlackPosts();
 
     expect(editedItem()).toEqual({ body: `✅ You answered at ${AT_IN_SLACK}: *2. Harbour first*, sent to orchestrator-1`, footer: `Answered in Bridge · <${BRIDGE_URL}|Open in Bridge>`, tone: 'done' });
+  });
+
+  it('names an option longer than its button in full, as its post lists it, when it was answered in Bridge (PR 181 review)', async () => {
+    const label = "Nothing changes there: the console's count stays as it is, and argo sees the same count as before";
+    const question = { id: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', title: 'Which goes first?', context: 'Both touch the same parts', options: [{ key: 1, label: 'Compact first', detail: '' }, { key: 2, label, detail: '' }], pick: { option: 1, why: 'drawn on Compact already' } };
+    const posted = slackPostOf(aPersonDelivery({ senderName: 'orchestrator-1', headline: 'Which goes first?', payload: JSON.stringify(question) }), { bridgeUrl: BRIDGE_URL, isHeadedBySender: false });
+    slack.state.posts.length = 0;
+    await slack.messages.post('xoxb-1', { messageId: QUESTION_MESSAGE, channel: 'D0MATHILDE', threadTs: null, message: posted });
+    await answeredInBridge();
+
+    await editSlackPosts();
+
+    expect(editedItem()?.body).toBe(`✅ You answered at ${AT_IN_SLACK}: *2. ${label}*, sent to orchestrator-1`);
   });
 
   it('names the option by its number when its button is not there to read its label from', async () => {
