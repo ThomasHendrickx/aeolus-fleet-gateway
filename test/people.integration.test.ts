@@ -106,9 +106,9 @@ describe('the deliveries people opened, in Postgres', () => {
 
   it('keeps the link where a step is done, so its row leads there once the step is opened (aeolus-fleet#1535)', async () => {
     const opened = createPrismaOpenedDeliveries(prisma);
-    await opened.save(anOpenedDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0l01', contentType: 'application/vnd.aeolus.step+json', askedQuestionId: null, stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', stepLink: 'https://github.com/new' }));
+    await opened.save(anOpenedDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0k01', contentType: 'application/vnd.aeolus.step+json', askedQuestionId: null, stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', stepLink: 'https://github.com/new' }));
 
-    await expect(opened.find(FLEET, { shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0l01' })).resolves.toMatchObject({ stepLink: 'https://github.com/new' });
+    await expect(opened.find(FLEET, { shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0k01' })).resolves.toMatchObject({ stepLink: 'https://github.com/new' });
   });
 
   it('keeps a delivery opened again once, as last opened', async () => {

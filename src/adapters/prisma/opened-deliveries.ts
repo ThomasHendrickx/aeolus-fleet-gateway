@@ -19,6 +19,7 @@ function openedOf(row: OpenedDeliveryRow): OpenedDelivery {
     withdrawnQuestionId: row.withdrawnQuestionId,
     stepId: row.stepId,
     withdrawnStepId: row.withdrawnStepId,
+    stepLink: row.stepLink,
     sentAt: row.sentAt,
     openedAt: row.openedAt,
   };

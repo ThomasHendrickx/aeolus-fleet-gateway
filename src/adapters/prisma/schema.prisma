@@ -386,6 +386,8 @@ model OpenedDelivery {
   stepId              String?  @map("step_id")
   /// The uuid of the step it withdraws or replaces; null otherwise.
   withdrawnStepId     String?  @map("withdrawn_step_id")
+  /// The link where the step it asks is done (Bridge, CC14), so its row leads there once opened; null for a step without one, one opened before the gateway kept it, or any other message.
+  stepLink            String?  @map("step_link")
   sentAt              DateTime @map("sent_at") @db.Timestamptz(3)
   openedAt            DateTime @map("opened_at") @db.Timestamptz(3)
 

@@ -253,7 +253,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     expect(taken.isOk ? taken.value.map(({ stepId }) => stepId) : taken).toEqual(['6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', null, null]);
   });
 
-  it("reads the asker's pick on a question and a replacement's new one, and the link of a step, none of any other message or a link that is not http or https (aeolus-fleet#1535)", async () => {
+  it("reads the asker's pick on a question and a replacement's new one, and the link of a step and a step replacement's new one, none of any other message or a link that is not http or https (aeolus-fleet#1535)", async () => {
     const delivery = {
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
@@ -282,6 +282,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
           { ...delivery, contentType: 'application/vnd.aeolus.question-replacement+json', payload: JSON.stringify({ questionId: QUESTION.id, question: { ...twoOptions, id: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f' } }) },
           { ...delivery, contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(step) },
           { ...delivery, contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify({ ...step, link: 'javascript:alert(1)' }) },
+          { ...delivery, contentType: 'application/vnd.aeolus.step-replacement+json', payload: JSON.stringify({ stepId: step.id, step: { ...step, id: '7a2d3b51-6e2c-4c9f-8b62-1d9f4a3b8e21', link: 'https://github.com/organizations/new' } }) },
           { ...delivery, contentType: 'text/plain', payload: JSON.stringify(step) },
         ],
       },
@@ -294,6 +295,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       { pick: 2, stepLink: null },
       { pick: null, stepLink: 'https://github.com/new' },
       { pick: null, stepLink: null },
+      { pick: null, stepLink: 'https://github.com/organizations/new' },
       { pick: null, stepLink: null },
     ]);
   });
@@ -466,6 +468,8 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         withdrawnQuestionId: null,
         stepId: null,
         withdrawnStepId: null,
+        pick: 1,
+        stepLink: null,
         sentAt: new Date('2026-10-19T08:00:00.000Z'),
         inReplyTo: null,
         meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',
