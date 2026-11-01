@@ -25,7 +25,7 @@ function aQuestion(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, step: undefined, meetingId: undefined, stale: null, ...overrides };
 }
 
-function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number; note: string | null } | null; note?: string } = {}): string {
+function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string } = {}): string {
   const { inBasket = null, note = '' } = shown;
   const noop = () => undefined;
   return renderToStaticMarkup(

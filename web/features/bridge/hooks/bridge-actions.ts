@@ -70,7 +70,7 @@ export async function answerDelivery({ fleet, deliveryId, input }: { fleet: stri
 }
 
 /** Puts the person's answer to a question in the basket, or changes it there: nothing is sent (Bridge, section 9). */
-export async function putInBasket({ fleet, deliveryId, option, note }: { fleet: string; deliveryId: string; option: number; note: string }): Promise<ActionOutcome<undefined>> {
+export async function putInBasket({ fleet, deliveryId, option, note }: { fleet: string; deliveryId: string; option: number | null; note: string }): Promise<ActionOutcome<undefined>> {
   return attempt(fleet, async (api) => {
     await api.people.putInBasket.mutate({ deliveryId, option, note });
     return undefined;

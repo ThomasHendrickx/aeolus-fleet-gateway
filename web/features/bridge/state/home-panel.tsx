@@ -16,7 +16,7 @@ function countsOf(items: readonly HomeItem[]): string {
 function rowOutcomeOf(item: HomeItem, items: readonly HomeItem[]): string | undefined {
   const { stale, inBasket } = item;
   if (stale === null && inBasket !== null) {
-    return `In the basket: option ${String(inBasket.option)}`;
+    return inBasket.option === null ? 'In the basket: the note alone' : `In the basket: option ${String(inBasket.option)}`;
   }
   if (stale === null) {
     return item.state === 'seen' ? 'Seen, not done yet' : undefined;

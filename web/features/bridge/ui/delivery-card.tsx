@@ -22,7 +22,7 @@ export interface InBasket {
 function InBasketNotice({ inBasket, basketHref, isRemoving, isWorking, onRemove }: { inBasket: InBasket; basketHref: string; isRemoving: boolean; isWorking: boolean; onRemove: () => void }) {
   return (
     <div data-testid="bridge-in-basket" className="grid gap-2 rounded-md border border-border bg-muted p-3">
-      <span className="font-medium">In the basket: option {inBasket.option}, not sent</span>
+      <span className="font-medium">In the basket: {inBasket.option === null ? 'the note alone' : `option ${String(inBasket.option)}`}, not sent</span>
       {inBasket.note === null ? null : <span className="text-caption">“{inBasket.note}”</span>}
       <span className="text-caption text-muted-foreground">Pick another option to change it.</span>
       <div className="flex flex-wrap gap-2">
@@ -121,8 +121,9 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
 
 /**
  * One item in focus (design B, Signal). A question opens with the asker's
- * pick chosen (CC11), or the option in the basket; its one button puts that
- * option in the basket with the note, if any, and sends nothing (CC24): the
+ * pick chosen (CC11), or the option in the basket; its button puts that
+ * option in the basket with the note, if any, and once the note has text
+ * another puts the note alone there; neither sends anything (CC24): the
  * person sends the basket. A step (CC14) shows why and its link, then its
  * note field before Done and Cannot, each sending its outcome at once with
  * the note. Any other item may get a note as its answer, and may
@@ -164,8 +165,8 @@ export function DeliveryCard({
   onNoteChange: (note: string) => void;
   /** Answers any item but a question with the note. */
   onAnswer: (option: number | undefined) => void;
-  /** Puts the option chosen of a question in the basket, with the note. */
-  onPut: (option: number) => void;
+  /** Puts the option chosen of a question in the basket, with the note, or the note alone. */
+  onPut: (option: number | null) => void;
   /** Takes the question's answer out of the basket. */
   onRemove: () => void;
   onDone: () => void;
@@ -235,9 +236,16 @@ export function DeliveryCard({
             </div>
           ) : chosen === undefined ? null : (
             <div className="grid gap-1">
-              <ActionButton data-testid="bridge-put-in-basket" variant="primary" className="justify-self-start" isPending={working?.kind === 'option'} pendingLabel="Putting in the basket..." disabled={isWorking} onClick={() => { onPut(chosen); }}>
-                Put option {chosen} in the basket
-              </ActionButton>
+              <div className="flex flex-wrap gap-2">
+                <ActionButton data-testid="bridge-put-in-basket" variant="primary" isPending={working?.kind === 'option'} pendingLabel="Putting in the basket..." disabled={isWorking} onClick={() => { onPut(chosen); }}>
+                  Put option {chosen} in the basket
+                </ActionButton>
+                {note.trim() === '' ? null : (
+                  <ActionButton data-testid="bridge-put-note-alone" isPending={working?.kind === 'note'} pendingLabel="Putting in the basket..." disabled={isWorking} onClick={() => { onPut(null); }}>
+                    Put the note alone in the basket
+                  </ActionButton>
+                )}
+              </div>
               <span className="text-caption text-muted-foreground">Nothing is sent yet. {delivery.from} receives this answer when you send the basket.</span>
             </div>
           )}
