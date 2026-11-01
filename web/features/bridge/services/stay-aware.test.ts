@@ -8,7 +8,7 @@ import { alertOf, clearsSaidOf, feedOf, healthHrefOf, unseenSaidOf } from './sta
 // Health in the console and says what Aeolus does on clear.
 
 const ALERT = {
-  alertId: 'alr_01m6bx0dz59nqc0539gsxywrgd',
+  alertId: 'alt_01m6bx0dz59nqc0539gsxywrgd',
   headline: 'builder-gateway: no report change for 2 h',
   body: 'Its last report, 17:46: *Working: slice W9*.',
   ship: { id: 'shp_01m6bw3rg8n3xmqe91x19xm3y7', name: 'builder-gateway' },
