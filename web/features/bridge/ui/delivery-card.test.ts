@@ -143,10 +143,10 @@ describe('a step opened in Bridge (CC14)', () => {
     }).toEqual({ noteFirst: true, note: true, noteSays: true, done: true, cannot: true, answer: false });
   });
 
-  it('shows a withdrawn step stale: nothing to do, no Done or Cannot', () => {
+  it('shows a withdrawn step stale: nothing to do, no link, Done or Cannot', () => {
     const markup = render(aStep({ stale: { kind: 'withdrawn', replacementId: null } }));
 
-    expect({ stale: markup.includes('Withdrawn by gateway. Nothing to do: it is done.'), done: markup.includes('data-testid="bridge-step-done"'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, done: false, note: false });
+    expect({ stale: markup.includes('Withdrawn by gateway. Nothing to do: it is done.'), done: markup.includes('data-testid="bridge-step-done"'), note: markup.includes('data-testid="bridge-note"'), link: markup.includes('data-testid="bridge-step-link"') }).toEqual({ stale: true, done: false, note: false, link: false });
   });
 
   it('links a replaced step to its replacement, the new step', () => {
