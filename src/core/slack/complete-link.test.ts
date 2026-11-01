@@ -27,7 +27,7 @@ function accountOf({ signIn }: { signIn: string }) {
   return Promise.resolve(
     accountId === undefined
       ? err({ kind: 'signedOut' as const })
-      : ok<SharedAccountToken>({ accountToken: `token-${accountId}`, endsAt: new Date('2026-10-27T10:00:00.000Z'), accountId, personShipId: null, scopes: [] }),
+      : ok<SharedAccountToken>({ accountToken: `token-${accountId}`, endsAt: new Date('2026-10-27T10:00:00.000Z'), accountId, personShipId: null, scopes: [], isArgoAllowed: false }),
   );
 }
 

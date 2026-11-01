@@ -17,6 +17,7 @@ export const CHARLOTTE_TOKENS: PagasaeTokens = {
   accountId: 'acc-charlotte',
   personShipId: PERSON_SHIP_ID,
   scopes: ['fleet:read', 'gateway:approve'],
+  isArgoAllowed: false,
 };
 
 /** Seals as a test reads them: numbered in the order they are made, opened from the same seals only. */

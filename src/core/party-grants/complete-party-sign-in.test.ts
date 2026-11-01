@@ -23,7 +23,7 @@ const SIGNED_IN: Record<string, string | undefined> = { 'mathilde-browser': 'acc
 function accountOf({ signIn }: { signIn: string }) {
   const accountId = SIGNED_IN[signIn];
   return Promise.resolve(
-    accountId === undefined ? err({ kind: 'signedOut' as const }) : ok<SharedAccountToken>({ accountToken: `token-${accountId}`, endsAt: new Date('2026-10-28T15:00:00.000Z'), accountId, personShipId: null, scopes: [] }),
+    accountId === undefined ? err({ kind: 'signedOut' as const }) : ok<SharedAccountToken>({ accountToken: `token-${accountId}`, endsAt: new Date('2026-10-28T15:00:00.000Z'), accountId, personShipId: null, scopes: [], isArgoAllowed: false }),
   );
 }
 

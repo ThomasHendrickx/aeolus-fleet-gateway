@@ -50,6 +50,8 @@ export interface PagasaeTokens {
   readonly personShipId: ShipId | null;
   /** The scopes the account token carries: what the account may do in the fleet. */
   readonly scopes: readonly string[];
+  /** Whether the account token says the account is allowed as argo in the fleet (decision 0058). */
+  readonly isArgoAllowed: boolean;
 }
 
 /** Outbound port: pagasae, where the gateway sends a person to sign in, and redeems the code they come back with. */

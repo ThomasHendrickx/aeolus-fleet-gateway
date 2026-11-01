@@ -70,6 +70,7 @@ export function createPagasae(options: { url: string; clientId: string; clientSe
       accountId: claims.data.accountId,
       personShipId: claims.data.personShipId,
       scopes: claims.data.scopes,
+      isArgoAllowed: claims.data.isArgoAllowed,
     });
   };
 

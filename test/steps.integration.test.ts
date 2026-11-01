@@ -191,7 +191,7 @@ describe("the gateway's own Link Slack step is done with no press (BG7)", () => 
       links,
       signIn: slack.signIn,
       states,
-      accountOf: () => Promise.resolve(ok<SharedAccountToken>({ accountToken: 'token-charlotte', endsAt: new Date('2026-10-31T22:00:00.000Z'), accountId: 'acc-charlotte', personShipId: charlotte.shipId, scopes: [] })),
+      accountOf: () => Promise.resolve(ok<SharedAccountToken>({ accountToken: 'token-charlotte', endsAt: new Date('2026-10-31T22:00:00.000Z'), accountId: 'acc-charlotte', personShipId: charlotte.shipId, scopes: [], isArgoAllowed: false })),
       shipNames: fakeShipNames(),
       clock: { now: () => AT },
       linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link',
