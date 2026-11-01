@@ -102,3 +102,57 @@ export function outcomeTextOf(item: Pick<RecordItem, 'state' | 'outcome'>): stri
     }
   }
 }
+
+/**
+ * The time of day an item arrived or an outcome was sent, as an opened item
+ * says it (decide.html: "19:41"): the hour and minute in the person's own
+ * time zone, the browser's unless one is named.
+ */
+export function clockTimeOf(at: string, timeZone?: string): string {
+  return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(at));
+}
+
+/** An opened item's job and whether a stay-aware one is an alert: what its heading and screen are named by. */
+interface Named {
+  readonly job: Job;
+  readonly isAlert: boolean;
+}
+
+/** Who sent an opened item, in its heading's words: "question from orchestrator-1", "step from", or "from" alone (decide.html, do.html, stay-aware.html). */
+export function fromWordsOf({ job }: Named): string {
+  switch (job) {
+    case 'decide':
+      return 'question from';
+    case 'do':
+      return 'step from';
+    case 'stay-aware':
+    case 'everything-else':
+      return 'from';
+  }
+}
+
+/**
+ * Whether an opened item was seen, in its heading's words: seen by this
+ * opening, or already; an alert or a notice is done once seen (CC16). A
+ * question or step seen before says nothing more (do.html).
+ */
+export function seenWordsOf({ wasNew, isDoneOnSeeing }: { wasNew: boolean; isDoneOnSeeing: boolean }): string | undefined {
+  if (isDoneOnSeeing) {
+    return wasNew ? 'Seen now, so done' : 'Seen, so done';
+  }
+  return wasNew ? 'Seen just now' : undefined;
+}
+
+/** The title of an item's own screen on a phone, beside its back chevron (decide.html, do.html). */
+export function screenTitleOf(item: Named): string {
+  switch (item.job) {
+    case 'decide':
+      return 'Question';
+    case 'do':
+      return 'Step';
+    case 'stay-aware':
+      return item.isAlert ? 'Alert' : 'Notice';
+    case 'everything-else':
+      return 'Message';
+  }
+}

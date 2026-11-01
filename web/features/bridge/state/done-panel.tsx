@@ -56,6 +56,7 @@ export function DonePanel({ fleetId, first, now }: { fleetId: string; first: Rec
                   item={item}
                   now={readAt}
                   isNew={item.state === 'new'}
+                  isOpen={opening.opened?.deliveryId === item.deliveryId}
                   outcome={outcomeTextOf(item)}
                   failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}
                   actions={

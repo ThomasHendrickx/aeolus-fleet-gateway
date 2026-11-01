@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { BridgeHome, HomeItem } from '../services/items';
-import { HomePanel } from './home-panel';
+import type { ItemOpening } from './item-focus';
+import { HomeLists, HomePanel } from './home-panel';
 
 function anItem(overrides: Partial<HomeItem> = {}): HomeItem {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', isAlert: false, state: 'new', stale: null, inBasket: null, seenIn: null, places: [], actInPlace: null, ...overrides };
@@ -160,5 +161,43 @@ describe('Bridge home: each row as the mockups draw it (aeolus-fleet#1535)', () 
     });
 
     expect({ rows: (markup.match(/data-testid="bridge-item"/g) ?? []).length, dots: (markup.match(/aria-label="New"/g) ?? []).length, unseen: markup.includes('1 unseen, outside the count') }).toEqual({ rows: 2, dots: 1, unseen: true });
+  });
+});
+
+describe('the list beside an open item (decide.html, stay-aware.html, aeolus-fleet#1538)', () => {
+  const HOME: BridgeHome = {
+    waiting: { count: 2, items: [anItem(), anItem({ deliveryId: 'dlv_02', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin', state: 'seen', actInPlace: { kind: 'openLink', href: 'https://github.com/new', host: 'github.com' } })] },
+    stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', isAlert: true, from: 'watch', title: 'builder-gateway: no report change for 2 h' })],
+  };
+
+  function renderOpen(opened: ItemOpening['opened']): string {
+    const opening: ItemOpening = { open: () => undefined, openingId: undefined, putPick: () => undefined, puttingId: undefined, failure: undefined, opened };
+    return renderToStaticMarkup(createElement(HomeLists, { home: HOME, now: NOW, opening }));
+  }
+
+  it('shows what waits beside an open question, its count in the heading, the open one marked, and no buttons on the rows', () => {
+    const markup = renderOpen({ deliveryId: 'dlv_01', job: 'decide' });
+
+    expect({
+      count: markup.includes('data-testid="bridge-count" class="text-tone-waiting-fg">2<'),
+      sentence: markup.includes('Newest on top'),
+      rows: (markup.match(/data-testid="bridge-item"/g) ?? []).length,
+      marked: /<li[^>]*aria-current="true"[^>]*>(?:(?!<\/li>).)*Which goes first/.test(markup),
+      markedOnce: (markup.match(/aria-current="true"/g) ?? []).length,
+      buttons: ['bridge-open', 'bridge-put-pick', 'bridge-step-link'].some((testId) => markup.includes(`data-testid="${testId}"`)),
+      feed: markup.includes('builder-gateway: no report change for 2 h'),
+    }).toEqual({ count: true, sentence: false, rows: 2, marked: true, markedOnce: 1, buttons: false, feed: false });
+  });
+
+  it('shows the stay-aware feed beside an open alert, with its unseen count, and not what waits', () => {
+    const markup = renderOpen({ deliveryId: 'dlv_03', job: 'stay-aware' });
+
+    expect({ feed: markup.includes('builder-gateway: no report change for 2 h'), unseen: markup.includes('>1 unseen<'), marked: (markup.match(/aria-current="true"/g) ?? []).length, waiting: markup.includes('Waiting on you') }).toEqual({ feed: true, unseen: true, marked: 1, waiting: false });
+  });
+
+  it('shows both lists in full while no item is open', () => {
+    const markup = renderOpen(undefined);
+
+    expect({ sentence: markup.includes('1 to decide, 1 to do. Newest on top; nothing else is in this count.'), feed: markup.includes('1 unseen, outside the count'), open: markup.includes('data-testid="bridge-open"') }).toEqual({ sentence: true, feed: true, open: true });
   });
 });
