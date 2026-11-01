@@ -65,15 +65,21 @@ function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Qu
   );
 }
 
-/** What a stale question says: withdrawn, done; or replaced, with the replacement to open. */
-function StaleNotice({ stale, from, onOpen }: { stale: Stale; from: string; onOpen: (deliveryId: string) => void }) {
+/** What a stale question or step says, in its words: withdrawn, done; or replaced, with the replacement to open. */
+const STALE_WORDS = {
+  question: { withdrawn: 'Nothing to answer: it is done.', replaced: 'Answer the new question.', open: 'Open the new question' },
+  step: { withdrawn: 'Nothing to do: it is done.', replaced: 'Do the new step.', open: 'Open the new step' },
+} as const;
+
+function StaleNotice({ stale, from, isStep, onOpen }: { stale: Stale; from: string; isStep: boolean; onOpen: (deliveryId: string) => void }) {
   const { replacementId } = stale;
+  const words = STALE_WORDS[isStep ? 'step' : 'question'];
   return (
     <div data-testid="bridge-stale" className="grid gap-2 rounded-md border border-border bg-muted p-3">
-      <span>{stale.kind === 'withdrawn' ? `Withdrawn by ${from}. Nothing to answer: it is done.` : `Replaced by ${from}. Answer the new question.`}</span>
+      <span>{stale.kind === 'withdrawn' ? `Withdrawn by ${from}. ${words.withdrawn}` : `Replaced by ${from}. ${words.replaced}`}</span>
       {replacementId === null ? null : (
         <ActionButton data-testid="bridge-replacement" className="justify-self-start" isPending={false} pendingLabel="Opening..." onClick={() => { onOpen(replacementId); }}>
-          Open the new question
+          {words.open}
         </ActionButton>
       )}
     </div>
@@ -179,7 +185,7 @@ export function DeliveryCard({
   onDone: () => void;
   /** Ends a step done or cannot, with the note. */
   onFinishStep: (outcome: StepOutcome) => void;
-  /** Opens another item: a replaced question's replacement. */
+  /** Opens another item: a replaced question's or step's replacement. */
   onOpen: (deliveryId: string) => void;
   onBack: () => void;
 }) {
@@ -210,7 +216,7 @@ export function DeliveryCard({
           </p>
         </>
       )}
-      {stale === null ? null : <StaleNotice stale={stale} from={delivery.from} onOpen={onOpen} />}
+      {stale === null ? null : <StaleNotice stale={stale} from={delivery.from} isStep={step !== undefined} onOpen={onOpen} />}
       {inBasket === null || stale !== null ? null : <InBasketNotice inBasket={inBasket} basketHref={basketHref} isRemoving={working?.kind === 'remove'} isWorking={isWorking} onRemove={onRemove} />}
       {isDoneOnSeeing ? (
         <p data-testid="bridge-seen-done" className="text-muted-foreground">

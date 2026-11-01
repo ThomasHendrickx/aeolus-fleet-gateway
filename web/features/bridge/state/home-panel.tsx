@@ -28,15 +28,15 @@ function rowOutcomeOf(item: HomeItem, items: readonly HomeItem[]): string | unde
   return replacement === undefined ? `Replaced by ${item.from}` : `Replaced by ${item.from} with “${replacement.title}”`;
 }
 
-/** Opens a replaced question's replacement, the new item. */
+/** Opens a replaced question's or step's replacement, the new item, of the same job. */
 function ReplacementButton({ item, opening }: { item: HomeItem; opening: ItemOpening }) {
   const replacementId = item.stale?.replacementId ?? null;
   if (replacementId === null) {
     return null;
   }
   return (
-    <ActionButton data-testid="bridge-replacement" isPending={opening.openingId === replacementId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open({ deliveryId: replacementId, job: 'decide' }); }}>
-      Open the new question
+    <ActionButton data-testid="bridge-replacement" isPending={opening.openingId === replacementId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open({ deliveryId: replacementId, job: item.job }); }}>
+      {item.job === 'do' ? 'Open the new step' : 'Open the new question'}
     </ActionButton>
   );
 }
@@ -51,7 +51,7 @@ function OpenButton({ item, opening }: { item: HomeItem; opening: ItemOpening })
 
 /**
  * Bridge home's lists (CC18): what waits on the person, decide and do, with
- * one count, a dot on what is new, a question its asker withdrew or replaced
+ * one count, a dot on what is new, a question or step its asker withdrew or replaced
  * faded and outside the count, a replaced one leading to its replacement; and the stay-aware feed beside it, the
  * alerts and notices they have not seen, outside the count. Opening one of
  * the feed is all it asks (CC16).

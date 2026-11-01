@@ -58,20 +58,28 @@ export interface StepView {
   readonly link: { readonly href: string; readonly host: string } | undefined;
 }
 
-/** The step content type (CC14), as common names it from its release after 0.35.0; it moves to common's constant then. */
+/** The step and step replacement content types (CC14), as common names them from its release after 0.35.0; they move to common's constants then. */
 const STEP_CONTENT_TYPE = 'application/vnd.aeolus.step+json';
+const STEP_REPLACEMENT_CONTENT_TYPE = 'application/vnd.aeolus.step-replacement+json';
 
 /** What Bridge reads of a step, as common's stepSchema words it from its release after 0.35.0 (Bridge B2); it moves to common's then. */
 const stepSchema = z.object({ title: z.string().min(1), why: z.string(), link: z.url({ protocol: /^https?$/ }).optional() });
 
-/** The step a delivery asks; none for any other message, or one whose payload does not read. */
+/** The schema a step is read with, by content type: a step's own, or the new step a step replacement asks. */
+const STEP_SCHEMAS = new Map<string, z.ZodType<z.infer<typeof stepSchema>>>([
+  [STEP_CONTENT_TYPE, stepSchema],
+  [STEP_REPLACEMENT_CONTENT_TYPE, z.object({ step: stepSchema }).transform(({ step }) => step)],
+]);
+
+/** The step a delivery asks: a step's own, or the new step a step replacement asks; none for any other message, or one whose payload does not read. */
 export function stepOf(opened: { contentType: string; payload: string }): StepView | undefined {
   const [essence = ''] = opened.contentType.split(';');
-  if (essence.trim().toLowerCase() !== STEP_CONTENT_TYPE) {
+  const schema = STEP_SCHEMAS.get(essence.trim().toLowerCase());
+  if (schema === undefined) {
     return undefined;
   }
   try {
-    const step = stepSchema.safeParse(JSON.parse(opened.payload));
+    const step = schema.safeParse(JSON.parse(opened.payload));
     if (!step.success) {
       return undefined;
     }
