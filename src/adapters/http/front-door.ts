@@ -24,6 +24,9 @@ const WEB_APP_FILES = '/_next/*';
 /** The web app's service worker, which shows a wake (wake a person, W4): a browser asks for its script as for any file. */
 const WAKE_WORKER = '/wake-worker.js';
 
+/** The icon the service worker shows a wake for argo with (argo's inbox, AI4). */
+const ARGO_WAKE_ICON = '/argo-wake-icon.svg';
+
 /** The app mark the pages link: the web app builds these two files from web/app/icon.svg and web/app/apple-icon.png. */
 const APP_MARK_FILES = ['/icon.svg', '/apple-icon.png'];
 
@@ -63,7 +66,7 @@ export function registerFrontDoor(server: FastifyInstance, deps: { web?: WebApp 
   const { web } = deps;
   if (web !== undefined) {
     // The web app writes the answer itself: Fastify, hijacked, sends nothing more.
-    for (const path of [WEB_APP_FILES, WAKE_WORKER, ...APP_MARK_FILES]) {
+    for (const path of [WEB_APP_FILES, WAKE_WORKER, ARGO_WAKE_ICON, ...APP_MARK_FILES]) {
       server.get(path, async (request, reply) => {
         reply.hijack();
         await web(request.raw, reply.raw);
