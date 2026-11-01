@@ -116,8 +116,8 @@ describe('a question opened in Bridge (CC11)', () => {
 describe('a step opened in Bridge (CC14)', () => {
   const STEP = { title: 'Sign in to attio', why: "Until you sign in, your ships' calls to attio are refused.", link: { href: 'https://gateway.example.com/outside-parties/attio?fleet=flt_01', host: 'gateway.example.com' } };
 
-  function aStep(): FocusedDelivery {
-    return { deliveryId: 'dlv_03', from: 'gateway', title: STEP.title, sentAt: '2026-10-31T21:00:00.000Z', payload: '{}', body: '{}', question: undefined, step: STEP, meetingId: undefined, stale: null };
+  function aStep(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
+    return { deliveryId: 'dlv_03', from: 'gateway', title: STEP.title, sentAt: '2026-10-31T21:00:00.000Z', payload: '{}', body: '{}', question: undefined, step: STEP, meetingId: undefined, stale: null, ...overrides };
   }
 
   it('shows why, and the link with the host it leads to, opened only by the person', () => {
@@ -141,5 +141,17 @@ describe('a step opened in Bridge (CC14)', () => {
       cannot: markup.includes('data-testid="bridge-step-cannot"'),
       answer: markup.includes('data-testid="bridge-answer"'),
     }).toEqual({ noteFirst: true, note: true, noteSays: true, done: true, cannot: true, answer: false });
+  });
+
+  it('shows a withdrawn step stale: nothing to do, no Done or Cannot', () => {
+    const markup = render(aStep({ stale: { kind: 'withdrawn', replacementId: null } }));
+
+    expect({ stale: markup.includes('Withdrawn by gateway. Nothing to do: it is done.'), done: markup.includes('data-testid="bridge-step-done"'), note: markup.includes('data-testid="bridge-note"') }).toEqual({ stale: true, done: false, note: false });
+  });
+
+  it('links a replaced step to its replacement, the new step', () => {
+    const markup = render(aStep({ stale: { kind: 'replaced', replacementId: 'dlv_04' } }));
+
+    expect({ stale: markup.includes('Replaced by gateway. Do the new step.'), link: markup.includes('Open the new step'), done: markup.includes('data-testid="bridge-step-done"') }).toEqual({ stale: true, link: true, done: false });
   });
 });

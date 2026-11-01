@@ -65,6 +65,15 @@ describe('Bridge home (CC18)', () => {
     expect({ stale: markup.includes('Replaced by orchestrator-1 with “Which goes first, now that U4 slipped?”'), link: (markup.match(/data-testid="bridge-replacement"/g) ?? []).length }).toEqual({ stale: true, link: 1 });
   });
 
+  it('links a replaced step to its replacement, the new step', () => {
+    const markup = render({
+      waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_03', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory' }), anItem({ job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin', stale: { kind: 'replaced', replacementId: 'dlv_03' } })] },
+      stayAware: [],
+    });
+
+    expect({ stale: markup.includes('Replaced by orchestrator-1 with “Create the GitHub repository aeolus-fleet-memory”'), link: markup.includes('Open the new step') }).toEqual({ stale: true, link: true });
+  });
+
   it('says on its row that a question is in the basket with the note alone', () => {
     const markup = render({ waiting: { count: 1, items: [anItem({ state: 'seen', inBasket: { option: null, note: 'Ask me after the demo.' } })] }, stayAware: [] });
 

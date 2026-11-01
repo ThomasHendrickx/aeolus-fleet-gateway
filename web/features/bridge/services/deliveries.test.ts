@@ -67,10 +67,17 @@ describe('a step, as Bridge shows it (CC14)', () => {
     expect(stepOf({ contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(unlinked) })).toEqual({ title: 'Sign in to attio', why: 'A ship of yours called attio.', link: undefined });
   });
 
+  it('reads the new step a step replacement asks, so it is done as a step', () => {
+    const replacing = { id: '7a2d3b51-6e2c-4c9f-8b62-1d9f4a3b8e21', title: 'Sign in to attio with the team account', why: 'The team owns attio now.' };
+
+    expect(stepOf({ contentType: 'application/vnd.aeolus.step-replacement+json', payload: JSON.stringify({ stepId: STEP.id, step: replacing }) })).toEqual({ title: 'Sign in to attio with the team account', why: 'The team owns attio now.', link: undefined });
+  });
+
   it.each([
     { what: 'any other message', contentType: 'text/plain', payload: JSON.stringify(STEP) },
     { what: 'a step whose payload does not read', contentType: 'application/vnd.aeolus.step+json', payload: 'not json' },
     { what: 'a step whose link is not http(s)', contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify({ ...STEP, link: 'javascript:alert(1)' }) },
+    { what: 'a step withdrawal', contentType: 'application/vnd.aeolus.step-withdrawal+json', payload: JSON.stringify({ stepId: STEP.id }) },
   ])('reads no step of $what', ({ contentType, payload }) => {
     expect(stepOf({ contentType, payload })).toBeUndefined();
   });
