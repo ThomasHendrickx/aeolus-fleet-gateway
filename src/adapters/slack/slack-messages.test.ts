@@ -110,7 +110,7 @@ describe("a bot's message only one person sees", () => {
         { type: 'button', action_id: 'open', text: { type: 'plain_text', text: 'Open github.com' }, url: 'https://github.com/new', value: 'open', style: 'primary' },
         { type: 'button', action_id: 'done', text: { type: 'plain_text', text: 'Done' }, value: 'done' },
       ],
-      alertColor: '#9a9b9e',
+      alertColor: '#dddddd',
       alert: ['context', 'section', 'actions'],
       alertButtons: [{ type: 'button', action_id: 'seen', text: { type: 'plain_text', text: 'Seen' }, value: 'seen' }],
     });
