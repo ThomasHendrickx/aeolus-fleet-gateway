@@ -74,7 +74,7 @@ describe("a press of Slack's Seen button", () => {
   it('keeps it seen in Slack, so Bridge and the post say where it was seen', async () => {
     await press(ALERT);
 
-    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: ALERT.deliveryId, place: 'slack', kind: 'seen', option: null, at: NOW }]);
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: MATHILDE_SHIP, deliveryId: ALERT.deliveryId, place: 'slack', kind: 'seen', option: null, note: null, seen: { place: 'slack', at: NOW }, at: NOW }]);
   });
 
   it("tells the person's pages their inbox changed, and forgets the alert as opened", async () => {

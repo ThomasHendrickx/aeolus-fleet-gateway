@@ -88,7 +88,7 @@ describe('a person removes an entry from the basket', () => {
 
     expect(entries.held.size).toBe(0);
     expect(calls).toContain(`handled(${HARBOUR.deliveryId})`);
-    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: HARBOUR.deliveryId, place: 'bridge', kind: 'notSent', option: 2, at: AT }]);
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: HARBOUR.deliveryId, place: 'bridge', kind: 'notSent', option: 2, note: null, seen: null, at: AT }]);
   });
 
   it('keeps a refused entry when the fleet does not take that its question is done, so the person can remove it again', async () => {

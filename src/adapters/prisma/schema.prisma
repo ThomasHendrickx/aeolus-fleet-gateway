@@ -690,7 +690,12 @@ model ItemOutcome {
   kind       String
   /// The option of a question answered with one; null otherwise.
   option     Int?
-  at         DateTime @db.Timestamptz(3)
+  /// The note the person sent with it; null when they wrote none.
+  note       String?
+  /// Where (bridge, chat, slack) and when the person first saw the item; null where the gateway did not see it seen.
+  seenIn     String?   @map("seen_in")
+  seenAt     DateTime? @map("seen_at") @db.Timestamptz(3)
+  at         DateTime  @db.Timestamptz(3)
 
   @@id([fleetId, shipId, deliveryId])
   @@map("item_outcomes")

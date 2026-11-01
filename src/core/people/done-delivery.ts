@@ -46,6 +46,6 @@ export function createDoneDelivery(deps: DealDeps): DoneDelivery {
     if (!sent.value.value.isOk) {
       return refuse('SEND_REFUSED', `The fleet did not take your outcome: ${sent.value.value.error.message}`);
     }
-    return handledOf(deps, { caller, delivery, as: { place, kind: outcome, option: null } });
+    return handledOf(deps, { caller, delivery, as: { place, kind: outcome, option: null, note: noteOf(note) } });
   };
 }

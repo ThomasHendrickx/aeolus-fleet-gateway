@@ -75,6 +75,8 @@ export function ItemRow({
   outcome,
   failure,
   onOpen,
+  time,
+  detail,
   actions,
 }: {
   item: Pick<HomeItem, 'deliveryId' | 'from' | 'title' | 'sentAt' | 'job'> & { readonly isAlert?: boolean; readonly places?: readonly Place[] };
@@ -90,6 +92,10 @@ export function ItemRow({
   failure: string | undefined;
   /** Opens the item; none while it cannot be opened now. */
   onOpen?: () => void;
+  /** A time of day said in place of its age, such as when it was done (done.html). */
+  time?: { readonly at: string; readonly said: string };
+  /** A line of its own beneath, such as what came of it in Done. */
+  detail?: ReactNode;
   actions?: ReactNode;
 }) {
   const isAlert = item.isAlert ?? false;
@@ -135,9 +141,10 @@ export function ItemRow({
           )}
         </span>
       </span>
-      <time dateTime={item.sentAt} title={sentAtOf(item.sentAt)} className="whitespace-nowrap text-right text-caption text-muted-foreground">
-        {ageOf(item.sentAt, now)}
+      <time dateTime={time?.at ?? item.sentAt} title={sentAtOf(time?.at ?? item.sentAt)} className="whitespace-nowrap text-right text-caption text-muted-foreground">
+        {time?.said ?? ageOf(item.sentAt, now)}
       </time>
+      {detail === undefined ? null : <div className="col-span-2 col-start-2">{detail}</div>}
       {actions === undefined || actions === null ? null : <div className="col-span-2 col-start-2 flex flex-wrap items-center gap-1.5">{actions}</div>}
       {failure === undefined ? null : (
         <div className="col-span-2 col-start-2">

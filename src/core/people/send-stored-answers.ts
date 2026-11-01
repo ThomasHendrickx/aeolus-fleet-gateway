@@ -4,6 +4,7 @@ import type { FleetRefusal } from '../connection/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { answerKeyOf, answerOf, type BasketEntries, type BasketEntry } from './basket.js';
 import type { ItemOutcomes } from './item-outcome.js';
+import { sightingOf } from './opened-of.js';
 import { isEndedCrew, KEY_UNAVAILABLE } from './person-crew.js';
 import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from './ports.js';
 
@@ -109,7 +110,8 @@ async function sendEntry(deps: SendDeps, sending: { crewToken: string; entry: Ba
   if (!handled.isOk && isNotAnswered(handled.error)) {
     return 'kept';
   }
-  await deps.outcomes.save({ fleetId: entry.fleetId, shipId: entry.shipId, deliveryId: entry.deliveryId, place: 'bridge', kind: 'answered', option: entry.option, at: deps.clock.now() });
+  const opened = await deps.opened.find(entry.fleetId, { shipId: entry.shipId, deliveryId: entry.deliveryId });
+  await deps.outcomes.save({ fleetId: entry.fleetId, shipId: entry.shipId, deliveryId: entry.deliveryId, place: 'bridge', kind: 'answered', option: entry.option, note: entry.note, seen: opened === undefined ? null : sightingOf(opened), at: deps.clock.now() });
   await takeOut(deps, entry);
   return 'sent';
 }
