@@ -2,7 +2,9 @@ import type { FleetId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ACCOUNT_URL, CHARLOTTE, CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
+import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createAccountInView } from './account-in-view.js';
 import { createAccountOfSignIn } from './account-of-sign-in.js';
 import type { SharedAccountToken } from './ports.js';
@@ -25,7 +27,7 @@ const clock = { now: () => now };
 /** The gateway serves every fleet, as an open installation does, unless the test names the fleets it serves. */
 function inView(signIns: ReturnType<typeof fakeSharedSignIn>, served?: readonly FleetId[]) {
   const isServed = (fleetId: FleetId) => Promise.resolve(served === undefined || served.includes(fleetId));
-  return createAccountInView({ signIns, accountOf: createAccountOfSignIn({ signIns, clock }), isServed });
+  return createAccountInView({ signIns, accountOf: createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock }), isServed });
 }
 
 const CHARLOTTE_IN_FLEET: ReadonlyMap<FleetId, SharedAccountToken> = new Map([[FLEET_ID, CHARLOTTE_ACCOUNT_TOKEN]]);
@@ -111,6 +113,17 @@ describe('the account token of the fleet in view', () => {
     await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
 
     expect(signIns.exchanges).toBe(2);
+  });
+
+  it('keeps the account allowed as argo at its exchange, and drops it once a token says it no longer is', async () => {
+    const argoAccounts = memoryArgoAccounts();
+    const allowed = createAccountOfSignIn({ signIns: fakeSharedSignIn({ tokens: new Map([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, isArgoAllowed: true }]]) }), argoAccounts, clock });
+    await allowed({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
+    const kept = await argoAccounts.list(FLEET_ID);
+
+    await createAccountOfSignIn({ signIns: fakeSharedSignIn({ tokens: CHARLOTTE_IN_FLEET }), argoAccounts, clock })({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
+
+    expect({ kept, then: await argoAccounts.list(FLEET_ID) }).toEqual({ kept: [{ accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID }], then: [] });
   });
 
   it('is never kept when pagasae refused it', async () => {

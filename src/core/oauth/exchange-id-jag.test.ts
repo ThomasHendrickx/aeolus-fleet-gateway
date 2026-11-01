@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeSecrets, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { memoryPartyStore } from '../../../test/support/party-fakes.js';
-import { CHARLOTTE_TOKENS, fakeIdJagPagasae, memoryAccountGrants } from '../../../test/support/sign-in-fakes.js';
+import { CHARLOTTE_TOKENS, fakeIdJagPagasae, memoryAccountGrants, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createAuthenticateAccessToken } from './authenticate-access-token.js';
 import { createExchangeIdJag } from './exchange-id-jag.js';
 import { createExchangeToken } from './exchange-token.js';
@@ -23,6 +24,7 @@ const ISSUED_AT = new Date('2026-10-23T09:00:00.000Z');
 let clients: ReturnType<typeof memoryOAuthClients>;
 let tokens: ReturnType<typeof memoryIssuedTokens>;
 let grants: ReturnType<typeof memoryAccountGrants>;
+let argoAccounts: ReturnType<typeof memoryArgoAccounts>;
 let pagasae: ReturnType<typeof fakeIdJagPagasae>;
 let servedFleets: Set<string>;
 let exchangeToken: ReturnType<typeof createExchangeToken>;
@@ -37,9 +39,10 @@ beforeEach(async () => {
   await clients.save({ clientId: 'client-machine', fleetId: FLEET_ID, name: 'Machine', redirectUris: [], secretHash: 'hash(machine-secret)', grant: 'clientCredentials' });
   tokens = memoryIssuedTokens();
   grants = memoryAccountGrants();
-  pagasae = fakeIdJagPagasae({ 'id-jag-charlotte': CHARLOTTE_TOKENS, 'id-jag-elsewhere': { ...CHARLOTTE_TOKENS, fleetId: OTHER_FLEET_ID }, 'id-jag-down': 'unavailable' });
+  argoAccounts = memoryArgoAccounts();
+  pagasae = fakeIdJagPagasae({ 'id-jag-charlotte': CHARLOTTE_TOKENS, 'id-jag-argo': { ...CHARLOTTE_TOKENS, isArgoAllowed: true }, 'id-jag-elsewhere': { ...CHARLOTTE_TOKENS, fleetId: OTHER_FLEET_ID }, 'id-jag-down': 'unavailable' });
   servedFleets = new Set([FLEET_ID, OTHER_FLEET_ID]);
-  const exchangeIdJag = createExchangeIdJag({ clients, tokens, secrets, clock, resource: RESOURCE, pagasae, grants, servesFleet: (fleetId) => Promise.resolve(servedFleets.has(fleetId)) });
+  const exchangeIdJag = createExchangeIdJag({ clients, tokens, secrets, clock, resource: RESOURCE, pagasae, grants, argoAccounts, servesFleet: (fleetId) => Promise.resolve(servedFleets.has(fleetId)) });
   exchangeToken = createExchangeToken({ clients, codes: memoryAuthorizationCodes(), tokens, secrets, clock, resource: RESOURCE, parties: memoryPartyStore(), servesOutsideParties: () => Promise.resolve(true), exchangeIdJag });
   authenticate = createAuthenticateAccessToken({ tokens, secrets, clock, resource: RESOURCE });
 });
@@ -58,6 +61,12 @@ describe('a registered client posts an ID-JAG (JWT bearer grant)', () => {
     expect(grants.held).toMatchObject([{ grantId: 'secret-1', fleetId: FLEET_ID, accountId: 'acc-charlotte', refreshToken: 'pagasae-refresh-1', accountToken: 'account-token-1' }]);
     await expect(authenticate('secret-2')).resolves.toMatchObject({ isOk: true, value: { fleetId: FLEET_ID, clientId: 'client-claude', kind: 'account', grantId: 'secret-1' } });
     expect(tokens.held).toMatchObject([{ refreshHash: null, refreshExpiresAt: null, accessExpiresAt: new Date('2026-10-23T10:00:00.000Z') }]);
+  });
+
+  it('keeps the account allowed as argo, with its person ship, when its token says so', async () => {
+    await exchangeToken(anIdJagGrant({ assertion: 'id-jag-argo' }));
+
+    await expect(argoAccounts.list(FLEET_ID)).resolves.toEqual([{ accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID }]);
   });
 
   it('works for a public client registered for the code flow, which has no secret', async () => {

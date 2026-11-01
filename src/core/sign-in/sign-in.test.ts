@@ -1,6 +1,7 @@
 import type { FleetId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryOAuthClients, PLUGIN_RESOURCE, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, fakeSignInSeals, PAGASAE_URL, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
@@ -26,6 +27,7 @@ let secrets: ReturnType<typeof fakeSecrets>;
 let clients: ReturnType<typeof memoryOAuthClients>;
 let seals: ReturnType<typeof fakeSignInSeals>;
 let grants: ReturnType<typeof memoryAccountGrants>;
+let argoAccounts: ReturnType<typeof memoryArgoAccounts>;
 let codes: ReturnType<typeof memoryAuthorizationCodes>;
 let served: FleetId[];
 /** Every ask for a client the sign-in made. */
@@ -38,6 +40,7 @@ beforeEach(async () => {
   await clients.save({ clientId: 'client-cursor', fleetId: OTHER_FLEET_ID, name: 'Cursor', redirectUris: ['https://cursor.example.com/callback'], secretHash: null, grant: 'authorizationCode' });
   seals = fakeSignInSeals();
   grants = memoryAccountGrants();
+  argoAccounts = memoryArgoAccounts();
   codes = memoryAuthorizationCodes();
   served = [FLEET_ID];
   asks = [];
@@ -70,6 +73,7 @@ function completeSignIn(pagasae: Pagasae = fakePagasae({ code: 'pagasae-code-1',
     seals,
     pagasae,
     grants,
+    argoAccounts,
     codes,
     secrets,
     clock: { now: () => now },
@@ -208,6 +212,14 @@ describe('pagasae sends the person back', () => {
 
     await expect(completeSignIn()({ state, browserSecret, error: 'access_denied' })).resolves.toEqual({ isOk: true, value: { kind: 'answered', redirectTo: `${CALLBACK}?error=access_denied&state=state-1&iss=${encodeURIComponent(ISSUER)}` } });
     expect(grants.held).toEqual([]);
+  });
+
+  it('keeps the account allowed as argo, with its person ship, when its token says so', async () => {
+    const back = await started();
+
+    await completeSignIn(fakePagasae({ code: 'pagasae-code-1', verifier: 'secret-1', tokens: { ...CHARLOTTE_TOKENS, isArgoAllowed: true } }))(back);
+
+    await expect(argoAccounts.list(FLEET_ID)).resolves.toEqual([{ accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID }]);
   });
 
   it('says why when pagasae refuses its code, issuing no code', async () => {
