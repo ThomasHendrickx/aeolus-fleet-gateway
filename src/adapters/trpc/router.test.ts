@@ -145,7 +145,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readBridgeHome: (caller) =>
         Promise.resolve(
           grantOf(caller) === PERSON_TOKEN
-            ? ok({ waiting: { count: 1, items: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, state: 'new' as const }] }, stayAware: [] })
+            ? ok({ waiting: { count: 1, items: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, state: 'new' as const, stale: null }] }, stayAware: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       readRecord: ({ cursor }) =>
@@ -158,7 +158,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       openDelivery: ({ caller, deliveryId }) =>
         Promise.resolve(
           deliveryId === DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
-            ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null })
+            ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, stale: null })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} waits for you: read your inbox again` }),
         ),
       answerDelivery: (input) => {

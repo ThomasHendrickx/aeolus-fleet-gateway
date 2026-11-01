@@ -27,6 +27,8 @@ import {
   receiveOutputSchema,
   sentMessageOutputSchema,
   questionSchema,
+  isQuestionContentType,
+  withdrawalOf,
   sendOutputSchema,
   shipDetailOutputSchema,
   startingPromptOutputSchema,
@@ -123,8 +125,9 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
   return response.ok ? ok(request.answers.parse(body)) : err(refusalSchema.parse(body));
 }
 
-/** A delivery to a person ship as the gateway shows it, with a question's title read from its payload. */
+/** A delivery to a person ship as the gateway shows it, with its headline and the questions it asks and withdraws read from its payload. */
 function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, contentType, payload, sentAt, inReplyTo, meetingId }: ReceivedDelivery): PersonDelivery {
+  const asked = askedQuestionOf({ contentType, payload });
   return {
     deliveryId,
     messageId,
@@ -132,7 +135,9 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     senderName,
     contentType,
     payload,
-    headline: headlineOf({ contentType, payload }),
+    headline: asked?.title ?? headlineOf({ contentType, payload }),
+    askedQuestionId: asked?.id ?? null,
+    withdrawnQuestionId: withdrawalOf({ contentType, payload })?.questionId ?? null,
     sentAt: new Date(sentAt),
     inReplyTo,
     meetingId,
@@ -175,9 +180,9 @@ function meetingReadOf(read: MeetingOutput): MeetingRead {
   };
 }
 
-/** A question's payload, if it parses as one. */
-function questionOf(payload: string) {
-  return parsedOf(questionSchema, payload);
+/** The question a message asks (decision 0038): a question's own, or a replacement's new one; none for any other message, or one whose payload does not read. */
+function askedQuestionOf(carried: { contentType: string; payload: string }) {
+  return isQuestionContentType(carried.contentType) ? parsedOf(questionSchema, carried.payload) : (withdrawalOf(carried)?.replacement ?? undefined);
 }
 
 /**
@@ -194,12 +199,12 @@ const recordOutputSchema = z.object({
 const titledSchema = z.object({ title: z.string().min(1) }).transform(({ title }) => title);
 const headedSchema = z.object({ headline: z.string().min(1) }).transform(({ headline }) => headline);
 
-/** The headline of a question, a step, an alert or a notice (Bridge, CC10); none for any other message, or one whose payload does not read. */
+/** The headline of a step, an alert or a notice (Bridge, CC10); a question's is its title, read with the question it asks. None for any other message, or one whose payload does not read. */
 function headlineOf({ contentType, payload }: { contentType: string; payload: string }): string | null {
   const job = jobOf(contentType);
   switch (job) {
     case 'decide':
-      return questionOf(payload)?.title ?? null;
+      return null;
     case 'do':
       return parsedOf(titledSchema, payload) ?? null;
     case 'stay-aware':

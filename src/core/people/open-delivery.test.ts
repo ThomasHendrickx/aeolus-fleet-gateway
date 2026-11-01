@@ -39,7 +39,7 @@ describe('a person opens a delivery that waits for their person ship', () => {
 
     await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toEqual({
       isOk: true,
-      value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null },
+      value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null, stale: null },
     });
   });
 
@@ -50,7 +50,7 @@ describe('a person opens a delivery that waits for their person ship', () => {
     await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
   });
 
-  it('acknowledges it for the person, once it kept what an answer and the inbox need: its message, its sender, title, content type and when it was sent, never its payload', async () => {
+  it('acknowledges it for the person, once it kept what an answer and the inbox need: its message, its sender, title, content type, the question it asks and when it was sent, never its payload', async () => {
     const { openDelivery, calls } = opening([QUESTION]);
 
     await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' });
@@ -66,6 +66,8 @@ describe('a person opens a delivery that waits for their person ship', () => {
         from: 'tracker',
         title: 'Go for release 1.4?',
         contentType: 'application/vnd.aeolus.question+json',
+        askedQuestionId: '9b2f',
+        withdrawnQuestionId: null,
         sentAt: QUESTION.sentAt,
         openedAt: AT,
       },
@@ -154,7 +156,7 @@ describe('a person opens again a delivery they opened, from any client (aeolus-f
     expect({ again, isSame: JSON.stringify(again) === JSON.stringify(first) }).toEqual({
       again: {
         isOk: true,
-        value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null },
+        value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null, stale: null },
       },
       isSame: true,
     });
@@ -211,5 +213,98 @@ describe('a person sees an alert or a notice: seeing it is all it asks (Bridge, 
     await opening([QUESTION]).openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'bridge' });
 
     expect(outcomes.held).toEqual([]);
+  });
+});
+
+describe('a person opens a question its asker withdrew or replaced: their look at it is all it asks (Bridge, section 9)', () => {
+  const ASKED = '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e';
+  const ASKING = aPersonDelivery({ askedQuestionId: ASKED });
+  const WITHDRAWAL = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0006',
+    messageId: 'msg_01m3tbfspe96yf1rnr4ank0006',
+    contentType: 'application/vnd.aeolus.question-withdrawal+json',
+    payload: JSON.stringify({ questionId: ASKED }),
+    headline: null,
+    askedQuestionId: null,
+    withdrawnQuestionId: ASKED,
+  });
+  const REPLACEMENT = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0007',
+    messageId: 'msg_01m3tbfspe96yf1rnr4ank0007',
+    contentType: 'application/vnd.aeolus.question-replacement+json',
+    headline: 'Go for release 1.4 after #1488?',
+    askedQuestionId: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f',
+    withdrawnQuestionId: ASKED,
+  });
+
+  function asked(calls: string[]): string[] {
+    return calls.filter((call) => call !== 'inbox' && !call.startsWith('pushReceive'));
+  }
+
+  it('shows a withdrawn question stale, with nothing to answer', async () => {
+    const shown = await opening([ASKING, WITHDRAWAL]).openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
+
+    expect(shown).toMatchObject({ isOk: true, value: { deliveryId: ASKING.deliveryId, stale: { kind: 'withdrawn', replacementId: null } } });
+  });
+
+  it('acknowledges and reports handled both the withdrawn question and its withdrawal, keeping nothing opened', async () => {
+    const { openDelivery, calls } = opening([ASKING, WITHDRAWAL]);
+
+    await openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
+
+    expect({ calls: asked(calls), opened: [...opened.held.values()] }).toEqual({
+      calls: [`ack(${ASKING.deliveryId})`, `handled(${ASKING.deliveryId})`, `ack(${WITHDRAWAL.deliveryId})`, `handled(${WITHDRAWAL.deliveryId})`],
+      opened: [],
+    });
+  });
+
+  it('keeps the question withdrawn and its withdrawal seen, where the person looked at it', async () => {
+    await opening([ASKING, WITHDRAWAL]).openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'chat' });
+
+    expect(outcomes.held).toEqual([
+      { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: ASKING.deliveryId, place: 'chat', kind: 'withdrawn', option: null, at: AT },
+      { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: WITHDRAWAL.deliveryId, place: 'chat', kind: 'seen', option: null, at: AT },
+    ]);
+  });
+
+  it('is done with a question the person opened before, once it was withdrawn, at their next look', async () => {
+    const ship = { crewToken: 'aeolus_ct_v1_charlotte', deliveries: [ASKING] };
+    const fleet = fakePersonShipDoor(ship);
+    const openDelivery = createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: fleet.door, opened, changes, outcomes, clock: { now: () => AT } });
+    await openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
+    ship.deliveries.push(WITHDRAWAL);
+
+    const shown = await openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
+
+    expect({ stale: shown.isOk ? shown.value.stale : shown, calls: asked(fleet.calls), opened: [...opened.held.values()] }).toEqual({
+      stale: { kind: 'withdrawn', replacementId: null },
+      calls: [`ack(${ASKING.deliveryId})`, `delivery(${ASKING.deliveryId})`, `handled(${ASKING.deliveryId})`, `ack(${WITHDRAWAL.deliveryId})`, `handled(${WITHDRAWAL.deliveryId})`],
+      opened: [],
+    });
+  });
+
+  it('shows a replaced question stale, linked to its replacement, and is done with it alone: the replacement is a new item that still waits', async () => {
+    const { openDelivery, calls } = opening([ASKING, REPLACEMENT]);
+
+    const shown = await openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
+
+    expect({ stale: shown.isOk ? shown.value.stale : shown, calls: asked(calls), kinds: outcomes.held.map(({ deliveryId, kind }) => ({ deliveryId, kind })) }).toEqual({
+      stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId },
+      calls: [`ack(${ASKING.deliveryId})`, `handled(${ASKING.deliveryId})`],
+      kinds: [{ deliveryId: ASKING.deliveryId, kind: 'replaced' }],
+    });
+  });
+
+  it('is done with the question a replacement replaces once the person opens the replacement, which still waits on them', async () => {
+    const { openDelivery, calls } = opening([ASKING, REPLACEMENT]);
+
+    const shown = await openDelivery({ caller: CALLER, deliveryId: REPLACEMENT.deliveryId, place: 'bridge' });
+
+    expect({ stale: shown.isOk ? shown.value.stale : shown, calls: asked(calls), kinds: outcomes.held.map(({ deliveryId, kind }) => ({ deliveryId, kind })), opened: [...opened.held.keys()] }).toEqual({
+      stale: null,
+      calls: [`ack(${REPLACEMENT.deliveryId})`, `ack(${ASKING.deliveryId})`, `handled(${ASKING.deliveryId})`],
+      kinds: [{ deliveryId: ASKING.deliveryId, kind: 'replaced' }],
+      opened: [`${FLEET_ID}/${PERSON_SHIP_ID}/${REPLACEMENT.deliveryId}`],
+    });
   });
 });

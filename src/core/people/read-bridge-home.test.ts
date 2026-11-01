@@ -46,6 +46,8 @@ function anOpened(overrides: Partial<OpenedDelivery> = {}): OpenedDelivery {
     from: 'commercial',
     title: 'Pricing page: a price per ship, or plans only?',
     contentType: 'application/vnd.aeolus.question+json',
+    askedQuestionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b',
+    withdrawnQuestionId: null,
     sentAt: new Date('2026-10-31T19:20:00.000Z'),
     openedAt: new Date('2026-10-31T19:30:00.000Z'),
     ...overrides,
@@ -126,5 +128,82 @@ describe('Bridge home: what waits on the person, with one count (CC18)', () => {
     reading.refusals.pushReceive.push({ code: 'FLEET_UNREACHABLE', message: 'The fleet did not answer' });
 
     await expect(reading.readHome(CHARLOTTE_GRANT)).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
+  });
+});
+
+describe('Bridge home: a question its asker withdrew or replaced (CC11, decision 0038)', () => {
+  const ASKED = '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e';
+  const ORCHESTRATOR = 'shp_01m3tbfspe96yf1rnr4ank0orc';
+  const ASKING = aPersonDelivery({ ...QUESTION, senderShipId: ORCHESTRATOR, askedQuestionId: ASKED });
+  const WITHDRAWAL = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0006',
+    senderShipId: ORCHESTRATOR,
+    senderName: 'orchestrator-1',
+    contentType: 'application/vnd.aeolus.question-withdrawal+json',
+    payload: JSON.stringify({ questionId: ASKED }),
+    headline: null,
+    askedQuestionId: null,
+    withdrawnQuestionId: ASKED,
+    sentAt: new Date('2026-10-31T20:09:00.000Z'),
+  });
+  const REPLACEMENT = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0007',
+    senderShipId: ORCHESTRATOR,
+    senderName: 'orchestrator-1',
+    contentType: 'application/vnd.aeolus.question-replacement+json',
+    headline: 'Which goes first, now that U4 slipped?',
+    askedQuestionId: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f',
+    withdrawnQuestionId: ASKED,
+    sentAt: new Date('2026-10-31T20:10:00.000Z'),
+  });
+
+  function shownOf(home: Awaited<ReturnType<ReturnType<typeof readHome>['readHome']>>) {
+    return home.isOk ? { count: home.value.waiting.count, items: home.value.waiting.items.map(({ deliveryId, stale }) => ({ deliveryId, stale })) } : home;
+  }
+
+  it('shows a withdrawn question stale, out of the count, and leaves the withdrawal itself out', async () => {
+    const home = await readHome([ASKING, WITHDRAWAL]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toEqual({ count: 0, items: [{ deliveryId: QUESTION.deliveryId, stale: { kind: 'withdrawn', replacementId: null } }] });
+  });
+
+  it('shows a replaced question stale, out of the count, linked to its replacement, which waits as a new item', async () => {
+    const home = await readHome([ASKING, REPLACEMENT]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toEqual({
+      count: 1,
+      items: [
+        { deliveryId: REPLACEMENT.deliveryId, stale: null },
+        { deliveryId: QUESTION.deliveryId, stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId } },
+      ],
+    });
+  });
+
+  it('shows a question the person opened stale once its asker withdraws it', async () => {
+    await opened.save(anOpened({ deliveryId: QUESTION.deliveryId, senderShipId: ORCHESTRATOR, askedQuestionId: ASKED }));
+
+    const home = await readHome([WITHDRAWAL]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toEqual({ count: 0, items: [{ deliveryId: QUESTION.deliveryId, stale: { kind: 'withdrawn', replacementId: null } }] });
+  });
+
+  it('shows a question stale whose replacement the person opened already', async () => {
+    await opened.save(anOpened({ deliveryId: REPLACEMENT.deliveryId, senderShipId: ORCHESTRATOR, askedQuestionId: REPLACEMENT.askedQuestionId, withdrawnQuestionId: ASKED, sentAt: REPLACEMENT.sentAt }));
+
+    const home = await readHome([ASKING]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toEqual({
+      count: 1,
+      items: [
+        { deliveryId: REPLACEMENT.deliveryId, stale: null },
+        { deliveryId: QUESTION.deliveryId, stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId } },
+      ],
+    });
+  });
+
+  it('keeps a question waiting, in the count, when another ship names it: only its asker withdraws it', async () => {
+    const home = await readHome([ASKING, { ...WITHDRAWAL, senderShipId: 'shp_01m3tbfspe96yf1rnr4ank0oth' }]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toEqual({ count: 1, items: [{ deliveryId: QUESTION.deliveryId, stale: null }] });
   });
 });

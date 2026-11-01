@@ -118,6 +118,8 @@ export function aPersonDelivery(overrides: Partial<PersonDelivery> = {}): Person
     contentType: 'application/vnd.aeolus.question+json',
     payload: '{"id":"9b2f","title":"Go for release 1.4?","context":"All checks are green.","options":[{"key":1,"label":"Go"}]}',
     headline: 'Go for release 1.4?',
+    askedQuestionId: '9b2f',
+    withdrawnQuestionId: null,
     sentAt: new Date('2026-10-19T08:00:00.000Z'),
     inReplyTo: null,
     meetingId: null,

@@ -6,14 +6,16 @@ import type { ItemState } from './item-state.js';
 import type { PersonCaller, PersonCrewError } from './person-crew.js';
 import type { OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
+import { staleOf, type Asking, type Stale } from './stale-question.js';
 
-/** An item on Bridge home: by its title, with its job, new or seen. */
+/** An item on Bridge home: by its title, with its job, new or seen, and stale once its asker withdrew or replaced the question it asks. */
 export interface HomeItem extends InboxEntry {
   readonly job: ItemJob;
   readonly state: Exclude<ItemState, 'done'>;
+  readonly stale: Stale | null;
 }
 
-/** Bridge home: what waits on the person, decide and do, with its count; and the stay-aware feed, outside the count. */
+/** Bridge home: what waits on the person, decide and do, with its count, a stale question listed outside it; and the stay-aware feed, outside the count. */
 export interface BridgeHome {
   readonly waiting: { readonly count: number; readonly items: HomeItem[] };
   readonly stayAware: HomeItem[];
@@ -37,7 +39,9 @@ function newestFirst(a: HomeItem, b: HomeItem): number {
  * Use case: a person reads Bridge home (CC18). What waits is what the
  * gateway takes for their person ship as its crew, as their inbox does, and
  * what they opened and are not done with yet, kept to the jobs that wait on
- * them, decide and do (section 6), newest first, with their count. The
+ * them, decide and do (section 6), newest first, with their count. A
+ * question its asker withdrew or replaced is listed stale, out of the count,
+ * linked to its replacement; the withdrawal itself is not listed (CC11). The
  * alerts and notices that reached them and they have not seen are the
  * stay-aware feed, outside the count. Everything else is in the record.
  */
@@ -47,11 +51,14 @@ export function createReadBridgeHome(deps: { crewPersonShip: CrewPersonShip; cre
     if (!waiting.isOk) {
       return waiting;
     }
-    const taken: HomeItem[] = waiting.value.deliveries.map((delivery) => ({ ...inboxEntryOf(delivery), job: jobOf(delivery.contentType), state: 'new' }));
-    const isTaken = new Set<string>(taken.map(({ deliveryId }) => deliveryId));
     const opened = await deps.opened.list(caller.fleetId, waiting.value.crew.shipId);
-    const seen: HomeItem[] = opened.filter(({ deliveryId }) => !isTaken.has(deliveryId)).map((delivery) => ({ ...openedEntryOf(delivery), job: openedJobOf(delivery), state: 'seen' }));
+    const asking: Asking[] = [...waiting.value.deliveries, ...opened];
+    const taken: HomeItem[] = waiting.value.deliveries.map((delivery) => ({ ...inboxEntryOf(delivery), job: jobOf(delivery.contentType), state: 'new', stale: staleOf(delivery, asking) }));
+    const isTaken = new Set<string>(taken.map(({ deliveryId }) => deliveryId));
+    const seen: HomeItem[] = opened
+      .filter(({ deliveryId }) => !isTaken.has(deliveryId))
+      .map((delivery) => ({ ...openedEntryOf(delivery), job: openedJobOf(delivery), state: 'seen', stale: staleOf(delivery, asking) }));
     const items = [...taken, ...seen].filter(({ job }) => isCounted(job)).sort(newestFirst);
-    return ok({ waiting: { count: items.length, items }, stayAware: taken.filter(({ job }) => job === 'stay-aware').sort(newestFirst) });
+    return ok({ waiting: { count: items.filter(({ stale }) => stale === null).length, items }, stayAware: taken.filter(({ job }) => job === 'stay-aware').sort(newestFirst) });
   };
 }

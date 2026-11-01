@@ -6,9 +6,36 @@ import { ItemRow } from '../ui/item-row';
 import { ItemFocus, type ItemOpening } from './item-focus';
 
 function countsOf(items: readonly HomeItem[]): string {
-  const toDecide = items.filter(({ job }) => job === 'decide').length;
-  const toDo = items.filter(({ job }) => job === 'do').length;
+  const counted = items.filter(({ stale }) => stale === null);
+  const toDecide = counted.filter(({ job }) => job === 'decide').length;
+  const toDo = counted.filter(({ job }) => job === 'do').length;
   return `${String(toDecide)} to decide, ${String(toDo)} to do. Newest on top; nothing else is in this count.`;
+}
+
+/** What a row says of its item: stale, seen and not done, or nothing while new. */
+function rowOutcomeOf(item: HomeItem, items: readonly HomeItem[]): string | undefined {
+  const { stale } = item;
+  if (stale === null) {
+    return item.state === 'seen' ? 'Seen, not done yet' : undefined;
+  }
+  if (stale.kind === 'withdrawn') {
+    return `Withdrawn by ${item.from}: open it to clear it`;
+  }
+  const replacement = items.find(({ deliveryId }) => deliveryId === stale.replacementId);
+  return replacement === undefined ? `Replaced by ${item.from}` : `Replaced by ${item.from} with “${replacement.title}”`;
+}
+
+/** Opens a replaced question's replacement, the new item. */
+function ReplacementButton({ item, opening }: { item: HomeItem; opening: ItemOpening }) {
+  const replacementId = item.stale?.replacementId ?? null;
+  if (replacementId === null) {
+    return null;
+  }
+  return (
+    <ActionButton data-testid="bridge-replacement" isPending={opening.openingId === replacementId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open({ deliveryId: replacementId, job: 'decide' }); }}>
+      Open the new question
+    </ActionButton>
+  );
 }
 
 function OpenButton({ item, opening }: { item: HomeItem; opening: ItemOpening }) {
@@ -21,7 +48,8 @@ function OpenButton({ item, opening }: { item: HomeItem; opening: ItemOpening })
 
 /**
  * Bridge home's lists (CC18): what waits on the person, decide and do, with
- * one count, a dot on what is new; and the stay-aware feed beside it, the
+ * one count, a dot on what is new, a question its asker withdrew or replaced
+ * faded and outside the count, a replaced one leading to its replacement; and the stay-aware feed beside it, the
  * alerts and notices they have not seen, outside the count. Opening one of
  * the feed is all it asks (CC16).
  */
@@ -46,7 +74,8 @@ export function HomePanel({ fleetId, home }: { fleetId: string; home: BridgeHome
             ) : (
               <ul className="grid gap-2">
                 {waiting.items.map((item) => (
-                  <ItemRow key={item.deliveryId} item={item} isNew={item.state === 'new'} outcome={item.state === 'seen' ? 'Seen, not done yet' : undefined} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}>
+                  <ItemRow key={item.deliveryId} item={item} isNew={item.state === 'new'} isStale={item.stale !== null} outcome={rowOutcomeOf(item, waiting.items)} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}>
+                    <ReplacementButton item={item} opening={opening} />
                     <OpenButton item={item} opening={opening} />
                   </ItemRow>
                 ))}

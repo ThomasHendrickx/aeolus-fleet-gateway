@@ -81,6 +81,10 @@ export interface PersonDelivery {
   readonly payload: string;
   /** The headline of a question (its title), a step (its title), an alert or a notice, read at the edge; none for any other message. */
   readonly headline: string | null;
+  /** The uuid of the question it asks (decision 0038): a question's own, a replacement's new one; none for any other message. */
+  readonly askedQuestionId: string | null;
+  /** The uuid of the question it withdraws or replaces, from the same asker; none for any other message. */
+  readonly withdrawnQuestionId: string | null;
   readonly sentAt: Date;
   readonly inReplyTo: MessageId | null;
   /** The meeting its message was contributed to or tells of; none outside a meeting (decision 0061). */
@@ -148,7 +152,7 @@ export interface PersonShipDoor {
  * A delivery a person opened, as the gateway keeps it until they deal with
  * it (Q28 (a)): what their answer needs once the delivery is acknowledged,
  * its message and sender, and what their inbox lists, its title and when it
- * was sent, never its payload. It is the person ship's, so every client of
+ * was sent, and the questions it asks and withdraws, never its payload. It is the person ship's, so every client of
  * the person finds it.
  */
 export interface OpenedDelivery {
@@ -161,6 +165,9 @@ export interface OpenedDelivery {
   readonly title: string;
   /** Its content type, which names its job (Bridge, CC10); none for one opened before the gateway kept it. */
   readonly contentType: string | null;
+  /** The uuid of the question it asks, and of the one it withdraws or replaces (decision 0038), as its payload named them; none otherwise. */
+  readonly askedQuestionId: string | null;
+  readonly withdrawnQuestionId: string | null;
   readonly sentAt: Date;
   readonly openedAt: Date;
 }

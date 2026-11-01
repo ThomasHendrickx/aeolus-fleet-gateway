@@ -37,6 +37,8 @@ function anOpenedDelivery(overrides: Partial<OpenedDelivery> = {}): OpenedDelive
     from: 'tracker',
     title: 'Go for release 1.4?',
     contentType: 'application/vnd.aeolus.question+json',
+    askedQuestionId: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e',
+    withdrawnQuestionId: null,
     sentAt: new Date('2026-10-19T08:00:00.000Z'),
     openedAt: AT,
     ...overrides,
@@ -62,6 +64,19 @@ describe('the deliveries people opened, in Postgres', () => {
     await opened.save(anOpenedDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0bef', contentType: null }));
 
     await expect(opened.find(FLEET, { shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0bef' })).resolves.toMatchObject({ contentType: null });
+  });
+
+  it('keeps the question a replacement asks and the one it replaces, so a stale question is known once the replacement is opened (Bridge, CC11)', async () => {
+    const opened = createPrismaOpenedDeliveries(prisma);
+    const replacement = anOpenedDelivery({
+      deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0rep',
+      contentType: 'application/vnd.aeolus.question-replacement+json',
+      askedQuestionId: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f',
+      withdrawnQuestionId: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e',
+    });
+    await opened.save(replacement);
+
+    await expect(opened.find(FLEET, { shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0rep' })).resolves.toEqual(replacement);
   });
 
   it('keeps a delivery opened again once, as last opened', async () => {

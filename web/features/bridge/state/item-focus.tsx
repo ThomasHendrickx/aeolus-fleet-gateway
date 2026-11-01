@@ -11,7 +11,7 @@ import { Notice } from '../ui/notice';
 
 /** What a list of items gets to open one: the press, the one opening, and why one could not be opened. */
 export interface ItemOpening {
-  readonly open: (item: Pick<HomeItem, 'deliveryId' | 'job'>) => void;
+  readonly open: (item: { deliveryId: string; job: HomeItem['job'] }) => void;
   readonly openingId: string | undefined;
   readonly failure: { deliveryId: string; message: string } | undefined;
 }
@@ -20,8 +20,10 @@ export interface ItemOpening {
  * A list of Bridge's items with one in focus at a time. Opening is the
  * person's own act, so it is a press, never a link: the gateway acknowledges
  * the item for them, and it is shown whole. An alert or a notice seen is
- * done at once (CC16), so it shows with no answer to give. Answering or
- * being done says so in place, and the page reads itself again.
+ * done at once (CC16), so it shows with no answer to give, as does a
+ * question its asker withdrew or replaced; a replaced one opens its
+ * replacement. Answering or being done says so in place, and the page reads
+ * itself again.
  */
 export function ItemFocus({ fleetId, children }: { fleetId: string; children: (opening: ItemOpening) => ReactNode }) {
   const [focus, setFocus] = useState<{ delivery: FocusedDelivery; isDoneOnSeeing: boolean } | undefined>();
@@ -33,7 +35,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
   const [done, setDone] = useState<string | undefined>();
   const [, startTransition] = useTransition();
 
-  const open = (item: Pick<HomeItem, 'deliveryId' | 'job'>) => {
+  const open = (item: { deliveryId: string; job: HomeItem['job'] }) => {
     setOpeningId(item.deliveryId);
     setOpenFailure(undefined);
     setDone(undefined);
@@ -69,6 +71,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
     const { delivery } = focus;
     return (
       <DeliveryCard
+        key={delivery.deliveryId}
         delivery={delivery}
         isDoneOnSeeing={focus.isDoneOnSeeing}
         meetingHref={delivery.meetingId === undefined ? undefined : meetingPathOf({ fleetId, meetingId: delivery.meetingId })}
@@ -79,6 +82,7 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
         onAnswer={(option) => { settle({ control: option === undefined ? { kind: 'note' } : { kind: 'option', option }, action: () => answerDelivery({ fleet: fleetId, deliveryId: delivery.deliveryId, input: { questionId: delivery.question?.id, option, note } }), said: `Your answer went to ${delivery.from}.` }); }
         }
         onDone={() => { settle({ control: { kind: 'done' }, action: () => doneDelivery(fleetId, delivery.deliveryId), said: `Done with “${delivery.title}”.` }); }}
+        onOpen={(deliveryId) => { open({ deliveryId, job: 'decide' }); }}
         onBack={() => { setFocus(undefined); }}
       />
     );

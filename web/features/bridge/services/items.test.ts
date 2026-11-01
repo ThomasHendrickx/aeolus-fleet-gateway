@@ -13,6 +13,8 @@ describe('what came of an item and where, as Done says it (Bridge, CC4)', () => 
     [{ place: 'slack', kind: 'answered', option: 2 }, 'Answered in Slack: option 2'],
     [{ place: 'bridge', kind: 'answered', option: null }, 'Answered in Bridge'],
     [{ place: 'chat', kind: 'done', option: null }, 'Done in a chat'],
+    [{ place: 'bridge', kind: 'withdrawn', option: null }, 'Withdrawn by its asker, seen in Bridge'],
+    [{ place: 'chat', kind: 'replaced', option: null }, 'Replaced by its asker, seen in a chat'],
   ] as const)('says %o as %s', (outcome, text) => {
     expect(outcomeTextOf(anItem({ outcome: { ...outcome, at: '2026-10-31T19:58:00.000Z' } }))).toBe(text);
   });

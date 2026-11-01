@@ -2,7 +2,7 @@
  * An item that reached a person, as Bridge shows it once opened, and the
  * answer its form sends: pure view logic, no React and no API client.
  */
-import { ALERT_CONTENT_TYPE, ANSWER_CONTENT_TYPE, answerSchema, isQuestionContentType, questionSchema, type Question } from '@aeolus-fleet/common';
+import { ALERT_CONTENT_TYPE, ANSWER_CONTENT_TYPE, answerSchema, isQuestionContentType, questionSchema, withdrawalOf, type Question } from '@aeolus-fleet/common';
 import { z } from 'zod';
 import type { inferRouterOutputs } from '@trpc/server';
 
@@ -26,12 +26,20 @@ export interface FocusedDelivery {
   readonly question: Question | undefined;
   /** The meeting it was contributed to or tells of, when it belongs to one. */
   readonly meetingId: string | undefined;
+  /** Whether its asker withdrew or replaced the question it asks, with the replacement, a new item. */
+  readonly stale: Stale | null;
 }
 
-/** A question, when the delivery is one the fleet's question content type carries. */
+/** A question its asker withdrew or replaced (decision 0038), as the API says it. */
+export interface Stale {
+  readonly kind: 'withdrawn' | 'replaced';
+  readonly replacementId: string | null;
+}
+
+/** The question a delivery asks (decision 0038): a question's own, or the new question a replacement asks. */
 export function questionOf(opened: { contentType: string; payload: string }): Question | undefined {
   if (!isQuestionContentType(opened.contentType)) {
-    return undefined;
+    return withdrawalOf(opened)?.replacement ?? undefined;
   }
   try {
     const question = questionSchema.safeParse(JSON.parse(opened.payload));

@@ -1,16 +1,58 @@
-import type { FocusedDelivery } from '../services/deliveries';
+import { useState } from 'react';
+
+import type { Question } from '@aeolus-fleet/common';
+
+import type { FocusedDelivery, Stale } from '../services/deliveries';
 import { ActionButton } from './action-button';
 import { Notice } from './notice';
 
 /** Which of the card's controls is working: an option of the question, the note alone, or done. */
 export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'note' } | { kind: 'done' };
 
+/** The options of a question, one to choose, the asker's pick marked; none to choose once it is stale. */
+function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Question; chosen: number | undefined; isStale: boolean; onChoose: (option: number) => void }) {
+  return (
+    <fieldset className={`grid gap-2 ${isStale ? 'opacity-60' : ''}`} disabled={isStale}>
+      <legend className="sr-only">Options</legend>
+      {question.options.map((option) => (
+        <label key={option.key} className={`flex items-start gap-3 rounded-md border p-3 ${option.key === chosen && !isStale ? 'border-ring bg-accent' : 'border-border'}`}>
+          <input type="radio" name="option" value={option.key} checked={option.key === chosen && !isStale} onChange={() => { onChoose(option.key); }} className="mt-1" />
+          <span className="grid flex-1 gap-0.5">
+            <span className="font-medium">
+              {option.key}. {option.label}
+            </span>
+            {option.detail === '' ? null : <span className="text-caption text-muted-foreground">{option.detail}</span>}
+          </span>
+          {option.key === question.pick.option ? <span className="rounded-sm border border-border px-1.5 text-caption">Their pick</span> : null}
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+/** What a stale question says: withdrawn, done; or replaced, with the replacement to open. */
+function StaleNotice({ stale, from, onOpen }: { stale: Stale; from: string; onOpen: (deliveryId: string) => void }) {
+  const { replacementId } = stale;
+  return (
+    <div data-testid="bridge-stale" className="grid gap-2 rounded-md border border-border bg-muted p-3">
+      <span>{stale.kind === 'withdrawn' ? `Withdrawn by ${from}. Nothing to answer: it is done.` : `Replaced by ${from}. Answer the new question.`}</span>
+      {replacementId === null ? null : (
+        <ActionButton data-testid="bridge-replacement" className="justify-self-start" isPending={false} pendingLabel="Opening..." onClick={() => { onOpen(replacementId); }}>
+          Open the new question
+        </ActionButton>
+      )}
+    </div>
+  );
+}
+
 /**
- * One item in focus (design B, Signal). A question is answered with one tap
- * on a button that names the option it sends, the asker's pick on a dashed
- * edge; any other item may get a note as its answer, and may be done with;
- * one of a meeting leads to the meeting. An alert or a notice is done once
- * seen (Bridge, CC16): it asks nothing more.
+ * One item in focus (design B, Signal). A question opens with the asker's
+ * pick chosen (CC11); one button names the option it sends, and a note may
+ * go with it or alone. Any other item may get a note as its answer, and may
+ * be done with; one of a meeting leads to the meeting. An alert or a notice
+ * is done once seen (Bridge, CC16): it asks nothing more. So is a question
+ * its asker withdrew or replaced: stale, nothing to send, a replaced one
+ * leading to its replacement.
  */
 export function DeliveryCard({
   delivery,
@@ -22,6 +64,7 @@ export function DeliveryCard({
   onNoteChange,
   onAnswer,
   onDone,
+  onOpen,
   onBack,
 }: {
   delivery: FocusedDelivery;
@@ -35,11 +78,13 @@ export function DeliveryCard({
   onNoteChange: (note: string) => void;
   onAnswer: (option: number | undefined) => void;
   onDone: () => void;
+  /** Opens another item: a replaced question's replacement. */
+  onOpen: (deliveryId: string) => void;
   onBack: () => void;
 }) {
-  const { question } = delivery;
+  const { question, stale } = delivery;
+  const [chosen, setChosen] = useState(question?.pick.option);
   const isWorking = working !== undefined;
-  const picked = question?.options.find((option) => option.key === question.pick.option);
   return (
     <section data-testid="bridge-delivery" className="grid gap-3 rounded-lg border border-border bg-card p-6 text-card-foreground shadow-sm">
       <span className="text-caption text-muted-foreground">
@@ -56,34 +101,18 @@ export function DeliveryCard({
       ) : (
         <>
           <p className="whitespace-pre-wrap">{question.context}</p>
-          <div className="flex flex-wrap gap-2">
-            {question.options.map((option) => (
-              <ActionButton
-                key={option.key}
-                title={option.detail}
-                variant={option.key === question.pick.option ? 'primary' : 'secondary'}
-                className={option.key === question.pick.option ? 'outline-2 outline-offset-2 outline-dashed outline-ring' : ''}
-                isPending={working?.kind === 'option' && working.option === option.key}
-                pendingLabel="Sending..."
-                disabled={isWorking}
-                onClick={() => { onAnswer(option.key); }}
-              >
-                {option.label}
-              </ActionButton>
-            ))}
-          </div>
-          {picked === undefined ? null : (
-            <p className="text-muted-foreground">
-              {picked.label} is the pick of {delivery.from}: {question.pick.why}
-            </p>
-          )}
+          <QuestionOptions question={question} chosen={chosen} isStale={stale !== null} onChoose={setChosen} />
+          <p className="text-caption text-muted-foreground">
+            {delivery.from} picks {question.pick.option}: {question.pick.why}
+          </p>
         </>
       )}
+      {stale === null ? null : <StaleNotice stale={stale} from={delivery.from} onOpen={onOpen} />}
       {isDoneOnSeeing ? (
         <p data-testid="bridge-seen-done" className="text-muted-foreground">
           Seen now, so done: it asks nothing more.
         </p>
-      ) : (
+      ) : stale !== null ? null : (
         <>
           <label className="grid gap-1">
             <span>{question === undefined ? 'Your answer' : 'Note'}</span>
@@ -98,6 +127,11 @@ export function DeliveryCard({
           </label>
           {failure === undefined ? null : <Notice message={failure} isFailure />}
           <div className="flex flex-wrap gap-2">
+            {question === undefined || chosen === undefined ? null : (
+              <ActionButton data-testid="bridge-send-option" variant="primary" isPending={working?.kind === 'option'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onAnswer(chosen); }}>
+                Send option {chosen}
+              </ActionButton>
+            )}
             <ActionButton data-testid="bridge-answer" variant={question === undefined ? 'primary' : 'secondary'} isPending={working?.kind === 'note'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onAnswer(undefined); }}>
               {question === undefined ? 'Answer' : 'Send the note alone'}
             </ActionButton>
