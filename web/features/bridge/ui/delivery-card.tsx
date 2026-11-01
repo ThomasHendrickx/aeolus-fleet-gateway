@@ -114,7 +114,7 @@ function StepAsked({ step, isStale, isFinished }: { step: StepView; isStale: boo
           <ExternalLink aria-hidden className="size-4 shrink-0 text-muted-foreground" />
           <span className="grid flex-1">
             <span className="font-medium">Where it is done</span>
-            <span className="text-caption text-muted-foreground">{link.isOutside ? `${link.address} · opens outside Aeolus` : link.address}</span>
+            <span className="font-mono text-caption text-muted-foreground">{link.isOutside ? `${link.address} · opens outside Aeolus` : link.address}</span>
           </span>
           {isFinished ? null : (
             <a data-testid="bridge-step-link" href={link.href} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center rounded-md border border-border px-3 hover:bg-accent">
