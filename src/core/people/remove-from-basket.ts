@@ -1,11 +1,11 @@
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import { handledOf, type DealDeps } from './opened-of.js';
-import type { PersonCaller, PersonCrewError } from './person-crew.js';
+import { handledOf, type DealDeps, type DealtError } from './opened-of.js';
+import type { PersonCaller } from './person-crew.js';
 import { standingBasketOf, type BasketDeps } from './read-basket.js';
 import { takeOutUnsent } from './send-basket.js';
 
-export type RemoveFromBasket = (input: { caller: PersonCaller; questionId: string }) => Promise<Result<{ questionId: string }, PersonCrewError | DomainError<'NOT_IN_BASKET' | 'CONFLICT'>>>;
+export type RemoveFromBasket = (input: { caller: PersonCaller; questionId: string }) => Promise<Result<{ questionId: string }, DealtError | DomainError<'NOT_IN_BASKET' | 'CONFLICT'>>>;
 
 /**
  * Use case: the person removes an entry from the basket (section 9). One
