@@ -12,6 +12,12 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
+
+/** The conversation a post to the channel goes into, as Slack answers it: a person's user id names their direct messages with the bot. */
+function conversationOf(channel: string): string {
+  return channel.startsWith('U') ? `D${channel.slice(1)}` : channel;
+}
+
 export interface FakeSlack {
   url: string;
   /** Slack's Web API base, as the gateway's SLACK_API_URL names it. */
@@ -83,9 +89,9 @@ export async function startFakeSlack(): Promise<FakeSlack> {
   const posted = new Array<{ botToken: string; form: Record<string, string> }>();
   const reactions = new Array<{ botToken: string; form: Record<string, string> }>();
   const updated = new Array<{ botToken: string; form: Record<string, string> }>();
-  /** A posted message as Slack holds it now: its text as last given, in its conversation and thread. */
+  /** A posted message as Slack holds it now: its text as last given, in its conversation and thread. A person's user id names no conversation here: Slack reads and edits a direct message only by the conversation's id. */
   const messageAt = (channel: string | null, ts: string | null) => {
-    const index = posted.findIndex((each, at) => each.form.channel === channel && `1730019600.${String(at + 1).padStart(6, '0')}` === ts);
+    const index = posted.findIndex((each, at) => conversationOf(each.form.channel ?? '') === channel && `1730019600.${String(at + 1).padStart(6, '0')}` === ts);
     const post = posted[index];
     const held = updated.findLast((each) => each.form.channel === channel && each.form.ts === ts)?.form ?? post?.form;
     const attachments: unknown = JSON.parse(held?.attachments ?? '[]');
@@ -233,7 +239,7 @@ export async function startFakeSlack(): Promise<FakeSlack> {
         posted.push({ botToken: bearer, form: Object.fromEntries(form) });
         const ts = `1730019600.${String(posted.length).padStart(6, '0')}`;
         await postsHeld;
-        answer(response, { body: { ok: true, channel: form.get('channel'), ts } });
+        answer(response, { body: { ok: true, channel: conversationOf(form.get('channel') ?? ''), ts } });
         return;
       }
       case 'reactions.add': {

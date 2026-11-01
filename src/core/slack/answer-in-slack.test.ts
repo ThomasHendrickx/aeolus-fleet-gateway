@@ -141,6 +141,14 @@ describe("a press of a question's button in Slack", () => {
     });
   });
 
+  it("answers a press in the person's direct messages on a question kept by their user id, before Slack named the conversation (aeolus-fleet#1573)", async () => {
+    await posts.save({ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, messageId: QUESTION.messageId, deliveryId: QUESTION.deliveryId, senderShipId: BUDGET_CHECK, appId: 'A01', channel: 'U0MATHILDE', ts: null, threadTs: null });
+
+    const answered = await press(2);
+
+    expect({ answered, replies: fleet.replies.map(({ payload }) => payload) }).toEqual({ answered: { isOk: true, value: { kind: 'answered' } }, replies: ['{"questionId":"5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11","option":2}'] });
+  });
+
   it("says in the thread why core did not take the answer", async () => {
     fleet.refusals.reply.push({ code: 'NOT_REACHABLE', message: 'No rule' });
 
