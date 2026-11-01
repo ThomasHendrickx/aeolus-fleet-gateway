@@ -151,6 +151,19 @@ describe("a bot's post edited once something came of its item (Bridge, view sync
     await expect(messages.messageOf('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', threadTs: null })).resolves.toEqual({ isOk: true, value: QUESTION_POST });
   });
 
+  it("posts what waits at argo in argo's own colour with a plain Open in the console as argo, and reads it back so", async () => {
+    const messages = createSlackMessages({ apiUrl: slack.apiUrl });
+    const argoPost = {
+      text: 'Waits at argo, not you: thomas-mac is low on disk: 4% free',
+      item: { asker: 'trierarch', heading: '*Waits at argo*, not you · Report from trierarch', title: 'thomas-mac is low on disk: 4% free', body: null, aside: 'For everyone allowed as argo. Acting signs you in to the console as argo.', footer: null, tone: 'argo' },
+      buttons: [{ text: 'Open in the console as argo', url: 'https://fleet.acme.test/inbox?message=dlv_01m3tbfspe96yf1rnr4ank0002', isPlain: true }],
+    } as const satisfies SlackMessage;
+    await messages.post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'D0MATHILDE', threadTs: null, message: argoPost });
+
+    const [attachment] = z.array(z.object({ color: z.string() })).parse(JSON.parse(slack.posted[0]?.form.attachments ?? ''));
+    expect({ color: attachment?.color, back: await messages.messageOf('xoxb-A01', { channel: 'D0MATHILDE', ts: '1730019600.000001', threadTs: null }) }).toEqual({ color: '#8ea6ff', back: { isOk: true, value: argoPost } });
+  });
+
   it("reads a message that is no item back as its text, in a thread", async () => {
     const messages = createSlackMessages({ apiUrl: slack.apiUrl });
     await messages.post('xoxb-A01', { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', channel: 'D0MATHILDE', threadTs: '1730019000.000100', message: { text: 'Friday', item: null, buttons: [] } });
