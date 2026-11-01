@@ -2,7 +2,8 @@
 /**
  * Bridge's actions, each one call of the gateway's API as the signed-in
  * account, on the server (0033): opening, answering and being done with an
- * item, reading the next page of the record, and in Bridge's settings the
+ * item, putting an answer in the basket, removing it and sending the basket,
+ * reading the next page of the record, and in Bridge's settings the
  * wake channels, the Slack link and deciding a request. The API checks everything; a
  * refusal comes back in its own words for the page to say by the control. A
  * sign-in that ended sends the person to sign in again.
@@ -18,6 +19,7 @@ import { serverCredentialOf } from '../../forms/server-credential';
 import { answerOf, bodyOf, questionOf, type AnswerInput, type FocusedDelivery } from '../services/deliveries';
 import type { SubscriptionInput } from '../services/web-push';
 import { EVERY_APP_SHIP_SCOPES, type DecisionInput } from '../services/requests';
+import type { BasketSent } from '../services/basket';
 import type { RecordPage } from '../services/items';
 import { BRIDGE_PATH } from '../paths';
 
@@ -64,6 +66,27 @@ export async function answerDelivery({ fleet, deliveryId, input }: { fleet: stri
     await api.people.answer.mutate({ deliveryId, ...answer.value });
     return undefined;
   });
+}
+
+/** Puts the person's answer to a question in the basket, or changes it there: nothing is sent (Bridge, section 9). */
+export async function putInBasket({ fleet, deliveryId, option, note }: { fleet: string; deliveryId: string; option: number; note: string }): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    await api.people.putInBasket.mutate({ deliveryId, option, note });
+    return undefined;
+  });
+}
+
+/** Takes an answer out of the basket; one the fleet refused marks its question done, not sent. */
+export async function removeFromBasket(fleet: string, questionId: string): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    await api.people.removeFromBasket.mutate({ questionId });
+    return undefined;
+  });
+}
+
+/** Send N answers: each entry stored as sending, then sent on its own by the gateway. */
+export async function sendBasket(fleet: string): Promise<ActionOutcome<BasketSent>> {
+  return attempt(fleet, (api) => api.people.sendBasket.mutate());
 }
 
 export async function doneDelivery(fleet: string, deliveryId: string): Promise<ActionOutcome<undefined>> {
