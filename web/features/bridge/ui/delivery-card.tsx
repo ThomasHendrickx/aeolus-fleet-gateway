@@ -41,6 +41,15 @@ export function putOf({ chosen, inBasket, note }: { chosen: number | null | unde
   return chosen === null ? { label: 'Put the note alone in the basket', isReady: note.trim() !== '' } : { label: `Put option ${String(chosen)} in the basket`, isReady: true };
 }
 
+/** Which info lines a question says: the asker's pick while the choice is it and nothing is in the basket, or it is stale (decide-1); that nothing is sent yet once another option is chosen (basket-1); neither while the choice is what the basket holds (basket-2). */
+export function infoLinesOf({ chosen, pick, inBasket, isStale }: { chosen: number | null | undefined; pick: number; inBasket: InBasket | null; isStale: boolean }): { isPickSaid: boolean; isNothingSentSaid: boolean } {
+  if (isStale) {
+    return { isPickSaid: true, isNothingSentSaid: false };
+  }
+  const isAtPick = inBasket === null && chosen === pick;
+  return { isPickSaid: isAtPick, isNothingSentSaid: !isAtPick && putOf({ chosen, inBasket, note: '' }) !== null };
+}
+
 /** What a question in the basket says, in the info tone (basket.html): in it, not sent, with its note; picking another option changes it. */
 function InBasketNotice({ inBasket, basketHref, isRemoving, isWorking, onRemove }: { inBasket: InBasket; basketHref: string; isRemoving: boolean; isWorking: boolean; onRemove: () => void }) {
   return (
@@ -49,7 +58,7 @@ function InBasketNotice({ inBasket, basketHref, isRemoving, isWorking, onRemove 
       <div className="grid flex-1 gap-2">
         <span className="grid gap-0.5">
           <span className="font-medium">In the basket: {inBasket.option === null ? 'the note alone' : `option ${String(inBasket.option)}`}, not sent</span>
-          <span className="text-caption text-muted-foreground">{inBasket.note === null ? '' : `“${inBasket.note}” `}Pick another option to change it.</span>
+          <span className="text-caption text-muted-foreground">{inBasket.note === null ? '' : `"${inBasket.note}" `}Pick another option to change it.</span>
         </span>
         <div className="flex flex-wrap gap-2">
           <a data-testid="bridge-basket-open" href={basketHref} className="inline-flex h-9 items-center rounded-md border border-border bg-card px-4 text-card-foreground hover:bg-accent">
@@ -208,7 +217,7 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
 }
 
 /** A question's note field, always open (BH1), and the button putting the answer in the basket, sending nothing (CC24); neither while the choice is what the basket holds. */
-function QuestionControls({ from, put, note, isPutting, isWorking, failure, onNoteChange, onPut }: { from: string; put: Put | null; note: string; isPutting: boolean; isWorking: boolean; failure: string | undefined; onNoteChange: (note: string) => void; onPut: () => void }) {
+function QuestionControls({ from, put, isNothingSentSaid, note, isPutting, isWorking, failure, onNoteChange, onPut }: { from: string; put: Put | null; isNothingSentSaid: boolean; note: string; isPutting: boolean; isWorking: boolean; failure: string | undefined; onNoteChange: (note: string) => void; onPut: () => void }) {
   if (put === null) {
     return null;
   }
@@ -216,15 +225,15 @@ function QuestionControls({ from, put, note, isPutting, isWorking, failure, onNo
     <>
       <label className="grid gap-1">
         <span>Note (optional)</span>
-        <textarea data-testid="bridge-note" rows={2} value={note} onChange={(event) => { onNoteChange(event.target.value); }} className="field-sizing-content min-h-16 rounded-md border border-input bg-background p-2" />
+        <textarea data-testid="bridge-note" rows={2} value={note} onChange={(event) => { onNoteChange(event.target.value); }} className="field-sizing-content min-h-16 resize-none rounded-md border border-input bg-background p-2" />
         <span className="text-caption text-muted-foreground">Goes with the answer.</span>
       </label>
       {failure === undefined ? null : <Notice message={failure} isFailure />}
-      <ActionButton data-testid="bridge-put-in-basket" variant="primary" className="justify-self-start" isPending={isPutting} pendingLabel="Putting in the basket..." disabled={isWorking || !put.isReady} onClick={onPut}>
+      <ActionButton data-testid="bridge-put-in-basket" variant="primary" className="w-full justify-center sm:w-auto sm:justify-self-start" isPending={isPutting} pendingLabel="Putting in the basket..." disabled={isWorking || !put.isReady} onClick={onPut}>
         <ShoppingBasket aria-hidden className="size-4" />
         {put.label}
       </ActionButton>
-      <InfoLine>Nothing is sent yet. {from} receives this answer when you send the basket.</InfoLine>
+      {isNothingSentSaid ? <InfoLine>Nothing is sent yet. {from} receives this answer when you send the basket.</InfoLine> : null}
     </>
   );
 }
@@ -295,6 +304,7 @@ export function DeliveryCard({
   const { question, step, stale } = delivery;
   const [chosen, setChosen] = useState<number | null | undefined>(inBasket === null ? question?.pick.option : inBasket.option);
   const isWorking = working !== undefined;
+  const infoLines = question === undefined ? undefined : infoLinesOf({ chosen, pick: question.pick.option, inBasket, isStale: stale !== null });
   return (
     <section data-testid="bridge-delivery" className="grid gap-3 rounded-lg border border-border bg-card p-6 text-card-foreground shadow-sm">
       <span className="text-caption text-muted-foreground">
@@ -314,9 +324,11 @@ export function DeliveryCard({
         <>
           <p className="whitespace-pre-wrap">{question.context}</p>
           <QuestionOptions question={question} chosen={chosen} isStale={stale !== null} onChoose={setChosen} />
-          <InfoLine>
-            {delivery.from} picks {question.pick.option}: {question.pick.why}
-          </InfoLine>
+          {infoLines?.isPickSaid === true ? (
+            <InfoLine>
+              {delivery.from} picks {question.pick.option}: {question.pick.why}
+            </InfoLine>
+          ) : null}
         </>
       )}
       {stale === null ? null : <StaleNotice stale={stale} from={delivery.from} isStep={step !== undefined} onOpen={onOpen} />}
@@ -344,7 +356,7 @@ export function DeliveryCard({
           </div>
         </>
       ) : (
-        <QuestionControls from={delivery.from} put={putOf({ chosen, inBasket, note })} note={note} isPutting={working?.kind === (chosen === null ? 'note' : 'option')} isWorking={isWorking} failure={failure} onNoteChange={onNoteChange} onPut={() => { if (chosen !== undefined) { onPut(chosen); } }} />
+        <QuestionControls from={delivery.from} put={putOf({ chosen, inBasket, note })} isNothingSentSaid={infoLines?.isNothingSentSaid === true} note={note} isPutting={working?.kind === (chosen === null ? 'note' : 'option')} isWorking={isWorking} failure={failure} onNoteChange={onNoteChange} onPut={() => { if (chosen !== undefined) { onPut(chosen); } }} />
       )}
       {question === undefined || stale !== null || places === undefined ? null : (
         <footer data-testid="bridge-shown-in" className="grid gap-1 border-t border-border pt-3 text-caption text-muted-foreground">

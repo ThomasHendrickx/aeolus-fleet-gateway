@@ -14,12 +14,12 @@ export function putToastOf(option: number | null): ToastWords {
   return { title: option === null ? 'Your note alone in the basket' : `Option ${String(option)} in the basket`, description: 'Not sent. Still waiting on you until you send it.' };
 }
 
-/** The toasts Bridge raised for the basket, each behind the basket icon, on the popover. */
+/** The toasts Bridge raised for the basket, each behind the basket icon, on the popover, gone by themselves: at the left on a desktop and none on a phone, as basket.html draws them. */
 export function BasketToasts() {
   const { toasts } = Toast.useToastManager();
   return (
     <Toast.Portal>
-      <Toast.Viewport className="fixed right-4 bottom-4 z-50 grid w-[min(24rem,calc(100vw-2rem))] gap-2">
+      <Toast.Viewport className="fixed bottom-4 left-4 z-50 hidden w-[min(24rem,calc(100vw-2rem))] gap-2 sm:grid">
         {toasts.map((toast) => (
           <Toast.Root key={toast.id} toast={toast} data-testid="bridge-basket-toast" className="flex items-start gap-3 rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg">
             <ShoppingBasket aria-hidden className="mt-0.5 size-4 shrink-0" />
@@ -27,9 +27,6 @@ export function BasketToasts() {
               <Toast.Title className="font-medium" />
               <Toast.Description className="text-caption text-muted-foreground" />
             </Toast.Content>
-            <Toast.Close aria-label="Dismiss" className="text-muted-foreground">
-              ×
-            </Toast.Close>
           </Toast.Root>
         ))}
       </Toast.Viewport>
