@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
@@ -14,9 +14,15 @@ import { ITEM_JOBS, routingDefaultsOf, type Route } from './routing.js';
 let crews: ReturnType<typeof memoryPersonCrews>;
 let opened: ReturnType<typeof memoryOpenedDeliveries>;
 
-beforeEach(() => {
+/** The gateway's own ship, which sends a person its own steps (CC14). */
+const GATEWAY_SHIP_ID = 'shp_01m3tbfspe96yf1rnr4ank0gat';
+let connections: ReturnType<typeof memoryConnectionStore>;
+
+beforeEach(async () => {
   crews = memoryPersonCrews();
   opened = memoryOpenedDeliveries();
+  connections = memoryConnectionStore();
+  await connections.save({ fleetId: FLEET_ID, shipId: GATEWAY_SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-01T00:00:00.000Z') });
 });
 
 /** A chat on for every job, as the gateway's defaults have it (Bridge, CC19). */
@@ -25,7 +31,7 @@ const CHAT_ON = routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' a
 function readInbox(deliveries: PersonDelivery[], options: { crewToken?: string; routes?: Route[]; isExcludingIgnored?: boolean } = {}) {
   const { crewToken = 'aeolus_ct_v1_charlotte', routes = [], isExcludingIgnored = false } = options;
   const ship = fakePersonShipDoor({ crewToken, deliveries, isExcludingIgnored });
-  return { ...ship, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, routes: memoryRoutes(routes), defaults: CHAT_ON }) };
+  return { ...ship, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, routes: memoryRoutes(routes), defaults: CHAT_ON, connections }) };
 }
 
 function aChatRoute(overrides: Partial<Route>): Route {
@@ -209,5 +215,32 @@ describe('a chat lists only the jobs on for it (Bridge, section 8)', () => {
     const read = await readInbox([aPersonDelivery()], { routes: [aChatRoute({ job: 'decide', isOn: true })] }).readInbox(CHARLOTTE_GRANT);
 
     expect(read.isOk && read.value.deliveries.map(({ deliveryId }) => deliveryId)).toEqual([aPersonDelivery().deliveryId]);
+  });
+});
+
+describe("a chat leaves the gateway's own steps out: they show in Bridge only (BH8)", () => {
+  const OWN_STEP = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0gs1',
+    messageId: 'msg_01m3tbfspe96yf1rnr4ank0gs1',
+    senderShipId: GATEWAY_SHIP_ID,
+    senderName: 'gateway',
+    contentType: 'application/vnd.aeolus.step+json',
+    headline: 'Sign in to the outside party linear',
+    askedQuestionId: null,
+    stepId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+  });
+
+  it("lists neither the gateway's own step that waits nor counts it", async () => {
+    const inbox = await readInbox([OWN_STEP, aPersonDelivery()]).readInbox(CHARLOTTE_GRANT);
+
+    expect(inbox.isOk ? { waiting: inbox.value.waiting, listed: inbox.value.deliveries.map(({ deliveryId }) => deliveryId) } : inbox).toEqual({ waiting: 1, listed: ['dlv_01m3tbfspe96yf1rnr4ank0001'] });
+  });
+
+  it("lists no gateway's own step the person opened", async () => {
+    await opened.save({ ...OPENED, deliveryId: OWN_STEP.deliveryId, senderShipId: GATEWAY_SHIP_ID, contentType: OWN_STEP.contentType, askedQuestionId: null, stepId: OWN_STEP.stepId });
+
+    const inbox = await readInbox([]).readInbox(CHARLOTTE_GRANT);
+
+    expect(inbox.isOk ? inbox.value.opened : inbox).toEqual([]);
   });
 });
