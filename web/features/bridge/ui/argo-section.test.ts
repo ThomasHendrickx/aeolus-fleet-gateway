@@ -74,10 +74,16 @@ describe("Bridge's argo section", () => {
     expect(textOf(sectionOf({ count: 1, items: [anItem()], done: null }))).toContain("Acting signs you in to the console as argo; it ends anyone else's sign-in as argo.");
   });
 
-  it('says who did the message done at argo, where and when, and that it left the list for everyone', () => {
+  it('says who did the message done at argo, where and when, by its title cut at its first colon, and that it left the list for everyone', () => {
     const text = textOf(sectionOf({ count: 1, items: [QUESTION], done: { title: 'thomas-mac is low on disk: 4% free', at: '2026-11-01T20:14:00.000Z', by: 'Mathilde', isInConsole: true } }));
 
-    expect(text).toContain('Done at argo by Mathilde in the console, 20:14 UTC: thomas-mac is low on disk: 4% free. Gone from this list for everyone allowed as argo.');
+    expect(text).toContain('Done at argo by Mathilde in the console, 20:14: thomas-mac is low on disk. Gone from this list for everyone allowed as argo.');
+  });
+
+  it('says the done message by its whole title when it has no colon, and on a phone without where', () => {
+    const text = textOf(sectionOf({ count: 0, items: [], done: { title: 'Flagship design-sq was released', at: '2026-11-01T20:14:00.000Z', by: 'Mathilde', isInConsole: true } }));
+
+    expect(text).toContain('Done at argo by Mathilde, 20:14: Flagship design-sq was released.');
   });
 
   it('marks a stale question withdrawn, as the console does', () => {
