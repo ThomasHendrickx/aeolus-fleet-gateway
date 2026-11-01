@@ -7,7 +7,7 @@ const SECRET = 'a-gateway-secret-of-at-least-32-characters';
 const SIGN_IN = {
   verifier: 'the-gateway-verifier-kept-secret-on-the-way',
   browserSecret: 'the-secret-the-browser-holds-in-a-cookie',
-  returnTo: '/overview?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv',
+  returnTo: '/bridge?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv',
   expiresAt: new Date('2026-10-21T09:10:00.000Z'),
 };
 

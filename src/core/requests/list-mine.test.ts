@@ -6,7 +6,7 @@ import type { Actor } from '../actors/authenticate-actor.js';
 import { createListMine } from './list-mine.js';
 import type { PendingRequest } from './ports.js';
 
-// Your requests on the overview (decision 0056): the requests an account
+// Your requests in Bridge's settings (decision 0056): the requests an account
 // asked, in any state, the newest first.
 
 const NOW = new Date('2026-10-28T09:00:00.000Z');

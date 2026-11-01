@@ -11,7 +11,7 @@ import { charlotteIn, PAGASAE_APP_CLIENT, PAGASAE_CLIENT, startFakePagasae, type
 import { aFreePort, startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
-// A person's open overview and inbox change within seconds, without a
+// A person's open Bridge and inbox change within seconds, without a
 // reload, when a delivery reaches their person ship and when they open one
 // in another client (wake a person, #1014): the gateway's waiter of the ship
 // tells the pages, which read people.inbox again. The fleet and the gateway
@@ -68,8 +68,8 @@ afterEach(async () => {
 
 const asCharlotte = (): Record<string, string> => ({ cookie: `aeolus_account_session=${SIGN_IN}`, 'aeolus-fleet': fleetId });
 
-/** Charlotte's open overview: the stream its page follows, each event telling it to read itself again. */
-async function charlottesOverview() {
+/** Charlotte's open Bridge: the stream its page follows, each event telling it to read itself again. */
+async function charlottesBridge() {
   const stop = new AbortController();
   const stream = await fetch(`${address}/trpc/requests.changes`, { headers: { accept: 'text/event-stream', ...asCharlotte() }, signal: stop.signal });
   if (stream.body === null) {
@@ -121,16 +121,16 @@ async function charlottesInbox() {
   return inboxAnswerSchema.parse(await read.json()).result.data;
 }
 
-describe("a person's open overview, as their person ship's inbox changes", () => {
+describe("a person's open Bridge, as their person ship's inbox changes", () => {
   it('is told to read itself again when a delivery reaches their person ship', async () => {
-    const overview = await charlottesOverview();
+    const bridge = await charlottesBridge();
 
     await trackerSendsCharlotte();
 
     try {
-      await expect(overview.isToldToReadAgain()).resolves.toBe(true);
+      await expect(bridge.isToldToReadAgain()).resolves.toBe(true);
     } finally {
-      overview.close();
+      bridge.close();
     }
   });
 
@@ -138,15 +138,15 @@ describe("a person's open overview, as their person ship's inbox changes", () =>
     await trackerSendsCharlotte();
     await expect.poll(async () => (await charlottesInbox()).waiting, { timeout: HEARD_WITHIN_MS }).toBe(1);
     const [delivery] = (await charlottesInbox()).deliveries;
-    const overview = await charlottesOverview();
+    const bridge = await charlottesBridge();
 
     const opened = await fetch(`${address}/trpc/people.open`, { method: 'POST', headers: { 'content-type': 'application/json', ...asCharlotte() }, body: JSON.stringify({ deliveryId: delivery?.deliveryId }) });
     expect(opened.status).toBe(200);
 
     try {
-      await expect(overview.isToldToReadAgain()).resolves.toBe(true);
+      await expect(bridge.isToldToReadAgain()).resolves.toBe(true);
     } finally {
-      overview.close();
+      bridge.close();
     }
   });
 });

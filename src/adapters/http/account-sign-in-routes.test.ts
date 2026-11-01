@@ -39,7 +39,7 @@ afterEach(async () => {
 
 describe('signing in to the pages', () => {
   it("sends the browser to pagasae, holding the sign-in's secret in a cookie only the way back reads", async () => {
-    const started = await server.inject({ url: '/sign-in/start?return_to=%2Foverview%3Ffleet%3Dflt_1' });
+    const started = await server.inject({ url: '/sign-in/start?return_to=%2Fbridge%3Ffleet%3Dflt_1' });
 
     expect({ status: started.statusCode, location: started.headers.location, cookie: started.headers['set-cookie'] }).toEqual({
       status: 302,
@@ -49,13 +49,13 @@ describe('signing in to the pages', () => {
   });
 
   it('goes back to the page asked for, clearing the cookie', async () => {
-    await server.inject({ url: '/sign-in/start?return_to=%2Foverview%3Ffleet%3Dflt_1' });
+    await server.inject({ url: '/sign-in/start?return_to=%2Fbridge%3Ffleet%3Dflt_1' });
 
     const back = await server.inject({ url: '/sign-in/done?state=sealed-1&code=pagasae-code-1', headers: { cookie: 'aeolus_account_sign_in=secret-2' } });
 
     expect({ status: back.statusCode, location: back.headers.location, cookie: back.headers['set-cookie'] }).toEqual({
       status: 302,
-      location: '/overview?fleet=flt_1',
+      location: '/bridge?fleet=flt_1',
       cookie: 'aeolus_account_sign_in=; Path=/sign-in/done; Max-Age=0; HttpOnly; Secure; SameSite=Lax',
     });
   });

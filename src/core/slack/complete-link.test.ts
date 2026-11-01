@@ -91,7 +91,7 @@ describe('completing a Slack link', () => {
 
     const completed = await completeLink();
 
-    expect(completed).toEqual(err({ kind: 'ACCOUNT_LINKED', message: 'Your account is linked to Slack as @mathilde.old already: unlink it on the Overview first', fleetId: FLEET_ID, name: 'mathilde.old' }));
+    expect(completed).toEqual(err({ kind: 'ACCOUNT_LINKED', message: 'Your account is linked to Slack as @mathilde.old already: unlink it in Bridge's settings first', fleetId: FLEET_ID, name: 'mathilde.old' }));
   });
 
   it("refuses a Slack user of another workspace than the fleet's", async () => {

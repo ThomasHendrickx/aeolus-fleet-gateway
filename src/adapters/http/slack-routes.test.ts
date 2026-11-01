@@ -118,16 +118,16 @@ describe("a linked person's message at the events door", () => {
 });
 
 // Sign in with Slack sends the person back to the gateway (gateway scopes
-// 9.3); they go on to the Overview, which says how the link went by its
+// 9.3); they go on to Bridge, which says how the link went by its
 // outcome, naming the first link of a second one refused.
 
 describe("Sign in with Slack's way back", () => {
-  it('sends the person to the Overview, linked', async () => {
+  it('sends the person to Bridge, linked', async () => {
     const { server } = await aServer(() => Promise.resolve(ok({ fleetId: FLEET_ID })));
 
     const answer = await server.inject({ method: 'GET', url: `${SLACK_LINK_PATH}?code=code-1&state=sealed` });
 
-    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: `/overview?fleet=${FLEET_ID}&slack=linked` });
+    expect({ status: answer.statusCode, location: answer.headers.location }).toEqual({ status: 302, location: `/bridge/settings?fleet=${FLEET_ID}&slack=linked` });
   });
 
   it('names the first link of a second one refused', async () => {
@@ -135,7 +135,7 @@ describe("Sign in with Slack's way back", () => {
 
     const answer = await server.inject({ method: 'GET', url: `${SLACK_LINK_PATH}?code=code-1&state=sealed` });
 
-    expect(answer.headers.location).toBe(`/overview?fleet=${FLEET_ID}&slack=slack-user-linked&name=joris`);
+    expect(answer.headers.location).toBe(`/bridge/settings?fleet=${FLEET_ID}&slack=slack-user-linked&name=joris`);
   });
 
   it("completes the link with the shared sign-in the browser holds, so a link is bound to the account that started it", async () => {
@@ -167,6 +167,6 @@ describe("Sign in with Slack's way back", () => {
 
     const answer = await server.inject({ method: 'GET', url: `${SLACK_LINK_PATH}?error=access_denied&state=sealed` });
 
-    expect(answer.headers.location).toBe('/overview?slack=cancelled');
+    expect(answer.headers.location).toBe('/bridge/settings?slack=cancelled');
   });
 });

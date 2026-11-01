@@ -30,11 +30,11 @@ afterEach(async () => {
 });
 
 describe("the gateway's address as a person opens it (#1030)", () => {
-  it('sends a person who opens the address to the Overview', async () => {
+  it('sends a person who opens the address to Bridge', async () => {
     const page = await server.inject({ url: '/', headers: { accept: BROWSER_ACCEPT } });
 
     expect(page.statusCode).toBe(303);
-    expect(page.headers.location).toBe('/overview');
+    expect(page.headers.location).toBe('/bridge');
   });
 
   it('hands an unknown page a person opens to the web app, which answers it', async () => {
@@ -62,12 +62,12 @@ describe("the gateway's address as a person opens it (#1030)", () => {
   });
 
   it("hands a page's own calls to the web app: a refresh of its server components, and its live updates", async () => {
-    const refresh = await server.inject({ url: '/overview?fleet=f', headers: { accept: '*/*', rsc: '1' } });
-    const live = await server.inject({ url: '/overview/changes?fleet=f', headers: { accept: 'text/event-stream' } });
+    const refresh = await server.inject({ url: '/bridge?fleet=f', headers: { accept: '*/*', rsc: '1' } });
+    const live = await server.inject({ url: '/bridge/changes?fleet=f', headers: { accept: 'text/event-stream' } });
 
     expect([refresh.body, live.body]).toEqual([
-      '<p>the web app answered /overview?fleet=f</p>',
-      '<p>the web app answered /overview/changes?fleet=f</p>',
+      '<p>the web app answered /bridge?fleet=f</p>',
+      '<p>the web app answered /bridge/changes?fleet=f</p>',
     ]);
   });
 

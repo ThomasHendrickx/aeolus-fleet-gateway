@@ -60,7 +60,7 @@ async function show(fleet: ReturnType<typeof aShip>, freshGiven?: readonly Pushe
       return Promise.resolve();
     },
     clock: { now: () => new Date('2026-10-27T09:00:00.000Z') },
-    overviewUrlOf: (fleetId) => `https://gateway.acme.test/overview?fleet=${fleetId}`,
+    bridgeUrlOf: (fleetId) => `https://gateway.acme.test/bridge?fleet=${fleetId}`,
   })(SHIP, { crewToken: CREW, fresh });
 }
 

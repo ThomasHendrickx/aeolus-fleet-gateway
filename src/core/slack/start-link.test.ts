@@ -7,7 +7,7 @@ import type { PersonCaller } from '../people/person-crew.js';
 import { err, ok } from '../shared/result.js';
 import { createStartLink } from './start-link.js';
 
-// Link Slack, from the Overview or the button in Slack's answer (gateway
+// Link Slack, from Bridge or the button in Slack's answer (gateway
 // scopes 9.3): Sign in with Slack through the fleet's own bot's app, for
 // the fleet's workspace, the link's state sealed for ten minutes. Only an
 // account with a person ship in the fleet links; its person ship is crewed
