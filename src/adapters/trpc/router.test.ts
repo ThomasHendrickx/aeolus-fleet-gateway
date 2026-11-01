@@ -984,6 +984,13 @@ describe("a person reads and deals with their person ship's deliveries through t
     ]);
   });
 
+  it('puts a note alone in the basket, with no option', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.putInBasket({ deliveryId: DELIVERY, option: null, note: 'Ask me after the demo' })).resolves.toEqual({ questionId: QUESTION_ID, option: null, note: 'Ask me after the demo' });
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, deliveryId: DELIVERY, option: 'null', note: 'Ask me after the demo' }]);
+  });
+
   it('refuses an option that is no whole number from 1, putting nothing in the basket', async () => {
     const { context, answers } = aContext(PERSON_COOKIE);
 
