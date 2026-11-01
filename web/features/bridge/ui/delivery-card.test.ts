@@ -178,17 +178,37 @@ describe('a step opened in Bridge (CC14)', () => {
     }).toEqual({ title: true, note: true, sent: true, tone: true, address: true, open: false, noteField: false, done: false });
   });
 
-  it('shows a step the person cannot do neutral, with its X, when, the note quoted and what was sent', () => {
+  it('shows a step the person cannot do in the ended tone, with its X, when, the note quoted and what was sent', () => {
     const markup = render(aStep(), { finished: { outcome: 'cannot', note: 'The name is taken.', at: '2026-10-31T20:05:00.000Z' } });
 
     expect({
       title: markup.includes('Cannot, in Bridge at 20:05 UTC'),
       note: markup.includes('“The name is taken.”'),
       sent: markup.includes('Sent to orchestrator-1 as you, with the outcome cannot.'),
-      neutral: /data-testid="bridge-step-outcome"[^>]*bg-muted/.test(markup) && !/data-testid="bridge-step-outcome"[^>]*tone-ok/.test(markup),
+      ended: /data-testid="bridge-step-outcome"[^>]*border-tone-ended-border bg-tone-ended-bg/.test(markup) && /lucide-circle-x[^"]*text-tone-ended-fg/.test(markup),
       icon: markup.includes('lucide-circle-x'),
       cannot: markup.includes('data-testid="bridge-step-cannot"'),
     }).toEqual({ title: true, note: true, sent: true, neutral: true, icon: true, cannot: false });
+  });
+
+  it.each([
+    { outcome: 'done' as const, icon: 'lucide-circle-check', tone: 'text-tone-ok-fg' },
+    { outcome: 'cannot' as const, icon: 'lucide-circle-x', tone: 'text-tone-ended-fg' },
+  ])('words the $outcome box in the foreground, its sent line muted, only its icon in its tone', ({ outcome, icon, tone }) => {
+    const markup = render(aStep(), { finished: { outcome, note: 'A note.', at: '2026-10-31T20:03:00.000Z' } });
+    const box = /<div data-testid="bridge-step-outcome"[^>]*>/.exec(markup)?.[0] ?? '';
+
+    expect({
+      boxInTone: /text-tone-/.test(box),
+      iconInTone: new RegExp(`${icon}[^"]*${tone}`).test(markup),
+      sentMuted: /<span class="[^"]*text-muted-foreground[^"]*">“A note\.” Sent to orchestrator-1/.test(markup),
+    }).toEqual({ boxInTone: false, iconInTone: true, sentMuted: true });
+  });
+
+  it('grows the note field with its note, so a note of three lines shows whole', () => {
+    const markup = render(aStep(), { note: 'A note of three lines.' });
+
+    expect(/<textarea[^>]*data-testid="bridge-note"[^>]*class="[^"]*field-sizing-content/.test(markup)).toBe(true);
   });
 
   it('shows an outcome sent with no note without a quote', () => {
