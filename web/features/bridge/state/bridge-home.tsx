@@ -4,11 +4,12 @@ import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { readYourFleet, type FleetRead } from '../fleet/hooks/read-your-fleet';
 import { YourFleetPanel } from '../fleet/state/your-fleet-panel';
-import { readBridgeHome, readTimeOf } from '../hooks/read-bridge';
+import { readBridgeHome, readSlackDroppedOut, readTimeOf } from '../hooks/read-bridge';
 import { BRIDGE_PATH } from '../paths';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { HomeColumns } from '../ui/home-columns';
+import { SlackDroppedOut } from '../ui/slack-dropped-out';
 import { HomePanel } from './home-panel';
 import { KeptRead } from './kept-read';
 import { RecordUnreadable } from './record-unreadable';
@@ -22,11 +23,16 @@ const NOTHING = { waiting: { count: 0, items: [] }, stayAware: [] };
  * read, the browser shows it as last read (states.html).
  */
 async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: string; fleet: Promise<FleetRead> }) {
-  const [read, fleetRead] = await Promise.all([readBridgeHome(api), fleet]);
+  const [read, fleetRead, slackDroppedOut] = await Promise.all([readBridgeHome(api), fleet, readSlackDroppedOut(api)]);
   const isNothingWaiting = read.kind !== 'unreadable' && (read.kind === 'none' || read.value.waiting.items.length === 0);
   return (
     <HomeColumns
-      banner={read.kind === 'unreadable' ? <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} /> : null}
+      banner={
+        <>
+          {read.kind === 'unreadable' ? <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} /> : null}
+          <KeptRead readAt={slackDroppedOut === undefined ? undefined : new Date().toISOString()}>{slackDroppedOut === undefined || slackDroppedOut === null ? null : <SlackDroppedOut fleetId={fleetId} botName={slackDroppedOut.botName} />}</KeptRead>
+        </>
+      }
       main={<KeptRead readAt={readTimeOf(read)}>{read.kind === 'unreadable' ? null : <HomePanel fleetId={fleetId} home={read.kind === 'read' ? read.value : NOTHING} />}</KeptRead>}
       aside={
         <KeptRead readAt={fleetRead.kind === 'unreadable' ? undefined : new Date().toISOString()}>
@@ -40,7 +46,7 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
 /**
  * Bridge home (docs/design/bridge, CC18), where signing in lands: what waits
  * on the person with one count, and the stay-aware feed, with Your fleet
- * beside them. Signed out, the browser goes to sign in before anything
+ * beside them, and why Slack shows nothing when it dropped out. Signed out, the browser goes to sign in before anything
  * shows; signed in, the shape shows
  * while it loads. It reads itself again whenever the person ship's items
  * change, and tells the gateway while it is in focus (wake a person, W6).

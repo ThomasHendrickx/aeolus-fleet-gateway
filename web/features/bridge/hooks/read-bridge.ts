@@ -41,6 +41,9 @@ export interface BridgeRoutingParts {
   readonly slackLink: SlackLink | null | undefined;
 }
 
+/** Why Slack shows the person nothing now, as the gateway answers it: the fleet's own bot, by its name, was removed in Slack. */
+export type SlackDroppedOut = NonNullable<Awaited<ReturnType<GatewayApi['slack']['droppedOut']['query']>>>;
+
 /** A person's Slack link as the gateway answers it: the workspace, and the Slack name linked, none while unlinked. */
 export type SlackLink = NonNullable<Awaited<ReturnType<GatewayApi['slack']['link']['query']>>>;
 
@@ -79,6 +82,20 @@ async function personRead<T>(call: Promise<T>): Promise<BridgeRead<T>> {
 
 /** Bridge home, read once per page: the shell's counts and home's lists share the read. */
 export const readBridgeHome = cache((api: GatewayApi): Promise<BridgeRead<BridgeHome>> => personRead(api.people.home.query()));
+
+/**
+ * Why Slack shows the person nothing now, if it dropped out (Bridge, section
+ * 9): null while it did not, or for an account the API refuses it to;
+ * undefined while it cannot be read now, so Bridge goes on saying what it
+ * last read. The person's own reads say whether their sign-in ended.
+ */
+export async function readSlackDroppedOut(api: GatewayApi): Promise<SlackDroppedOut | null | undefined> {
+  try {
+    return await api.slack.droppedOut.query();
+  } catch (error) {
+    return refusalCodeOf(error) === 'FORBIDDEN' ? null : undefined;
+  }
+}
 
 export function readBasket(api: GatewayApi): Promise<BridgeRead<BasketView>> {
   return personRead(api.people.basket.query());
