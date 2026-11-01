@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ageOf, clockTimeOf, fromWordsOf, jobLabelOf, jobWordOf, outcomeTextOf, screenTitleOf, seenWordsOf, type RecordItem } from './items';
 
 function anItem(overrides: Partial<RecordItem> = {}): RecordItem {
-  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', state: 'done', outcome: null, ...overrides };
+  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', isAlert: false, state: 'done', places: [], contentType: 'application/vnd.aeolus.question+json', payload: '{}', outcome: null, ...overrides };
 }
 
 describe('what came of an item and where, as Done says it (Bridge, CC4)', () => {
@@ -17,7 +17,7 @@ describe('what came of an item and where, as Done says it (Bridge, CC4)', () => 
     [{ place: 'chat', kind: 'replaced', option: null }, 'Replaced by its asker, seen in a chat'],
     [{ place: 'bridge', kind: 'notSent', option: 2 }, 'Not sent, removed in Bridge: option 2'],
   ] as const)('says %o as %s', (outcome, text) => {
-    expect(outcomeTextOf(anItem({ outcome: { ...outcome, at: '2026-10-31T19:58:00.000Z' } }))).toBe(text);
+    expect(outcomeTextOf(anItem({ outcome: { ...outcome, optionLabel: null, note: null, seen: null, replacementTitle: null, at: '2026-10-31T19:58:00.000Z' } }))).toBe(text);
   });
 
   it('says Done for one done with no outcome kept, as before Bridge or ended by the fleet', () => {

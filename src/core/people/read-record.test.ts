@@ -56,10 +56,8 @@ function readRecord(record: RecordedPersonDelivery[]) {
 
 async function itemsOf(record: RecordedPersonDelivery[]) {
   const page = await readRecord(record).readRecord({ caller: CHARLOTTE_GRANT, cursor: null });
-  if (!page.isOk) {
-    throw new Error(page.error.message);
-  }
-  return page.value.items;
+  expect(page.isOk).toBe(true);
+  return page.isOk ? page.value.items : [];
 }
 
 /** Keeps what came of a delivery of Charlotte's person ship. */
@@ -80,7 +78,7 @@ describe("a person reads their person ship's record in Done (Bridge, CC12)", () 
   it('leaves out what still waits on the person, new or seen: Done holds only items with an outcome (BH3)', async () => {
     const items = await itemsOf([aRecorded(1, { state: 'pending' }), aRecorded(2, { state: 'handed' }), aRecorded(3, { state: 'acknowledged' }), aRecorded(4, { state: 'handled' }), aRecorded(5, { state: 'undeliverable' })]);
 
-    expect(items.map(({ deliveryId }) => deliveryId)).toEqual(['dlv_01m3tbfspe96yf1rnr4ank0004', 'dlv_01m3tbfspe96yf1rnr4ank0005']);
+    expect(items.map(({ deliveryId }) => deliveryId)).toEqual(['dlv_01m3tbfspe96yf1rnr4ank0005', 'dlv_01m3tbfspe96yf1rnr4ank0004']);
   });
 
   it('lists no withdrawal as an item of its own: it shows on the question or step it names', async () => {
@@ -154,13 +152,13 @@ describe("a person reads their person ship's record in Done (Bridge, CC12)", () 
 
     const items = await itemsOf([aRecorded(1), aRecorded(2, { contentType: 'text/plain', payload: 'Thanks', headline: null })]);
 
-    expect(items.map(({ places }) => places)).toEqual([['slack', 'chat'], ['chat']]);
+    expect(items.map(({ places }) => places)).toEqual([['chat'], ['slack', 'chat']]);
   });
 
   it('tells an alert from a notice', async () => {
     const items = await itemsOf([aRecorded(1, { contentType: 'application/vnd.aeolus.alert+json', payload: '{}' }), aRecorded(2, { contentType: 'application/vnd.aeolus.notice+json', payload: '{}' })]);
 
-    expect(items.map(({ isAlert }) => isAlert)).toEqual([true, false]);
+    expect(items.map(({ isAlert }) => isAlert)).toEqual([false, true]);
   });
 
   it('carries what the item says, so it opens whole from Done with nothing acknowledged', async () => {

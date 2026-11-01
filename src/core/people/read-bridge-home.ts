@@ -14,9 +14,9 @@ import { asPersonCrew, withOwnRefusal, type PersonCaller, type PersonCrewError }
 import type { OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
 import { RECORD_PAGE_SIZE, SEALED_TITLE } from './read-record.js';
-import { ownStepsInBridgeOnly, ROUTING_PLACES, routingOf, type RoutedItem, type Routing, type RoutingDefaults, type RoutingPlace, type Routes } from './routing.js';
+import { placesOf } from './item-places.js';
+import { ownStepsInBridgeOnly, routingOf, type RoutingDefaults, type RoutingPlace, type Routes } from './routing.js';
 import { askingOf, staleOf, type Asking, type Stale } from './stale-item.js';
-import { isOfferedPlace } from './turn-route.js';
 
 /**
  * An item on Bridge home: by its title, with its job, an alert told from a
@@ -59,11 +59,6 @@ function inBasketOf(entries: readonly BasketEntry[]): (deliveryId: string) => Ho
     const entry = entries.find((each) => each.deliveryId === deliveryId);
     return entry === undefined ? null : { option: entry.option, note: entry.note };
   };
-}
-
-/** The places besides Bridge that show an item, as routing per job has them and the gateway offers them, in routing's order. */
-function placesOf(routing: Routing, offered: { isEmailOffered: boolean; isWebPushOffered: boolean }): (item: RoutedItem) => RoutingPlace[] {
-  return (item) => ROUTING_PLACES.filter((place) => isOfferedPlace(place, offered) && routing.isShowing(place, item));
 }
 
 function newestFirst(a: HomeItem, b: HomeItem): number {
