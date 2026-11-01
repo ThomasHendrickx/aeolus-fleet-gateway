@@ -384,6 +384,32 @@ model OpenedDelivery {
   @@map("opened_deliveries")
 }
 
+/// An answer in a person's basket (Bridge, section 9; CC21): picked in Bridge and not sent yet, one per question, sent in the order added.
+/// The person ships with an entry stored as sending are found by the partial index basket_entries_sending, in its migration.
+model BasketEntry {
+  fleetId      String   @map("fleet_id")
+  shipId       String   @map("ship_id")
+  /// The uuid of the question it answers (decision 0038).
+  questionId   String   @map("question_id")
+  deliveryId   String   @map("delivery_id")
+  messageId    String   @map("message_id")
+  senderShipId String   @map("sender_ship_id")
+  from         String
+  title        String
+  sentAt       DateTime @map("sent_at") @db.Timestamptz(3)
+  option       Int
+  note         String?
+  addedAt      DateTime @map("added_at") @db.Timestamptz(3)
+  /// waiting, sending or refused.
+  state        String
+  /// Why the fleet refused it, while refused.
+  refusal      String?
+
+  @@id([fleetId, shipId, questionId])
+  @@index([fleetId, shipId, addedAt])
+  @@map("basket_entries")
+}
+
 /// A pending request for an outside party (decision 0056): an outside MCP client's authorize request, or a person's request for an outside MCP server, kept 7 days.
 /// One open request per client or server in a fleet (partial unique index pending_requests_one_open, in its migration).
 model PendingRequest {
