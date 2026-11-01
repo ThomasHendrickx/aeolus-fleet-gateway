@@ -30,6 +30,8 @@ export interface FakeSlack {
   posted: { botToken: string; form: Record<string, string> }[];
   /** Each reaction added, with a bot token. */
   reactions: { botToken: string; form: Record<string, string> }[];
+  /** Each message given new text (chat.update), with a bot token. */
+  updated: { botToken: string; form: Record<string, string> }[];
   /** Holds the answer to each post, the post itself taken, until the function answered is called: Slack has the post, the gateway not yet its Slack message. */
   holdPosts(): () => void;
   /** Answers the method 429 with this Retry-After, until cleared. */
@@ -80,6 +82,13 @@ export async function startFakeSlack(): Promise<FakeSlack> {
   const postedOnlyTo = new Array<{ botToken: string; form: Record<string, string> }>();
   const posted = new Array<{ botToken: string; form: Record<string, string> }>();
   const reactions = new Array<{ botToken: string; form: Record<string, string> }>();
+  const updated = new Array<{ botToken: string; form: Record<string, string> }>();
+  /** A posted message as Slack holds it now: its text as last given, in its conversation and thread. */
+  const messageAt = (channel: string | null, ts: string | null) => {
+    const index = posted.findIndex((each, at) => each.form.channel === channel && `1730019600.${String(at + 1).padStart(6, '0')}` === ts);
+    const post = posted[index];
+    return post === undefined ? undefined : { ts: ts ?? '', thread_ts: post.form.thread_ts, text: updated.findLast((each) => each.form.channel === channel && each.form.ts === ts)?.form.text ?? post.form.text ?? '' };
+  };
   let signingInAs = { userId: 'U0MATHILDE', name: 'mathilde', teamId: SLACK_TEAM.id };
   let rotations = 0;
   let base = '';
@@ -233,6 +242,22 @@ export async function startFakeSlack(): Promise<FakeSlack> {
         answer(response, { body: isThere ? { ok: false, error: 'already_reacted' } : { ok: true } });
         return;
       }
+      case 'conversations.history':
+      case 'conversations.replies': {
+        // Read between oldest and latest, both the message's own time, inclusive.
+        const message = form.get('oldest') === form.get('latest') && form.get('inclusive') === 'true' ? messageAt(form.get('channel'), form.get('latest')) : undefined;
+        const isInThread = method === 'conversations.replies' ? message?.thread_ts === form.get('ts') : message?.thread_ts === undefined;
+        answer(response, { body: { ok: true, messages: message !== undefined && isInThread ? [message] : [] } });
+        return;
+      }
+      case 'chat.update': {
+        const isThere = messageAt(form.get('channel'), form.get('ts')) !== undefined;
+        if (isThere) {
+          updated.push({ botToken: bearer, form: Object.fromEntries(form) });
+        }
+        answer(response, { body: isThere ? { ok: true } : { ok: false, error: 'message_not_found' } });
+        return;
+      }
       case 'chat.postEphemeral': {
         if (!bearer.startsWith('xoxb-')) {
           answer(response, { body: { ok: false, error: 'invalid_auth' } });
@@ -263,6 +288,7 @@ export async function startFakeSlack(): Promise<FakeSlack> {
     postedOnlyTo,
     posted,
     reactions,
+    updated,
     apps,
     get rotations() {
       return rotations;
