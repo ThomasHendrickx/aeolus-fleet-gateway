@@ -30,6 +30,7 @@ const OPENED: OpenedDelivery = {
   withdrawnQuestionId: null,
   stepId: null,
   withdrawnStepId: null,
+  stepLink: null,
   sentAt: new Date('2026-10-19T08:00:00.000Z'),
   openedAt: AT,
 };

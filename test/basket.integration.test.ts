@@ -97,6 +97,7 @@ async function answeredIntoTheBasket(asker: { shipId: ShipId; crewToken: string 
     withdrawnQuestionId: null,
     stepId: null,
     withdrawnStepId: null,
+    stepLink: null,
     sentAt: delivery.sentAt,
     openedAt: AT,
   });

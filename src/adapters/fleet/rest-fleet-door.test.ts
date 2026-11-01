@@ -253,6 +253,51 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     expect(taken.isOk ? taken.value.map(({ stepId }) => stepId) : taken).toEqual(['6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', null, null]);
   });
 
+  it("reads the asker's pick on a question and a replacement's new one, and the link of a step, none of any other message or a link that is not http or https (aeolus-fleet#1535)", async () => {
+    const delivery = {
+      deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+      messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+      senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderName: 'orchestrator-1',
+      senderType: 'orchestrator',
+      recipient: { kind: 'ship', shipId: 'shp_01m3tbfspe96yf1rnr4ank0per' },
+      model: null,
+      sentAt: '2026-10-31T19:41:00.000Z',
+      inReplyTo: null,
+      attempts: 0,
+      isForced: false,
+      meetingId: null,
+      scheduleId: null,
+      sendTime: null,
+      state: 'received',
+      handOverNumber: null,
+    };
+    const twoOptions = { ...QUESTION, options: [{ key: 1, label: 'Go' }, { key: 2, label: 'Wait' }], pick: { option: 2, why: 'One check is flaky' } };
+    const step = { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Create the GitHub repository aeolus-fleet-memory-plugin', why: '', link: 'https://github.com/new' };
+    answer = {
+      status: 200,
+      body: {
+        deliveries: [
+          { ...delivery, contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify(twoOptions) },
+          { ...delivery, contentType: 'application/vnd.aeolus.question-replacement+json', payload: JSON.stringify({ questionId: QUESTION.id, question: { ...twoOptions, id: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f' } }) },
+          { ...delivery, contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(step) },
+          { ...delivery, contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify({ ...step, link: 'javascript:alert(1)' }) },
+          { ...delivery, contentType: 'text/plain', payload: JSON.stringify(step) },
+        ],
+      },
+    };
+
+    const taken = await createRestFleetDoor(base).person.pushReceive('aeolus_ct_v1_charlotte', { max: 10 });
+
+    expect(taken.isOk ? taken.value.map(({ pick, stepLink }) => ({ pick, stepLink })) : taken).toEqual([
+      { pick: 2, stepLink: null },
+      { pick: 2, stepLink: null },
+      { pick: null, stepLink: 'https://github.com/new' },
+      { pick: null, stepLink: null },
+      { pick: null, stepLink: null },
+    ]);
+  });
+
   it("reads the headline of a step, an alert and a notice from its payload, and none from one it cannot read (Bridge, CC14, CC15)", async () => {
     const delivery = {
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
