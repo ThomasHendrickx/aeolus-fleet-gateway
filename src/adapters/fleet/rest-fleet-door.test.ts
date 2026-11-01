@@ -172,6 +172,42 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     ]);
   });
 
+  it("reads the uuid of the step a step asks, and none of a step whose payload does not read or of any other message (Bridge, CC14)", async () => {
+    const delivery = {
+      deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+      messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
+      senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderName: 'builder-plugin',
+      senderType: 'builder',
+      recipient: { kind: 'ship', shipId: 'shp_01m3tbfspe96yf1rnr4ank0per' },
+      model: null,
+      sentAt: '2026-10-31T19:41:00.000Z',
+      inReplyTo: null,
+      attempts: 0,
+      isForced: false,
+      meetingId: null,
+      scheduleId: null,
+      sendTime: null,
+      state: 'received',
+      handOverNumber: null,
+    };
+    const step = { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Create the GitHub repository aeolus-fleet-memory-plugin', why: 'The plugin needs its own repository.', link: 'https://github.com/new' };
+    answer = {
+      status: 200,
+      body: {
+        deliveries: [
+          { ...delivery, contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(step) },
+          { ...delivery, contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify({ ...step, id: 'not a uuid' }) },
+          { ...delivery, contentType: 'text/plain', payload: JSON.stringify(step) },
+        ],
+      },
+    };
+
+    const taken = await createRestFleetDoor(base).person.pushReceive('aeolus_ct_v1_charlotte', { max: 10 });
+
+    expect(taken.isOk ? taken.value.map(({ stepId }) => stepId) : taken).toEqual(['6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', null, null]);
+  });
+
   it("reads the headline of a step, an alert and a notice from its payload, and none from one it cannot read (Bridge, CC14, CC15)", async () => {
     const delivery = {
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
@@ -454,7 +490,7 @@ describe('the scopes the fleet lists, read as the gateway\'s ship (fleet.scopes,
 });
 
 describe('where the delivery of a message a proxy ship sent stands, as sentMessage answers (common 0.32.0)', () => {
-  it("reads the state and since of the message's one delivery to the ship it went to", async () => {
+  it("reads the id, state and since of the message's one delivery to the ship it went to", async () => {
     answer = {
       status: 200,
       body: {
@@ -465,6 +501,6 @@ describe('where the delivery of a message a proxy ship sent stands, as sentMessa
       },
     };
 
-    await expect(createRestFleetDoor(base).sentMessage('aeolus_ct_v1_gateway', 'msg_01m3tb1zgr5h2ffee12xnch8pp')).resolves.toEqual({ isOk: true, value: { state: 'handed', since: new Date('2026-10-26T07:00:05.000Z') } });
+    await expect(createRestFleetDoor(base).sentMessage('aeolus_ct_v1_gateway', 'msg_01m3tb1zgr5h2ffee12xnch8pp')).resolves.toEqual({ isOk: true, value: { deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch8pp', state: 'handed', since: new Date('2026-10-26T07:00:05.000Z') } });
   });
 });
