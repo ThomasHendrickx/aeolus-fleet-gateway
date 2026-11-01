@@ -89,11 +89,11 @@ function BasketEntryRow({ entry, line, opening, working, onRemove }: { entry: Ba
       </div>
       {standing.kind === 'waiting' ? (
         <div className="flex items-center gap-1.5">
-          <ActionButton data-testid="bridge-basket-change" size="sm" aria-label="Change" isPending={opening.openingId === entry.deliveryId} pendingLabel="Opening..." disabled={isWorking} onClick={() => { opening.open({ deliveryId: entry.deliveryId, job: 'decide', inBasket: { option: entry.option, note: entry.note } }); }}>
+          <ActionButton data-testid="bridge-basket-change" size="small" aria-label="Change" isPending={opening.openingId === entry.deliveryId} pendingLabel="Opening..." disabled={isWorking} onClick={() => { opening.open({ deliveryId: entry.deliveryId, job: 'decide', inBasket: { option: entry.option, note: entry.note } }); }}>
             <Pencil aria-hidden className="size-3.5" />
             <span className="hidden sm:inline">Change</span>
           </ActionButton>
-          <ActionButton data-testid="bridge-basket-remove" size="sm" variant="ghost" aria-label="Remove" isPending={isRemoving} pendingLabel="Removing..." disabled={isWorking} onClick={() => { onRemove(entry.questionId); }}>
+          <ActionButton data-testid="bridge-basket-remove" size="small" variant="ghost" aria-label="Remove" isPending={isRemoving} pendingLabel="Removing..." disabled={isWorking} onClick={() => { onRemove(entry.questionId); }}>
             <X aria-hidden className="size-4 sm:hidden" />
             <span className="hidden sm:inline">Remove</span>
           </ActionButton>
@@ -110,12 +110,12 @@ function BasketEntryRow({ entry, line, opening, working, onRemove }: { entry: Ba
       {standing.kind === 'withdrawn' || standing.kind === 'replaced' || standing.kind === 'dealtElsewhere' || standing.kind === 'refused' ? (
         <div className="col-span-2 col-start-2 flex flex-wrap items-center gap-1.5">
           {replacementId === null ? null : (
-            <ActionButton data-testid="bridge-replacement" size="sm" isPending={opening.openingId === replacementId} pendingLabel="Opening..." disabled={isWorking} onClick={() => { opening.open({ deliveryId: replacementId, job: 'decide' }); }}>
+            <ActionButton data-testid="bridge-replacement" size="small" isPending={opening.openingId === replacementId} pendingLabel="Opening..." disabled={isWorking} onClick={() => { opening.open({ deliveryId: replacementId, job: 'decide' }); }}>
               <ArrowRight aria-hidden className="size-3.5" />
               Answer the new question
             </ActionButton>
           )}
-          <ActionButton data-testid="bridge-basket-remove" size="sm" variant={standing.kind === 'replaced' ? 'ghost' : 'secondary'} isPending={isRemoving} pendingLabel="Removing..." disabled={isWorking} onClick={() => { onRemove(entry.questionId); }}>
+          <ActionButton data-testid="bridge-basket-remove" size="small" variant={standing.kind === 'replaced' ? 'ghost' : 'secondary'} isPending={isRemoving} pendingLabel="Removing..." disabled={isWorking} onClick={() => { onRemove(entry.questionId); }}>
             {standing.kind === 'refused' ? 'Remove and mark done' : 'Remove'}
           </ActionButton>
         </div>

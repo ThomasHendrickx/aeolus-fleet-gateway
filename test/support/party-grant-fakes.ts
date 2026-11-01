@@ -48,7 +48,7 @@ export function anAttioParty(overrides: Partial<McpServerParty> = {}): McpServer
   return {
     fleetId: FLEET_ID,
     name: 'attio',
-    kind: 'mcpServer',
+    kind: 'mcpServer', displayName: null,
     url: 'https://mcp.attio.com/mcp',
     credential: { kind: 'personSignIn', client: ATTIO_CLIENT },
     concurrencyLimit: 4,

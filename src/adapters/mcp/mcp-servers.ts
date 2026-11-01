@@ -18,7 +18,7 @@ import {
 } from '@modelcontextprotocol/client';
 import { z } from 'zod';
 
-import type { CredentialRefusal, McpServerConnection, McpServers, OutsideTool, ToolCall, ToolCallOutcome, ToolResult } from '../../core/mcp-out/ports.js';
+import type { ConnectedServer, CredentialRefusal, McpServerConnection, McpServers, OutsideTool, ToolCall, ToolCallOutcome, ToolResult } from '../../core/mcp-out/ports.js';
 import { err, ok } from '../../core/shared/result.js';
 
 /** How the gateway names itself to outside MCP servers. */
@@ -76,9 +76,14 @@ function transportFor(connection: McpServerConnection): StreamableHTTPClientTran
   }
 }
 
-async function connected(connection: McpServerConnection): Promise<Client> {
+/** Told on each connect what the server named itself as. */
+type OnConnected = (connection: McpServerConnection, server: ConnectedServer) => Promise<void>;
+
+async function connected(connection: McpServerConnection, onConnected: OnConnected): Promise<Client> {
   const client = new Client(CLIENT_INFO, { versionNegotiation: { mode: 'auto' } });
   await client.connect(transportFor(connection));
+  // Only the title, never the technical name: a name is often a package id (Thomas, aeolus-fleet#1535).
+  await onConnected(connection, { title: client.getServerVersion()?.title ?? null });
   return client;
 }
 
@@ -164,12 +169,14 @@ async function callOnce(client: Client, call: ToolCall): Promise<ToolCallOutcome
   };
 }
 
-export function createMcpServers(): McpServers {
+/** The outside MCP servers, telling onConnected on each connect what the server named itself as. */
+export function createMcpServers(options: { onConnected?: OnConnected } = {}): McpServers {
+  const onConnected = options.onConnected ?? (() => Promise.resolve());
   return {
     async listTools(connection) {
       let client: Client | undefined;
       try {
-        client = await connected(connection);
+        client = await connected(connection, onConnected);
         return ok(await listEveryTool(client));
       } catch (error) {
         return err({ kind: 'unreachable', reason: reasonOf(error) });
@@ -181,7 +188,7 @@ export function createMcpServers(): McpServers {
     async callTool(connection, call) {
       let client: Client;
       try {
-        client = await connected(connection);
+        client = await connected(connection, onConnected);
       } catch (error) {
         return notSentOf(error);
       }

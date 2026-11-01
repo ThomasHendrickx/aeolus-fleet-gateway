@@ -9,6 +9,7 @@ import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { DiscoveredStatement } from '../mcp-in/ports.js';
 import type { Result } from '../shared/result.js';
+import type { Place } from './item-outcome.js';
 import type { Routing } from './routing.js';
 import type { ListedShip } from './your-fleet.js';
 
@@ -92,6 +93,10 @@ export interface PersonDelivery {
   readonly stepId: string | null;
   /** The uuid of the step it withdraws or replaces, from the same asker; none for any other message. */
   readonly withdrawnStepId: string | null;
+  /** The option the asker picks on the question it asks (decision 0038); none for any other message. */
+  readonly pick: number | null;
+  /** The link where the step it asks is done (Bridge, CC14), an http or https URL; none for a step without one, or any other message. */
+  readonly stepLink: string | null;
   readonly sentAt: Date;
   readonly inReplyTo: MessageId | null;
   /** The meeting its message was contributed to or tells of; none outside a meeting (decision 0061). */
@@ -185,6 +190,10 @@ export interface OpenedDelivery {
   /** The uuid of the step it asks, and of the one it withdraws or replaces (Bridge, CC14), as its payload named them; none otherwise. */
   readonly stepId: string | null;
   readonly withdrawnStepId: string | null;
+  /** The link where the step it asks is done, as its payload named it; none for a step without one, one opened before the gateway kept it, or any other message. */
+  readonly stepLink: string | null;
+  /** Where the person opened it, so a row says Seen in Bridge; none for one opened before the gateway kept it. */
+  readonly openedIn: Place | null;
   readonly sentAt: Date;
   readonly openedAt: Date;
 }

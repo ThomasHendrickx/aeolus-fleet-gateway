@@ -14,7 +14,8 @@ import { ItemFocus } from './item-focus';
  * what came of it and where. The next page is read only when they ask for
  * it. One not done yet opens here, to answer or be done with.
  */
-export function DonePanel({ fleetId, first }: { fleetId: string; first: RecordPage }) {
+export function DonePanel({ fleetId, first, now }: { fleetId: string; first: RecordPage; now: string }) {
+  const readAt = new Date(now);
   const [items, setItems] = useState(first.items);
   const [nextCursor, setNextCursor] = useState(first.nextCursor);
   const [failure, setFailure] = useState<string | undefined>();
@@ -48,15 +49,23 @@ export function DonePanel({ fleetId, first }: { fleetId: string; first: RecordPa
               Nothing has reached you yet.
             </p>
           ) : (
-            <ul className="grid gap-2">
+            <ul className="overflow-hidden rounded-lg border border-border bg-card">
               {items.map((item) => (
-                <ItemRow key={item.deliveryId} item={item} isNew={item.state === 'new'} outcome={outcomeTextOf(item)} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}>
-                  {item.state === 'done' ? null : (
-                    <ActionButton data-testid="bridge-open" isPending={opening.openingId === item.deliveryId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open(item); }}>
-                      Open
-                    </ActionButton>
-                  )}
-                </ItemRow>
+                <ItemRow
+                  key={item.deliveryId}
+                  item={item}
+                  now={readAt}
+                  isNew={item.state === 'new'}
+                  outcome={outcomeTextOf(item)}
+                  failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}
+                  actions={
+                    item.state === 'done' ? null : (
+                      <ActionButton data-testid="bridge-open" size="row" isPending={opening.openingId === item.deliveryId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open(item); }}>
+                        Open
+                      </ActionButton>
+                    )
+                  }
+                />
               ))}
             </ul>
           )}

@@ -82,6 +82,16 @@ export async function putInBasket({ fleet, deliveryId, option, optionLabel, note
   });
 }
 
+/** From a question's row: opens it, as the person's own press, and puts its asker's pick in the basket with no note, named by its label as the question shows it (aeolus-fleet#1535). */
+export async function putPickInBasket({ fleet, deliveryId, option }: { fleet: string; deliveryId: string; option: number }): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    const opened = await api.people.open.mutate({ deliveryId });
+    const optionLabel = questionOf(opened)?.options.find(({ key }) => key === option)?.label ?? null;
+    await api.people.putInBasket.mutate({ deliveryId, option, optionLabel, note: '' });
+    return undefined;
+  });
+}
+
 /** Takes an answer out of the basket; one the fleet refused marks its question done, not sent. */
 export async function removeFromBasket(fleet: string, questionId: string): Promise<ActionOutcome<undefined>> {
   return attempt(fleet, async (api) => {

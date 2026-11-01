@@ -70,6 +70,8 @@ describe('a person opens a delivery that waits for their person ship', () => {
         withdrawnQuestionId: null,
         stepId: null,
         withdrawnStepId: null,
+        stepLink: null,
+        openedIn: 'chat',
         sentAt: QUESTION.sentAt,
         openedAt: AT,
       },
@@ -83,6 +85,15 @@ describe('a person opens a delivery that waits for their person ship', () => {
     await openDelivery({ caller: CALLER, deliveryId: step.deliveryId, place: 'bridge' });
 
     expect([...opened.held.values()].map(({ stepId }) => stepId)).toEqual(['6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10']);
+  });
+
+  it('keeps the link where a step is done, so its row leads there once seen (aeolus-fleet#1535)', async () => {
+    const step = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0s01', contentType: 'application/vnd.aeolus.step+json', payload: '{}', headline: 'Create the repository', askedQuestionId: null, stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', stepLink: 'https://github.com/new' });
+    const { openDelivery } = opening([step]);
+
+    await openDelivery({ caller: CALLER, deliveryId: step.deliveryId, place: 'bridge' });
+
+    expect([...opened.held.values()].map(({ stepLink }) => stepLink)).toEqual(['https://github.com/new']);
   });
 
   it('refuses a delivery that does not wait for the person, acknowledging nothing', async () => {

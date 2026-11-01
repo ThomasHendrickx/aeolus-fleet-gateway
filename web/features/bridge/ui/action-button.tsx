@@ -6,9 +6,12 @@ const VARIANTS = {
   ghost: 'text-foreground hover:bg-accent',
 } as const;
 
-const SIZES = {
-  md: 'h-9 px-4',
-  sm: 'h-8 px-3 text-meta',
+/** A row's buttons are small on a desktop, and a thumb's size on a phone (Bridge mockups, home). */
+export const SIZES = {
+  regular: 'h-9 gap-2 px-4',
+  row: 'h-9 gap-2 px-4 text-body sm:h-6 sm:gap-1.5 sm:px-2.5 sm:text-meta',
+  /** A basket entry's buttons (basket.html). */
+  small: 'h-8 gap-2 px-3 text-meta',
 } as const;
 
 /**
@@ -19,7 +22,7 @@ export function ActionButton({
   isPending,
   pendingLabel,
   variant = 'secondary',
-  size = 'md',
+  size = 'regular',
   children,
   className = '',
   disabled,
@@ -30,7 +33,7 @@ export function ActionButton({
       {...button}
       disabled={disabled === true || isPending}
       aria-busy={isPending}
-      className={`inline-flex items-center gap-2 rounded-md disabled:cursor-not-allowed disabled:opacity-70 ${SIZES[size]} ${VARIANTS[variant]} ${className}`}
+      className={`inline-flex items-center rounded-md disabled:cursor-not-allowed disabled:opacity-70 ${SIZES[size]} ${VARIANTS[variant]} ${className}`}
     >
       {isPending ? (
         <>

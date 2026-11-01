@@ -214,7 +214,7 @@ export function createHandCall(deps: {
         break;
     }
     // The grant as it is now, at hand-over: one removed while the call waited refuses it, one signed in lets it through.
-    let callTool = (call: ToolCall): Promise<ToolCallOutcome> => deps.servers.callTool({ url: party.url, credential: party.credential }, call);
+    let callTool = (call: ToolCall): Promise<ToolCallOutcome> => deps.servers.callTool({ url: party.url, credential: party.credential, party: { fleetId: party.fleetId, name: party.name } }, call);
     const { credential } = party;
     if (credential.kind === 'personSignIn') {
       const found = await deps.grantCalls.grantOf({ server: { fleetId: party.fleetId, name: party.name, url: party.url, client: credential.client }, senderShipId: delivery.senderShipId });

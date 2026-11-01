@@ -24,7 +24,7 @@ export function memoryPartyStore(): PartyStore & { held: Map<string, Party> } {
     // A server's tool switches change only by switchTools once it is kept, as the store keeps them.
     save: (party) => {
       const earlier = held.get(key(party.fleetId, party.name));
-      held.set(key(party.fleetId, party.name), party.kind === 'mcpServer' && earlier?.kind === 'mcpServer' ? { ...party, toolSwitches: earlier.toolSwitches } : party);
+      held.set(key(party.fleetId, party.name), party.kind === 'mcpServer' && earlier?.kind === 'mcpServer' ? { ...party, toolSwitches: earlier.toolSwitches, displayName: earlier.displayName } : party);
       return Promise.resolve();
     },
     switchTools: ({ fleetId, name }, { listed, switched }) => {
@@ -32,6 +32,14 @@ export function memoryPartyStore(): PartyStore & { held: Map<string, Party> } {
       if (party?.kind === 'mcpServer') {
         const kept = party.toolSwitches ?? new Map(listed.map((tool) => [tool, true]));
         held.set(key(fleetId, name), { ...party, toolSwitches: new Map([...kept, ...switched]) });
+      }
+      return Promise.resolve();
+    },
+    // A server's display name changes only by keepDisplayName once it is kept, as the store keeps it.
+    keepDisplayName: ({ fleetId, name }, displayName) => {
+      const party = held.get(key(fleetId, name));
+      if (party?.kind === 'mcpServer') {
+        held.set(key(fleetId, name), { ...party, displayName });
       }
       return Promise.resolve();
     },

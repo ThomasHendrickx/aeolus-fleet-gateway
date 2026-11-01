@@ -1,7 +1,10 @@
 import { idSchema } from '@aeolus-fleet/common';
+import { z } from 'zod';
 
 import type { OpenedDeliveries, OpenedDelivery } from '../../core/people/ports.js';
 import type { Db } from './client.js';
+
+const placeSchema = z.enum(['bridge', 'chat', 'slack', 'gateway']);
 
 type OpenedDeliveryRow = NonNullable<Awaited<ReturnType<Db['openedDelivery']['findUnique']>>>;
 
@@ -19,6 +22,8 @@ function openedOf(row: OpenedDeliveryRow): OpenedDelivery {
     withdrawnQuestionId: row.withdrawnQuestionId,
     stepId: row.stepId,
     withdrawnStepId: row.withdrawnStepId,
+    stepLink: row.stepLink,
+    openedIn: row.openedIn === null ? null : placeSchema.parse(row.openedIn),
     sentAt: row.sentAt,
     openedAt: row.openedAt,
   };

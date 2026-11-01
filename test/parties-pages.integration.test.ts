@@ -254,7 +254,7 @@ describe('the parties pages, as the account signed in', () => {
     await createPrismaPartyStore(prisma).save({
       fleetId: FLEET,
       name: party.name,
-      kind: 'mcpServer',
+      kind: 'mcpServer', displayName: null,
       url: party.url,
       credential: { kind: 'none' },
       concurrencyLimit: 4,
@@ -282,7 +282,7 @@ describe('the parties pages, as the account signed in', () => {
     await parties.save({
       fleetId: FLEET,
       name: 'attio',
-      kind: 'mcpServer',
+      kind: 'mcpServer', displayName: null,
       url: 'https://mcp.attio.com/mcp',
       credential: {
         kind: 'personSignIn',
