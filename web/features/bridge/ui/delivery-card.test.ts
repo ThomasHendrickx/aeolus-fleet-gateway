@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { FocusedDelivery } from '../services/deliveries';
 import type { RoutedPlace } from '../services/routing';
-import { DeliveryCard, putOf, type StepFinished } from './delivery-card';
+import { DeliveryCard, infoLinesOf, putOf, type StepFinished } from './delivery-card';
 
 // A question opened in Bridge (CC11): the asker's pick preselected, one
 // button putting it in the basket (CC24), naming the option; one its asker
@@ -62,9 +62,8 @@ describe('a question opened in Bridge (CC11)', () => {
       picked: markup.includes('checked="" value="2"') && !markup.includes('checked="" value="1"'),
       theirPick: markup.includes('Their pick'),
       put: markup.includes('>Put option 2 in the basket<'),
-      said: markup.includes('Nothing is sent yet. orchestrator-1 receives this answer when you send the basket.'),
       sendsAtOnce: markup.includes('Send option') || markup.includes('Send the note alone'),
-    }).toEqual({ choices: 3, picked: true, theirPick: true, put: true, said: true, sendsAtOnce: false });
+    }).toEqual({ choices: 3, picked: true, theirPick: true, put: true, sendsAtOnce: false });
   });
 
   it('says a question whose answer is in the basket is in it, not sent, with its note, its option picked, the basket and Remove beside it', () => {
@@ -72,7 +71,7 @@ describe('a question opened in Bridge (CC11)', () => {
 
     expect({
       inBasket: markup.includes('In the basket: option 1, not sent'),
-      note: markup.includes('“U4 first, then Harbour.”'),
+      note: markup.includes('&quot;U4 first, then Harbour.&quot;'),
       picked: markup.includes('checked="" value="1"'),
       basket: markup.includes('href="/bridge/basket?fleet=flt_01"'),
       remove: markup.includes('data-testid="bridge-basket-remove"'),
@@ -94,7 +93,7 @@ describe('a question opened in Bridge (CC11)', () => {
   it('says a question whose note alone is in the basket is in it, not sent, with its note', () => {
     const markup = render(aQuestion(), { inBasket: { option: null, note: 'Neither: ask me after the demo.' } });
 
-    expect({ inBasket: markup.includes('In the basket: the note alone, not sent'), note: markup.includes('“Neither: ask me after the demo.”') }).toEqual({ inBasket: true, note: true });
+    expect({ inBasket: markup.includes('In the basket: the note alone, not sent'), note: markup.includes('&quot;Neither: ask me after the demo.&quot;') }).toEqual({ inBasket: true, note: true });
   });
 
   it('shows a withdrawn question stale: nothing to choose or send', () => {
@@ -129,13 +128,30 @@ describe("Decide's words (decide.html, basket.html)", () => {
     expect(/data-testid="bridge-put-in-basket"[^>]*>(?:(?!<\/button>).)*lucide-shopping-basket/.test(markup)).toBe(true);
   });
 
-  it('says nothing is sent yet behind the info icon, and the asker\'s pick behind it too', () => {
+  it("says the asker's pick behind the info icon on a question opened at their pick, and not that nothing is sent yet (decide-1)", () => {
     const markup = render(aQuestion());
 
     expect({
-      nothingSent: /lucide-info(?:(?!<\/p>).)*Nothing is sent yet\. orchestrator-1 receives this answer when you send the basket\./.test(markup),
       pick: /lucide-info(?:(?!<\/p>).)*orchestrator-1 picks 2: The demo on 12 Nov needs it\./.test(markup),
-    }).toEqual({ nothingSent: true, pick: true });
+      nothingSent: markup.includes('Nothing is sent yet.'),
+    }).toEqual({ pick: true, nothingSent: false });
+  });
+
+  it("leaves out the asker's pick on a question in the basket (basket-2)", () => {
+    const markup = render(aQuestion(), { inBasket: { option: 2, note: 'Harbour first.' } });
+
+    expect(markup.includes('orchestrator-1 picks 2')).toBe(false);
+  });
+
+  it('spans the button putting the answer across the card on a phone, back to its own width from the small breakpoint', () => {
+    const markup = render(aQuestion());
+    const button = /<button[^>]*data-testid="bridge-put-in-basket"[^>]*>/.exec(markup)?.[0] ?? '';
+
+    expect({ full: /class="[^"]*\bw-full\b/.test(button) && button.includes('justify-center'), own: button.includes('sm:w-auto') && button.includes('sm:justify-self-start') }).toEqual({ full: true, own: true });
+  });
+
+  it('draws the note field without a resize grip, as it grows with its note', () => {
+    expect(/<textarea[^>]*data-testid="bridge-note"[^>]*class="[^"]*resize-none/.test(render(aQuestion()))).toBe(true);
   });
 
   it('names where the question shows under it, behind the eye icon', () => {
@@ -161,7 +177,7 @@ describe("Decide's words (decide.html, basket.html)", () => {
     expect({
       tone: /<div data-testid="bridge-in-basket"[^>]*border-tone-active-border bg-tone-active-bg/.test(markup),
       icon: /data-testid="bridge-in-basket"(?:(?!data-testid="bridge-basket-open").)*lucide-shopping-basket/.test(markup),
-      oneLine: markup.includes('“Harbour first: the demo on 12 Nov needs it.” Pick another option to change it.'),
+      oneLine: markup.includes('&quot;Harbour first: the demo on 12 Nov needs it.&quot; Pick another option to change it.'),
     }).toEqual({ tone: true, icon: true, oneLine: true });
   });
 
@@ -194,6 +210,30 @@ describe('what the button under a question puts in the basket', () => {
 
   it('offers nothing to put before an option is chosen', () => {
     expect(putOf({ chosen: undefined, inBasket: null, note: '' })).toBeNull();
+  });
+});
+
+describe('which info lines a question says (decide.html, basket.html)', () => {
+  const PICK = 2;
+
+  it("says the asker's pick, and not that nothing is sent yet, while the choice is their pick and nothing is in the basket (decide-1)", () => {
+    expect(infoLinesOf({ chosen: PICK, pick: PICK, inBasket: null, isStale: false })).toEqual({ isPickSaid: true, isNothingSentSaid: false });
+  });
+
+  it("says nothing is sent yet, and not the asker's pick, once another option is chosen (basket-1)", () => {
+    expect(infoLinesOf({ chosen: 1, pick: PICK, inBasket: null, isStale: false })).toEqual({ isPickSaid: false, isNothingSentSaid: true });
+  });
+
+  it('says neither while the choice is what the basket holds (basket-2)', () => {
+    expect(infoLinesOf({ chosen: PICK, pick: PICK, inBasket: { option: PICK, note: null }, isStale: false })).toEqual({ isPickSaid: false, isNothingSentSaid: false });
+  });
+
+  it('says nothing is sent yet once another option is chosen while one is in the basket', () => {
+    expect(infoLinesOf({ chosen: 1, pick: PICK, inBasket: { option: PICK, note: null }, isStale: false })).toEqual({ isPickSaid: false, isNothingSentSaid: true });
+  });
+
+  it("keeps the asker's pick on a question its asker withdrew or replaced, with nothing to send", () => {
+    expect(infoLinesOf({ chosen: PICK, pick: PICK, inBasket: null, isStale: true })).toEqual({ isPickSaid: true, isNothingSentSaid: false });
   });
 });
 
