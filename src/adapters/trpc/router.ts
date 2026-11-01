@@ -64,7 +64,12 @@ import type { ListToDecide } from '../../core/requests/list-to-decide.js';
 import type { EndSignIns } from '../../core/sign-in/end-sign-ins.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import type { AnswerDelivery } from '../../core/people/answer-delivery.js';
+import type { CountBasket } from '../../core/people/count-basket.js';
 import type { DoneDelivery } from '../../core/people/done-delivery.js';
+import type { PutInBasket } from '../../core/people/put-in-basket.js';
+import type { ReadBasket } from '../../core/people/read-basket.js';
+import type { RemoveFromBasket } from '../../core/people/remove-from-basket.js';
+import type { SendBasket } from '../../core/people/send-basket.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { ChangeOwnMic } from '../../core/meetings/change-own-mic.js';
 import type { MeetingRead } from '../../core/meetings/ports.js';
@@ -175,6 +180,11 @@ export interface Context {
     openDelivery: OpenDelivery;
     answerDelivery: AnswerDelivery;
     doneDelivery: DoneDelivery;
+    readBasket: ReadBasket;
+    countBasket: CountBasket;
+    putInBasket: PutInBasket;
+    removeFromBasket: RemoveFromBasket;
+    sendBasket: SendBasket;
     readWakeChannels: ReadWakeChannels;
     turnEmailChannel: TurnEmailChannel;
     turnOnWebPush: TurnOnWebPush;
@@ -604,6 +614,10 @@ const PERSON_CODES = {
   KEY_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
   NO_SUCH_DELIVERY: 'NOT_FOUND',
   SEND_REFUSED: 'BAD_REQUEST',
+  NOT_A_QUESTION: 'BAD_REQUEST',
+  INVALID_ARGUMENTS: 'BAD_REQUEST',
+  NOT_IN_BASKET: 'NOT_FOUND',
+  CONFLICT: 'CONFLICT',
   CHANNEL_NOT_OFFERED: 'PRECONDITION_FAILED',
   INVALID_SUBSCRIPTION: 'BAD_REQUEST',
   NO_SUCH_MEETING: 'NOT_FOUND',
@@ -1226,6 +1240,18 @@ export const gatewayRouter = t.router({
     answer: personProcedure
       .input(z.strictObject({ deliveryId: z.string().min(1), contentType: z.string().min(1), payload: payloadSchema }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.answerDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
+    /** The basket (Bridge, section 9): the answers they picked in Bridge and have not sent, in the order added. */
+    basket: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readBasket(ctx.caller))),
+    /** How many answers the basket holds, for Bridge's navigation on every page. */
+    basketCount: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.countBasket(ctx.caller))),
+    /** Puts their answer to a question they opened in the basket, or changes it there; nothing is sent. */
+    putInBasket: personProcedure
+      .input(z.strictObject({ deliveryId: z.string().min(1), option: z.int().min(1), note: payloadSchema }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.putInBasket({ caller: ctx.caller, ...input }))),
+    /** Takes an entry out of the basket. */
+    removeFromBasket: personProcedure.input(z.strictObject({ questionId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.removeFromBasket({ caller: ctx.caller, ...input }))),
+    /** Send N answers: each entry stored as sending, then sent on its own by the gateway. */
+    sendBasket: personProcedure.mutation(async ({ ctx }) => personAnswerOf(await ctx.person.sendBasket(ctx.caller))),
     /** Is done with a delivery they opened, with no answer. */
     done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
     /** The channels that wake them when something waits for their person ship, each offered or not and on or not (wake a person, W8). */
