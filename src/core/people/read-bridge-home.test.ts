@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import { createReadBridgeHome } from './read-bridge-home.js';
@@ -11,15 +11,17 @@ import { createReadBridgeHome } from './read-bridge-home.js';
 
 let crews: ReturnType<typeof memoryPersonCrews>;
 let opened: ReturnType<typeof memoryOpenedDeliveries>;
+let entries: ReturnType<typeof memoryBasketEntries>;
 
 beforeEach(() => {
   crews = memoryPersonCrews();
   opened = memoryOpenedDeliveries();
+  entries = memoryBasketEntries();
 });
 
 function readHome(deliveries: PersonDelivery[]) {
   const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries });
-  return { ...ship, readHome: createReadBridgeHome({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened }) };
+  return { ...ship, readHome: createReadBridgeHome({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, entries }) };
 }
 
 const QUESTION = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', sentAt: new Date('2026-10-31T19:48:00.000Z'), senderName: 'orchestrator-1', headline: 'Which goes first: the Compact look (U4) or Harbour?' });
@@ -77,6 +79,21 @@ describe('Bridge home: what waits on the person, with one count (CC18)', () => {
       items: [
         { from: 'orchestrator-1', state: 'new' },
         { from: 'commercial', state: 'seen' },
+      ],
+    });
+  });
+
+  it('says a question whose answer is in the basket is in it, with the option and the note, still waiting and in the count (section 9, rule 1)', async () => {
+    await opened.save(anOpened());
+    await entries.save(aBasketEntry({ questionId: anOpened().askedQuestionId ?? '', deliveryId: anOpened().deliveryId, option: 1, note: 'Plans only, for now.' }));
+
+    const home = await readHome([QUESTION]).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? { count: home.value.waiting.count, items: home.value.waiting.items.map(({ from, inBasket }) => ({ from, inBasket })) } : home).toEqual({
+      count: 2,
+      items: [
+        { from: 'orchestrator-1', inBasket: null },
+        { from: 'commercial', inBasket: { option: 1, note: 'Plans only, for now.' } },
       ],
     });
   });
