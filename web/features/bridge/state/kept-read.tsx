@@ -20,7 +20,12 @@ export function KeptRead({ readAt, children }: { readAt: string | undefined; chi
   if (next.kept?.readAt !== kept?.readAt) {
     setKept(next.kept);
   }
-  return <LastReadContext value={next.shown.lastReadAt}>{next.shown.part}</LastReadContext>;
+  return <AsLastRead at={next.shown.lastReadAt}>{next.shown.part}</AsLastRead>;
+}
+
+/** Shows what is inside as last read at a time; as read now with none. */
+export function AsLastRead({ at, children }: { at: string | undefined; children: ReactNode }) {
+  return <LastReadContext value={at}>{children}</LastReadContext>;
 }
 
 /** When what shows was last read, while it shows as last read; undefined while it is read now. */
