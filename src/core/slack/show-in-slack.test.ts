@@ -33,7 +33,7 @@ function slackOnFor(job: Route['job'], changedAt = TURNED_ON_AT): Route {
 
 const FROM_RELEASE_NOTES_FIELDS = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', messageId: 'msg_01m3tbfspe96yf1rnr4ank0001', senderShipId: RELEASE_NOTES, senderName: 'release-notes' } as const;
 const FROM_RELEASE_NOTES = aPersonDelivery({ ...FROM_RELEASE_NOTES_FIELDS, contentType: 'text/plain', payload: 'Friday', headline: null });
-const A_QUESTION = aPersonDelivery({ ...FROM_RELEASE_NOTES_FIELDS, contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify({ id: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', title: 'Ship it?', context: 'Ready', options: [{ key: 1, label: 'Ship', detail: '' }], pick: { option: 1, why: 'ready' } }) });
+const A_QUESTION = aPersonDelivery({ ...FROM_RELEASE_NOTES_FIELDS, contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify({ id: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', title: 'Ship it?', context: 'Ready', options: [{ key: 1, label: 'Ship', detail: '' }], pick: { option: 1, why: 'ready' } }), headline: 'Ship it?' });
 const FROM_BUDGET_CHECK = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', senderShipId: BUDGET_CHECK, senderName: 'budget-check', contentType: 'text/plain', payload: 'Over budget', headline: null });
 
 let apps: ReturnType<typeof memorySlackApps>;
@@ -124,12 +124,12 @@ describe('a delivery to a linked person, in Slack', () => {
     expect({ shown: shown.isOk && [...shown.value.shown], handOvers: fleet.handOvers, posts: slack.state.posts }).toEqual({ shown: [], handOvers: [], posts: [] });
   });
 
-  it('shows a question with one button per option, once Slack is on for decide', async () => {
+  it('shows a question headed by its asker and job, with one button per option, once Slack is on for decide', async () => {
     const fleet = aShip([A_QUESTION]);
 
     await show(fleet, { routes: [slackOnFor('decide')] });
 
-    expect(slack.state.posts.map(({ text, buttons }) => ({ text, buttons }))).toEqual([{ text: '*Ship it?*\nReady', buttons: [{ text: 'Ship', option: 1 }] }]);
+    expect(slack.state.posts.map(({ text, item, buttons }) => ({ text, heading: item?.heading, buttons }))).toEqual([{ text: 'Question from release-notes: Ship it?', heading: 'Question from release-notes · Decide', buttons: [{ text: '1. Ship', option: 1, isPicked: true }] }]);
   });
 
   it('posts a link for what Slack does not show in full, handed', async () => {

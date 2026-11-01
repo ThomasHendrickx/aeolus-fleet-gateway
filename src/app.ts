@@ -782,7 +782,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // View sync in Slack (Bridge, section 7): each post edited once something came of its item, at once when an inbox change is heard.
   const slackEdits = createRoundWorker({
     name: 'slack edits',
-    round: createEditSlackPosts({ posts: slackPosts, apps: slackApps, slack: slackMessages }),
+    round: createEditSlackPosts({ posts: slackPosts, apps: slackApps, slack: slackMessages, bridgeUrlOf }),
     sleep,
     intervalMs: SLACK_EDIT_ROUND_MS,
     log: server.log,
