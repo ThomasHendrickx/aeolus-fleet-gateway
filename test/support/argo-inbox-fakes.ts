@@ -1,7 +1,7 @@
 /** argo's inbox as the gateway reads it, in memory for a test. */
 import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
-import type { ArgoAccount, ArgoAccounts, ArgoInboxDoor, ArgoInboxEntry } from '../../src/core/argo-inbox/ports.js';
+import type { ArgoAccount, ArgoAccounts, ArgoInboxChange, ArgoInboxDoor, ArgoInboxEntry } from '../../src/core/argo-inbox/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 /** The accounts allowed as argo, per fleet, held in memory. */
@@ -37,9 +37,18 @@ export function anArgoEntry(number: number, overrides: Partial<ArgoInboxEntry> =
     contentType: 'text/markdown',
     sentAt: new Date(`2026-11-01T09:${id.slice(1)}:00.000Z`),
     deliveryState: 'pending',
+    payload: `Report ${id} to argo`,
+    headline: null,
+    askedQuestionId: null,
+    withdrawnQuestionId: null,
     ...overrides,
   };
 }
+
+/** An account allowed as argo, signed in to the console as argo when argo marks a message done. */
+export const MATHILDE_ACCOUNT_ID = 'acc_mathilde';
+/** When argo marks a message done, unless told otherwise. */
+export const DONE_AT = new Date('2026-11-01T20:14:00.000Z');
 
 const NOT_ANSWERING = { code: 'UNAVAILABLE', message: 'The fleet did not answer' };
 
@@ -54,14 +63,14 @@ export function fakeArgoInboxFleet() {
     isReadRuleOn: true,
     isAnswering: true,
     entries: new Map<MessageId, ArgoInboxEntry>(),
-    /** Each change to a delivery to argo, by the message it concerns: its position is its index plus one. */
-    events: new Array<MessageId>(),
+    /** Each change to a delivery to argo: its position is its index plus one. */
+    events: new Array<ArgoInboxChange>(),
     /** How many times every message to argo was read whole. */
     wholeReads: 0,
   };
-  const change = (entry: ArgoInboxEntry) => {
+  const change = (entry: ArgoInboxEntry, by: Omit<ArgoInboxChange, 'messageId'>) => {
     state.entries.set(entry.messageId, entry);
-    state.events.push(entry.messageId);
+    state.events.push({ messageId: entry.messageId, ...by });
   };
   const refusedUnlessAnswering = <T>(answer: () => T): Promise<Result<T, { code: string; message: string }>> => Promise.resolve(state.isAnswering ? ok(answer()) : err(NOT_ANSWERING));
   const door: ArgoInboxDoor = {
@@ -73,20 +82,20 @@ export function fakeArgoInboxFleet() {
         return state.isReadRuleOn ? [...state.entries.values()] : [];
       }),
     entry: (_crewToken, { messageId }) => refusedUnlessAnswering(() => (state.isReadRuleOn ? (state.entries.get(messageId) ?? null) : null)),
-    changes: (_crewToken, { afterSeq }) => refusedUnlessAnswering(() => ({ messageIds: state.isReadRuleOn ? state.events.slice(afterSeq) : [], lastSeq: state.events.length })),
+    changes: (_crewToken, { afterSeq }) => refusedUnlessAnswering(() => ({ changes: state.isReadRuleOn ? state.events.slice(afterSeq) : [], lastSeq: state.events.length })),
   };
   return {
     state,
     door,
     /** A ship sends argo a message: core stores it Open and unread. */
     send: (entry: ArgoInboxEntry) => {
-      change(entry);
+      change(entry, { occurredAt: entry.sentAt, actorShipId: entry.sender.shipId, signedInAccountId: null });
     },
-    /** argo marks it done in the console. */
-    markDone: (messageId: MessageId) => {
+    /** argo marks it done, in the console by the account signed in as argo unless told otherwise. */
+    markDone: (messageId: MessageId, done: { at?: Date; signedInAccountId?: string | null } = {}) => {
       const entry = state.entries.get(messageId);
       if (entry !== undefined) {
-        change({ ...entry, deliveryState: 'acknowledged' });
+        change({ ...entry, deliveryState: 'acknowledged' }, { occurredAt: done.at ?? DONE_AT, actorShipId: ARGO_SHIP_ID, signedInAccountId: done.signedInAccountId === undefined ? MATHILDE_ACCOUNT_ID : done.signedInAccountId });
       }
     },
   };
