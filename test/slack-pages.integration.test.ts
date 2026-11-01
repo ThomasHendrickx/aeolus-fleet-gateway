@@ -429,4 +429,79 @@ describe('linking a Slack account (gateway scopes S7)', () => {
     ]));
     expect(answers).toHaveLength(2);
   }, 120_000);
+
+  describe('view sync (Bridge B8)', () => {
+    const asCharlotte = () => ({ cookie: `aeolus_account_session=${READER_SIGN_IN}`, [FLEET_HEADER]: fleetId });
+    const personCall = (procedure: string, body: unknown) => fetch(`${address}/trpc/people.${procedure}`, { method: 'POST', headers: { 'content-type': 'application/json', ...asCharlotte() }, body: JSON.stringify(body) });
+    const personRead = async (procedure: string): Promise<unknown> => (await fetch(`${address}/trpc/people.${procedure}`, { headers: asCharlotte() })).json();
+
+    /** Charlotte's open Bridge: the stream its pages follow, each event telling them to read themselves again. */
+    async function charlottesBridge() {
+      const stop = new AbortController();
+      const stream = await fetch(`${address}/trpc/requests.changes`, { headers: { accept: 'text/event-stream', ...asCharlotte() }, signal: stop.signal });
+      const reader = (stream.body ?? new ReadableStream<Uint8Array>()).pipeThrough(new TextDecoderStream()).getReader();
+      // The stream is open once its first event, connected, comes.
+      await reader.read();
+      return {
+        isToldToReadAgain: async (): Promise<boolean> => {
+          let heard = '';
+          const deadline = setTimeout(() => {
+            void reader.cancel();
+          }, 15_000);
+          try {
+            while (!heard.includes(`"fleetId":"${fleetId}"`)) {
+              const { value, done } = await reader.read();
+              if (done) {
+                return false;
+              }
+              heard += value;
+            }
+            return true;
+          } finally {
+            clearTimeout(deadline);
+          }
+        },
+        close: () => {
+          stop.abort();
+        },
+      };
+    }
+
+    it('shows a question answered in Slack as answered in Slack with option 2 in an open Bridge without a reload and on its basket entry; a later press in Bridge sends nothing, and the Slack post is edited, its buttons gone', async () => {
+      await releaseNotesReceives();
+      const posted = slack.posted.length;
+      const question = JSON.stringify({ id: '7d1e2f3a-4b5c-4d6e-8f70-819a2b3c4d5e', title: 'Which design?', context: 'Three in the PR', options: [{ key: 1, label: 'Compact', detail: '' }, { key: 2, label: 'Harbour', detail: '' }, { key: 3, label: 'Both', detail: '' }], pick: { option: 2, why: 'demo' } });
+      const questionMessageId = await releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: question });
+      await expect.poll(() => slack.posted.length, { timeout: 30_000 }).toBe(posted + 1);
+      await expect.poll(() => prisma.slackPost.count({ where: { fleetId, messageId: questionMessageId, ts: { not: null } } }), { timeout: 30_000 }).toBe(1);
+      const questionTs = `1730019600.${String(posted + 1).padStart(6, '0')}`;
+      const deliveryId = (await prisma.slackPost.findFirstOrThrow({ where: { fleetId, messageId: questionMessageId } })).deliveryId;
+      // Charlotte opened it in Bridge and put option 1 in the basket, not sent yet.
+      expect((await personCall('open', { deliveryId })).status).toBe(200);
+      expect((await personCall('putInBasket', { deliveryId, option: 1, note: '' })).status).toBe(200);
+      const bridge = await charlottesBridge();
+
+      const pressed = await press({ messageTs: questionTs, messageId: questionMessageId, option: 2 });
+
+      expect(pressed.status).toBe(200);
+      try {
+        await expect(bridge.isToldToReadAgain()).resolves.toBe(true);
+      } finally {
+        bridge.close();
+      }
+      const basket = z.object({ result: z.object({ data: z.object({ entries: z.array(z.object({ deliveryId: z.string(), standing: z.unknown() })) }) }) }).parse(await personRead('basket')).result.data.entries;
+      // Bridge says it as Answered in Slack: option 2 (web/features/bridge/services/basket.ts); Done reads it from core's record, which the test core does not serve yet.
+      expect(basket.find((entry) => entry.deliveryId === deliveryId)?.standing).toEqual({ kind: 'dealtElsewhere', place: 'slack', option: 2 });
+
+      const later = await personCall('putInBasket', { deliveryId, option: 3, note: '' });
+      expect({ status: later.status, said: JSON.stringify(await later.json()).includes('Already answered in Slack: option 2. Nothing is sent.') }).toEqual({ status: 409, said: true });
+      expect((await personCall('sendBasket', {})).status).toBe(200);
+      // A basket round after Send, which would send what the basket held.
+      await new Promise((resolve) => setTimeout(resolve, 6_000));
+      const answers = (await releaseNotesReceives()).filter(({ inReplyTo }) => inReplyTo === questionMessageId);
+      expect(answers.map(({ payload }) => payload)).toEqual(['{"questionId":"7d1e2f3a-4b5c-4d6e-8f70-819a2b3c4d5e","option":2}']);
+
+      await expect.poll(() => slack.updated.filter(({ form }) => form.ts === questionTs).map(({ form }) => ({ text: form.text, blocks: form.blocks })), { timeout: 45_000 }).toEqual([{ text: '*Which design?*\nThree in the PR\n\n_Answered in Slack: option 2_', blocks: '[]' }]);
+    }, 120_000);
+  });
 });
