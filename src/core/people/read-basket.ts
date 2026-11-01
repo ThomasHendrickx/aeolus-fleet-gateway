@@ -18,6 +18,7 @@ export interface BasketItem {
   readonly sentAt: string;
   /** None for a note alone. */
   readonly option: number | null;
+  readonly optionLabel: string | null;
   readonly note: string | null;
   readonly standing: BasketStanding;
 }
@@ -95,6 +96,7 @@ export function createReadBasket(deps: BasketDeps): ReadBasket {
       title: entry.title,
       sentAt: entry.sentAt.toISOString(),
       option: entry.option,
+      optionLabel: entry.optionLabel,
       note: entry.note,
       standing,
     }));

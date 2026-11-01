@@ -6,7 +6,7 @@ import { sendLabelOf, sentTextOf, standingTextOf, type BasketItem } from './bask
 // stands as, what Send sends, and what it did.
 
 function anItem(standing: BasketItem['standing']): BasketItem {
-  return { questionId: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e', deliveryId: 'dlv_01', from: 'commercial', title: 'Pricing page: a price per ship, or plans only?', sentAt: '2026-10-31T19:13:00.000Z', option: 1, note: null, standing };
+  return { questionId: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e', deliveryId: 'dlv_01', from: 'commercial', title: 'Pricing page: a price per ship, or plans only?', sentAt: '2026-10-31T19:13:00.000Z', option: 1, optionLabel: 'Plans only', note: null, standing };
 }
 
 describe("the basket's words", () => {
@@ -19,8 +19,8 @@ describe("the basket's words", () => {
       standingTextOf(anItem({ kind: 'waiting' })),
       standingTextOf(anItem({ kind: 'sending' })),
       standingTextOf(anItem({ kind: 'refused', reason: 'commercial did not take the answer: Ship commercial was retired' })),
-      standingTextOf(anItem({ kind: 'withdrawn' })),
-      standingTextOf(anItem({ kind: 'replaced', replacementId: 'dlv_02' })),
+      standingTextOf(anItem({ kind: 'withdrawn', at: '2026-10-31T20:09:00.000Z' })),
+      standingTextOf(anItem({ kind: 'replaced', replacementId: 'dlv_02', at: '2026-10-31T20:11:00.000Z', replacementTitle: 'Pricing page: plans only?' })),
       standingTextOf(anItem({ kind: 'dealtElsewhere', place: 'slack', option: 2 })),
       standingTextOf(anItem({ kind: 'dealtElsewhere', place: 'chat', option: null })),
     ]).toEqual([

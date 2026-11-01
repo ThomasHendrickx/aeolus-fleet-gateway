@@ -17,6 +17,7 @@ function anEntry(overrides: Partial<BasketItem> = {}): BasketItem {
     title: 'Which goes first: the Compact look (U4) or Harbour?',
     sentAt: '2026-10-31T19:41:00.000Z',
     option: 2,
+    optionLabel: "Harbour first, on today's look",
     note: 'Harbour first: the demo on 12 Nov needs it.',
     standing: { kind: 'waiting' },
     ...overrides,
@@ -52,8 +53,8 @@ describe('the basket open', () => {
     const markup = render({
       toSend: 1,
       entries: [
-        anEntry({ questionId: 'q1', standing: { kind: 'withdrawn' } }),
-        anEntry({ questionId: 'q2', standing: { kind: 'replaced', replacementId: 'dlv_09' } }),
+        anEntry({ questionId: 'q1', standing: { kind: 'withdrawn', at: '2026-10-31T20:09:00.000Z' } }),
+        anEntry({ questionId: 'q2', standing: { kind: 'replaced', replacementId: 'dlv_09', at: '2026-10-31T20:11:00.000Z', replacementTitle: 'Pricing page: plans only?' } }),
         anEntry({ questionId: 'q3', standing: { kind: 'refused', reason: 'orchestrator-1 did not take the answer: retired' } }),
         anEntry({ questionId: 'q4', standing: { kind: 'sending' } }),
         anEntry({ questionId: 'q5' }),

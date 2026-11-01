@@ -58,15 +58,15 @@ export interface BasketEntries {
 /**
  * What an entry stands as now: as kept (waiting, sending, refused with
  * why); its question withdrawn or replaced by its asker (section 9, rule
- * 5); or dealt with elsewhere, as when Slack or a chat answered it first
+ * 5), with when and, for a replacement, its title; or dealt with elsewhere, as when Slack or a chat answered it first
  * (rule 6): either is not sent.
  */
 export type BasketStanding =
   | { readonly kind: 'waiting' }
   | { readonly kind: 'sending' }
   | { readonly kind: 'refused'; readonly reason: string }
-  | { readonly kind: 'withdrawn' }
-  | { readonly kind: 'replaced'; readonly replacementId: DeliveryId | null }
+  | { readonly kind: 'withdrawn'; readonly at: string }
+  | { readonly kind: 'replaced'; readonly replacementId: DeliveryId | null; readonly at: string; readonly replacementTitle: string | null }
   | { readonly kind: 'dealtElsewhere'; readonly place: Place; readonly option: number | null };
 
 /**
@@ -79,9 +79,9 @@ export function standingOf(entry: BasketEntry, known: { outcome: ItemOutcome | u
   if (outcome !== undefined) {
     switch (outcome.kind) {
       case 'withdrawn':
-        return { kind: 'withdrawn' };
+        return { kind: 'withdrawn', at: outcome.at.toISOString() };
       case 'replaced':
-        return { kind: 'replaced', replacementId: null };
+        return { kind: 'replaced', replacementId: null, at: outcome.at.toISOString(), replacementTitle: null };
       case 'seen':
       case 'answered':
       case 'done':
@@ -99,7 +99,7 @@ export function standingOf(entry: BasketEntry, known: { outcome: ItemOutcome | u
       if (stale === null) {
         return { kind: 'waiting' };
       }
-      return stale.kind === 'withdrawn' ? { kind: 'withdrawn' } : { kind: 'replaced', replacementId: stale.replacementId };
+      return stale.kind === 'withdrawn' ? { kind: 'withdrawn', at: stale.at } : { kind: 'replaced', replacementId: stale.replacementId, at: stale.at, replacementTitle: stale.replacementTitle };
   }
 }
 
