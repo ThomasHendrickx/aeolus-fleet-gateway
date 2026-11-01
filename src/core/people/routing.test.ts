@@ -1,4 +1,4 @@
-import { ALERT_CONTENT_TYPE, QUESTION_CONTENT_TYPE } from '@aeolus-fleet/common';
+import { ALERT_CONTENT_TYPE, QUESTION_CONTENT_TYPE, type ShipId } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
@@ -18,8 +18,8 @@ function aRoute(overrides: Partial<Route> = {}): Route {
 }
 
 /** A ship of the fleet, and the gateway's own ship, which sends a person its own steps (CC14). */
-const SENDER = 'shp_01m3tbfspe96yf1rnr4ank9trk';
-const GATEWAY_SHIP_ID = 'shp_01m3tbfspe96yf1rnr4ank0gat';
+const SENDER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9trk';
+const GATEWAY_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank0gat';
 
 const aQuestion = (sentAt: Date) => ({ contentType: QUESTION_CONTENT_TYPE, sentAt, senderShipId: SENDER });
 
@@ -56,7 +56,7 @@ describe('routing per job', () => {
 
   it('knows each item by its job: a plain message is everything else', () => {
     const routing = routingOf([aRoute({ job: 'everything-else', place: 'chat' })], routingDefaultsOf([]));
-    expect([routing.isShowing('chat', { contentType: 'text/plain', sentAt: TURNED_ON_AT }), routing.isShowing('chat', aQuestion(TURNED_ON_AT))]).toEqual([true, false]);
+    expect([routing.isShowing('chat', { contentType: 'text/plain', sentAt: TURNED_ON_AT, senderShipId: SENDER }), routing.isShowing('chat', aQuestion(TURNED_ON_AT))]).toEqual([true, false]);
   });
 });
 

@@ -14,7 +14,7 @@ import { asPersonCrew, withOwnRefusal, type PersonCaller, type PersonCrewError }
 import type { OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
 import { RECORD_PAGE_SIZE, SEALED_TITLE } from './read-record.js';
-import { ROUTING_PLACES, routingOf, type Routing, type RoutingDefaults, type RoutingPlace, type Routes } from './routing.js';
+import { ownStepsInBridgeOnly, ROUTING_PLACES, routingOf, type RoutedItem, type Routing, type RoutingDefaults, type RoutingPlace, type Routes } from './routing.js';
 import { askingOf, staleOf, type Asking, type Stale } from './stale-item.js';
 import { isOfferedPlace } from './turn-route.js';
 
@@ -62,7 +62,7 @@ function inBasketOf(entries: readonly BasketEntry[]): (deliveryId: string) => Ho
 }
 
 /** The places besides Bridge that show an item, as routing per job has them and the gateway offers them, in routing's order. */
-function placesOf(routing: Routing, offered: { isEmailOffered: boolean; isWebPushOffered: boolean }): (item: { contentType: string; sentAt: Date }) => RoutingPlace[] {
+function placesOf(routing: Routing, offered: { isEmailOffered: boolean; isWebPushOffered: boolean }): (item: RoutedItem) => RoutingPlace[] {
   return (item) => ROUTING_PLACES.filter((place) => isOfferedPlace(place, offered) && routing.isShowing(place, item));
 }
 
@@ -125,7 +125,7 @@ export function createReadBridgeHome(deps: {
     ]);
     const asking: Asking[] = [...waiting.value.deliveries.map(askingOf), ...opened];
     const inBasket = inBasketOf(entries);
-    const showingIn = placesOf(routingOf(routes, deps.defaults), deps);
+    const showingIn = placesOf(ownStepsInBridgeOnly(routingOf(routes, deps.defaults), gateway?.shipId), deps);
     const own = { gatewayShipId: gateway?.shipId, actionOf: deps.ownStepActionOf };
     /** What the row shows of an item besides its entry: an alert or not, the places that show it, and what it does in place. */
     const rowOf = (item: Omit<ActingItem, 'senderShipId' | 'pick' | 'stepLink'>, of: { contentType: string; sentAt: Date; senderShipId: ShipId; pick: number | null; stepLink: string | null }) => ({
