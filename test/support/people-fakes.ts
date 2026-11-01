@@ -136,12 +136,13 @@ export const SENT_MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank0sen';
 /**
  * A person's ship in the fleet, as its crew's calls see it: the deliveries
  * waiting for it, each push receive handing the oldest again, up to max,
- * with the last number the gateway handed it with;
+ * past the ones it is told to leave out unless it keeps no exclusions, as a
+ * core before excluding does, with the last number the gateway handed it with;
  * the ones it acknowledged, read again until handled; what its discover
  * answers; its record, newest first by delivery id; the crew token it
  * takes, and the calls the gateway made.
  */
-export function fakePersonShipDoor(ship: { crewToken: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[] }) {
+export function fakePersonShipDoor(ship: { crewToken: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[]; isExcludingIgnored?: boolean }) {
   const calls: string[] = [];
   /** The replies the fleet took, as sent. */
   const replies: Parameters<PersonShipDoor['reply']>[1][] = [];
@@ -160,13 +161,14 @@ export function fakePersonShipDoor(ship: { crewToken: string; deliveries: Person
       calls.push('inbox');
       return crewed(crewToken, () => ({ waiting: ship.deliveries.length }));
     },
-    pushReceive: (crewToken, { max }) => {
-      calls.push(`pushReceive(${String(max)})`);
+    pushReceive: (crewToken, { max, excluding = [] }) => {
+      calls.push(excluding.length === 0 ? `pushReceive(${String(max)})` : `pushReceive(${String(max)}, excluding ${String(excluding.length)})`);
       const refused = refusals.pushReceive.shift();
       if (refused) {
         return Promise.resolve(err(refused));
       }
-      return crewed(crewToken, () => ship.deliveries.slice(0, max).map((delivery) => ({ ...delivery, handOverNumber: handOvers.findLast(({ deliveryId }) => deliveryId === delivery.deliveryId)?.handOverNumber ?? null })));
+      const left = ship.isExcludingIgnored === true ? ship.deliveries : ship.deliveries.filter(({ deliveryId }) => !excluding.includes(deliveryId));
+      return crewed(crewToken, () => left.slice(0, max).map((delivery) => ({ ...delivery, handOverNumber: handOvers.findLast(({ deliveryId }) => deliveryId === delivery.deliveryId)?.handOverNumber ?? null })));
     },
     record: (crewToken, { cursor, limit }) => {
       calls.push(`record(${cursor ?? 'newest'})`);

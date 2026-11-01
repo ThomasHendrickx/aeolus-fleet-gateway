@@ -22,9 +22,9 @@ beforeEach(() => {
 /** A chat on for every job, as the gateway's defaults have it (Bridge, CC19). */
 const CHAT_ON = routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' as const })));
 
-function readInbox(deliveries: PersonDelivery[], options: { crewToken?: string; routes?: Route[] } = {}) {
-  const { crewToken = 'aeolus_ct_v1_charlotte', routes = [] } = options;
-  const ship = fakePersonShipDoor({ crewToken, deliveries });
+function readInbox(deliveries: PersonDelivery[], options: { crewToken?: string; routes?: Route[]; isExcludingIgnored?: boolean } = {}) {
+  const { crewToken = 'aeolus_ct_v1_charlotte', routes = [], isExcludingIgnored = false } = options;
+  const ship = fakePersonShipDoor({ crewToken, deliveries, isExcludingIgnored });
   return { ...ship, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, routes: memoryRoutes(routes), defaults: CHAT_ON }) };
 }
 
@@ -48,6 +48,14 @@ const OPENED: OpenedDelivery = {
   sentAt: new Date('2026-10-19T07:00:00.000Z'),
   openedAt: new Date('2026-10-19T07:30:00.000Z'),
 };
+/** As many waiting deliveries, each its own, the oldest first. */
+function manyDeliveries(count: number): PersonDelivery[] {
+  return Array.from({ length: count }, (_, index) => {
+    const number = String(index + 1).padStart(4, '0');
+    return aPersonDelivery({ deliveryId: `dlv_01m3tbfspe96yf1rnr4ank${number}`, messageId: `msg_01m3tbfspe96yf1rnr4ank${number}` });
+  });
+}
+
 const OPENED_ENTRY = { deliveryId: OPENED.deliveryId, from: 'tracker', title: 'The build is red', sentAt: '2026-10-19T07:00:00.000Z' };
 
 describe("a person reads their person ship's inbox: what waits, by titles only", () => {
@@ -84,12 +92,38 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
     expect(read.isOk ? read.value.deliveries.map(({ title }) => title) : []).toEqual([eighty, `${'a'.repeat(79)}…`]);
   });
 
-  it('lists at most 10, with how many wait in all', async () => {
-    const { calls, readInbox: read } = readInbox(Array.from({ length: 12 }, () => aPersonDelivery()));
+  it('lists every delivery that waits, however many, taking 10 at a time past the ones it took', async () => {
+    const { calls, readInbox: read } = readInbox(manyDeliveries(25));
 
     const answer = await read(CHARLOTTE_GRANT);
 
-    expect({ waiting: answer.isOk ? answer.value.waiting : 0, listed: answer.isOk ? answer.value.deliveries.length : 0, calls }).toEqual({ waiting: 12, listed: 10, calls: ['inbox', 'pushReceive(10)'] });
+    expect({ waiting: answer.isOk ? answer.value.waiting : 0, listed: answer.isOk ? answer.value.deliveries.length : 0, calls }).toEqual({
+      waiting: 25,
+      listed: 25,
+      calls: ['inbox', 'pushReceive(10)', 'pushReceive(10, excluding 10)', 'pushReceive(10, excluding 20)'],
+    });
+  });
+
+  it('takes once when exactly 10 wait, and again for the 11th', async () => {
+    const ten = readInbox(manyDeliveries(10));
+    const eleven = readInbox(manyDeliveries(11));
+
+    const [tenRead, elevenRead] = [await ten.readInbox(CHARLOTTE_GRANT), await eleven.readInbox(CHARLOTTE_GRANT)];
+
+    expect({ ten: tenRead.isOk && tenRead.value.deliveries.length, tenCalls: ten.calls, eleven: elevenRead.isOk && elevenRead.value.deliveries.length, elevenCalls: eleven.calls }).toEqual({
+      ten: 10,
+      tenCalls: ['inbox', 'pushReceive(10)'],
+      eleven: 11,
+      elevenCalls: ['inbox', 'pushReceive(10)', 'pushReceive(10, excluding 10)'],
+    });
+  });
+
+  it('stops taking once the fleet takes nothing new, as a core that keeps no exclusions does, with how many wait in all', async () => {
+    const { calls, readInbox: read } = readInbox(manyDeliveries(12), { isExcludingIgnored: true });
+
+    const answer = await read(CHARLOTTE_GRANT);
+
+    expect({ waiting: answer.isOk ? answer.value.waiting : 0, listed: answer.isOk ? answer.value.deliveries.length : 0, calls }).toEqual({ waiting: 12, listed: 10, calls: ['inbox', 'pushReceive(10)', 'pushReceive(10, excluding 10)'] });
   });
 
   it('takes nothing while nothing waits, so the person is never kept waiting', async () => {

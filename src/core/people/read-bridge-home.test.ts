@@ -70,6 +70,17 @@ describe('Bridge home: what waits on the person, with one count (CC18)', () => {
     });
   });
 
+  it('lists and counts every question that waits, however many, not only the first 10', async () => {
+    const questions = Array.from({ length: 12 }, (_, index) => {
+      const number = String(index + 1).padStart(4, '0');
+      return aPersonDelivery({ deliveryId: `dlv_01m3tbfspe96yf1rnr4ank${number}`, messageId: `msg_01m3tbfspe96yf1rnr4ank${number}` });
+    });
+
+    const home = await readHome(questions).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? { count: home.value.waiting.count, listed: home.value.waiting.items.length } : home).toEqual({ count: 12, listed: 12 });
+  });
+
   it('lists a question the person opened and has not answered as seen, still in the count', async () => {
     await opened.save(anOpened());
 
