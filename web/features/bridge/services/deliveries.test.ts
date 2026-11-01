@@ -1,7 +1,7 @@
 import { ANSWER_CONTENT_TYPE } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
-import { answerOf, bodyOf } from './deliveries';
+import { answerOf, bodyOf, questionOf } from './deliveries';
 
 const QUESTION_ID = '0b3f6a52-7c1e-4d0f-9a43-2f6c1d8e5b71';
 
@@ -37,5 +37,19 @@ describe('what an opened item shows of its payload (Bridge, CC15)', () => {
 
   it('shows any other payload as it came, and one it cannot read as it came too', () => {
     expect([bodyOf({ contentType: 'text/plain', payload: 'The build is red' }), bodyOf({ contentType: 'application/vnd.aeolus.notice+json', payload: 'not json' })]).toEqual(['The build is red', 'not json']);
+  });
+});
+
+describe('the question an opened item asks (decision 0038)', () => {
+  const QUESTION = { id: QUESTION_ID, title: 'Go for release 1.4?', context: 'All checks are green.', options: [{ key: 1, label: 'Go', detail: '' }], pick: { option: 1, why: 'Every check is green' } };
+
+  it("reads a question's own, and the new question a replacement asks, so it is answered as a question", () => {
+    const replacing = { ...QUESTION, id: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f', title: 'Go for release 1.4 after #1488?' };
+
+    expect([
+      questionOf({ contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify(QUESTION) })?.id,
+      questionOf({ contentType: 'application/vnd.aeolus.question-replacement+json', payload: JSON.stringify({ questionId: QUESTION_ID, question: replacing }) })?.id,
+      questionOf({ contentType: 'application/vnd.aeolus.question-withdrawal+json', payload: JSON.stringify({ questionId: QUESTION_ID }) }),
+    ]).toEqual([QUESTION_ID, '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f', undefined]);
   });
 });
