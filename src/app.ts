@@ -129,7 +129,7 @@ import { createPingWorker } from './ping-worker.js';
 import { createSlackTokenWorker } from './slack-token-worker.js';
 import { createGrantWorker } from './grant-worker.js';
 import { createSlackEventWorker } from './slack-event-worker.js';
-import { createBasketWorker } from './basket-worker.js';
+import { createRoundWorker } from './round-worker.js';
 import { createPrismaSlackEvents } from './adapters/prisma/slack-events.js';
 import { createSendSlackEvents } from './core/slack/send-slack-events.js';
 import { createSlackInstallSeals } from './adapters/crypto/slack-install-seals.js';
@@ -762,8 +762,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const openedDeliveries = createPrismaOpenedDeliveries(prisma);
   const itemOutcomes = createPrismaItemOutcomes(prisma);
   const basketEntries = createPrismaBasketEntries(prisma);
-  const basketSends = createBasketWorker({
-    send: createSendStoredAnswers({ entries: basketEntries, crews: personCrews, door: door.person, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock }),
+  const basketSends = createRoundWorker({
+    name: 'basket',
+    round: createSendStoredAnswers({ entries: basketEntries, crews: personCrews, door: door.person, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock }),
     sleep,
     intervalMs: BASKET_ROUND_MS,
     log: server.log,

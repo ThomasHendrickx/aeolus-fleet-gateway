@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 
-import { createBasketWorker } from './basket-worker.js';
+import { createRoundWorker } from './round-worker.js';
 
 // The gateway sends what the basket stores as sending (Bridge, section 9):
 // a round at its start, as after a restart, again every interval while the
@@ -10,13 +10,14 @@ import { createBasketWorker } from './basket-worker.js';
 /** A sleep that waits until woken or stopped, however long it was asked. */
 const sleepUntilWoken = (_ms: number, signal: AbortSignal) => new Promise<void>((resolve) => { signal.addEventListener('abort', () => { resolve(); }, { once: true }); });
 
-describe("the gateway's sender of the basket", () => {
-  it('sends a round at its start, and at once when woken, one round at a time', async () => {
+describe("a worker of rounds, as the basket's sender is", () => {
+  it('runs a round at its start, and at once when woken, one round at a time', async () => {
     let rounds = 0;
     let isRunning = false;
     let wasOverlapped = false;
-    const worker = createBasketWorker({
-      send: async () => {
+    const worker = createRoundWorker({
+      name: 'basket',
+      round: async () => {
         wasOverlapped ||= isRunning;
         isRunning = true;
         rounds += 1;
@@ -41,8 +42,9 @@ describe("the gateway's sender of the basket", () => {
 
   it('goes on after a round that failed', async () => {
     let rounds = 0;
-    const worker = createBasketWorker({
-      send: () => {
+    const worker = createRoundWorker({
+      name: 'basket',
+      round: () => {
         rounds += 1;
         return rounds === 1 ? Promise.reject(new Error('database restarting')) : Promise.resolve({ sent: 1, kept: 0, refused: 0 });
       },
