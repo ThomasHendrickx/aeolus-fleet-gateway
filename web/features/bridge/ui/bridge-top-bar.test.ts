@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import { headerSwitchersOf } from '../../frame/services/header-switchers';
 import type { BridgeScreen } from '../services/shell';
 import { BridgeTopBar } from './bridge-top-bar';
 
@@ -61,5 +62,34 @@ describe("Bridge's top bar", () => {
 
   it("keeps the page's name in the breadcrumb while an item is open from another page", () => {
     expect(textOf(topBarOf({ screen: 'stay-aware', opened: { title: 'Stay aware', onBack: () => undefined } }), 'bridge-crumb')).toBe('Aeolus fleet / Stay aware');
+  });
+});
+
+
+const FLEET = 'flt_01m5fcd917vwf30mx663fgc3z8';
+
+describe("Bridge's app switcher", () => {
+  const [switcher] = headerSwitchersOf({
+    account: { id: 'acc-thomas', email: 'thomas@example.com' },
+    apps: [{ app: 'account', url: 'https://account.example/' }, { app: 'admin', url: 'https://account.example/admin' }],
+    fleets: [{ id: FLEET, name: 'Aeolus fleet', apps: [{ app: 'console', url: 'https://console.example/' }, { app: 'gateway', url: 'https://bridge.example/' }] }],
+  });
+
+  it('offers the shared desktop and phone switchers where the product name was', () => {
+    const markup = renderToStaticMarkup(createElement(BridgeTopBar, { fleetId: FLEET, fleetName: 'Aeolus fleet', screen: 'home', isLive: true, opened: undefined, avatar: null, switcher }));
+
+    expect(markup).toContain('data-testid="app-switcher-apps"');
+    expect(markup).toContain('Switch fleet or app: Aeolus fleet, Gateway');
+    expect(markup).not.toContain('data-testid="bridge-crumb"');
+    expect(markup).not.toContain('data-testid="bridge-title"');
+  });
+
+  it('offers Console, Gateway, Account and Admin with the rights the account has', () => {
+    expect(switcher?.apps.map(({ label, url, isCurrent }) => ({ label, url, isCurrent }))).toEqual([
+      { label: 'Console', url: `https://console.example/?fleet=${FLEET}`, isCurrent: false },
+      { label: 'Gateway', url: `https://bridge.example/?fleet=${FLEET}`, isCurrent: true },
+      { label: 'Account', url: 'https://account.example/', isCurrent: false },
+      { label: 'Admin', url: 'https://account.example/admin', isCurrent: false },
+    ]);
   });
 });
