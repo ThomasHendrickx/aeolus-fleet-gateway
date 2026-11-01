@@ -124,6 +124,8 @@ export function aPersonDelivery(overrides: Partial<PersonDelivery> = {}): Person
     withdrawnQuestionId: null,
     stepId: null,
     withdrawnStepId: null,
+    pick: null,
+    stepLink: null,
     sentAt: new Date('2026-10-19T08:00:00.000Z'),
     inReplyTo: null,
     meetingId: null,

@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
+import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import { createReadBridgeHome } from './read-bridge-home.js';
+import { routingDefaultsOf, type Route } from './routing.js';
 
 // Bridge home (docs/design/bridge, CC18): what waits on the person with one
 // count, decide and do, and the stay-aware feed beside it, outside the count.
@@ -12,16 +13,35 @@ import { createReadBridgeHome } from './read-bridge-home.js';
 let crews: ReturnType<typeof memoryPersonCrews>;
 let opened: ReturnType<typeof memoryOpenedDeliveries>;
 let entries: ReturnType<typeof memoryBasketEntries>;
+let connections: ReturnType<typeof memoryConnectionStore>;
+let routes: Route[];
 
-beforeEach(() => {
+/** The gateway's own ship in the fleet, which sends the person its own steps (CC14). */
+const GATEWAY_SHIP_ID = 'shp_01m3tbfspe96yf1rnr4ank0gat';
+
+/** The gateway's defaults (CC19): a chat on for every job, Slack, web push and email off. */
+const CHAT_ON = routingDefaultsOf([
+  { job: 'decide', place: 'chat' },
+  { job: 'do', place: 'chat' },
+  { job: 'stay-aware', place: 'chat' },
+  { job: 'everything-else', place: 'chat' },
+]);
+
+beforeEach(async () => {
   crews = memoryPersonCrews();
   opened = memoryOpenedDeliveries();
   entries = memoryBasketEntries();
+  connections = memoryConnectionStore();
+  routes = [];
+  await connections.save({ fleetId: FLEET_ID, shipId: GATEWAY_SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-01T00:00:00.000Z') });
 });
 
-function readHome(deliveries: PersonDelivery[]) {
+function readHome(deliveries: PersonDelivery[], offered: { isEmailOffered: boolean; isWebPushOffered: boolean } = { isEmailOffered: false, isWebPushOffered: true }) {
   const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries });
-  return { ...ship, readHome: createReadBridgeHome({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, entries }) };
+  return {
+    ...ship,
+    readHome: createReadBridgeHome({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, entries, connections, routes: memoryRoutes(routes), defaults: CHAT_ON, ...offered }),
+  };
 }
 
 const QUESTION = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', sentAt: new Date('2026-10-31T19:48:00.000Z'), senderName: 'orchestrator-1', headline: 'Which goes first: the Compact look (U4) or Harbour?' });
@@ -52,6 +72,7 @@ function anOpened(overrides: Partial<OpenedDelivery> = {}): OpenedDelivery {
     withdrawnQuestionId: null,
     stepId: null,
     withdrawnStepId: null,
+    stepLink: null,
     sentAt: new Date('2026-10-31T19:20:00.000Z'),
     openedAt: new Date('2026-10-31T19:30:00.000Z'),
     ...overrides,
@@ -321,5 +342,113 @@ describe('Bridge home: a step its asker withdrew or replaced, as a question (CC1
     const home = await readHome([question, WITHDRAWAL]).readHome(CHARLOTTE_GRANT);
 
     expect(shownOf(home)).toEqual({ count: 1, items: [{ deliveryId: QUESTION.deliveryId, stale: null }] });
+  });
+});
+
+describe('Bridge home: what each row says and acts on in place (aeolus-fleet#1535)', () => {
+  const PICKED = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0010',
+    senderName: 'orchestrator-1',
+    headline: 'Which goes first: the Compact look (U4) or Harbour?',
+    askedQuestionId: '7d1e2f3a-4b5c-4d6e-8f7a-9b0c1d2e3f4a',
+    pick: 2,
+  });
+  const LINKED_STEP = aPersonDelivery({ ...STEP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0011', stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', stepLink: 'https://github.com/new', askedQuestionId: null });
+  const OWN_STEP = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0012',
+    senderShipId: GATEWAY_SHIP_ID,
+    senderName: 'gateway',
+    contentType: 'application/vnd.aeolus.step+json',
+    headline: 'Sign in to linear',
+    askedQuestionId: null,
+    stepId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+    stepLink: 'https://gateway.example.com/parties/linear/sign-in?fleet=flt_1',
+  });
+
+  function actsOf(home: Awaited<ReturnType<ReturnType<typeof readHome>['readHome']>>) {
+    return home.isOk ? home.value.waiting.items.map(({ deliveryId, actInPlace }) => ({ deliveryId, actInPlace })) : home;
+  }
+
+  it('offers to put the asker\'s pick in the basket on a question still new', async () => {
+    const home = await readHome([PICKED]).readHome(CHARLOTTE_GRANT);
+
+    expect(actsOf(home)).toEqual([{ deliveryId: PICKED.deliveryId, actInPlace: { kind: 'putPick', option: 2 } }]);
+  });
+
+  it('offers nothing in place on a question the person opened: they answer it opened', async () => {
+    await opened.save(anOpened());
+
+    const home = await readHome([]).readHome(CHARLOTTE_GRANT);
+
+    expect(actsOf(home)).toEqual([{ deliveryId: anOpened().deliveryId, actInPlace: null }]);
+  });
+
+  it('offers nothing in place on a question its asker withdrew', async () => {
+    const withdrawal = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0013', senderShipId: PICKED.senderShipId, contentType: 'application/vnd.aeolus.question-withdrawal+json', headline: null, askedQuestionId: null, withdrawnQuestionId: PICKED.askedQuestionId });
+
+    const home = await readHome([PICKED, withdrawal]).readHome(CHARLOTTE_GRANT);
+
+    expect(actsOf(home)).toEqual([{ deliveryId: PICKED.deliveryId, actInPlace: null }]);
+  });
+
+  it('offers a step\'s link with the host it leads to', async () => {
+    const home = await readHome([LINKED_STEP]).readHome(CHARLOTTE_GRANT);
+
+    expect(actsOf(home)).toEqual([{ deliveryId: LINKED_STEP.deliveryId, actInPlace: { kind: 'openLink', href: 'https://github.com/new', host: 'github.com' } }]);
+  });
+
+  it('offers a step\'s link once the person opened it, as kept on opening', async () => {
+    await opened.save(anOpened({ contentType: 'application/vnd.aeolus.step+json', askedQuestionId: null, stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', stepLink: 'https://github.com/new' }));
+
+    const home = await readHome([]).readHome(CHARLOTTE_GRANT);
+
+    expect(actsOf(home)).toEqual([{ deliveryId: anOpened().deliveryId, actInPlace: { kind: 'openLink', href: 'https://github.com/new', host: 'github.com' } }]);
+  });
+
+  it('offers nothing in place on a step with no link', async () => {
+    const home = await readHome([STEP]).readHome(CHARLOTTE_GRANT);
+
+    expect(actsOf(home)).toEqual([{ deliveryId: STEP.deliveryId, actInPlace: null }]);
+  });
+
+  it('offers the gateway\'s own step as its own action, by its title, where it is done', async () => {
+    const home = await readHome([OWN_STEP]).readHome(CHARLOTTE_GRANT);
+
+    expect(actsOf(home)).toEqual([{ deliveryId: OWN_STEP.deliveryId, actInPlace: { kind: 'ownStep', href: 'https://gateway.example.com/parties/linear/sign-in?fleet=flt_1', title: 'Sign in to linear' } }]);
+  });
+
+  it('tells an alert from a notice in the stay-aware feed', async () => {
+    const home = await readHome([NOTICE, ALERT]).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? home.value.stayAware.map(({ title, isAlert }) => ({ title, isAlert })) : home).toEqual([
+      { title: 'builder-gateway: no report change for 2 h', isAlert: true },
+      { title: 'PR #1497 opened: Bridge mockups', isAlert: false },
+    ]);
+  });
+
+  it('names the places besides Bridge that show each item: a chat by default', async () => {
+    const home = await readHome([QUESTION, ALERT]).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? [...home.value.waiting.items, ...home.value.stayAware].map(({ places }) => places) : home).toEqual([['chat'], ['chat']]);
+  });
+
+  it('names a place that pushes only on what arrived after it was turned on for the job (CC20)', async () => {
+    routes.push({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, job: 'decide', place: 'slack', isOn: true, changedAt: new Date('2026-10-31T19:30:00.000Z') });
+    await opened.save(anOpened());
+
+    const home = await readHome([QUESTION]).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? home.value.waiting.items.map(({ from, places }) => ({ from, places })) : home).toEqual([
+      { from: 'orchestrator-1', places: ['slack', 'chat'] },
+      { from: 'commercial', places: ['chat'] },
+    ]);
+  });
+
+  it('names no place the gateway does not offer, though turned on', async () => {
+    routes.push({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, job: 'stay-aware', place: 'web-push', isOn: true, changedAt: new Date('2026-10-01T00:00:00.000Z') });
+
+    const home = await readHome([ALERT], { isEmailOffered: false, isWebPushOffered: false }).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? home.value.stayAware.map(({ places }) => places) : home).toEqual([['chat']]);
   });
 });
