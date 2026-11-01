@@ -119,6 +119,11 @@ export function memoryArgoWakes(): ArgoWakes & { covered: Map<string, Set<Messag
       covered.set(keyOf(ship), new Set([...(covered.get(keyOf(ship)) ?? [])].filter((messageId) => !messageIds.includes(messageId))));
       return Promise.resolve();
     },
+    forgetAllBut: (ship, open) => {
+      calls.push({ call: 'forgetAllBut', ship, messageIds: open });
+      covered.set(keyOf(ship), new Set([...(covered.get(keyOf(ship)) ?? [])].filter((messageId) => open.includes(messageId))));
+      return Promise.resolve();
+    },
     lastSentAt: (ship, channel) => {
       calls.push({ call: 'lastSentAt', ship, messageIds: [] });
       return Promise.resolve(sent.filter(isShip(ship)).findLast((wake) => wake.channel === channel)?.sentAt);

@@ -59,11 +59,16 @@ export interface ArgoInboxDoor {
  * inbox, AI4, AI5): the messages to argo a wake or a page in focus already
  * covered, so each is woken once per person, and when each channel last woke
  * the person ship for argo, so the window holds across restarts and instances.
+ * Each read and write names the messages it concerns, so it reads in pages of
+ * those, never every message covered.
  */
 export interface ArgoWakes {
-  coveredOf(ship: PersonShip): Promise<ReadonlySet<MessageId>>;
+  /** Which of these messages were covered for the person ship. */
+  coveredAmong(ship: PersonShip, messageIds: readonly MessageId[]): Promise<ReadonlySet<MessageId>>;
   cover(ship: PersonShip, messageIds: readonly MessageId[]): Promise<void>;
-  /** Forgets the covered messages no longer open at argo: done there, they never open again. */
+  /** Forgets these messages, done at argo: they never open again. */
+  forget(ship: PersonShip, messageIds: readonly MessageId[]): Promise<void>;
+  /** Forgets every covered message but the ones open now, as at a start, when what was done meanwhile is not known. */
   forgetAllBut(ship: PersonShip, open: readonly MessageId[]): Promise<void>;
   lastSentAt(ship: PersonShip, channel: WakeChannelName): Promise<Date | undefined>;
   record(wake: { ship: PersonShip; channel: WakeChannelName; sentAt: Date }): Promise<void>;
