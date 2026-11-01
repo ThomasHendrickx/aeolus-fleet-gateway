@@ -138,6 +138,7 @@ import { registerSlackRoutes, SLACK_ACTIONS_PATH, SLACK_EVENTS_PATH, SLACK_INSTA
 import { createPrismaSlackPosts } from './adapters/prisma/slack-posts.js';
 import { createAnswerInSlack } from './core/slack/answer-in-slack.js';
 import { createEditSlackPosts } from './core/slack/edit-slack-posts.js';
+import { createSeeInSlack } from './core/slack/see-in-slack.js';
 import { createShowInSlack } from './core/slack/show-in-slack.js';
 import { createPrismaSlackLinks } from './adapters/prisma/slack-links.js';
 import { createSlackMessages } from './adapters/slack/slack-messages.js';
@@ -935,6 +936,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   registerSlackRoutes(server, {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
     answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
+    seeInSlack: createSeeInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
     completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl }),
     takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, posts: slackPosts, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl: `${issuer}/slack/link` }),
   });
