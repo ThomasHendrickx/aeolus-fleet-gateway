@@ -35,6 +35,7 @@ const OPENED: OpenedDelivery = {
   contentType: 'text/plain',
   askedQuestionId: null,
   withdrawnQuestionId: null,
+  stepId: null,
   sentAt: new Date('2026-10-19T07:00:00.000Z'),
   openedAt: new Date('2026-10-19T07:30:00.000Z'),
 };

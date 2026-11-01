@@ -17,6 +17,7 @@ export type DomainErrorKind =
   | 'SERVER_DETAILS_MISSING'
   | 'REQUEST_ID_USED'
   | 'FLEET_UNAVAILABLE'
+  | 'NOT_A_STEP'
   | 'KEY_UNAVAILABLE'
   | 'NOT_CONNECTED'
   | 'PARTY_EXISTS'

@@ -167,7 +167,8 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
       doneDelivery: (input) => {
-        answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId });
+        const { outcome, note } = input;
+        answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId, ...(outcome === undefined ? {} : { outcome }), ...(note === undefined ? {} : { note }) });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
       },
       readBasket: () =>
@@ -927,6 +928,25 @@ describe("a person reads and deals with their person ship's deliveries through t
       { grantId: PERSON_TOKEN, deliveryId: DELIVERY, contentType: 'text/plain', payload: 'Yes' },
       { grantId: PERSON_TOKEN, deliveryId: DELIVERY },
     ]);
+  });
+
+  it('marks a step done or cannot with the note, in Bridge, as its own account (Bridge, CC14)', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+    const caller = gatewayRouter.createCaller(context);
+
+    await caller.people.done({ deliveryId: DELIVERY, outcome: 'cannot', note: 'I have no right to create repositories there' });
+
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, deliveryId: DELIVERY, outcome: 'cannot', note: 'I have no right to create repositories there' }]);
+  });
+
+  it("refuses a step's note over the fleet's payload limit, or an outcome other than done or cannot, marking nothing", async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+    const caller = gatewayRouter.createCaller(context);
+
+    await expect(caller.people.done({ deliveryId: DELIVERY, outcome: 'done', note: 'é'.repeat(PAYLOAD_MAX_BYTES / 2 + 1) })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    // @ts-expect-error -- the outcome a page could send that is neither done nor cannot, which the type rules out.
+    await expect(caller.people.done({ deliveryId: DELIVERY, outcome: 'later' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(answers).toEqual([]);
   });
 
   it("refuses an answer over the fleet's payload limit in UTF-8 bytes, though under it in characters, sending nothing", async () => {

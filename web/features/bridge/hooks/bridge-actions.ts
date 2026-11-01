@@ -16,7 +16,7 @@ import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { FLEET_PARAMETER } from '../../../lib/gateway-api/page-account';
 import { refusalCodeOf, refusalMessageOf, requestApi } from '../../../lib/gateway-api/page-api';
 import { serverCredentialOf } from '../../forms/server-credential';
-import { answerOf, bodyOf, questionOf, type AnswerInput, type FocusedDelivery } from '../services/deliveries';
+import { answerOf, bodyOf, questionOf, stepOf, type AnswerInput, type FocusedDelivery } from '../services/deliveries';
 import type { SubscriptionInput } from '../services/web-push';
 import { EVERY_APP_SHIP_SCOPES, type DecisionInput } from '../services/requests';
 import type { BasketSent } from '../services/basket';
@@ -53,7 +53,7 @@ export async function openDelivery(fleet: string, deliveryId: string): Promise<A
   return attempt(fleet, async (api) => {
     const opened = await api.people.open.mutate({ deliveryId });
     const { contentType, payload, meetingId, ...entry } = opened;
-    return { ...entry, payload, body: bodyOf({ contentType, payload }), question: questionOf({ contentType, payload }), meetingId: meetingId ?? undefined };
+    return { ...entry, payload, body: bodyOf({ contentType, payload }), question: questionOf({ contentType, payload }), step: stepOf({ contentType, payload }), meetingId: meetingId ?? undefined };
   });
 }
 
@@ -89,9 +89,10 @@ export async function sendBasket(fleet: string): Promise<ActionOutcome<BasketSen
   return attempt(fleet, (api) => api.people.sendBasket.mutate());
 }
 
-export async function doneDelivery(fleet: string, deliveryId: string): Promise<ActionOutcome<undefined>> {
+/** Is done with an item; a step done or cannot, with the person's note if they wrote one, its outcome sent at once (CC14, CC23). */
+export async function doneDelivery({ fleet, deliveryId, step }: { fleet: string; deliveryId: string; step?: { outcome: 'done' | 'cannot'; note: string } }): Promise<ActionOutcome<undefined>> {
   return attempt(fleet, async (api) => {
-    await api.people.done.mutate({ deliveryId });
+    await api.people.done.mutate(step === undefined ? { deliveryId } : { deliveryId, ...step });
     return undefined;
   });
 }

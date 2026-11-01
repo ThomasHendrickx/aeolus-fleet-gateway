@@ -82,6 +82,7 @@ export function standingOf(entry: BasketEntry, known: { outcome: ItemOutcome | u
       case 'seen':
       case 'answered':
       case 'done':
+      case 'cannot':
       case 'notSent':
         return { kind: 'dealtElsewhere', place: outcome.place, option: outcome.option };
     }

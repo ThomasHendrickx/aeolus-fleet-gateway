@@ -109,6 +109,16 @@ describe("what came of a person ship's items, in Postgres (Bridge, CC4)", () => 
     await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [withdrawn.deliveryId, replaced.deliveryId] })).resolves.toEqual(expect.arrayContaining([withdrawn, replaced]));
   });
 
+  it('keeps a step the person cannot do as cannot, and one of the gateway it saw complete as done by the gateway (Bridge, CC14)', async () => {
+    const outcomes = createPrismaItemOutcomes(prisma);
+    const cannot = { ...outcome, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch807', place: 'chat', kind: 'cannot', option: null } as const;
+    const doneByGateway = { ...outcome, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch808', place: 'gateway', kind: 'done', option: null } as const;
+    await outcomes.save(cannot);
+    await outcomes.save(doneByGateway);
+
+    await expect(outcomes.findMany(FLEET, { shipId: PERSON_SHIP, deliveryIds: [cannot.deliveryId, doneByGateway.deliveryId] })).resolves.toEqual(expect.arrayContaining([cannot, doneByGateway]));
+  });
+
   it('forgets a fleet with what came of its items (decision 0021)', async () => {
     const outcomes = createPrismaItemOutcomes(prisma);
     const forgotten = { ...outcome, fleetId: OTHER_FLEET, deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch804' } as const;

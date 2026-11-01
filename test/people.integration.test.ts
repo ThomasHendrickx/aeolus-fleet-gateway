@@ -39,6 +39,7 @@ function anOpenedDelivery(overrides: Partial<OpenedDelivery> = {}): OpenedDelive
     contentType: 'application/vnd.aeolus.question+json',
     askedQuestionId: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e',
     withdrawnQuestionId: null,
+    stepId: null,
     sentAt: new Date('2026-10-19T08:00:00.000Z'),
     openedAt: AT,
     ...overrides,
@@ -77,6 +78,14 @@ describe('the deliveries people opened, in Postgres', () => {
     await opened.save(replacement);
 
     await expect(opened.find(FLEET, { shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0rep' })).resolves.toEqual(replacement);
+  });
+
+  it('keeps the uuid of the step a step asks, so its outcome names it once the step is acknowledged (Bridge, CC14)', async () => {
+    const opened = createPrismaOpenedDeliveries(prisma);
+    const step = anOpenedDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0stp', contentType: 'application/vnd.aeolus.step+json', askedQuestionId: null, stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10' });
+    await opened.save(step);
+
+    await expect(opened.find(FLEET, { shipId: PERSON_SHIP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0stp' })).resolves.toEqual(step);
   });
 
   it('keeps a delivery opened again once, as last opened', async () => {

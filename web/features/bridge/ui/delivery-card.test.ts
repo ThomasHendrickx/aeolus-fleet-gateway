@@ -22,10 +22,11 @@ const QUESTION = {
 };
 
 function aQuestion(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
-  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, meetingId: undefined, stale: null, ...overrides };
+  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, step: undefined, meetingId: undefined, stale: null, ...overrides };
 }
 
-function render(delivery: FocusedDelivery, inBasket: { option: number; note: string | null } | null = null): string {
+function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number; note: string | null } | null; note?: string } = {}): string {
+  const { inBasket = null, note = '' } = shown;
   const noop = () => undefined;
   return renderToStaticMarkup(
     createElement(DeliveryCard, {
@@ -34,7 +35,7 @@ function render(delivery: FocusedDelivery, inBasket: { option: number; note: str
       meetingHref: undefined,
       basketHref: '/bridge/basket?fleet=flt_01',
       inBasket,
-      note: '',
+      note,
       working: undefined,
       failure: undefined,
       onNoteChange: noop,
@@ -42,6 +43,7 @@ function render(delivery: FocusedDelivery, inBasket: { option: number; note: str
       onPut: noop,
       onRemove: noop,
       onDone: noop,
+      onFinishStep: noop,
       onOpen: noop,
       onBack: noop,
     }),
@@ -63,7 +65,7 @@ describe('a question opened in Bridge (CC11)', () => {
   });
 
   it('says a question whose answer is in the basket is in it, not sent, with its note, its option picked, the basket and Remove beside it', () => {
-    const markup = render(aQuestion(), { option: 1, note: 'U4 first, then Harbour.' });
+    const markup = render(aQuestion(), { inBasket: { option: 1, note: 'U4 first, then Harbour.' } });
 
     expect({
       inBasket: markup.includes('In the basket: option 1, not sent'),
@@ -84,5 +86,36 @@ describe('a question opened in Bridge (CC11)', () => {
     const markup = render(aQuestion({ stale: { kind: 'replaced', replacementId: 'dlv_02' } }));
 
     expect({ stale: markup.includes('Replaced by orchestrator-1. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('in the basket') }).toEqual({ stale: true, link: true, send: false });
+  });
+});
+
+describe('a step opened in Bridge (CC14)', () => {
+  const STEP = { title: 'Sign in to attio', why: "Until you sign in, your ships' calls to attio are refused.", link: { href: 'https://gateway.example.com/outside-parties/attio?fleet=flt_01', host: 'gateway.example.com' } };
+
+  function aStep(): FocusedDelivery {
+    return { deliveryId: 'dlv_03', from: 'gateway', title: STEP.title, sentAt: '2026-10-31T21:00:00.000Z', payload: '{}', body: '{}', question: undefined, step: STEP, meetingId: undefined, stale: null };
+  }
+
+  it('shows why, and the link with the host it leads to, opened only by the person', () => {
+    const markup = render(aStep());
+
+    expect({
+      why: markup.includes("Until you sign in, your ships&#x27;"),
+      link: markup.includes('href="https://gateway.example.com/outside-parties/attio?fleet=flt_01"'),
+      host: markup.includes('Open on gateway.example.com'),
+    }).toEqual({ why: true, link: true, host: true });
+  });
+
+  it('shows its note field before Done or Cannot, for either, with no answer to send', () => {
+    const markup = render(aStep(), { note: 'It asked for read access only' });
+
+    expect({
+      noteFirst: markup.indexOf('data-testid="bridge-note"') < markup.indexOf('data-testid="bridge-step-done"'),
+      note: markup.includes('It asked for read access only'),
+      noteSays: markup.includes('Optional, goes with Done or Cannot'),
+      done: markup.includes('data-testid="bridge-step-done"'),
+      cannot: markup.includes('data-testid="bridge-step-cannot"'),
+      answer: markup.includes('data-testid="bridge-answer"'),
+    }).toEqual({ noteFirst: true, note: true, noteSays: true, done: true, cannot: true, answer: false });
   });
 });

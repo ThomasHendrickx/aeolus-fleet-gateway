@@ -31,7 +31,8 @@ export interface ItemOpening {
  * the item for them, and it is shown whole. An alert or a notice seen is
  * done at once (CC16), so it shows with no answer to give, as does a
  * question its asker withdrew or replaced; a replaced one opens its
- * replacement. A question's answer goes in the basket (CC24), and comes
+ * replacement. A step ends done or cannot with the note, sent at once,
+ * never through the basket (CC23). A question's answer goes in the basket (CC24), and comes
  * out of it there. Answering, being done or putting in the basket says so
  * in place, and the page reads itself again.
  */
@@ -101,7 +102,14 @@ export function ItemFocus({ fleetId, children }: { fleetId: string; children: (o
             settle({ control: { kind: 'remove' }, action: () => removeFromBasket(fleetId, questionId), said: `Your answer to “${delivery.title}” is out of the basket; the question still waits on you.` });
           }
         }}
-        onDone={() => { settle({ control: { kind: 'done' }, action: () => doneDelivery(fleetId, delivery.deliveryId), said: `Done with “${delivery.title}”.` }); }}
+        onDone={() => { settle({ control: { kind: 'done' }, action: () => doneDelivery({ fleet: fleetId, deliveryId: delivery.deliveryId }), said: `Done with “${delivery.title}”.` }); }}
+        onFinishStep={(outcome) => {
+          settle({
+            control: { kind: outcome },
+            action: () => doneDelivery({ fleet: fleetId, deliveryId: delivery.deliveryId, step: { outcome, note } }),
+            said: outcome === 'done' ? `Done: ${delivery.from} is told “${delivery.title}” is done.` : `Cannot: ${delivery.from} is told you cannot do “${delivery.title}”.`,
+          });
+        }}
         onOpen={(deliveryId) => { open({ deliveryId, job: 'decide' }); }}
         onBack={() => { setFocus(undefined); }}
       />

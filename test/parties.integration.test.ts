@@ -203,14 +203,14 @@ describe("each party's required scopes in Postgres (design gateway-scopes, 4.2)"
     const notices = createPrismaSignInNotices(prisma);
     await parties.save(aParty({ fleetId, name: 'attio' }));
     await notices.open(fleetId, { party: 'attio', personShipId: MATHILDE_SHIP_ID, noticeId: 'ntc-1' });
-    await notices.markTold(fleetId, { party: 'attio', personShipId: MATHILDE_SHIP_ID });
+    await notices.markTold(fleetId, { party: 'attio', personShipId: MATHILDE_SHIP_ID, stepMessageId: null });
     await notices.open(fleetId, { party: 'crm', personShipId: MATHILDE_SHIP_ID, noticeId: 'ntc-other' });
 
     await parties.remove(fleetId, 'attio');
     await parties.save(aParty({ fleetId, name: 'attio' }));
 
-    await expect(notices.open(fleetId, { party: 'attio', personShipId: MATHILDE_SHIP_ID, noticeId: 'ntc-2' })).resolves.toEqual({ noticeId: 'ntc-2', isTold: false });
-    await expect(notices.open(fleetId, { party: 'crm', personShipId: MATHILDE_SHIP_ID, noticeId: 'ntc-x' })).resolves.toEqual({ noticeId: 'ntc-other', isTold: false });
+    await expect(notices.open(fleetId, { party: 'attio', personShipId: MATHILDE_SHIP_ID, noticeId: 'ntc-2' })).resolves.toEqual({ noticeId: 'ntc-2', isTold: false, stepMessageId: null });
+    await expect(notices.open(fleetId, { party: 'crm', personShipId: MATHILDE_SHIP_ID, noticeId: 'ntc-x' })).resolves.toEqual({ noticeId: 'ntc-other', isTold: false, stepMessageId: null });
   });
 
   it('keeps the requirements when the party is saved again, and removes them with the party', async () => {

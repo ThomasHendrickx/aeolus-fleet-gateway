@@ -10,9 +10,11 @@ import { createStateParty } from '../mcp-out/state-party.js';
 import { err, ok } from '../shared/result.js';
 import { createCompletePartySignIn } from './complete-party-sign-in.js';
 import { createListingConnectionOf } from './listing-connection.js';
-import type { PartySignInUnderWay } from './ports.js';
+import type { FinishesOwnStep, PartySignInUnderWay } from './ports.js';
 
 const AT = new Date('2026-10-28T14:05:00.000Z');
+/** The message of the step the gateway's ship sent Mathilde, asking her to sign in to Attio. */
+const STEP_MESSAGE_ID = 'msg_01m3tbfspe96yf1rnr4ank0stp';
 const REDIRECT_URI = 'https://gateway.example.com/outside-parties/sign-in/done';
 
 /** Each browser's shared sign-in, by the account it names in the fleet. */
@@ -39,6 +41,8 @@ let servers: ReturnType<typeof fakeMcpServers>;
 let door: ReturnType<typeof fakeStatementDoor>;
 let notices: ReturnType<typeof memorySignInNotices>;
 let completing: ReturnType<typeof createCompletePartySignIn>;
+/** The gateway's own steps finished, as the people's side finishes each. */
+let finished: Parameters<FinishesOwnStep>[0][];
 
 beforeEach(async () => {
   parties = memoryPartyStore();
@@ -50,7 +54,12 @@ beforeEach(async () => {
   door = fakeStatementDoor();
   const clock = { now: () => AT };
   const stateParty = createStateParty({ parties, servers, connectionOf: createListingConnectionOf({ grants, clock }), door, marks: memoryToolMarks(), requirements: memoryScopeRequirements(), timing: { waitMs: 10_000, deadlineMs: 300_000 } });
-  completing = createCompletePartySignIn({ servers: signInServersOf(parties), grants, seals, signIns: attio.signIns, notices, accountOf, stateParty, clock, redirectUri: REDIRECT_URI });
+  finished = [];
+  const finishStep: FinishesOwnStep = (step) => {
+    finished.push(step);
+    return Promise.resolve();
+  };
+  completing = createCompletePartySignIn({ servers: signInServersOf(parties), grants, seals, signIns: attio.signIns, notices, accountOf, stateParty, finishStep, clock, redirectUri: REDIRECT_URI });
 });
 
 function back(overrides: Partial<Parameters<typeof completing>[0]> = {}): ReturnType<typeof completing> {
@@ -110,11 +119,30 @@ describe('a person comes back from signing in to an outside MCP server (decision
 
   it('closes the notice that told them a call needed their sign-in, so a later loss tells them again (Q6, scenario 9)', async () => {
     await notices.open(FLEET_ID, { party: 'attio', personShipId: MATHILDE_SHIP_ID, noticeId: 'notice-1' });
-    await notices.markTold(FLEET_ID, { party: 'attio', personShipId: MATHILDE_SHIP_ID });
+    await notices.markTold(FLEET_ID, { party: 'attio', personShipId: MATHILDE_SHIP_ID, stepMessageId: STEP_MESSAGE_ID });
 
     await back();
 
     expect(notices.held).toEqual([]);
+  });
+
+  it('finishes the step that asked them to sign in, with no press (Bridge, CC14)', async () => {
+    await notices.open(FLEET_ID, { party: 'attio', personShipId: MATHILDE_SHIP_ID, noticeId: 'notice-1' });
+    await notices.markTold(FLEET_ID, { party: 'attio', personShipId: MATHILDE_SHIP_ID, stepMessageId: STEP_MESSAGE_ID });
+
+    await back();
+
+    expect(finished).toEqual([{ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP_ID, stepMessageId: STEP_MESSAGE_ID }]);
+  });
+
+  it('finishes no step when none asked them, or the fleet refused the one that would have', async () => {
+    await notices.open(FLEET_ID, { party: 'attio', personShipId: MATHILDE_SHIP_ID, noticeId: 'notice-1' });
+    await notices.markTold(FLEET_ID, { party: 'attio', personShipId: MATHILDE_SHIP_ID, stepMessageId: null });
+
+    await back();
+    await back();
+
+    expect(finished).toEqual([]);
   });
 });
 

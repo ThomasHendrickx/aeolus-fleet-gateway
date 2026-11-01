@@ -22,6 +22,7 @@ const PLACES: Record<Extract<BasketItem['standing'], { kind: 'dealtElsewhere' }>
   bridge: 'in Bridge',
   chat: 'in a chat',
   slack: 'in Slack',
+  gateway: 'by the gateway',
 };
 
 const SKIPPED: Record<BasketSent['skipped'][number]['kind'], string> = {

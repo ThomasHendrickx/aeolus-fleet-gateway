@@ -615,6 +615,7 @@ const PERSON_CODES = {
   NO_SUCH_DELIVERY: 'NOT_FOUND',
   SEND_REFUSED: 'BAD_REQUEST',
   NOT_A_QUESTION: 'BAD_REQUEST',
+  NOT_A_STEP: 'BAD_REQUEST',
   INVALID_ARGUMENTS: 'BAD_REQUEST',
   NOT_IN_BASKET: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
@@ -1252,8 +1253,13 @@ export const gatewayRouter = t.router({
     removeFromBasket: personProcedure.input(z.strictObject({ questionId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.removeFromBasket({ caller: ctx.caller, ...input }))),
     /** Send N answers: each entry stored as sending, then sent on its own by the gateway. */
     sendBasket: personProcedure.mutation(async ({ ctx }) => personAnswerOf(await ctx.person.sendBasket(ctx.caller))),
-    /** Is done with a delivery they opened, with no answer. */
-    done: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
+    /** Is done with a delivery they opened, with no answer; a step done or cannot, with their note if any, its outcome sent at once (Bridge, CC14, CC23). */
+    done: personProcedure
+      .input(z.strictObject({ deliveryId: z.string().min(1), outcome: z.enum(['done', 'cannot']).optional(), note: payloadSchema.optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const { deliveryId, outcome, note } = input;
+        return personAnswerOf(await ctx.person.doneDelivery({ caller: ctx.caller, place: 'bridge', deliveryId, ...(outcome === undefined ? {} : { outcome }), ...(note === undefined ? {} : { note }) }));
+      }),
     /** The channels that wake them when something waits for their person ship, each offered or not and on or not (wake a person, W8). */
     wakeChannels: personProcedure.query(async ({ ctx }) => {
       const { email, webPush } = personAnswerOf(await ctx.person.readWakeChannels(ctx.caller));

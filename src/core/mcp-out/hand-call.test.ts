@@ -381,13 +381,13 @@ describe('a call to a server where each person signs in goes out under its askin
     expect(crew.log.map(([call]) => call)).toEqual(['send', 'ack', 'handled']);
   });
 
-  it('tells the owner once, by a message to their person ship with the page (scenario 12, 13, Q6, Q9)', async () => {
+  it('tells the owner once, by a step to their person ship with the page (scenario 12, 13, Q6, Q9; Bridge, CC14)', async () => {
     jorisOwns();
 
     await handCall({ party: ATTIO, delivery: SEARCH });
     await handCall({ party: ATTIO, delivery: aPushedDelivery({ ...SEARCH, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9d02', messageId: 'msg_01m3tbfspe96yf1rnr4ank9m02' }) });
 
-    expect(sender.sent).toMatchObject([{ to: JORIS_SHIP_ID, contentType: 'text/plain' }]);
+    expect(sender.sent).toMatchObject([{ to: JORIS_SHIP_ID, contentType: 'application/vnd.aeolus.step+json' }]);
     expect(sender.sent[0]?.payload).toContain(PAGE);
   });
 

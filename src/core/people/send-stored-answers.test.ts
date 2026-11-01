@@ -56,6 +56,7 @@ function openedOf(entry: BasketEntry): OpenedDelivery {
     contentType: 'application/vnd.aeolus.question+json',
     askedQuestionId: entry.questionId,
     withdrawnQuestionId: null,
+    stepId: null,
     sentAt: entry.sentAt,
     openedAt: new Date('2026-10-31T19:50:00.000Z'),
   };

@@ -377,6 +377,8 @@ model OpenedDelivery {
   askedQuestionId     String?  @map("asked_question_id")
   /// The uuid of the question it withdraws or replaces; null otherwise.
   withdrawnQuestionId String?  @map("withdrawn_question_id")
+  /// The uuid of the step it asks (Bridge, CC14); null otherwise.
+  stepId              String?  @map("step_id")
   sentAt              DateTime @map("sent_at") @db.Timestamptz(3)
   openedAt            DateTime @map("opened_at") @db.Timestamptz(3)
 
@@ -645,6 +647,8 @@ model PartySignInNotice {
   personShipId String    @map("person_ship_id")
   noticeId     String    @map("notice_id")
   isTold       Boolean   @default(false) @map("is_told")
+  /// The message of the step that told the person (Bridge, CC14); null until told, or when the fleet refused it.
+  stepMessageId String?  @map("step_message_id")
 
   @@id([fleetId, party, personShipId])
   @@map("party_sign_in_notices")
@@ -655,9 +659,9 @@ model ItemOutcome {
   fleetId    String   @map("fleet_id")
   shipId     String   @map("ship_id")
   deliveryId String   @map("delivery_id")
-  /// bridge, chat or slack.
+  /// bridge, chat, slack, or gateway for a step of its own it saw complete.
   place      String
-  /// seen, answered, done, withdrawn, replaced or notSent.
+  /// seen, answered, done, cannot (a step), withdrawn, replaced or notSent.
   kind       String
   /// The option of a question answered with one; null otherwise.
   option     Int?

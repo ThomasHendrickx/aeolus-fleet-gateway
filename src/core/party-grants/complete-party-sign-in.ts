@@ -6,7 +6,7 @@ import type { DomainError, DomainErrorKind } from '../shared/errors.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { SignInClient } from '../vault/credential.js';
 import { accessTokenEndsAtOf, type OutsideAccount } from './party-grant.js';
-import type { IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, SignInNotices, SignInServers, StatesProxyShip } from './ports.js';
+import type { FinishesOwnStep, IdTokenClaims, PartyGrants, PartySignIns, PartySignInSeals, SignInNotices, SignInServers, StatesProxyShip } from './ports.js';
 
 /** The party's page a refusal goes back to: none when the state names no sign-in the gateway started. */
 export interface SignInPage {
@@ -57,8 +57,9 @@ function outsideAccountOf(idToken: IdTokenClaims | null, client: SignInClient): 
  * token names an outside account another person's grant already names, the
  * person is turned away and the tokens are dropped (Q13). Else the grant is
  * kept in place of the person's earlier one, the notice that told them a
- * call needed it is closed, so a later loss tells them again (Q6), and the
- * proxy ship is stated from it (Q15). Nothing is kept on any refusal.
+ * call needed it is closed, so a later loss tells them again (Q6), the step
+ * that asked them to sign in is finished with no press (Bridge, CC14), and
+ * the proxy ship is stated from it (Q15). Nothing is kept on any refusal.
  */
 export function createCompletePartySignIn(deps: {
   servers: SignInServers;
@@ -68,6 +69,7 @@ export function createCompletePartySignIn(deps: {
   notices: Pick<SignInNotices, 'close'>;
   accountOf: (asked: Parameters<AccountOfSignIn>[0]) => ReturnType<AccountOfSignIn>;
   stateParty: StatesProxyShip;
+  finishStep: FinishesOwnStep;
   clock: Clock;
   redirectUri: string;
 }): CompletePartySignIn {
@@ -129,7 +131,10 @@ export function createCompletePartySignIn(deps: {
       // Another person signed in as the same outside account meanwhile.
       return turnedAway();
     }
-    await deps.notices.close(fleetId, { party: name, personShipId });
+    const closed = await deps.notices.close(fleetId, { party: name, personShipId });
+    if (closed?.stepMessageId != null) {
+      await deps.finishStep({ fleetId, personShipId, stepMessageId: closed.stepMessageId });
+    }
     const stated = await deps.stateParty({ fleetId, name });
     return ok({ ...at, statementRefusal: stated.isOk ? null : stated.error.message });
   };

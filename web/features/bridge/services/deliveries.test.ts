@@ -1,7 +1,7 @@
 import { ANSWER_CONTENT_TYPE } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
-import { answerOf, bodyOf, questionOf } from './deliveries';
+import { answerOf, bodyOf, questionOf, stepOf } from './deliveries';
 
 const QUESTION_ID = '0b3f6a52-7c1e-4d0f-9a43-2f6c1d8e5b71';
 
@@ -51,5 +51,27 @@ describe('the question an opened item asks (decision 0038)', () => {
       questionOf({ contentType: 'application/vnd.aeolus.question-replacement+json', payload: JSON.stringify({ questionId: QUESTION_ID, question: replacing }) })?.id,
       questionOf({ contentType: 'application/vnd.aeolus.question-withdrawal+json', payload: JSON.stringify({ questionId: QUESTION_ID }) }),
     ]).toEqual([QUESTION_ID, '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f', undefined]);
+  });
+});
+
+describe('a step, as Bridge shows it (CC14)', () => {
+  const STEP = { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Sign in to attio', why: 'A ship of yours called attio.', link: 'https://gateway.example.com/outside-parties/attio?fleet=flt_01' };
+
+  it('reads its title, why, and its link with the host the link leads to', () => {
+    expect(stepOf({ contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(STEP) })).toEqual({ title: 'Sign in to attio', why: 'A ship of yours called attio.', link: { href: STEP.link, host: 'gateway.example.com' } });
+  });
+
+  it('reads a step with no link as one with none', () => {
+    const unlinked = { id: STEP.id, title: STEP.title, why: STEP.why };
+
+    expect(stepOf({ contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify(unlinked) })).toEqual({ title: 'Sign in to attio', why: 'A ship of yours called attio.', link: undefined });
+  });
+
+  it.each([
+    { what: 'any other message', contentType: 'text/plain', payload: JSON.stringify(STEP) },
+    { what: 'a step whose payload does not read', contentType: 'application/vnd.aeolus.step+json', payload: 'not json' },
+    { what: 'a step whose link is not http(s)', contentType: 'application/vnd.aeolus.step+json', payload: JSON.stringify({ ...STEP, link: 'javascript:alert(1)' }) },
+  ])('reads no step of $what', ({ contentType, payload }) => {
+    expect(stepOf({ contentType, payload })).toBeUndefined();
   });
 });

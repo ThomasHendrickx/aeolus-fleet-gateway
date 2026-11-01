@@ -33,12 +33,14 @@ const PLACES: Record<Outcome['place'], string> = {
   bridge: 'in Bridge',
   chat: 'in a chat',
   slack: 'in Slack',
+  gateway: 'by the gateway',
 };
 
 const KINDS: Record<Outcome['kind'], string> = {
   seen: 'Seen',
   answered: 'Answered',
   done: 'Done',
+  cannot: 'Marked cannot',
   withdrawn: 'Withdrawn by its asker, seen',
   replaced: 'Replaced by its asker, seen',
   notSent: 'Not sent, removed',

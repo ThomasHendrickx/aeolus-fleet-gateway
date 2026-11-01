@@ -101,9 +101,9 @@ export interface ReceivedReply {
   payload: string;
 }
 
-/** Outbound port: the fleet's sentMessage, as a proxy ship's crew calls it: where the delivery of a message it sent stands, and since when. */
+/** Outbound port: the fleet's sentMessage, as a proxy ship's crew calls it: the delivery of a message it sent, where it stands, and since when. */
 export interface SentMessages {
-  sentMessage(crewToken: string, messageId: MessageId): Promise<Result<{ state: DeliveryState; since: Date }, FleetRefusal>>;
+  sentMessage(crewToken: string, messageId: MessageId): Promise<Result<{ deliveryId: DeliveryId; state: DeliveryState; since: Date }, FleetRefusal>>;
 }
 
 /** Outbound port: the fleet's receiveReply, as a proxy ship's crew calls it: the reply to one message, if one came within the fleet's wait. */

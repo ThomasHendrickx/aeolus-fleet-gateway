@@ -68,10 +68,20 @@ describe('a person opens a delivery that waits for their person ship', () => {
         contentType: 'application/vnd.aeolus.question+json',
         askedQuestionId: '9b2f',
         withdrawnQuestionId: null,
+        stepId: null,
         sentAt: QUESTION.sentAt,
         openedAt: AT,
       },
     ]);
+  });
+
+  it('keeps the uuid of the step a step asks, so its outcome names it (Bridge, CC14)', async () => {
+    const step = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0s01', contentType: 'application/vnd.aeolus.step+json', payload: '{}', headline: 'Sign in to linear', askedQuestionId: null, stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10' });
+    const { openDelivery } = opening([step]);
+
+    await openDelivery({ caller: CALLER, deliveryId: step.deliveryId, place: 'bridge' });
+
+    expect([...opened.held.values()].map(({ stepId }) => stepId)).toEqual(['6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10']);
   });
 
   it('refuses a delivery that does not wait for the person, acknowledging nothing', async () => {
