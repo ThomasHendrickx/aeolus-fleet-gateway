@@ -36,16 +36,6 @@ const PLACES: Record<Outcome['place'], string> = {
   gateway: 'by the gateway',
 };
 
-const KINDS: Record<Outcome['kind'], string> = {
-  seen: 'Seen',
-  answered: 'Answered',
-  done: 'Done',
-  cannot: 'Marked cannot',
-  withdrawn: 'Withdrawn by its asker, seen',
-  replaced: 'Replaced by its asker, seen',
-  notSent: 'Not sent, removed',
-};
-
 export function jobLabelOf(job: Job): string {
   return JOB_LABELS[job];
 }
@@ -85,22 +75,152 @@ export function seenTextOf(seenIn: Outcome['place'] | null): string {
   return seenIn === null ? 'Seen' : `Seen ${PLACES[seenIn]}`;
 }
 
-/** What came of an item and where, such as Answered in Slack: option 2; Done alone when no outcome was kept. */
-export function outcomeTextOf(item: Pick<RecordItem, 'state' | 'outcome'>): string {
-  switch (item.state) {
-    case 'new':
-      return 'New';
+/** What came of an item, short, as its history says it: Answered in Slack: option 2, Cannot, in Bridge, Withdrawn by orchestrator-1. */
+function saidOf(outcome: Outcome, from: string): string {
+  const option = outcome.option === null ? '' : `: option ${String(outcome.option)}`;
+  switch (outcome.kind) {
     case 'seen':
-      return 'Seen, not done yet';
-    case 'done': {
-      const { outcome } = item;
-      if (outcome === null) {
-        return 'Done';
-      }
-      const said = `${KINDS[outcome.kind]} ${PLACES[outcome.place]}`;
-      return outcome.option === null ? said : `${said}: option ${String(outcome.option)}`;
-    }
+      return `Seen ${PLACES[outcome.place]}`;
+    case 'answered':
+      return `Answered ${PLACES[outcome.place]}${option}`;
+    case 'done':
+      return outcome.place === 'gateway' ? 'Done: the gateway saw it complete' : `Done ${PLACES[outcome.place]}`;
+    case 'cannot':
+      return `Cannot, ${PLACES[outcome.place]}`;
+    case 'withdrawn':
+      return `Withdrawn by ${from}`;
+    case 'replaced':
+      return `Replaced by ${from}`;
+    case 'notSent':
+      return `Not sent, removed ${PLACES[outcome.place]}${option}`;
   }
+}
+
+/** Whether an item ended as the person or its asker meant it to: seen, answered, done; not for cannot, withdrawn, replaced or not sent. */
+function isEndedWell(kind: Outcome['kind']): boolean {
+  switch (kind) {
+    case 'seen':
+    case 'answered':
+    case 'done':
+      return true;
+    case 'cannot':
+    case 'withdrawn':
+    case 'replaced':
+    case 'notSent':
+      return false;
+  }
+}
+
+/** The option's label after its number, when the question names it: ", Harbour first". */
+function labelOf(outcome: Outcome): string {
+  return outcome.optionLabel === null ? '' : `, ${outcome.optionLabel}`;
+}
+
+/**
+ * What came of a done item and where, on its row in Done (done.html): the
+ * answer's option with its label and the note quoted, a step's note quoted,
+ * who withdrew or replaced it and with what; Done alone when the fleet ended
+ * it with no outcome kept. Whether it ended well picks its icon.
+ */
+export function doneOutcomeOf(item: Pick<RecordItem, 'from' | 'outcome'>): { readonly text: string; readonly isOk: boolean } {
+  const { outcome } = item;
+  if (outcome === null) {
+    return { text: 'Done', isOk: true };
+  }
+  const said = saidOf(outcome, item.from);
+  const note = outcome.note === null ? '' : `“${outcome.note}”`;
+  const text = (() => {
+    switch (outcome.kind) {
+      case 'answered':
+        return `${said}${labelOf(outcome)}${note === '' ? '' : `${outcome.option === null ? '' : ','} with the note ${note}`}`;
+      case 'notSent':
+        return `${said}${labelOf(outcome)}`;
+      case 'done':
+      case 'cannot':
+        return note === '' || outcome.place === 'gateway' ? said : `${said}: ${note}`;
+      case 'replaced':
+        return outcome.replacementTitle === null ? said : `Withdrawn by ${item.from}, replaced by “${outcome.replacementTitle}”`;
+      case 'seen':
+      case 'withdrawn':
+        return said;
+    }
+  })();
+  return { text, isOk: isEndedWell(outcome.kind) };
+}
+
+/** Whether what came of an item was sent to its asker as the person: an answer, or a step's done or cannot by the person. */
+function isSentAsPerson(outcome: Outcome): boolean {
+  return outcome.place !== 'gateway' && (outcome.kind === 'answered' || outcome.kind === 'done' || outcome.kind === 'cannot');
+}
+
+/**
+ * What came of a done item opened from Done, where and at what time, with
+ * the option's label (decide.html: "Answered in Slack at 19:58: option 2,
+ * Harbour first"), and what was sent to its asker as the person, the note
+ * quoted; none for one the fleet ended with no outcome kept.
+ */
+export function endedOf(item: Pick<RecordItem, 'from' | 'outcome'>, timeZone?: string): { readonly isOk: boolean; readonly text: string; readonly sent: string | undefined } | undefined {
+  const { outcome } = item;
+  if (outcome === null) {
+    return undefined;
+  }
+  const time = ` at ${clockTimeOf(outcome.at, timeZone)}`;
+  const said = saidOf({ ...outcome, option: null }, item.from);
+  const option = outcome.option === null ? '' : `: option ${String(outcome.option)}${labelOf(outcome)}`;
+  const text = outcome.kind === 'done' && outcome.place === 'gateway' ? `Done by the gateway${time}: it saw it complete` : `${said}${time}${option}`;
+  const note = outcome.note === null ? '' : `“${outcome.note}” `;
+  return { isOk: isEndedWell(outcome.kind), text, sent: isSentAsPerson(outcome) ? `${note}Sent to ${item.from} as you.` : undefined };
+}
+
+/** The places a row and a history name, as Where things show names them. */
+const PLACE_NAMES: Record<RecordItem['places'][number] | 'bridge', string> = {
+  bridge: 'Bridge',
+  slack: 'Slack',
+  chat: 'a chat',
+  'web-push': 'web push',
+  email: 'email',
+};
+
+/** One line of a done item's history: at what time, what happened, and what more, the last one ending it. */
+export interface HistoryLine {
+  readonly at: string;
+  readonly text: string;
+  readonly detail: string | undefined;
+  readonly isEnd: boolean;
+}
+
+/**
+ * A done item's history (decide.html, answered in Slack): when it arrived
+ * and the places that showed it, where and when the person saw it, and
+ * what came of it, done. One whose outcome is seeing it says seen once.
+ */
+export function historyOf(item: Pick<RecordItem, 'from' | 'sentAt' | 'places' | 'outcome'>, timeZone?: string): HistoryLine[] {
+  const arrived: HistoryLine = { at: clockTimeOf(item.sentAt, timeZone), text: `Arrived from ${item.from}`, detail: `shown in ${(['bridge', ...item.places] as const).map((place) => PLACE_NAMES[place]).join(', ')}`, isEnd: false };
+  const { outcome } = item;
+  if (outcome === null) {
+    return [arrived];
+  }
+  const { seen } = outcome;
+  const seenLine: HistoryLine[] = seen === null || outcome.kind === 'seen' ? [] : [{ at: clockTimeOf(seen.at, timeZone), text: `Seen ${PLACES[seen.place]}`, detail: undefined, isEnd: false }];
+  return [arrived, ...seenLine, { at: clockTimeOf(outcome.at, timeZone), text: saidOf(outcome, item.from), detail: 'done', isEnd: true }];
+}
+
+/** A day as a calendar date in a time zone, counted from the epoch. */
+function dayNumberOf(at: Date, timeZone: string | undefined): number {
+  const [year = 0, month = 1, day = 1] = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone }).format(at).split('-').map(Number);
+  return Date.UTC(year, month - 1, day) / (MS_PER_MINUTE * MINUTES_PER_HOUR * HOURS_PER_DAY);
+}
+
+/** The day Done groups an item under, in the person's own time zone: Today, Yesterday, then its date (done.html). */
+export function dayOf(at: string, { now, timeZone }: { now: Date; timeZone?: string }): string {
+  const days = dayNumberOf(now, timeZone) - dayNumberOf(new Date(at), timeZone);
+  if (days === 0) {
+    return 'Today';
+  }
+  if (days === DAYS_YESTERDAY) {
+    return 'Yesterday';
+  }
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone }).format(new Date(at));
 }
 
 /**

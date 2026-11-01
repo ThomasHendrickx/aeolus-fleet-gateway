@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 
 import { readMoreRecord } from '../hooks/bridge-actions';
-import { outcomeTextOf, type RecordPage } from '../services/items';
+import { doneOutcomeOf, type RecordPage } from '../services/items';
 import { ActionButton } from '../ui/action-button';
 import { ItemRow } from '../ui/item-row';
 import { Notice } from '../ui/notice';
@@ -57,7 +57,7 @@ export function DonePanel({ fleetId, first, now }: { fleetId: string; first: Rec
                   now={readAt}
                   isNew={item.state === 'new'}
                   isOpen={opening.opened?.deliveryId === item.deliveryId}
-                  outcome={outcomeTextOf(item)}
+                  outcome={doneOutcomeOf(item).text}
                   failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}
                   actions={
                     item.state === 'done' ? null : (
