@@ -1,10 +1,12 @@
 'use client';
 
 import { staleSaidOf } from '../services/deliveries';
+import { lastReadTimeOf } from '../services/last-read';
 import type { BridgeHome, HomeItem } from '../services/items';
 import { ActionButton } from '../ui/action-button';
 import { ItemRow } from '../ui/item-row';
 import { ItemFocus, type ItemOpening } from './item-focus';
+import { useLastReadAt } from './kept-read';
 
 function countsOf(items: readonly HomeItem[]): string {
   const counted = items.filter(({ stale }) => stale === null);
@@ -48,6 +50,36 @@ function OpenButton({ item, opening }: { item: HomeItem; opening: ItemOpening })
 }
 
 /**
+ * What waited when Bridge home was last read, while the record cannot be
+ * read (states.html): when, the rows faded and not to be opened, since
+ * opening one acknowledges it through the fleet, and that they show as last
+ * read. The stay-aware feed and sending a message wait for the fleet.
+ */
+function WaitingAsLastRead({ items, lastReadAt }: { items: readonly HomeItem[]; lastReadAt: string }) {
+  const at = lastReadTimeOf(lastReadAt);
+  return (
+    <section className="grid gap-3" aria-labelledby="bridge-waiting-heading">
+      <div>
+        <h1 id="bridge-waiting-heading" className="text-heading font-semibold">
+          Waiting on you
+        </h1>
+        <p className="text-muted-foreground" data-testid="bridge-last-read">{`Last read ${at}`}</p>
+      </div>
+      {items.length === 0 ? null : (
+        <ul inert className="grid gap-2 opacity-60">
+          {items.map((item) => (
+            <ItemRow key={item.deliveryId} item={item} isNew={item.state === 'new'} staleKind={item.stale?.kind} outcome={rowOutcomeOf(item)} failure={undefined}>
+              {null}
+            </ItemRow>
+          ))}
+        </ul>
+      )}
+      <p className="text-caption text-muted-foreground">{`Shown as last read, at ${at}.`}</p>
+    </section>
+  );
+}
+
+/**
  * Bridge home's lists (CC18): what waits on the person, decide and do, with
  * one count, a dot on what is new, a question or step its asker withdrew or replaced
  * faded and outside the count, a replaced one leading to its replacement; and the stay-aware feed beside it, the
@@ -56,6 +88,10 @@ function OpenButton({ item, opening }: { item: HomeItem; opening: ItemOpening })
  */
 export function HomePanel({ fleetId, home }: { fleetId: string; home: BridgeHome }) {
   const { waiting, stayAware } = home;
+  const lastReadAt = useLastReadAt();
+  if (lastReadAt !== undefined) {
+    return <WaitingAsLastRead items={waiting.items} lastReadAt={lastReadAt} />;
+  }
   return (
     <ItemFocus fleetId={fleetId}>
       {(opening) => (
