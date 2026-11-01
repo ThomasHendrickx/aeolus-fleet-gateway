@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { FocusedDelivery } from '../services/deliveries';
-import { DeliveryCard, type StepFinished } from './delivery-card';
+import type { RoutedPlace } from '../services/routing';
+import { DeliveryCard, putOf, type StepFinished } from './delivery-card';
 
 // A question opened in Bridge (CC11): the asker's pick preselected, one
 // button putting it in the basket (CC24), naming the option; one its asker
@@ -25,8 +26,8 @@ function aQuestion(overrides: Partial<FocusedDelivery> = {}): FocusedDelivery {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: QUESTION.title, sentAt: '2026-10-31T19:41:00.000Z', payload: JSON.stringify(QUESTION), body: JSON.stringify(QUESTION), question: QUESTION, step: undefined, meetingId: undefined, stale: null, ...overrides };
 }
 
-function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string; finished?: StepFinished | null } = {}): string {
-  const { inBasket = null, note = '', finished = null } = shown;
+function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string; finished?: StepFinished | null; places?: readonly RoutedPlace[] } = {}): string {
+  const { inBasket = null, note = '', finished = null, places } = shown;
   const noop = () => undefined;
   return renderToStaticMarkup(
     createElement(DeliveryCard, {
@@ -36,6 +37,7 @@ function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number 
       basketHref: '/bridge/basket?fleet=flt_01',
       inBasket,
       finished,
+      places,
       note,
       working: undefined,
       failure: undefined,
@@ -83,16 +85,10 @@ describe('a question opened in Bridge (CC11)', () => {
     expect({ choices: (markup.match(/type="radio"/g) ?? []).length, noteAlone: markup.includes('No option, only the note'), secondButton: markup.includes('data-testid="bridge-put-note-alone"') }).toEqual({ choices: 3, noteAlone: true, secondButton: false });
   });
 
-  it('opens a question whose note alone is in the basket with No option, only the note chosen, its button putting the note alone', () => {
+  it('opens a question whose note alone is in the basket with No option, only the note chosen', () => {
     const markup = render(aQuestion(), { inBasket: { option: null, note: 'Neither: ask me after the demo.' }, note: 'Neither: ask me after the demo.' });
 
-    expect({ chosen: markup.includes('checked="" value=""'), put: markup.includes('>Put the note alone in the basket<') }).toEqual({ chosen: true, put: true });
-  });
-
-  it('puts no note alone while the note is empty', () => {
-    const markup = render(aQuestion(), { inBasket: { option: null, note: 'Neither: ask me after the demo.' }, note: '' });
-
-    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Put the note alone in the basket</);
+    expect(markup.includes('checked="" value=""')).toBe(true);
   });
 
   it('says a question whose note alone is in the basket is in it, not sent, with its note', () => {
@@ -111,6 +107,93 @@ describe('a question opened in Bridge (CC11)', () => {
     const markup = render(aQuestion({ stale: { kind: 'replaced', replacementId: 'dlv_02', at: '2026-10-31T20:10:00.000Z', replacementTitle: 'Which goes first, now that U4 slipped?' } }));
 
     expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:10 UTC with “Which goes first, now that U4 slipped?”. Answer the new question.'), link: markup.includes('data-testid="bridge-replacement"'), send: markup.includes('in the basket') }).toEqual({ stale: true, link: true, send: false });
+  });
+});
+
+describe("Decide's words (decide.html, basket.html)", () => {
+  it('shows the note field always open, in the words basket.html gives it, with no Add a note button and no placeholder (BH1)', () => {
+    const markup = render(aQuestion());
+
+    expect({
+      label: markup.includes('>Note (optional)<'),
+      help: markup.includes('>Goes with the answer.<'),
+      placeholder: /<textarea[^>]*data-testid="bridge-note"[^>]*placeholder=/.test(markup),
+      grows: /<textarea[^>]*data-testid="bridge-note"[^>]*class="[^"]*field-sizing-content/.test(markup),
+      addANote: markup.includes('Add a note'),
+    }).toEqual({ label: true, help: true, placeholder: false, grows: true, addANote: false });
+  });
+
+  it('marks the button putting the answer in the basket with the basket icon', () => {
+    const markup = render(aQuestion());
+
+    expect(/data-testid="bridge-put-in-basket"[^>]*>(?:(?!<\/button>).)*lucide-shopping-basket/.test(markup)).toBe(true);
+  });
+
+  it('says nothing is sent yet behind the info icon, and the asker\'s pick behind it too', () => {
+    const markup = render(aQuestion());
+
+    expect({
+      nothingSent: /lucide-info(?:(?!<\/p>).)*Nothing is sent yet\. orchestrator-1 receives this answer when you send the basket\./.test(markup),
+      pick: /lucide-info(?:(?!<\/p>).)*orchestrator-1 picks 2: The demo on 12 Nov needs it\./.test(markup),
+    }).toEqual({ nothingSent: true, pick: true });
+  });
+
+  it('names where the question shows under it, behind the eye icon', () => {
+    const markup = render(aQuestion(), { places: ['slack', 'chat'] });
+
+    expect(/data-testid="bridge-shown-in"(?:(?!<\/footer>).)*lucide-eye(?:(?!<\/footer>).)*Shows in Bridge, Slack and a chat, as Where things show sets for Decide\. One answer, wherever you give it\./.test(markup)).toBe(true);
+  });
+
+  it('names no places where the page did not read them', () => {
+    expect(render(aQuestion()).includes('data-testid="bridge-shown-in"')).toBe(false);
+  });
+
+  it('names no places for a step, or a question its asker withdrew', () => {
+    const step = render(aQuestion({ question: undefined, step: { title: 'Sign in', why: 'Only you can.', link: undefined } }), { places: ['slack'] });
+    const withdrawn = render(aQuestion({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } }), { places: ['slack'] });
+
+    expect({ step: step.includes('data-testid="bridge-shown-in"'), withdrawn: withdrawn.includes('data-testid="bridge-shown-in"') }).toEqual({ step: false, withdrawn: false });
+  });
+
+  it('shows a question in the basket in the info tone, with the basket icon, its note and how to change it on one line', () => {
+    const markup = render(aQuestion(), { inBasket: { option: 2, note: 'Harbour first: the demo on 12 Nov needs it.' } });
+
+    expect({
+      tone: /<div data-testid="bridge-in-basket"[^>]*border-tone-active-border bg-tone-active-bg/.test(markup),
+      icon: /data-testid="bridge-in-basket"(?:(?!data-testid="bridge-basket-open").)*lucide-shopping-basket/.test(markup),
+      oneLine: markup.includes('“Harbour first: the demo on 12 Nov needs it.” Pick another option to change it.'),
+    }).toEqual({ tone: true, icon: true, oneLine: true });
+  });
+
+  it('shows a question in the basket with the box alone: no note field and no button putting the same answer again', () => {
+    const markup = render(aQuestion(), { inBasket: { option: 2, note: 'Harbour first.' }, note: 'Harbour first.' });
+
+    expect({ note: markup.includes('data-testid="bridge-note"'), put: markup.includes('data-testid="bridge-put-in-basket"') }).toEqual({ note: false, put: false });
+  });
+});
+
+describe('what the button under a question puts in the basket', () => {
+  it('puts the option chosen, with or without a note', () => {
+    expect(putOf({ chosen: 2, inBasket: null, note: '' })).toEqual({ label: 'Put option 2 in the basket', isReady: true });
+  });
+
+  it('puts the note alone only once there is a note', () => {
+    expect({ empty: putOf({ chosen: null, inBasket: null, note: '  ' }), written: putOf({ chosen: null, inBasket: null, note: 'Neither.' }) }).toEqual({
+      empty: { label: 'Put the note alone in the basket', isReady: false },
+      written: { label: 'Put the note alone in the basket', isReady: true },
+    });
+  });
+
+  it('offers nothing to put while the choice is what the basket holds', () => {
+    expect({ option: putOf({ chosen: 2, inBasket: { option: 2, note: null }, note: '' }), noteAlone: putOf({ chosen: null, inBasket: { option: null, note: 'Neither.' }, note: 'Neither.' }) }).toEqual({ option: null, noteAlone: null });
+  });
+
+  it('puts another option picked while one is in the basket, which changes the entry', () => {
+    expect(putOf({ chosen: 1, inBasket: { option: 2, note: 'Harbour first.' }, note: 'Harbour first.' })).toEqual({ label: 'Put option 1 in the basket', isReady: true });
+  });
+
+  it('offers nothing to put before an option is chosen', () => {
+    expect(putOf({ chosen: undefined, inBasket: null, note: '' })).toBeNull();
   });
 });
 
