@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aSlackApp, aSlackLink, aSlackWorkspace, fakeShipNames, fakeSlackSignIn, memorySlackApps, memorySlackLinks, memorySlackWorkspaces, plainLinkStates } from '../../../test/support/slack-fakes.js';
+import { aSlackApp, aSlackLink, aSlackWorkspace, fakeShipNames, fakeSlackSignIn, memorySlackApps, memorySlackLinks, memorySlackLinkSteps, memorySlackWorkspaces, plainLinkStates } from '../../../test/support/slack-fakes.js';
 import type { SharedAccountToken } from '../account-sign-in/ports.js';
+import type { FinishesOwnStep } from '../party-grants/ports.js';
 import { err, ok } from '../shared/result.js';
 import { createCompleteLink } from './complete-link.js';
 
@@ -34,12 +35,19 @@ let workspaces: ReturnType<typeof memorySlackWorkspaces>;
 let apps: ReturnType<typeof memorySlackApps>;
 let links: ReturnType<typeof memorySlackLinks>;
 let slack: ReturnType<typeof fakeSlackSignIn>;
+let steps: ReturnType<typeof memorySlackLinkSteps>;
+/** The gateway's own steps finished, as the people's side finishes each. */
+let finished: Parameters<FinishesOwnStep>[0][];
+
+const STEP_MESSAGE = 'msg_01m3tbfspe96yf1rnr4ank9m01';
 
 beforeEach(async () => {
   workspaces = memorySlackWorkspaces();
   apps = memorySlackApps();
   links = memorySlackLinks();
   slack = fakeSlackSignIn();
+  steps = memorySlackLinkSteps();
+  finished = [];
   slack.state.codes.set('code-mathilde', { teamId: 'T0ACME', userId: 'U0MATHILDE', name: 'mathilde' });
   await workspaces.save(aSlackWorkspace({ teamName: 'Acme' }));
   await apps.save(aSlackApp());
@@ -56,6 +64,11 @@ function completeLink(input: { code: string; state: string; signIn: string | und
     shipNames: fakeShipNames({ [JORIS_SHIP]: 'joris' }),
     clock: { now: () => now },
     linkRedirectUrl: LINK_REDIRECT_URL,
+    steps,
+    finishStep: (step) => {
+      finished.push(step);
+      return Promise.resolve();
+    },
   })(input);
 }
 
@@ -157,5 +170,40 @@ describe('completing a Slack link', () => {
 
     expect(completed.isOk ? undefined : completed.error.kind).toBe('SLACK_UNAVAILABLE');
     expect(links.held).toEqual([]);
+  });
+});
+
+describe('a link finishes the step that asked for it, with no press (Bridge, BG7)', () => {
+  const askMathilde = async () => {
+    await steps.open(FLEET_ID, { personShipId: MATHILDE_SHIP, stepId: '0b7e4c52-1f3a-4d6e-8b2c-5a9d1e7f3c21' });
+    await steps.markTold(FLEET_ID, { personShipId: MATHILDE_SHIP, stepMessageId: STEP_MESSAGE });
+  };
+
+  it('finishes the step and closes the ask, so a later unlink asks again', async () => {
+    await askMathilde();
+
+    await completeLink();
+
+    expect(finished).toEqual([{ fleetId: FLEET_ID, personShipId: MATHILDE_SHIP, stepMessageId: STEP_MESSAGE }]);
+    expect(steps.held).toEqual([]);
+  });
+
+  it('finishes nothing when the fleet refused the step, and closes the ask', async () => {
+    await steps.open(FLEET_ID, { personShipId: MATHILDE_SHIP, stepId: '0b7e4c52-1f3a-4d6e-8b2c-5a9d1e7f3c21' });
+    await steps.markTold(FLEET_ID, { personShipId: MATHILDE_SHIP, stepMessageId: null });
+
+    await completeLink();
+
+    expect(finished).toEqual([]);
+    expect(steps.held).toEqual([]);
+  });
+
+  it('finishes nothing and keeps the ask open when the link is refused', async () => {
+    await askMathilde();
+
+    await completeLink({ code: 'code-unknown', state: STATE, signIn: 'sign-in-mathilde' });
+
+    expect(finished).toEqual([]);
+    expect(steps.held).toHaveLength(1);
   });
 });

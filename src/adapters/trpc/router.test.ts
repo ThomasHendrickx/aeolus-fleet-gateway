@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { ACCOUNT_URL, CHARLOTTE, CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn, GATEWAY_URL } from '../../../test/support/account-sign-in-fakes.js';
-import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { FLEET_ID, memoryConnectionStore, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { fakeCallSender } from '../../../test/support/mcp-in-fakes.js';
 import { HEADS_MEETING_ID, aMeetingRead } from '../../../test/support/meeting-fakes.js';
 import { createAccountInView } from '../../core/account-sign-in/account-in-view.js';
 import { createAccountOfSignIn } from '../../core/account-sign-in/account-of-sign-in.js';
@@ -24,7 +25,7 @@ import { err, ok } from '../../core/shared/result.js';
 import { createFocusPage } from '../../core/people/focus-page.js';
 import { memoryFocusedPages } from '../../../test/support/people-fakes.js';
 import { createChangeHub, type ChangeHub } from '../http/live.js';
-import { fakeProxyShipKinds, fakeShipNames, fakeSlackShips, fakeSlackSignIn, fakeSlackTooling, memorySlackApps, memorySlackLinks, memorySlackWorkspaces, plainInstallStates, plainLinkStates, SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
+import { fakeProxyShipKinds, fakeShipNames, fakeSlackShips, fakeSlackSignIn, fakeSlackTooling, memorySlackApps, memorySlackLinks, memorySlackLinkSteps, memorySlackWorkspaces, plainInstallStates, plainLinkStates, SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
 import type { CredentialOf } from '../../core/actors/credential-of.js';
 import { createExposeShip } from '../../core/slack/expose-ship.js';
 import { createListExposable } from '../../core/slack/list-exposable.js';
@@ -32,6 +33,7 @@ import { createRemoveBot } from '../../core/slack/remove-bot.js';
 import { createConnectSlack } from '../../core/slack/connect-slack.js';
 import { createDisconnectSlack } from '../../core/slack/disconnect-slack.js';
 import { createReadSlack } from '../../core/slack/read-slack.js';
+import { createAskToLinkSlack } from '../../core/slack/ask-to-link-slack.js';
 import { createReadSlackLink } from '../../core/slack/read-slack-link.js';
 import { createStartLink } from '../../core/slack/start-link.js';
 import { createUnlinkSlack } from '../../core/slack/unlink-slack.js';
@@ -430,7 +432,7 @@ function slackOf({ tooling, workspaces, apps }: { tooling: ReturnType<typeof fak
     connectSlack: createConnectSlack({ slack: tooling.slack, workspaces, apps, shipNames: fakeShipNames({ [OWNER]: 'charlotte' }), clock, addresses }),
     startInstall: createStartInstall({ slack: tooling.slack, apps, workspaces, takeAccessToken, states: plainInstallStates(), ships, credentialOf, clock, addresses }),
     disconnectSlack: createDisconnectSlack({ slack: tooling.slack, workspaces, apps, takeAccessToken }),
-    readSlackLink: createReadSlackLink({ workspaces, apps, links }),
+    readSlackLink: createReadSlackLink({ workspaces, apps, links, askToLink: createAskToLinkSlack({ steps: memorySlackLinkSteps(), connections: memoryConnectionStore(), sender: fakeCallSender(), newStepId: () => 'step-1', linkUrlOf: () => 'https://gateway.acme.test/slack/link' }) }),
     startLink: createStartLink({ workspaces, apps, signIn: fakeSlackSignIn().signIn, states: plainLinkStates(), crewPersonShip: (caller) => Promise.resolve('signedIn' in caller && caller.signedIn.personShipId !== null ? ok({ shipId: caller.signedIn.personShipId, crewToken: 'crew-person' }) : err({ kind: 'noPersonShip' as const })), clock, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' }),
     unlinkSlack: createUnlinkSlack({ links }),
   };

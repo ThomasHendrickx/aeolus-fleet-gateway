@@ -141,9 +141,11 @@ import { createEditSlackPosts } from './core/slack/edit-slack-posts.js';
 import { createSeeInSlack } from './core/slack/see-in-slack.js';
 import { createShowInSlack } from './core/slack/show-in-slack.js';
 import { createPrismaSlackLinks } from './adapters/prisma/slack-links.js';
+import { createPrismaSlackLinkSteps } from './adapters/prisma/slack-link-steps.js';
 import { createSlackMessages } from './adapters/slack/slack-messages.js';
 import { createSlackSignIn } from './adapters/slack/slack-sign-in.js';
 import { createCompleteLink } from './core/slack/complete-link.js';
+import { createAskToLinkSlack } from './core/slack/ask-to-link-slack.js';
 import { createReadSlackLink } from './core/slack/read-slack-link.js';
 import { createStartLink } from './core/slack/start-link.js';
 import { createStopSlackLink } from './core/slack/stop-slack-link.js';
@@ -736,6 +738,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const slackApiUrl = options.slackApiUrl ?? SLACK_API_URL;
   const slackApps = createPrismaSlackApps(prisma);
   const slackLinks = createPrismaSlackLinks(prisma);
+  const slackLinkSteps = createPrismaSlackLinkSteps(prisma);
   const slackPosts = createPrismaSlackPosts(prisma);
   const slackMessages = createSlackMessages({ apiUrl: slackApiUrl });
   const bridgeUrlOf = (fleetId: FleetId): string => `${issuer}/bridge?fleet=${encodeURIComponent(fleetId)}`;
@@ -766,6 +769,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // The basket's answers stored as sending, sent by the gateway on its own, after a restart too (Bridge, section 9).
   const openedDeliveries = createPrismaOpenedDeliveries(prisma);
   const itemOutcomes = createPrismaItemOutcomes(prisma);
+  // The gateway's own steps it sees complete: a sign-in to an outside server, a Slack link.
+  const finishOwnStep = createFinishOwnStep({ connections, sent: door, crews: personCrews, door: door.person, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock });
   const basketEntries = createPrismaBasketEntries(prisma);
   const basketSends = createRoundWorker({
     name: 'basket',
@@ -899,6 +904,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const slackInstallStates = createSlackInstallSeals(options.gatewaySecret);
   const installRedirectUrl = `${issuer}${SLACK_INSTALL_PATH}`;
   const linkRedirectUrl = `${issuer}${SLACK_LINK_PATH}`;
+  // Where Link Slack starts: Bridge's settings, a bot's answer in Slack and the step that asks for it.
+  const linkPageUrl = `${issuer}/slack/link`;
   const slackSignIn = createSlackSignIn({ apiUrl: slackApiUrl });
   const slackLinkStates = createSlackLinkSeals(options.gatewaySecret);
   const takeAccessToken = createTakeAccessToken({ slack: slackTooling, workspaces: slackWorkspaces, clock });
@@ -921,7 +928,12 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     listExposable: createListExposable({ ships: slackShips, apps: slackApps, proxyShips, credentialOf: credentialOf }),
     exposeShip: createExposeShip({ slack: slackTooling, apps: slackApps, ships: slackShips, proxyShips, takeAccessToken, credentialOf: credentialOf, clock, addresses: slackAddresses }),
     removeBot: createRemoveBot({ slack: slackTooling, apps: slackApps, ships: slackShips, takeAccessToken, credentialOf: credentialOf }),
-    readSlackLink: createReadSlackLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks }),
+    readSlackLink: createReadSlackLink({
+      workspaces: slackWorkspaces,
+      apps: slackApps,
+      links: slackLinks,
+      askToLink: createAskToLinkSlack({ steps: slackLinkSteps, connections, sender: door, newStepId: randomUUID, linkUrlOf: (fleetId) => `${linkPageUrl}?${new URLSearchParams({ fleet: fleetId }).toString()}` }),
+    }),
     // Where no pagasae is set no one signs in, so no account has a person ship to link.
     startLink: createStartLink({ workspaces: slackWorkspaces, apps: slackApps, signIn: slackSignIn, states: slackLinkStates, crewPersonShip: person?.crewPersonShip ?? (() => Promise.resolve(err({ kind: 'noPersonShip' as const }))), clock, linkRedirectUrl }),
     unlinkSlack: createUnlinkSlack({ links: slackLinks }),
@@ -937,8 +949,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
     answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
     seeInSlack: createSeeInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
-    completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl }),
-    takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, posts: slackPosts, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl: `${issuer}/slack/link` }),
+    completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl, steps: slackLinkSteps, finishStep: finishOwnStep }),
+    takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, posts: slackPosts, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl }),
   });
   const rotateConfigurationTokens = createRotateConfigurationTokens({ workspaces: slackWorkspaces, takeAccessToken });
   const followExposedShips = createFollowExposedShips({ workspaces: slackWorkspaces, apps: slackApps, ships: slackShips, slack: slackTooling, takeAccessToken, addresses: slackAddresses });
@@ -980,7 +992,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     remove: createRemoveGrant({ ...approvingDeps, grants: partyGrants, signIns: partySignIns }),
   };
   registerPartySignInRoutes(server, {
-    complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, notices: signInNotices, accountOf, stateParty, finishStep: createFinishOwnStep({ connections, sent: door, crews: personCrews, door: door.person, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock }), clock, redirectUri: partySignInRedirectUri }),
+    complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, notices: signInNotices, accountOf, stateParty, finishStep: finishOwnStep, clock, redirectUri: partySignInRedirectUri }),
     log: server.log,
   });
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined; waitingSecret: string | undefined }): Context => ({

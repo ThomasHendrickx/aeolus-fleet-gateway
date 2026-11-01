@@ -1,7 +1,7 @@
 import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
-import type { InstallState, InstallStates, LinkState, LinkStates, MadeApp, ProxyShipKinds, ShipNames, ShipToExpose, SlackApps, SlackButton, SlackEvents, SlackIdentity, SlackLinks, SlackMessages, SlackPosts, SlackRefusal, SlackShips, SlackSignIn, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
+import type { InstallState, InstallStates, LinkState, LinkStates, MadeApp, ProxyShipKinds, ShipNames, ShipToExpose, SlackApps, SlackButton, SlackEvents, SlackIdentity, SlackLinks, SlackLinkStep, SlackLinkSteps, SlackMessages, SlackPosts, SlackRefusal, SlackShips, SlackSignIn, SlackTooling, SlackWorkspaces } from '../../src/core/slack/ports.js';
 import type { KeptSlackEvent } from '../../src/core/slack/kept-slack-event.js';
 import type { SlackLink } from '../../src/core/slack/slack-link.js';
 import { isUnfinished, type SlackPost } from '../../src/core/slack/slack-post.js';
@@ -293,6 +293,37 @@ export function memorySlackLinks(): SlackLinks & { held: SlackLink[] } {
     stop: (fleetId, { accountId, at }) => {
       held.splice(0, held.length, ...held.map((link) => (link.fleetId === fleetId && link.accountId === accountId && link.stoppedAt === null ? { ...link, stoppedAt: at } : link)));
       return Promise.resolve();
+    },
+  };
+}
+
+/** The open asks to link Slack in memory, one per person ship. */
+export function memorySlackLinkSteps(): SlackLinkSteps & { held: (SlackLinkStep & { fleetId: FleetId; personShipId: ShipId })[] } {
+  const held = new Array<SlackLinkStep & { fleetId: FleetId; personShipId: ShipId }>();
+  const indexOf = (fleetId: FleetId, personShipId: ShipId) => held.findIndex((step) => step.fleetId === fleetId && step.personShipId === personShipId);
+  const shown = ({ stepId, isTold, stepMessageId }: SlackLinkStep): SlackLinkStep => ({ stepId, isTold, stepMessageId });
+  return {
+    held,
+    open: (fleetId, { personShipId, stepId }) => {
+      const open = held[indexOf(fleetId, personShipId)];
+      if (open !== undefined) {
+        return Promise.resolve(shown(open));
+      }
+      held.push({ fleetId, personShipId, stepId, isTold: false, stepMessageId: null });
+      return Promise.resolve({ stepId, isTold: false, stepMessageId: null });
+    },
+    markTold: (fleetId, { personShipId, stepMessageId }) => {
+      const at = indexOf(fleetId, personShipId);
+      const open = held[at];
+      if (open !== undefined) {
+        held[at] = { ...open, isTold: true, stepMessageId };
+      }
+      return Promise.resolve();
+    },
+    close: (fleetId, personShipId) => {
+      const at = indexOf(fleetId, personShipId);
+      const [closed] = at === -1 ? [] : held.splice(at, 1);
+      return Promise.resolve(closed === undefined ? undefined : shown(closed));
     },
   };
 }
