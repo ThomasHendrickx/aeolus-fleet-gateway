@@ -7,6 +7,7 @@ import type { DeliveryId, DeliveryState, FleetId, MessageId, ShipId } from '@aeo
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
+import type { ArgoSlackPost } from './argo-slack-post.js';
 
 /** An account allowed as argo in a fleet, as its latest account token said, and the person ship it is reached at. */
 export interface ArgoAccount {
@@ -64,4 +65,15 @@ export interface ArgoInboxDoor {
   entry(crewToken: string, read: { argo: ShipId; messageId: MessageId }): Promise<Result<ArgoMessageRead | null, FleetRefusal>>;
   /** Each change to a delivery to argo after the position, in order, waiting while none came until the signal aborts, and the position to follow from next. */
   changes(crewToken: string, follow: { argo: ShipId; afterSeq: number; signal: AbortSignal }): Promise<Result<{ changes: readonly ArgoInboxChange[]; lastSeq: number }, FleetRefusal>>;
+}
+
+/** Outbound port: the messages open at argo in Slack, by fleet, person ship and message, in the gateway's database. */
+export interface ArgoSlackPosts {
+  /** Every post kept in the fleet. */
+  list(fleetId: FleetId): Promise<ArgoSlackPost[]>;
+  /** Keeps a new post; none when one is kept for the person ship and the message already, as two rounds at once find. */
+  keep(post: ArgoSlackPost): Promise<'kept' | 'known'>;
+  /** Keeps it as it is now: given its Slack message, or given up. */
+  save(post: ArgoSlackPost): Promise<void>;
+  remove(fleetId: FleetId, post: { personShipId: ShipId; messageId: MessageId }): Promise<void>;
 }
