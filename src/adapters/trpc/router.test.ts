@@ -147,7 +147,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readBridgeHome: (caller) =>
         Promise.resolve(
           grantOf(caller) === PERSON_TOKEN
-            ? ok({ waiting: { count: 1, items: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, isAlert: false, state: 'new' as const, stale: null, inBasket: null, places: ['chat' as const], actInPlace: { kind: 'putPick' as const, option: 1 } }] }, stayAware: [] })
+            ? ok({ waiting: { count: 1, items: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, isAlert: false, state: 'new' as const, seenIn: null, stale: null, inBasket: null, places: ['chat' as const], actInPlace: { kind: 'putPick' as const, option: 1 } }] }, stayAware: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       readRecord: ({ cursor }) =>

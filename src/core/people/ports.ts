@@ -8,6 +8,7 @@ import type { DeliveryId, DeliveryState, FleetId, MeetingId, MessageId, ShipId, 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { DiscoveredStatement } from '../mcp-in/ports.js';
 import type { Result } from '../shared/result.js';
+import type { Place } from './item-outcome.js';
 import type { Routing } from './routing.js';
 
 /** A call the gateway makes for an account: the account's token beside the gateway's own crew token, so the account acts through the gateway's ship. */
@@ -187,6 +188,8 @@ export interface OpenedDelivery {
   readonly withdrawnStepId: string | null;
   /** The link where the step it asks is done, as its payload named it; none for a step without one, one opened before the gateway kept it, or any other message. */
   readonly stepLink: string | null;
+  /** Where the person opened it, so a row says Seen in Bridge; none for one opened before the gateway kept it. */
+  readonly openedIn: Place | null;
   readonly sentAt: Date;
   readonly openedAt: Date;
 }

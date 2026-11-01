@@ -18,13 +18,13 @@ function stepOf({ noticeId, party, lost }: { noticeId: string; party: string; lo
     lost === null
       ? {
           id: noticeId,
-          title: `Sign in to ${party}`,
+          title: `Sign in to the outside party ${party}`,
           why: `A ship of yours called ${party}, which calls under each person's own sign-in, and you are not signed in to it. Until you sign in, your ships' calls to ${party} are refused.`,
           link: pageUrl,
         }
       : {
           id: noticeId,
-          title: `Sign in to ${party} again`,
+          title: `Sign in to the outside party ${party} again`,
           why: `Your sign-in to ${party} ended: ${party} refused to refresh it (${lost.why}). Until you sign in again, your ships' calls to ${party} are refused.`,
           link: pageUrl,
         },

@@ -80,6 +80,11 @@ export function ageOf(sentAt: string, now: Date): string {
   return days === DAYS_YESTERDAY ? 'yesterday' : `${String(days)} d`;
 }
 
+/** Where the person saw an item, as its row says it: Seen in Bridge; Seen alone where the gateway did not keep where. */
+export function seenTextOf(seenIn: Outcome['place'] | null): string {
+  return seenIn === null ? 'Seen' : `Seen ${PLACES[seenIn]}`;
+}
+
 /** What came of an item and where, such as Answered in Slack: option 2; Done alone when no outcome was kept. */
 export function outcomeTextOf(item: Pick<RecordItem, 'state' | 'outcome'>): string {
   switch (item.state) {

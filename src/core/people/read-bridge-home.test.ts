@@ -45,7 +45,8 @@ function ownStepActionOf(href: string): string | undefined {
   return party === undefined ? undefined : `Sign in to ${party}`;
 }
 
-function readHome(deliveries: PersonDelivery[], offered: { isEmailOffered: boolean; isWebPushOffered: boolean } = { isEmailOffered: false, isWebPushOffered: true }, record: RecordedPersonDelivery[] = []) {
+function readHome(deliveries: PersonDelivery[], options: { offered?: { isEmailOffered: boolean; isWebPushOffered: boolean }; record?: RecordedPersonDelivery[] } = {}) {
+  const { offered = { isEmailOffered: false, isWebPushOffered: true }, record = [] } = options;
   const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries, record });
   return {
     ...ship,
@@ -456,8 +457,8 @@ describe('Bridge home: what each row says and acts on in place (aeolus-fleet#153
     const home = await readHome([OWN_STEP, LINKED_STEP]).readHome(CHARLOTTE_GRANT);
 
     expect(home.isOk ? home.value.waiting.items.map(({ from, places }) => ({ from, places })) : home).toEqual([
-      { from: 'gateway', places: [] },
       { from: 'orchestrator-1', places: ['chat'] },
+      { from: 'gateway', places: [] },
     ]);
   });
 
@@ -482,7 +483,7 @@ describe('Bridge home: what each row says and acts on in place (aeolus-fleet#153
     const answered: RecordedPersonDelivery = { ...QUESTION, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0021', state: 'handled', isPayloadUnreadable: false };
     await outcomes.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: seenNotice.deliveryId, place: 'bridge', kind: 'seen', option: null, at: new Date('2026-10-31T19:53:00.000Z') });
 
-    const home = await readHome([ALERT, NOTICE], undefined, [{ ...ALERT, state: 'received', isPayloadUnreadable: false }, { ...NOTICE, state: 'received', isPayloadUnreadable: false }, seenNotice, answered]).readHome(CHARLOTTE_GRANT);
+    const home = await readHome([ALERT, NOTICE], { record: [{ ...ALERT, state: 'received', isPayloadUnreadable: false }, { ...NOTICE, state: 'received', isPayloadUnreadable: false }, seenNotice, answered] }).readHome(CHARLOTTE_GRANT);
 
     expect(home.isOk ? home.value.stayAware.map(({ deliveryId, state, seenIn }) => ({ deliveryId, state, seenIn })) : home).toEqual([
       { deliveryId: ALERT.deliveryId, state: 'new', seenIn: null },
@@ -528,7 +529,7 @@ describe('Bridge home: what each row says and acts on in place (aeolus-fleet#153
   it('names no place the gateway does not offer, though turned on', async () => {
     routes.push({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, job: 'stay-aware', place: 'web-push', isOn: true, changedAt: new Date('2026-10-01T00:00:00.000Z') });
 
-    const home = await readHome([ALERT], { isEmailOffered: false, isWebPushOffered: false }).readHome(CHARLOTTE_GRANT);
+    const home = await readHome([ALERT], { offered: { isEmailOffered: false, isWebPushOffered: false } }).readHome(CHARLOTTE_GRANT);
 
     expect(home.isOk ? home.value.stayAware.map(({ places }) => places) : home).toEqual([['chat']]);
   });

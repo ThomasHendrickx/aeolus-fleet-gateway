@@ -46,7 +46,7 @@ import { createStartPartySignIn } from './core/party-grants/start-party-sign-in.
 import { signInServersOf } from './core/parties/sign-in-servers.js';
 import { createPartySignIns } from './adapters/oauth/party-sign-ins.js';
 import { createPartySignInSeals } from './adapters/crypto/party-sign-in-seals.js';
-import { PARTY_SIGN_IN_DONE_PATH, partyPageUrlOf, registerPartySignInRoutes } from './adapters/http/party-sign-in-routes.js';
+import { ownStepActionOf, PARTY_SIGN_IN_DONE_PATH, partyPageUrlOf, registerPartySignInRoutes } from './adapters/http/party-sign-in-routes.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
 import { createHandA2aMessage } from './core/a2a-out/hand-a2a-message.js';
@@ -804,7 +804,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
       readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults }),
-      readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries, connections, routes, defaults: routingDefaults, ...placesOffered }),
+      readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries, outcomes, connections, routes, defaults: routingDefaults, ownStepActionOf: ownStepActionOf(options.publicUrl ?? DEFAULT_PUBLIC_URL), ...placesOffered }),
       readRecord: createReadRecord({ ...asCrew, outcomes }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes, outcomes, clock }),

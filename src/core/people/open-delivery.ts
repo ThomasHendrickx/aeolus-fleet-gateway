@@ -50,7 +50,7 @@ export function createOpenDelivery(deps: DealDeps): OpenDelivery {
     if (!delivery) {
       return openedAgain(deps, { caller, crew: waiting.value.crew, deliveryId, place, waiting: waiting.value.deliveries });
     }
-    const kept = keptOf(deps, { caller, shipId: waiting.value.crew.shipId, delivery });
+    const kept = keptOf(deps, { caller, shipId: waiting.value.crew.shipId, delivery, place });
     const acknowledged = await seenNow(deps, { caller, kept });
     if (!acknowledged.isOk) {
       return acknowledged;
@@ -61,9 +61,9 @@ export function createOpenDelivery(deps: DealDeps): OpenDelivery {
   };
 }
 
-/** What the gateway keeps of a delivery the person opens: what their answer and their lists need, never its payload. */
-function keptOf(deps: DealDeps, opening: { caller: PersonCaller; shipId: OpenedDelivery['shipId']; delivery: PersonDelivery }): OpenedDelivery {
-  const { caller, shipId, delivery } = opening;
+/** What the gateway keeps of a delivery the person opens: what their answer and their lists need, and where they opened it, never its payload. */
+function keptOf(deps: DealDeps, opening: { caller: PersonCaller; shipId: OpenedDelivery['shipId']; delivery: PersonDelivery; place: Place }): OpenedDelivery {
+  const { caller, shipId, delivery, place } = opening;
   return {
     fleetId: caller.fleetId,
     shipId,
@@ -78,6 +78,7 @@ function keptOf(deps: DealDeps, opening: { caller: PersonCaller; shipId: OpenedD
     stepId: delivery.stepId,
     withdrawnStepId: delivery.withdrawnStepId,
     stepLink: delivery.stepLink,
+    openedIn: place,
     sentAt: delivery.sentAt,
     openedAt: deps.clock.now(),
   };
@@ -134,7 +135,7 @@ async function doneWith(
     if (delivery === undefined) {
       return;
     }
-    kept = keptOf(deps, { caller, shipId: crew.shipId, delivery });
+    kept = keptOf(deps, { caller, shipId: crew.shipId, delivery, place });
     const acknowledged = await seenNow(deps, { caller, kept });
     if (!acknowledged.isOk) {
       return;

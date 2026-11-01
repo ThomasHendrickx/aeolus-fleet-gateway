@@ -3,7 +3,7 @@
 import { ShoppingBasket } from 'lucide-react';
 
 import { staleSaidOf } from '../services/deliveries';
-import type { BridgeHome, HomeItem } from '../services/items';
+import { seenTextOf, type BridgeHome, type HomeItem } from '../services/items';
 import { ActionButton } from '../ui/action-button';
 import { ItemRow } from '../ui/item-row';
 import { RowLink } from '../ui/row-link';
@@ -23,7 +23,7 @@ function rowOutcomeOf(item: HomeItem): string | undefined {
     return inBasket.option === null ? 'In the basket: the note alone' : `In the basket: option ${String(inBasket.option)}`;
   }
   if (stale === null) {
-    return item.state === 'seen' ? 'Seen' : undefined;
+    return item.state === 'seen' ? seenTextOf(item.seenIn) : undefined;
   }
   const said = staleSaidOf(stale, item.from);
   return stale.kind === 'withdrawn' ? `${said}: open it to clear it` : said;
@@ -60,7 +60,7 @@ function WaitingActions({ item, opening }: { item: HomeItem; opening: ItemOpenin
   if (act?.kind === 'ownStep') {
     return (
       <RowLink data-testid="bridge-own-step" href={act.href} isOutside={false}>
-        {act.title}
+        {act.label}
       </RowLink>
     );
   }
@@ -91,9 +91,9 @@ function openerOf(item: HomeItem, opening: ItemOpening): (() => void) | undefine
 /**
  * Bridge home's lists (CC18): what waits on the person, decide and do, with
  * one count, a dot on what is new, a question or step its asker withdrew or replaced
- * faded and outside the count, a replaced one leading to its replacement; and the stay-aware feed beside it, the
- * alerts and notices they have not seen, outside the count. Opening one of
- * the feed is all it asks (CC16).
+ * struck through and outside the count, a replaced one leading to its replacement; and the stay-aware feed beside it, the
+ * alerts and notices, a dot on those not seen, which alone it counts, outside the count. Opening one of
+ * the feed is all it asks (CC16): it stays in the feed, seen.
  */
 export function HomePanel({ fleetId, home, now }: { fleetId: string; home: BridgeHome; now: string }) {
   const { waiting, stayAware } = home;
@@ -137,7 +137,7 @@ export function HomePanel({ fleetId, home, now }: { fleetId: string; home: Bridg
               <h2 id="bridge-stay-aware-heading" className="text-section font-semibold">
                 Stay aware
               </h2>
-              <span className="text-caption text-muted-foreground">{stayAware.length} unseen, outside the count</span>
+              <span className="text-caption text-muted-foreground">{stayAware.filter(({ state }) => state === 'new').length} unseen, outside the count</span>
             </div>
             {stayAware.length === 0 ? (
               <p data-testid="bridge-nothing-new" className="rounded-md border border-border bg-card p-3 text-muted-foreground">
@@ -146,7 +146,7 @@ export function HomePanel({ fleetId, home, now }: { fleetId: string; home: Bridg
             ) : (
               <ul className="overflow-hidden rounded-lg border border-border bg-card">
                 {stayAware.map((item) => (
-                  <ItemRow key={item.deliveryId} item={item} now={readAt} isNew outcome={undefined} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined} onOpen={openerOf(item, opening)} />
+                  <ItemRow key={item.deliveryId} item={item} now={readAt} isNew={item.state === 'new'} outcome={undefined} failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined} onOpen={openerOf(item, opening)} />
                 ))}
               </ul>
             )}

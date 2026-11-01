@@ -388,6 +388,8 @@ model OpenedDelivery {
   withdrawnStepId     String?  @map("withdrawn_step_id")
   /// The link where the step it asks is done (Bridge, CC14), so its row leads there once opened; null for a step without one, one opened before the gateway kept it, or any other message.
   stepLink            String?  @map("step_link")
+  /// Where the person opened it (bridge, chat, slack), so a row says Seen in Bridge; null for one opened before the gateway kept it.
+  openedIn            String?  @map("opened_in")
   sentAt              DateTime @map("sent_at") @db.Timestamptz(3)
   openedAt            DateTime @map("opened_at") @db.Timestamptz(3)
 
