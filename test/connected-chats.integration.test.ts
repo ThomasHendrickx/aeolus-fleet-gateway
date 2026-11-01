@@ -29,11 +29,11 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-async function aClient(clientId: string, name: string, fleetId: FleetId = FLEET) {
+async function aClient({ clientId, name, fleetId = FLEET }: { clientId: string; name: string; fleetId?: FleetId }) {
   await createPrismaOAuthClients(prisma).save({ clientId, fleetId, name, redirectUris: ['https://chat.example/cb'], secretHash: null, grant: 'authorizationCode' });
 }
 
-async function aGrant(grantId: string, personShipId: ShipId | null, fleetId: FleetId = FLEET) {
+async function aGrant({ grantId, personShipId, fleetId = FLEET }: { grantId: string; personShipId: ShipId | null; fleetId?: FleetId }) {
   await createPrismaAccountGrants(prisma).save({ grantId, fleetId, accountId: 'acc-thomas', personShipId, scopes: [], refreshToken: 'r', accountToken: 'a', accountTokenExpiresAt: ACCESS_UNTIL });
 }
 
@@ -57,10 +57,10 @@ function aPair(pair: { family: string; clientId: string; grantId: string; fleetI
 
 describe('the chats connected as a person ship, in Postgres', () => {
   it('lists each active token pair of its grants with its client and until when it lives: the refresh token, else the access token', async () => {
-    await aClient('client-claude', 'claude.ai');
-    await aClient('client-chatgpt', 'ChatGPT');
-    await aGrant('grant-claude', PERSON_SHIP);
-    await aGrant('grant-chatgpt', PERSON_SHIP);
+    await aClient({ clientId: 'client-claude', name: 'claude.ai' });
+    await aClient({ clientId: 'client-chatgpt', name: 'ChatGPT' });
+    await aGrant({ grantId: 'grant-claude', personShipId: PERSON_SHIP });
+    await aGrant({ grantId: 'grant-chatgpt', personShipId: PERSON_SHIP });
     const tokens = createPrismaIssuedTokens(prisma);
     await tokens.save(aPair({ family: 'claude-1', clientId: 'client-claude', grantId: 'grant-claude' }));
     await tokens.save(aPair({ family: 'chatgpt-1', clientId: 'client-chatgpt', grantId: 'grant-chatgpt', refreshExpiresAt: null }));
@@ -77,11 +77,11 @@ describe('the chats connected as a person ship, in Postgres', () => {
   });
 
   it("leaves out a pair revoked or rotated, another person ship's and another fleet's", async () => {
-    await aClient('client-cursor', 'Cursor');
-    await aClient('client-other', 'Other', OTHER_FLEET);
-    await aGrant('grant-cursor', PERSON_SHIP);
-    await aGrant('grant-someone', OTHER_PERSON_SHIP);
-    await aGrant('grant-other-fleet', PERSON_SHIP, OTHER_FLEET);
+    await aClient({ clientId: 'client-cursor', name: 'Cursor' });
+    await aClient({ clientId: 'client-other', name: 'Other', fleetId: OTHER_FLEET });
+    await aGrant({ grantId: 'grant-cursor', personShipId: PERSON_SHIP });
+    await aGrant({ grantId: 'grant-someone', personShipId: OTHER_PERSON_SHIP });
+    await aGrant({ grantId: 'grant-other-fleet', personShipId: PERSON_SHIP, fleetId: OTHER_FLEET });
     const tokens = createPrismaIssuedTokens(prisma);
     await tokens.save(aPair({ family: 'cursor-1', clientId: 'client-cursor', grantId: 'grant-cursor' }));
     await tokens.revokeFamily('cursor-1');
