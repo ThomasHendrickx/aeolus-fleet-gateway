@@ -117,7 +117,7 @@ function FocusedItems({ fleetId, decidePlaces, children }: { fleetId: string; de
         onNoteChange={setNote}
         onAnswer={(option) => { settle({ control: option === undefined ? { kind: 'note' } : { kind: 'option', option }, action: () => answerDelivery({ fleet: fleetId, deliveryId: delivery.deliveryId, input: { questionId: delivery.question?.id, option, note } }), onSettled: leave(`Your answer went to ${delivery.from}.`) }); }
         }
-        onPut={(option) => { settle({ control: option === null ? { kind: 'note' } : { kind: 'option', option }, action: () => putInBasket({ fleet: fleetId, deliveryId: delivery.deliveryId, option, note }), onSettled: (put) => {
+        onPut={(option) => { settle({ control: option === null ? { kind: 'note' } : { kind: 'option', option }, action: () => putInBasket({ fleet: fleetId, deliveryId: delivery.deliveryId, option, optionLabel: delivery.question?.options.find(({ key }) => key === option)?.label ?? null, note }), onSettled: (put) => {
               setFocus({ ...focus, inBasket: put });
               toasts.add(putToastOf(put.option));
             } }); }}

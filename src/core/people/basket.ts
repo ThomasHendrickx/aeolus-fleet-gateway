@@ -30,6 +30,8 @@ export interface BasketEntry {
   readonly sentAt: Date;
   /** The option picked; none for a note alone (decision 0038). */
   readonly option: number | null;
+  /** The option's label, as the question shows it, so the basket names the answer; none for a note alone. */
+  readonly optionLabel: string | null;
   /** The note that goes with the answer; none when the person wrote none. */
   readonly note: string | null;
   /** When it was put in the basket: entries are sent in this order, and changing one keeps its place. */

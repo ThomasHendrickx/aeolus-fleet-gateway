@@ -408,6 +408,8 @@ model BasketEntry {
   sentAt       DateTime @map("sent_at") @db.Timestamptz(3)
   /// None for a note alone.
   option       Int?
+  /// The option's label, as the question shows it; none for a note alone.
+  optionLabel  String?  @map("option_label")
   note         String?
   addedAt      DateTime @map("added_at") @db.Timestamptz(3)
   /// waiting, sending or refused.

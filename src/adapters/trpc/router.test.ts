@@ -184,7 +184,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         if (input.deliveryId !== DELIVERY) {
           return Promise.resolve(err({ kind: 'NOT_A_QUESTION' as const, message: 'Only an answer to a question goes in the basket' }));
         }
-        answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId, option: String(input.option), note: input.note });
+        answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId, option: String(input.option), optionLabel: String(input.optionLabel), note: input.note });
         return Promise.resolve(ok({ questionId: QUESTION_ID, option: input.option, note: input.note === '' ? null : input.note }));
       },
       removeFromBasket: ({ questionId }) =>
@@ -978,10 +978,10 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context, answers } = aContext(PERSON_COOKIE);
     const caller = gatewayRouter.createCaller(context);
 
-    await expect(caller.people.putInBasket({ deliveryId: DELIVERY, option: 2, note: 'Harbour first' })).resolves.toEqual({ questionId: QUESTION_ID, option: 2, note: 'Harbour first' });
+    await expect(caller.people.putInBasket({ deliveryId: DELIVERY, option: 2, optionLabel: "Harbour first, on today's look", note: 'Harbour first' })).resolves.toEqual({ questionId: QUESTION_ID, option: 2, note: 'Harbour first' });
     await expect(caller.people.sendBasket()).resolves.toEqual({ sending: 1, skipped: [] });
     expect(answers).toEqual([
-      { grantId: PERSON_TOKEN, deliveryId: DELIVERY, option: '2', note: 'Harbour first' },
+      { grantId: PERSON_TOKEN, deliveryId: DELIVERY, option: '2', optionLabel: "Harbour first, on today's look", note: 'Harbour first' },
       { grantId: PERSON_TOKEN, sent: 'basket' },
     ]);
   });
@@ -989,21 +989,21 @@ describe("a person reads and deals with their person ship's deliveries through t
   it('puts a note alone in the basket, with no option', async () => {
     const { context, answers } = aContext(PERSON_COOKIE);
 
-    await expect(gatewayRouter.createCaller(context).people.putInBasket({ deliveryId: DELIVERY, option: null, note: 'Ask me after the demo' })).resolves.toEqual({ questionId: QUESTION_ID, option: null, note: 'Ask me after the demo' });
-    expect(answers).toEqual([{ grantId: PERSON_TOKEN, deliveryId: DELIVERY, option: 'null', note: 'Ask me after the demo' }]);
+    await expect(gatewayRouter.createCaller(context).people.putInBasket({ deliveryId: DELIVERY, option: null, optionLabel: null, note: 'Ask me after the demo' })).resolves.toEqual({ questionId: QUESTION_ID, option: null, note: 'Ask me after the demo' });
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, deliveryId: DELIVERY, option: 'null', optionLabel: 'null', note: 'Ask me after the demo' }]);
   });
 
   it('refuses an option that is no whole number from 1, putting nothing in the basket', async () => {
     const { context, answers } = aContext(PERSON_COOKIE);
 
-    await expect(gatewayRouter.createCaller(context).people.putInBasket({ deliveryId: DELIVERY, option: 1.5, note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(gatewayRouter.createCaller(context).people.putInBasket({ deliveryId: DELIVERY, option: 1.5, optionLabel: 'Compact look first', note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(answers).toEqual([]);
   });
 
   it('says a delivery that asks no question goes in no basket, an entry being sent cannot be removed, and one not in the basket is not found', async () => {
     const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
 
-    await expect(caller.people.putInBasket({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9txt', option: 1, note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller.people.putInBasket({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9txt', option: 1, optionLabel: 'Compact look first', note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     await expect(caller.people.removeFromBasket({ questionId: QUESTION_ID })).rejects.toMatchObject({ code: 'CONFLICT' });
     await expect(caller.people.removeFromBasket({ questionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });

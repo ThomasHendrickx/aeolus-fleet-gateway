@@ -111,6 +111,7 @@ async function answeredIntoTheBasket(asker: { shipId: ShipId; crewToken: string 
     title: question.title,
     sentAt: delivery.sentAt,
     option: 1,
+    optionLabel: 'Plans only',
     note: null,
     addedAt: question.addedAt,
     state: 'sending',

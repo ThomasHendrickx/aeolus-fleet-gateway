@@ -36,6 +36,7 @@ function anEntry(overrides: Partial<BasketEntry> = {}): BasketEntry {
     title: 'Which goes first: the Compact look (U4) or Harbour?',
     sentAt: new Date('2026-10-31T19:41:00.000Z'),
     option: 2,
+    optionLabel: "Harbour first, on today's look",
     note: 'Harbour first: the demo on 12 Nov needs it.',
     addedAt: new Date('2026-10-31T19:53:00.000Z'),
     state: 'waiting',
@@ -72,9 +73,9 @@ describe('the basket in Postgres', () => {
   it('keeps an entry with a note and no option, answering with the note alone', async () => {
     const entries = createPrismaBasketEntries(prisma);
     const shipId: ShipId = 'shp_01m3tb1zgr5h2ffee12xnch8p7';
-    await entries.save(anEntry({ shipId, option: null, note: 'Neither: ask me after the demo.' }));
+    await entries.save(anEntry({ shipId, option: null, optionLabel: null, note: 'Neither: ask me after the demo.' }));
 
-    await expect(entries.list(FLEET, shipId)).resolves.toEqual([anEntry({ shipId, option: null, note: 'Neither: ask me after the demo.' })]);
+    await expect(entries.list(FLEET, shipId)).resolves.toEqual([anEntry({ shipId, option: null, optionLabel: null, note: 'Neither: ask me after the demo.' })]);
   });
 
   it("lists a person ship's entries in the order added, and counts them, none of another ship or fleet", async () => {

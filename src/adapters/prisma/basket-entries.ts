@@ -20,6 +20,7 @@ function entryOf(row: BasketEntryRow): BasketEntry {
     title: row.title,
     sentAt: row.sentAt,
     option: row.option,
+    optionLabel: row.optionLabel,
     note: row.note,
     addedAt: row.addedAt,
     state: stateSchema.parse(row.state),

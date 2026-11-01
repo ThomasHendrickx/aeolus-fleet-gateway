@@ -71,10 +71,10 @@ export async function answerDelivery({ fleet, deliveryId, input }: { fleet: stri
   });
 }
 
-/** Puts the person's answer to a question in the basket, or changes it there: nothing is sent (Bridge, section 9). */
-export async function putInBasket({ fleet, deliveryId, option, note }: { fleet: string; deliveryId: string; option: number | null; note: string }): Promise<ActionOutcome<{ option: number | null; note: string | null }>> {
+/** Puts the person's answer to a question in the basket, or changes it there, with the option's label as the question shows it: nothing is sent (Bridge, section 9). */
+export async function putInBasket({ fleet, deliveryId, option, optionLabel, note }: { fleet: string; deliveryId: string; option: number | null; optionLabel: string | null; note: string }): Promise<ActionOutcome<{ option: number | null; note: string | null }>> {
   return attempt(fleet, async (api) => {
-    const { option: put, note: written } = await api.people.putInBasket.mutate({ deliveryId, option, note });
+    const { option: put, note: written } = await api.people.putInBasket.mutate({ deliveryId, option, optionLabel, note });
     return { option: put, note: written };
   });
 }
