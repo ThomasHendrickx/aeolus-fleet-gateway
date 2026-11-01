@@ -341,16 +341,6 @@ model PersonCrew {
   @@map("person_crews")
 }
 
-/// A person who turned email on to be woken for their person ship (wake a person, W8): a row while it is on; nothing is on by default.
-model EmailChannel {
-  fleetId    String   @map("fleet_id")
-  shipId     String   @map("ship_id")
-  turnedOnAt DateTime @map("turned_on_at") @db.Timestamptz(3)
-
-  @@id([fleetId, shipId])
-  @@map("email_channels")
-}
-
 /// A person's own choice of where a job shows besides Bridge (Bridge, section 8): on or off, and when they made it; where none is kept, the gateway's default holds.
 model Route {
   fleetId   String   @map("fleet_id")

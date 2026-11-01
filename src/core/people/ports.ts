@@ -244,12 +244,6 @@ export interface WakesSent {
   record(wake: { ship: PersonShip; channel: WakeChannelName; sentAt: Date }): Promise<void>;
 }
 
-/** Outbound port: whether each person turned email on to be woken for their person ship (W8), by fleet and person ship. */
-export interface EmailChannels {
-  isOn(ship: PersonShip): Promise<boolean>;
-  turn(ship: PersonShip, switched: { isOn: boolean; at: Date }): Promise<void>;
-}
-
 /** A page of a person in focus (wake a person, W6): by its own id, with when it was last seen in focus. */
 export interface FocusedPage {
   readonly fleetId: FleetId;
