@@ -27,10 +27,13 @@ describe('Done (done.html)', () => {
     expect([markup.includes('Seen in Bridge'), markup.includes('Answered in Slack: option 2, Harbour first')]).toEqual([true, true]);
   });
 
-  it('groups items under their day, each with the time of day it arrived', () => {
-    const markup = render({ items: [anItem(), anItem({ deliveryId: 'dlv_02', sentAt: '2026-10-29T09:12:00.000Z' })], nextCursor: null });
+  it('groups items under the day they were done, each with the time of day it was done', () => {
+    const doneLater = anItem({ sentAt: '2026-10-31T18:00:00.000Z', outcome: { place: 'bridge', kind: 'seen', option: null, optionLabel: null, note: null, seen: null, replacementTitle: null, at: '2026-10-31T19:49:00.000Z' } });
+    const endedByTheFleet = anItem({ deliveryId: 'dlv_02', sentAt: '2026-10-29T09:12:00.000Z', outcome: null });
 
-    expect([markup.includes('>Today<'), markup.includes('>29 Oct<'), markup.includes('>19:47<'), markup.includes('>09:12<')]).toEqual([true, true, true, true]);
+    const markup = render({ items: [doneLater, endedByTheFleet], nextCursor: null });
+
+    expect([markup.includes('>Today<'), markup.includes('>29 Oct<'), markup.includes('>19:49<'), markup.includes('>18:00<'), markup.includes('>09:12<')]).toEqual([true, true, true, false, true]);
   });
 
   it('opens a done item by its title, with no Open button beside it', () => {
