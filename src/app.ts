@@ -34,6 +34,7 @@ import { createSetScopeRequirements } from './core/parties/set-scope-requirement
 import { createStateParty } from './core/mcp-out/state-party.js';
 import { createListingConnectionOf } from './core/party-grants/listing-connection.js';
 import { createCompletePartySignIn } from './core/party-grants/complete-party-sign-in.js';
+import { createFinishOwnStep } from './core/people/finish-own-step.js';
 import { createReadOwnGrant } from './core/party-grants/read-own-grant.js';
 import { createRemoveOwnGrant } from './core/party-grants/remove-own-grant.js';
 import { createEndAccountGrants } from './core/party-grants/end-account-grants.js';
@@ -956,7 +957,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     remove: createRemoveGrant({ ...approvingDeps, grants: partyGrants, signIns: partySignIns }),
   };
   registerPartySignInRoutes(server, {
-    complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, notices: signInNotices, accountOf, stateParty, finishStep: () => Promise.resolve(), clock, redirectUri: partySignInRedirectUri }),
+    complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, notices: signInNotices, accountOf, stateParty, finishStep: createFinishOwnStep({ connections, sent: door, crews: personCrews, door: door.person, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock }), clock, redirectUri: partySignInRedirectUri }),
     log: server.log,
   });
   const contextFor = (sent: { cookie: string | undefined; crewToken: string | undefined; signIn: string | undefined; fleetInView: FleetId | undefined; installationTokenSent: string | undefined; waitingSecret: string | undefined }): Context => ({

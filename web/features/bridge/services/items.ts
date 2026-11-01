@@ -33,6 +33,7 @@ const PLACES: Record<Outcome['place'], string> = {
   bridge: 'in Bridge',
   chat: 'in a chat',
   slack: 'in Slack',
+  gateway: 'by the gateway',
 };
 
 const KINDS: Record<Outcome['kind'], string> = {

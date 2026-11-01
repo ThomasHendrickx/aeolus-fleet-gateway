@@ -659,7 +659,7 @@ model ItemOutcome {
   fleetId    String   @map("fleet_id")
   shipId     String   @map("ship_id")
   deliveryId String   @map("delivery_id")
-  /// bridge, chat or slack.
+  /// bridge, chat, slack, or gateway for a step of its own it saw complete.
   place      String
   /// seen, answered, done, cannot (a step), withdrawn, replaced or notSent.
   kind       String

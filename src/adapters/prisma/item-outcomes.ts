@@ -6,7 +6,7 @@ import type { Db } from './client.js';
 
 type ItemOutcomeRow = NonNullable<Awaited<ReturnType<Db['itemOutcome']['findUnique']>>>;
 
-const placeSchema = z.enum(['bridge', 'chat', 'slack']);
+const placeSchema = z.enum(['bridge', 'chat', 'slack', 'gateway']);
 const kindSchema = z.enum(['seen', 'answered', 'done', 'cannot', 'withdrawn', 'replaced', 'notSent']);
 
 function outcomeOf(row: ItemOutcomeRow): ItemOutcome {

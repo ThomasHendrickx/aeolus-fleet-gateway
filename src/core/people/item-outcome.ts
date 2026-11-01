@@ -6,8 +6,8 @@
  */
 import type { DeliveryId, FleetId, ShipId } from '@aeolus-fleet/common';
 
-/** Where the person acted: Bridge, a chat (an MCP client of the gateway), or Slack. */
-export type Place = 'bridge' | 'chat' | 'slack';
+/** Where the person acted: Bridge, a chat (an MCP client of the gateway), or Slack; or the gateway, which saw a step of its own complete (CC14). */
+export type Place = 'bridge' | 'chat' | 'slack' | 'gateway';
 
 /**
  * What the person did: saw it, answered it (with the option they picked, if
