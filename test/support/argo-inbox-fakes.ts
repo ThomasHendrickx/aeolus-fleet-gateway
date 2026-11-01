@@ -1,7 +1,7 @@
 /** argo's inbox as the gateway reads it, in memory for a test. */
 import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
-import type { ArgoAccount, ArgoAccounts, ArgoInboxDoor, ArgoInboxEntry } from '../../src/core/argo-inbox/ports.js';
+import type { ArgoAccount, ArgoAccounts, ArgoInboxChange, ArgoInboxDoor, ArgoMessageRead } from '../../src/core/argo-inbox/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 /** The accounts allowed as argo, per fleet, held in memory. */
@@ -28,7 +28,7 @@ const TRIERARCH_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9trr';
 export const TRIERARCH = { shipId: TRIERARCH_SHIP_ID, name: 'trierarch' };
 
 /** A message to argo, numbered, from the trierarch unless told otherwise. */
-export function anArgoEntry(number: number, overrides: Partial<ArgoInboxEntry> = {}): ArgoInboxEntry {
+export function anArgoEntry(number: number, overrides: Partial<ArgoMessageRead> = {}): ArgoMessageRead {
   const id = String(number).padStart(3, '0');
   return {
     messageId: `msg_01m3tbfspe96yf1rnr4ank9${id}`,
@@ -37,6 +37,7 @@ export function anArgoEntry(number: number, overrides: Partial<ArgoInboxEntry> =
     contentType: 'text/markdown',
     sentAt: new Date(`2026-11-01T09:${id.slice(1)}:00.000Z`),
     deliveryState: 'pending',
+    headline: 'thomas-mac is low on disk: 4% free',
     ...overrides,
   };
 }
@@ -53,15 +54,15 @@ export function fakeArgoInboxFleet() {
   const state = {
     isReadRuleOn: true,
     isAnswering: true,
-    entries: new Map<MessageId, ArgoInboxEntry>(),
+    entries: new Map<MessageId, ArgoMessageRead>(),
     /** Each change to a delivery to argo, by the message it concerns: its position is its index plus one. */
-    events: new Array<MessageId>(),
+    events: new Array<ArgoInboxChange>(),
     /** How many times every message to argo was read whole. */
     wholeReads: 0,
   };
-  const change = (entry: ArgoInboxEntry) => {
+  const change = (entry: ArgoMessageRead, by: Omit<ArgoInboxChange, 'messageId'>) => {
     state.entries.set(entry.messageId, entry);
-    state.events.push(entry.messageId);
+    state.events.push({ messageId: entry.messageId, ...by });
   };
   const refusedUnlessAnswering = <T>(answer: () => T): Promise<Result<T, { code: string; message: string }>> => Promise.resolve(state.isAnswering ? ok(answer()) : err(NOT_ANSWERING));
   const door: ArgoInboxDoor = {
@@ -73,20 +74,20 @@ export function fakeArgoInboxFleet() {
         return state.isReadRuleOn ? [...state.entries.values()] : [];
       }),
     entry: (_crewToken, { messageId }) => refusedUnlessAnswering(() => (state.isReadRuleOn ? (state.entries.get(messageId) ?? null) : null)),
-    changes: (_crewToken, { afterSeq }) => refusedUnlessAnswering(() => ({ messageIds: state.isReadRuleOn ? state.events.slice(afterSeq) : [], lastSeq: state.events.length })),
+    changes: (_crewToken, { afterSeq }) => refusedUnlessAnswering(() => ({ changes: state.isReadRuleOn ? state.events.slice(afterSeq) : [], lastSeq: state.events.length })),
   };
   return {
     state,
     door,
     /** A ship sends argo a message: core stores it Open and unread. */
-    send: (entry: ArgoInboxEntry) => {
-      change(entry);
+    send: (entry: ArgoMessageRead) => {
+      change(entry, { at: entry.sentAt, accountId: null });
     },
-    /** argo marks it done in the console. */
-    markDone: (messageId: MessageId) => {
+    /** argo marks it done in the console, by default at 20:14 with no account signed in as argo named. */
+    markDone: (messageId: MessageId, by: Partial<Omit<ArgoInboxChange, 'messageId'>> = {}) => {
       const entry = state.entries.get(messageId);
       if (entry !== undefined) {
-        change({ ...entry, deliveryState: 'acknowledged' });
+        change({ ...entry, deliveryState: 'handled' }, { at: new Date('2026-11-01T20:14:00.000Z'), accountId: null, ...by });
       }
     },
   };
