@@ -138,6 +138,7 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     headline: asked?.title ?? headlineOf({ contentType, payload }),
     askedQuestionId: asked?.id ?? null,
     withdrawnQuestionId: withdrawalOf({ contentType, payload })?.questionId ?? null,
+    stepId: jobOf(contentType) === 'do' ? (parsedOf(stepIdSchema, payload) ?? null) : null,
     sentAt: new Date(sentAt),
     inReplyTo,
     meetingId,
@@ -194,6 +195,13 @@ const recordOutputSchema = z.object({
   items: z.array(deliveryOutputSchema.extend({ isPayloadUnreadable: z.boolean() })),
   nextCursor: idSchema('delivery').nullable(),
 });
+
+/**
+ * The uuid of the step a step asks (Bridge, CC14), as common's stepSchema
+ * words it in its release after 0.35.0 (Bridge B2): until common carries it,
+ * the gateway reads it with this one, which moves to common's then.
+ */
+const stepIdSchema = z.object({ id: z.uuid() }).transform(({ id }) => id);
 
 /** What a step's title, or an alert's or a notice's headline, is read from: nothing else of its payload is read here. */
 const titledSchema = z.object({ title: z.string().min(1) }).transform(({ title }) => title);
@@ -305,7 +313,7 @@ export function createRestFleetDoor(
       }
       // A message to one ship has the one delivery.
       const [delivery] = sent.value.deliveries;
-      return delivery === undefined ? err({ code: 'UNAVAILABLE', message: 'The fleet named no delivery for the message' }) : ok({ state: delivery.state, since: new Date(delivery.since) });
+      return delivery === undefined ? err({ code: 'UNAVAILABLE', message: 'The fleet named no delivery for the message' }) : ok({ deliveryId: delivery.deliveryId, state: delivery.state, since: new Date(delivery.since) });
     },
     pushReceive: async (crewToken, { max, signal }) => {
       const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max }, answers: pushReceiveOutputSchema, signal });

@@ -85,6 +85,8 @@ export interface PersonDelivery {
   readonly askedQuestionId: string | null;
   /** The uuid of the question it withdraws or replaces, from the same asker; none for any other message. */
   readonly withdrawnQuestionId: string | null;
+  /** The uuid of the step it asks (Bridge, CC14); none for any other message. */
+  readonly stepId: string | null;
   readonly sentAt: Date;
   readonly inReplyTo: MessageId | null;
   /** The meeting its message was contributed to or tells of; none outside a meeting (decision 0061). */

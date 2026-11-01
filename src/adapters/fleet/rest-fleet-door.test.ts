@@ -366,6 +366,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         headline: 'Go for release 1.4?',
         askedQuestionId: QUESTION.id,
         withdrawnQuestionId: null,
+        stepId: null,
         sentAt: new Date('2026-10-19T08:00:00.000Z'),
         inReplyTo: null,
         meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',

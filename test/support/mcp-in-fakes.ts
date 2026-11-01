@@ -228,7 +228,7 @@ export function fakeReplyReceiver() {
   };
   const sent: SentMessages = {
     sentMessage: (_crewToken, messageId) =>
-      Promise.resolve(state.refusal === undefined ? ok(state.deliveries.get(messageId) ?? { state: 'pending', since: new Date('2026-10-19T12:00:00.000Z') }) : err(state.refusal)),
+      Promise.resolve(state.refusal === undefined ? ok({ deliveryId: `dlv_${messageId.slice('msg_'.length)}` as const, ...(state.deliveries.get(messageId) ?? { state: 'pending', since: new Date('2026-10-19T12:00:00.000Z') }) }) : err(state.refusal)),
   };
   return { state, receiver, sent, acknowledged };
 }

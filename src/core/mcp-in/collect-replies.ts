@@ -77,7 +77,8 @@ export function createCollectReplies(deps: CollectRepliesDeps): CollectReplies {
       const received = await deps.replies.receiveReply(crewToken, { messageId: call.messageId, signal });
       const delivery = await deps.sent.sentMessage(crewToken, call.messageId);
       if (delivery.isOk) {
-        await deps.calls.setDelivery({ fleetId: call.fleetId, messageId: call.messageId }, delivery.value);
+        const { state, since } = delivery.value;
+        await deps.calls.setDelivery({ fleetId: call.fleetId, messageId: call.messageId }, { state, since });
       }
       if (!received.isOk) {
         if (CREW_REFUSED.has(received.error.code)) {
