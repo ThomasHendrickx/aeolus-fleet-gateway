@@ -756,7 +756,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: door.person,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: door.person, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
+      wakePerson: createWakePerson({ door: door.person, connections, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,
@@ -803,7 +803,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     const changes = inboxChanges;
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
-      readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults }),
+      readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults, connections }),
       readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries, outcomes, connections, routes, defaults: routingDefaults, ownStepActionOf: ownStepActionOf(options.publicUrl ?? DEFAULT_PUBLIC_URL), ...placesOffered }),
       readRecord: createReadRecord({ ...asCrew, outcomes }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),

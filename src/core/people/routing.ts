@@ -39,11 +39,18 @@ export interface Routes {
   save(route: Route): Promise<void>;
 }
 
+/** An item as routing reads it: its content type names its job, and who sent it. */
+export interface RoutedItem {
+  readonly contentType: string;
+  readonly sentAt: Date;
+  readonly senderShipId: ShipId;
+}
+
 /** Where a person's items show, by job and place. */
 export interface Routing {
   isOn(job: ItemJob, place: RoutingPlace): boolean;
   /** Whether the place shows the item: its job on there, and for a push place sent since it was turned on. */
-  isShowing(place: RoutingPlace, item: { readonly contentType: string; readonly sentAt: Date }): boolean;
+  isShowing(place: RoutingPlace, item: RoutedItem): boolean;
 }
 
 const keyOf = (job: ItemJob, place: RoutingPlace): string => `${job}:${place}`;
@@ -77,6 +84,21 @@ export function routingOf(routes: readonly Route[], defaults: RoutingDefaults): 
       // On by default, a place was never turned on later: it shows everything.
       const turnedOnAt = own.get(keyOf(job, place))?.changedAt;
       return isPullPlace(place) || turnedOnAt === undefined || sentAt.getTime() >= turnedOnAt.getTime();
+    },
+  };
+}
+
+/**
+ * Routing with the gateway's own steps, as to sign in to a party or link
+ * Slack (CC14), shown in Bridge only: never in a chat or Slack, whatever is
+ * on for do there (Thomas, 1 Nov, BH8). A wake still says one waits.
+ */
+export function ownStepsInBridgeOnly(routing: Routing, gatewayShipId: ShipId | undefined): Routing {
+  return {
+    isOn: (job, place) => routing.isOn(job, place),
+    isShowing: (place, item) => {
+      const isOwnStep = item.senderShipId === gatewayShipId && jobOf(item.contentType) === 'do';
+      return isOwnStep && (place === 'chat' || place === 'slack') ? false : routing.isShowing(place, item);
     },
   };
 }
