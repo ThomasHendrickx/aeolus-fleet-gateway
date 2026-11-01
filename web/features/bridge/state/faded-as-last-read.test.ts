@@ -20,14 +20,18 @@ describe('a page as last read', () => {
   it('shows the list faded and not to be acted on, as last read, saying when', () => {
     const markup = render('2026-10-31T20:14:00.000Z');
 
-    expect({ faded: markup.includes('<div inert="" class="opacity-60 [&amp;_button]:hidden"><ul>the list</ul></div>'), shown: markup.includes('Shown as last read, at 20:14 UTC.') }).toEqual({ faded: true, shown: true });
+    expect({ faded: /<div inert="" class="opacity-60 [^"]*"><ul>the list<\/ul><\/div>/.test(markup), shown: markup.includes('Shown as last read, at 20:14 UTC.') }).toEqual({ faded: true, shown: true });
   });
 });
 
 describe('acting on a page as last read', () => {
-  it('leaves out its buttons, such as Open, since acting goes through the fleet', () => {
-    const markup = renderToStaticMarkup(createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(FadedAsLastRead, { children: createElement('button', null, 'Open') }) }));
+  const markup = renderToStaticMarkup(createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(FadedAsLastRead, { children: createElement('button', null, 'Open') }) }));
 
-    expect(markup.includes('[&amp;_button]:hidden')).toBe(true);
+  it('leaves out its buttons, such as Open, since acting goes through the fleet', () => {
+    expect(markup.includes(':hidden')).toBe(true);
+  });
+
+  it("keeps each row's title, a button while read now (aeolus-fleet#1535)", () => {
+    expect(markup.includes('[&amp;_button:not([data-testid=bridge-item-title])]:hidden')).toBe(true);
   });
 });
