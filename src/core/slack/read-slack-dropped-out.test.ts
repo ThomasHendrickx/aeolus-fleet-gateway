@@ -25,8 +25,8 @@ beforeEach(async () => {
   await links.add(aSlackLink());
 });
 
-function readSlackDroppedOut({ actor = MATHILDE, slackOnByDefault = true }: { actor?: Actor; slackOnByDefault?: boolean } = {}) {
-  const defaults = routingDefaultsOf(slackOnByDefault ? [{ job: 'decide', place: 'slack' }] : []);
+function readSlackDroppedOut({ actor = MATHILDE, isSlackOnByDefault = true }: { actor?: Actor; isSlackOnByDefault?: boolean } = {}) {
+  const defaults = routingDefaultsOf(isSlackOnByDefault ? [{ job: 'decide', place: 'slack' }] : []);
   return createReadSlackDroppedOut({ apps, links, routes, defaults })({ actor });
 }
 
@@ -38,7 +38,7 @@ describe('Slack dropped out, said in Bridge', () => {
   it('says it for a job the person turned Slack on for themselves', async () => {
     await routes.save({ fleetId: FLEET_ID, shipId: 'shp_01m3tbfspe96yf1rnr4ank9m4t', job: 'stay-aware', place: 'slack', isOn: true, changedAt: new Date('2026-10-30T10:00:00.000Z') });
 
-    await expect(readSlackDroppedOut({ slackOnByDefault: false })).resolves.toEqual({ botName: 'Aeolus fleet' });
+    await expect(readSlackDroppedOut({ isSlackOnByDefault: false })).resolves.toEqual({ botName: 'Aeolus fleet' });
   });
 
   it("says nothing while the fleet's own bot is in Slack", async () => {

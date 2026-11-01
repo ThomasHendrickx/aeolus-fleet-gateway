@@ -23,7 +23,7 @@ import type { DecideRequest } from '../../core/requests/decide-request.js';
 import type { PendingRequest } from '../../core/requests/ports.js';
 import { err, ok } from '../../core/shared/result.js';
 import { createFocusPage } from '../../core/people/focus-page.js';
-import { memoryFocusedPages } from '../../../test/support/people-fakes.js';
+import { memoryFocusedPages, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { createChangeHub, type ChangeHub } from '../http/live.js';
 import { aSlackApp, aSlackLink, fakeProxyShipKinds, fakeShipNames, fakeSlackShips, fakeSlackSignIn, fakeSlackTooling, memorySlackApps, memorySlackLinks, memorySlackLinkSteps, memorySlackWorkspaces, plainInstallStates, plainLinkStates, SLACK_ADDRESSES } from '../../../test/support/slack-fakes.js';
 import type { CredentialOf } from '../../core/actors/credential-of.js';
@@ -34,6 +34,8 @@ import { createConnectSlack } from '../../core/slack/connect-slack.js';
 import { createDisconnectSlack } from '../../core/slack/disconnect-slack.js';
 import { createReadSlack } from '../../core/slack/read-slack.js';
 import { createAskToLinkSlack } from '../../core/slack/ask-to-link-slack.js';
+import { routingDefaultsOf } from '../../core/people/routing.js';
+import { createReadSlackDroppedOut } from '../../core/slack/read-slack-dropped-out.js';
 import { createReadSlackLink } from '../../core/slack/read-slack-link.js';
 import { createStartLink } from '../../core/slack/start-link.js';
 import { createUnlinkSlack } from '../../core/slack/unlink-slack.js';
@@ -443,6 +445,7 @@ function slackOf({ tooling, workspaces, apps, links }: { tooling: ReturnType<typ
     readSlackLink: createReadSlackLink({ workspaces, apps, links, askToLink: createAskToLinkSlack({ steps: memorySlackLinkSteps(), connections: memoryConnectionStore(), sender: fakeCallSender(), newStepId: () => 'step-1', linkUrlOf: () => 'https://gateway.acme.test/slack/link' }) }),
     startLink: createStartLink({ workspaces, apps, signIn: fakeSlackSignIn().signIn, states: plainLinkStates(), crewPersonShip: (caller) => Promise.resolve('signedIn' in caller && caller.signedIn.personShipId !== null ? ok({ shipId: caller.signedIn.personShipId, crewToken: 'crew-person' }) : err({ kind: 'noPersonShip' as const })), clock, linkRedirectUrl: 'https://gateway.acme.test/gw/slack/link' }),
     unlinkSlack: createUnlinkSlack({ links }),
+    readSlackDroppedOut: createReadSlackDroppedOut({ apps, links, routes: memoryRoutes(), defaults: routingDefaultsOf([{ job: 'decide', place: 'slack' }]) }),
   };
 }
 

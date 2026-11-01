@@ -208,6 +208,7 @@ import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/r
 import { createPrismaRoutes } from './adapters/prisma/routes.js';
 import { createReadWakeChannels } from './core/people/read-wake-channels.js';
 import { createReadRouting } from './core/people/read-routing.js';
+import { createReadSlackDroppedOut } from './core/slack/read-slack-dropped-out.js';
 import { createTurnRoute } from './core/people/turn-route.js';
 import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
@@ -941,6 +942,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     // Where no pagasae is set no one signs in, so no account has a person ship to link.
     startLink: createStartLink({ workspaces: slackWorkspaces, apps: slackApps, signIn: slackSignIn, states: slackLinkStates, crewPersonShip: person?.crewPersonShip ?? (() => Promise.resolve(err({ kind: 'noPersonShip' as const }))), clock, linkRedirectUrl }),
     unlinkSlack: createUnlinkSlack({ links: slackLinks }),
+    readSlackDroppedOut: createReadSlackDroppedOut({ apps: slackApps, links: slackLinks, routes, defaults: routingDefaults }),
   };
   const slackEvents = createPrismaSlackEvents(prisma);
   const slackSends = createSlackEventWorker({
