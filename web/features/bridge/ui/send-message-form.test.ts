@@ -55,7 +55,7 @@ describe('the form to send a ship a message (aeolus-fleet #1547)', () => {
   it('locks while it sends, saying Bridge waits until the fleet stored it', () => {
     const markup = render({ to: 'builder-gateway', message: MESSAGE, phase: { kind: 'sending' } });
 
-    expect({ locked: markup.includes('<fieldset disabled=""'), said: markup.includes('Sending. Bridge waits until the fleet has stored it.'), sending: markup.includes('Sending...') }).toEqual({ locked: true, said: true, sending: true });
+    expect({ locked: /<textarea[^>]*disabled=""/.test(markup), said: markup.includes('Sending. Bridge waits until the fleet has stored it.'), sending: markup.includes('Sending...') }).toEqual({ locked: true, said: true, sending: true });
   });
 
   it('keeps the message when the fleet did not answer, offering Send again under the same key', () => {

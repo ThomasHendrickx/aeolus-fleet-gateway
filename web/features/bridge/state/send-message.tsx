@@ -34,17 +34,22 @@ interface Draft {
  * send to; Send goes as the person ship and waits until the fleet stored
  * it, then closes with a toast. It opens on what the person fills in first:
  * the ship from home, the message from an alert. A message is not an answer, so it never
- * goes through the basket. Cancel or close keeps nothing. A send sent again
+ * goes through the basket. Cancel or close keeps nothing. Closed while it
+ * sends, the send goes on: stored, the toast says so; failed, the form
+ * opens again with the message kept, unless the person opened it anew. A send sent again
  * with the same ship and message carries the same key, so it arrives once.
  */
 function SendMessageDialog({ fleetId, children }: { fleetId: string; children: ReactNode }) {
   const [draft, setDraft] = useState<Draft | undefined>();
   const [sendTo, setSendTo] = useState<SendToRead>({ kind: 'reading' });
   const lastSend = useRef<LastSend | null>(null);
+  /** How many times the form opened: a send answered after the person opened it anew leaves the new form alone. */
+  const openings = useRef(0);
   const [, startTransition] = useTransition();
   const toasts = Toast.useToastManager();
 
   const open: OpenSendMessage = (from) => {
+    openings.current += 1;
     lastSend.current = null;
     setDraft({ to: from?.alertShip ?? null, isFromAlert: from !== undefined, message: '', phase: { kind: 'writing' } });
     setSendTo({ kind: 'reading' });
@@ -62,13 +67,17 @@ function SendMessageDialog({ fleetId, children }: { fleetId: string; children: R
     const key = keyToSend({ last: lastSend.current, to: sending.to, message: sending.message, newKey: crypto.randomUUID() });
     lastSend.current = { key, to: sending.to, message: sending.message };
     setDraft({ ...sending, phase: { kind: 'sending' } });
+    const opening = openings.current;
     startTransition(async () => {
       const sent = await sendShipMessage({ fleet: fleetId, to: sending.to, payload: sending.message, idempotencyKey: key });
+      const isOpenedAnew = openings.current !== opening;
       if (sent.isOk) {
-        setDraft(undefined);
+        if (!isOpenedAnew) {
+          setDraft(undefined);
+        }
         const sentAs = sendTo.kind === 'read' ? sendTo.value.sentAs : 'your person ship';
         toasts.add({ ...sentNoticeOf({ to: sending.to, sentAs, storedAt: sent.value.storedAt }), timeout: 0 });
-      } else {
+      } else if (!isOpenedAnew) {
         setDraft({ ...sending, phase: { kind: 'failed', failure: sendFailureOf(sent) } });
       }
     });
@@ -80,7 +89,7 @@ function SendMessageDialog({ fleetId, children }: { fleetId: string; children: R
       <Dialog.Root
         open={draft !== undefined}
         onOpenChange={(isOpen) => {
-          if (!isOpen && draft?.phase.kind !== 'sending') {
+          if (!isOpen) {
             close();
           }
         }}
