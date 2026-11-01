@@ -13,7 +13,8 @@ export type RemoveFromBasket = (input: { caller: PersonCaller; questionId: strin
  * refused leaves it and its question is done, as not sent; kept while the
  * fleet does not take that, so they can remove it again. One whose question
  * its asker withdrew or replaced leaves it, and the question is done as
- * such; one answered elsewhere just leaves. One being sent goes as stored.
+ * such; one answered elsewhere just leaves. One being sent goes as stored,
+ * and one sent stays until the next Put or Send clears it.
  */
 export function createRemoveFromBasket(deps: BasketDeps & DealDeps): RemoveFromBasket {
   return async ({ caller, questionId }) => {
@@ -29,6 +30,8 @@ export function createRemoveFromBasket(deps: BasketDeps & DealDeps): RemoveFromB
     switch (standing.kind) {
       case 'sending':
         return refuse('CONFLICT', 'This answer is being sent: it goes as it was put in the basket');
+      case 'sent':
+        return refuse('CONFLICT', 'This answer was sent and stored: the next answer you put in the basket, or the next Send, clears it');
       case 'refused': {
         const question = basket.value.opened.find(({ deliveryId }) => deliveryId === entry.deliveryId);
         if (question !== undefined) {

@@ -30,6 +30,8 @@ function openedOf(entry: BasketEntry): OpenedDelivery {
     withdrawnQuestionId: null,
     stepId: null,
     withdrawnStepId: null,
+    stepLink: null,
+    openedIn: null,
     sentAt: entry.sentAt,
     openedAt: new Date('2026-10-31T19:50:00.000Z'),
   };
@@ -86,7 +88,7 @@ describe('a person removes an entry from the basket', () => {
 
     expect(entries.held.size).toBe(0);
     expect(calls).toContain(`handled(${HARBOUR.deliveryId})`);
-    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: HARBOUR.deliveryId, place: 'bridge', kind: 'notSent', option: 2, at: AT }]);
+    expect(outcomes.held).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: HARBOUR.deliveryId, place: 'bridge', kind: 'notSent', option: 2, note: null, seen: null, at: AT }]);
   });
 
   it('keeps a refused entry when the fleet does not take that its question is done, so the person can remove it again', async () => {
@@ -123,6 +125,15 @@ describe('a person removes an entry from the basket', () => {
 
   it('refuses to remove an entry being sent: it goes as stored', async () => {
     await store({ ...HARBOUR, state: 'sending' });
+
+    const removed = await removeWith().remove({ caller: CHARLOTTE_GRANT, questionId: HARBOUR.questionId });
+
+    expect(removed).toMatchObject({ isOk: false, error: { kind: 'CONFLICT' } });
+    expect(entries.held.size).toBe(1);
+  });
+
+  it('refuses to remove an entry sent: its answer is stored, and the next Put or Send clears it', async () => {
+    await store({ ...HARBOUR, state: 'sent', storedAt: new Date('2026-10-31T20:16:00.000Z') });
 
     const removed = await removeWith().remove({ caller: CHARLOTTE_GRANT, questionId: HARBOUR.questionId });
 

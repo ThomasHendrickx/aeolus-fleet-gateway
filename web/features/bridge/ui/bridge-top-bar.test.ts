@@ -54,4 +54,12 @@ describe("Bridge's top bar", () => {
 
     expect({ title: textOf(markup, 'bridge-title'), back: /<button[^>]*data-testid="bridge-back"/.test(markup) }).toEqual({ title: 'Question', back: true });
   });
+
+  it('names Waiting on you in the breadcrumb while an item is open from home', () => {
+    expect(textOf(topBarOf({ opened: { title: 'Question', onBack: () => undefined } }), 'bridge-crumb')).toBe('Aeolus fleet / Waiting on you');
+  });
+
+  it("keeps the page's name in the breadcrumb while an item is open from another page", () => {
+    expect(textOf(topBarOf({ screen: 'stay-aware', opened: { title: 'Stay aware', onBack: () => undefined } }), 'bridge-crumb')).toBe('Aeolus fleet / Stay aware');
+  });
 });

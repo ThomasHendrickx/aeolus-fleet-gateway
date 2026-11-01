@@ -22,6 +22,18 @@ function optionOf({ contentType, payload }: { contentType: string; payload: stri
   }
 }
 
+/** The note an answer carries: an answer's own, or a reply as plain text, whole; none for an answer without one. */
+function noteOfAnswer({ contentType, payload }: { contentType: string; payload: string }): string | null {
+  if (!isAnswerContentType(contentType)) {
+    return payload.trim() === '' ? null : payload;
+  }
+  try {
+    return answerChoiceSchema.safeParse(JSON.parse(payload)).data?.note ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Use case: a person answers a delivery they opened (Q20): a reply to its
  * sender, in reply to its message, then it is handled, answered where they
@@ -45,6 +57,6 @@ export function createAnswerDelivery(deps: DealDeps): AnswerDelivery {
     if (!sent.value.value.isOk) {
       return refuse('SEND_REFUSED', `The fleet did not take your answer: ${sent.value.value.error.message}`);
     }
-    return handledOf(deps, { caller, delivery, as: { place, kind: 'answered', option: optionOf({ contentType, payload }) } });
+    return handledOf(deps, { caller, delivery, as: { place, kind: 'answered', option: optionOf({ contentType, payload }), note: noteOfAnswer({ contentType, payload }) } });
   };
 }

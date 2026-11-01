@@ -1,9 +1,9 @@
-import { ALERT_CONTENT_TYPE, QUESTION_CONTENT_TYPE } from '@aeolus-fleet/common';
+import { ALERT_CONTENT_TYPE, QUESTION_CONTENT_TYPE, type ShipId } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
-import { routingDefaultsOf, routingOf, type Route } from './routing.js';
+import { ownStepsInBridgeOnly, routingDefaultsOf, routingOf, type Route } from './routing.js';
 
 // Routing per job (docs/design/bridge, section 8): per fleet, person ship,
 // job and place, on or off, defaults from the gateway's configuration (CC5,
@@ -17,7 +17,11 @@ function aRoute(overrides: Partial<Route> = {}): Route {
   return { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, job: 'decide', place: 'slack', isOn: true, changedAt: TURNED_ON_AT, ...overrides };
 }
 
-const aQuestion = (sentAt: Date) => ({ contentType: QUESTION_CONTENT_TYPE, sentAt });
+/** A ship of the fleet, and the gateway's own ship, which sends a person its own steps (CC14). */
+const SENDER: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9trk';
+const GATEWAY_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank0gat';
+
+const aQuestion = (sentAt: Date) => ({ contentType: QUESTION_CONTENT_TYPE, sentAt, senderShipId: SENDER });
 
 describe('routing per job', () => {
   it('is on for a job and place the defaults turn on, and off for the rest', () => {
@@ -32,7 +36,7 @@ describe('routing per job', () => {
 
   it('shows in a pull place every item of a job on, whenever it arrived', () => {
     const routing = routingOf([aRoute({ place: 'chat', job: 'stay-aware' })], DEFAULTS);
-    expect(routing.isShowing('chat', { contentType: ALERT_CONTENT_TYPE, sentAt: new Date('2026-10-01T00:00:00.000Z') })).toBe(true);
+    expect(routing.isShowing('chat', { contentType: ALERT_CONTENT_TYPE, sentAt: new Date('2026-10-01T00:00:00.000Z'), senderShipId: SENDER })).toBe(true);
   });
 
   it('shows in a push place only what arrived since it was turned on for the job, from the moment itself', () => {
@@ -52,6 +56,33 @@ describe('routing per job', () => {
 
   it('knows each item by its job: a plain message is everything else', () => {
     const routing = routingOf([aRoute({ job: 'everything-else', place: 'chat' })], routingDefaultsOf([]));
-    expect([routing.isShowing('chat', { contentType: 'text/plain', sentAt: TURNED_ON_AT }), routing.isShowing('chat', aQuestion(TURNED_ON_AT))]).toEqual([true, false]);
+    expect([routing.isShowing('chat', { contentType: 'text/plain', sentAt: TURNED_ON_AT, senderShipId: SENDER }), routing.isShowing('chat', aQuestion(TURNED_ON_AT))]).toEqual([true, false]);
+  });
+});
+
+describe("the gateway's own steps, in Bridge only (BH8)", () => {
+  const STEP = 'application/vnd.aeolus.step+json';
+  const EVERY_PLACE_ON_FOR_DO = routingDefaultsOf([{ job: 'do', place: 'chat' }, { job: 'do', place: 'slack' }, { job: 'do', place: 'email' }]);
+  const routing = ownStepsInBridgeOnly(routingOf([], EVERY_PLACE_ON_FOR_DO), GATEWAY_SHIP_ID);
+  const sentAt = new Date('2026-11-01T13:00:00.000Z');
+
+  it("never shows the gateway's own step in a chat or Slack, though both are on for do", () => {
+    const ownStep = { contentType: STEP, sentAt, senderShipId: GATEWAY_SHIP_ID };
+    expect([routing.isShowing('chat', ownStep), routing.isShowing('slack', ownStep)]).toEqual([false, false]);
+  });
+
+  it("still wakes for the gateway's own step where a wake is on for do", () => {
+    expect(routing.isShowing('email', { contentType: STEP, sentAt, senderShipId: GATEWAY_SHIP_ID })).toBe(true);
+  });
+
+  it("shows another ship's step in a chat and Slack as routing has it", () => {
+    const step = { contentType: STEP, sentAt, senderShipId: SENDER };
+    expect([routing.isShowing('chat', step), routing.isShowing('slack', step)]).toEqual([true, true]);
+  });
+
+  it('shows anything else the gateway sends as routing has it', () => {
+    const notice = { contentType: 'application/vnd.aeolus.notice+json', sentAt, senderShipId: GATEWAY_SHIP_ID };
+    const onForNotices = ownStepsInBridgeOnly(routingOf([], routingDefaultsOf([{ job: 'stay-aware', place: 'chat' }])), GATEWAY_SHIP_ID);
+    expect(onForNotices.isShowing('chat', notice)).toBe(true);
   });
 });

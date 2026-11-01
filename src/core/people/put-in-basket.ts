@@ -17,20 +17,21 @@ export interface PutEntry {
   readonly note: string | null;
 }
 
-export type PutInBasket = (input: { caller: PersonCaller; deliveryId: string; option: number | null; note: string }) => Promise<Result<PutEntry, DealtError | DomainError<'NOT_A_QUESTION' | 'INVALID_ARGUMENTS' | 'CONFLICT'>>>;
+export type PutInBasket = (input: { caller: PersonCaller; deliveryId: string; option: number | null; optionLabel: string | null; note: string }) => Promise<Result<PutEntry, DealtError | DomainError<'NOT_A_QUESTION' | 'INVALID_ARGUMENTS' | 'CONFLICT'>>>;
 
 /**
  * Use case: a person puts their answer to a question they opened in Bridge
  * into the basket (section 9, rule 1): its option and a note if they wrote
- * one, or a note alone. Nothing is sent; the question still waits on them. One entry per
+ * one, or a note alone, with the option's label as the question shows it,
+ * so the basket names the answer. Nothing is sent; the question still waits on them. One entry per
  * question: picking again changes it, in its place in the order added. An
  * entry being sent goes as stored, and one the fleet refused is removed,
  * not sent again, so neither changes. A question answered elsewhere first
- * is refused saying where. Every page of the person reads the
- * basket again.
+ * is refused saying where. The answers sent before are cleared, as a new
+ * basket starts. Every page of the person reads the basket again.
  */
 export function createPutInBasket(deps: { crewPersonShip: CrewPersonShip; opened: OpenedDeliveries; entries: BasketEntries; outcomes: Pick<ItemOutcomes, 'findMany'>; changes: InboxChanges; clock: Clock }): PutInBasket {
-  return async ({ caller, deliveryId, option, note }) => {
+  return async ({ caller, deliveryId, option, optionLabel, note }) => {
     const opened = await openedOf(deps, { caller, deliveryId });
     if (!opened.isOk) {
       return opened;
@@ -45,12 +46,19 @@ export function createPutInBasket(deps: { crewPersonShip: CrewPersonShip; opened
     if (!answerSchema.safeParse(answerOf(entry)).success) {
       return refuse('INVALID_ARGUMENTS', 'Pick one of the options, numbered from 1, or write a note');
     }
+    const label = option === null ? null : (optionLabel?.trim() ?? '');
+    if (label === '') {
+      return refuse('INVALID_ARGUMENTS', 'Name the option picked by its label, as the question shows it');
+    }
     const kept = await deps.entries.find(caller.fleetId, { shipId: question.shipId, questionId });
     if (kept?.state === 'sending') {
       return refuse('CONFLICT', 'This answer is being sent: it goes as it was put in the basket');
     }
     if (kept?.state === 'refused') {
       return refuse('CONFLICT', 'The fleet refused this answer: remove it from the basket');
+    }
+    for (const sent of (await deps.entries.list(question.fleetId, question.shipId)).filter(({ state }) => state === 'sent')) {
+      await deps.entries.remove(sent.fleetId, { shipId: sent.shipId, questionId: sent.questionId });
     }
     await deps.entries.save({
       fleetId: question.fleetId,
@@ -62,9 +70,12 @@ export function createPutInBasket(deps: { crewPersonShip: CrewPersonShip; opened
       title: question.title,
       sentAt: question.sentAt,
       ...entry,
+      optionLabel: label,
       addedAt: kept?.addedAt ?? deps.clock.now(),
       state: 'waiting',
       refusal: null,
+      isUnanswered: false,
+      storedAt: null,
     });
     await deps.changes.tell({ fleetId: question.fleetId, shipId: question.shipId });
     return ok(entry);

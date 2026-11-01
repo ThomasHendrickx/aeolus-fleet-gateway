@@ -31,6 +31,7 @@ const STEP = aPersonDelivery({
   askedQuestionId: null,
   stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d11',
   withdrawnStepId: null,
+  stepLink: null,
 });
 
 /** The same step, as Charlotte opened it before she signed in. */
@@ -47,6 +48,8 @@ const OPENED: OpenedDelivery = {
   withdrawnQuestionId: null,
   stepId: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d11',
   withdrawnStepId: null,
+  stepLink: null,
+  openedIn: null,
   sentAt: new Date('2026-10-31T21:00:00.000Z'),
   openedAt: new Date('2026-10-31T21:10:00.000Z'),
 };
@@ -87,7 +90,7 @@ describe('a step the gateway sees complete is done with no press (Bridge, CC14)'
 
     expect({ calls: ship.calls, kept: outcomes.held }).toEqual({
       calls: [`ack(${STEP_DELIVERY_ID})`, `handled(${STEP_DELIVERY_ID})`],
-      kept: [{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: STEP_DELIVERY_ID, place: 'gateway', kind: 'done', option: null, at: AT }],
+      kept: [{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: STEP_DELIVERY_ID, place: 'gateway', kind: 'done', option: null, note: null, seen: null, at: AT }],
     });
   });
 

@@ -29,6 +29,8 @@ const STEP: OpenedDelivery = {
   withdrawnQuestionId: null,
   stepId: STEP_ID,
   withdrawnStepId: null,
+  stepLink: null,
+  openedIn: null,
   sentAt: new Date('2026-10-31T20:40:00.000Z'),
   openedAt: AT,
 };
@@ -62,12 +64,12 @@ describe('a person marks a step done or that they cannot, with a note', () => {
     expect(ship.calls).toEqual([`reply(${STEP.messageId})`, `handled(${STEP.deliveryId})`]);
   });
 
-  it('sends the asker the step outcome cannot with the note, and keeps cannot where the person said it', async () => {
+  it('sends the asker the step outcome cannot with the note, and keeps cannot with the note where the person said it', async () => {
     await doneDelivery({ caller: CHARLOTTE_GRANT, place: 'chat', deliveryId: STEP.deliveryId, outcome: 'cannot', note: 'I have no right to create repositories there' });
 
-    expect({ payloads: ship.replies.map(({ payload }) => payload), kept: outcomes.held.map(({ place, kind }) => ({ place, kind })) }).toEqual({
+    expect({ payloads: ship.replies.map(({ payload }) => payload), kept: outcomes.held.map(({ place, kind, note }) => ({ place, kind, note })) }).toEqual({
       payloads: [JSON.stringify({ stepId: STEP_ID, outcome: 'cannot', note: 'I have no right to create repositories there' })],
-      kept: [{ place: 'chat', kind: 'cannot' }],
+      kept: [{ place: 'chat', kind: 'cannot', note: 'I have no right to create repositories there' }],
     });
   });
 

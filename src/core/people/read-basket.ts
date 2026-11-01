@@ -1,7 +1,7 @@
 import type { DeliveryId } from '@aeolus-fleet/common';
 
 import { ok, type Result } from '../shared/result.js';
-import { standingOf, type BasketEntries, type BasketEntry, type BasketStanding } from './basket.js';
+import { askingOfEntry, basketCountOf, standingOf, type BasketEntries, type BasketEntry, type BasketStanding } from './basket.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import type { ItemOutcomes } from './item-outcome.js';
 import type { PersonCaller, PersonCrewError, PersonCrewToken } from './person-crew.js';
@@ -18,12 +18,15 @@ export interface BasketItem {
   readonly sentAt: string;
   /** None for a note alone. */
   readonly option: number | null;
+  readonly optionLabel: string | null;
   readonly note: string | null;
   readonly standing: BasketStanding;
 }
 
-/** The basket: its entries in the order added, and how many answers Send would send. */
+/** The basket: its entries in the order added, how many will be sent, and how many answers Send would send now. */
 export interface BasketView {
+  /** What is or will be sent, as the basket's heading counts it. */
+  readonly count: number;
   readonly toSend: number;
   readonly entries: BasketItem[];
 }
@@ -47,11 +50,6 @@ export interface StandingBasket {
   readonly entries: readonly { readonly entry: BasketEntry; readonly standing: BasketStanding }[];
 }
 
-/** The question an entry answers, as a withdrawal or a replacement names it. */
-function askingOf(entry: BasketEntry): Asking {
-  return { deliveryId: entry.deliveryId, senderShipId: entry.senderShipId, sentAt: entry.sentAt, title: entry.title, askedQuestionId: entry.questionId, withdrawnQuestionId: null, stepId: null, withdrawnStepId: null };
-}
-
 /**
  * Each entry of the caller's basket with what it stands as: what came of its
  * question, kept by the gateway wherever the person acted, and whether its
@@ -72,7 +70,7 @@ export async function standingBasketOf(deps: BasketDeps, caller: PersonCaller): 
     opened,
     entries: entries.map((entry) => ({
       entry,
-      standing: standingOf(entry, { outcome: outcomes.find(({ deliveryId }) => deliveryId === entry.deliveryId), stale: staleOf(askingOf(entry), among) }),
+      standing: standingOf(entry, { outcome: outcomes.find(({ deliveryId }) => deliveryId === entry.deliveryId), stale: staleOf(askingOfEntry(entry), among) }),
     })),
   });
 }
@@ -80,7 +78,8 @@ export async function standingBasketOf(deps: BasketDeps, caller: PersonCaller): 
 /**
  * Use case: a person opens their basket (section 9, rule 2): each entry in
  * the order added, with its question, asker, option and note, and what it
- * stands as; how many answers Send would send, the entries still waiting.
+ * stands as, those sent kept until the next Put or Send; how many will be
+ * sent; how many answers Send would send, the entries still waiting.
  */
 export function createReadBasket(deps: BasketDeps): ReadBasket {
   return async (caller) => {
@@ -95,9 +94,10 @@ export function createReadBasket(deps: BasketDeps): ReadBasket {
       title: entry.title,
       sentAt: entry.sentAt.toISOString(),
       option: entry.option,
+      optionLabel: entry.optionLabel,
       note: entry.note,
       standing,
     }));
-    return ok({ toSend: entries.filter(({ standing }) => standing.kind === 'waiting').length, entries });
+    return ok({ count: basketCountOf(entries.map(({ standing }) => standing)), toSend: entries.filter(({ standing }) => standing.kind === 'waiting').length, entries });
   };
 }

@@ -1,10 +1,10 @@
 import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from "@aeolus-fleet/common";
 
-import type { FleetRefusal } from "../connection/ports.js";
+import type { ConnectionStore, FleetRefusal } from "../connection/ports.js";
 import type { Clock } from "../shared/clock.js";
 import { err, ok, type Result } from "../shared/result.js";
 import type { RoutingDefaults, Routing, Routes } from "./routing.js";
-import { routingOf } from "./routing.js";
+import { ownStepsInBridgeOnly, routingOf } from "./routing.js";
 import type {
   FocusedPages,
   HandOverChannel,
@@ -62,6 +62,8 @@ export type WakePerson = (
  */
 export function createWakePerson(deps: {
   door: Pick<PersonShipDoor, "pushReceive" | "handed">;
+  /** The gateway's connection, whose ship sends the gateway's own steps. */
+  connections: Pick<ConnectionStore, "binding">;
   /** Slack, where the person linked it; none where nothing beyond the pages shows deliveries. */
   shownElsewhere?: ShownElsewhere;
   channels: readonly WakeChannel[];
@@ -96,7 +98,9 @@ export function createWakePerson(deps: {
       ({ handOverNumber }) => handOverNumber === null,
     );
     // Read anew at every wake, so a change of where a job shows applies at once.
-    const routing = routingOf(await deps.routes.list(ship), deps.defaults);
+    const [routes, gateway] = await Promise.all([deps.routes.list(ship), deps.connections.binding(ship.fleetId)]);
+    // The gateway's own steps never go to Slack: they show in Bridge only (BH8).
+    const routing = ownStepsInBridgeOnly(routingOf(routes, deps.defaults), gateway?.shipId);
     // Asked even with nothing fresh: it finishes what an earlier wake left unfinished, as after a restart.
     const shownElsewhere =
       deps.shownElsewhere === undefined

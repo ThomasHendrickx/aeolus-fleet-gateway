@@ -46,7 +46,7 @@ import { createStartPartySignIn } from './core/party-grants/start-party-sign-in.
 import { signInServersOf } from './core/parties/sign-in-servers.js';
 import { createPartySignIns } from './adapters/oauth/party-sign-ins.js';
 import { createPartySignInSeals } from './adapters/crypto/party-sign-in-seals.js';
-import { PARTY_SIGN_IN_DONE_PATH, partyPageUrlOf, registerPartySignInRoutes } from './adapters/http/party-sign-in-routes.js';
+import { ownStepPartyOf, PARTY_SIGN_IN_DONE_PATH, partyPageUrlOf, registerPartySignInRoutes } from './adapters/http/party-sign-in-routes.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
 import { createHandA2aMessage } from './core/a2a-out/hand-a2a-message.js';
@@ -65,6 +65,7 @@ import { createCallGrantOf } from './core/party-grants/call-grant.js';
 import { createRefreshGrant } from './core/party-grants/refresh-grant.js';
 import { createKeepGrantsAlive } from './core/party-grants/keep-grants-alive.js';
 import { createTellSignInNeeded } from './core/party-grants/tell-sign-in-needed.js';
+import { createKeepServerTitle } from './core/mcp-out/keep-server-title.js';
 import { createRunParty } from './core/mcp-out/run-party.js';
 import { createPrismaCalls } from './adapters/prisma/calls.js';
 import { sleep } from './adapters/timers/sleep.js';
@@ -213,6 +214,7 @@ import { createTurnRoute } from './core/people/turn-route.js';
 import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
 import { createReadMeeting } from './core/meetings/read-meeting.js';
+import { createReadSendTo } from './core/people/read-send-to.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
 import { createWakePerson } from './core/people/wake-person.js';
@@ -453,7 +455,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const oauthClients = createPrismaOAuthClients(prisma);
   const issuedTokens = createPrismaIssuedTokens(prisma);
   const marks = createPrismaToolMarks(prisma);
-  const servers = createMcpServers();
+  const servers = createMcpServers({ onConnected: createKeepServerTitle({ parties }) });
   // A caller of a proxy ship waits and gives up as the gateway does with its server (interop 3.4, 5.3).
   const callTiming = { waitMs: options.mcpWaitMaxMs ?? MCP_WAIT_MAX_MS, deadlineMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS };
   const requirements = createPrismaScopeRequirements(prisma);
@@ -484,7 +486,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
   // A call to a server where each person signs in goes out under its asking ship's owner's grant (decision 0067).
   const partyPageUrl = partyPageUrlOf(options.publicUrl ?? DEFAULT_PUBLIC_URL);
-  const tellSignInNeeded = createTellSignInNeeded({ notices: signInNotices, connections, sender: door, newNoticeId: randomUUID, pageUrlOf: partyPageUrl });
+  const tellSignInNeeded = createTellSignInNeeded({ notices: signInNotices, connections, parties, sender: door, newNoticeId: randomUUID, pageUrlOf: partyPageUrl });
   const refreshGrant = createRefreshGrant({ signIns: partySignIns, grants: partyGrants, tellSignInNeeded, clock });
   const grantCalls = createGrantCalls({
     callGrantOf: createCallGrantOf({ connections, door, grants: partyGrants }),
@@ -762,7 +764,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: door.person,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: door.person, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
+      wakePerson: createWakePerson({ door: door.person, connections, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,
@@ -809,9 +811,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     const changes = inboxChanges;
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
     return {
-      readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults }),
-      readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries }),
-      readRecord: createReadRecord({ ...asCrew, outcomes }),
+      readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults, connections }),
+      readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries, outcomes, connections, routes, defaults: routingDefaults, parties, ownStepPartyOf: ownStepPartyOf(options.publicUrl ?? DEFAULT_PUBLIC_URL), ...placesOffered }),
+      readRecord: createReadRecord({ ...asCrew, outcomes, connections, routes, defaults: routingDefaults, ...placesOffered }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes, outcomes, clock }),
@@ -833,6 +835,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       turnOffWebPush: createTurnOffWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions }),
       focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
       listShips: createListShips(asCrew),
+      readSendTo: createReadSendTo(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
       readMeeting: createReadMeeting({ ...asCrew, door: door.meetings }),
       changeOwnMic: createChangeOwnMic({ ...asCrew, door: door.meetings }),

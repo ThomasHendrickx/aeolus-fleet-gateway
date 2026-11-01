@@ -134,3 +134,20 @@ export function emailCardOf({ isOffered, isOnForAnyJob }: { isOffered: boolean; 
 export function emailTurnsOf(routing: Pick<RoutingView, 'jobs'>, isOn: boolean): { job: RoutedJob; place: 'email'; isOn: boolean }[] {
   return routing.jobs.filter(({ job, places }) => places.email !== isOn && (!isOn || WAITING_JOBS.includes(job))).map(({ job }) => ({ job, place: 'email', isOn }));
 }
+
+/** The places as a sentence names them after Bridge. */
+const PLACE_WORDS: Readonly<Record<RoutedPlace, string>> = { slack: 'Slack', chat: 'a chat', 'web-push': 'web push', email: 'email' };
+
+/** The places besides Bridge that show a question: those routing has on for Decide that the gateway offers, in routing's order. */
+export function decidePlacesOf(routing: RoutingView): RoutedPlace[] {
+  const decide = routing.jobs.find(({ job }) => job === 'decide');
+  return ROUTED_PLACES.filter((place) => routing.offered[place] && decide?.places[place] === true);
+}
+
+/** Where an opened question shows (decide.html): Bridge and the places on for Decide, and that one answer counts wherever it is given. */
+export function shownInOf(places: readonly RoutedPlace[]): string {
+  const named = ['Bridge', ...places.map((place) => PLACE_WORDS[place])];
+  const last = named.at(-1);
+  const list = named.length === 1 ? 'Bridge' : `${named.slice(0, -1).join(', ')} and ${String(last)}`;
+  return `Shows in ${list}, as Where things show sets for Decide. One answer, wherever you give it.`;
+}

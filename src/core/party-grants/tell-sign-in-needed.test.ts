@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeCallSender, MESSAGE_ID } from '../../../test/support/mcp-in-fakes.js';
-import { JORIS_SHIP_ID, memorySignInNotices } from '../../../test/support/party-grant-fakes.js';
+import { memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { anAttioParty, JORIS_SHIP_ID, memorySignInNotices } from '../../../test/support/party-grant-fakes.js';
 import { createTellSignInNeeded } from './tell-sign-in-needed.js';
 
 const PAGE = 'https://gateway.example.com/outside-parties/attio?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv';
@@ -11,16 +13,19 @@ let sender: ReturnType<typeof fakeCallSender>;
 let notices: ReturnType<typeof memorySignInNotices>;
 let tell: ReturnType<typeof createTellSignInNeeded>;
 let issued: number;
+let parties: ReturnType<typeof memoryPartyStore>;
 
 beforeEach(async () => {
   sender = fakeCallSender();
   notices = memorySignInNotices();
   issued = 0;
+  parties = memoryPartyStore();
   const connections = memoryConnectionStore();
   await connections.save({ fleetId: FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-25T09:00:00.000Z') });
   tell = createTellSignInNeeded({
     notices,
     connections,
+    parties,
     sender,
     newNoticeId: () => {
       issued += 1;
@@ -43,7 +48,7 @@ describe('the person whose sign-in a call needs is told once per party (decision
         contentType: 'application/vnd.aeolus.step+json',
         payload: JSON.stringify({
           id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d11',
-          title: 'Sign in to attio',
+          title: 'Sign in to the outside party attio',
           why: "A ship of yours called attio, which calls under each person's own sign-in, and you are not signed in to it. Until you sign in, your ships' calls to attio are refused.",
           link: PAGE,
         }),
@@ -58,11 +63,35 @@ describe('the person whose sign-in a call needs is told once per party (decision
     expect(sender.sent.map(({ payload }): unknown => JSON.parse(payload))).toEqual([
       {
         id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d11',
-        title: 'Sign in to attio again',
+        title: 'Sign in to the outside party attio again',
         why: "Your sign-in to attio ended: attio refused to refresh it (invalid_grant: the refresh token is revoked). Until you sign in again, your ships' calls to attio are refused.",
         link: PAGE,
       },
     ]);
+  });
+
+  it("names the party by its server's own title first, when the gateway keeps one (aeolus-fleet#1535)", async () => {
+    await parties.save(anAttioParty({ displayName: 'Attio' }));
+
+    await tellJoris();
+
+    expect(sender.sent.map(({ payload }) => z.object({ title: z.string() }).parse(JSON.parse(payload)).title)).toEqual(['Sign in to Attio for the outside party attio']);
+  });
+
+  it("asks them to sign in again by the server's own title first, when the gateway keeps one", async () => {
+    await parties.save(anAttioParty({ displayName: 'Attio' }));
+
+    await tell({ fleetId: FLEET_ID, party: 'attio', personShipId: JORIS_SHIP_ID, lost: { at: new Date('2026-10-28T16:00:00.000Z'), why: 'invalid_grant' } });
+
+    expect(sender.sent.map(({ payload }) => z.object({ title: z.string() }).parse(JSON.parse(payload)).title)).toEqual(['Sign in to Attio again for the outside party attio']);
+  });
+
+  it('keeps its words when the server gives no title', async () => {
+    await parties.save(anAttioParty({ displayName: null }));
+
+    await tellJoris();
+
+    expect(sender.sent.map(({ payload }) => z.object({ title: z.string() }).parse(JSON.parse(payload)).title)).toEqual(['Sign in to the outside party attio']);
   });
 
   it('keeps the message of the step it sent, so their sign-in finishes that step', async () => {

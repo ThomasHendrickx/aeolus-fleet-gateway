@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { chatCardOf, emailCardOf, emailTurnsOf, slackCardOf, turnedToastOf, waitingByJobOf, webPushCardOf } from './routing';
+import { chatCardOf, decidePlacesOf, emailCardOf, emailTurnsOf, shownInOf, slackCardOf, turnedToastOf, waitingByJobOf, webPushCardOf } from './routing';
 
 // Where things show (Bridge, section 8; the routing mockup): the toast after
 // a change says what the place now shows (CC20), and each place card says its
@@ -159,5 +159,34 @@ describe("what email's Turn on and Turn off change", () => {
       { job: 'do', place: 'email', isOn: false },
       { job: 'stay-aware', place: 'email', isOn: false },
     ]);
+  });
+});
+
+// Where an opened question shows (decide.html): Bridge, and each place
+// routing has on for Decide that the gateway offers, in routing's order.
+
+describe('where an opened question shows', () => {
+  it('names Bridge and the places on for Decide, as Where things show sets them', () => {
+    expect(shownInOf(['slack', 'chat'])).toBe('Shows in Bridge, Slack and a chat, as Where things show sets for Decide. One answer, wherever you give it.');
+  });
+
+  it('names Bridge alone while no other place is on for Decide', () => {
+    expect(shownInOf([])).toBe('Shows in Bridge, as Where things show sets for Decide. One answer, wherever you give it.');
+  });
+
+  it('names web push and email in the words a sentence reads', () => {
+    expect(shownInOf(['slack', 'chat', 'web-push', 'email'])).toBe('Shows in Bridge, Slack, a chat, web push and email, as Where things show sets for Decide. One answer, wherever you give it.');
+  });
+
+  it('takes the places on for Decide that the gateway offers, leaving out one it does not offer', () => {
+    const routing = {
+      offered: { slack: true, chat: true, 'web-push': true, email: false },
+      jobs: [
+        { job: 'decide' as const, places: { slack: true, chat: false, 'web-push': true, email: true } },
+        { job: 'do' as const, places: { slack: false, chat: true, 'web-push': false, email: false } },
+      ],
+    };
+
+    expect(decidePlacesOf(routing)).toEqual(['slack', 'web-push']);
   });
 });

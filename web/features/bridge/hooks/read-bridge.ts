@@ -16,8 +16,8 @@ import type { WakeChannels } from '../services/deliveries';
 import type { BasketView } from '../services/basket';
 import type { BridgeHome, RecordPage } from '../services/items';
 import type { ShownRequest } from '../services/requests';
-import type { ShellCounts } from '../ui/bridge-sidebar';
-import { waitingByJobOf, type RoutingView, type WaitingByJob } from '../services/routing';
+import { decidePlacesOf, waitingByJobOf, type RoutedPlace, type RoutingView, type WaitingByJob } from '../services/routing';
+import { shellCountsOf, type ShellCounts } from '../services/shell';
 
 /** What waits of each job while Bridge home cannot be read: no count is said. */
 const NOTHING_KNOWN_WAITING: WaitingByJob = { decide: undefined, do: undefined, 'stay-aware': undefined, 'everything-else': undefined };
@@ -80,6 +80,15 @@ async function personRead<T>(call: Promise<T>): Promise<BridgeRead<T>> {
 /** Bridge home, read once per page: the shell's counts and home's lists share the read. */
 export const readBridgeHome = cache((api: GatewayApi): Promise<BridgeRead<BridgeHome>> => personRead(api.people.home.query()));
 
+/** The places besides Bridge that show a question, for an opened question to name; none while routing cannot be read, as the question shows without them. */
+export async function readDecidePlaces(api: GatewayApi): Promise<RoutedPlace[] | undefined> {
+  try {
+    return decidePlacesOf(await api.people.routing.query());
+  } catch {
+    return undefined;
+  }
+}
+
 export function readBasket(api: GatewayApi): Promise<BridgeRead<BasketView>> {
   return personRead(api.people.basket.query());
 }
@@ -98,15 +107,7 @@ export async function readBasketCount(api: GatewayApi): Promise<number> {
  */
 export async function readShellCounts(api: GatewayApi): Promise<ShellCounts> {
   const [home, basket, fleet] = await Promise.all([readBridgeHome(api), readBasketCount(api), readYourFleet(api)]);
-  const fleetAlerts = fleet.kind === 'read' ? fleet.value.counts.alert : undefined;
-  switch (home.kind) {
-    case 'read':
-      return { waiting: home.value.waiting.count, stayAware: home.value.stayAware.length, basket, fleetAlerts };
-    case 'none':
-      return { waiting: 0, stayAware: 0, basket, fleetAlerts };
-    case 'unreadable':
-      return { waiting: undefined, stayAware: undefined, basket, fleetAlerts };
-  }
+  return shellCountsOf({ home, basket, fleetAlerts: fleet.kind === 'read' ? fleet.value.counts.alert : undefined });
 }
 
 export function readRecordPage(api: GatewayApi, cursor: string | null): Promise<BridgeRead<RecordPage>> {

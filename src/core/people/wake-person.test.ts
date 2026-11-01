@@ -1,7 +1,7 @@
 import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
-import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { aPersonDelivery, memoryFocusedPages, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
@@ -97,8 +97,20 @@ function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: Flee
   };
 }
 
+/** The gateway's own ship, which sends a person its own steps (CC14). */
+const GATEWAY_SHIP_ID = 'shp_01m3tbfspe96yf1rnr4ank0gat';
+
+/** The gateway connected to the fleet as its own ship. */
+function connected() {
+  const connections = memoryConnectionStore();
+  // The memory store keeps it at once; its promise only says so.
+  void connections.save({ fleetId: FLEET_ID, shipId: GATEWAY_SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-01T00:00:00.000Z') });
+  return connections;
+}
+
 function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[]; wakesSent?: WakesSent; focused?: FocusedPages; endedAttempts?: { channel: WakeChannelName; reason: string }[]; shownElsewhere?: ShownElsewhere; routes?: Route[]; defaults?: RoutingDefaults }) {
   return createWakePerson({
+    connections: connected(),
     routes: memoryRoutes(deps.routes ?? []),
     defaults: deps.defaults ?? EVERY_JOB_WAKES,
     ...(deps.shownElsewhere === undefined ? {} : { shownElsewhere: deps.shownElsewhere }),
@@ -311,7 +323,7 @@ describe('waking a person', () => {
     const email = aChannel('email');
     const wakesSent = memoryWakesSent();
     const crashing = { ...ship.door, handed: () => Promise.reject(new Error('the gateway stopped')) };
-    await expect(createWakePerson({ routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
+    await expect(createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
 
     await waking({ ship, channels: [email.channel], wakesSent })(SHIP, CREW_TOKEN);
 
@@ -323,7 +335,7 @@ describe('waking a person', () => {
     const refusing = { ...ship.door, handed: () => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) };
     const wakesSent = memoryWakesSent();
 
-    const woken = await createWakePerson({ routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
+    const woken = await createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
 
     expect({ woken, sent: wakesSent.sent }).toEqual({ woken: err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }), sent: [{ channel: 'email', at: NOW }] });
   });
@@ -340,7 +352,7 @@ describe('waking a person', () => {
         return handedCalls === 2 ? Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) : ship.door.handed(crewToken, handOver);
       },
     };
-    const wakePerson = createWakePerson({ routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: refusingOnce, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
+    const wakePerson = createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: refusingOnce, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
 
     const first = await wakePerson(SHIP, CREW_TOKEN);
     const retried = await wakePerson(SHIP, CREW_TOKEN);
@@ -531,6 +543,16 @@ describe('waking a person per job (Bridge, section 8)', () => {
     await waking({ ship, channels: [aChannel('email').channel], defaults: NOTHING_ON, routes, shownElsewhere: slackShowing(ship) })(SHIP, CREW_TOKEN);
 
     expect(ship.handOvers).toEqual([{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', handOverNumber: 1, channel: 'slack' }]);
+  });
+
+  it("never shows the gateway's own step in Slack, though Slack is on for do: it shows in Bridge only (BH8)", async () => {
+    const ownStep = aDelivery(1, { senderShipId: GATEWAY_SHIP_ID, contentType: 'application/vnd.aeolus.step+json', askedQuestionId: null });
+    const ship = aShip([ownStep]);
+    const routes = [aRoute({ job: 'do', place: 'slack' })];
+
+    await waking({ ship, channels: [aChannel('email').channel], defaults: NOTHING_ON, routes, shownElsewhere: slackShowing(ship) })(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers.filter(({ channel }) => channel === 'slack')).toEqual([]);
   });
 
   it('applies a change at once: the next wake reads where each job shows anew', async () => {

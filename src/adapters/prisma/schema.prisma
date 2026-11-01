@@ -80,6 +80,8 @@ model Party {
   concurrencyLimit         Int?     @map("concurrency_limit")
   /// An MCP server's tool switches, by tool name (aeolus-fleet#1151); none kept yet means every tool it lists is on.
   toolSwitches             Json?    @map("tool_switches")
+  /// An MCP server's display name: the title its serverInfo gave on the gateway's last connect, none if it gave none.
+  displayName              String?  @map("display_name")
   /// The scopes a calling ship needs (gateway scopes, 4.2): the party's set and each tool's, by scope text and tool name; none set yet needs nothing.
   scopeRequirements        Json?    @map("scope_requirements")
   /// The version the requirements were last changed to, so a change made on an older one is refused.
@@ -388,6 +390,10 @@ model OpenedDelivery {
   stepId              String?  @map("step_id")
   /// The uuid of the step it withdraws or replaces; null otherwise.
   withdrawnStepId     String?  @map("withdrawn_step_id")
+  /// The link where the step it asks is done (Bridge, CC14), so its row leads there once opened; null for a step without one, one opened before the gateway kept it, or any other message.
+  stepLink            String?  @map("step_link")
+  /// Where the person opened it (bridge, chat, slack), so a row says Seen in Bridge; null for one opened before the gateway kept it.
+  openedIn            String?  @map("opened_in")
   sentAt              DateTime @map("sent_at") @db.Timestamptz(3)
   openedAt            DateTime @map("opened_at") @db.Timestamptz(3)
 
@@ -395,7 +401,7 @@ model OpenedDelivery {
   @@map("opened_deliveries")
 }
 
-/// An answer in a person's basket (Bridge, section 9; CC21): picked in Bridge and not sent yet, one per question, sent in the order added.
+/// An answer in a person's basket (Bridge, section 9; CC21): picked in Bridge, one per question, sent in the order added; kept as sent until the next Put or Send.
 /// The person ships with an entry stored as sending are found by the partial index basket_entries_sending, in its migration.
 model BasketEntry {
   fleetId      String   @map("fleet_id")
@@ -410,12 +416,18 @@ model BasketEntry {
   sentAt       DateTime @map("sent_at") @db.Timestamptz(3)
   /// None for a note alone.
   option       Int?
+  /// The option's label, as the question shows it; none for a note alone.
+  optionLabel  String?  @map("option_label")
   note         String?
   addedAt      DateTime @map("added_at") @db.Timestamptz(3)
-  /// waiting, sending or refused.
+  /// waiting, sending, sent or refused.
   state        String
-  /// Why the fleet refused it, while refused.
+  /// Why the fleet refused it, in words, while refused.
   refusal      String?
+  /// Whether the fleet did not answer its last send.
+  isUnanswered Boolean   @default(false) @map("is_unanswered")
+  /// When the fleet stored its answer, once sent.
+  storedAt     DateTime? @map("stored_at") @db.Timestamptz(3)
 
   @@id([fleetId, shipId, questionId])
   @@index([fleetId, shipId, addedAt])
@@ -686,7 +698,12 @@ model ItemOutcome {
   kind       String
   /// The option of a question answered with one; null otherwise.
   option     Int?
-  at         DateTime @db.Timestamptz(3)
+  /// The note the person sent with it; null when they wrote none.
+  note       String?
+  /// Where (bridge, chat, slack) and when the person first saw the item; null where the gateway did not see it seen.
+  seenIn     String?   @map("seen_in")
+  seenAt     DateTime? @map("seen_at") @db.Timestamptz(3)
+  at         DateTime  @db.Timestamptz(3)
 
   @@id([fleetId, shipId, deliveryId])
   @@map("item_outcomes")

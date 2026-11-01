@@ -13,9 +13,9 @@ async function StayAwareParts({ api, fleetId }: { api: GatewayApi; fleetId: stri
   const read = await readBridgeHome(api);
   switch (read.kind) {
     case 'read':
-      return <StayAwarePanel fleetId={fleetId} stayAware={read.value.stayAware} />;
+      return <StayAwarePanel fleetId={fleetId} stayAware={read.value.stayAware} now={new Date().toISOString()} />;
     case 'none':
-      return <StayAwarePanel fleetId={fleetId} stayAware={[]} />;
+      return <StayAwarePanel fleetId={fleetId} stayAware={[]} now={new Date().toISOString()} />;
     case 'unreadable':
       return <RecordUnreadable message={read.message} />;
   }

@@ -16,7 +16,7 @@ function aCrewedServer(fleetId: FleetId, name: string): McpServerParty {
   return {
     fleetId,
     name,
-    kind: 'mcpServer',
+    kind: 'mcpServer', displayName: null,
     url: `https://${name}.example.com/mcp`,
     credential: { kind: 'bearer', token: 't' },
     concurrencyLimit: 4,

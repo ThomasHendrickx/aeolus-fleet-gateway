@@ -5,16 +5,11 @@ import { inFleet } from '../../../lib/gateway-api/page-account';
 import { OUTSIDE_PARTIES_PATH } from '../../outside-parties/paths';
 import { BRIDGE_FLEET_PATH } from '../fleet/paths';
 import { BRIDGE_BASKET_PATH, BRIDGE_DONE_PATH, BRIDGE_PATH, BRIDGE_ROUTING_PATH, BRIDGE_SETTINGS_PATH, BRIDGE_STAY_AWARE_PATH } from '../paths';
-import type { BridgeScreen } from '../services/shell';
+import type { BridgeScreen, ShellCounts } from '../services/shell';
+
+export type { ShellCounts };
 import { ShellCount, type CountTone } from './shell-count';
 
-/** The counts the shell shows: what waits, the unseen to stay aware of, the basket's answers and the alerts in the fleet; one not known now is left out. */
-export interface ShellCounts {
-  readonly waiting: number | undefined;
-  readonly stayAware: number | undefined;
-  readonly basket: number;
-  readonly fleetAlerts: number | undefined;
-}
 
 interface Entry {
   readonly key: string;
