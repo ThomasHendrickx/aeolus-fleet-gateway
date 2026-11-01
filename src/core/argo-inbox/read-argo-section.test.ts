@@ -40,7 +40,7 @@ function readSection(caller = THOMAS) {
     accounts,
     inboxOf: follow.inboxOf,
     shipNames: { nameOf: (_fleetId, shipId) => Promise.resolve(shipId === MATHILDE_SHIP_ID ? 'Mathilde' : undefined) },
-    clock: () => now,
+    clock: { now: () => now },
     consoleUrlOf: (deliveryId) => `https://fleet.example/inbox?message=${deliveryId}`,
   })(caller);
 }

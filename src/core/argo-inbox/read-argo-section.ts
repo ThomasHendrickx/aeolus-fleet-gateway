@@ -2,6 +2,7 @@ import type { DeliveryId, FleetId, ShipId } from '@aeolus-fleet/common';
 
 import { essenceOf, NOTICE_CONTENT_TYPE } from '../people/item-job.js';
 import { staleOf, type Asking, type Stale } from '../people/stale-item.js';
+import type { Clock } from '../shared/clock.js';
 import type { DoneAtArgo } from './argo-inbox.js';
 import type { FollowArgoInbox } from './follow-argo-inbox.js';
 import type { ArgoAccounts, ArgoMessage } from './ports.js';
@@ -72,7 +73,7 @@ export function createReadArgoSection(deps: {
   accounts: Pick<ArgoAccounts, 'list'>;
   inboxOf: FollowArgoInbox['inboxOf'];
   shipNames: { nameOf: (fleetId: FleetId, shipId: ShipId) => Promise<string | undefined> };
-  clock: () => Date;
+  clock: Clock;
   consoleUrlOf: (deliveryId: DeliveryId) => string;
 }): ReadArgoSection {
   const doneOf = async (fleetId: FleetId, { lastDone, now }: { lastDone: DoneAtArgo | null; now: Date }): Promise<ArgoDone | null> => {
@@ -94,7 +95,7 @@ export function createReadArgoSection(deps: {
     if (!accounts.some((account) => account.accountId === accountId)) {
       return null;
     }
-    const now = deps.clock();
+    const now = deps.clock.now();
     const asking = inbox.messages.map(askingOf);
     const items = inbox.messages
       .filter((message) => !isWithdrawalOnly(message))
