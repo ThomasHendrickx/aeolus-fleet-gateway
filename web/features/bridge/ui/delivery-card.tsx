@@ -127,16 +127,16 @@ function StepAsked({ step, isStale, isFinished }: { step: StepView; isStale: boo
   );
 }
 
-/** A step ended in Bridge, shown on the step: done in the ok tone, cannot neutral, when, the note quoted and what was sent (do.html). */
+/** A step ended in Bridge, shown on the step: done in the ok tone, cannot in the ended tone, only the icon in the tone's colour, when, the note quoted and what was sent (do.html). */
 function StepOutcomeNotice({ from, finished }: { from: string; finished: StepFinished }) {
   const isDone = finished.outcome === 'done';
   const Icon = isDone ? CircleCheck : CircleX;
   return (
-    <div data-testid="bridge-step-outcome" role="status" className={`flex items-start gap-3 rounded-md border p-3 ${isDone ? 'border-tone-ok-border bg-tone-ok-bg text-tone-ok-fg' : 'border-border bg-muted'}`}>
-      <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${isDone ? '' : 'text-muted-foreground'}`} />
+    <div data-testid="bridge-step-outcome" role="status" className={`flex items-start gap-3 rounded-md border p-3 ${isDone ? 'border-tone-ok-border bg-tone-ok-bg' : 'border-tone-ended-border bg-tone-ended-bg'}`}>
+      <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${isDone ? 'text-tone-ok-fg' : 'text-tone-ended-fg'}`} />
       <span className="grid gap-0.5">
         <span className="font-medium">{`${isDone ? 'Done in Bridge' : 'Cannot, in Bridge'} at ${clockTimeOf(finished.at)}`}</span>
-        <span className="text-caption">
+        <span className="text-caption text-muted-foreground">
           {finished.note === '' ? '' : `“${finished.note}” `}
           {`Sent to ${from} as you, with the outcome ${finished.outcome}.`}
         </span>
@@ -158,7 +158,7 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
           value={note}
           onChange={(event) => { onNoteChange(event.target.value); }}
           placeholder={`Add a note for ${from}: what you did, or why you cannot`}
-          className="rounded-md border border-input bg-background p-2"
+          className="field-sizing-content min-h-16 rounded-md border border-input bg-background p-2"
         />
         <span className="text-caption text-muted-foreground">Sent with Done or Cannot, whichever you press.</span>
       </label>

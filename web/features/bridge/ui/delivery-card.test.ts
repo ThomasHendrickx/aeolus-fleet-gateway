@@ -188,7 +188,7 @@ describe('a step opened in Bridge (CC14)', () => {
       ended: /data-testid="bridge-step-outcome"[^>]*border-tone-ended-border bg-tone-ended-bg/.test(markup) && /lucide-circle-x[^"]*text-tone-ended-fg/.test(markup),
       icon: markup.includes('lucide-circle-x'),
       cannot: markup.includes('data-testid="bridge-step-cannot"'),
-    }).toEqual({ title: true, note: true, sent: true, neutral: true, icon: true, cannot: false });
+    }).toEqual({ title: true, note: true, sent: true, ended: true, icon: true, cannot: false });
   });
 
   it.each([
@@ -199,7 +199,7 @@ describe('a step opened in Bridge (CC14)', () => {
     const box = /<div data-testid="bridge-step-outcome"[^>]*>/.exec(markup)?.[0] ?? '';
 
     expect({
-      boxInTone: /text-tone-/.test(box),
+      boxInTone: box.includes('text-tone-'),
       iconInTone: new RegExp(`${icon}[^"]*${tone}`).test(markup),
       sentMuted: /<span class="[^"]*text-muted-foreground[^"]*">“A note\.” Sent to orchestrator-1/.test(markup),
     }).toEqual({ boxInTone: false, iconInTone: true, sentMuted: true });
