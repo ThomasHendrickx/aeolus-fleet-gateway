@@ -125,12 +125,12 @@ describe('the parties pages, as the account signed in', () => {
     expect(textOf(await answer.text())).toContain('Turn onThe gateway is not connected to your fleet');
   }, 60_000);
 
-  it("says why the API refused a party's page, its change and its retire, with the way back to the list", async () => {
+  it("says why the API refused a party's page, its change and its retire, with the way back to the list in the crumbs (#191)", async () => {
     const pages = ['/outside-parties/linear', '/outside-parties/linear/change', '/outside-parties/linear/retire'];
 
     const bodies = await Promise.all(pages.map(async (page) => (await fetch(`${address}${page}?fleet=${FLEET}`, { headers: PAGE })).text()));
 
-    expect(bodies.map((body) => body.includes('role="alert"') && textOf(body).includes('← Outside parties'))).toEqual(pages.map(() => true));
+    expect(bodies.map((body) => body.includes('role="alert"') && /data-testid="bridge-crumb"[^>]*>.*?<a href="\/outside-parties\?fleet=[^"]*"/.test(body))).toEqual(pages.map(() => true));
   }, 60_000);
 
   it("checks a server from the address step, and shows the check's refusal on that step with the address kept", async () => {
@@ -388,7 +388,8 @@ describe('the parties pages, as the account signed in', () => {
 
   it("links Bridge, the outside parties, the parties and Slack of the fleet in view from the header, the page shown current (aeolus-fleet#1120, #1119; gateway scopes 9.6)", async () => {
     const tabs = ['/bridge', '/outside-parties', '/parties', '/slack'];
-    const pages = tabs.slice(1);
+    // Outside parties shows in Bridge's shell (#191), so the header's pages are the parties and Slack.
+    const pages = tabs.slice(2);
     const bodies = await Promise.all(pages.map(async (page) => (await fetch(`${address}${page}?fleet=${FLEET}`, { headers: PAGE })).text()));
 
     // The desktop header and the phone bar each show the tabs: each tab is read once.
@@ -397,8 +398,8 @@ describe('the parties pages, as the account signed in', () => {
     expect(bodies.map(tabsOf)).toEqual(pages.map((current) => tabs.map((page) => ({ href: `${page}?fleet=${FLEET}`, isCurrent: page === current }))));
   }, 60_000);
 
-  it("shows Bridge's pages in Bridge's shell, its sidebar and the phone's tabs, and not the gateway's top bar (aeolus-fleet#1536)", async () => {
-    const pages = ['/bridge', '/bridge/basket', '/bridge/stay-aware', '/bridge/done', '/bridge/fleet', '/bridge/settings', '/bridge/settings/routing'];
+  it("shows Bridge's pages in Bridge's shell, its sidebar and the phone's tabs, and not the gateway's top bar, Outside parties and its pages too (aeolus-fleet#1536, #191)", async () => {
+    const pages = ['/bridge', '/bridge/basket', '/bridge/stay-aware', '/bridge/done', '/bridge/fleet', '/bridge/settings', '/bridge/settings/routing', '/outside-parties', '/outside-parties/add', '/outside-parties/add-a2a-client', '/outside-parties/add-a2a-agent', '/outside-parties/linear', '/outside-parties/linear/change', '/outside-parties/linear/retire'];
     const bodies = await Promise.all(pages.map(async (page) => (await fetch(`${address}${page}?fleet=${FLEET}`, { headers: PAGE })).text()));
 
     expect(bodies.map((body) => ({ sidebar: body.includes('data-testid="bridge-sidebar"'), tabs: body.includes('data-testid="bridge-tab-waiting"'), header: body.includes('data-testid="frame-header"') }))).toEqual(
