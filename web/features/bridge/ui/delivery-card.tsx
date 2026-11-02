@@ -56,15 +56,6 @@ export function putOf({ chosen, inBasket, note }: { chosen: number | null | unde
   return chosen === null ? { label: 'Put the note alone in the basket', isReady: note.trim() !== '' } : { label: `Put option ${String(chosen)} in the basket`, isReady: true };
 }
 
-/**
- * Whether a question's note field is open: decide.html draws it closed
- * behind Add a note; it opens on that press, and stays open while there is a
- * note, or the basket holds one (orchestrator-1 on PR 195, the open state undrawn).
- */
-export function isNoteOpenOf({ note, inBasket, isAdded }: { note: string; inBasket: InBasket | null; isAdded: boolean }): boolean {
-  return isAdded || note !== '' || (inBasket?.note ?? null) !== null;
-}
-
 /** Which info lines a question says: the asker's pick while the choice is it and nothing is in the basket, or it is stale (decide-1); that nothing is sent yet once another option is chosen (basket-1); neither while the choice is what the basket holds (basket-2). */
 export function infoLinesOf({ chosen, pick, inBasket, isStale }: { chosen: number | null | undefined; pick: number; inBasket: InBasket | null; isStale: boolean }): { isPickSaid: boolean; isNothingSentSaid: boolean } {
   if (isStale) {
@@ -107,8 +98,8 @@ function InfoLine({ children }: { children: ReactNode }) {
   );
 }
 
-/** The options of a question, one to choose, the asker's pick marked, and, while the note is open, No option, only the note, for a note alone; none to choose once it is stale. */
-function QuestionOptions({ question, chosen, isStale, isNoteAloneOffered, onChoose }: { question: Question; chosen: number | null | undefined; isStale: boolean; isNoteAloneOffered: boolean; onChoose: (option: number | null) => void }) {
+/** The options of a question, one to choose, the asker's pick marked, and No option, only the note, for a note alone; none to choose once it is stale. */
+function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Question; chosen: number | null | undefined; isStale: boolean; onChoose: (option: number | null) => void }) {
   return (
     <fieldset className={`grid gap-2 ${isStale ? 'opacity-60' : ''}`} disabled={isStale}>
       <legend className="sr-only">Options</legend>
@@ -124,15 +115,13 @@ function QuestionOptions({ question, chosen, isStale, isNoteAloneOffered, onChoo
           {option.key === question.pick.option ? <span className="rounded-sm border border-border px-1.5 text-caption">Their pick</span> : null}
         </label>
       ))}
-      {isNoteAloneOffered ? (
-        <label className={`flex items-start gap-3 rounded-md border p-3 ${chosen === null && !isStale ? 'border-ring bg-accent' : 'border-border'}`}>
-          <input type="radio" name="option" value="" checked={chosen === null && !isStale} onChange={() => { onChoose(null); }} className="mt-1" />
-          <span className="grid flex-1 gap-0.5">
-            <span className="font-medium">No option, only the note</span>
-            <span className="text-caption text-muted-foreground max-md:hidden">Answer with your note alone.</span>
-          </span>
-        </label>
-      ) : null}
+      <label className={`flex items-start gap-3 rounded-md border p-3 ${chosen === null && !isStale ? 'border-ring bg-accent' : 'border-border'}`}>
+        <input type="radio" name="option" value="" checked={chosen === null && !isStale} onChange={() => { onChoose(null); }} className="mt-1" />
+        <span className="grid flex-1 gap-0.5">
+          <span className="font-medium">No option, only the note</span>
+          <span className="text-caption text-muted-foreground max-md:hidden">Answer with your note alone.</span>
+        </span>
+      </label>
     </fieldset>
   );
 }
@@ -239,32 +228,23 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
   );
 }
 
-/** A question's note field behind Add a note, open once pressed or while there is a note (decide.html), and the button putting the answer in the basket, sending nothing (CC24); neither while the choice is what the basket holds. */
-function QuestionControls({ from, put, isNothingSentSaid, isNoteOpen, note, isPutting, isWorking, failure, onAddNote, onNoteChange, onPut }: { from: string; put: Put | null; isNothingSentSaid: boolean; isNoteOpen: boolean; note: string; isPutting: boolean; isWorking: boolean; failure: string | undefined; onAddNote: () => void; onNoteChange: (note: string) => void; onPut: () => void }) {
+/** A question's note field, always open (BH1), and the button putting the answer in the basket, sending nothing (CC24); neither while the choice is what the basket holds. */
+function QuestionControls({ from, put, isNothingSentSaid, note, isPutting, isWorking, failure, onNoteChange, onPut }: { from: string; put: Put | null; isNothingSentSaid: boolean; note: string; isPutting: boolean; isWorking: boolean; failure: string | undefined; onNoteChange: (note: string) => void; onPut: () => void }) {
   if (put === null) {
     return null;
   }
   return (
     <>
-      {isNoteOpen ? (
-        <label className="grid gap-1">
-          <span>Note (optional)</span>
-          <textarea data-testid="bridge-note" rows={2} value={note} onChange={(event) => { onNoteChange(event.target.value); }} className="field-sizing-content min-h-16 resize-none rounded-md border border-input bg-background p-2" />
-          <span className="text-caption text-muted-foreground">Goes with the answer.</span>
-        </label>
-      ) : null}
+      <label className="grid gap-1">
+        <span>Note (optional)</span>
+        <textarea data-testid="bridge-note" rows={2} value={note} onChange={(event) => { onNoteChange(event.target.value); }} className="field-sizing-content min-h-16 resize-none rounded-md border border-input bg-background p-2" />
+        <span className="text-caption text-muted-foreground">Goes with the answer.</span>
+      </label>
       {failure === undefined ? null : <Notice message={failure} isFailure />}
-      <div className="flex flex-wrap gap-2">
-        <ActionButton data-testid="bridge-put-in-basket" variant="primary" className="w-full justify-center sm:w-auto sm:justify-self-start" isPending={isPutting} pendingLabel="Putting in the basket..." disabled={isWorking || !put.isReady} onClick={onPut}>
-          <ShoppingBasket aria-hidden className="size-4" />
-          {put.label}
-        </ActionButton>
-        {isNoteOpen ? null : (
-          <ActionButton data-testid="bridge-add-note" className="w-full justify-center sm:w-auto" isPending={false} pendingLabel="Add a note" disabled={isWorking} onClick={onAddNote}>
-            Add a note
-          </ActionButton>
-        )}
-      </div>
+      <ActionButton data-testid="bridge-put-in-basket" variant="primary" className="w-full justify-center sm:w-auto sm:justify-self-start" isPending={isPutting} pendingLabel="Putting in the basket..." disabled={isWorking || !put.isReady} onClick={onPut}>
+        <ShoppingBasket aria-hidden className="size-4" />
+        {put.label}
+      </ActionButton>
       {isNothingSentSaid ? <InfoLine>Nothing is sent yet. {from} receives this answer when you send the basket.</InfoLine> : null}
     </>
   );
@@ -402,8 +382,6 @@ export function DeliveryCard({
 }) {
   const { question, step, stale } = delivery;
   const [chosen, setChosen] = useState<number | null | undefined>(inBasket === null ? question?.pick.option : inBasket.option);
-  const [isNoteAdded, setNoteAdded] = useState(false);
-  const isNoteOpen = isNoteOpenOf({ note, inBasket, isAdded: isNoteAdded });
   const isWorking = working !== undefined;
   const infoLines = question === undefined ? undefined : infoLinesOf({ chosen, pick: question.pick.option, inBasket, isStale: stale !== null });
   // Seeing an alert or a notice was all it asked, so it is done (CC16).
@@ -428,7 +406,7 @@ export function DeliveryCard({
           <div className={PROSE}>
             <Markdown text={question.context} />
           </div>
-          <QuestionOptions question={question} chosen={chosen} isStale={stale !== null} isNoteAloneOffered={isNoteOpen} onChoose={setChosen} />
+          <QuestionOptions question={question} chosen={chosen} isStale={stale !== null} onChoose={setChosen} />
           {infoLines?.isPickSaid === true ? (
             <InfoLine>
               {delivery.from} picks {question.pick.option}: {question.pick.why}
@@ -462,7 +440,7 @@ export function DeliveryCard({
           </div>
         </>
       ) : (
-        <QuestionControls from={delivery.from} put={putOf({ chosen, inBasket, note })} isNothingSentSaid={infoLines?.isNothingSentSaid === true} isNoteOpen={isNoteOpen} note={note} isPutting={working?.kind === (chosen === null ? 'note' : 'option')} isWorking={isWorking} failure={failure} onAddNote={() => { setNoteAdded(true); }} onNoteChange={onNoteChange} onPut={() => { if (chosen !== undefined) { onPut(chosen); } }} />
+        <QuestionControls from={delivery.from} put={putOf({ chosen, inBasket, note })} isNothingSentSaid={infoLines?.isNothingSentSaid === true} note={note} isPutting={working?.kind === (chosen === null ? 'note' : 'option')} isWorking={isWorking} failure={failure} onNoteChange={onNoteChange} onPut={() => { if (chosen !== undefined) { onPut(chosen); } }} />
       )}
       {question === undefined || stale !== null || places === undefined ? null : (
         <footer data-testid="bridge-shown-in" className="grid gap-1 border-t border-border pt-3 text-caption text-muted-foreground">
