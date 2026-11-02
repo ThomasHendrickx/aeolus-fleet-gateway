@@ -1,4 +1,4 @@
-import { classNames } from '@aeolus-fleet/common/header';
+import { classNames } from '@aeolus-fleet/ui';
 
 /** How a count is drawn in the shell: waiting in its tone, the basket filled, alerts in theirs, anything else plain. */
 export type CountTone = 'waiting' | 'basket' | 'attention' | 'plain';

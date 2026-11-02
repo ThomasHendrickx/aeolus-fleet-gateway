@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 /**
  * Every page of the gateway's web app: the header on top, the page below.
- * The header is the one every Aeolus app shows (@aeolus-fleet/common/header,
+ * The header is the one every Aeolus app shows (@aeolus-fleet/ui,
  * header design H2) for an account signed in, else a plain bar.
  */
 export function Frame({ header, children }: { header: ReactNode; children: ReactNode }) {

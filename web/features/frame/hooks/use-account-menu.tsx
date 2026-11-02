@@ -1,7 +1,7 @@
 'use client';
 
 import type { Theme } from '@aeolus-fleet/common';
-import type { AvatarMenuEntry, AvatarMenuProps } from '@aeolus-fleet/common/header';
+import type { AvatarMenuEntry, AvatarMenuProps } from '@aeolus-fleet/ui';
 import { useRef, useState, type ReactNode } from 'react';
 
 import { setTheme } from '../actions';

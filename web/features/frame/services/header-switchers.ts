@@ -6,7 +6,7 @@
  * offers one switcher per listed fleet and the header picks by the address.
  */
 import { accountIdSchema, headerAppSchema, idSchema, type AppLink, type AppsList } from '@aeolus-fleet/common';
-import { appSwitcherOf, type AppSwitcherModel } from '@aeolus-fleet/common/header';
+import { appSwitcherOf, type AppSwitcherModel } from '@aeolus-fleet/common/rules';
 
 /** The apps and fleets the account may open, as the API's account.apps answers them. */
 export interface AccountApps {

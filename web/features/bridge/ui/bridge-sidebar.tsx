@@ -1,4 +1,5 @@
-import { AppSwitcher, type AppSwitcherModel } from '@aeolus-fleet/common/header';
+import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
+import { AppSwitcher } from '@aeolus-fleet/ui';
 import { Bell, CheckCheck, Globe, Inbox, Route, Ship, ShoppingBasket, SlidersHorizontal, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 

@@ -1,4 +1,4 @@
-import { Avatar } from '@aeolus-fleet/common/header';
+import { Avatar } from '@aeolus-fleet/ui';
 import type { ReactNode } from 'react';
 
 /**

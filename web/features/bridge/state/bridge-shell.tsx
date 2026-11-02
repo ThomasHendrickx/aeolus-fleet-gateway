@@ -1,4 +1,4 @@
-import type { AppSwitcherModel } from '@aeolus-fleet/common/header';
+import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
 import { Suspense, type ReactNode } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';

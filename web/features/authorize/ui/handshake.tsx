@@ -1,4 +1,4 @@
-import { Avatar } from '@aeolus-fleet/common/header';
+import { Avatar } from '@aeolus-fleet/ui';
 import { ArrowLeftRight } from 'lucide-react';
 
 /** Who meets whom: the outside party's mark and name, and the fleet's mark, side by side. */

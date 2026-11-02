@@ -1,7 +1,8 @@
 'use client';
 
 import type { Theme } from '@aeolus-fleet/common';
-import { AvatarMenu, AvatarMenuSheet, type AppSwitcherModel } from '@aeolus-fleet/common/header';
+import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
+import { AvatarMenu, AvatarMenuSheet } from '@aeolus-fleet/ui';
 import { Globe, Route, SlidersHorizontal } from 'lucide-react';
 import type { ReactNode } from 'react';
 

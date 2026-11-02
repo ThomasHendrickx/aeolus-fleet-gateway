@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@aeolus-fleet/common/header';
+import { Button } from '@aeolus-fleet/ui';
 import { Hourglass, LogIn } from 'lucide-react';
 import { useState, type SyntheticEvent } from 'react';
 

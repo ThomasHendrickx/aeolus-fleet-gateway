@@ -1,7 +1,8 @@
 'use client';
 
 import type { Theme } from '@aeolus-fleet/common';
-import { AppHeader, AppSwitcher, AvatarMenuSheet, type AppSwitcherModel } from '@aeolus-fleet/common/header';
+import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
+import { AppHeader, AppSwitcher, AvatarMenuSheet } from '@aeolus-fleet/ui';
 import { useSearchParams } from 'next/navigation';
 
 import { useAccountMenu } from '../hooks/use-account-menu';

@@ -1,4 +1,5 @@
-import type { AppSwitcherModel, AvatarMenuEntry } from '@aeolus-fleet/common/header';
+import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
+import type { AvatarMenuEntry } from '@aeolus-fleet/ui';
 import { AppWindow, Check } from 'lucide-react';
 
 /** The shared switcher's permitted apps, offered in the phone avatar sheet without replacing the screen title. */
