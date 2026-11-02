@@ -2,7 +2,7 @@ import { ArrowUpRight, Network, Plug, SquareTerminal, User, Users } from 'lucide
 import type { ReactNode } from 'react';
 
 import { healthHrefOf } from '../../services/stay-aware';
-import { GROUP_LABELS, STATE_LABELS, type FleetGroup, type FleetTile, type ShipState, type YourFleet } from '../services/your-fleet';
+import { ageOf, GROUP_LABELS, STATE_LABELS, type FleetGroup, type FleetTile, type ShipState, type YourFleet } from '../services/your-fleet';
 import { StateIcon } from './state-icon';
 
 const GROUP_ICONS = { people: Users, agents: SquareTerminal, plugins: Plug, throughTheGateway: Network } as const;
@@ -49,12 +49,13 @@ function TileFrame({ href, title, className, children }: { href: string | undefi
 
 /**
  * A ship's tile (design/bridge-fleet-width): its kind, its whole name, what
- * it is doing and its state; a link to the ship's page in the console, with
+ * it is doing, its state and when it last did something; a link to the ship's page in the console, with
  * an arrow on hover and focus. A working ship's tile carries the live band,
  * which stands still under reduced motion.
  */
-function Tile({ group, tile, consoleUrl }: { group: FleetGroup; tile: FleetTile; consoleUrl: string | undefined }) {
+function Tile({ group, tile, consoleUrl, now }: { group: FleetGroup; tile: FleetTile; consoleUrl: string | undefined; now: Date }) {
   const { shipId, name, state, note } = tile;
+  const age = ageOf(tile.lastActivityAt, now);
   const KindIcon = KIND_ICONS[group];
   return (
     <li className="min-w-0">
@@ -80,6 +81,11 @@ function Tile({ group, tile, consoleUrl }: { group: FleetGroup; tile: FleetTile;
             <StateIcon state={state} />
             {STATE_LABELS[state]}
           </span>
+          {age === null ? null : (
+            <span data-testid="fleet-tile-age" className="text-caption text-muted-foreground">
+              {age}
+            </span>
+          )}
         </span>
         {state === 'working' ? (
           <i
@@ -93,7 +99,7 @@ function Tile({ group, tile, consoleUrl }: { group: FleetGroup; tile: FleetTile;
   );
 }
 
-function Group({ group, tiles, consoleUrl, tileColumns }: { group: FleetGroup; tiles: readonly FleetTile[]; consoleUrl: string | undefined; tileColumns: string }) {
+function Group({ group, tiles, consoleUrl, tileColumns, now }: { group: FleetGroup; tiles: readonly FleetTile[]; consoleUrl: string | undefined; tileColumns: string; now: Date }) {
   const Icon = GROUP_ICONS[group];
   return (
     <section className="grid gap-1.5" aria-label={GROUP_LABELS[group]}>
@@ -104,7 +110,7 @@ function Group({ group, tiles, consoleUrl, tileColumns }: { group: FleetGroup; t
       </h3>
       <ul className={`grid gap-2 ${tileColumns}`}>
         {tiles.map((tile) => (
-          <Tile key={tile.shipId} group={group} tile={tile} consoleUrl={consoleUrl} />
+          <Tile key={tile.shipId} group={group} tile={tile} consoleUrl={consoleUrl} now={now} />
         ))}
       </ul>
     </section>
@@ -115,11 +121,11 @@ function Group({ group, tiles, consoleUrl, tileColumns }: { group: FleetGroup; t
  * One tile per ship, grouped People, Agents, Plugins and Through the gateway,
  * each group alerts first; a tile opens its ship in the fleet's console.
  */
-export function FleetWall({ groups, consoleUrl, tileColumns, className }: { groups: YourFleet['groups']; consoleUrl: string | undefined; tileColumns: string; className?: string }) {
+export function FleetWall({ groups, consoleUrl, tileColumns, now, className }: { groups: YourFleet['groups']; consoleUrl: string | undefined; tileColumns: string; now: Date; className?: string }) {
   return (
     <div data-testid="fleet-wall" className={`${className ?? ''} grid gap-2.5`.trim()}>
       {groups.map(({ group, tiles }) => (
-        <Group key={group} group={group} tiles={tiles} consoleUrl={consoleUrl} tileColumns={tileColumns} />
+        <Group key={group} group={group} tiles={tiles} consoleUrl={consoleUrl} tileColumns={tileColumns} now={now} />
       ))}
     </div>
   );

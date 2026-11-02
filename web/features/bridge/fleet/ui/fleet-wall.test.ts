@@ -74,6 +74,8 @@ describe("a ship tile's last activity", () => {
   });
 
   it('says nothing for a ship that did nothing yet, so its tile has no time', () => {
-    expect((wall(CONSOLE_URL).match(/<li/g) ?? []).length - (wall(CONSOLE_URL).match(/data-testid="fleet-tile-age"/g) ?? []).length).toBe(1);
+    const argo = wall(CONSOLE_URL).split('data-testid="fleet-tile"').find((tile) => tile.includes('>argo<'));
+
+    expect(argo?.includes('data-testid="fleet-tile-age"')).toBe(false);
   });
 });

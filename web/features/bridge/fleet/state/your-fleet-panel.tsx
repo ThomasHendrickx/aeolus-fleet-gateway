@@ -38,7 +38,7 @@ export function YourFleetPanel({ fleetId, consoleUrl, read, phone, isRecordUnrea
       {read.kind === 'read' ? (
         <>
           <FleetNumbers fleet={read.value} isShipCountShown={false} />
-          <FleetWall className="max-lg:hidden" groups={read.value.groups} consoleUrl={consoleUrl} tileColumns={TILE_COLUMNS} />
+          <FleetWall className="max-lg:hidden" groups={read.value.groups} consoleUrl={consoleUrl} tileColumns={TILE_COLUMNS} now={new Date()} />
         </>
       ) : (
         <FleetUnreadable message={read.message} />
