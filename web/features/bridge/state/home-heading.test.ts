@@ -24,6 +24,12 @@ describe("Bridge home's title row, across what waits and Your fleet (#189, 4)", 
     expect({ count: markup.includes('data-testid="bridge-count" class="text-tone-waiting-fg">2<'), counts: markup.includes('1 to decide, 1 to do. Newest on top; nothing else is in this count.') }).toEqual({ count: true, counts: true });
   });
 
+  it('leaves a withdrawn question out of what is in the count', () => {
+    const markup = heading({ count: 1, items: [anItem({ deliveryId: 'dlv_02' }), anItem({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } })] });
+
+    expect(markup.includes('1 to decide, 0 to do.')).toBe(true);
+  });
+
   it('says nothing waits when nothing does', () => {
     expect(heading({ count: 0, items: [] }).includes('Nothing waits on you.')).toBe(true);
   });

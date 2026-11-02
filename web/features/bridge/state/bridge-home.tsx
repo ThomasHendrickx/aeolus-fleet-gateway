@@ -16,7 +16,7 @@ import { HomeColumns } from '../ui/home-columns';
 import { SlackDroppedOut } from '../ui/slack-dropped-out';
 import { HomePanel } from './home-panel';
 import { KeptRead } from './kept-read';
-import { LastReadHeading } from './last-read-heading';
+import { HomeHeading } from './home-heading';
 import { RecordUnreadable } from './record-unreadable';
 
 /** For an account with no person ship nothing waits, and nothing reaches it unasked. */
@@ -37,7 +37,7 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
   const argoInboxNotice = argoInboxNoticeOf(argoNotice);
   return (
     <HomeColumns
-      heading={<KeptRead readAt={readAt}>{read.kind === 'unreadable' ? null : <LastReadHeading />}</KeptRead>}
+      heading={<KeptRead readAt={readAt}>{read.kind === 'unreadable' ? null : <HomeHeading waiting={home.waiting} />}</KeptRead>}
       banner={
         <>
           {read.kind === 'unreadable' ? <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} /> : null}

@@ -1,6 +1,6 @@
 'use client';
 
-import { Send, ShoppingBasket } from 'lucide-react';
+import { ShoppingBasket } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { staleSaidOf } from '../services/deliveries';
@@ -12,14 +12,6 @@ import { ItemRow } from '../ui/item-row';
 import { RowLink } from '../ui/row-link';
 import { ItemFocus, type ItemOpening } from './item-focus';
 import { useLastReadAt } from './kept-read';
-import { useSendMessage } from './send-message';
-
-function countsOf(items: readonly HomeItem[]): string {
-  const counted = items.filter(({ stale }) => stale === null);
-  const toDecide = counted.filter(({ job }) => job === 'decide').length;
-  const toDo = counted.filter(({ job }) => job === 'do').length;
-  return `${String(toDecide)} to decide, ${String(toDo)} to do. Newest on top; nothing else is in this count.`;
-}
 
 /** What a row says of its item: stale, in the basket, seen, or nothing while new. */
 function rowOutcomeOf(item: HomeItem): string | undefined {
@@ -52,20 +44,6 @@ function OpenButton({ item, opening }: { item: HomeItem; opening: ItemOpening })
     <ActionButton data-testid="bridge-open" size="row" isPending={opening.openingId === item.deliveryId} pendingLabel="Opening..." disabled={opening.openingId !== undefined} onClick={() => { opening.open(item); }}>
       Open
     </ActionButton>
-  );
-}
-
-/** Opens the form to send any ship a message (aeolus-fleet #1547): its words on the desktop, its icon alone on the phone. */
-function SendMessageButton() {
-  const sendMessage = useSendMessage();
-  if (sendMessage === undefined) {
-    return null;
-  }
-  return (
-    <button type="button" data-testid="bridge-send-message" aria-label="Send a ship a message" onClick={() => { sendMessage(); }} className="inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-card font-semibold hover:bg-accent sm:w-auto sm:px-4">
-      <Send aria-hidden="true" className="size-4" />
-      <span className="hidden sm:inline">Send a ship a message</span>
-    </button>
   );
 }
 
@@ -173,8 +151,8 @@ function ListBeside({ home, readAt, opening, isStayAware }: { home: BridgeHome; 
  * one count, a dot on what is new, a question or step its asker withdrew or replaced
  * struck through and outside the count, a replaced one leading to its replacement; and the stay-aware feed beside it, the
  * alerts and notices, a dot on those not seen, which alone it counts, outside the count. Opening one of
- * the feed is all it asks (CC16): it stays in the feed, seen. Beside the count, the person sends any
- * ship a message. Beside an open item, only the list it was opened from (aeolus-fleet#1538).
+ * the feed is all it asks (CC16): it stays in the feed, seen. The count heads the page, above Your fleet
+ * too (HomeHeading). Beside an open item, only the list it was opened from (aeolus-fleet#1538).
  */
 export function HomeLists({ home, now, opening, argo }: { home: BridgeHome; now: string; opening: ItemOpening; argo?: ReactNode }) {
   const { waiting, stayAware } = home;
@@ -185,15 +163,6 @@ export function HomeLists({ home, now, opening, argo }: { home: BridgeHome; now:
   return (
     <div className="grid gap-8">
       <section className="grid gap-3" aria-labelledby="bridge-waiting-heading">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 id="bridge-waiting-heading" className="text-heading font-semibold">
-              Waiting on you <span data-testid="bridge-count" className="text-tone-waiting-fg">{waiting.count}</span>
-            </h1>
-            <p className="text-muted-foreground">{waiting.count === 0 ? 'Nothing waits on you.' : countsOf(waiting.items)}</p>
-          </div>
-          <SendMessageButton />
-        </div>
         {waiting.items.length === 0 ? (
           <div data-testid="bridge-nothing-waits" className="grid justify-items-center gap-1 rounded-lg border border-border bg-card p-6 text-center">
             <span className="font-semibold">Nothing waits on you</span>

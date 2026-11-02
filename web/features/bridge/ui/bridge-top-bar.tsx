@@ -39,10 +39,11 @@ function Back({ fleetId, hasBack, opened }: { fleetId: string; hasBack: boolean;
  * breadcrumb, the fleet then the page in view (Waiting on you while an item
  * is open from home), and Live. On the phone the
  * screen title, an item open in place of its list named by it, with a back
- * chevron where it leads back, Live and the avatar. Live shows while the
+ * chevron where it leads back, the page's action (home: send a ship a
+ * message, as the #1560 sheet draws it), Live and the avatar. Live shows while the
  * page follows its changes.
  */
-export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, avatar }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; isLive: boolean; opened: OpenedItem | undefined; avatar: ReactNode }) {
+export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, phoneAction, avatar }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; isLive: boolean; opened: OpenedItem | undefined; phoneAction: ReactNode; avatar: ReactNode }) {
   const { name, hasBack } = screenOf(screen);
   const crumb = opened !== undefined && screen === 'home' ? OPENED_FROM_HOME : name;
   return (
@@ -61,6 +62,7 @@ export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, avata
           Live
         </span>
       ) : null}
+      {phoneAction === null ? null : <span className="sm:hidden">{phoneAction}</span>}
       <span className="sm:hidden">{avatar}</span>
     </header>
   );

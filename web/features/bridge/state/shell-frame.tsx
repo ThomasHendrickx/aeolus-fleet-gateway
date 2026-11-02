@@ -16,6 +16,8 @@ import type { BridgeScreen } from '../services/shell';
 import { phoneAppEntries } from '../ui/phone-app-entries';
 import { BridgeTopBar } from '../ui/bridge-top-bar';
 import { OpenedItemProvider } from './opened-item';
+import { SendMessageProvider } from './send-message';
+import { SendMessageButton } from './send-message-button';
 
 /** The account signed in, as the shell shows it: its email, the account app's address, the theme it chose. */
 export interface ShellAccount {
@@ -68,20 +70,33 @@ function PhoneAvatar({ fleetId, switcher, account: { email, accountUrl, theme } 
 /**
  * The part of Bridge's shell that lives in the browser: the top bar over
  * the page, Live while the page follows its changes, the phone's title
- * naming an item open in place of its list. It keeps the page live, and
- * tells the gateway while it is in focus (wake a person, W6).
+ * naming an item open in place of its list, and the page beside it, taking
+ * the window (design/bridge-fleet-width). It offers every page under it the
+ * form to send a ship a message, which the phone's home opens from its top
+ * bar. It keeps the page live, and tells the gateway while it is in focus
+ * (wake a person, W6).
  */
 export function ShellFrame({ fleetId, fleetName, screen, account, switcher, children }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; account: ShellAccount | undefined; switcher?: AppSwitcherModel; children: ReactNode }) {
   const isLive = useLiveRefresh(fleetId);
   useFocusReport(fleetId);
   return (
-    <OpenedItemProvider>
-      {(opened) => (
-        <>
-          <BridgeTopBar fleetId={fleetId} fleetName={fleetName} screen={screen} isLive={isLive} opened={opened} avatar={account === undefined ? null : <PhoneAvatar fleetId={fleetId} switcher={switcher} account={account} />} />
-          <main className="w-full max-w-5xl flex-1 px-4 py-5 sm:px-6">{children}</main>
-        </>
-      )}
-    </OpenedItemProvider>
+    <SendMessageProvider fleetId={fleetId}>
+      <OpenedItemProvider>
+        {(opened) => (
+          <>
+            <BridgeTopBar
+              fleetId={fleetId}
+              fleetName={fleetName}
+              screen={screen}
+              isLive={isLive}
+              opened={opened}
+              phoneAction={screen === 'home' && opened === undefined ? <SendMessageButton look="icon" /> : null}
+              avatar={account === undefined ? null : <PhoneAvatar fleetId={fleetId} switcher={switcher} account={account} />}
+            />
+            <main className="w-full min-w-0 flex-1 px-4 py-5 sm:px-6">{children}</main>
+          </>
+        )}
+      </OpenedItemProvider>
+    </SendMessageProvider>
   );
 }

@@ -64,6 +64,6 @@ describe("Bridge's top bar", () => {
   });
 
   it("carries home's action on the phone beside its title, as the #1560 sheet draws it (#189, 10)", () => {
-    expect(/<span class="sm:hidden"><button data-testid="send"><\/button><\/span>/.test(topBarOf({ phoneAction: createElement('button', { 'data-testid': 'send' }) }))).toBe(true);
+    expect(topBarOf({ phoneAction: createElement('button', { 'data-testid': 'send' }) }).includes('<span class="sm:hidden"><button data-testid="send"></button></span>')).toBe(true);
   });
 });
