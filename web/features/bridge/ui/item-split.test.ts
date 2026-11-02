@@ -26,4 +26,16 @@ describe('the split of a list and its open item (aeolus-fleet#1538)', () => {
       order: markup.indexOf('id="the-list"') < markup.indexOf('id="the-item"'),
     }).toEqual({ beside: true, listOnPhone: true, order: true });
   });
+
+  it('fills the area under the top bar edge to edge on a desktop, two panes and a divider, no inset card (decide.html, do.html)', () => {
+    const markup = renderToStaticMarkup(createElement(ItemSplit, { list: LIST, item: ITEM }));
+    const split = (/<div data-testid="bridge-split" class="([^"]*)"/.exec(markup)?.[1] ?? '').split(' ');
+    const list = (/<div data-testid="bridge-split-list" class="([^"]*)"/.exec(markup)?.[1] ?? '').split(' ');
+
+    expect({
+      edgeToEdge: ['md:-mx-6', 'md:-my-5', 'md:min-h-[calc(100dvh-3.5rem)]'].every((name) => split.includes(name)),
+      card: split.some((name) => name.startsWith('md:rounded') || name === 'md:border' || name === 'md:bg-card'),
+      divider: list.includes('border-r'),
+    }).toEqual({ edgeToEdge: true, card: false, divider: true });
+  });
 });
