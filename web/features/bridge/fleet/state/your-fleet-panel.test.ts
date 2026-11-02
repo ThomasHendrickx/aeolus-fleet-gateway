@@ -11,15 +11,15 @@ const FLEET: YourFleet = {
   shipCount: 4,
   counts: { alert: 1, waiting: 1, working: 1, idle: 1 },
   groups: [
-    { group: 'people', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9arg', name: 'argo', state: 'idle', note: null }] },
+    { group: 'people', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9arg', name: 'argo', state: 'idle', note: null, lastActivityAt: null }] },
     {
       group: 'agents',
       tiles: [
-        { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bgw', name: 'builder-gateway', state: 'alert', note: null },
-        { shipId: 'shp_01m3tbfspe96yf1rnr4ank9orc', name: 'orchestrator-1', state: 'waiting', note: 'waiting on Thomas' },
+        { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bgw', name: 'builder-gateway', state: 'alert', note: null, lastActivityAt: null },
+        { shipId: 'shp_01m3tbfspe96yf1rnr4ank9orc', name: 'orchestrator-1', state: 'waiting', note: 'waiting on Thomas', lastActivityAt: null },
       ],
     },
-    { group: 'throughTheGateway', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9git', name: 'github', state: 'working', note: 'listing issues' }] },
+    { group: 'throughTheGateway', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9git', name: 'github', state: 'working', note: 'listing issues', lastActivityAt: null }] },
   ],
 };
 
