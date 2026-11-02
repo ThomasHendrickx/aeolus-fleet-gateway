@@ -20,7 +20,8 @@ Only the layout widths and Your fleet's tiles change. Everything else is as the 
 | What waits | Whatever is left beside Your fleet | At most 44rem, its reading width |
 | Your fleet | A fixed 20rem column | The rest of the window, at least 20rem |
 | A tile's size | 52 px high, three a row | At least 112 px high and 12rem wide, about 16:9: four a row at 1900, two at 1440 and on the phone |
-| A tile's content | The name, cut, and the state | The whole name, what the ship is doing (its report, two lines at most), the state and when it last did something |
+| A tile's content | The name, cut, and the state | A small icon for the ship's kind, the whole name, what the ship is doing (its report, two lines at most), the state and when it last did something |
+| The kind icon | None | At the tile's top left, in a 22 px square in the state's tone, Lucide as Bridge uses it: a person (People), a terminal (Agents), a plug (Plugins), a network (Through the gateway), the same icons as the group headings |
 | Working | A green tile | A green tile with a band of light running along its foot every 2.4 s |
 | Click or tap | Nothing | Opens the ship's page (aeolus-fleet#1475: "a tap on a ship tile opens the ship's page"; the title shows the report on hover) |
 | Hover | Nothing | The border takes the state's colour, the tile lifts 1 px with a soft shadow, an arrow shows top right |
