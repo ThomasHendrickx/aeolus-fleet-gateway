@@ -25,7 +25,7 @@ describe("Your fleet's summary", () => {
   });
 });
 
-// A tile's last activity in the words the approved mockups draw (design/bridge-fleet-width): now, 25 min, 3 h, yesterday.
+// A tile's last activity in the words the approved mockups draw (design/bridge-fleet-width): now, 25 min, 3 h, yesterday, 2 d, then the date (28 Oct) from a week on.
 describe("a ship tile's last activity", () => {
   const NOW = new Date('2026-11-02T12:00:00.000Z');
   const agoOf = (minutes: number) => ageOf(new Date(NOW.getTime() - minutes * 60_000).toISOString(), NOW);
@@ -46,15 +46,19 @@ describe("a ship tile's last activity", () => {
     expect([agoOf(24 * 60), agoOf(47 * 60 + 59)]).toEqual(['yesterday', 'yesterday']);
   });
 
-  it('counts whole days from two days on', () => {
-    expect([agoOf(48 * 60), agoOf(9 * 24 * 60)]).toEqual(['2 d', '9 d']);
+  it('counts whole days from two days up to six', () => {
+    expect([agoOf(48 * 60), agoOf(6 * 24 * 60 + 23 * 60)]).toEqual(['2 d', '6 d']);
+  });
+
+  it('gives the date from a week on', () => {
+    expect([agoOf(7 * 24 * 60), agoOf(5 * 7 * 24 * 60)]).toEqual(['26 Oct', '28 Sep']);
   });
 
   it('says now for a time a little ahead of the clock', () => {
     expect(agoOf(-2)).toBe('now');
   });
 
-  it('says nothing while the ship did nothing yet', () => {
-    expect(ageOf(null, NOW)).toBeNull();
+  it('says there is no activity while the ship did nothing yet', () => {
+    expect(ageOf(null, NOW)).toBe('No activity yet');
   });
 });

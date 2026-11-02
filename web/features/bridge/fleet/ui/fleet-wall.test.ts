@@ -13,7 +13,7 @@ const GROUPS: YourFleet['groups'] = [
   { group: 'people', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9arg', name: 'argo', state: 'idle', note: null, lastActivityAt: null }] },
   { group: 'agents', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9orc', name: 'orchestrator-1', state: 'working', note: 'Cutting #189 into slices', lastActivityAt: '2026-11-02T11:59:30.000Z' }] },
   { group: 'plugins', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9tri', name: 'trierarch-plugin', state: 'waiting', note: 'Watching 12 sessions', lastActivityAt: '2026-11-02T11:35:00.000Z' }] },
-  { group: 'throughTheGateway', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9mem', name: 'company-memory', state: 'alert', note: 'Last call: search', lastActivityAt: '2026-11-02T09:00:00.000Z' }] },
+  { group: 'throughTheGateway', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9mem', name: 'company-memory', state: 'alert', note: 'Last call: search', lastActivityAt: '2026-10-20T09:00:00.000Z' }] },
 ];
 
 function wall(consoleUrl: string | undefined): string {
@@ -70,12 +70,12 @@ describe("a ship tile's last activity", () => {
   it('says when each ship last did something, at the foot beside its state', () => {
     const ages = [...wall(CONSOLE_URL).matchAll(/data-testid="fleet-tile-age"[^>]*>([^<]*)</g)].map(([, age]) => age);
 
-    expect(ages).toEqual(['now', '25 min', '3 h']);
+    expect(ages).toEqual(['No activity yet', 'now', '25 min', '20 Oct']);
   });
 
-  it('says nothing for a ship that did nothing yet, so its tile has no time', () => {
+  it('says No activity yet, muted, in the time\'s place for a ship that did nothing yet', () => {
     const argo = wall(CONSOLE_URL).split('data-testid="fleet-tile"').find((tile) => tile.includes('>argo<'));
 
-    expect(argo?.includes('data-testid="fleet-tile-age"')).toBe(false);
+    expect(argo?.match(/data-testid="fleet-tile-age" class="([^"]*)">No activity yet</)?.[1]).toBe('text-caption text-muted-foreground');
   });
 });
