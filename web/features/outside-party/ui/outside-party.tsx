@@ -81,7 +81,6 @@ export async function OutsideParty({ page, name, outcome }: { page: SignedInPage
   if (!read.isOk) {
     return (
       <div className="grid gap-4">
-        <Back fleetId={fleetId} />
         <Refusal>{read.refusal}</Refusal>
       </div>
     );
@@ -102,7 +101,6 @@ export async function OutsideParty({ page, name, outcome }: { page: SignedInPage
   );
   return (
     <div className="grid gap-4">
-      <Back fleetId={fleetId} />
       <PartyHead party={party} />
       <dl className={`${CARD} grid gap-3`}>
         <Fact label="Proxy ship">{party.proxyShipName ?? UNKNOWN}</Fact>
