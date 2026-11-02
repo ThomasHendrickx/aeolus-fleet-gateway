@@ -11,12 +11,18 @@ export interface DoneAtArgo {
   readonly signedInAccountId: string | null;
 }
 
+/** When a message left argo's open inbox, and the account that did it, as argo or itself; none when no account did. */
+export interface MessageDoneAtArgo {
+  readonly at: Date;
+  readonly accountId: string | null;
+}
+
 /**
  * argo's inbox as the gateway's ship reads it in a fleet:
- * - read: every message open there, oldest first, and the newest the ship saw done while following, if any;
+ * - read: argo's ship, every message open there, oldest first, and the newest the ship saw done while following, if any;
  * - notLetRead: argo has not added the read rule that lets the ship read it, or removed it.
  */
-export type ArgoInbox = { readonly kind: 'read'; readonly messages: readonly ArgoMessage[]; readonly lastDone: DoneAtArgo | null } | { readonly kind: 'notLetRead' };
+export type ArgoInbox = { readonly kind: 'read'; readonly argo: ShipId; readonly messages: readonly ArgoMessage[]; readonly lastDone: DoneAtArgo | null } | { readonly kind: 'notLetRead' };
 
 /** A message's title as an inbox lists it: its headline, else its first line, cut to the longest title. */
 export function argoTitleOf({ headline, payload }: Pick<ArgoInboxEntry, 'headline' | 'payload'>): string {

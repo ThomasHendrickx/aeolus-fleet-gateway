@@ -1,7 +1,8 @@
 /** argo's inbox as the gateway reads it, in memory for a test. */
 import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
-import type { ArgoAccount, ArgoAccounts, ArgoInboxChange, ArgoInboxDoor, ArgoInboxEntry, ArgoWakes } from '../../src/core/argo-inbox/ports.js';
+import type { ArgoSlackPost } from '../../src/core/argo-inbox/argo-slack-post.js';
+import type { ArgoAccount, ArgoAccounts, ArgoSlackPosts, ArgoInboxChange, ArgoInboxDoor, ArgoInboxEntry, ArgoWakes } from '../../src/core/argo-inbox/ports.js';
 import type { PersonShip, WakeChannelName } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
@@ -24,7 +25,7 @@ export function memoryArgoAccounts(): ArgoAccounts & { held: Map<FleetId, Map<st
 
 /** argo's ship in a test fleet. */
 export const ARGO_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9arg';
-/** The trierarch, which sends argo its biggest problems. */
+/** The trierarch of thomas-mac, named for its computer, which sends argo its biggest problems. */
 const TRIERARCH_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9trr';
 export const TRIERARCH = { shipId: TRIERARCH_SHIP_ID, name: 'trierarch' };
 
@@ -68,6 +69,10 @@ export function fakeArgoInboxFleet() {
     events: new Array<ArgoInboxChange>(),
     /** How many times every message to argo was read whole. */
     wholeReads: 0,
+    /** Each ship's type as the fleet answers it. */
+    types: new Map<ShipId, string>([[TRIERARCH_SHIP_ID, 'trierarch']]),
+    /** Each ship whose type was read, in order. */
+    typeReads: new Array<ShipId>(),
   };
   const change = (entry: ArgoInboxEntry, by: Omit<ArgoInboxChange, 'messageId'>) => {
     state.entries.set(entry.messageId, entry);
@@ -83,6 +88,11 @@ export function fakeArgoInboxFleet() {
         return state.isReadRuleOn ? [...state.entries.values()] : [];
       }),
     entry: (_crewToken, { messageId }) => refusedUnlessAnswering(() => (state.isReadRuleOn ? (state.entries.get(messageId) ?? null) : null)),
+    shipType: (_crewToken, shipId) =>
+      refusedUnlessAnswering(() => {
+        state.typeReads.push(shipId);
+        return state.types.get(shipId) ?? 'agent';
+      }),
     changes: (_crewToken, { afterSeq }) => refusedUnlessAnswering(() => ({ changes: state.isReadRuleOn ? state.events.slice(afterSeq) : [], lastSeq: state.events.length })),
   };
   return {
@@ -90,14 +100,49 @@ export function fakeArgoInboxFleet() {
     door,
     /** A ship sends argo a message: core stores it Open and unread. */
     send: (entry: ArgoInboxEntry) => {
-      change(entry, { occurredAt: entry.sentAt, actorShipId: entry.sender.shipId, signedInAccountId: null });
+      change(entry, { occurredAt: entry.sentAt, actorShipId: entry.sender.shipId, signedInAccountId: null, actorAccountId: null });
     },
     /** argo marks it done, in the console by the account signed in as argo unless told otherwise. */
-    markDone: (messageId: MessageId, done: { at?: Date; signedInAccountId?: string | null } = {}) => {
+    markDone: (messageId: MessageId, done: { at?: Date; signedInAccountId?: string | null; actorAccountId?: string | null } = {}) => {
       const entry = state.entries.get(messageId);
       if (entry !== undefined) {
-        change({ ...entry, deliveryState: 'acknowledged' }, { occurredAt: done.at ?? DONE_AT, actorShipId: ARGO_SHIP_ID, signedInAccountId: done.signedInAccountId === undefined ? MATHILDE_ACCOUNT_ID : done.signedInAccountId });
+        change(
+          { ...entry, deliveryState: 'acknowledged' },
+          { occurredAt: done.at ?? DONE_AT, actorShipId: ARGO_SHIP_ID, signedInAccountId: done.signedInAccountId === undefined ? MATHILDE_ACCOUNT_ID : done.signedInAccountId, actorAccountId: done.actorAccountId ?? null },
+        );
       }
+    },
+  };
+}
+
+/** The messages open at argo in Slack, in memory, one per fleet, person ship and message. */
+export function memoryArgoSlackPosts(): ArgoSlackPosts & { held: ArgoSlackPost[] } {
+  const held = new Array<ArgoSlackPost>();
+  const indexOf = (fleetId: FleetId, { personShipId, messageId }: { personShipId: ShipId; messageId: MessageId }) =>
+    held.findIndex((post) => post.fleetId === fleetId && post.personShipId === personShipId && post.messageId === messageId);
+  return {
+    held,
+    list: (fleetId) => Promise.resolve(held.filter((post) => post.fleetId === fleetId)),
+    keep: (post) => {
+      if (indexOf(post.fleetId, post) !== -1) {
+        return Promise.resolve('known');
+      }
+      held.push(post);
+      return Promise.resolve('kept');
+    },
+    save: (post) => {
+      const index = indexOf(post.fleetId, post);
+      if (index !== -1) {
+        held[index] = post;
+      }
+      return Promise.resolve();
+    },
+    remove: (fleetId, post) => {
+      const index = indexOf(fleetId, post);
+      if (index !== -1) {
+        held.splice(index, 1);
+      }
+      return Promise.resolve();
     },
   };
 }

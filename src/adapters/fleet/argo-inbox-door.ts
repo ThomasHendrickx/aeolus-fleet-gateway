@@ -2,11 +2,12 @@
  * argo's inbox as the gateway's own ship reads it through core's public
  * ship contract, by its crew token and within its read reach (argo's inbox,
  * AI9; decision 0034): argo by fleet.list, the fleet's events by
- * fleet.follow, with who caused each change, and argo's messages by
- * fleet.shipMessages and, read whole with their payloads, fleet.message,
- * which have no REST door, so they go over tRPC with the crew token.
+ * fleet.follow, with who caused each change, and a sender's type by
+ * fleet.ship, and argo's messages by fleet.shipMessages and, read whole with
+ * their payloads, fleet.message, which have no REST door, so they go over
+ * tRPC with the crew token.
  */
-import { FOLLOW_MAX_LIMIT, FOLLOW_WAIT_MAX_SECONDS, followFleetOutputSchema, messageOutputSchema, shipMessagesOutputSchema, type MessageId, type ShipId } from '@aeolus-fleet/common';
+import { FOLLOW_MAX_LIMIT, FOLLOW_WAIT_MAX_SECONDS, followFleetOutputSchema, messageOutputSchema, shipMessagesOutputSchema, shipOutputSchema, type MessageId, type ShipId } from '@aeolus-fleet/common';
 import { PAGE_SIZE_MAX } from '@aeolus-fleet/common/rules';
 import type { z } from 'zod';
 
@@ -77,14 +78,18 @@ export function createArgoInboxDoor(options: { fleetUrl: string }): ArgoInboxDoo
       const { contentType, payload } = read.value;
       return ok(listed === null ? null : { ...listed, payload, ...questionPartsOf({ contentType, payload }) });
     },
+    shipType: async (crewToken, shipId) => {
+      const read = parsedAs(shipOutputSchema, await readAs(fleetUrl, { as: { crewToken }, procedure: 'ship', input: { shipId } }));
+      return read.isOk ? ok(read.value.type) : read;
+    },
     changes: async (crewToken, { argo, afterSeq, signal }) => {
       const input = { afterSeq, max: FOLLOW_MAX_LIMIT, waitSeconds: FOLLOW_WAIT_MAX_SECONDS };
       const followed = parsedAs(followFleetOutputSchema, await readAs(fleetUrl, { as: { crewToken }, procedure: 'follow', input, signal }));
       if (!followed.isOk) {
         return followed;
       }
-      const changes = followed.value.events.flatMap(({ shipId, messageId, occurredAt, actorShipId, actorSignedInAccountId }) =>
-        shipId === argo && messageId !== null ? [{ messageId, occurredAt: new Date(occurredAt), actorShipId, signedInAccountId: actorSignedInAccountId }] : [],
+      const changes = followed.value.events.flatMap(({ shipId, messageId, occurredAt, actorShipId, actorSignedInAccountId, actorAccountId }) =>
+        shipId === argo && messageId !== null ? [{ messageId, occurredAt: new Date(occurredAt), actorShipId, signedInAccountId: actorSignedInAccountId, actorAccountId }] : [],
       );
       return ok({ changes, lastSeq: followed.value.lastSeq });
     },

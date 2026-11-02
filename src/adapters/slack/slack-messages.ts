@@ -26,13 +26,14 @@ export const DONE_ACTION = 'done';
 const OPEN_ACTION = 'open';
 
 /** The colour at an item's side, as views.html draws it. */
-const TONE_COLORS = { asking: '#4a6fa5', aware: '#dddddd', done: '#2eb67d', ended: '#dddddd' } as const satisfies Record<SlackTone, string>;
+const TONE_COLORS = { asking: '#4a6fa5', aware: '#dddddd', argo: '#8ea6ff', done: '#2eb67d', ended: '#dddddd' } as const satisfies Record<SlackTone, string>;
 
 /** An item's colour back to its side: grey reads as aware, as an ended item's post shows nothing else that differs. */
 const COLOR_TONES = new Map<string, SlackTone>([
   [TONE_COLORS.asking, 'asking'],
   [TONE_COLORS.done, 'done'],
   [TONE_COLORS.aware, 'aware'],
+  [TONE_COLORS.argo, 'argo'],
 ]);
 
 /** The heading's block, named by the asker, so an edit reads who asked. */
@@ -46,7 +47,7 @@ const postedMessageSchema = z.object({ ok: z.literal(true), channel: z.string(),
 /** What the gateway says when Slack answers no message at the time asked, as Slack names a message it does not have. */
 const MESSAGE_NOT_FOUND = 'message_not_found';
 
-/** A button as Slack shows it: an option, named by its number, the pick's filled; Open on a link, filled; Done; or Seen. */
+/** A button as Slack shows it: an option, named by its number, the pick's filled; Open on a link, filled unless plain; Done; or Seen. */
 function elementOf(button: SlackButton) {
   const text = { type: 'plain_text', text: button.text };
   if ('option' in button) {
@@ -54,7 +55,7 @@ function elementOf(button: SlackButton) {
     return { type: 'button', action_id: `${ANSWER_PREFIX}${option}`, text, value: option, ...(button.isPicked ? { style: 'primary' } : {}) };
   }
   if ('url' in button) {
-    return { type: 'button', action_id: OPEN_ACTION, text, url: button.url, value: OPEN_ACTION, style: 'primary' };
+    return { type: 'button', action_id: OPEN_ACTION, text, url: button.url, value: OPEN_ACTION, ...(button.isPlain === true ? {} : { style: 'primary' }) };
   }
   return 'isDone' in button ? { type: 'button', action_id: DONE_ACTION, text, value: DONE_ACTION } : { type: 'button', action_id: SEEN_ACTION, text, value: SEEN_ACTION };
 }
@@ -112,7 +113,7 @@ function buttonOf(element: NonNullable<Block['elements']>[number]): SlackButton 
     return { text, option: Number(action.slice(ANSWER_PREFIX.length)), isPicked: element.style === 'primary' };
   }
   if (action === OPEN_ACTION && element.url !== undefined) {
-    return { text, url: element.url };
+    return { text, url: element.url, ...(element.style === undefined ? { isPlain: true as const } : {}) };
   }
   if (action === DONE_ACTION) {
     return { text, isDone: true };

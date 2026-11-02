@@ -66,6 +66,7 @@ describe("the gateway's ship reading argo's inbox", () => {
 
     expect(follow.inboxOf(FLEET_ID)).toEqual({
       kind: 'read',
+      argo: ARGO_SHIP_ID,
       messages: [{ messageId: anArgoEntry(1).messageId, deliveryId: anArgoEntry(1).deliveryId, sender: anArgoEntry(1).sender, contentType: 'text/markdown', sentAt: anArgoEntry(1).sentAt, title: 'Report 001 to argo', askedQuestionId: null, withdrawnQuestionId: null }],
       lastDone: null,
     });
@@ -122,6 +123,28 @@ describe("the gateway's ship reading argo's inbox", () => {
     await follow.round(signal);
 
     expect({ unchanged, then: changed }).toEqual({ unchanged: [FLEET_ID], then: [FLEET_ID, FLEET_ID] });
+  });
+
+  it('keeps when a message was done at argo and by which account signed in as argo', async () => {
+    fleet.send(anArgoEntry(1));
+    const follow = following();
+    await follow.round(signal);
+
+    fleet.markDone(anArgoEntry(1).messageId, { at: new Date('2026-11-01T20:14:00.000Z'), signedInAccountId: 'acc-mathilde' });
+    await follow.round(signal);
+
+    expect(follow.doneAtArgo(FLEET_ID, anArgoEntry(1).messageId)).toEqual({ at: new Date('2026-11-01T20:14:00.000Z'), accountId: 'acc-mathilde' });
+  });
+
+  it('knows nothing of who did a message it did not see done, as one done while the gateway was down', async () => {
+    fleet.send(anArgoEntry(1));
+    await following().round(signal);
+    fleet.markDone(anArgoEntry(1).messageId, { signedInAccountId: 'acc-mathilde' });
+
+    const restarted = following();
+    await restarted.round(signal);
+
+    expect(restarted.doneAtArgo(FLEET_ID, anArgoEntry(1).messageId)).toBeUndefined();
   });
 
   it('reads the open inbox again whole on a restart and loses nothing, what came while it was down included', async () => {

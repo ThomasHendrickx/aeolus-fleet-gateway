@@ -234,17 +234,18 @@ export interface SlackEvents {
 /**
  * A button under a post: under a question, its option's number and label,
  * the option it answers, and whether it is the asker's pick, filled; under a
- * step, Open on its link and Done; or Seen, under an item with no other
- * (Bridge, section 6).
+ * step, Open on its link and Done, Open filled; under what waits at argo,
+ * Open in the console as argo, plain (argo's inbox, AI2); or Seen, under an
+ * item with no other (Bridge, section 6).
  */
 export type SlackButton =
   | { readonly text: string; readonly option: number; readonly isPicked: boolean }
-  | { readonly text: string; readonly url: string }
+  | { readonly text: string; readonly url: string; readonly isPlain?: true }
   | { readonly text: string; readonly isDone: true }
   | { readonly text: string; readonly isSeen: true };
 
-/** How an item's post is marked at its side (views.html): asking while it waits on the person, aware for what only tells, done once answered, done or seen, ended for any other outcome. */
-export type SlackTone = 'asking' | 'aware' | 'done' | 'ended';
+/** How an item's post is marked at its side (views.html): asking while it waits on the person, aware for what only tells, argo for what waits at argo (argo's inbox, AI4), done once answered, done or seen, ended for any other outcome. */
+export type SlackTone = 'asking' | 'aware' | 'argo' | 'done' | 'ended';
 
 /**
  * An item as its post in Slack shows it (Bridge, views.html): headed by its

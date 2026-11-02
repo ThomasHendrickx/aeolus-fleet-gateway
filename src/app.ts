@@ -187,6 +187,8 @@ import { createPrismaArgoAccounts } from './adapters/prisma/argo-accounts.js';
 import { createArgoInboxDoor } from './adapters/fleet/argo-inbox-door.js';
 import { createFollowArgoInbox } from './core/argo-inbox/follow-argo-inbox.js';
 import { createReadArgoInboxNotice } from './core/argo-inbox/read-argo-inbox-notice.js';
+import { createShowArgoInboxInSlack } from './core/argo-inbox/show-argo-inbox-in-slack.js';
+import { createPrismaArgoSlackPosts } from './adapters/prisma/argo-slack-posts.js';
 import { createReadArgoSection } from './core/argo-inbox/read-argo-section.js';
 import { createWakeForArgo } from './core/argo-inbox/wake-for-argo.js';
 import { createPersonWakes } from './core/people/person-wakes.js';
@@ -800,10 +802,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     log: server.log,
   });
   // The gateway's own ship reads argo's open inbox by the read rule argo adds, whole at the start, then following each change (argo's inbox, AI9).
+  const argoInboxDoor = createArgoInboxDoor({ fleetUrl: options.fleetUrl });
   // Each change to what it holds has the pages of that fleet read themselves again, so what was done at argo leaves them at once.
   const followArgoInbox = createFollowArgoInbox({
     connections,
-    door: createArgoInboxDoor({ fleetUrl: options.fleetUrl }),
+    door: argoInboxDoor,
     onChanged: (fleetId) => {
       hub.publish({ fleetId, topic: 'argoInbox' });
     },
@@ -980,6 +983,23 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       return ship?.isOk === true ? ship.value.name : undefined;
     },
   };
+  // What waits at argo is posted in Slack to each person allowed as argo who turned it on, and edited once done at argo (argo's inbox, AI4).
+  const showArgoInboxInSlack = createShowArgoInboxInSlack({
+    connections,
+    inboxOf: followArgoInbox.inboxOf,
+    doneAtArgo: followArgoInbox.doneAtArgo,
+    door: argoInboxDoor,
+    accounts: argoAccounts,
+    posts: createPrismaArgoSlackPosts(prisma),
+    links: slackLinks,
+    apps: slackApps,
+    slack: slackMessages,
+    routes,
+    defaults: routingDefaults,
+    shipNames,
+    argoMessageUrlOf: (deliveryId) => `${options.fleetUrl}/inbox?message=${encodeURIComponent(deliveryId)}`,
+  });
+  const argoInboxInSlack = createRoundWorker({ name: "argo's inbox in Slack", round: showArgoInboxInSlack, sleep, intervalMs: POLL_MS, log: server.log });
   const slackShips = createSlackShips({ fleetUrl: options.fleetUrl, crewTokenOf: async (fleetId) => (await connections.find(fleetId))?.crewToken, ships: createFleetShips(options.fleetUrl), asActor: createProxyShipsAsActor(options.fleetUrl) });
   // Which outside party a ship is the proxy ship of: a fleet has few parties.
   const proxyShips: ProxyShipKinds = { kindOf: async (fleetId, shipId) => (await parties.list(fleetId)).find((party) => party.proxyShipId === shipId)?.kind };
@@ -1193,6 +1213,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       basketSends.start();
       slackEdits.start();
       argoInboxFollower.start();
+      argoInboxInSlack.start();
       argoWakes.start();
       grantKeeper.start();
       return restored;
@@ -1208,6 +1229,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       // A follow waits up to 25 s while argo's inbox does not change: aborted, the round under way ends at once.
       argoInboxStopping.abort();
       await argoInboxFollower.stop();
+      await argoInboxInSlack.stop();
       await argoWakes.stop();
       await grantKeeper.stop();
       await workers.stop();
