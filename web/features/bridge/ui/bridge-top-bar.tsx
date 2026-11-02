@@ -40,7 +40,7 @@ function Back({ fleetId, hasBack, opened }: { fleetId: string; hasBack: boolean;
  * is open from home), and Live. On the phone the
  * screen title, an item open in place of its list named by it, with a back
  * chevron where it leads back, the page's action (home: send a ship a
- * message, as the #1560 sheet draws it), Live and the avatar. Live shows while the
+ * message, as the #1560 sheet draws it), then Live and the avatar. Live shows while the
  * page follows its changes.
  */
 export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, phoneAction, avatar }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; isLive: boolean; opened: OpenedItem | undefined; phoneAction: ReactNode; avatar: ReactNode }) {
@@ -56,13 +56,13 @@ export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, phone
       <span data-testid="bridge-title" className={`min-w-0 flex-1 truncate font-semibold tracking-tight sm:hidden ${hasBack || opened !== undefined ? 'text-lg' : 'text-title-touch'}`}>
         {opened?.title ?? phoneTitle}
       </span>
+      {phoneAction === null ? null : <span className="sm:hidden">{phoneAction}</span>}
       {isLive ? (
         <span data-testid="bridge-live" className="inline-flex items-center gap-1.5 text-meta text-muted-foreground">
           <i aria-hidden className="inline-block size-2 rounded-full bg-tone-ok-fg" />
           Live
         </span>
       ) : null}
-      {phoneAction === null ? null : <span className="sm:hidden">{phoneAction}</span>}
       <span className="sm:hidden">{avatar}</span>
     </header>
   );
