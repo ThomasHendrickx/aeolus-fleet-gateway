@@ -48,6 +48,10 @@ describe('a ship tile on Your fleet', () => {
     expect((wall(CONSOLE_URL).match(/data-testid="fleet-tile-live"/g) ?? []).length).toBe(1);
   });
 
+  it('stands the live band still under reduced motion, a solid line with no running light', () => {
+    expect(wall(CONSOLE_URL).includes('motion-reduce:animate-none motion-reduce:bg-none')).toBe(true);
+  });
+
   it('shows the arrow on hover and on keyboard focus', () => {
     const markup = wall(CONSOLE_URL);
 

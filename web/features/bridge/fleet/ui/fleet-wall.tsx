@@ -85,7 +85,7 @@ function Tile({ group, tile, consoleUrl }: { group: FleetGroup; tile: FleetTile;
           <i
             data-testid="fleet-tile-live"
             aria-hidden="true"
-            className="absolute inset-x-0 bottom-0 h-0.5 animate-live-band bg-[linear-gradient(90deg,transparent,currentColor,transparent)] bg-size-[40%_100%] bg-no-repeat opacity-70 motion-reduce:animate-none motion-reduce:bg-current motion-reduce:opacity-35"
+            className="absolute inset-x-0 bottom-0 h-0.5 animate-live-band bg-[linear-gradient(90deg,transparent,currentColor,transparent)] bg-size-[40%_100%] bg-no-repeat opacity-70 motion-reduce:animate-none motion-reduce:bg-none motion-reduce:bg-current motion-reduce:opacity-35"
           />
         ) : null}
       </TileFrame>
