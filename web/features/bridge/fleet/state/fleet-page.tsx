@@ -11,7 +11,7 @@ import { FleetWall } from '../ui/fleet-wall';
  * headed Your fleet with Harbour's lead line; then a tile per ship in its
  * group.
  */
-export function FleetPage({ read }: { read: FleetRead }) {
+export function FleetPage({ read, consoleUrl }: { read: FleetRead; consoleUrl: string | undefined }) {
   return (
     <section className="grid gap-4" aria-labelledby="bridge-fleet-heading">
       <div>
@@ -24,7 +24,7 @@ export function FleetPage({ read }: { read: FleetRead }) {
       {read.kind === 'read' ? (
         <>
           <FleetNumbers fleet={read.value} isShipCountShown />
-          <FleetWall groups={read.value.groups} tileColumns="grid-cols-3 sm:grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))]" />
+          <FleetWall groups={read.value.groups} consoleUrl={consoleUrl} tileColumns="grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]" />
         </>
       ) : read.kind === 'unreadable' ? (
         <FleetUnreadable message={read.message} />
