@@ -79,10 +79,10 @@ describe('Your fleet beside Bridge home', () => {
 });
 
 describe("the phone's Fleet tab", () => {
-  it('is headed Fleet on the phone, straight to the numbers, as Harbour\'s phone; the lead line only on a wider screen', () => {
+  it("leaves the heading to the phone's top bar, straight to the numbers, as Harbour's phone; Your fleet and the lead line on a wider screen", () => {
     const markup = renderToStaticMarkup(createElement(FleetPage, { consoleUrl: undefined, read: { kind: 'read', value: FLEET } }));
 
-    expect([markup.includes('<span class="sm:hidden">Fleet</span>'), markup.includes('<span class="max-sm:hidden">Your fleet</span>'), markup.includes('<p class="max-sm:hidden text-muted-foreground">4 ships:')]).toEqual([true, true, true]);
+    expect([/<h1[^>]*class="[^"]*max-sm:sr-only[^"]*"[^>]*>Your fleet<\/h1>/.test(markup), markup.includes('<p class="max-sm:hidden text-muted-foreground">4 ships:')]).toEqual([true, true]);
   });
 
   it('shows five numbers, the ships then each state, and the tiles', () => {

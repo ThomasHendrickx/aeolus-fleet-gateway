@@ -8,25 +8,25 @@ import { openedScreenOf, screenOf, shellCountsOf } from './shell';
 
 describe("Bridge's screens", () => {
   it('names home Bridge, in the breadcrumb and as the phone title, with no way back and Waiting current', () => {
-    expect(screenOf('home')).toEqual({ name: 'Bridge', hasBack: false, tab: 'waiting' });
+    expect(screenOf('home')).toEqual({ name: 'Bridge', phoneTitle: 'Bridge', hasBack: false, tab: 'waiting' });
   });
 
-  it('names each other page as the sidebar does, the tab its page is under current', () => {
+  it('names each other page as the sidebar does, the Fleet tab as its tab on the phone, the tab its page is under current', () => {
     expect((['stay-aware', 'done', 'fleet'] as const).map((screen) => screenOf(screen))).toEqual([
-      { name: 'Stay aware', hasBack: false, tab: 'aware' },
-      { name: 'Done', hasBack: false, tab: 'done' },
-      { name: 'Your fleet', hasBack: false, tab: 'fleet' },
+      { name: 'Stay aware', phoneTitle: 'Stay aware', hasBack: false, tab: 'aware' },
+      { name: 'Done', phoneTitle: 'Done', hasBack: false, tab: 'done' },
+      { name: 'Your fleet', phoneTitle: 'Fleet', hasBack: false, tab: 'fleet' },
     ]);
   });
 
   it('leads back from the basket to home, under Waiting', () => {
-    expect(screenOf('basket')).toEqual({ name: 'Basket', hasBack: true, tab: 'waiting' });
+    expect(screenOf('basket')).toEqual({ name: 'Basket', phoneTitle: 'Basket', hasBack: true, tab: 'waiting' });
   });
 
   it('leads back from the settings, under no tab', () => {
     expect((['routing', 'settings'] as const).map((screen) => screenOf(screen))).toEqual([
-      { name: 'Where things show', hasBack: true, tab: null },
-      { name: 'Settings', hasBack: true, tab: null },
+      { name: 'Where things show', phoneTitle: 'Where things show', hasBack: true, tab: null },
+      { name: 'Settings', phoneTitle: 'Settings', hasBack: true, tab: null },
     ]);
   });
 });

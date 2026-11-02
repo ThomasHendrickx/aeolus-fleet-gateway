@@ -30,6 +30,10 @@ describe("Bridge home's title row, across what waits and Your fleet (#189, 4)", 
     expect(markup.includes('1 to decide, 0 to do.')).toBe(true);
   });
 
+  it('titles the page at 20 px on a wider screen and 22 px on the phone, as the mockups draw it', () => {
+    expect(/<h1[^>]*class="[^"]*text-title sm:text-heading-touch/.test(heading())).toBe(true);
+  });
+
   it('says nothing waits when nothing does', () => {
     expect(heading({ count: 0, items: [] }).includes('Nothing waits on you.')).toBe(true);
   });
