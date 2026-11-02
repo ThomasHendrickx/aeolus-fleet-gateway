@@ -1,26 +1,38 @@
+import { harbourOutputSchema } from '@aeolus-fleet/common';
+import { PAGE_SIZE_MAX } from '@aeolus-fleet/common/rules';
+
+import type { ListedShip } from '../../core/people/your-fleet.js';
 import type { ActiveShips } from '../../core/people/ports.js';
-import { ok } from '../../core/shared/result.js';
-import { everyListedShip } from './every-listed-ship.js';
+import { err, ok } from '../../core/shared/result.js';
+import { readAs } from './actor-door.js';
 
 /**
- * The fleet's active ships as the actor reads them (fleet.list, decision
- * 0057), for Your fleet: retired ships are filtered out in the fleet's own
- * query, and each ship comes with its kind, its crew's report and its open
- * alerts.
+ * The fleet's active ships as the actor reads them, for Your fleet: core's
+ * Harbour (fleet.harbour, docs/design/fleet-overview) answers each ship's
+ * tile within the actor's read reach, with its kind, the state core worded,
+ * its crew's note and when it last did something. The fleet answers a page
+ * at a time (performance S6), so the read goes on from each page's next
+ * cursor until it is null. Harbour has no REST door, so it goes over tRPC
+ * with the headers a REST call carries.
  */
 export function createActiveShips(fleetUrl: string): ActiveShips {
   return {
     list: async (as) => {
-      const listed = await everyListedShip(fleetUrl, { as, filter: { status: ['awaitingCrew', 'crewed'] } });
-      if (!listed.isOk) {
-        return listed;
-      }
-      return ok(
-        listed.value.flatMap(({ id, name, kind, status, report, openAlertCount }) =>
-          // The filter asked for no retired ship; one answered anyway is left out.
-          status === 'retired' ? [] : [{ shipId: id, name, kind, status, report: report === null ? null : { state: report.state, note: report.note }, openAlertCount }],
-        ),
-      );
+      const ships: ListedShip[] = [];
+      let cursor: string | undefined;
+      do {
+        const read = await readAs(fleetUrl, { as, procedure: 'harbour', input: { ...(cursor === undefined ? {} : { cursor }), limit: PAGE_SIZE_MAX }, isTrpcOnly: true });
+        if (!read.isOk) {
+          return read;
+        }
+        const page = harbourOutputSchema.safeParse(read.value);
+        if (!page.success) {
+          return err({ code: 'UNAVAILABLE', message: 'The fleet answered no ships' });
+        }
+        ships.push(...page.data.items.map(({ id, name, kind, state, note, lastActivityAt }) => ({ shipId: id, name, kind, state, note, lastActivityAt })));
+        cursor = page.data.nextCursor ?? undefined;
+      } while (cursor !== undefined);
+      return ok(ships);
     },
   };
 }

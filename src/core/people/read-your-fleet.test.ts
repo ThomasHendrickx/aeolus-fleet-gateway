@@ -18,7 +18,7 @@ const SENT: ActorCredential = {};
 const AS_ACCOUNT: ActorCredential = { crewToken: 'aeolus_ct_v1_gateway', accountToken: 'aeolus_at_v1_thomas' };
 const credentialOf: CredentialOf = () => Promise.resolve(ok(AS_ACCOUNT));
 
-const REVIEWER: ListedShip = { shipId: 'shp_01m3tbfspe96yf1rnr4ank9rev', name: 'reviewer', kind: 'agent', status: 'crewed', report: { state: 'working', note: 'reviewing #165' }, openAlertCount: 0 };
+const REVIEWER: ListedShip = { shipId: 'shp_01m3tbfspe96yf1rnr4ank9rev', name: 'reviewer', kind: 'agent', state: 'working', note: 'reviewing #165', lastActivityAt: '2026-11-01T12:00:00.000Z' };
 
 /** The fleet's ships, as each credential reads them. */
 function activeShips(answer: { readonly ships: readonly ListedShip[] } | FleetRefusal): ActiveShips & { readAs: ActorCredential[] } {
@@ -48,7 +48,7 @@ describe('a person reads Your fleet', () => {
       ok({
         shipCount: 1,
         counts: { alert: 0, waiting: 0, working: 1, idle: 0 },
-        groups: [{ group: 'agents', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9rev', name: 'reviewer', state: 'working', note: 'reviewing #165' }] }],
+        groups: [{ group: 'agents', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9rev', name: 'reviewer', state: 'working', note: 'reviewing #165', lastActivityAt: '2026-11-01T12:00:00.000Z' }] }],
       }),
     );
   });

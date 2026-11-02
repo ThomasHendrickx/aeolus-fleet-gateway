@@ -3,47 +3,29 @@ import { describe, expect, it } from 'vitest';
 import { yourFleetOf, type ListedShip } from './your-fleet.js';
 
 // Your fleet (Bridge home, as Harbour draws it, docs/design/fleet-overview):
-// each ship in one of four states, Alert, Waiting, Working or Idle, and in one
+// each ship in one of four states, as core words them, and in one
 // group by its kind: People, Agents, Plugins, Through the gateway.
 
 let next = 0;
 
 function aShip(overrides: Partial<ListedShip>): ListedShip {
   next += 1;
-  return { shipId: `shp_01m3tbfspe96yf1rnr4ank9c${String(next).padStart(2, '0')}`, name: `ship-${String(next)}`, kind: 'agent', status: 'crewed', report: null, openAlertCount: 0, ...overrides };
+  return { shipId: `shp_01m3tbfspe96yf1rnr4ank9c${String(next).padStart(2, '0')}`, name: `ship-${String(next)}`, kind: 'agent', state: 'idle', note: null, lastActivityAt: null, ...overrides };
 }
 
-function stateOf(ship: ListedShip): string | undefined {
-  return yourFleetOf([ship]).groups[0]?.tiles[0]?.state;
+function tileOf(ship: ListedShip) {
+  return yourFleetOf([ship]).groups[0]?.tiles[0];
 }
 
-describe("a ship's state in your fleet", () => {
-  it('is Alert while it has an open alert, whatever its report says', () => {
-    expect(stateOf(aShip({ openAlertCount: 1, report: { state: 'working', note: null } }))).toBe('alert');
+describe("a ship's tile in your fleet", () => {
+  it("carries the state core worded, the crew's note and when the ship last did something", () => {
+    const ship = aShip({ name: 'reviewer', state: 'working', note: 'building slice 3', lastActivityAt: '2026-11-01T12:00:00.000Z' });
+
+    expect(tileOf(ship)).toEqual({ shipId: ship.shipId, name: 'reviewer', state: 'working', note: 'building slice 3', lastActivityAt: '2026-11-01T12:00:00.000Z' });
   });
 
-  it('is Waiting while it awaits crew', () => {
-    expect(stateOf(aShip({ status: 'awaitingCrew' }))).toBe('waiting');
-  });
-
-  it('is Waiting while its crew reports it is blocked', () => {
-    expect(stateOf(aShip({ report: { state: 'blocked', note: 'needs a decision' } }))).toBe('waiting');
-  });
-
-  it('is Working while its crew reports working', () => {
-    expect(stateOf(aShip({ report: { state: 'working', note: null } }))).toBe('working');
-  });
-
-  it('is Idle while its crew reports idle', () => {
-    expect(stateOf(aShip({ report: { state: 'idle', note: null } }))).toBe('idle');
-  });
-
-  it('is Idle while its crew has reported nothing', () => {
-    expect(stateOf(aShip({ report: null }))).toBe('idle');
-  });
-
-  it("carries the crew's note, so the tile can say what the ship is doing", () => {
-    expect(yourFleetOf([aShip({ report: { state: 'working', note: 'building slice 3' } })]).groups[0]?.tiles[0]?.note).toBe('building slice 3');
+  it('carries no time while the ship did nothing yet', () => {
+    expect(tileOf(aShip({ lastActivityAt: null }))?.lastActivityAt).toBeNull();
   });
 });
 
@@ -71,11 +53,11 @@ describe('the groups of your fleet', () => {
 
   it('orders each group alerts first, then waiting, working and idle, ties by name', () => {
     const fleet = yourFleetOf([
-      aShip({ name: 'walker-1', report: { state: 'idle', note: null } }),
-      aShip({ name: 'reviewer', report: { state: 'working', note: null } }),
-      aShip({ name: 'builder-core', report: { state: 'working', note: null } }),
-      aShip({ name: 'orchestrator-1', report: { state: 'blocked', note: null } }),
-      aShip({ name: 'builder-gateway', openAlertCount: 2 }),
+      aShip({ name: 'walker-1', state: 'idle' }),
+      aShip({ name: 'reviewer', state: 'working' }),
+      aShip({ name: 'builder-core', state: 'working' }),
+      aShip({ name: 'orchestrator-1', state: 'waiting' }),
+      aShip({ name: 'builder-gateway', state: 'alert' }),
     ]);
 
     expect(fleet.groups[0]?.tiles.map(({ name }) => name)).toEqual(['builder-gateway', 'orchestrator-1', 'builder-core', 'reviewer', 'walker-1']);
@@ -85,10 +67,10 @@ describe('the groups of your fleet', () => {
 describe('the numbers of your fleet', () => {
   it('counts the ships, and how many are in each state', () => {
     const fleet = yourFleetOf([
-      aShip({ openAlertCount: 1 }),
-      aShip({ status: 'awaitingCrew' }),
-      aShip({ report: { state: 'blocked', note: null } }),
-      aShip({ kind: 'plugin', report: { state: 'working', note: null } }),
+      aShip({ state: 'alert' }),
+      aShip({ state: 'waiting' }),
+      aShip({ state: 'waiting' }),
+      aShip({ kind: 'plugin', state: 'working' }),
       aShip({ kind: 'person' }),
     ]);
 
