@@ -19,7 +19,7 @@ Only the layout widths and Your fleet's tiles change. Everything else is as the 
 | The page | Stops at 1024 px (`max-w-5xl`), the rest of the window empty | Takes the window beside the sidebar |
 | What waits | Whatever is left beside Your fleet | At most 44rem, its reading width |
 | Your fleet | A fixed 20rem column | The rest of the window, at least 20rem |
-| A tile's size | 52 px high, three a row | At least 112 px high and 12rem wide, about 16:9: four a row at 1900, two at 1440 and on the phone |
+| A tile's size | 52 px high, three a row | At least 112 px high and 14rem wide: three a row at 1900, one at 1440 (the full column width), two on the phone |
 | A tile's content | The name, cut, and the state | A small icon for the ship's kind, the whole name, what the ship is doing (its report, two lines at most), the state and when it last did something |
 | The kind icon | None | At the tile's top left, in a 22 px square in the state's tone, Lucide as Bridge uses it: a person (People), a terminal (Agents), a plug (Plugins), a network (Through the gateway), the same icons as the group headings |
 | Working | A green tile | A green tile with a band of light running along its foot every 2.4 s |

@@ -30,10 +30,10 @@ describe('each ship the form offers, with its state as Your fleet shows it', () 
       {
         group: 'agents',
         tiles: [
-          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bgw', name: 'builder-gateway', state: 'alert', note: null },
-          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9or1', name: 'orchestrator-1', state: 'waiting', note: null },
-          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bco', name: 'builder-core', state: 'working', note: null },
-          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bui', name: 'builder-ui', state: 'idle', note: null },
+          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bgw', name: 'builder-gateway', state: 'alert', note: null, lastActivityAt: null },
+          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9or1', name: 'orchestrator-1', state: 'waiting', note: null, lastActivityAt: null },
+          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bco', name: 'builder-core', state: 'working', note: null, lastActivityAt: null },
+          { shipId: 'shp_01m3tbfspe96yf1rnr4ank9bui', name: 'builder-ui', state: 'idle', note: null, lastActivityAt: null },
         ],
       },
     ],

@@ -2,20 +2,22 @@
  * Your fleet (Bridge home, as Harbour draws it, docs/design/fleet-overview):
  * every active ship the person reads, each in one of four states and one
  * group by its kind, with the numbers on top. The state and the group come
- * only from what core answers of the ship: its status, its crew's report and
- * its open alerts, and its kind (decision 0044).
+ * only from what core answers of the ship in Harbour: its state, its crew's
+ * note, when it last did something and its kind (decision 0044).
  */
-import type { ReportState, ShipId, ShipKind } from '@aeolus-fleet/common';
+import type { ShipId, ShipKind } from '@aeolus-fleet/common';
 
 /** An active ship as the fleet lists it to the person: retired ships are not listed. */
 export interface ListedShip {
   readonly shipId: ShipId;
   readonly name: string;
   readonly kind: ShipKind;
-  readonly status: 'awaitingCrew' | 'crewed';
-  /** What its crew last reported; null while it reported nothing. */
-  readonly report: { readonly state: ReportState; readonly note: string | null } | null;
-  readonly openAlertCount: number;
+  /** The state core worded for the ship (Harbour): an alert, waiting, working or idle. */
+  readonly state: ShipState;
+  /** What its crew last said it is doing; null when it said nothing. */
+  readonly note: string | null;
+  /** When the ship last did something, as an ISO time; null while it did nothing yet. */
+  readonly lastActivityAt: string | null;
 }
 
 /** The four states, in the order a group shows them: what needs the person first. */
@@ -32,6 +34,8 @@ export interface FleetTile {
   readonly state: ShipState;
   /** What the ship is doing, as its crew last said; null when it said nothing. */
   readonly note: string | null;
+  /** When the ship last did something, as an ISO time; null while it did nothing yet. */
+  readonly lastActivityAt: string | null;
 }
 
 export interface YourFleet {
@@ -39,29 +43,6 @@ export interface YourFleet {
   readonly counts: Readonly<Record<ShipState, number>>;
   /** Only the groups that hold a ship. */
   readonly groups: readonly { readonly group: FleetGroup; readonly tiles: readonly FleetTile[] }[];
-}
-
-/**
- * An open alert comes before anything else; a ship no crew holds, or whose
- * crew is blocked, waits (Harbour: "awaiting crew or blocked"); a ship that
- * reported nothing is idle.
- */
-function stateOf(ship: ListedShip): ShipState {
-  if (ship.openAlertCount > 0) {
-    return 'alert';
-  }
-  if (ship.status === 'awaitingCrew') {
-    return 'waiting';
-  }
-  switch (ship.report?.state) {
-    case 'blocked':
-      return 'waiting';
-    case 'working':
-      return 'working';
-    case 'idle':
-    case undefined:
-      return 'idle';
-  }
 }
 
 /** The group of a ship by its kind; the viewer, the console's door, is in none. */
@@ -88,7 +69,7 @@ function byStateThenName(left: FleetTile, right: FleetTile): number {
 export function yourFleetOf(ships: readonly ListedShip[]): YourFleet {
   const placed = ships.flatMap((ship) => {
     const group = groupOf(ship.kind);
-    return group === null ? [] : [{ group, tile: { shipId: ship.shipId, name: ship.name, state: stateOf(ship), note: ship.report?.note ?? null } }];
+    return group === null ? [] : [{ group, tile: { shipId: ship.shipId, name: ship.name, state: ship.state, note: ship.note, lastActivityAt: ship.lastActivityAt } }];
   });
   const counts = { alert: 0, waiting: 0, working: 0, idle: 0 };
   for (const { tile } of placed) {

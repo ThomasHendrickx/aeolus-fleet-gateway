@@ -23,7 +23,7 @@ export function FleetPage({ read, consoleUrl }: { read: FleetRead; consoleUrl: s
       {read.kind === 'read' ? (
         <>
           <FleetNumbers fleet={read.value} isShipCountShown />
-          <FleetWall groups={read.value.groups} consoleUrl={consoleUrl} tileColumns="grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]" />
+          <FleetWall groups={read.value.groups} consoleUrl={consoleUrl} tileColumns="grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]" now={new Date()} />
         </>
       ) : read.kind === 'unreadable' ? (
         <FleetUnreadable message={read.message} />

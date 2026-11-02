@@ -96,7 +96,7 @@ const ORDERBOT_REQUEST: PendingRequest = {
 const YOUR_FLEET = {
   shipCount: 1,
   counts: { alert: 0, waiting: 0, working: 1, idle: 0 },
-  groups: [{ group: 'agents' as const, tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9rev' as const, name: 'reviewer', state: 'working' as const, note: 'reviewing #165' }] }],
+  groups: [{ group: 'agents' as const, tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9rev' as const, name: 'reviewer', state: 'working' as const, note: 'reviewing #165', lastActivityAt: '2026-11-01T12:00:00.000Z' }] }],
 };
 
 function aContext(cookie: string | undefined, crewToken?: string): {
