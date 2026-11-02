@@ -44,7 +44,7 @@ function Back({ fleetId, hasBack, opened }: { fleetId: string; hasBack: boolean;
  * page follows its changes.
  */
 export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, phoneAction, avatar }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; isLive: boolean; opened: OpenedItem | undefined; phoneAction: ReactNode; avatar: ReactNode }) {
-  const { name, hasBack } = screenOf(screen);
+  const { name, phoneTitle, hasBack } = screenOf(screen);
   const crumb = opened !== undefined && screen === 'home' ? OPENED_FROM_HOME : name;
   return (
     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background pr-3 pl-4">
@@ -54,7 +54,7 @@ export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, phone
         <b className="font-semibold text-foreground">{crumb}</b>
       </span>
       <span data-testid="bridge-title" className={`min-w-0 flex-1 truncate font-semibold tracking-tight sm:hidden ${hasBack || opened !== undefined ? 'text-lg' : 'text-title-touch'}`}>
-        {opened?.title ?? name}
+        {opened?.title ?? phoneTitle}
       </span>
       {isLive ? (
         <span data-testid="bridge-live" className="inline-flex items-center gap-1.5 text-meta text-muted-foreground">

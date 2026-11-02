@@ -14,8 +14,8 @@ export function SendMessageButton({ look }: { look: SendMessageLook }) {
     return null;
   }
   return (
-    <button type="button" data-testid="bridge-send-message" aria-label="Send a ship a message" onClick={() => { sendMessage(); }} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-md hover:bg-accent ${look === 'words' ? 'h-9 border border-border bg-card px-4 font-semibold' : 'size-8'}`}>
-      <Send aria-hidden="true" className="size-4" />
+    <button type="button" data-testid="bridge-send-message" aria-label="Send a ship a message" onClick={() => { sendMessage(); }} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-md hover:bg-accent ${look === 'words' ? 'h-7 border border-input bg-card px-3 text-meta font-medium shadow-sm' : 'size-8'}`}>
+      <Send aria-hidden="true" className={look === 'words' ? 'size-3.5' : 'size-4'} />
       {look === 'words' ? <span>Send a ship a message</span> : null}
     </button>
   );

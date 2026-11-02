@@ -25,7 +25,7 @@ export function HomeHeading({ waiting }: { waiting: BridgeHome['waiting'] }) {
   if (lastReadAt !== undefined) {
     return (
       <div className="max-sm:hidden">
-        <h1 id="bridge-waiting-heading" className="text-heading font-semibold">
+        <h1 id="bridge-waiting-heading" className="text-heading-touch font-semibold">
           Waiting on you
         </h1>
         <p className="text-muted-foreground" data-testid="bridge-last-read">{`Last read ${lastReadTimeOf(lastReadAt)}`}</p>
@@ -35,7 +35,7 @@ export function HomeHeading({ waiting }: { waiting: BridgeHome['waiting'] }) {
   return (
     <div data-testid="bridge-title-row" className="flex items-start justify-between gap-3">
       <div>
-        <h1 id="bridge-waiting-heading" className="text-heading font-semibold">
+        <h1 id="bridge-waiting-heading" className="text-title sm:text-heading-touch font-semibold">
           Waiting on you <span data-testid="bridge-count" className="text-tone-waiting-fg">{waiting.count}</span>
         </h1>
         <p className="text-muted-foreground max-sm:hidden">{waiting.count === 0 ? 'Nothing waits on you.' : countsOf(waiting.items)}</p>
