@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { FocusedDelivery } from '../services/deliveries';
 import type { RoutedPlace } from '../services/routing';
-import { DeliveryCard, infoLinesOf, putOf, type Opened, type StepFinished } from './delivery-card';
+import { DeliveryCard, infoLinesOf, isNoteOpenOf, putOf, type Opened, type StepFinished } from './delivery-card';
 
 // A question opened in Bridge (CC11): the asker's pick preselected, one
 // button putting it in the basket (CC24), naming the option; one its asker
@@ -88,10 +88,21 @@ describe('a question opened in Bridge (CC11)', () => {
     }).toEqual({ inBasket: true, note: true, picked: true, basket: true, remove: true });
   });
 
-  it('offers No option, only the note, among the options, for an answer with the note alone', () => {
+  it('opens with three options and Add a note beside the button, as decide.html draws it: no note field, no note-alone row yet', () => {
     const markup = render(aQuestion());
 
-    expect({ choices: (markup.match(/type="radio"/g) ?? []).length, noteAlone: markup.includes('No option, only the note'), secondButton: markup.includes('data-testid="bridge-put-note-alone"') }).toEqual({ choices: 3, noteAlone: true, secondButton: false });
+    expect({
+      choices: (markup.match(/type="radio"/g) ?? []).length,
+      noteAlone: markup.includes('No option, only the note'),
+      field: markup.includes('data-testid="bridge-note"'),
+      addANote: /<button[^>]*data-testid="bridge-add-note"[^>]*>Add a note<\/button>/.test(markup),
+    }).toEqual({ choices: 3, noteAlone: false, field: false, addANote: true });
+  });
+
+  it('offers No option, only the note, beside the open note field, for an answer with the note alone', () => {
+    const markup = render(aQuestion(), { note: 'Ask me after the demo.' });
+
+    expect({ noteAlone: markup.includes('No option, only the note'), field: markup.includes('data-testid="bridge-note"'), addANote: markup.includes('data-testid="bridge-add-note"') }).toEqual({ noteAlone: true, field: true, addANote: false });
   });
 
   it('opens a question whose note alone is in the basket with No option, only the note chosen', () => {
@@ -120,16 +131,15 @@ describe('a question opened in Bridge (CC11)', () => {
 });
 
 describe("Decide's words (decide.html, basket.html)", () => {
-  it('shows the note field always open, in the words basket.html gives it, with no Add a note button and no placeholder (BH1)', () => {
-    const markup = render(aQuestion());
+  it('shows the note field, once open, in the words basket.html gives it, with no placeholder', () => {
+    const markup = render(aQuestion(), { note: 'U4 first.' });
 
     expect({
       label: markup.includes('>Note (optional)<'),
       help: markup.includes('>Goes with the answer.<'),
       placeholder: /<textarea[^>]*data-testid="bridge-note"[^>]*placeholder=/.test(markup),
       grows: /<textarea[^>]*data-testid="bridge-note"[^>]*class="[^"]*field-sizing-content/.test(markup),
-      addANote: markup.includes('Add a note'),
-    }).toEqual({ label: true, help: true, placeholder: false, grows: true, addANote: false });
+    }).toEqual({ label: true, help: true, placeholder: false, grows: true });
   });
 
   it('marks the button putting the answer in the basket with the basket icon', () => {
@@ -502,5 +512,19 @@ describe('an alert or a notice opened in Bridge (stay-aware.html)', () => {
     const markup = render(aQuestion({ from: 'trierarch', title: 'trierarch plugin 0.35.1 released', question: undefined }), { opened: { job: 'stay-aware', isAlert: false, wasNew: true } });
 
     expect({ tile: markup.includes('data-testid="bridge-alert-tile"'), health: markup.includes('Health'), clears: markup.includes('data-testid="bridge-alert-clears"') }).toEqual({ tile: false, health: false, clears: false });
+  });
+});
+
+describe("whether a question's note field is open (decide.html; the open state as orchestrator-1 set it)", () => {
+  it('is closed on a question opened with no note, until Add a note opens it', () => {
+    expect([isNoteOpenOf({ note: '', inBasket: null, isAdded: false }), isNoteOpenOf({ note: '', inBasket: null, isAdded: true })]).toEqual([false, true]);
+  });
+
+  it('is open while there is a note, or the basket holds one', () => {
+    expect([isNoteOpenOf({ note: 'U4 first.', inBasket: null, isAdded: false }), isNoteOpenOf({ note: '', inBasket: { option: 1, note: 'U4 first.' }, isAdded: false })]).toEqual([true, true]);
+  });
+
+  it('stays closed for an answer in the basket with no note', () => {
+    expect(isNoteOpenOf({ note: '', inBasket: { option: 1, note: null }, isAdded: false })).toBe(false);
   });
 });
