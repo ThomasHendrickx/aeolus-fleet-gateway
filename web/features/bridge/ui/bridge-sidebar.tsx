@@ -1,3 +1,5 @@
+import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
+import { AppSwitcher } from '@aeolus-fleet/ui';
 import { Bell, CheckCheck, Globe, Inbox, Route, Ship, ShoppingBasket, SlidersHorizontal, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -39,7 +41,7 @@ function SidebarEntry({ entry }: { entry: Entry }) {
 }
 
 /**
- * Bridge's sidebar on desktop (home.html): the Bridge mark; Waiting on you,
+ * Bridge's sidebar on desktop: the shared app menu in place of the Bridge mark; Waiting on you,
  * the basket while it holds any (section 9, rule 2), Stay aware, Done and
  * Your fleet, each with its count; for an account allowed as argo, Waits at
  * argo under For argo, with argo's own count (argo's inbox, AI4), leading to
@@ -47,7 +49,7 @@ function SidebarEntry({ entry }: { entry: Entry }) {
  * outside parties, and Fleets and account, the account page in the account
  * app; the person at the foot.
  */
-export function BridgeSidebar({ fleetId, screen, counts, accountUrl, foot }: { fleetId: string; screen: BridgeScreen; counts: ShellCounts; accountUrl: string | undefined; foot: ReactNode }) {
+export function BridgeSidebar({ fleetId, screen, counts, accountUrl, foot, switcher }: { fleetId: string; screen: BridgeScreen; counts: ShellCounts; accountUrl: string | undefined; foot: ReactNode; switcher?: AppSwitcherModel }) {
   const entry = (key: BridgeScreen, rest: Omit<Entry, 'key' | 'isCurrent'>): Entry => ({ key, isCurrent: key === screen, ...rest });
   const pages: Entry[] = [
     entry('home', { label: 'Waiting on you', href: inFleet(BRIDGE_PATH, fleetId), Icon: Inbox, count: { value: counts.waiting, tone: 'waiting' } }),
@@ -63,11 +65,15 @@ export function BridgeSidebar({ fleetId, screen, counts, accountUrl, foot }: { f
   ];
   return (
     <aside data-testid="bridge-sidebar" className="sticky top-0 flex h-dvh w-(--size-sidebar) shrink-0 flex-col gap-0.5 border-r border-border bg-sidebar p-3 text-sidebar-foreground max-sm:hidden">
-      <div className="mb-2.5 flex h-10 items-center gap-2.5 px-2 font-semibold">
-        <span className="inline-flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Ship aria-hidden className="size-4" />
-        </span>
-        Bridge
+      <div className="mb-2.5 flex h-10 min-w-0 items-center font-semibold">
+        {switcher === undefined ? (
+          <span className="flex items-center gap-2.5 px-2">
+            <span className="inline-flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <Ship aria-hidden className="size-4" />
+            </span>
+            Bridge
+          </span>
+        ) : <AppSwitcher switcher={switcher} layout="full" className="min-w-0" />}
       </div>
       <nav aria-label="Bridge" className="flex flex-col gap-0.5">
         {pages.map((page) => (

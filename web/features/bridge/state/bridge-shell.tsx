@@ -1,7 +1,9 @@
+import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
 import { Suspense, type ReactNode } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { readHeader } from '../../frame/hooks/read-header';
+import { headerSwitchersOf } from '../../frame/services/header-switchers';
 import { readTheme } from '../../frame/hooks/read-theme';
 import { Frame } from '../../frame/ui/frame';
 import { PlainHeader } from '../../frame/ui/plain-header';
@@ -23,13 +25,14 @@ async function Counted({ counts, children }: { counts: Promise<ShellCounts>; chi
 }
 
 /** The account signed in and the fleet in view by name, as the header's read answers them; none while it cannot be read. */
-async function readShellPerson(fleetId: string): Promise<{ account: ShellAccount | undefined; fleetName: string | undefined }> {
+async function readShellPerson(fleetId: string): Promise<{ account: ShellAccount | undefined; fleetName: string | undefined; switcher?: AppSwitcherModel }> {
   const [answer, theme] = await Promise.all([readHeader(), readTheme()]);
   if (answer === undefined) {
     return { account: undefined, fleetName: undefined };
   }
   return {
     account: { email: answer.account.email, accountUrl: answer.apps.find(({ app }) => app === 'account')?.url, theme },
+    switcher: headerSwitchersOf(answer).find(({ fleet }) => fleet.id === fleetId),
     fleetName: answer.fleets.find(({ id }) => id === fleetId)?.name,
   };
 }
@@ -45,9 +48,9 @@ export async function BridgeShell({ api, fleetId, screen, children }: { api: Gat
   const counts = readShellCounts(api);
   // The counts are awaited where they show, after the person is read: a refusal meanwhile is not left unhandled.
   counts.catch(() => undefined);
-  const { account, fleetName } = await readShellPerson(fleetId);
+  const { account, fleetName, switcher } = await readShellPerson(fleetId);
   const sidebar = (shown: ShellCounts) => (
-    <BridgeSidebar fleetId={fleetId} screen={screen} counts={shown} accountUrl={account?.accountUrl} foot={account === undefined ? null : <SidebarPerson account={account} fleetName={fleetName} isAllowedAsArgo={shown.argo !== undefined} />} />
+    <BridgeSidebar switcher={switcher} fleetId={fleetId} screen={screen} counts={shown} accountUrl={account?.accountUrl} foot={account === undefined ? null : <SidebarPerson account={account} fleetName={fleetName} isAllowedAsArgo={shown.argo !== undefined} />} />
   );
   const tabs = (shown: ShellCounts) => <BridgeTabs fleetId={fleetId} screen={screen} counts={shown} />;
   return (
@@ -56,7 +59,7 @@ export async function BridgeShell({ api, fleetId, screen, children }: { api: Gat
         <Counted counts={counts}>{sidebar}</Counted>
       </Suspense>
       <div className="flex min-w-0 flex-1 flex-col">
-        <ShellFrame fleetId={fleetId} fleetName={fleetName} screen={screen} account={account}>
+        <ShellFrame fleetId={fleetId} fleetName={fleetName} screen={screen} account={account} switcher={switcher}>
           {children}
         </ShellFrame>
         <Suspense fallback={tabs(NO_COUNTS)}>
