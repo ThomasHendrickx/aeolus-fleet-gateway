@@ -19,6 +19,12 @@ function wall(consoleUrl: string | undefined): string {
   return renderToStaticMarkup(createElement(FleetWall, { groups: GROUPS, consoleUrl, tileColumns: 'grid-cols-2' }));
 }
 
+describe("Your fleet's groups on the phone's Fleet tab", () => {
+  it('heads each group at the touch size, 15 px, as the phone draws it', () => {
+    expect(/<h3 class="[^"]*max-sm:text-body-touch/.test(wall(CONSOLE_URL))).toBe(true);
+  });
+});
+
 describe('a ship tile on Your fleet', () => {
   it("opens the ship's page in the fleet's console (aeolus-fleet#1475, option 1 on #194)", () => {
     expect(wall(CONSOLE_URL).includes(`href="${CONSOLE_URL}/ships/shp_01m3tbfspe96yf1rnr4ank9orc"`)).toBe(true);
