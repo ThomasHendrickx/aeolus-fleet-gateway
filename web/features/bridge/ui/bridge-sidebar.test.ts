@@ -76,6 +76,14 @@ describe("Bridge's sidebar", () => {
     ]);
   });
 
+  it('marks Outside parties current on its pages (#191)', () => {
+    expect(entriesOf(sidebarOf({ screen: 'outside-parties' }))['outside-parties']?.isCurrent).toBe(true);
+  });
+
+  it('says before the switch that Fleets and account opens the Account app (#191)', () => {
+    expect(/data-testid="bridge-side-account"[^>]*>.*<span[^>]*title="Opens the Account app"/.test(sidebarOf())).toBe(true);
+  });
+
   it('leaves Fleets and account out while the account app is not known', () => {
     expect(entriesOf(sidebarOf({ accountUrl: null })).account).toBeUndefined();
   });

@@ -9,8 +9,8 @@ import { BridgeTopBar } from './bridge-top-bar';
 // breadcrumb and Live; on the phone the screen title, with a back chevron
 // where it leads back, Live and the avatar.
 
-function topBarOf({ screen = 'home', fleetName = 'Aeolus fleet', isLive = true, opened, phoneAction = null }: { screen?: BridgeScreen; fleetName?: string | null; isLive?: boolean; opened?: { title: string; onBack: () => void }; phoneAction?: ReturnType<typeof createElement> | null } = {}): string {
-  return renderToStaticMarkup(createElement(BridgeTopBar, { fleetId: 'flt_01', fleetName: fleetName ?? undefined, screen, isLive, opened, phoneAction, avatar: null }));
+function topBarOf({ screen = 'home', fleetName = 'Aeolus fleet', isLive = true, opened, phoneAction = null, below }: { screen?: BridgeScreen; fleetName?: string | null; isLive?: boolean; opened?: { title: string; onBack: () => void }; phoneAction?: ReturnType<typeof createElement> | null; below?: { name: string; parentHref: string } } = {}): string {
+  return renderToStaticMarkup(createElement(BridgeTopBar, { fleetId: 'flt_01', fleetName: fleetName ?? undefined, screen, isLive, opened, phoneAction, below, avatar: null }));
 }
 
 function textOf(markup: string, testId: string): string | undefined {
@@ -65,5 +65,19 @@ describe("Bridge's top bar", () => {
 
   it("carries home's action on the phone beside its title, as the #1560 sheet draws it (#189, 10)", () => {
     expect(topBarOf({ phoneAction: createElement('button', { 'data-testid': 'send' }) }).includes('<span class="sm:hidden"><button data-testid="send"></button></span>')).toBe(true);
+  });
+
+  describe('on a page below Outside parties (#191)', () => {
+    const markup = topBarOf({ screen: 'outside-parties', below: { name: 'Add MCP server', parentHref: '/outside-parties?fleet=flt_01' } });
+
+    it('adds the page to the breadcrumb, Outside parties leading back to it', () => {
+      const crumb = /<span[^>]*data-testid="bridge-crumb"[^>]*>(.*?)<\/span>/.exec(markup)?.[1] ?? '';
+
+      expect({ text: crumb.replace(/<[^>]*>/g, ''), link: crumb.includes('<a href="/outside-parties?fleet=flt_01"') }).toEqual({ text: 'Aeolus fleet / Outside parties / Add MCP server', link: true });
+    });
+
+    it("names the page as the phone's title, its back chevron leading to Outside parties", () => {
+      expect({ title: textOf(markup, 'bridge-title'), back: /<a[^>]*data-testid="bridge-back"[^>]*href="([^"]*)"/.exec(markup)?.[1] }).toEqual({ title: 'Add MCP server', back: '/outside-parties?fleet=flt_01' });
+    });
   });
 });

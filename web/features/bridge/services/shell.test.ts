@@ -23,6 +23,10 @@ describe("Bridge's screens", () => {
     expect(screenOf('basket')).toEqual({ name: 'Basket', phoneTitle: 'Basket', hasBack: true, tab: 'waiting' });
   });
 
+  it('names Outside parties as the sidebar does, leading back to home, under no tab (#191)', () => {
+    expect(screenOf('outside-parties')).toEqual({ name: 'Outside parties', phoneTitle: 'Outside parties', hasBack: true, tab: null });
+  });
+
   it('leads back from the settings, under no tab', () => {
     expect((['routing', 'settings'] as const).map((screen) => screenOf(screen))).toEqual([
       { name: 'Where things show', phoneTitle: 'Where things show', hasBack: true, tab: null },
