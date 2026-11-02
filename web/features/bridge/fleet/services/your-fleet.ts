@@ -44,3 +44,22 @@ export function summaryOf(fleet: YourFleet): string {
   const parts = SUMMARY_PARTS.filter(({ state }) => fleet.counts[state] > 0).map(({ state, words }) => `${String(fleet.counts[state])} ${words}`);
   return `${shipsOf(fleet.shipCount)}: ${parts.join(', ')}`;
 }
+
+/** When a ship last did something, in the words of Your fleet's tiles (design/bridge-fleet-width): now, 25 min, 3 h, yesterday, 2 d; null while it did nothing yet. */
+export function ageOf(lastActivityAt: string | null, now: Date): string | null {
+  if (lastActivityAt === null) {
+    return null;
+  }
+  const minutes = Math.floor((now.getTime() - new Date(lastActivityAt).getTime()) / 60_000);
+  if (minutes < 1) {
+    return 'now';
+  }
+  if (minutes < 60) {
+    return `${String(minutes)} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${String(hours)} h`;
+  }
+  return hours < 48 ? 'yesterday' : `${String(Math.floor(hours / 24))} d`;
+}
