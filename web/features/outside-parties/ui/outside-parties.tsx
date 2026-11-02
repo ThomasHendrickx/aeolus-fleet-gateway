@@ -1,7 +1,7 @@
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { BUTTONS, COMPACT_CARD, SMALL_BUTTON } from '../../forms/ui/look';
-import { countsOf, outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty, type Side } from '../party-kinds';
+import { countsOf, inListOrder, outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty, type Side } from '../party-kinds';
 import { ADD_A2A_AGENT_PATH, ADD_A2A_CLIENT_PATH, ADD_SERVER_PATH, OUTSIDE_PARTIES_PATH, partyPath } from '../paths';
 import { StatusBadge, Tag } from './status-badge';
 import { SwitchCard } from './switch-card';
@@ -46,7 +46,7 @@ export async function OutsideParties({ page, side }: { page: SignedInPage; side:
   const [status, parties] = await Promise.all([readOf(api.outsideParties.status.query()), readOf(api.parties.list.query())]);
   const listed = parties.isOk ? parties.value : [];
   const counts = countsOf(listed);
-  const shown = side === undefined ? listed : listed.filter((party) => PARTY_KINDS[party.kind].side === side);
+  const shown = inListOrder(side === undefined ? listed : listed.filter((party) => PARTY_KINDS[party.kind].side === side));
   const filters = [
     { label: 'All', href: OUTSIDE_PARTIES_PATH, isCurrent: side === undefined },
     { label: 'Servers', href: `${OUTSIDE_PARTIES_PATH}?kind=server`, isCurrent: side === 'server' },
