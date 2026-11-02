@@ -43,6 +43,12 @@ describe('Bridge home (CC18)', () => {
     expect({ feed: markup.includes('builder-gateway: no report change for 2 h'), outside: markup.includes('1 unseen, outside the count') }).toEqual({ feed: true, outside: true });
   });
 
+  it('heads the stay-aware feed with its bell, as home.html draws it', () => {
+    const markup = render({ waiting: { count: 0, items: [] }, stayAware: [] });
+
+    expect(/<h2 id="bridge-stay-aware-heading"[^>]*><svg[^>]*lucide-bell/.test(markup)).toBe(true);
+  });
+
   it('says nothing waits, and nothing new reached the person, when nothing does', () => {
     const markup = render({ waiting: { count: 0, items: [] }, stayAware: [] });
 
