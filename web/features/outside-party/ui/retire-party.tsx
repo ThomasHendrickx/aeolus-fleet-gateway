@@ -12,14 +12,14 @@ export async function RetireParty({ page, name }: { page: SignedInPage; name: st
   const read = await readOf(api.parties.get.query({ name }));
   if (!read.isOk) {
     return (
-      <div className="grid gap-4">
+      <div className="grid max-w-160 gap-4">
         <Refusal>{read.refusal}</Refusal>
       </div>
     );
   }
   const party = read.value;
   return (
-    <div className="grid gap-4">
+    <div className="grid max-w-160 gap-4">
       <section className={`${CARD} grid gap-3`}>
         <h2 className="text-heading font-semibold">Retire {party.name}?</h2>
         <ul className="list-disc pl-5">

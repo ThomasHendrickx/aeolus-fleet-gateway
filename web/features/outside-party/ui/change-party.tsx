@@ -37,7 +37,7 @@ export async function ChangeParty({ page, name }: { page: SignedInPage; name: st
   const read = await readOf(api.parties.get.query({ name }));
   if (!read.isOk) {
     return (
-      <div className="grid gap-4">
+      <div className="grid max-w-160 gap-4">
         <Refusal>{read.refusal}</Refusal>
       </div>
     );
@@ -48,7 +48,7 @@ export async function ChangeParty({ page, name }: { page: SignedInPage; name: st
   const own = scopes.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope));
   const beyond = held === null ? [] : held.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope) && !own.includes(scope));
   return (
-    <div className="grid gap-4">
+    <div className="grid max-w-160 gap-4">
       <section className={`${CARD} grid gap-3`}>
         <h2 className="text-section font-semibold">{party.name}: owner and scopes</h2>
         <ActionForm action={changeParty} fleetId={fleetId} submit={{ label: 'Save', pending: 'Saving…' }} testId="outside-party-change-form">
