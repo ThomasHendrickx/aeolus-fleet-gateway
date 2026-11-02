@@ -9,8 +9,8 @@ import { BridgeTopBar } from './bridge-top-bar';
 // breadcrumb and Live; on the phone the screen title, with a back chevron
 // where it leads back, Live and the avatar.
 
-function topBarOf({ screen = 'home', fleetName = 'Aeolus fleet', isLive = true, opened }: { screen?: BridgeScreen; fleetName?: string | null; isLive?: boolean; opened?: { title: string; onBack: () => void } } = {}): string {
-  return renderToStaticMarkup(createElement(BridgeTopBar, { fleetId: 'flt_01', fleetName: fleetName ?? undefined, screen, isLive, opened, avatar: null }));
+function topBarOf({ screen = 'home', fleetName = 'Aeolus fleet', isLive = true, opened, phoneAction = null }: { screen?: BridgeScreen; fleetName?: string | null; isLive?: boolean; opened?: { title: string; onBack: () => void }; phoneAction?: ReturnType<typeof createElement> | null } = {}): string {
+  return renderToStaticMarkup(createElement(BridgeTopBar, { fleetId: 'flt_01', fleetName: fleetName ?? undefined, screen, isLive, opened, phoneAction, avatar: null }));
 }
 
 function textOf(markup: string, testId: string): string | undefined {
@@ -61,5 +61,9 @@ describe("Bridge's top bar", () => {
 
   it("keeps the page's name in the breadcrumb while an item is open from another page", () => {
     expect(textOf(topBarOf({ screen: 'stay-aware', opened: { title: 'Stay aware', onBack: () => undefined } }), 'bridge-crumb')).toBe('Aeolus fleet / Stay aware');
+  });
+
+  it("carries home's action on the phone beside its title, as the #1560 sheet draws it (#189, 10)", () => {
+    expect(/<span class="sm:hidden"><button data-testid="send"><\/button><\/span>/.test(topBarOf({ phoneAction: createElement('button', { 'data-testid': 'send' }) }))).toBe(true);
   });
 });
