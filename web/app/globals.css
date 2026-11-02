@@ -1,5 +1,5 @@
 /*
- * The gateway's theme. The design tokens come from @aeolus-fleet/common/header,
+ * The gateway's theme. The design tokens come from @aeolus-fleet/ui,
  * light on :root and dark on .dark. They are imported unlayered, so their values
  * win over Tailwind's theme layer at runtime.
  *
@@ -12,10 +12,10 @@
 /* Tailwind scans the web app alone, not the gateway's server. */
 @import 'tailwindcss' source('..');
 @import 'tw-animate-css';
-@import '@aeolus-fleet/common/header/tokens.css';
+@import '@aeolus-fleet/ui/tokens.css';
 
 /* The header every Aeolus app shows and the atoms it stands on come from common (header design H2). */
-@source '../../node_modules/@aeolus-fleet/common/dist/header';
+@source '../../node_modules/@aeolus-fleet/ui/dist';
 
 @custom-variant dark (&:where(.dark, .dark *));
 

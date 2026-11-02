@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import { headerSwitchersOf } from '../../frame/services/header-switchers';
 import type { BridgeScreen } from '../services/shell';
 import { BridgeSidebar, type ShellCounts } from './bridge-sidebar';
 
@@ -77,5 +78,21 @@ describe("Bridge's sidebar", () => {
 
   it('leaves Fleets and account out while the account app is not known', () => {
     expect(entriesOf(sidebarOf({ accountUrl: null })).account).toBeUndefined();
+  });
+});
+
+
+describe("Bridge's desktop app navigation", () => {
+  it('keeps the shared app menu at the top of the sidebar on every page', () => {
+    const [switcher] = headerSwitchersOf({
+      account: { id: 'acc-thomas', email: 'thomas@example.com' },
+      apps: [{ app: 'account', url: 'https://account.example/' }],
+      fleets: [{ id: 'flt_01m5fcd917vwf30mx663fgc3z8', name: 'Aeolus fleet', apps: [{ app: 'console', url: 'https://console.example/' }, { app: 'gateway', url: 'https://bridge.example/' }] }],
+    });
+    for (const screen of ['home', 'basket', 'done', 'stay-aware', 'routing', 'settings', 'fleet'] as const) {
+      const markup = renderToStaticMarkup(createElement(BridgeSidebar, { fleetId: 'flt_01', screen, counts: COUNTS, accountUrl: ACCOUNT_URL, foot: null, switcher }));
+      expect(markup).toContain('data-testid="app-switcher-apps"');
+      expect(markup.indexOf('data-testid="app-switcher-apps"')).toBeLessThan(markup.indexOf('<nav aria-label="Bridge"'));
+    }
   });
 });
