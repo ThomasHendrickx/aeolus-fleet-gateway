@@ -21,8 +21,8 @@ function toneOf(state: ShipState, count: number): string {
 function FleetNumber({ testId, tone, value, children }: { testId: string; tone: string; value: number; children: React.ReactNode }) {
   return (
     <div data-testid={testId} className={`grid min-w-0 gap-0.5 rounded-md border px-2 py-1.5 max-sm:justify-items-center max-sm:px-0.5 ${tone}`}>
-      <span className="text-xl leading-6 font-semibold">{value}</span>
-      <span className="flex min-w-0 items-center gap-1 whitespace-nowrap text-[11px] text-muted-foreground max-sm:justify-center max-sm:gap-0.5 max-sm:text-[10px]">{children}</span>
+      <span className="text-xl leading-6 font-semibold max-sm:text-[22px] max-sm:leading-[26px]">{value}</span>
+      <span className="flex min-w-0 items-center gap-1 whitespace-nowrap text-[11px] text-muted-foreground max-sm:justify-center max-sm:gap-0.5 max-sm:text-[11px]">{children}</span>
     </div>
   );
 }

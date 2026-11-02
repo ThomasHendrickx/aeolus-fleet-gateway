@@ -97,8 +97,8 @@ function Group({ group, tiles, consoleUrl, tileColumns }: { group: FleetGroup; t
   const Icon = GROUP_ICONS[group];
   return (
     <section className="grid gap-1.5" aria-label={GROUP_LABELS[group]}>
-      <h3 className="flex items-center gap-1.5 text-caption font-semibold">
-        <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+      <h3 className="flex items-center gap-1.5 text-caption font-semibold max-sm:gap-2 max-sm:text-body-touch">
+        <Icon aria-hidden="true" className="size-3.5 shrink-0 max-sm:size-4" />
         <span>{GROUP_LABELS[group]}</span>
         <span className="font-normal text-muted-foreground">{tiles.length}</span>
       </h3>

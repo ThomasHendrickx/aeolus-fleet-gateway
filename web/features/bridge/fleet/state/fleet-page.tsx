@@ -14,8 +14,8 @@ import { FleetWall } from '../ui/fleet-wall';
 export function FleetPage({ read, consoleUrl }: { read: FleetRead; consoleUrl: string | undefined }) {
   return (
     <section className="grid gap-4" aria-labelledby="bridge-fleet-heading">
-      <div>
-        <h1 id="bridge-fleet-heading" className="text-heading-touch font-semibold max-sm:sr-only">
+      <div className="max-sm:sr-only">
+        <h1 id="bridge-fleet-heading" className="text-heading-touch font-semibold">
           Your fleet
         </h1>
         {read.kind === 'read' ? <p className="max-sm:hidden text-muted-foreground">{summaryOf(read.value)}</p> : null}
