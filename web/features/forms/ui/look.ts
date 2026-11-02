@@ -20,3 +20,6 @@ export type ButtonKind = keyof typeof BUTTONS;
 export const INPUT = 'h-9 w-full rounded-md border border-input bg-background px-3 font-mono text-code';
 
 export const LABEL = 'grid gap-1';
+
+/** A select in the body font, its browser chevron replaced by the design system's (design/bridge-navigation). */
+export const SELECT = 'h-9 w-full appearance-none rounded-md border border-input bg-background pr-8 pl-3';
