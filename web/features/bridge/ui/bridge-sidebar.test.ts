@@ -72,7 +72,7 @@ describe("Bridge's sidebar", () => {
       { href: '/bridge/settings?fleet=flt_01', text: 'Settings', isCurrent: false },
       { href: '/bridge/settings/routing?fleet=flt_01', text: 'Where things show', isCurrent: false },
       { href: '/outside-parties?fleet=flt_01', text: 'Outside parties', isCurrent: false },
-      { href: ACCOUNT_URL, text: 'Fleets and account', isCurrent: false },
+      { href: ACCOUNT_URL, text: 'Fleets and accountOpens the Account app', isCurrent: false },
     ]);
   });
 

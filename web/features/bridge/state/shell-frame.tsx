@@ -14,7 +14,7 @@ import { useLiveRefresh } from '../hooks/use-live-refresh';
 import { BRIDGE_ROUTING_PATH } from '../paths';
 import type { BridgeScreen } from '../services/shell';
 import { phoneAppEntries } from '../ui/phone-app-entries';
-import { BridgeTopBar } from '../ui/bridge-top-bar';
+import { BridgeTopBar, type PageBelow } from '../ui/bridge-top-bar';
 import { OpenedItemProvider } from './opened-item';
 import { SendMessageProvider } from './send-message';
 import { SendMessageButton } from './send-message-button';
@@ -76,7 +76,7 @@ function PhoneAvatar({ fleetId, switcher, account: { email, accountUrl, theme } 
  * bar. It keeps the page live, and tells the gateway while it is in focus
  * (wake a person, W6).
  */
-export function ShellFrame({ fleetId, fleetName, screen, account, switcher, children }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; account: ShellAccount | undefined; switcher?: AppSwitcherModel; children: ReactNode }) {
+export function ShellFrame({ fleetId, fleetName, screen, below, account, switcher, children }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; below?: PageBelow; account: ShellAccount | undefined; switcher?: AppSwitcherModel; children: ReactNode }) {
   const isLive = useLiveRefresh(fleetId);
   useFocusReport(fleetId);
   return (
@@ -90,6 +90,7 @@ export function ShellFrame({ fleetId, fleetName, screen, account, switcher, chil
               screen={screen}
               isLive={isLive}
               opened={opened}
+              below={below}
               phoneAction={screen === 'home' && opened === undefined ? <SendMessageButton look="icon" /> : null}
               avatar={account === undefined ? null : <PhoneAvatar fleetId={fleetId} switcher={switcher} account={account} />}
             />

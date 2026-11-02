@@ -7,7 +7,7 @@
 import type { HomeItem } from './items';
 
 /** Bridge's pages, each a screen of the shell. */
-export type BridgeScreen = 'home' | 'basket' | 'stay-aware' | 'done' | 'fleet' | 'routing' | 'settings';
+export type BridgeScreen = 'home' | 'basket' | 'stay-aware' | 'done' | 'fleet' | 'routing' | 'outside-parties' | 'settings';
 
 /** The phone's four tabs. */
 export type PhoneTab = 'waiting' | 'aware' | 'done' | 'fleet';
@@ -29,6 +29,7 @@ const SCREENS: Record<BridgeScreen, ScreenNaming> = {
   done: { name: 'Done', phoneTitle: 'Done', hasBack: false, tab: 'done' },
   fleet: { name: 'Your fleet', phoneTitle: 'Fleet', hasBack: false, tab: 'fleet' },
   routing: { name: 'Where things show', phoneTitle: 'Where things show', hasBack: true, tab: null },
+  'outside-parties': { name: 'Outside parties', phoneTitle: 'Outside parties', hasBack: true, tab: null },
   settings: { name: 'Settings', phoneTitle: 'Settings', hasBack: true, tab: null },
 };
 

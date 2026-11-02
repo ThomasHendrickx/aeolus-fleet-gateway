@@ -9,7 +9,7 @@ import { BridgeTopBar } from './bridge-top-bar';
 // breadcrumb and Live; on the phone the screen title, with a back chevron
 // where it leads back, Live and the avatar.
 
-function topBarOf({ screen = 'home', fleetName = 'Aeolus fleet', isLive = true, opened, phoneAction = null, below }: { screen?: BridgeScreen; fleetName?: string | null; isLive?: boolean; opened?: { title: string; onBack: () => void }; phoneAction?: ReturnType<typeof createElement> | null; below?: { name: string; parentHref: string } } = {}): string {
+function topBarOf({ screen = 'home', fleetName = 'Aeolus fleet', isLive = true, opened, phoneAction = null, below }: { screen?: BridgeScreen; fleetName?: string | null; isLive?: boolean; opened?: { title: string; onBack: () => void }; phoneAction?: ReturnType<typeof createElement> | null; below?: { name: string; parentHref: string; via?: { name: string; href: string } } } = {}): string {
   return renderToStaticMarkup(createElement(BridgeTopBar, { fleetId: 'flt_01', fleetName: fleetName ?? undefined, screen, isLive, opened, phoneAction, below, avatar: null }));
 }
 
@@ -79,5 +79,12 @@ describe("Bridge's top bar", () => {
     it("names the page as the phone's title, its back chevron leading to Outside parties", () => {
       expect({ title: textOf(markup, 'bridge-title'), back: /<a[^>]*data-testid="bridge-back"[^>]*href="([^"]*)"/.exec(markup)?.[1] }).toEqual({ title: 'Add MCP server', back: '/outside-parties?fleet=flt_01' });
     });
+  });
+
+  it("leads back from a party's change page to the party, between Outside parties and the page in the crumbs", () => {
+    const markup = topBarOf({ screen: 'outside-parties', below: { name: 'Change', parentHref: '/outside-parties?fleet=flt_01', via: { name: 'github', href: '/outside-parties/github?fleet=flt_01' } } });
+    const crumb = /<span[^>]*data-testid="bridge-crumb"[^>]*>(.*?)<\/span>/.exec(markup)?.[1] ?? '';
+
+    expect({ text: crumb.replace(/<[^>]*>/g, ''), back: /<a[^>]*data-testid="bridge-back"[^>]*href="([^"]*)"/.exec(markup)?.[1] }).toEqual({ text: 'Aeolus fleet / Outside parties / github / Change', back: '/outside-parties/github?fleet=flt_01' });
   });
 });

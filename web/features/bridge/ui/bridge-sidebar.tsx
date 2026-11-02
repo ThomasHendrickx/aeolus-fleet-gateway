@@ -1,6 +1,6 @@
 import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
 import { AppSwitcher } from '@aeolus-fleet/ui';
-import { Bell, CheckCheck, Globe, Inbox, Route, Ship, ShoppingBasket, SlidersHorizontal, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, Bell, CheckCheck, Globe, Inbox, Route, Ship, ShoppingBasket, SlidersHorizontal, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
@@ -22,10 +22,12 @@ interface Entry {
   readonly Icon: LucideIcon;
   readonly isCurrent: boolean;
   readonly count?: { readonly value: number | undefined; readonly tone: CountTone };
+  /** Said with an arrow where the entry leaves Bridge for another app, so the switch is expected (#191). */
+  readonly opensApp?: string;
 }
 
 function SidebarEntry({ entry }: { entry: Entry }) {
-  const { key, label, href, Icon, isCurrent, count } = entry;
+  const { key, label, href, Icon, isCurrent, count, opensApp } = entry;
   return (
     <a
       href={href}
@@ -36,6 +38,12 @@ function SidebarEntry({ entry }: { entry: Entry }) {
       <Icon aria-hidden className="size-4 shrink-0" />
       {label}
       {count === undefined ? null : <ShellCount count={count.value} tone={count.tone} className="ml-auto" />}
+      {opensApp === undefined ? null : (
+        <span title={opensApp} className="ml-auto inline-flex text-muted-foreground">
+          <ArrowUpRight aria-hidden className="size-3.5" />
+          <span className="sr-only">{opensApp}</span>
+        </span>
+      )}
     </a>
   );
 }
@@ -47,7 +55,7 @@ function SidebarEntry({ entry }: { entry: Entry }) {
  * argo under For argo, with argo's own count (argo's inbox, AI4), leading to
  * home's argo section; the settings: Where things show, the
  * outside parties, and Fleets and account, the account page in the account
- * app; the person at the foot.
+ * app, marked as opening it; the person at the foot.
  */
 export function BridgeSidebar({ fleetId, screen, counts, accountUrl, foot, switcher }: { fleetId: string; screen: BridgeScreen; counts: ShellCounts; accountUrl: string | undefined; foot: ReactNode; switcher?: AppSwitcherModel }) {
   const entry = (key: BridgeScreen, rest: Omit<Entry, 'key' | 'isCurrent'>): Entry => ({ key, isCurrent: key === screen, ...rest });
@@ -60,8 +68,8 @@ export function BridgeSidebar({ fleetId, screen, counts, accountUrl, foot, switc
   ];
   const settings: Entry[] = [
     entry('routing', { label: 'Where things show', href: inFleet(BRIDGE_ROUTING_PATH, fleetId), Icon: Route }),
-    { key: 'outside-parties', label: 'Outside parties', href: inFleet(OUTSIDE_PARTIES_PATH, fleetId), Icon: Globe, isCurrent: false },
-    ...(accountUrl === undefined ? [] : [{ key: 'account', label: 'Fleets and account', href: accountUrl, Icon: SlidersHorizontal, isCurrent: false }]),
+    entry('outside-parties', { label: 'Outside parties', href: inFleet(OUTSIDE_PARTIES_PATH, fleetId), Icon: Globe }),
+    ...(accountUrl === undefined ? [] : [{ key: 'account', label: 'Fleets and account', href: accountUrl, Icon: SlidersHorizontal, isCurrent: false, opensApp: 'Opens the Account app' }]),
   ];
   return (
     <aside data-testid="bridge-sidebar" className="sticky top-0 flex h-dvh w-(--size-sidebar) shrink-0 flex-col gap-0.5 border-r border-border bg-sidebar p-3 text-sidebar-foreground max-sm:hidden">
