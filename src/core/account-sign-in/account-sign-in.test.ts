@@ -1,12 +1,13 @@
+import type { FleetId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, fakeAccountSignInSeals, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeSecrets } from '../../../test/support/oauth-fakes.js';
-import { PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
+import { PAGASAE_URL, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createAccountOfSignIn } from './account-of-sign-in.js';
-import type { SharedSignIn } from './ports.js';
+import type { SharedAccountToken, SharedSignIn } from './ports.js';
 import { createCompleteAccountSignIn } from './complete-account-sign-in.js';
 import { createSignOutAccount } from './sign-out-account.js';
 import { createStartAccountSignIn } from './start-account-sign-in.js';
@@ -146,5 +147,27 @@ describe('a person signs out', () => {
     const signIns = fakeSharedSignIn({ isAvailable: false });
 
     expect(await createSignOutAccount({ signIns, accountOf: createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock }) })(CHARLOTTE_SIGN_IN)).toEqual({ isOk: false, error: { kind: 'unavailable' } });
+  });
+});
+
+describe('the account token a shared sign-in has in a fleet', () => {
+  it('is kept for its life, so a page\'s many calls make one exchange', async () => {
+    const signIns = fakeSharedSignIn({ tokens: new Map([[FLEET_ID, CHARLOTTE_ACCOUNT_TOKEN]]) });
+    const accountOf = createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock });
+    await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
+
+    await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
+
+    expect(signIns.exchanges).toBe(1);
+  });
+
+  it('is exchanged again while it names no person ship, so the one commissioned meanwhile is known at the next call (aeolus-fleet#1583)', async () => {
+    const tokens = new Map<FleetId, SharedAccountToken>([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, personShipId: null }]]);
+    const accountOf = createAccountOfSignIn({ signIns: fakeSharedSignIn({ tokens }), argoAccounts: memoryArgoAccounts(), clock });
+    await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
+
+    tokens.set(FLEET_ID, CHARLOTTE_ACCOUNT_TOKEN);
+
+    await expect(accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID })).resolves.toMatchObject({ isOk: true, value: { personShipId: PERSON_SHIP_ID } });
   });
 });

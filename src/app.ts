@@ -218,7 +218,9 @@ import type { ItemJob } from './core/people/item-job.js';
 import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/routing.js';
 import { createPrismaRoutes } from './adapters/prisma/routes.js';
 import { createReadWakeChannels } from './core/people/read-wake-channels.js';
+import { createReadChats } from './core/people/read-chats.js';
 import { createReadRouting } from './core/people/read-routing.js';
+import { createReadSlackDroppedOut } from './core/slack/read-slack-dropped-out.js';
 import { createTurnRoute } from './core/people/turn-route.js';
 import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
@@ -232,6 +234,7 @@ import { createEmailChannel } from './adapters/pagasae/email-channel.js';
 import { createPrismaWakesSent } from './adapters/prisma/wakes-sent.js';
 import { createPrismaFocusedPages } from './adapters/prisma/focused-pages.js';
 import { createPrismaWebPushSubscriptions } from './adapters/prisma/web-push-subscriptions.js';
+import { createPrismaConnectedChats } from './adapters/prisma/connected-chats.js';
 import { createWebPush } from './adapters/web-push/web-push.js';
 import { createWebPushChannel } from './core/people/web-push-channel.js';
 import { createTurnOffWebPush } from './core/people/turn-off-web-push.js';
@@ -886,6 +889,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
         subscriptions: webPushSubscriptions,
         webPushKey: options.webPush?.publicKey ?? null,
       }),
+      readChats: createReadChats({ crewPersonShip: asCrew.crewPersonShip, chats: createPrismaConnectedChats(prisma), clock }),
       readRouting: createReadRouting({ crewPersonShip: asCrew.crewPersonShip, routes, defaults: routingDefaults, ...placesOffered }),
       turnRoute: createTurnRoute({ crewPersonShip: asCrew.crewPersonShip, routes, defaults: routingDefaults, ...placesOffered, clock }),
       turnOnWebPush: createTurnOnWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions, resolver: systemHostResolver, isWebPushOffered: options.webPush !== undefined, clock }),
@@ -1021,6 +1025,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     // Where no pagasae is set no one signs in, so no account has a person ship to link.
     startLink: createStartLink({ workspaces: slackWorkspaces, apps: slackApps, signIn: slackSignIn, states: slackLinkStates, crewPersonShip: person?.crewPersonShip ?? (() => Promise.resolve(err({ kind: 'noPersonShip' as const }))), clock, linkRedirectUrl }),
     unlinkSlack: createUnlinkSlack({ links: slackLinks }),
+    readSlackDroppedOut: createReadSlackDroppedOut({ apps: slackApps, links: slackLinks, routes, defaults: routingDefaults }),
   };
   const slackEvents = createPrismaSlackEvents(prisma);
   const slackSends = createSlackEventWorker({
@@ -1031,7 +1036,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
   registerSlackRoutes(server, {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
-    answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
+    answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock, bridgeUrlOf }),
     seeInSlack: createSeeInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
     doneInSlack: createDoneInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
     completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl, steps: slackLinkSteps, finishStep: finishOwnStep }),

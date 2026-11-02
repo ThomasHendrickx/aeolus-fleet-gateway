@@ -14,6 +14,14 @@ describe("Bridge home's columns", () => {
   });
 });
 
+describe("Bridge home's title row (home.html, states.html)", () => {
+  it('runs the whole width above the banner, home and Your fleet', () => {
+    const markup = renderToStaticMarkup(createElement(HomeColumns, { heading: createElement('p', null, 'heading'), banner: createElement('p', null, 'banner'), main: createElement('p', null, 'home'), aside: createElement('p', null, 'fleet') }));
+
+    expect(markup.includes('<p>heading</p>') && markup.indexOf('<p>heading</p>') < markup.indexOf('<p>banner</p>')).toBe(true);
+  });
+});
+
 // decide.html, do.html: an opened item takes Your fleet's place, the list beside it (aeolus-fleet#1538).
 describe("Bridge home's columns while an item is open", () => {
   it('gives the whole width to the list and the open item, Your fleet out of sight', () => {

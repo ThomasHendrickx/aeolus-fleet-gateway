@@ -4,7 +4,7 @@ import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { readYourFleet, type FleetRead } from '../fleet/hooks/read-your-fleet';
 import { YourFleetPanel } from '../fleet/state/your-fleet-panel';
-import { readArgoInboxNotice, readArgoSection, readBridgeHome, readDecidePlaces } from '../hooks/read-bridge';
+import { readArgoInboxNotice, readArgoSection, readBridgeHome, readDecidePlaces, readSlackDroppedOut, readTimeOf } from '../hooks/read-bridge';
 import { argoInboxNoticeOf } from '../services/argo-inbox-notice';
 import { BRIDGE_PATH } from '../paths';
 import { ArgoInboxNotice } from '../ui/argo-inbox-notice';
@@ -12,31 +12,49 @@ import { ArgoSectionList } from '../ui/argo-section';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { HomeColumns } from '../ui/home-columns';
+import { SlackDroppedOut } from '../ui/slack-dropped-out';
 import { HomePanel } from './home-panel';
+import { KeptRead } from './kept-read';
+import { LastReadHeading } from './last-read-heading';
 import { RecordUnreadable } from './record-unreadable';
 
 /** For an account with no person ship nothing waits, and nothing reaches it unasked. */
 const NOTHING = { waiting: { count: 0, items: [] }, stayAware: [] };
 
-/** Your fleet beside home once both are read; the fleet was asked for at the same time as home, so neither waits on the other. */
+/**
+ * Your fleet beside home once both are read; the fleet was asked for at the
+ * same time as home, so neither waits on the other. While either cannot be
+ * read, the browser shows it as last read (states.html).
+ */
 async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: string; fleet: Promise<FleetRead> }) {
-  const [read, decidePlaces, fleetRead, argoNotice, argoSection] = await Promise.all([readBridgeHome(api), readDecidePlaces(api), fleet, readArgoInboxNotice(api), readArgoSection(api)]);
+  const [read, decidePlaces, fleetRead, slackDroppedOut, argoNotice, argoSection] = await Promise.all([readBridgeHome(api), readDecidePlaces(api), fleet, readSlackDroppedOut(api), readArgoInboxNotice(api), readArgoSection(api)]);
+  const isNothingWaiting = read.kind !== 'unreadable' && (read.kind === 'none' || read.value.waiting.items.length === 0);
+  const readAt = readTimeOf(read);
+  const home = read.kind === 'read' ? read.value : NOTHING;
   const now = new Date().toISOString();
   const argo = argoSection === null ? undefined : <ArgoSectionList section={argoSection} now={now} />;
-  const isNothingWaiting = read.kind !== 'unreadable' && (read.kind === 'none' || read.value.waiting.items.length === 0);
   const argoInboxNotice = argoInboxNoticeOf(argoNotice);
   return (
     <HomeColumns
+      heading={<KeptRead readAt={readAt}>{read.kind === 'unreadable' ? null : <LastReadHeading />}</KeptRead>}
       banner={
-        read.kind === 'unreadable' || argoInboxNotice !== null ? (
-          <>
-            {read.kind === 'unreadable' ? <RecordUnreadable message={read.message} /> : null}
-            {argoInboxNotice === null ? null : <ArgoInboxNotice notice={argoInboxNotice} />}
-          </>
-        ) : undefined
+        <>
+          {read.kind === 'unreadable' ? <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} /> : null}
+          {argoInboxNotice === null ? null : <ArgoInboxNotice notice={argoInboxNotice} />}
+          <KeptRead readAt={slackDroppedOut === undefined ? undefined : new Date().toISOString()}>{slackDroppedOut === undefined || slackDroppedOut === null ? null : <SlackDroppedOut fleetId={fleetId} botName={slackDroppedOut.botName} />}</KeptRead>
+        </>
       }
-      main={read.kind === 'unreadable' ? (argo ?? null) : read.kind === 'read' ? <HomePanel fleetId={fleetId} home={read.value} now={now} decidePlaces={decidePlaces} argo={argo} /> : <HomePanel fleetId={fleetId} home={NOTHING} now={now} argo={argo} />}
-      aside={<YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} />}
+      main={
+        <>
+          <KeptRead readAt={readAt}>{read.kind === 'unreadable' ? null : <HomePanel fleetId={fleetId} home={home} now={now} decidePlaces={read.kind === 'read' ? decidePlaces : undefined} argo={argo} />}</KeptRead>
+          {read.kind === 'unreadable' ? (argo ?? null) : null}
+        </>
+      }
+      aside={
+        <KeptRead readAt={fleetRead.kind === 'unreadable' ? undefined : new Date().toISOString()}>
+          <YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} isRecordUnreadable={read.kind === 'unreadable'} />
+        </KeptRead>
+      }
     />
   );
 }
@@ -44,7 +62,7 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
 /**
  * Bridge home (docs/design/bridge, CC18), where signing in lands: what waits
  * on the person with one count, and the stay-aware feed, with Your fleet
- * beside them. Signed out, the browser goes to sign in before anything
+ * beside them, and why Slack shows nothing when it dropped out. Signed out, the browser goes to sign in before anything
  * shows; signed in, the shape shows
  * while it loads. It reads itself again whenever the person ship's items
  * change, and tells the gateway while it is in focus (wake a person, W6).

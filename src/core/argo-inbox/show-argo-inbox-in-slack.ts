@@ -76,7 +76,7 @@ export function createShowArgoInboxInSlack(deps: {
     if (edited === undefined) {
       return 'forget';
     }
-    const updated = await deps.slack.update(app.bot.token, { ...where, message: edited });
+    const updated = await deps.slack.update(app.bot.token, { ...where, messageId: post.messageId, message: edited });
     return !updated.isOk && isForLater(updated.error) ? 'keep' : 'forget';
   };
 
@@ -85,7 +85,7 @@ export function createShowArgoInboxInSlack(deps: {
     const message = argoSlackMessageOf(read, { senderType, argoMessageUrl: deps.argoMessageUrlOf(read.deliveryId) });
     const posted = await deps.slack.post(bot.bot.token, { messageId: read.messageId, channel: kept.channel, threadTs: null, message });
     if (posted.isOk) {
-      await deps.posts.save({ ...kept, ts: posted.value.ts });
+      await deps.posts.save({ ...kept, channel: posted.value.channel, ts: posted.value.ts });
     } else if (!isForLater(posted.error)) {
       await deps.posts.save({ ...kept, isGivenUp: true });
     }

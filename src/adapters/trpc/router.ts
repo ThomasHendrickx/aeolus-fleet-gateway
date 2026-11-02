@@ -88,6 +88,7 @@ import type { FocusPage } from '../../core/people/focus-page.js';
 import type { TurnOffWebPush } from '../../core/people/turn-off-web-push.js';
 import type { TurnOnWebPush } from '../../core/people/turn-on-web-push.js';
 import type { PersonShip } from '../../core/people/ports.js';
+import type { ReadChats } from '../../core/people/read-chats.js';
 import type { ReadRouting } from '../../core/people/read-routing.js';
 import { ITEM_JOBS, ROUTING_PLACES } from '../../core/people/routing.js';
 import type { TurnRoute } from '../../core/people/turn-route.js';
@@ -100,6 +101,7 @@ import type { ExposeShip } from '../../core/slack/expose-ship.js';
 import type { ListExposable } from '../../core/slack/list-exposable.js';
 import type { RemoveBot } from '../../core/slack/remove-bot.js';
 import type { ReadSlack } from '../../core/slack/read-slack.js';
+import type { ReadSlackDroppedOut } from '../../core/slack/read-slack-dropped-out.js';
 import type { ReadSlackLink } from '../../core/slack/read-slack-link.js';
 import type { StartLink } from '../../core/slack/start-link.js';
 import type { StopSlackLink } from '../../core/slack/stop-slack-link.js';
@@ -196,6 +198,7 @@ export interface Context {
     removeFromBasket: RemoveFromBasket;
     sendBasket: SendBasket;
     readWakeChannels: ReadWakeChannels;
+    readChats: ReadChats;
     readRouting: ReadRouting;
     turnRoute: TurnRoute;
     turnOnWebPush: TurnOnWebPush;
@@ -216,6 +219,7 @@ export interface Context {
     exposeShip: ExposeShip;
     removeBot: RemoveBot;
     readSlackLink: ReadSlackLink;
+    readSlackDroppedOut: ReadSlackDroppedOut;
     startLink: StartLink;
     unlinkSlack: UnlinkSlack;
   };
@@ -1307,6 +1311,8 @@ export const gatewayRouter = t.router({
       const { email, webPush } = personAnswerOf(await ctx.person.readWakeChannels(ctx.caller));
       return { email, webPush: { publicKey: webPush.publicKey, browsers: webPush.browsers.map(({ addedAt, ...browser }) => ({ ...browser, addedAt: addedAt.toISOString() })) } };
     }),
+    /** The chats connected through the gateway as their person ship, by name: the chat place's state (Bridge, section 8). */
+    chats: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readChats(ctx.caller))),
     /** Where each job shows besides Bridge, per place, and the places the gateway offers (Bridge, section 8). */
     routing: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readRouting(ctx.caller))),
     /** Turns a place on or off for a job; it applies at once. */
@@ -1490,6 +1496,8 @@ export const gatewayRouter = t.router({
     link: servedProcedure
       .output(z.object({ workspaceName: z.string(), link: z.object({ slackName: z.string() }).nullable() }).nullable())
       .query(({ ctx }) => ctx.slack.readSlackLink({ actor: ctx.actor })),
+    /** Why Slack shows the person nothing now, for Bridge to say (Bridge, section 9): the fleet's own bot removed in Slack; none while Slack is not dropped out for them. */
+    droppedOut: servedProcedure.output(z.object({ botName: z.string() }).nullable()).query(({ ctx }) => ctx.slack.readSlackDroppedOut({ actor: ctx.actor })),
     /** Sign in with Slack to link the person's Slack account, from Bridge's settings or Slack's answer to an unlinked person (9.3). */
     startLink: servedProcedure.output(z.object({ url: z.string() })).mutation(async ({ ctx }) => slackAnswerOf(await ctx.slack.startLink({ actor: ctx.actor }))),
     /** Unlinks the person's own Slack account (9.3). */

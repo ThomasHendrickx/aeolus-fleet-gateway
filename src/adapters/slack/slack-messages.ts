@@ -6,7 +6,7 @@
  * attachment whose colour marks its side, each part a block named so it
  * reads back; a reaction (reactions.add); and a message read
  * (conversations.history, or conversations.replies in a thread) and given
- * anew, its buttons gone (chat.update).
+ * anew, an item with the buttons given (chat.update).
  */
 import { z } from 'zod';
 
@@ -200,10 +200,10 @@ export function createSlackMessages(options: { apiUrl: string }): SlackMessages 
       const message = read.value.messages.find((each) => each.ts === ts);
       return message === undefined ? err({ kind: 'refused', error: MESSAGE_NOT_FOUND }) : ok(messageBackOf(message));
     },
-    update: async (botToken, { channel, ts, message }) => {
-      const { text, item } = message;
-      // The buttons go: once something came of the item, there is nothing left to press.
-      const form = item === null ? { channel, ts, text, blocks: '[]', attachments: '[]' } : { channel, ts, text: '', blocks: '[]', attachments: JSON.stringify([attachmentOf('', { text, item, buttons: [] })]) };
+    update: async (botToken, { channel, ts, messageId, message }) => {
+      const { text, item, buttons } = message;
+      // A message that is no item is edited only once something came of it: nothing is left to press.
+      const form = item === null ? { channel, ts, text, blocks: '[]', attachments: '[]' } : { channel, ts, text: '', blocks: '[]', attachments: JSON.stringify([attachmentOf(messageId, { text, item, buttons })]) };
       const updated = await call({ method: 'chat.update', form, token: botToken }, postedSchema);
       return updated.isOk ? ok(undefined) : updated;
     },

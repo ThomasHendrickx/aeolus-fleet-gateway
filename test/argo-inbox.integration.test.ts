@@ -156,7 +156,7 @@ describe("Slack's post for what waits at argo, on a real fleet", () => {
     expect({
       posted: posted.map(({ botToken, form }) => ({ botToken, channel: form.channel, isWaitingAtArgo: form.attachments?.includes('Waits at argo') })),
       updated: updated.map(({ form }) => ({ channel: form.channel, isDoneAtArgo: form.attachments?.includes('Done at argo') })),
-    }).toEqual({ posted: [{ botToken: 'xoxb-A01', channel: 'U0CHARLOTTE', isWaitingAtArgo: true }], updated: [{ channel: 'U0CHARLOTTE', isDoneAtArgo: true }] });
+    }).toEqual({ posted: [{ botToken: 'xoxb-A01', channel: 'U0CHARLOTTE', isWaitingAtArgo: true }], updated: [{ channel: 'D0CHARLOTTE', isDoneAtArgo: true }] });
   });
 });
 

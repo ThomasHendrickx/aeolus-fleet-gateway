@@ -71,6 +71,32 @@ describe('a delivery as Slack shows it', () => {
     });
   });
 
+  describe("a question's options, as Slack shows a button's text (aeolus-fleet#1574)", () => {
+    const questionWith = (labels: readonly string[]) => slackPostOf(aDelivery({
+      contentType: 'application/vnd.aeolus.question+json',
+      payload: JSON.stringify({ id: '5f0c6c1e-8a39-4f37-9b0c-1c6d0e4f2a11', title: 'Ship the release?', context: 'Notes are **ready**', options: labels.map((label, at) => ({ key: at + 1, label, detail: '' })), pick: { option: 1, why: 'ready' } }),
+      headline: 'Ship the release?',
+    }), { bridgeUrl: OVERVIEW_URL, isHeadedBySender: false });
+
+    it("shows a button's text whole up to Slack's 75 characters, and cuts one longer with an ellipsis, as Slack refuses the whole post for it", () => {
+      expect([
+        questionWith(['Keep', "Nothing changes there: the console's count stays as it is, for argo also"]).buttons.map(({ text }) => text),
+        questionWith(['Keep', "Nothing changes there: the console's count stays as it is, for argo also!"]).buttons.map(({ text }) => text),
+      ]).toEqual([
+        ['1. Keep', "2. Nothing changes there: the console's count stays as it is, for argo also"],
+        ['1. Keep', "2. Nothing changes there: the console's count stays as it is, for argo als…"],
+      ]);
+    });
+
+    it("lists each option in full under the context once a button's text is over 30 characters, as Slack cuts a longer one in its button", () => {
+      expect(questionWith(['Keep the count as it stands.', 'Wait & see']).item?.body).toBe('Notes are *ready*\n\n*1.* Keep the count as it stands.\n*2.* Wait &amp; see');
+    });
+
+    it("lists no options while every button's text is 30 characters or fewer", () => {
+      expect(questionWith(['Keep the count as it stands', 'Wait']).item?.body).toBe('Notes are *ready*');
+    });
+  });
+
   it('shows an alert and a notice headed by their sender and job, with their headline and Seen', () => {
     const alert = slackPostOf(aDelivery({ senderName: 'watch', contentType: 'application/vnd.aeolus.alert+json', payload: '{}', headline: 'builder-gateway: no report change for 2 h' }), { bridgeUrl: OVERVIEW_URL, isHeadedBySender: false });
     const notice = slackPostOf(aDelivery({ contentType: 'application/vnd.aeolus.notice+json', payload: '{}', headline: 'Release 0.36.2 is out' }), { bridgeUrl: OVERVIEW_URL, isHeadedBySender: false });

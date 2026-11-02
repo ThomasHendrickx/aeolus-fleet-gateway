@@ -1,8 +1,13 @@
+import type { FleetId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
 import { FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
+import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { fakePersonShipFleet, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
+import { createAccountOfSignIn } from '../account-sign-in/account-of-sign-in.js';
+import type { SharedAccountToken } from '../account-sign-in/ports.js';
 import { err, ok } from '../shared/result.js';
 import type { AccountTokenOf } from '../sign-in/account-token.js';
 import { createCrewPersonShip } from './crew-person-ship.js';
@@ -43,6 +48,22 @@ describe("a signed-in person's person ship", () => {
     const { fleet, crewPersonShip: crew } = crewPersonShip();
 
     await expect(crew({ fleetId: FLEET_ID, signedIn: { accountToken: 'account-token-1', personShipId: PERSON_SHIP_ID } })).resolves.toEqual({ isOk: true, value: { shipId: PERSON_SHIP_ID, crewToken: 'aeolus_ct_v1_person_1' } });
+    expect(fleet.state.calls).toEqual([`startingPrompt ${PERSON_SHIP_ID}`, `register ${PERSON_SHIP_ID}`]);
+  });
+
+  it('gets its lease once commissioned after the person signed in, as in a fleet just made (aeolus-fleet#1583)', async () => {
+    const tokens = new Map<FleetId, SharedAccountToken>([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, personShipId: null }]]);
+    const accountOf = createAccountOfSignIn({ signIns: fakeSharedSignIn({ tokens }), argoAccounts: memoryArgoAccounts(), clock: { now: () => new Date('2026-10-21T09:00:00.000Z') } });
+    const { fleet, crewPersonShip: crew } = crewPersonShip();
+    const crewAsSignedIn = async () => {
+      const token = await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
+      return token.isOk ? crew({ fleetId: FLEET_ID, signedIn: { accountToken: token.value.accountToken, personShipId: token.value.personShipId } }) : token;
+    };
+    await crewAsSignedIn();
+
+    tokens.set(FLEET_ID, CHARLOTTE_ACCOUNT_TOKEN);
+
+    await expect(crewAsSignedIn()).resolves.toEqual({ isOk: true, value: { shipId: PERSON_SHIP_ID, crewToken: 'aeolus_ct_v1_person_1' } });
     expect(fleet.state.calls).toEqual([`startingPrompt ${PERSON_SHIP_ID}`, `register ${PERSON_SHIP_ID}`]);
   });
 

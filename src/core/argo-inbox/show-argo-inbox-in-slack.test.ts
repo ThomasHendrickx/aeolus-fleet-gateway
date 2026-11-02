@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { anArgoEntry, fakeArgoInboxFleet, memoryArgoAccounts, memoryArgoSlackPosts, TRIERARCH } from '../../../test/support/argo-inbox-fakes.js';
 import { FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/fleet-fakes.js';
 import { memoryRoutes } from '../../../test/support/people-fakes.js';
-import { aSlackApp, aSlackLink, fakeShipNames, fakeSlackMessages, memorySlackApps, memorySlackLinks } from '../../../test/support/slack-fakes.js';
+import { aSlackApp, aSlackLink, conversationOf, fakeShipNames, fakeSlackMessages, memorySlackApps, memorySlackLinks } from '../../../test/support/slack-fakes.js';
 import { routingDefaultsOf, type Route } from '../people/routing.js';
 import { createFollowArgoInbox } from './follow-argo-inbox.js';
 import { createShowArgoInboxInSlack } from './show-argo-inbox-in-slack.js';
@@ -147,7 +147,7 @@ describe("what waits at argo, in Slack's post", () => {
     await gateway.round();
 
     expect(slack.state.edits.map(({ channel, message }) => ({ channel, body: message.item?.body, tone: message.item?.tone, aside: message.item?.aside, buttons: message.buttons }))).toEqual(
-      ['U0MATHILDE', 'U0THOMAS'].map((channel) => ({ channel, body: '✅ Done at argo by thomas in the console, <!date^1793564040^{time}|20:14 UTC>', tone: 'done', aside: null, buttons: [] })),
+      ['U0MATHILDE', 'U0THOMAS'].map((user) => ({ channel: conversationOf(user), body: '✅ Done at argo by thomas in the console, <!date^1793564040^{time}|20:14 UTC>', tone: 'done', aside: null, buttons: [] })),
     );
   });
 

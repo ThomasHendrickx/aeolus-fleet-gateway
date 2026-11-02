@@ -117,6 +117,27 @@ describe('Bridge home: what waits on the person, with one count (CC18)', () => {
     expect(home.isOk ? { count: home.value.waiting.count, listed: home.value.waiting.items.length } : home).toEqual({ count: 12, listed: 12 });
   });
 
+  it('shows each of more than 10 deliveries sent the person ship, questions, a step, a notice and an alert, past the first 10 taken (aeolus-fleet#1583)', async () => {
+    const questions = Array.from({ length: 10 }, (_, index) => {
+      const number = String(index + 1).padStart(4, '0');
+      return aPersonDelivery({ deliveryId: `dlv_01m3tbfspe96yf1rnr4ank${number}`, messageId: `msg_01m3tbfspe96yf1rnr4ank${number}` });
+    });
+    const later = [
+      aPersonDelivery({ ...STEP, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0021', messageId: 'msg_01m3tbfspe96yf1rnr4ank0021' }),
+      aPersonDelivery({ ...NOTICE, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0022', messageId: 'msg_01m3tbfspe96yf1rnr4ank0022' }),
+      aPersonDelivery({ ...ALERT, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0023', messageId: 'msg_01m3tbfspe96yf1rnr4ank0023' }),
+    ];
+
+    const home = await readHome([...questions, ...later]).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? [...home.value.waiting.items, ...home.value.stayAware].map(({ deliveryId }) => deliveryId).sort() : home).toEqual([
+      ...questions.map(({ deliveryId }) => deliveryId),
+      'dlv_01m3tbfspe96yf1rnr4ank0021',
+      'dlv_01m3tbfspe96yf1rnr4ank0022',
+      'dlv_01m3tbfspe96yf1rnr4ank0023',
+    ]);
+  });
+
   it('lists a question the person opened and has not answered as seen, still in the count', async () => {
     await opened.save(anOpened());
 

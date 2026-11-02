@@ -98,3 +98,11 @@ describe("the phone's Fleet tab", () => {
     expect(renderToStaticMarkup(createElement(FleetPage, { read: { kind: 'forbidden' } })).includes('Your account may not read the fleet&#x27;s ships.')).toBe(true);
   });
 });
+
+describe('Your fleet while the record cannot be read either (states.html)', () => {
+  it("shows nothing of its own, so the banner alone says it, once and without core's words", () => {
+    const markup = renderToStaticMarkup(createElement(YourFleetPanel, { fleetId: 'flt_01', read: { kind: 'unreadable', message: 'The fleet did not answer: fetch failed' }, phone: 'hidden', isRecordUnreadable: true }));
+
+    expect(markup).toBe('');
+  });
+});

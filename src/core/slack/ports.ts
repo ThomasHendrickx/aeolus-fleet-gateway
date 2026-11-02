@@ -207,8 +207,8 @@ export interface SlackMessages {
   react(botToken: string, reaction: { channel: string; ts: string; name: string }): Promise<Result<undefined, SlackRefusal>>;
   /** A message as Slack holds it, in a conversation or a thread of it (conversations.history, conversations.replies): the item it frames as the gateway posted or edited it, or its text alone. */
   messageOf(botToken: string, message: { channel: string; ts: string; threadTs: string | null }): Promise<Result<SlackMessage, SlackRefusal>>;
-  /** Gives a message the item or text given, its buttons gone (chat.update). */
-  update(botToken: string, message: { channel: string; ts: string; message: SlackMessage }): Promise<Result<undefined, SlackRefusal>>;
+  /** Gives a message the item or text given, with an item's buttons given, naming the fleet message as its post's do; none once something came of it (chat.update). */
+  update(botToken: string, message: { channel: string; ts: string; messageId: MessageId; message: SlackMessage }): Promise<Result<undefined, SlackRefusal>>;
 }
 
 /**

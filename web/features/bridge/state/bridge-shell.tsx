@@ -10,13 +10,16 @@ import { readShellCounts } from '../hooks/read-bridge';
 import type { BridgeScreen } from '../services/shell';
 import { BridgeSidebar, type ShellCounts } from '../ui/bridge-sidebar';
 import { BridgeTabs } from '../ui/bridge-tabs';
+import { KeptRead } from './kept-read';
 import { ShellFrame, SidebarPerson, type ShellAccount } from './shell-frame';
 
 /** The shell before its counts are read: none shown, the basket left out. */
 const NO_COUNTS: ShellCounts = { waiting: undefined, stayAware: undefined, basket: 0, fleetAlerts: undefined };
 
+/** The counts once read; while what waits cannot be read, the browser shows them as last read (states.html). */
 async function Counted({ counts, children }: { counts: Promise<ShellCounts>; children: (counts: ShellCounts) => ReactNode }) {
-  return children(await counts);
+  const read = await counts;
+  return <KeptRead readAt={read.waiting === undefined ? undefined : new Date().toISOString()}>{children(read)}</KeptRead>;
 }
 
 /** The account signed in and the fleet in view by name, as the header's read answers them; none while it cannot be read. */

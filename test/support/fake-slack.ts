@@ -12,6 +12,27 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
+import { z } from 'zod';
+
+
+/** The most characters Slack takes in a button's text: one longer refuses the whole post. */
+const BUTTON_TEXT_MAX_LENGTH = 75;
+
+const buttonsSchema = z.array(z.object({ blocks: z.array(z.object({ elements: z.array(z.object({ text: z.unknown() })).optional() })).optional() }));
+
+/** Whether Slack takes every button of a post, in its blocks or its attachments' blocks. */
+function areButtonsShown(form: URLSearchParams): boolean {
+  const attachments = buttonsSchema.parse(JSON.parse(form.get('attachments') ?? '[]'));
+  const blocks = buttonsSchema.element.shape.blocks.unwrap().parse(JSON.parse(form.get('blocks') ?? '[]'));
+  const texts = [...blocks, ...attachments.flatMap((attachment) => attachment.blocks ?? [])].flatMap((block) => (block.elements ?? []).map(({ text }) => z.object({ text: z.string() }).safeParse(text).data?.text ?? ''));
+  return texts.every((text) => text.length <= BUTTON_TEXT_MAX_LENGTH);
+}
+
+/** The conversation a post to the channel goes into, as Slack answers it: a person's user id names their direct messages with the bot. */
+function conversationOf(channel: string): string {
+  return channel.startsWith('U') ? `D${channel.slice(1)}` : channel;
+}
+
 export interface FakeSlack {
   url: string;
   /** Slack's Web API base, as the gateway's SLACK_API_URL names it. */
@@ -83,9 +104,9 @@ export async function startFakeSlack(): Promise<FakeSlack> {
   const posted = new Array<{ botToken: string; form: Record<string, string> }>();
   const reactions = new Array<{ botToken: string; form: Record<string, string> }>();
   const updated = new Array<{ botToken: string; form: Record<string, string> }>();
-  /** A posted message as Slack holds it now: its text as last given, in its conversation and thread. */
+  /** A posted message as Slack holds it now: its text as last given, in its conversation and thread. A person's user id names no conversation here: Slack reads and edits a direct message only by the conversation's id. */
   const messageAt = (channel: string | null, ts: string | null) => {
-    const index = posted.findIndex((each, at) => each.form.channel === channel && `1730019600.${String(at + 1).padStart(6, '0')}` === ts);
+    const index = posted.findIndex((each, at) => conversationOf(each.form.channel ?? '') === channel && `1730019600.${String(at + 1).padStart(6, '0')}` === ts);
     const post = posted[index];
     const held = updated.findLast((each) => each.form.channel === channel && each.form.ts === ts)?.form ?? post?.form;
     const attachments: unknown = JSON.parse(held?.attachments ?? '[]');
@@ -230,10 +251,14 @@ export async function startFakeSlack(): Promise<FakeSlack> {
           answer(response, { body: { ok: false, error: 'invalid_auth' } });
           return;
         }
+        if (!areButtonsShown(form)) {
+          answer(response, { body: { ok: false, error: 'invalid_blocks' } });
+          return;
+        }
         posted.push({ botToken: bearer, form: Object.fromEntries(form) });
         const ts = `1730019600.${String(posted.length).padStart(6, '0')}`;
         await postsHeld;
-        answer(response, { body: { ok: true, channel: form.get('channel'), ts } });
+        answer(response, { body: { ok: true, channel: conversationOf(form.get('channel') ?? ''), ts } });
         return;
       }
       case 'reactions.add': {

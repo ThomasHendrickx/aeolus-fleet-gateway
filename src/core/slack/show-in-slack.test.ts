@@ -87,7 +87,15 @@ describe('a delivery to a linked person, in Slack', () => {
     expect(fleet.handOvers).toEqual([{ deliveryId: FROM_RELEASE_NOTES.deliveryId, handOverNumber: 1, channel: 'slack' }]);
     expect(slack.state.posts.map(({ botToken, channel, threadTs, text }) => ({ botToken, channel, threadTs, text }))).toEqual([{ botToken: 'xoxb-2', channel: 'U0MATHILDE', threadTs: null, text: 'Friday' }]);
     expect(fleet.calls.filter((call) => !call.startsWith('pushReceive'))).toEqual([`handed(${FROM_RELEASE_NOTES.deliveryId})`]);
-    expect(posts.held).toEqual([expect.objectContaining({ deliveryId: FROM_RELEASE_NOTES.deliveryId, appId: 'A02', channel: 'U0MATHILDE', ts: '1730020000.000001' })]);
+    expect(posts.held).toEqual([expect.objectContaining({ deliveryId: FROM_RELEASE_NOTES.deliveryId, appId: 'A02', channel: 'D0MATHILDE', ts: '1730020000.000001' })]);
+  });
+
+  it("keeps a post to the person's direct messages in the conversation Slack answered, as a press, a thread reply and an edit there name it (aeolus-fleet#1573)", async () => {
+    const fleet = aShip([A_QUESTION]);
+
+    await show(fleet, { routes: [slackOnFor('decide')] });
+
+    expect(posts.held.map(({ channel, ts }) => ({ channel, ts }))).toEqual([{ channel: 'D0MATHILDE', ts: '1730020000.000001' }]);
   });
 
   it('shows every delivery once, handed once, however often the person is woken', async () => {
