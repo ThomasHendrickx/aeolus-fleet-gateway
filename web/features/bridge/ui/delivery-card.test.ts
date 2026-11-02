@@ -73,7 +73,7 @@ describe('a question opened in Bridge (CC11)', () => {
       theirPick: markup.includes('Their pick'),
       put: markup.includes('>Put option 2 in the basket<'),
       sendsAtOnce: markup.includes('Send option') || markup.includes('Send the note alone'),
-    }).toEqual({ choices: 3, picked: true, theirPick: true, put: true, sendsAtOnce: false });
+    }).toEqual({ choices: 2, picked: true, theirPick: true, put: true, sendsAtOnce: false });
   });
 
   it('says a question whose answer is in the basket is in it, not sent, with its note, its option picked, the basket and Remove beside it', () => {
@@ -88,7 +88,7 @@ describe('a question opened in Bridge (CC11)', () => {
     }).toEqual({ inBasket: true, note: true, picked: true, basket: true, remove: true });
   });
 
-  it('opens with three options and Add a note beside the button, as decide.html draws it: no note field, no note-alone row yet', () => {
+  it('opens with its options and Add a note beside the button, as decide.html draws it: no note field, no note-alone row yet', () => {
     const markup = render(aQuestion());
 
     expect({
@@ -96,7 +96,7 @@ describe('a question opened in Bridge (CC11)', () => {
       noteAlone: markup.includes('No option, only the note'),
       field: markup.includes('data-testid="bridge-note"'),
       addANote: /<button[^>]*data-testid="bridge-add-note"[^>]*>Add a note<\/button>/.test(markup),
-    }).toEqual({ choices: 3, noteAlone: false, field: false, addANote: true });
+    }).toEqual({ choices: 2, noteAlone: false, field: false, addANote: true });
   });
 
   it('offers No option, only the note, beside the open note field, for an answer with the note alone', () => {
@@ -171,7 +171,7 @@ describe("Decide's words (decide.html, basket.html)", () => {
   });
 
   it('draws the note field without a resize grip, as it grows with its note', () => {
-    expect(/<textarea[^>]*data-testid="bridge-note"[^>]*class="[^"]*resize-none/.test(render(aQuestion()))).toBe(true);
+    expect(/<textarea[^>]*data-testid="bridge-note"[^>]*class="[^"]*resize-none/.test(render(aQuestion(), { note: 'U4 first.' }))).toBe(true);
   });
 
   it('names where the question shows under it, behind the eye icon', () => {
@@ -433,7 +433,7 @@ describe('an opened item’s heading, text and screen (aeolus-fleet#1538)', () =
   });
 
   it('shows a question’s options by their labels alone on a phone, their details from a desktop up', () => {
-    const markup = render(aQuestion());
+    const markup = render(aQuestion(), { note: 'U4 first.' });
     const classesOf = (detail: string) => (new RegExp(`<span class="([^"]*)">${detail}</span>`).exec(markup)?.[1] ?? '').split(' ');
 
     expect([classesOf('Harbour is built once\\.').includes('max-md:hidden'), classesOf('Answer with your note alone\\.').includes('max-md:hidden')]).toEqual([true, true]);
