@@ -47,6 +47,9 @@ function grantOf(caller: PersonCaller): string {
   return 'grantId' in caller ? caller.grantId : caller.signedIn.accountToken;
 }
 
+/** Bridge's argo section as the gateway answers it for an account allowed as argo. */
+const ARGO_SECTION = { count: 1, items: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9001' as const, title: 'thomas-mac is low on disk: 4% free', from: 'trierarch', sentAt: '2026-11-01T09:01:00.000Z', kind: 'report' as const, look: 'alert' as const, isNew: true, stale: null, consoleUrl: 'https://fleet.example/inbox?message=dlv_01m3tbfspe96yf1rnr4ank9001' }], done: null };
+
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
 const FOCUSED_AT = new Date('2026-10-23T10:00:00.000Z');
@@ -305,6 +308,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     listParties: () => Promise.resolve([]),
     listOwnerChoices: () => Promise.resolve(ok([])),
     readYourFleet: () => Promise.resolve(ok(YOUR_FLEET)),
+    readArgoSection: ({ accountId }) => Promise.resolve(accountId === 'acc-charlotte' ? ARGO_SECTION : null),
     readArgoInboxNotice: ({ accountId }) => Promise.resolve(accountId === 'acc-charlotte' ? { kind: 'notLetRead' as const, gatewayShip: { shipId: MANAGER, name: 'gateway' } } : { kind: 'none' as const }),
     retireParty: unused,
     changePartyOwner: unused,
@@ -1066,6 +1070,20 @@ describe("an account reads the overview's notice of argo's read rule through the
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.argoInboxNotice()).resolves.toEqual({ kind: 'none' });
+  });
+});
+
+describe("an account reads Bridge's argo section through the gateway's API (argo's inbox, AI4)", () => {
+  it('reads the section the gateway answers for an account allowed as argo', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.argoSection()).resolves.toEqual(ARGO_SECTION);
+  });
+
+  it('reads no section as any actor but an account, as only an account is allowed as argo', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.argoSection()).resolves.toBeNull();
   });
 });
 

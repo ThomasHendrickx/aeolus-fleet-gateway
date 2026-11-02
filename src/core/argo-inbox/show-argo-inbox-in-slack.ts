@@ -4,11 +4,11 @@ import type { ConnectionStore } from '../connection/ports.js';
 import { routingOf, type RoutingDefaults, type Routes } from '../people/routing.js';
 import type { ShipNames, SlackApps, SlackLinks, SlackMessages, SlackRefusal } from '../slack/ports.js';
 import type { SlackApp } from '../slack/slack-app.js';
-import type { DoneAtArgo } from './argo-inbox.js';
+import type { MessageDoneAtArgo } from './argo-inbox.js';
 import { argoSlackMessageOf, doneAtArgoMessageOf } from './argo-slack-message.js';
 import type { ArgoSlackPost } from './argo-slack-post.js';
 import type { FollowArgoInbox } from './follow-argo-inbox.js';
-import type { ArgoAccount, ArgoAccounts, ArgoInboxDoor, ArgoMessage, ArgoMessageRead, ArgoSlackPosts } from './ports.js';
+import type { ArgoAccount, ArgoAccounts, ArgoInboxDoor, ArgoMessage, ArgoInboxEntry, ArgoSlackPosts } from './ports.js';
 
 /** One pass over every fleet the gateway is connected to. */
 export type ShowArgoInboxInSlack = () => Promise<void>;
@@ -56,7 +56,7 @@ export function createShowArgoInboxInSlack(deps: {
   const senderTypes = new Map<string, string>();
 
   /** Who did it: the name of the person ship of the account signed in as argo, when the gateway keeps it as allowed as argo. */
-  const byOf = async (fleetId: FleetId, { done, accounts }: { done: DoneAtArgo | undefined; accounts: readonly ArgoAccount[] }): Promise<string | undefined> => {
+  const byOf = async (fleetId: FleetId, { done, accounts }: { done: MessageDoneAtArgo | undefined; accounts: readonly ArgoAccount[] }): Promise<string | undefined> => {
     const account = accounts.find(({ accountId }) => accountId === done?.accountId);
     return account === undefined ? undefined : deps.shipNames.nameOf(fleetId, account.personShipId);
   };
@@ -81,7 +81,7 @@ export function createShowArgoInboxInSlack(deps: {
   };
 
   /** Posts it: kept with its Slack message, given up once Slack refused it, or left for the next pass. */
-  const post = async (bot: InSlack, { kept, read, senderType }: { kept: ArgoSlackPost; read: ArgoMessageRead; senderType: string }): Promise<void> => {
+  const post = async (bot: InSlack, { kept, read, senderType }: { kept: ArgoSlackPost; read: ArgoInboxEntry; senderType: string }): Promise<void> => {
     const message = argoSlackMessageOf(read, { senderType, argoMessageUrl: deps.argoMessageUrlOf(read.deliveryId) });
     const posted = await deps.slack.post(bot.bot.token, { messageId: read.messageId, channel: kept.channel, threadTs: null, message });
     if (posted.isOk) {
@@ -109,8 +109,8 @@ export function createShowArgoInboxInSlack(deps: {
       return;
     }
     // Each message is read whole once a pass, for its headline, only when it is to be posted.
-    const reads = new Map<MessageId, ArgoMessageRead | null>();
-    const readOf = async ({ messageId }: ArgoMessage): Promise<ArgoMessageRead | null> => {
+    const reads = new Map<MessageId, ArgoInboxEntry | null>();
+    const readOf = async ({ messageId }: ArgoMessage): Promise<ArgoInboxEntry | null> => {
       if (!reads.has(messageId)) {
         const read = await deps.door.entry(crewToken, { argo: inbox.argo, messageId });
         reads.set(messageId, read.isOk ? read.value : null);

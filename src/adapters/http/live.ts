@@ -18,13 +18,29 @@ interface Listener {
   readonly read: () => void;
 }
 
-function isFor(listener: Listener, change: Change): boolean {
-  return listener.fleetId === change.fleetId && (change.topic === 'requests' || listener.personShipId === change.shipId);
+/**
+ * A change heard on this gateway: one committed to its database, or a change
+ * to argo's inbox, which each gateway instance's own ship follows in memory
+ * (argo's inbox, AI1), so it is heard on that instance alone.
+ */
+export type HeardChange = Change | { readonly fleetId: FleetId; readonly topic: 'argoInbox' };
+
+function isFor(listener: Listener, change: HeardChange): boolean {
+  if (listener.fleetId !== change.fleetId) {
+    return false;
+  }
+  switch (change.topic) {
+    case 'requests':
+    case 'argoInbox':
+      return true;
+    case 'inbox':
+      return listener.personShipId === change.shipId;
+  }
 }
 
 /** Hands each change to the listeners of its fleet, on this gateway. */
 export interface ChangeHub {
-  publish: (change: Change) => void;
+  publish: (change: HeardChange) => void;
   /** Every listener reads again: changes may have been missed. */
   resync: () => void;
   subscribe: (listener: Listener) => () => void;

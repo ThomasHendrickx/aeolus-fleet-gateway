@@ -191,6 +191,12 @@ export function itemHeadlineOf(carried: { contentType: string; payload: string }
   return askedQuestionOf(carried)?.title ?? replacingStep?.step.title ?? headlineOf(carried);
 }
 
+/** What argo's inbox reads from a message's payload, as a person's inbox does: its headline, and the question it asks or withdraws. */
+export function questionPartsOf(carried: { contentType: string; payload: string }): { headline: string | null; askedQuestionId: string | null; withdrawnQuestionId: string | null } {
+  const asked = askedQuestionOf(carried);
+  return { headline: itemHeadlineOf(carried), askedQuestionId: asked?.id ?? null, withdrawnQuestionId: withdrawalOf(carried)?.questionId ?? null };
+}
+
 /** The question a message asks (decision 0038): a question's own, or a replacement's new one; none for any other message, or one whose payload does not read. */
 function askedQuestionOf(carried: { contentType: string; payload: string }) {
   return isQuestionContentType(carried.contentType) ? parsedOf(questionSchema, carried.payload) : (withdrawalOf(carried)?.replacement ?? undefined);

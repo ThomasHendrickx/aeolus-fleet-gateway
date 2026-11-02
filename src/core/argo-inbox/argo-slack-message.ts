@@ -7,26 +7,21 @@
  */
 import { isQuestionContentType } from '@aeolus-fleet/common';
 
-import { TITLE_MAX_LENGTH } from '../people/inbox-entry.js';
 import { slackTimeOf } from '../slack/edited-post-of.js';
 import type { SlackMessage } from '../slack/ports.js';
 import { escaped } from '../slack/slack-post-of.js';
-import type { ArgoMessageRead } from './ports.js';
+import { argoTitleOf } from './argo-inbox.js';
+import type { ArgoInboxEntry } from './ports.js';
 
 /** The line under the headline: it is not the person's alone, and acting takes argo's sign-in. */
 const FOR_EVERYONE = 'For everyone allowed as argo. Acting signs you in to the console as argo.';
 
 const OPEN_AS_ARGO = 'Open in the console as argo';
 
-/** The headline, cut to fit as an inbox shows a title (#1570). */
-function titleOf(headline: string): string {
-  return headline.length <= TITLE_MAX_LENGTH ? headline : `${headline.slice(0, TITLE_MAX_LENGTH - 1)}…`;
-}
-
 /** Slack's post of a message open at argo, its sender named by type and name, its button to the message in the console as argo (A1's link). */
-export function argoSlackMessageOf(message: ArgoMessageRead, shown: { senderType: string; argoMessageUrl: string }): SlackMessage {
+export function argoSlackMessageOf(message: ArgoInboxEntry, shown: { senderType: string; argoMessageUrl: string }): SlackMessage {
   const kind = isQuestionContentType(message.contentType) ? 'Question' : 'Report';
-  const title = escaped(titleOf(message.headline));
+  const title = escaped(argoTitleOf(message));
   return {
     text: `Waits at argo, not you: ${title}`,
     item: { asker: message.sender.name, heading: `*Waits at argo*, not you · ${kind} from ${escaped(shown.senderType)} ${escaped(message.sender.name)}`, title, body: null, aside: FOR_EVERYONE, footer: null, tone: 'argo' },

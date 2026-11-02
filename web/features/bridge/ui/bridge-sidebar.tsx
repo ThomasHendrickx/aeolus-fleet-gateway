@@ -5,9 +5,11 @@ import { inFleet } from '../../../lib/gateway-api/page-account';
 import { OUTSIDE_PARTIES_PATH } from '../../outside-parties/paths';
 import { BRIDGE_FLEET_PATH } from '../fleet/paths';
 import { BRIDGE_BASKET_PATH, BRIDGE_DONE_PATH, BRIDGE_PATH, BRIDGE_ROUTING_PATH, BRIDGE_SETTINGS_PATH, BRIDGE_STAY_AWARE_PATH } from '../paths';
+import { ARGO_SECTION_ANCHOR } from '../services/argo-section';
 import type { BridgeScreen, ShellCounts } from '../services/shell';
 
 export type { ShellCounts };
+import { ArgoMark } from './argo-mark';
 import { ShellCount, type CountTone } from './shell-count';
 
 
@@ -39,7 +41,9 @@ function SidebarEntry({ entry }: { entry: Entry }) {
 /**
  * Bridge's sidebar on desktop (home.html): the Bridge mark; Waiting on you,
  * the basket while it holds any (section 9, rule 2), Stay aware, Done and
- * Your fleet, each with its count; the settings: Where things show, the
+ * Your fleet, each with its count; for an account allowed as argo, Waits at
+ * argo under For argo, with argo's own count (argo's inbox, AI4), leading to
+ * home's argo section; the settings: Where things show, the
  * outside parties, and Fleets and account, the account page in the account
  * app; the person at the foot.
  */
@@ -70,6 +74,16 @@ export function BridgeSidebar({ fleetId, screen, counts, accountUrl, foot }: { f
           <SidebarEntry key={page.key} entry={page} />
         ))}
       </nav>
+      {counts.argo === undefined ? null : (
+        <nav aria-label="For argo" className="flex flex-col gap-0.5">
+          <span className="px-2.5 pt-3.5 pb-1.5 text-caption font-medium text-muted-foreground">For argo</span>
+          <a href={`${inFleet(BRIDGE_PATH, fleetId)}#${ARGO_SECTION_ANCHOR}`} data-testid="bridge-side-argo" className="flex h-[30px] items-center gap-2.5 rounded-md px-2.5 text-foreground hover:bg-accent">
+            <ArgoMark className="-mx-0.5" />
+            Waits at argo
+            <ShellCount count={counts.argo} tone="argo" className="ml-auto" />
+          </a>
+        </nav>
+      )}
       <nav aria-label="Settings" className="flex flex-col gap-0.5">
         <a
           href={inFleet(BRIDGE_SETTINGS_PATH, fleetId)}

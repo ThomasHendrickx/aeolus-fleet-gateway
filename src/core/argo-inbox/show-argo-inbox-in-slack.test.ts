@@ -1,7 +1,7 @@
 import { QUESTION_CONTENT_TYPE, type ShipId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { anArgoEntry, fakeArgoInboxFleet, memoryArgoAccounts, memoryArgoSlackPosts } from '../../../test/support/argo-inbox-fakes.js';
+import { anArgoEntry, fakeArgoInboxFleet, memoryArgoAccounts, memoryArgoSlackPosts, TRIERARCH } from '../../../test/support/argo-inbox-fakes.js';
 import { FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/fleet-fakes.js';
 import { memoryRoutes } from '../../../test/support/people-fakes.js';
 import { aSlackApp, aSlackLink, fakeShipNames, fakeSlackMessages, memorySlackApps, memorySlackLinks } from '../../../test/support/slack-fakes.js';
@@ -98,7 +98,7 @@ describe("what waits at argo, in Slack's post", () => {
   });
 
   it('marks the post Waits at argo, not you, with its kind, sender and headline, for everyone allowed as argo, with one button to the console as argo', async () => {
-    fleet.send(anArgoEntry(1));
+    fleet.send(anArgoEntry(1, { payload: 'thomas-mac is low on disk: 4% free', sender: { ...TRIERARCH, name: 'thomas-mac' } }));
 
     await aGateway().round();
 
@@ -118,7 +118,7 @@ describe("what waits at argo, in Slack's post", () => {
   });
 
   it('gives a question no answer buttons: acting stays with argo, in the console', async () => {
-    fleet.send(anArgoEntry(1, { contentType: QUESTION_CONTENT_TYPE, headline: 'Which repository?' }));
+    fleet.send(anArgoEntry(1, { contentType: QUESTION_CONTENT_TYPE, headline: 'Which repository?', sender: { ...TRIERARCH, name: 'thomas-mac' } }));
 
     await aGateway().round();
 
@@ -143,7 +143,7 @@ describe("what waits at argo, in Slack's post", () => {
     const gateway = aGateway();
     await gateway.round();
 
-    fleet.markDone(anArgoEntry(1).messageId, { at: DONE_AT, accountId: 'acc-thomas' });
+    fleet.markDone(anArgoEntry(1).messageId, { at: DONE_AT, signedInAccountId: 'acc-thomas' });
     await gateway.round();
 
     expect(slack.state.edits.map(({ channel, message }) => ({ channel, body: message.item?.body, tone: message.item?.tone, aside: message.item?.aside, buttons: message.buttons }))).toEqual(
@@ -154,7 +154,7 @@ describe("what waits at argo, in Slack's post", () => {
   it('says only that it was done at argo for a message done while the gateway was down, as it saw no one do it', async () => {
     fleet.send(anArgoEntry(1));
     await aGateway().round();
-    fleet.markDone(anArgoEntry(1).messageId, { at: DONE_AT, accountId: 'acc-thomas' });
+    fleet.markDone(anArgoEntry(1).messageId, { at: DONE_AT, signedInAccountId: 'acc-thomas' });
 
     await aGateway().round();
 

@@ -159,3 +159,91 @@ describe("Slack's post for what waits at argo, on a real fleet", () => {
     }).toEqual({ posted: [{ botToken: 'xoxb-A01', channel: 'U0CHARLOTTE', isWaitingAtArgo: true }], updated: [{ channel: 'U0CHARLOTTE', isDoneAtArgo: true }] });
   });
 });
+
+const sectionSchema = z.object({
+  result: z.object({
+    data: z
+      .object({
+        count: z.number(),
+        items: z.array(z.object({ deliveryId: z.string(), title: z.string(), from: z.string(), consoleUrl: z.string() })),
+        done: z.object({ title: z.string(), isInConsole: z.boolean() }).nullable(),
+      })
+      .nullable(),
+  }),
+});
+
+/** Bridge's argo section, as the pages read it for the shared sign-in. */
+async function sectionFor(signIn: string) {
+  const read = await fetch(`${address}/trpc/people.argoSection`, { headers: { cookie: `aeolus_account_session=${signIn}`, 'aeolus-fleet': fleetId } });
+  return sectionSchema.parse(await read.json()).result.data;
+}
+
+/** The section once it shows a message titled so, or the last one read when it did not come within the time a person waits. */
+async function sectionOnceItShows(signIn: string, title: string) {
+  const deadline = Date.now() + SEEN_WITHIN_MS;
+  let section = await sectionFor(signIn);
+  while (section?.items.some((item) => item.title === title) !== true && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+    section = await sectionFor(signIn);
+  }
+  return section;
+}
+
+/** The changes stream an open Bridge page follows, as the shared sign-in: resolves at the first change it tells. */
+async function nextChangeFor(signIn: string): Promise<{ heard: Promise<string>; stop: () => void }> {
+  const stopping = new AbortController();
+  const response = await fetch(`${address}/trpc/requests.changes`, { headers: { accept: 'text/event-stream', cookie: `aeolus_account_session=${signIn}`, 'aeolus-fleet': fleetId }, signal: stopping.signal });
+  const body = response.body;
+  const heard = (async () => {
+    let text = '';
+    if (body === null) {
+      return text;
+    }
+    for await (const piece of body.pipeThrough(new TextDecoderStream())) {
+      text += piece;
+      if (text.includes(fleetId)) {
+        return text;
+      }
+    }
+    return text;
+  })();
+  return {
+    heard,
+    stop: () => {
+      stopping.abort();
+    },
+  };
+}
+
+describe("Bridge's argo section, on a real fleet", () => {
+  it('shows what the trierarch reports to argo, and a message done in the console leaves an open page without a reload', async () => {
+    await letReadArgo(fleet, { cookie, readerShipId: gatewayShip.shipId });
+    const trierarch = await register(fleet, await commission(fleet, { cookie, ship: { name: 'trierarch', type: 'trierarch', scopes: ['messages:send'] } }));
+    await send(fleet, { crewToken: trierarch, to: await argoShipId(fleet, cookie), contentType: 'text/plain', payload: 'thomas-mac is low on disk: 4% free' });
+    const shown = await sectionOnceItShows(ALLOWED_SIGN_IN, 'thomas-mac is low on disk: 4% free');
+    const page = await nextChangeFor(ALLOWED_SIGN_IN);
+
+    await markDoneAsArgo(fleet, { cookie, deliveryId: shown?.items[0]?.deliveryId ?? '' });
+
+    const told = await Promise.race([page.heard.then(() => 'told'), new Promise((resolve) => setTimeout(resolve, SEEN_WITHIN_MS, 'not told'))]);
+    page.stop();
+    const after = await sectionFor(ALLOWED_SIGN_IN);
+    expect({ shown: shown?.items.map(({ title, from }) => ({ title, from })), told, after: { count: after?.count, done: after?.done } }).toEqual({
+      shown: [{ title: 'thomas-mac is low on disk: 4% free', from: 'trierarch' }],
+      told: 'told',
+      after: { count: 0, done: { title: 'thomas-mac is low on disk: 4% free', isInConsole: false } },
+    });
+  });
+
+  it('shows no section to an account no longer allowed as argo', async () => {
+    await letReadArgo(fleet, { cookie, readerShipId: gatewayShip.shipId });
+    const deadline = Date.now() + SEEN_WITHIN_MS;
+    let allowed = await sectionFor(ALLOWED_SIGN_IN);
+    while (allowed === null && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+      allowed = await sectionFor(ALLOWED_SIGN_IN);
+    }
+
+    expect({ allowed: allowed?.count, noLonger: await sectionFor(NO_LONGER_SIGN_IN) }).toEqual({ allowed: 0, noLonger: null });
+  });
+});

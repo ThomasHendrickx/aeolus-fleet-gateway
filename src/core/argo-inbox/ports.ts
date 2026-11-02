@@ -23,31 +23,42 @@ export interface ArgoAccounts {
   list(fleetId: FleetId): Promise<readonly ArgoAccount[]>;
 }
 
-/** A message to argo as the gateway reads it from argo's inbox: who sent what, when, and its delivery. */
-export interface ArgoMessage {
+/** A message to argo as the fleet lists it: who sent it, when, and its delivery, with the delivery's state. */
+export interface ArgoInboxListed {
   readonly messageId: MessageId;
   readonly deliveryId: DeliveryId;
   readonly sender: { readonly shipId: ShipId; readonly name: string };
   readonly contentType: string;
   readonly sentAt: Date;
-}
-
-/** A message to argo and its delivery's state as the fleet answers it. */
-export interface ArgoInboxEntry extends ArgoMessage {
   readonly deliveryState: DeliveryState;
 }
 
-/** A message to argo read whole: its entry, and its headline, as a person reads it first. */
-export interface ArgoMessageRead extends ArgoInboxEntry {
-  /** A question's or a step's title, an alert's or a notice's headline, or else the payload's first line (#1570). */
-  readonly headline: string;
+/** A message to argo read whole: listed, with its payload, its headline, and the question it asks or withdraws, read from it. */
+export interface ArgoInboxEntry extends ArgoInboxListed {
+  readonly payload: string;
+  /** A question's title, or a step's, an alert's or a notice's headline; none for any other message. */
+  readonly headline: string | null;
+  readonly askedQuestionId: string | null;
+  readonly withdrawnQuestionId: string | null;
 }
 
-/** A change to a delivery to argo, as the fleet's event says it: the message, when, and the account that made it, as argo or itself; none for a ship's or the system's. */
+/** A message to argo as the gateway holds it: listed, titled as an inbox lists it, and the question it asks or withdraws. */
+export interface ArgoMessage extends Omit<ArgoInboxListed, 'deliveryState'> {
+  readonly title: string;
+  readonly askedQuestionId: string | null;
+  readonly withdrawnQuestionId: string | null;
+}
+
+/** A change to a delivery to argo, as the fleet's event says it: when, and who caused it, the account signed in to the console as argo included (decision 0054). */
 export interface ArgoInboxChange {
   readonly messageId: MessageId;
-  readonly at: Date;
-  readonly accountId: string | null;
+  readonly occurredAt: Date;
+  /** The ship that caused it; none for any other actor. */
+  readonly actorShipId: ShipId | null;
+  /** The account signed in to the console as argo when argo caused it; none otherwise. */
+  readonly signedInAccountId: string | null;
+  /** The account that caused it, signed in to the console as argo or itself; none for a ship's or the system's. */
+  readonly actorAccountId: string | null;
 }
 
 /**
@@ -60,13 +71,13 @@ export interface ArgoInboxDoor {
   argoInReach(crewToken: string): Promise<Result<ShipId | null, FleetRefusal>>;
   /** The position of the fleet's last event: a follow from there misses nothing after it. */
   position(crewToken: string): Promise<Result<number, FleetRefusal>>;
-  /** Every message to argo, with its delivery's state. */
-  entries(crewToken: string, argo: ShipId): Promise<Result<readonly ArgoInboxEntry[], FleetRefusal>>;
-  /** One message to argo with its delivery's state; null when it is no message to argo the ship reads. */
-  entry(crewToken: string, read: { argo: ShipId; messageId: MessageId }): Promise<Result<ArgoMessageRead | null, FleetRefusal>>;
+  /** Every message to argo, listed with its delivery's state. */
+  entries(crewToken: string, argo: ShipId): Promise<Result<readonly ArgoInboxListed[], FleetRefusal>>;
+  /** One message to argo read whole, with its delivery's state; null when it is no message to argo the ship reads. */
+  entry(crewToken: string, read: { argo: ShipId; messageId: MessageId }): Promise<Result<ArgoInboxEntry | null, FleetRefusal>>;
   /** A ship's type, as the fleet answers it even of a ship outside the read reach. */
   shipType(crewToken: string, shipId: ShipId): Promise<Result<string, FleetRefusal>>;
-  /** Each change to a delivery to argo after the position, in order, waiting while none came until the signal aborts, and the position to follow from next. */
+  /** Each change to a delivery to argo after the position, oldest first, waiting while none came until the signal aborts, and the position to follow from next. */
   changes(crewToken: string, follow: { argo: ShipId; afterSeq: number; signal: AbortSignal }): Promise<Result<{ changes: readonly ArgoInboxChange[]; lastSeq: number }, FleetRefusal>>;
 }
 

@@ -48,6 +48,10 @@ describe("the shell's counts", () => {
     expect(shellCountsOf({ home: { kind: 'read', value: { waiting: { count: 3 }, stayAware: [anItem('new'), anItem('seen'), anItem('new')] } }, basket: 1, fleetAlerts: 2 })).toEqual({ waiting: 3, stayAware: 2, basket: 1, fleetAlerts: 2 });
   });
 
+  it("keeps the argo count apart from what waits on the person: its own, for an account allowed as argo", () => {
+    expect(shellCountsOf({ home: { kind: 'read', value: { waiting: { count: 2 }, stayAware: [] } }, basket: 0, fleetAlerts: undefined, argo: 4 })).toEqual({ waiting: 2, stayAware: 0, basket: 0, fleetAlerts: undefined, argo: 4 });
+  });
+
   it('counts nothing waiting for an account with no person ship', () => {
     expect(shellCountsOf({ home: { kind: 'none' }, basket: 0, fleetAlerts: undefined })).toEqual({ waiting: 0, stayAware: 0, basket: 0, fleetAlerts: undefined });
   });

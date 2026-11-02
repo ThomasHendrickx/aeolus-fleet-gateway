@@ -2,7 +2,7 @@
 import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { ArgoSlackPost } from '../../src/core/argo-inbox/argo-slack-post.js';
-import type { ArgoAccount, ArgoAccounts, ArgoSlackPosts, ArgoInboxChange, ArgoInboxDoor, ArgoMessageRead, ArgoWakes } from '../../src/core/argo-inbox/ports.js';
+import type { ArgoAccount, ArgoAccounts, ArgoSlackPosts, ArgoInboxChange, ArgoInboxDoor, ArgoInboxEntry, ArgoWakes } from '../../src/core/argo-inbox/ports.js';
 import type { PersonShip, WakeChannelName } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
@@ -27,10 +27,10 @@ export function memoryArgoAccounts(): ArgoAccounts & { held: Map<FleetId, Map<st
 export const ARGO_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9arg';
 /** The trierarch of thomas-mac, named for its computer, which sends argo its biggest problems. */
 const TRIERARCH_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9trr';
-export const TRIERARCH = { shipId: TRIERARCH_SHIP_ID, name: 'thomas-mac' };
+export const TRIERARCH = { shipId: TRIERARCH_SHIP_ID, name: 'trierarch' };
 
 /** A message to argo, numbered, from the trierarch unless told otherwise. */
-export function anArgoEntry(number: number, overrides: Partial<ArgoMessageRead> = {}): ArgoMessageRead {
+export function anArgoEntry(number: number, overrides: Partial<ArgoInboxEntry> = {}): ArgoInboxEntry {
   const id = String(number).padStart(3, '0');
   return {
     messageId: `msg_01m3tbfspe96yf1rnr4ank9${id}`,
@@ -39,10 +39,18 @@ export function anArgoEntry(number: number, overrides: Partial<ArgoMessageRead> 
     contentType: 'text/markdown',
     sentAt: new Date(`2026-11-01T09:${id.slice(1)}:00.000Z`),
     deliveryState: 'pending',
-    headline: 'thomas-mac is low on disk: 4% free',
+    payload: `Report ${id} to argo`,
+    headline: null,
+    askedQuestionId: null,
+    withdrawnQuestionId: null,
     ...overrides,
   };
 }
+
+/** An account allowed as argo, signed in to the console as argo when argo marks a message done. */
+export const MATHILDE_ACCOUNT_ID = 'acc_mathilde';
+/** When argo marks a message done, unless told otherwise. */
+export const DONE_AT = new Date('2026-11-01T20:14:00.000Z');
 
 const NOT_ANSWERING = { code: 'UNAVAILABLE', message: 'The fleet did not answer' };
 
@@ -56,8 +64,8 @@ export function fakeArgoInboxFleet() {
   const state = {
     isReadRuleOn: true,
     isAnswering: true,
-    entries: new Map<MessageId, ArgoMessageRead>(),
-    /** Each change to a delivery to argo, by the message it concerns: its position is its index plus one. */
+    entries: new Map<MessageId, ArgoInboxEntry>(),
+    /** Each change to a delivery to argo: its position is its index plus one. */
     events: new Array<ArgoInboxChange>(),
     /** How many times every message to argo was read whole. */
     wholeReads: 0,
@@ -66,7 +74,7 @@ export function fakeArgoInboxFleet() {
     /** Each ship whose type was read, in order. */
     typeReads: new Array<ShipId>(),
   };
-  const change = (entry: ArgoMessageRead, by: Omit<ArgoInboxChange, 'messageId'>) => {
+  const change = (entry: ArgoInboxEntry, by: Omit<ArgoInboxChange, 'messageId'>) => {
     state.entries.set(entry.messageId, entry);
     state.events.push({ messageId: entry.messageId, ...by });
   };
@@ -91,14 +99,17 @@ export function fakeArgoInboxFleet() {
     state,
     door,
     /** A ship sends argo a message: core stores it Open and unread. */
-    send: (entry: ArgoMessageRead) => {
-      change(entry, { at: entry.sentAt, accountId: null });
+    send: (entry: ArgoInboxEntry) => {
+      change(entry, { occurredAt: entry.sentAt, actorShipId: entry.sender.shipId, signedInAccountId: null, actorAccountId: null });
     },
-    /** argo marks it done in the console, by default at 20:14 with no account signed in as argo named. */
-    markDone: (messageId: MessageId, by: Partial<Omit<ArgoInboxChange, 'messageId'>> = {}) => {
+    /** argo marks it done, in the console by the account signed in as argo unless told otherwise. */
+    markDone: (messageId: MessageId, done: { at?: Date; signedInAccountId?: string | null; actorAccountId?: string | null } = {}) => {
       const entry = state.entries.get(messageId);
       if (entry !== undefined) {
-        change({ ...entry, deliveryState: 'acknowledged' }, { at: new Date('2026-11-01T20:14:00.000Z'), accountId: null, ...by });
+        change(
+          { ...entry, deliveryState: 'acknowledged' },
+          { occurredAt: done.at ?? DONE_AT, actorShipId: ARGO_SHIP_ID, signedInAccountId: done.signedInAccountId === undefined ? MATHILDE_ACCOUNT_ID : done.signedInAccountId, actorAccountId: done.actorAccountId ?? null },
+        );
       }
     },
   };

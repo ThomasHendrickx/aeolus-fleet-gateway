@@ -68,10 +68,10 @@ describe("argo's inbox as the gateway's ship reads it from core", () => {
 
     const changes = await door().changes(gateway.crewToken, { argo, afterSeq, signal: AbortSignal.timeout(30_000) });
 
-    expect(changes).toMatchObject({ isOk: true, value: { changes: [{ messageId, accountId: null }] } });
+    expect(changes).toMatchObject({ isOk: true, value: { changes: [{ messageId, signedInAccountId: null, actorAccountId: null }] } });
   });
 
-  it('reads a message to argo whole with its headline: its first line, or the title of a question', async () => {
+  it('reads a message to argo whole with its headline: none for a plain report, the title of a question', async () => {
     const reportId = await send(fleet, { crewToken: trierarch, to: argo, contentType: 'text/markdown', payload: 'thomas-mac is low on disk: 4% free\n\nFree some disk.' });
     const question = { id: crypto.randomUUID(), title: 'Which repository?', context: 'builder-memory', options: [{ key: 1, label: 'aeolus-fleet' }], pick: { option: 1, why: 'it holds the docs' } };
     const questionId = await send(fleet, { crewToken: trierarch, to: argo, contentType: QUESTION_CONTENT_TYPE, payload: JSON.stringify(question) });
@@ -79,7 +79,7 @@ describe("argo's inbox as the gateway's ship reads it from core", () => {
     const [report, asked] = await Promise.all([door().entry(gateway.crewToken, { argo, messageId: reportId }), door().entry(gateway.crewToken, { argo, messageId: questionId })]);
 
     expect([report, asked]).toMatchObject([
-      { isOk: true, value: { headline: 'thomas-mac is low on disk: 4% free' } },
+      { isOk: true, value: { headline: null } },
       { isOk: true, value: { headline: 'Which repository?' } },
     ]);
   });
@@ -93,8 +93,8 @@ describe("argo's inbox as the gateway's ship reads it from core", () => {
 
     const changes = await door().changes(gateway.crewToken, { argo, afterSeq: position.isOk ? position.value : -1, signal: AbortSignal.timeout(30_000) });
     const done = await door().entry(gateway.crewToken, { argo, messageId });
-    const change = changes.isOk ? changes.value.changes.findLast((each) => each.messageId === messageId) : undefined;
-    expect({ isDatedChange: change?.at instanceof Date, state: done.isOk ? done.value?.deliveryState : done.error }).toEqual({ isDatedChange: true, state: 'acknowledged' });
+    const change = changes.isOk ? changes.value.changes.find((each) => each.messageId === messageId) : undefined;
+    expect({ by: change?.actorShipId, state: done.isOk ? done.value?.deliveryState : done.error }).toEqual({ by: argo, state: 'acknowledged' });
   });
 
   it("reads a sender's type, as Slack's post names it", async () => {
@@ -102,6 +102,15 @@ describe("argo's inbox as the gateway's ship reads it from core", () => {
     const senderShipId = entries.isOk ? (entries.value[0]?.sender.shipId ?? argo) : argo;
 
     await expect(door().shipType(gateway.crewToken, senderShipId)).resolves.toEqual({ isOk: true, value: 'trierarch' });
+  });
+
+  it('reads a message to argo whole: its payload, and the title of the question it asks', async () => {
+    const question = { id: 'b3f1c6a2-0d7e-4c55-9a51-6f0e4e2d9a11', title: 'Which repository holds the memory plugin?', context: 'builder-memory', options: [{ key: 1, label: 'aeolus-fleet' }], pick: { option: 1, why: 'one place' } };
+    const messageId = await send(fleet, { crewToken: trierarch, to: argo, contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify(question) });
+
+    const read = await door().entry(gateway.crewToken, { argo, messageId });
+
+    expect(read).toMatchObject({ isOk: true, value: { payload: JSON.stringify(question), headline: question.title, askedQuestionId: question.id, withdrawnQuestionId: null } });
   });
 
   it('reads no message argo sent as one to argo', async () => {
