@@ -36,4 +36,10 @@ describe('the numbers on Your fleet', () => {
 
     expect([zero.includes('text-tone-'), one.includes('text-tone-')]).toEqual([false, true]);
   });
+
+  it("draws each number at 22 px and its word at 11 px on the phone, as the phone's Fleet tab draws them", () => {
+    const markup = renderToStaticMarkup(createElement(FleetNumbers, { fleet: fleetWith({ alert: 1, waiting: 2, working: 8, idle: 7 }), isShipCountShown: true }));
+
+    expect([markup.includes('max-sm:text-[22px]'), markup.includes('max-sm:text-[11px]')]).toEqual([true, true]);
+  });
 });

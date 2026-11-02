@@ -20,10 +20,10 @@ export function A2aAgentForm({ fleetId, requestId, owners, scopes }: { fleetId: 
   const [state, action] = useActionState(addA2aAgent, IDLE);
   const fields = state.kind === 'refused' ? state.fields : {};
   return (
-    <form action={action} className={`${CARD} grid gap-3`} data-testid="add-a2a-agent-form">
+    <form action={action} className={`${CARD} grid max-w-160 gap-3`} data-testid="add-a2a-agent-form">
       <input type="hidden" name={FLEET_FIELD} value={fleetId} />
       <input type="hidden" name="requestId" value={requestId} />
-      <h1 className="text-title font-semibold">Add an A2A agent</h1>
+      <h1 className="text-heading-touch font-semibold max-sm:sr-only">Add an A2A agent</h1>
       <Outcome state={state.kind === 'refused' ? state : { kind: 'idle' }} />
       <label className={LABEL}>
         <span>Name, the proxy ship&apos;s</span>

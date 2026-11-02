@@ -1,13 +1,14 @@
 'use client';
 
+import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { ADDED_CREDENTIAL_KINDS, addedCredentialKindOf, CREDENTIAL_KINDS, credentialKindOf, SIGN_IN_CREDENTIAL, type AddedCredentialKind } from '../server-credential';
-import { INPUT, LABEL } from './look';
+import { INPUT, LABEL, SELECT } from './look';
 
 /**
  * The credential the vault keeps for an outside party the gateway calls: its
- * kind, then only the fields of that kind. A secret is never shown back, so
+ * kind, labelled by the legend alone, then only the fields of that kind. A secret is never shown back, so
  * it is typed again after a refusal. Only adding a server offers each person
  * signing in, which takes no field (decision 0067).
  */
@@ -17,16 +18,16 @@ export function CredentialFields({ legend, fields, noneHelp, canEachPersonSignIn
   return (
     <fieldset className="grid gap-3">
       <legend className="font-medium">{legend}</legend>
-      <label className={LABEL}>
-        <span>Credential</span>
-        <select className={INPUT} name="credentialKind" value={credentialKind} onChange={(event) => { const kind = kindOf(event.target.value); setCredentialKind(kind); onKindChange?.(kind); }}>
+      <span className="relative">
+        <select className={SELECT} aria-label={legend} name="credentialKind" value={credentialKind} onChange={(event) => { const kind = kindOf(event.target.value); setCredentialKind(kind); onKindChange?.(kind); }}>
           {(canEachPersonSignIn ? ADDED_CREDENTIAL_KINDS : CREDENTIAL_KINDS).map(({ kind, label }) => (
             <option key={kind} value={kind}>
               {label}
             </option>
           ))}
         </select>
-      </label>
+        <ChevronDown aria-hidden className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+      </span>
       {credentialKind === 'clientCredentials' ? (
         <>
           <label className={LABEL}>

@@ -15,7 +15,7 @@ import { BasketToasts, putToastOf } from '../ui/basket-toast';
 import { DeliveryCard, type DeliveryControl, type InBasket, type Opened, type StepFinished } from '../ui/delivery-card';
 import { ItemSplit } from '../ui/item-split';
 import { Notice } from '../ui/notice';
-import { SendMessageProvider, useSendMessage } from './send-message';
+import { useSendMessage } from './send-message';
 import { useOpenedItem } from './opened-item';
 
 /** An item to open: by its delivery, with its job, whether an alert, whether it was new, and the answer to it in the basket, if any. A replacement opened from its stale item is new. */
@@ -61,12 +61,10 @@ export interface ItemOpening {
  */
 export function ItemFocus({ fleetId, decidePlaces, consoleUrl, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; /** The fleet's console, where an opened alert's ship shows its Health. */ consoleUrl?: string; children: (opening: ItemOpening) => ReactNode }) {
   return (
-    <SendMessageProvider fleetId={fleetId}>
-      <Toast.Provider>
-        <FocusedItems fleetId={fleetId} decidePlaces={decidePlaces} consoleUrl={consoleUrl}>{children}</FocusedItems>
-        <BasketToasts />
-      </Toast.Provider>
-    </SendMessageProvider>
+    <Toast.Provider>
+      <FocusedItems fleetId={fleetId} decidePlaces={decidePlaces} consoleUrl={consoleUrl}>{children}</FocusedItems>
+      <BasketToasts />
+    </Toast.Provider>
   );
 }
 

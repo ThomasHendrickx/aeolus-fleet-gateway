@@ -113,6 +113,18 @@
       background-color: var(--highlight);
     }
   }
+
+  /* A working ship's tile: a band of light runs along its foot (design/bridge-fleet-width). */
+  --animate-live-band: live-band 2.4s linear infinite;
+
+  @keyframes live-band {
+    from {
+      background-position: -60% 0;
+    }
+    to {
+      background-position: 160% 0;
+    }
+  }
 }
 
 @layer base {

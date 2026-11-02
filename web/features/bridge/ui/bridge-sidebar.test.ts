@@ -72,8 +72,16 @@ describe("Bridge's sidebar", () => {
       { href: '/bridge/settings?fleet=flt_01', text: 'Settings', isCurrent: false },
       { href: '/bridge/settings/routing?fleet=flt_01', text: 'Where things show', isCurrent: false },
       { href: '/outside-parties?fleet=flt_01', text: 'Outside parties', isCurrent: false },
-      { href: ACCOUNT_URL, text: 'Fleets and account', isCurrent: false },
+      { href: ACCOUNT_URL, text: 'Fleets and accountOpens the Account app', isCurrent: false },
     ]);
+  });
+
+  it('marks Outside parties current on its pages (#191)', () => {
+    expect(entriesOf(sidebarOf({ screen: 'outside-parties' }))['outside-parties']?.isCurrent).toBe(true);
+  });
+
+  it('says before the switch that Fleets and account opens the Account app (#191)', () => {
+    expect(/data-testid="bridge-side-account"[^>]*>.*<span[^>]*title="Opens the Account app"/.test(sidebarOf())).toBe(true);
   });
 
   it('leaves Fleets and account out while the account app is not known', () => {

@@ -5,6 +5,7 @@ import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-a
 import { readYourFleet, type FleetRead } from '../fleet/hooks/read-your-fleet';
 import { YourFleetPanel } from '../fleet/state/your-fleet-panel';
 import { readArgoInboxNotice, readArgoSection, readBridgeHome, readDecidePlaces, readSlackDroppedOut, readTimeOf } from '../hooks/read-bridge';
+import { readConsoleUrl } from '../hooks/read-console-url';
 import { argoInboxNoticeOf } from '../services/argo-inbox-notice';
 import { BRIDGE_PATH } from '../paths';
 import { ArgoInboxNotice } from '../ui/argo-inbox-notice';
@@ -15,7 +16,7 @@ import { HomeColumns } from '../ui/home-columns';
 import { SlackDroppedOut } from '../ui/slack-dropped-out';
 import { HomePanel } from './home-panel';
 import { KeptRead } from './kept-read';
-import { LastReadHeading } from './last-read-heading';
+import { HomeHeading } from './home-heading';
 import { RecordUnreadable } from './record-unreadable';
 
 /** For an account with no person ship nothing waits, and nothing reaches it unasked. */
@@ -27,7 +28,7 @@ const NOTHING = { waiting: { count: 0, items: [] }, stayAware: [] };
  * read, the browser shows it as last read (states.html).
  */
 async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: string; fleet: Promise<FleetRead> }) {
-  const [read, decidePlaces, fleetRead, slackDroppedOut, argoNotice, argoSection] = await Promise.all([readBridgeHome(api), readDecidePlaces(api), fleet, readSlackDroppedOut(api), readArgoInboxNotice(api), readArgoSection(api)]);
+  const [read, decidePlaces, fleetRead, slackDroppedOut, argoNotice, argoSection, consoleUrl] = await Promise.all([readBridgeHome(api), readDecidePlaces(api), fleet, readSlackDroppedOut(api), readArgoInboxNotice(api), readArgoSection(api), readConsoleUrl(fleetId)]);
   const isNothingWaiting = read.kind !== 'unreadable' && (read.kind === 'none' || read.value.waiting.items.length === 0);
   const readAt = readTimeOf(read);
   const home = read.kind === 'read' ? read.value : NOTHING;
@@ -36,7 +37,7 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
   const argoInboxNotice = argoInboxNoticeOf(argoNotice);
   return (
     <HomeColumns
-      heading={<KeptRead readAt={readAt}>{read.kind === 'unreadable' ? null : <LastReadHeading />}</KeptRead>}
+      heading={<KeptRead readAt={readAt}>{read.kind === 'unreadable' ? null : <HomeHeading waiting={home.waiting} />}</KeptRead>}
       banner={
         <>
           {read.kind === 'unreadable' ? <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} /> : null}
@@ -52,7 +53,7 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
       }
       aside={
         <KeptRead readAt={fleetRead.kind === 'unreadable' ? undefined : new Date().toISOString()}>
-          <YourFleetPanel fleetId={fleetId} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} isRecordUnreadable={read.kind === 'unreadable'} />
+          <YourFleetPanel fleetId={fleetId} consoleUrl={consoleUrl} read={fleetRead} phone={isNothingWaiting ? 'numbers' : 'hidden'} isRecordUnreadable={read.kind === 'unreadable'} />
         </KeptRead>
       }
     />

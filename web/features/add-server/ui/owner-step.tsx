@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { FLEET_FIELD } from '../../forms/form-state';
-import { BUTTONS, CARD, INPUT, LABEL } from '../../forms/ui/look';
+import { BUTTONS, COMPACT_CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { OwnerField } from '../../forms/ui/owner-field';
 import { SubmitButton } from '../../forms/ui/submit-button';
 import type { AddServerState, ApproveState } from '../actions';
@@ -33,7 +33,7 @@ export function OwnerStep({ state, refused, action, onBack, fleetId, canSwitchTo
   return (
     <>
       {tools === null ? <Steps names={SIGN_IN_STEPS} at={1} /> : <Steps names={CHECKED_STEPS} at={2} />}
-      <form action={action} className={`${CARD} grid gap-3`} data-testid="add-server-owner">
+      <form action={action} className={`${COMPACT_CARD} grid gap-3.5`} data-testid="add-server-owner">
         {tools === null ? null : <ToolsSection tools={tools} canSwitch={canSwitchTools} />}
         <h2 className="text-section font-semibold">Its owner</h2>
         <Refused refusal={isRefused ? refused.message : undefined} />

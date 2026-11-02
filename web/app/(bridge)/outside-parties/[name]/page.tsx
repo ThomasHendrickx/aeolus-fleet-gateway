@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 
 import { signInOutcomeOf } from '../../../../features/outside-party/own-sign-in';
 import { OutsideParty } from '../../../../features/outside-party/ui/outside-party';
-import { partyPath } from '../../../../features/outside-parties/paths';
-import { NoSignIn } from '../../../../features/sign-in/ui/no-sign-in';
+import { OUTSIDE_PARTIES_PATH, partyPath } from '../../../../features/outside-parties/paths';
+import { BridgeNoSignIn, BridgeShell } from '../../../../features/bridge/state/bridge-shell';
+import { inFleet } from '../../../../lib/gateway-api/page-account';
 import { signedInPage, type SearchParams } from '../../../../lib/gateway-api/page-api';
 
 export const metadata: Metadata = { title: 'Outside parties' };
@@ -13,7 +14,11 @@ export default async function OutsidePartyPage({ params, searchParams }: { param
   const asked = await searchParams;
   const page = await signedInPage({ path: partyPath(name), searchParams: asked });
   if (page.kind === 'noSignIn') {
-    return <NoSignIn />;
+    return <BridgeNoSignIn />;
   }
-  return <OutsideParty page={page} name={name} outcome={signInOutcomeOf(asked)} />;
+  return (
+    <BridgeShell api={page.api} fleetId={page.fleetId} screen="outside-parties" below={{ name, parentHref: inFleet(OUTSIDE_PARTIES_PATH, page.fleetId) }}>
+      <OutsideParty page={page} name={name} outcome={signInOutcomeOf(asked)} />
+    </BridgeShell>
+  );
 }

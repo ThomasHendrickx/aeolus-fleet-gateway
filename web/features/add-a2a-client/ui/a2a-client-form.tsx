@@ -39,10 +39,10 @@ export function A2aClientForm({ fleetId, requestId, owners, scopes }: { fleetId:
     return <Added name={state.name} bearer={state.bearer} fleetId={fleetId} />;
   }
   return (
-    <form action={action} className={`${CARD} grid gap-3`} data-testid="add-a2a-client-form">
+    <form action={action} className={`${CARD} grid max-w-160 gap-3`} data-testid="add-a2a-client-form">
       <input type="hidden" name={FLEET_FIELD} value={fleetId} />
       <input type="hidden" name="requestId" value={requestId} />
-      <h1 className="text-title font-semibold">Add an A2A client</h1>
+      <h1 className="text-heading-touch font-semibold max-sm:sr-only">Add an A2A client</h1>
       <label className={LABEL}>
         <span>Name, the proxy ship&apos;s</span>
         <input className={INPUT} name="name" required />

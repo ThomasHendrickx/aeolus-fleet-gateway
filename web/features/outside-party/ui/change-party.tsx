@@ -6,7 +6,7 @@ import { OwnerField } from '../../forms/ui/owner-field';
 import { partyPath } from '../../outside-parties/paths';
 import { changeParty } from '../actions';
 import { EVERY_APP_SHIP_SCOPES, SCOPE_FIELD_PREFIX, SCOPES_SHOWN_FIELD } from '../scope-changes';
-import { Back, GRANTING_SCOPE, OWNING_SCOPE, Refusal } from './outside-party';
+import { GRANTING_SCOPE, OWNING_SCOPE, Refusal } from './outside-party';
 
 /** A scope's plain label, beside the scope itself. */
 const SCOPE_LABELS: Record<string, string> = {
@@ -37,8 +37,7 @@ export async function ChangeParty({ page, name }: { page: SignedInPage; name: st
   const read = await readOf(api.parties.get.query({ name }));
   if (!read.isOk) {
     return (
-      <div className="grid gap-4">
-        <Back fleetId={fleetId} />
+      <div className="grid max-w-160 gap-4">
         <Refusal>{read.refusal}</Refusal>
       </div>
     );
@@ -49,8 +48,7 @@ export async function ChangeParty({ page, name }: { page: SignedInPage; name: st
   const own = scopes.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope));
   const beyond = held === null ? [] : held.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope) && !own.includes(scope));
   return (
-    <div className="grid gap-4">
-      <Back fleetId={fleetId} />
+    <div className="grid max-w-160 gap-4">
       <section className={`${CARD} grid gap-3`}>
         <h2 className="text-section font-semibold">{party.name}: owner and scopes</h2>
         <ActionForm action={changeParty} fleetId={fleetId} submit={{ label: 'Save', pending: 'Saving…' }} testId="outside-party-change-form">

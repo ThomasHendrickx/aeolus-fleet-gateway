@@ -2,18 +2,13 @@ import { Suspense } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
-import { readHeader } from '../../frame/hooks/read-header';
 import { readBridgeHome } from '../hooks/read-bridge';
+import { readConsoleUrl } from '../hooks/read-console-url';
 import { BRIDGE_STAY_AWARE_PATH } from '../paths';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { PageAsLastRead } from './page-as-last-read';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { StayAwarePanel } from './stay-aware-panel';
-
-/** The fleet's console, where an alert's ship shows its Health; none while the account's apps cannot be read or name none. */
-async function readConsoleUrl(fleetId: string): Promise<string | undefined> {
-  return (await readHeader())?.fleets.find(({ id }) => id === fleetId)?.apps.find(({ app }) => app === 'console')?.url;
-}
 
 async function StayAwareParts({ api, fleetId }: { api: GatewayApi; fleetId: string }) {
   const [read, consoleUrl] = await Promise.all([readBridgeHome(api), readConsoleUrl(fleetId)]);

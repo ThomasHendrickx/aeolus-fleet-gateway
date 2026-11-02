@@ -6,25 +6,24 @@ import { FleetWall } from '../ui/fleet-wall';
 
 /**
  * The phone's Fleet tab, and where Your fleet's heading leads on any screen,
- * as Harbour draws it (docs/design/fleet-overview): on the phone headed
- * Fleet, straight to the ships and the four numbers; on a wider screen
+ * as Harbour draws it (docs/design/fleet-overview): on the phone its top
+ * bar says Fleet, straight to the ships and the four numbers; on a wider screen
  * headed Your fleet with Harbour's lead line; then a tile per ship in its
  * group.
  */
-export function FleetPage({ read }: { read: FleetRead }) {
+export function FleetPage({ read, consoleUrl }: { read: FleetRead; consoleUrl: string | undefined }) {
   return (
     <section className="grid gap-4" aria-labelledby="bridge-fleet-heading">
-      <div>
-        <h1 id="bridge-fleet-heading" className="text-heading font-semibold">
-          <span className="sm:hidden">Fleet</span>
-          <span className="max-sm:hidden">Your fleet</span>
+      <div className="max-sm:sr-only">
+        <h1 id="bridge-fleet-heading" className="text-heading-touch font-semibold">
+          Your fleet
         </h1>
         {read.kind === 'read' ? <p className="max-sm:hidden text-muted-foreground">{summaryOf(read.value)}</p> : null}
       </div>
       {read.kind === 'read' ? (
         <>
           <FleetNumbers fleet={read.value} isShipCountShown />
-          <FleetWall groups={read.value.groups} tileColumns="grid-cols-3 sm:grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))]" />
+          <FleetWall groups={read.value.groups} consoleUrl={consoleUrl} tileColumns="grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]" />
         </>
       ) : read.kind === 'unreadable' ? (
         <FleetUnreadable message={read.message} />

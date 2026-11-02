@@ -1,4 +1,4 @@
-import { createElement, Fragment } from 'react';
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
@@ -6,7 +6,6 @@ import type { BridgeHome, HomeItem } from '../services/items';
 import type { ItemOpening } from './item-focus';
 import { HomeLists, HomePanel } from './home-panel';
 import { AsLastRead } from './kept-read';
-import { LastReadHeading } from './last-read-heading';
 
 function anItem(overrides: Partial<HomeItem> = {}): HomeItem {
   return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', isAlert: false, state: 'new', stale: null, inBasket: null, seenIn: null, places: [], actInPlace: null, ...overrides };
@@ -20,18 +19,16 @@ function render(home: BridgeHome): string {
 }
 
 describe('Bridge home (CC18)', () => {
-  it('shows what waits with its count, each item to decide or do with who asked', () => {
+  it('shows what waits, each item to decide or do with who asked', () => {
     const markup = render({
       waiting: { count: 2, items: [anItem(), anItem({ deliveryId: 'dlv_02', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin', state: 'seen' })] },
       stayAware: [],
     });
 
     expect({
-      count: markup.includes('data-testid="bridge-count" class="text-tone-waiting-fg">2<'),
-      counts: markup.includes('1 to decide, 1 to do.'),
       rows: (markup.match(/data-testid="bridge-item"/g) ?? []).length,
       seen: markup.includes('>Seen<'),
-    }).toEqual({ count: true, counts: true, rows: 2, seen: true });
+    }).toEqual({ rows: 2, seen: true });
   });
 
   it('marks a new item with a dot, and not one the person saw', () => {
@@ -46,10 +43,10 @@ describe('Bridge home (CC18)', () => {
     expect({ feed: markup.includes('builder-gateway: no report change for 2 h'), outside: markup.includes('1 unseen, outside the count') }).toEqual({ feed: true, outside: true });
   });
 
-  it('offers to send a ship a message beside the count (aeolus-fleet #1547)', () => {
+  it('heads the stay-aware feed with its bell, as home.html draws it', () => {
     const markup = render({ waiting: { count: 0, items: [] }, stayAware: [] });
 
-    expect(markup).toContain('aria-label="Send a ship a message"');
+    expect(/<h2 id="bridge-stay-aware-heading"[^>]*><svg[^>]*lucide-bell/.test(markup)).toBe(true);
   });
 
   it('says nothing waits, and nothing new reached the person, when nothing does', () => {
@@ -62,13 +59,12 @@ describe('Bridge home (CC18)', () => {
     const markup = render({ waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_02', title: 'Hold PR #1488?' }), anItem({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } })] }, stayAware: [] });
 
     expect({
-      counts: markup.includes('1 to decide, 0 to do.'),
       stale: markup.includes('Withdrawn by orchestrator-1 at 20:09 UTC: open it to clear it'),
       struck: /<s[^>]*>Which goes first: the Compact look \(U4\) or Harbour\?<\/s>/.test(markup),
       icon: markup.includes('aria-label="Withdrawn"'),
       faded: markup.includes('opacity-60'),
       marked: (markup.match(/data-testid="bridge-item" data-stale="true"/g) ?? []).length,
-    }).toEqual({ counts: true, stale: true, struck: true, icon: true, faded: false, marked: 1 });
+    }).toEqual({ stale: true, struck: true, icon: true, faded: false, marked: 1 });
   });
 
   it('links a replaced question to its replacement, the new item', () => {
@@ -98,7 +94,7 @@ describe('Bridge home (CC18)', () => {
   it('says on its row that a question is in the basket with its option, still counted (section 9, rule 1)', () => {
     const markup = render({ waiting: { count: 1, items: [anItem({ state: 'seen', inBasket: { option: 2, note: null } })] }, stayAware: [] });
 
-    expect({ inBasket: markup.includes('In the basket: option 2'), seen: markup.includes('Seen, not done yet'), count: markup.includes('data-testid="bridge-count" class="text-tone-waiting-fg">1<') }).toEqual({ inBasket: true, seen: false, count: true });
+    expect({ inBasket: markup.includes('In the basket: option 2'), seen: markup.includes('Seen, not done yet') }).toEqual({ inBasket: true, seen: false });
   });
 });
 
@@ -200,7 +196,7 @@ describe('the list beside an open item (decide.html, stay-aware.html, aeolus-fle
   it('shows both lists in full while no item is open', () => {
     const markup = renderOpen(undefined);
 
-    expect({ sentence: markup.includes('1 to decide, 1 to do. Newest on top; nothing else is in this count.'), feed: markup.includes('1 unseen, outside the count'), open: markup.includes('data-testid="bridge-open"') }).toEqual({ sentence: true, feed: true, open: true });
+    expect({ feed: markup.includes('1 unseen, outside the count'), open: markup.includes('data-testid="bridge-open"') }).toEqual({ feed: true, open: true });
   });
 });
 
@@ -210,20 +206,8 @@ describe('Bridge home as last read, while the record cannot be read (states.html
     stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', from: 'watch', title: 'builder-gateway: no report change for 2 h' })],
   };
   const markup = renderToStaticMarkup(
-    createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(Fragment, null, createElement(LastReadHeading), createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW })) }),
+    createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW }) }),
   );
-
-  it('says when it was last read under the title, in place of the count', () => {
-    expect({
-      title: /<h1[^>]*>Waiting on you<\/h1>/.test(markup),
-      lastRead: markup.includes('data-testid="bridge-last-read">Last read 20:14 UTC<'),
-      count: markup.includes('data-testid="bridge-count"'),
-    }).toEqual({ title: true, lastRead: true, count: false });
-  });
-
-  it("leaves the title row out on the phone, as the phone's frame draws it", () => {
-    expect(/<div class="[^"]*max-sm:hidden[^"]*"><h1[^>]*>Waiting on you<\/h1>/.test(markup)).toBe(true);
-  });
 
   it('shows what waited as last read, faded and not to be opened, saying so under it', () => {
     expect({
@@ -234,13 +218,7 @@ describe('Bridge home as last read, while the record cannot be read (states.html
     }).toEqual({ rows: 2, faded: true, open: false, shown: true });
   });
 
-  it('leaves out the stay-aware feed and sending a ship a message', () => {
-    expect({ feed: markup.includes('builder-gateway: no report change for 2 h'), send: markup.includes('data-testid="bridge-send-message"') }).toEqual({ feed: false, send: false });
-  });
-});
-
-describe("Bridge home's title row while read now", () => {
-  it('is left to its lists: the heading above them says nothing', () => {
-    expect(renderToStaticMarkup(createElement(LastReadHeading))).toBe('');
+  it('leaves out the stay-aware feed', () => {
+    expect(markup.includes('builder-gateway: no report change for 2 h')).toBe(false);
   });
 });

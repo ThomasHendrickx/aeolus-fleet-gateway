@@ -24,7 +24,7 @@ const FLEET: YourFleet = {
 };
 
 function panel(read: Parameters<typeof YourFleetPanel>[0]['read'], phone: PhoneHome = 'numbers'): string {
-  return renderToStaticMarkup(createElement(YourFleetPanel, { fleetId: 'flt_01', read, phone }));
+  return renderToStaticMarkup(createElement(YourFleetPanel, { fleetId: 'flt_01', consoleUrl: undefined, read, phone }));
 }
 
 describe('Your fleet beside Bridge home', () => {
@@ -79,14 +79,14 @@ describe('Your fleet beside Bridge home', () => {
 });
 
 describe("the phone's Fleet tab", () => {
-  it('is headed Fleet on the phone, straight to the numbers, as Harbour\'s phone; the lead line only on a wider screen', () => {
-    const markup = renderToStaticMarkup(createElement(FleetPage, { read: { kind: 'read', value: FLEET } }));
+  it("leaves the heading to the phone's top bar, straight to the numbers, as Harbour's phone; Your fleet and the lead line on a wider screen", () => {
+    const markup = renderToStaticMarkup(createElement(FleetPage, { consoleUrl: undefined, read: { kind: 'read', value: FLEET } }));
 
-    expect([markup.includes('<span class="sm:hidden">Fleet</span>'), markup.includes('<span class="max-sm:hidden">Your fleet</span>'), markup.includes('<p class="max-sm:hidden text-muted-foreground">4 ships:')]).toEqual([true, true, true]);
+    expect([/<div class="max-sm:sr-only"><h1[^>]*>Your fleet<\/h1>/.test(markup), markup.includes('<p class="max-sm:hidden text-muted-foreground">4 ships:')]).toEqual([true, true]);
   });
 
   it('shows five numbers, the ships then each state, and the tiles', () => {
-    const markup = renderToStaticMarkup(createElement(FleetPage, { read: { kind: 'read', value: FLEET } }));
+    const markup = renderToStaticMarkup(createElement(FleetPage, { consoleUrl: undefined, read: { kind: 'read', value: FLEET } }));
 
     expect({
       numbers: ['ships', 'alert', 'waiting', 'working', 'idle'].map((number) => markup.includes(`data-testid="fleet-number-${number}"`)),
@@ -95,13 +95,13 @@ describe("the phone's Fleet tab", () => {
   });
 
   it('says the account may not read the fleet when the fleet does not let it', () => {
-    expect(renderToStaticMarkup(createElement(FleetPage, { read: { kind: 'forbidden' } })).includes('Your account may not read the fleet&#x27;s ships.')).toBe(true);
+    expect(renderToStaticMarkup(createElement(FleetPage, { consoleUrl: undefined, read: { kind: 'forbidden' } })).includes('Your account may not read the fleet&#x27;s ships.')).toBe(true);
   });
 });
 
 describe('Your fleet while the record cannot be read either (states.html)', () => {
   it("shows nothing of its own, so the banner alone says it, once and without core's words", () => {
-    const markup = renderToStaticMarkup(createElement(YourFleetPanel, { fleetId: 'flt_01', read: { kind: 'unreadable', message: 'The fleet did not answer: fetch failed' }, phone: 'hidden', isRecordUnreadable: true }));
+    const markup = renderToStaticMarkup(createElement(YourFleetPanel, { fleetId: 'flt_01', consoleUrl: undefined, read: { kind: 'unreadable', message: 'The fleet did not answer: fetch failed' }, phone: 'hidden', isRecordUnreadable: true }));
 
     expect(markup).toBe('');
   });

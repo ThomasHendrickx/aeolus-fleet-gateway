@@ -12,6 +12,7 @@ import { readShellCounts } from '../hooks/read-bridge';
 import type { BridgeScreen } from '../services/shell';
 import { BridgeSidebar, type ShellCounts } from '../ui/bridge-sidebar';
 import { BridgeTabs } from '../ui/bridge-tabs';
+import type { PageBelow } from '../ui/bridge-top-bar';
 import { KeptRead } from './kept-read';
 import { ShellFrame, SidebarPerson, type ShellAccount } from './shell-frame';
 
@@ -41,10 +42,11 @@ async function readShellPerson(fleetId: string): Promise<{ account: ShellAccount
  * Bridge's shell around each of its pages, in place of the gateway's top
  * bar (docs/design/bridge/mockups; aeolus-fleet#1536): on desktop the
  * sidebar and the top bar with the breadcrumb and Live; on the phone the
- * screen title, the four tabs and the basket's bar above them. Its counts
+ * screen title, the tabs and the basket's bar above them. A page below a
+ * screen, such as Add MCP server below Outside parties, is named after it. Its counts
  * are read beside the page, which shows while they load.
  */
-export async function BridgeShell({ api, fleetId, screen, children }: { api: GatewayApi; fleetId: string; screen: BridgeScreen; children: ReactNode }) {
+export async function BridgeShell({ api, fleetId, screen, below, children }: { api: GatewayApi; fleetId: string; screen: BridgeScreen; below?: PageBelow; children: ReactNode }) {
   const counts = readShellCounts(api);
   // The counts are awaited where they show, after the person is read: a refusal meanwhile is not left unhandled.
   counts.catch(() => undefined);
@@ -59,7 +61,7 @@ export async function BridgeShell({ api, fleetId, screen, children }: { api: Gat
         <Counted counts={counts}>{sidebar}</Counted>
       </Suspense>
       <div className="flex min-w-0 flex-1 flex-col">
-        <ShellFrame fleetId={fleetId} fleetName={fleetName} screen={screen} account={account} switcher={switcher}>
+        <ShellFrame fleetId={fleetId} fleetName={fleetName} screen={screen} below={below} account={account} switcher={switcher}>
           {children}
         </ShellFrame>
         <Suspense fallback={tabs(NO_COUNTS)}>

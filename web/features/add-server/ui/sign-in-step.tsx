@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 
 import { FLEET_FIELD, IDLE } from '../../forms/form-state';
-import { BUTTONS, CARD } from '../../forms/ui/look';
+import { BUTTONS, COMPACT_CARD } from '../../forms/ui/look';
 import { Outcome } from '../../forms/ui/outcome';
 import { SubmitButton } from '../../forms/ui/submit-button';
 import { inFleet } from '../../../lib/gateway-api/page-account';
@@ -22,7 +22,7 @@ export function SignInStep({ fleetId, name }: { fleetId: string; name: string })
   return (
     <>
       <Steps names={SIGN_IN_STEPS} at={2} />
-      <form action={signIn} className={`${CARD} grid gap-3`} data-testid="add-server-sign-in">
+      <form action={signIn} className={`${COMPACT_CARD} grid gap-3.5`} data-testid="add-server-sign-in">
         <Outcome state={{ kind: 'done', message: `${name} is added.` }} />
         <Outcome state={refused} />
         <input type="hidden" name={FLEET_FIELD} value={fleetId} />

@@ -7,13 +7,15 @@
 import type { HomeItem } from './items';
 
 /** Bridge's pages, each a screen of the shell. */
-export type BridgeScreen = 'home' | 'basket' | 'stay-aware' | 'done' | 'fleet' | 'routing' | 'settings';
+export type BridgeScreen = 'home' | 'basket' | 'stay-aware' | 'done' | 'fleet' | 'routing' | 'outside-parties' | 'settings';
 
 /** The phone's four tabs. */
 export type PhoneTab = 'waiting' | 'aware' | 'done' | 'fleet';
 
 export interface ScreenNaming {
   readonly name: string;
+  /** The phone's title, the tab's own word where the tab bar names it shorter (Fleet). */
+  readonly phoneTitle: string;
   /** Whether the phone's title leads back to home with a back chevron. */
   readonly hasBack: boolean;
   /** The phone's tab shown current; none for a page under no tab, such as the settings. */
@@ -21,13 +23,14 @@ export interface ScreenNaming {
 }
 
 const SCREENS: Record<BridgeScreen, ScreenNaming> = {
-  home: { name: 'Bridge', hasBack: false, tab: 'waiting' },
-  basket: { name: 'Basket', hasBack: true, tab: 'waiting' },
-  'stay-aware': { name: 'Stay aware', hasBack: false, tab: 'aware' },
-  done: { name: 'Done', hasBack: false, tab: 'done' },
-  fleet: { name: 'Your fleet', hasBack: false, tab: 'fleet' },
-  routing: { name: 'Where things show', hasBack: true, tab: null },
-  settings: { name: 'Settings', hasBack: true, tab: null },
+  home: { name: 'Bridge', phoneTitle: 'Bridge', hasBack: false, tab: 'waiting' },
+  basket: { name: 'Basket', phoneTitle: 'Basket', hasBack: true, tab: 'waiting' },
+  'stay-aware': { name: 'Stay aware', phoneTitle: 'Stay aware', hasBack: false, tab: 'aware' },
+  done: { name: 'Done', phoneTitle: 'Done', hasBack: false, tab: 'done' },
+  fleet: { name: 'Your fleet', phoneTitle: 'Fleet', hasBack: false, tab: 'fleet' },
+  routing: { name: 'Where things show', phoneTitle: 'Where things show', hasBack: true, tab: null },
+  'outside-parties': { name: 'Outside parties', phoneTitle: 'Outside parties', hasBack: true, tab: null },
+  settings: { name: 'Settings', phoneTitle: 'Settings', hasBack: true, tab: null },
 };
 
 const OPENED: Record<HomeItem['job'], string> = {
