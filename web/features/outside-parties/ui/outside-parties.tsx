@@ -1,6 +1,6 @@
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
-import { BUTTONS, CARD } from '../../forms/ui/look';
+import { BUTTONS, COMPACT_CARD, SMALL_BUTTON } from '../../forms/ui/look';
 import { countsOf, outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty, type Side } from '../party-kinds';
 import { ADD_A2A_AGENT_PATH, ADD_A2A_CLIENT_PATH, ADD_SERVER_PATH, OUTSIDE_PARTIES_PATH, partyPath } from '../paths';
 import { StatusBadge, Tag } from './status-badge';
@@ -16,17 +16,20 @@ function PartyCard({ party, fleetId }: { party: ListedParty; fleetId: string }) 
   const where = outsideAddressOf(party);
   const state = PARTY_STATES[party.state];
   return (
-    <a href={inFleet(partyPath(party.name), fleetId)} className={`${CARD} grid gap-2 hover:bg-accent`} data-testid="outside-parties-party">
-      <span className="flex items-center gap-2">
-        <strong>{party.name}</strong> <Tag>{protocol}</Tag> <Tag>{`${protocol} ${SIDES[side].one}`}</Tag>
+    <a href={inFleet(partyPath(party.name), fleetId)} className={`${COMPACT_CARD} grid min-w-0 justify-items-start gap-2 hover:bg-accent`} data-testid="outside-parties-party">
+      <span className="flex flex-wrap items-center gap-2">
+        <strong>{party.name}</strong>
+        <span className="contents max-sm:hidden">
+          <Tag>{protocol}</Tag> <Tag>{`${protocol} ${SIDES[side].one}`}</Tag>
+        </span>
       </span>
       {where === null ? null : (
-        <span className="truncate font-mono text-code" title={where}>
+        <span className="max-w-full truncate font-mono text-code text-muted-foreground" title={where}>
           {where}
         </span>
       )}
       <span className="flex flex-wrap items-center gap-2">
-        <StatusBadge tone={state.tone} label={state.label} />
+        <StatusBadge tone={state.tone} label={state.label} look="flat" />
         {party.ownerName === null ? null : <Tag>{party.ownerName}</Tag>}
       </span>
     </a>
@@ -51,10 +54,10 @@ export async function OutsideParties({ page, side }: { page: SignedInPage; side:
   ];
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-title font-semibold">Outside parties</h1>
-          <p className="text-muted-foreground" data-testid="outside-parties-counts">
+          <h1 className="text-heading-touch font-semibold max-sm:sr-only">Outside parties</h1>
+          <p className="text-meta text-muted-foreground" data-testid="outside-parties-counts">
             {[
               `${String(counts.sides.server)} ${counts.sides.server === 1 ? SIDES.server.one : SIDES.server.many}`,
               `${String(counts.sides.client)} ${counts.sides.client === 1 ? SIDES.client.one : SIDES.client.many}`,
@@ -62,19 +65,19 @@ export async function OutsideParties({ page, side }: { page: SignedInPage; side:
             ].join(' · ')}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 max-sm:hidden">
           {scopes.includes(APPROVING_SCOPE) ? (
-            <a className={BUTTONS.secondary} href={inFleet(ADD_A2A_CLIENT_PATH, fleetId)} data-testid="outside-parties-add-a2a-client">
+            <a className={`${BUTTONS.secondary} ${SMALL_BUTTON}`} href={inFleet(ADD_A2A_CLIENT_PATH, fleetId)} data-testid="outside-parties-add-a2a-client">
               Add A2A client
             </a>
           ) : null}
           {scopes.includes(APPROVING_SCOPE) ? (
-            <a className={BUTTONS.secondary} href={inFleet(ADD_A2A_AGENT_PATH, fleetId)} data-testid="outside-parties-add-a2a-agent">
+            <a className={`${BUTTONS.secondary} ${SMALL_BUTTON}`} href={inFleet(ADD_A2A_AGENT_PATH, fleetId)} data-testid="outside-parties-add-a2a-agent">
               Add A2A agent
             </a>
           ) : null}
           {scopes.includes(ADDING_SCOPE) ? (
-            <a className={BUTTONS.primary} href={inFleet(ADD_SERVER_PATH, fleetId)} data-testid="outside-parties-add">
+            <a className={`${BUTTONS.primary} ${SMALL_BUTTON}`} href={inFleet(ADD_SERVER_PATH, fleetId)} data-testid="outside-parties-add">
               Add server
             </a>
           ) : null}
@@ -87,9 +90,14 @@ export async function OutsideParties({ page, side }: { page: SignedInPage; side:
           {status.refusal}
         </p>
       )}
-      <nav aria-label="Show" className="flex gap-2">
+      <nav aria-label="Show" className="flex w-fit gap-0.5 rounded-md border border-border bg-muted p-0.75 max-sm:w-full max-sm:rounded-lg max-sm:p-1">
         {filters.map((filter) => (
-          <a key={filter.label} href={inFleet(filter.href, fleetId)} aria-current={filter.isCurrent ? 'page' : undefined} className={filter.isCurrent ? BUTTONS.secondary : `${BUTTONS.secondary} border-transparent`}>
+          <a
+            key={filter.label}
+            href={inFleet(filter.href, fleetId)}
+            aria-current={filter.isCurrent ? 'page' : undefined}
+            className={`inline-flex h-7 items-center justify-center rounded-sm px-2.5 text-meta font-medium max-sm:h-9 max-sm:flex-1 max-sm:text-body-touch ${filter.isCurrent ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+          >
             {filter.label}
           </a>
         ))}
@@ -101,7 +109,7 @@ export async function OutsideParties({ page, side }: { page: SignedInPage; side:
       ) : shown.length === 0 ? (
         <p className="text-muted-foreground">No outside party yet.</p>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] sm:gap-3">
           {shown.map((party) => (
             <PartyCard key={party.name} party={party} fleetId={fleetId} />
           ))}

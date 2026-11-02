@@ -1,9 +1,10 @@
 'use client';
 
+import { CircleCheck } from 'lucide-react';
 import { useActionState } from 'react';
 
 import { FLEET_FIELD, IDLE } from '../../forms/form-state';
-import { BUTTONS, CARD } from '../../forms/ui/look';
+import { BUTTONS, COMPACT_CARD } from '../../forms/ui/look';
 import { Outcome } from '../../forms/ui/outcome';
 import { SubmitButton } from '../../forms/ui/submit-button';
 import { switchOutsideParties } from '../actions';
@@ -20,11 +21,11 @@ const SWITCHING_SCOPE = 'fleet:network';
 export function SwitchCard({ isOn, canSwitch, fleetId }: { isOn: boolean; canSwitch: boolean; fleetId: string }) {
   const [state, formAction] = useActionState(switchOutsideParties, IDLE);
   return (
-    <section className={`${CARD} grid gap-3`} data-testid="outside-parties-switch">
-      <h2 className="flex items-center gap-2 text-section font-semibold">
-        Outside parties are {isOn ? 'on' : 'off'} {isOn ? <StatusBadge tone="ok" label="On" /> : <StatusBadge tone="ended" label="Off" />}
+    <section className={`${COMPACT_CARD} grid gap-1.5`} data-testid="outside-parties-switch">
+      <h2 className="flex items-center gap-2 font-semibold">
+        Outside parties are {isOn ? 'on' : 'off'} {isOn ? <StatusBadge tone="ok" label="On" look="flat" icon={<CircleCheck aria-hidden className="size-3.5" />} /> : <StatusBadge tone="ended" label="Off" look="flat" />}
       </h2>
-      <p className="text-muted-foreground">
+      <p className="text-meta text-muted-foreground">
         {isOn ? 'Approved outside MCP servers and clients reach the fleet, as its network rules allow.' : 'No outside MCP server or client reaches the fleet, and no request for one can be approved.'}
       </p>
       {state.kind === 'openNetwork' ? (
@@ -52,7 +53,7 @@ export function SwitchCard({ isOn, canSwitch, fleetId }: { isOn: boolean; canSwi
           </SubmitButton>
         </form>
       ) : (
-        <p className="text-muted-foreground">Turning them on or off needs {SWITCHING_SCOPE}.</p>
+        <p className="text-meta text-muted-foreground">Turning them on or off needs {SWITCHING_SCOPE}.</p>
       )}
       {state.kind === 'openNetwork' ? null : <Outcome state={state} />}
     </section>

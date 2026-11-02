@@ -21,8 +21,8 @@ export function AddServer({ fleetId, canSwitchTools }: { fleetId: string; canSwi
   const [backFrom, setBackFrom] = useState<string | undefined>(undefined);
   const owner = checked.step === 'owner' && backFrom !== checked.requestId ? checked : undefined;
   return (
-    <div className="grid gap-4">
-      <h1 className="text-title font-semibold">Add MCP server</h1>
+    <div className="grid max-w-160 gap-3">
+      <h1 className="text-heading-touch font-semibold max-sm:sr-only">Add MCP server</h1>
       {approved.kind === 'added' ? (
         <SignInStep fleetId={fleetId} name={approved.name} />
       ) : owner === undefined ? (

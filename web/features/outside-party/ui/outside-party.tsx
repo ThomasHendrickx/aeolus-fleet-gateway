@@ -56,7 +56,7 @@ export function PartyHead({ party }: { party: ListedParty }) {
   const state = PARTY_STATES[party.state];
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <h1 className="text-title font-semibold">{party.name}</h1>
+      <h1 className="text-heading-touch font-semibold max-sm:sr-only">{party.name}</h1>
       <Tag>{protocol}</Tag>
       <Tag>{SIDES[side].one}</Tag>
       <StatusBadge tone={state.tone} label={state.label} />

@@ -14,7 +14,7 @@ export default async function AddA2aAgentPage({ searchParams }: { searchParams: 
     return <BridgeNoSignIn />;
   }
   return (
-    <BridgeShell api={page.api} fleetId={page.fleetId} screen="outside-parties" below={{ name: 'Add A2A agent', parentHref: inFleet(OUTSIDE_PARTIES_PATH, page.fleetId) }}>
+    <BridgeShell api={page.api} fleetId={page.fleetId} screen="outside-parties" below={{ name: 'Add an A2A agent', parentHref: inFleet(OUTSIDE_PARTIES_PATH, page.fleetId) }}>
       <AddA2aAgent page={page} />
     </BridgeShell>
   );

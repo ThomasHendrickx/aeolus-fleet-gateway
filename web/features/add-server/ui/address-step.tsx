@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { FLEET_FIELD } from '../../forms/form-state';
 import { addedCredentialKindOf, SIGN_IN_CREDENTIAL } from '../../forms/server-credential';
 import { CredentialFields } from '../../forms/ui/credential-fields';
-import { CARD, INPUT, LABEL } from '../../forms/ui/look';
+import { COMPACT_CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { SubmitButton } from '../../forms/ui/submit-button';
 import { stepsOf } from '../steps';
 import { Refused } from './refused';
@@ -22,7 +22,7 @@ export function AddressStep({ state, action, fleetId }: { state: { fields: Reado
   return (
     <>
       <Steps names={stepsOf(kind)} at={0} />
-      <form action={action} className={`${CARD} grid gap-3`} data-testid="add-server-address">
+      <form action={action} className={`${COMPACT_CARD} grid gap-3.5`} data-testid="add-server-address">
         <input type="hidden" name={FLEET_FIELD} value={fleetId} />
         <Refused refusal={state.refusal} />
         <label className={LABEL}>
