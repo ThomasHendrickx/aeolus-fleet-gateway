@@ -1,6 +1,6 @@
 'use client';
 
-import { ShoppingBasket } from 'lucide-react';
+import { Bell, ShoppingBasket } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { staleSaidOf } from '../services/deliveries';
@@ -175,7 +175,8 @@ export function HomeLists({ home, now, opening, argo }: { home: BridgeHome; now:
       {argo}
       <section className="grid gap-3" aria-labelledby="bridge-stay-aware-heading">
         <div className="flex items-baseline justify-between gap-3">
-          <h2 id="bridge-stay-aware-heading" className="text-section font-semibold">
+          <h2 id="bridge-stay-aware-heading" className="inline-flex items-center gap-2 text-section font-semibold">
+            <Bell aria-hidden="true" className="size-4 shrink-0" />
             Stay aware
           </h2>
           <span className="text-caption text-muted-foreground">{stayAware.filter(({ state }) => state === 'new').length} unseen, outside the count</span>
