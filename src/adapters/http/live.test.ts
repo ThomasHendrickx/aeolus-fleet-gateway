@@ -42,6 +42,14 @@ describe("what hears each change to a person ship's inbox on this gateway (wake 
 
     expect(heard).toEqual(['charlotte', 'mathilde', 'argo']);
   });
+
+  it("tells every page of the fleet a change to argo's inbox, so a message done elsewhere leaves an open page without a reload", () => {
+    const { hub, heard } = pagesOfPeople();
+
+    hub.publish({ fleetId: FLEET, topic: 'argoInbox' });
+
+    expect(heard).toEqual(['charlotte', 'mathilde', 'argo']);
+  });
 });
 
 describe("what hears each change to a fleet's requests on this gateway", () => {

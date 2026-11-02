@@ -3,7 +3,7 @@
  * doors: argo signs in to the console and commissions ships with its session,
  * as the console's server does; a ship registers with its secret.
  */
-import { commissionShipOutputSchema, type ShipId } from '@aeolus-fleet/common';
+import { commissionShipOutputSchema, defineLabelOutputSchema, idSchema, type MessageId, type ShipId } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
 import { OPERATOR, type FleetServer } from './fleet-server.js';
@@ -93,4 +93,63 @@ export async function setOwner(fleet: FleetServer, argo: { cookie: string; shipI
 /** argo retires a ship (fleet:manage): it stays retired (decision 0056). */
 export async function retire(fleet: FleetServer, argo: { cookie: string; shipId: ShipId }): Promise<void> {
   await argoMutates(fleet, { cookie: argo.cookie, procedure: 'retire', input: { shipId: argo.shipId } });
+}
+
+const argoListSchema = trpcAnswer(z.object({ items: z.array(z.object({ id: z.string(), kind: z.string().optional() })) }));
+
+/** argo's own ship, as argo's console lists it. */
+export async function argoShipId(fleet: FleetServer, cookie: string): Promise<ShipId> {
+  const input = encodeURIComponent(JSON.stringify({ shipKind: ['operator'] }));
+  const response = await fetch(`${fleet.url}/trpc/fleet.list?input=${input}`, { headers: { cookie } });
+  const argo = argoListSchema.parse(await response.json()).result.data.items.find(({ kind }) => kind === 'operator');
+  return idSchema('ship').parse(argo?.id);
+}
+
+/**
+ * argo lets a ship read argo (argo's inbox, AI9): it labels the ship and
+ * itself and adds the read rule from the one to the other, as the console's
+ * Network page does, with the fleet's open rule off. With no rule of the
+ * fleet's own, the fleet's open rule lets every ship read argo already.
+ */
+export async function letReadArgo(fleet: FleetServer, argo: { cookie: string; readerShipId: ShipId }): Promise<void> {
+  const { cookie, readerShipId } = argo;
+  const response = await fetch(`${fleet.url}/trpc/fleet.defineLabel`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: fleet.url, cookie },
+    body: JSON.stringify({ key: 'argo-inbox', values: ['reader', 'argo'] }),
+  });
+  const { values } = trpcAnswer(defineLabelOutputSchema).parse(await response.json()).result.data;
+  const [reader, read] = [values.find(({ value }) => value === 'reader'), values.find(({ value }) => value === 'argo')];
+  if (reader === undefined || read === undefined) {
+    throw new Error('defineLabel answered no values');
+  }
+  await argoMutates(fleet, { cookie, procedure: 'assignLabel', input: { shipId: readerShipId, valueId: reader.id } });
+  await argoMutates(fleet, { cookie, procedure: 'assignLabel', input: { shipId: await argoShipId(fleet, cookie), valueId: read.id } });
+  await setOwnRules(fleet, { cookie, rules: [{ verb: 'read', from: [reader.id], to: [read.id] }] });
+}
+
+/** argo sets the fleet's own network rules, as its Network page applies them. */
+export async function setOwnRules(fleet: FleetServer, argo: { cookie: string; rules: unknown[] }): Promise<void> {
+  const response = await fetch(`${fleet.url}/trpc/fleet.saveNetworkRulesDraft`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: fleet.url, cookie: argo.cookie },
+    body: JSON.stringify({ rules: argo.rules }),
+  });
+  const { savedAgainstVersion } = trpcAnswer(z.object({ savedAgainstVersion: z.number() })).parse(await response.json()).result.data;
+  await argoMutates(fleet, { cookie: argo.cookie, procedure: 'applyNetworkRules', input: { version: savedAgainstVersion } });
+}
+
+/** argo marks a message to it done in the console's inbox. */
+export async function markDoneAsArgo(fleet: FleetServer, argo: { cookie: string; deliveryId: string }): Promise<void> {
+  await argoMutates(fleet, { cookie: argo.cookie, procedure: 'markDone', input: { deliveryId: argo.deliveryId } });
+}
+
+/** argo replies to a message in its inbox from the console, which marks it done: the reply's id. */
+export async function replyAsArgo(fleet: FleetServer, argo: { cookie: string; deliveryId: string; payload: string }): Promise<MessageId> {
+  const response = await fetch(`${fleet.url}/trpc/fleet.reply`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: fleet.url, cookie: argo.cookie },
+    body: JSON.stringify({ deliveryId: argo.deliveryId, payload: argo.payload, idempotencyKey: crypto.randomUUID() }),
+  });
+  return trpcAnswer(z.object({ messageId: idSchema('message') })).parse(await response.json()).result.data.messageId;
 }

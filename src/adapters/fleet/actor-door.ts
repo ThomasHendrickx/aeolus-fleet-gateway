@@ -56,15 +56,22 @@ export async function mutateAs(fleetUrl: string, call: { as: ActorCredential; pr
   return answer.success ? ok(answer.data.result.data) : err({ code: 'UNAVAILABLE', message: 'The fleet answered no result' });
 }
 
-/** One fleet read as the actor: a ship or an account over REST, argo or a viewer over tRPC as a query; what the fleet answered, unparsed. */
-export async function readAs(fleetUrl: string, call: { as: ActorCredential; procedure: string; input: unknown }): Promise<Result<unknown, FleetRefusal>> {
+/**
+ * One fleet read as the actor: a ship or an account over REST, argo or a
+ * viewer over tRPC as a query; what the fleet answered, unparsed. A read with
+ * no REST door goes over tRPC as a query with the headers a REST call carries.
+ * A read that waits, such as fleet.follow, ends once the signal aborts.
+ */
+export async function readAs(fleetUrl: string, call: { as: ActorCredential; procedure: string; input: unknown; isTrpcOnly?: boolean; signal?: AbortSignal }): Promise<Result<unknown, FleetRefusal>> {
   const { as, procedure, input } = call;
   const isConsole = as.crewToken === undefined;
+  const isTrpc = isConsole || call.isTrpcOnly === true;
+  const query = `${fleetUrl}/trpc/fleet.${procedure}?input=${encodeURIComponent(JSON.stringify(input))}`;
   let response: Response;
   try {
-    response = isConsole
-      ? await fetch(`${fleetUrl}/trpc/fleet.${procedure}?input=${encodeURIComponent(JSON.stringify(input))}`, { headers: { cookie: as.cookie ?? '' } })
-      : await fetch(`${fleetUrl}/api/v1/fleet/${procedure}`, { method: 'POST', headers: { 'content-type': 'application/json', ...restHeaders(as) }, body: JSON.stringify(input) });
+    response = isTrpc
+      ? await fetch(query, { headers: isConsole ? { cookie: as.cookie ?? '' } : restHeaders(as), ...(call.signal === undefined ? {} : { signal: call.signal }) })
+      : await fetch(`${fleetUrl}/api/v1/fleet/${procedure}`, { method: 'POST', headers: { 'content-type': 'application/json', ...restHeaders(as) }, body: JSON.stringify(input), ...(call.signal === undefined ? {} : { signal: call.signal }) });
   } catch (error) {
     return err({ code: 'UNAVAILABLE', message: error instanceof Error ? error.message : 'The fleet did not answer' });
   }
@@ -72,7 +79,7 @@ export async function readAs(fleetUrl: string, call: { as: ActorCredential; proc
   if (!response.ok) {
     return err(refusalOf(response.status, body));
   }
-  if (!isConsole) {
+  if (!isTrpc) {
     return ok(body);
   }
   const answer = trpcAnswerSchema.safeParse(body);

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
 import { FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
+import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { fakePersonShipFleet, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createAccountOfSignIn } from '../account-sign-in/account-of-sign-in.js';
@@ -52,7 +53,7 @@ describe("a signed-in person's person ship", () => {
 
   it('gets its lease once commissioned after the person signed in, as in a fleet just made (aeolus-fleet#1583)', async () => {
     const tokens = new Map<FleetId, SharedAccountToken>([[FLEET_ID, { ...CHARLOTTE_ACCOUNT_TOKEN, personShipId: null }]]);
-    const accountOf = createAccountOfSignIn({ signIns: fakeSharedSignIn({ tokens }), clock: { now: () => new Date('2026-10-21T09:00:00.000Z') } });
+    const accountOf = createAccountOfSignIn({ signIns: fakeSharedSignIn({ tokens }), argoAccounts: memoryArgoAccounts(), clock: { now: () => new Date('2026-10-21T09:00:00.000Z') } });
     const { fleet, crewPersonShip: crew } = crewPersonShip();
     const crewAsSignedIn = async () => {
       const token = await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });

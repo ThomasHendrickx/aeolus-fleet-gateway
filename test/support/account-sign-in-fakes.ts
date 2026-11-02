@@ -16,6 +16,7 @@ export const CHARLOTTE_ACCOUNT_TOKEN: SharedAccountToken = {
   accountId: 'acc-charlotte',
   personShipId: PERSON_SHIP_ID,
   scopes: ['fleet:read', 'gateway:approve'],
+  isArgoAllowed: false,
 };
 
 export const ACCOUNT_URL = `${PAGASAE_URL}/account`;

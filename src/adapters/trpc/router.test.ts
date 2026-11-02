@@ -4,6 +4,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { ACCOUNT_URL, CHARLOTTE, CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn, GATEWAY_URL } from '../../../test/support/account-sign-in-fakes.js';
 import { FLEET_ID, memoryConnectionStore, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { fakeCallSender } from '../../../test/support/mcp-in-fakes.js';
@@ -47,6 +48,9 @@ import { gatewayRouter, type Context } from './router.js';
 function grantOf(caller: PersonCaller): string {
   return 'grantId' in caller ? caller.grantId : caller.signedIn.accountToken;
 }
+
+/** Bridge's argo section as the gateway answers it for an account allowed as argo. */
+const ARGO_SECTION = { count: 1, items: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9001' as const, title: 'thomas-mac is low on disk: 4% free', from: 'trierarch', sentAt: '2026-11-01T09:01:00.000Z', kind: 'report' as const, look: 'alert' as const, isNew: true, stale: null, consoleUrl: 'https://fleet.example/inbox?message=dlv_01m3tbfspe96yf1rnr4ank9001' }], done: null };
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OWNER = 'shp_01m3tbfspe96yf1rnr4ank9wnr';
@@ -308,6 +312,8 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     listParties: () => Promise.resolve([]),
     listOwnerChoices: () => Promise.resolve(ok([])),
     readYourFleet: () => Promise.resolve(ok(YOUR_FLEET)),
+    readArgoSection: ({ accountId }) => Promise.resolve(accountId === 'acc-charlotte' ? ARGO_SECTION : null),
+    readArgoInboxNotice: ({ accountId }) => Promise.resolve(accountId === 'acc-charlotte' ? { kind: 'notLetRead' as const, gatewayShip: { shipId: MANAGER, name: 'gateway' } } : { kind: 'none' as const }),
     retireParty: unused,
     changePartyOwner: unused,
     changePartyScopes: unused,
@@ -1057,6 +1063,34 @@ describe("a person reads and deals with their person ship's deliveries through t
   });
 });
 
+describe("an account reads the overview's notice of argo's read rule through the gateway's API (argo's inbox, section 4)", () => {
+  it('tells the account allowed as argo what the gateway answers for it', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.argoInboxNotice()).resolves.toEqual({ kind: 'notLetRead', gatewayShip: { shipId: MANAGER, name: 'gateway' } });
+  });
+
+  it('tells any actor but an account nothing, as only an account is allowed as argo', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.argoInboxNotice()).resolves.toEqual({ kind: 'none' });
+  });
+});
+
+describe("an account reads Bridge's argo section through the gateway's API (argo's inbox, AI4)", () => {
+  it('reads the section the gateway answers for an account allowed as argo', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.argoSection()).resolves.toEqual(ARGO_SECTION);
+  });
+
+  it('reads no section as any actor but an account, as only an account is allowed as argo', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.argoSection()).resolves.toBeNull();
+  });
+});
+
 describe("a person reads Your fleet through the gateway's API (Bridge home)", () => {
   it('reads the numbers and the tiles by group, as the fleet answers their account', async () => {
     const { context } = aContext(PERSON_COOKIE);
@@ -1342,7 +1376,7 @@ describe("a person lists the requests they asked through the gateway's API (deci
 describe("the web app's page asks which account it shows the fleet in its address as (H5)", () => {
   const signIns = fakeSharedSignIn({ tokens: new Map([[FLEET, { ...CHARLOTTE_ACCOUNT_TOKEN, endsAt: new Date('2099-01-01T00:00:00.000Z') }]]) });
   const isServed = () => Promise.resolve(true);
-  const accountInView = createAccountInView({ signIns, accountOf: createAccountOfSignIn({ signIns, clock: { now: () => new Date('2026-10-21T09:00:00.000Z') } }), isServed });
+  const accountInView = createAccountInView({ signIns, accountOf: createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock: { now: () => new Date('2026-10-21T09:00:00.000Z') } }), isServed });
 
   function asked(sent: { signIn?: string; fleetInView?: FleetId }, inView: { accountInView: Context['accountInView'] } = { accountInView }) {
     return gatewayRouter.createCaller({ ...aContext(undefined).context, ...sent, ...inView }).account.inView();
@@ -1362,7 +1396,7 @@ describe("the web app's page asks which account it shows the fleet in its addres
 
   it('answers that the gateway is off for the fleet of an account that may open it in none, and where its account is', async () => {
     const noGateway = fakeSharedSignIn({ apps: { account: CHARLOTTE, apps: [{ app: 'account', url: ACCOUNT_URL }], fleets: [{ fleetId: FLEET, name: 'Acme', apps: [] }] } });
-    const off = createAccountInView({ signIns: noGateway, accountOf: createAccountOfSignIn({ signIns: noGateway, clock: { now: () => new Date() } }), isServed: () => Promise.resolve(false) });
+    const off = createAccountInView({ signIns: noGateway, accountOf: createAccountOfSignIn({ signIns: noGateway, argoAccounts: memoryArgoAccounts(), clock: { now: () => new Date() } }), isServed: () => Promise.resolve(false) });
 
     await expect(asked({ signIn: CHARLOTTE_SIGN_IN }, { accountInView: off })).resolves.toEqual({ kind: 'off', fleetName: 'Acme', accountUrl: ACCOUNT_URL });
   });
@@ -1374,7 +1408,7 @@ describe("the web app's page asks which account it shows the fleet in its addres
   it('says pagasae did not answer', async () => {
     const down = fakeSharedSignIn({ isAvailable: false });
 
-    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, { accountInView: createAccountInView({ signIns: down, accountOf: createAccountOfSignIn({ signIns: down, clock: { now: () => new Date() } }), isServed }) })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET }, { accountInView: createAccountInView({ signIns: down, accountOf: createAccountOfSignIn({ signIns: down, argoAccounts: memoryArgoAccounts(), clock: { now: () => new Date() } }), isServed }) })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 
   it('refuses where the gateway signs no one in to its pages', async () => {

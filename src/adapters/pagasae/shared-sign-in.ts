@@ -112,8 +112,8 @@ export function createSharedSignIn(options: { url: string; clientId: string; cli
       if (!token.success || !claims.success) {
         return err({ kind: 'unavailable' });
       }
-      const { accountId, personShipId, scopes, endsAt } = claims.data;
-      return ok({ accountToken: token.data.access_token, endsAt, accountId, personShipId, scopes });
+      const { accountId, personShipId, scopes, endsAt, isArgoAllowed } = claims.data;
+      return ok({ accountToken: token.data.access_token, endsAt, accountId, personShipId, scopes, isArgoAllowed });
     },
     apps: async (signIn) => {
       const basic = Buffer.from(`${encodeURIComponent(options.clientId)}:${encodeURIComponent(options.clientSecret)}`).toString('base64');

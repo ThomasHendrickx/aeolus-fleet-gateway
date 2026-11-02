@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { CHARLOTTE_SIGN_IN, fakeAccountSignInSeals, fakeSharedSignIn } from '../../../test/support/account-sign-in-fakes.js';
 import { fakeSecrets } from '../../../test/support/oauth-fakes.js';
 import { PAGASAE_URL } from '../../../test/support/sign-in-fakes.js';
@@ -28,7 +29,7 @@ beforeEach(async () => {
     issuer: ISSUER,
     start: createStartAccountSignIn({ seals, signIns, secrets: fakeSecrets(), clock }),
     complete: createCompleteAccountSignIn({ seals, signIns, clock }),
-    signOut: createSignOutAccount({ signIns, accountOf: createAccountOfSignIn({ signIns, clock }) }),
+    signOut: createSignOutAccount({ signIns, accountOf: createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock }) }),
   });
   await server.ready();
 });

@@ -37,6 +37,8 @@ export interface SharedAccountToken {
   /** The account's person ship in the fleet, if it has one (decision 0052). */
   readonly personShipId: ShipId | null;
   readonly scopes: readonly string[];
+  /** Whether the token says the account is allowed as argo in the fleet (decision 0058). */
+  readonly isArgoAllowed: boolean;
 }
 
 /** An Aeolus app an account may open, and its address (header design H1). */

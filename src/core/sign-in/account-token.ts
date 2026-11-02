@@ -1,5 +1,7 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
+import { createNoteArgoAccount } from '../argo-inbox/note-argo-account.js';
+import type { ArgoAccounts } from '../argo-inbox/ports.js';
 import type { IssuedTokens } from '../oauth/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
@@ -31,9 +33,12 @@ export type AccountTokenOf = (grant: { fleetId: FleetId; grantId: string }) => P
  * gateway refreshes it through pagasae, which replaces the refresh token. A
  * grant's calls made together share one refresh, as pagasae ends a grant
  * whose refresh token comes twice. pagasae refusing ends the grant here too,
- * revoking its client's tokens, so the person signs in again.
+ * revoking its client's tokens, so the person signs in again, and drops the
+ * account from those allowed as argo, as for a disabled one. Each refreshed
+ * token is the account's latest word on being allowed as argo (AI9).
  */
-export function createAccountTokenOf(deps: { grants: AccountGrants; tokens: IssuedTokens; pagasae: Pagasae; clock: Clock }): AccountTokenOf {
+export function createAccountTokenOf(deps: { grants: AccountGrants; tokens: IssuedTokens; pagasae: Pagasae; argoAccounts: ArgoAccounts; clock: Clock }): AccountTokenOf {
+  const noteArgoAccount = createNoteArgoAccount({ accounts: deps.argoAccounts });
   const refreshing = new Map<string, ReturnType<AccountTokenOf>>();
 
   const fresh: AccountTokenOf = async ({ fleetId, grantId }) => {
@@ -51,10 +56,12 @@ export function createAccountTokenOf(deps: { grants: AccountGrants; tokens: Issu
     if (!refreshed.isOk || refreshed.value.fleetId !== fleetId) {
       await deps.grants.end(fleetId, grantId);
       await deps.tokens.revokeGrant(fleetId, grantId);
+      await deps.argoAccounts.drop(fleetId, grant.accountId);
       return err({ kind: 'signedOut' });
     }
-    const { refreshToken, accountToken, accountTokenExpiresAt, personShipId, scopes } = refreshed.value;
+    const { refreshToken, accountToken, accountTokenExpiresAt, personShipId, scopes, isArgoAllowed } = refreshed.value;
     await deps.grants.renew({ fleetId, grantId }, { refreshToken, accountToken, accountTokenExpiresAt, personShipId, scopes });
+    await noteArgoAccount(fleetId, { accountId: grant.accountId, personShipId, isArgoAllowed });
     return ok({ accountToken, accountId: grant.accountId, personShipId, scopes });
   };
 

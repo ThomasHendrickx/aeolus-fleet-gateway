@@ -183,6 +183,16 @@ import { SHARED_SIGN_IN_COOKIE } from './core/account-sign-in/ports.js';
 import { createSignOutAccount } from './core/account-sign-in/sign-out-account.js';
 import { createStartAccountSignIn } from './core/account-sign-in/start-account-sign-in.js';
 import { createPrismaAccountGrants } from './adapters/prisma/account-grants.js';
+import { createPrismaArgoAccounts } from './adapters/prisma/argo-accounts.js';
+import { createArgoInboxDoor } from './adapters/fleet/argo-inbox-door.js';
+import { createFollowArgoInbox } from './core/argo-inbox/follow-argo-inbox.js';
+import { createReadArgoInboxNotice } from './core/argo-inbox/read-argo-inbox-notice.js';
+import { createShowArgoInboxInSlack } from './core/argo-inbox/show-argo-inbox-in-slack.js';
+import { createPrismaArgoSlackPosts } from './adapters/prisma/argo-slack-posts.js';
+import { createReadArgoSection } from './core/argo-inbox/read-argo-section.js';
+import { createWakeForArgo } from './core/argo-inbox/wake-for-argo.js';
+import { createPersonWakes } from './core/people/person-wakes.js';
+import { createPrismaArgoWakes } from './adapters/prisma/argo-wakes.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createExchangeIdJag } from './core/oauth/exchange-id-jag.js';
 import { createStartSignIn } from './core/sign-in/start-sign-in.js';
@@ -345,6 +355,8 @@ const BEARER = 'Bearer ';
 
 /** How often a proxy ship's worker looks again while the fleet hands it only what it holds, or does not answer. */
 const POLL_MS = 2_000;
+/** How often argo's wakes look for windows that passed; what arrives at argo wakes them at once. A wake held back by a window goes out at most this much after it passed, against windows of 10 and 60 minutes. */
+const ARGO_WAKES_ROUND_MS = 30_000;
 
 /** How often the gateway rotates the Slack configuration tokens due, well within the hour before one ends (gateway scopes 9.1). */
 const SLACK_TOKEN_ROUND_MS = 10 * 60_000;
@@ -636,6 +648,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // People sign in through pagasae where it is set (decision 0054); else no client connects, as only an account asks for one (A a).
   const pagasae = options.pagasae === undefined ? undefined : createPagasae({ ...options.pagasae, redirectUri: `${issuer}/pagasae/callback`, timeoutMs: PAGASAE_TIMEOUT_MS });
   const grants = createPrismaAccountGrants(prisma);
+  // The accounts allowed as argo, from each account's latest token (argo's inbox, AI9).
+  const argoAccounts = createPrismaArgoAccounts(prisma);
   const pendingRequests = createPrismaPendingRequests(prisma);
   const waitings = createWaitingSeals(options.gatewaySecret);
   const issuing = { codes: authorizationCodes, secrets: oauthSecrets, clock, issuer };
@@ -658,6 +672,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             seals,
             pagasae,
             grants,
+            argoAccounts,
             codes: authorizationCodes,
             secrets: oauthSecrets,
             clock,
@@ -704,13 +719,14 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
               resource,
               pagasae,
               grants,
+              argoAccounts,
               servesFleet: async (fleetId) => (await connections.find(fleetId)) !== undefined && (await isServed(fleetId)),
             }),
           }),
     }),
   });
   // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
-  const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, clock });
+  const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, argoAccounts, clock });
   // pagasae sends the email, asked with the gateway's installation token (wake a person, W2); without either, email wakes no one.
   // The browsers people turned web push on in (wake a person, W8).
   const webPushSubscriptions = createPrismaWebPushSubscriptions(prisma);
@@ -787,6 +803,50 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     sleep,
     intervalMs: BASKET_ROUND_MS,
     log: server.log,
+  });
+  // The gateway's own ship reads argo's open inbox by the read rule argo adds, whole at the start, then following each change (argo's inbox, AI9).
+  const argoInboxDoor = createArgoInboxDoor({ fleetUrl: options.fleetUrl });
+  // Each change to what it holds has the pages of that fleet read themselves again, so what was done at argo leaves them at once.
+  const followArgoInbox = createFollowArgoInbox({
+    connections,
+    door: argoInboxDoor,
+    onChanged: (fleetId) => {
+      hub.publish({ fleetId, topic: 'argoInbox' });
+    },
+  });
+  const argoInboxStopping = new AbortController();
+  // A wake of its own for what waits at argo, for every person allowed as argo, at once after each read of argo's inbox, and on its own round as windows pass (argo's inbox, AI5).
+  const argoWakes = createRoundWorker({
+    name: "argo's wakes",
+    round: createWakeForArgo({ connections, accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, people: createPersonWakes({ channels: wakeChannels, routes, defaults: routingDefaults, focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock }), argoWakes: createPrismaArgoWakes(prisma), clock }),
+    sleep,
+    intervalMs: ARGO_WAKES_ROUND_MS,
+    log: server.log,
+  });
+  const argoInboxFollower = createRoundWorker({
+    name: "argo's inbox",
+    round: async () => {
+      await followArgoInbox.round(argoInboxStopping.signal);
+      argoWakes.wake();
+    },
+    sleep,
+    intervalMs: POLL_MS,
+    log: server.log,
+  });
+  const readArgoInboxNotice = createReadArgoInboxNotice({ accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, connections });
+  // Bridge's argo section (argo's inbox, AI2 to AI4): each item opens in the console, at the fleet's address, through the sign-in as argo.
+  const readArgoSection = createReadArgoSection({
+    accounts: argoAccounts,
+    inboxOf: followArgoInbox.inboxOf,
+    shipNames: {
+      nameOf: async (fleetId, shipId) => {
+        const crew = await connections.find(fleetId);
+        const ship = crew === undefined ? undefined : await door.getShip(crew.crewToken, { shipId });
+        return ship?.isOk === true ? ship.value.name : undefined;
+      },
+    },
+    clock,
+    consoleUrlOf: (deliveryId) => `${options.fleetUrl}/inbox?message=${encodeURIComponent(deliveryId)}`,
   });
   // View sync in Slack (Bridge, section 7): each post edited once something came of its item, at once when an inbox change is heard.
   const slackEdits = createRoundWorker({
@@ -888,7 +948,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       ? undefined
       : createSharedSignIn({ url: options.pagasae.url, ...options.pagasaeApp, redirectUri: `${issuer}/sign-in/done`, timeoutMs: PAGASAE_TIMEOUT_MS });
   const accountOf: AccountOfSignIn =
-    signIns === undefined ? Object.assign(() => Promise.resolve(err({ kind: 'signedOut' as const })), { forget: () => undefined }) : createAccountOfSignIn({ signIns, clock });
+    signIns === undefined ? Object.assign(() => Promise.resolve(err({ kind: 'signedOut' as const })), { forget: () => undefined }) : createAccountOfSignIn({ signIns, argoAccounts, clock });
   const accountInView = signIns === undefined ? undefined : createAccountInView({ signIns, accountOf, isServed });
   if (signIns !== undefined) {
     const accountSeals = createAccountSignInSeals(options.gatewaySecret);
@@ -927,6 +987,23 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       return ship?.isOk === true ? ship.value.name : undefined;
     },
   };
+  // What waits at argo is posted in Slack to each person allowed as argo who turned it on, and edited once done at argo (argo's inbox, AI4).
+  const showArgoInboxInSlack = createShowArgoInboxInSlack({
+    connections,
+    inboxOf: followArgoInbox.inboxOf,
+    doneAtArgo: followArgoInbox.doneAtArgo,
+    door: argoInboxDoor,
+    accounts: argoAccounts,
+    posts: createPrismaArgoSlackPosts(prisma),
+    links: slackLinks,
+    apps: slackApps,
+    slack: slackMessages,
+    routes,
+    defaults: routingDefaults,
+    shipNames,
+    argoMessageUrlOf: (deliveryId) => `${options.fleetUrl}/inbox?message=${encodeURIComponent(deliveryId)}`,
+  });
+  const argoInboxInSlack = createRoundWorker({ name: "argo's inbox in Slack", round: showArgoInboxInSlack, sleep, intervalMs: POLL_MS, log: server.log });
   const slackShips = createSlackShips({ fleetUrl: options.fleetUrl, crewTokenOf: async (fleetId) => (await connections.find(fleetId))?.crewToken, ships: createFleetShips(options.fleetUrl), asActor: createProxyShipsAsActor(options.fleetUrl) });
   // Which outside party a ship is the proxy ship of: a fleet has few parties.
   const proxyShips: ProxyShipKinds = { kindOf: async (fleetId, shipId) => (await parties.list(fleetId)).find((party) => party.proxyShipId === shipId)?.kind };
@@ -1043,6 +1120,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     readParty,
     listOwnerChoices,
     readYourFleet,
+    readArgoInboxNotice,
+    readArgoSection,
     checkServer,
     readPartyTools,
     stateParty,
@@ -1138,6 +1217,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       slackSends.start();
       basketSends.start();
       slackEdits.start();
+      argoInboxFollower.start();
+      argoInboxInSlack.start();
+      argoWakes.start();
       grantKeeper.start();
       return restored;
     },
@@ -1149,6 +1231,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       await slackSends.stop();
       await basketSends.stop();
       await slackEdits.stop();
+      // A follow waits up to 25 s while argo's inbox does not change: aborted, the round under way ends at once.
+      argoInboxStopping.abort();
+      await argoInboxFollower.stop();
+      await argoInboxInSlack.stop();
+      await argoWakes.stop();
       await grantKeeper.stop();
       await workers.stop();
       await server.close();

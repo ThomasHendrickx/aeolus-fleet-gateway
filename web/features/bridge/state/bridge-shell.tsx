@@ -50,7 +50,7 @@ export async function BridgeShell({ api, fleetId, screen, children }: { api: Gat
   counts.catch(() => undefined);
   const { account, fleetName, switcher } = await readShellPerson(fleetId);
   const sidebar = (shown: ShellCounts) => (
-    <BridgeSidebar switcher={switcher} fleetId={fleetId} screen={screen} counts={shown} accountUrl={account?.accountUrl} foot={account === undefined ? null : <SidebarPerson account={account} fleetName={fleetName} />} />
+    <BridgeSidebar switcher={switcher} fleetId={fleetId} screen={screen} counts={shown} accountUrl={account?.accountUrl} foot={account === undefined ? null : <SidebarPerson account={account} fleetName={fleetName} isAllowedAsArgo={shown.argo !== undefined} />} />
   );
   const tabs = (shown: ShellCounts) => <BridgeTabs fleetId={fleetId} screen={screen} counts={shown} />;
   return (

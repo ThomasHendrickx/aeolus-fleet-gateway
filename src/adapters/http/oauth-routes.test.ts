@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { fakeClientMetadataDocuments, fakeSecrets, ISSUER, memoryAuthorizationCodes, memoryIssuedTokens, memoryOAuthClients, PLUGIN_RESOURCE, RESOURCE } from '../../../test/support/oauth-fakes.js';
 import { PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { fakeWaitingSeals, memoryPendingRequests } from '../../../test/support/request-fakes.js';
@@ -77,7 +78,7 @@ async function startServer(isSigningPeopleIn: boolean) {
           signIn: {
             start: createStartSignIn({ readAuthorization, pluginResource: PLUGIN_RESOURCE, seals, pagasae: fakePagasae({ refusal: 'unused' }), secrets, clock }),
             complete: (back) =>
-              createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)), askForClient })(back),
+              createCompleteSignIn({ readAuthorization, seals, pagasae, grants: memoryAccountGrants(), argoAccounts: memoryArgoAccounts(), codes, secrets, clock, issuer: ISSUER, servesFleet: (fleetId) => Promise.resolve(served.includes(fleetId)), askForClient })(back),
             readWaiting: createReadWaiting({ waitings, readAuthorization, requests, parties, codes, secrets, clock, issuer: ISSUER }),
             watchWaiting: createWatchWaiting({ waitings, requests, parties, clock }),
             hub,

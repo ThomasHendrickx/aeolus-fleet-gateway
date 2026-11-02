@@ -85,7 +85,7 @@ describe('the account token of a fleet, exchanged for the shared sign-in (RFC 86
 
     const exchanged = await signIns().accountToken({ signIn: SIGN_IN, fleetId: FLEET });
 
-    expect(exchanged).toEqual({ isOk: true, value: { accountToken: anAccountToken(CHARLOTTE), endsAt: new Date(1_792_400_600_000), accountId: 'acc-charlotte', personShipId: PERSON_SHIP, scopes: ['fleet:read', 'gateway:approve'] } });
+    expect(exchanged).toEqual({ isOk: true, value: { accountToken: anAccountToken(CHARLOTTE), endsAt: new Date(1_792_400_600_000), accountId: 'acc-charlotte', personShipId: PERSON_SHIP, scopes: ['fleet:read', 'gateway:approve'], isArgoAllowed: false } });
     expect({ url: received[0]?.url, form: Object.fromEntries(received[0]?.form ?? []) }).toEqual({
       url: '/oauth/token',
       form: {
@@ -97,6 +97,12 @@ describe('the account token of a fleet, exchanged for the shared sign-in (RFC 86
         client_secret: SECRET,
       },
     });
+  });
+
+  it('reads that the account is allowed as argo when its token says so', async () => {
+    answer = { status: 200, body: { access_token: anAccountToken({ ...CHARLOTTE, argo: true }), issued_token_type: 'urn:ietf:params:oauth:token-type:jwt', token_type: 'Bearer', expires_in: 600 } };
+
+    await expect(signIns().accountToken({ signIn: SIGN_IN, fleetId: FLEET })).resolves.toMatchObject({ isOk: true, value: { isArgoAllowed: true } });
   });
 
   it.each([

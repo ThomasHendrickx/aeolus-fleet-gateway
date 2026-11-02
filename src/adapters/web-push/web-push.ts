@@ -42,7 +42,7 @@ export function createWebPush(deps: {
         let request: ReturnType<typeof webPush.generateRequestDetails>;
         let target: URL;
         try {
-          request = webPush.generateRequestDetails({ endpoint, keys: browserKeys }, JSON.stringify({ fleetName: wake.fleetName, bridgeUrl: wake.bridgeUrl }), {
+          request = webPush.generateRequestDetails({ endpoint, keys: browserKeys }, JSON.stringify({ fleetName: wake.fleetName, bridgeUrl: wake.bridgeUrl, waitsAt: wake.waitsAt }), {
             vapidDetails: { subject: deps.subject, publicKey: deps.publicKey, privateKey: deps.privateKey },
             TTL: TIME_TO_LIVE_SECONDS,
           });

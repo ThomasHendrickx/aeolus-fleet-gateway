@@ -93,8 +93,15 @@ describe('redeeming the code pagasae sent the person back with', () => {
         accountId: 'acc-charlotte',
         personShipId: PERSON_SHIP,
         scopes: ['fleet:read', 'gateway:approve'],
+        isArgoAllowed: false,
       },
     });
+  });
+
+  it('answers that the account is allowed as argo when its token says so', async () => {
+    answer = { status: 200, body: { ...(typeof answer.body === 'object' ? answer.body : {}), access_token: anAccountToken({ ...CHARLOTTE, argo: true }) } };
+
+    await expect(pagasae().redeemCode({ code: 'pagasae-code-1', verifier: 'verifier-1' })).resolves.toMatchObject({ isOk: true, value: { isArgoAllowed: true } });
   });
 
   it.each([

@@ -1,12 +1,13 @@
 import { classNames } from '@aeolus-fleet/ui';
 
-/** How a count is drawn in the shell: waiting in its tone, the basket filled, alerts in theirs, anything else plain. */
-export type CountTone = 'waiting' | 'basket' | 'attention' | 'plain';
+/** How a count is drawn in the shell: waiting in its tone, the basket filled, alerts in theirs, argo's in the primary colour, anything else plain. */
+export type CountTone = 'waiting' | 'basket' | 'attention' | 'argo' | 'plain';
 
 const TONES: Record<CountTone, string> = {
   waiting: 'bg-tone-waiting-bg text-tone-waiting-fg',
   basket: 'bg-primary text-primary-foreground',
   attention: 'bg-tone-attention-bg text-tone-attention-fg',
+  argo: 'bg-highlight text-primary',
   plain: 'bg-secondary text-foreground',
 };
 

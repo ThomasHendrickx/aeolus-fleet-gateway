@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { FLEET_ID, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { memoryIssuedTokens } from '../../../test/support/oauth-fakes.js';
 import { CHARLOTTE_TOKENS, fakePagasae, memoryAccountGrants, PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
@@ -16,20 +17,58 @@ const REFRESHED: PagasaeTokens = { ...CHARLOTTE_TOKENS, accountToken: 'account-t
 let now: Date;
 let grants: ReturnType<typeof memoryAccountGrants>;
 let tokens: ReturnType<typeof memoryIssuedTokens>;
+let argoAccounts: ReturnType<typeof memoryArgoAccounts>;
 
 beforeEach(async () => {
   now = new Date('2026-10-19T09:00:00.000Z');
   grants = memoryAccountGrants();
   await grants.save({ ...GRANT, accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID, scopes: ['fleet:read'], refreshToken: 'pagasae-refresh-1', accountToken: 'account-token-1', accountTokenExpiresAt: new Date('2026-10-19T09:10:00.000Z') });
   tokens = memoryIssuedTokens();
+  argoAccounts = memoryArgoAccounts();
+  await argoAccounts.keep(FLEET_ID, { accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID });
   const pair = { familyId: 'family-1', codeHash: 'code-1', fleetId: FLEET_ID, clientId: 'client-1', resource: 'http://gateway.example.com/mcp', scope: null, accessExpiresAt: now, refreshExpiresAt: now };
   await tokens.save({ ...pair, kind: 'account', grantId: 'grant-1', accessHash: 'access-1', refreshHash: 'refresh-1' });
   await tokens.save({ ...pair, kind: 'party', party: 'claude', accessHash: 'access-2', refreshHash: 'refresh-2' });
 });
 
 function accountTokenOf(pagasae = fakePagasae({ refusal: 'unused' }, { 'pagasae-refresh-1': REFRESHED })) {
-  return { pagasae, accountTokenOf: createAccountTokenOf({ grants, tokens, pagasae, clock: { now: () => now } }) };
+  return { pagasae, accountTokenOf: createAccountTokenOf({ grants, tokens, pagasae, argoAccounts, clock: { now: () => now } }) };
 }
+
+describe("a signed-in person's account token and argo", () => {
+  it('keeps the account allowed as argo, with its person ship, when its refreshed token says so', async () => {
+    now = new Date('2026-10-19T09:09:30.000Z');
+    await argoAccounts.drop(FLEET_ID, 'acc-charlotte');
+
+    await accountTokenOf(fakePagasae({ refusal: 'unused' }, { 'pagasae-refresh-1': { ...REFRESHED, isArgoAllowed: true } })).accountTokenOf(GRANT);
+
+    await expect(argoAccounts.list(FLEET_ID)).resolves.toEqual([{ accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID }]);
+  });
+
+  it('drops an account no longer allowed as argo at its next token', async () => {
+    now = new Date('2026-10-19T09:09:30.000Z');
+
+    await accountTokenOf(fakePagasae({ refusal: 'unused' }, { 'pagasae-refresh-1': { ...REFRESHED, isArgoAllowed: false } })).accountTokenOf(GRANT);
+
+    await expect(argoAccounts.list(FLEET_ID)).resolves.toEqual([]);
+  });
+
+  it("drops the account when pagasae refuses its refresh, as for a disabled account, so its person ship gets nothing of argo's", async () => {
+    now = new Date('2026-10-19T09:09:30.000Z');
+
+    await accountTokenOf(fakePagasae({ refusal: 'unused' }, { 'pagasae-refresh-1': 'refused' })).accountTokenOf(GRANT);
+
+    await expect(argoAccounts.list(FLEET_ID)).resolves.toEqual([]);
+  });
+
+  it('keeps the account while pagasae does not answer, as nothing said it changed', async () => {
+    now = new Date('2026-10-19T09:09:30.000Z');
+
+    await accountTokenOf(fakePagasae({ refusal: 'unused' }, { 'pagasae-refresh-1': 'unavailable' })).accountTokenOf(GRANT);
+
+    await expect(argoAccounts.list(FLEET_ID)).resolves.toEqual([{ accountId: 'acc-charlotte', personShipId: PERSON_SHIP_ID }]);
+  });
+});
 
 describe("a signed-in person's account token", () => {
   it('is the one the grant holds while over a minute of it is left, asking pagasae nothing', async () => {

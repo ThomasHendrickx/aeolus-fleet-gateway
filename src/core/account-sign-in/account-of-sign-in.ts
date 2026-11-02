@@ -1,5 +1,7 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
+import { createNoteArgoAccount } from '../argo-inbox/note-argo-account.js';
+import type { ArgoAccounts } from '../argo-inbox/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { ok, type Result } from '../shared/result.js';
 import { ACCOUNT_TOKEN_MARGIN_MS } from '../sign-in/account-token.js';
@@ -18,9 +20,11 @@ export type AccountOfSignIn = ((asked: { signIn: string; fleetId: FleetId }) => 
  * rights lands at the next. A refusal is never kept, nor a token naming no
  * person ship, as core commissions one with the account's first ship and
  * pagasae within a minute (aeolus-fleet#1583); a sign-out here drops what
- * was kept at once.
+ * was kept at once. Each token exchanged is the account's latest word on
+ * being allowed as argo (argo's inbox, AI9).
  */
-export function createAccountOfSignIn(deps: { signIns: Pick<SharedSignIn, 'accountToken'>; clock: Clock }): AccountOfSignIn {
+export function createAccountOfSignIn(deps: { signIns: Pick<SharedSignIn, 'accountToken'>; argoAccounts: ArgoAccounts; clock: Clock }): AccountOfSignIn {
+  const noteArgoAccount = createNoteArgoAccount({ accounts: deps.argoAccounts });
   const kept = new Map<string, SharedAccountToken>();
   const isFresh = (token: SharedAccountToken) => token.endsAt.getTime() - ACCOUNT_TOKEN_MARGIN_MS > deps.clock.now().getTime();
 
@@ -39,6 +43,7 @@ export function createAccountOfSignIn(deps: { signIns: Pick<SharedSignIn, 'accou
         }
       }
       kept.set(key, exchanged.value);
+      await noteArgoAccount(fleetId, exchanged.value);
     }
     return exchanged;
   };

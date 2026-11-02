@@ -708,3 +708,50 @@ model ItemOutcome {
   @@id([fleetId, shipId, deliveryId])
   @@map("item_outcomes")
 }
+
+/// An account allowed as argo in a fleet, as its latest account token said, with the person ship it is reached at (argo's inbox, AI9).
+model ArgoAccount {
+  fleetId      String @map("fleet_id")
+  accountId    String @map("account_id")
+  personShipId String @map("person_ship_id")
+
+  @@id([fleetId, accountId])
+  @@map("argo_accounts")
+}
+
+/// A message open at argo as it is in Slack, for a person ship of an account allowed as argo (argo's inbox, AI4): kept before Slack is asked, forgotten once done at argo and its post edited.
+model ArgoSlackPost {
+  fleetId      String  @map("fleet_id")
+  personShipId String  @map("person_ship_id")
+  messageId    String  @map("message_id")
+  appId        String  @map("app_id")
+  channel      String
+  /// The Slack message, once Slack took the post.
+  ts           String?
+  /// Slack refused the post: it is never posted again.
+  isGivenUp    Boolean @default(false) @map("is_given_up")
+
+  @@id([fleetId, personShipId, messageId])
+  @@map("argo_slack_posts")
+}
+
+/// A message to argo a wake or a page in focus covered for a person ship allowed as argo, so it wakes that person once (argo's inbox, AI5).
+model ArgoMessageCovered {
+  fleetId   String @map("fleet_id")
+  shipId    String @map("ship_id")
+  messageId String @map("message_id")
+
+  @@id([fleetId, shipId, messageId])
+  @@map("argo_messages_covered")
+}
+
+/// When a channel last woke a person ship for what waits at argo, apart from its own wakes, so it sends at most one per its window (argo's inbox, AI5).
+model ArgoWakeSent {
+  fleetId String   @map("fleet_id")
+  shipId  String   @map("ship_id")
+  channel String
+  sentAt  DateTime @map("sent_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId, channel])
+  @@map("argo_wakes_sent")
+}

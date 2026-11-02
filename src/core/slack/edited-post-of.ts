@@ -19,7 +19,7 @@ const MS_PER_SECOND = 1_000;
 const CLOCK = { from: 11, to: 16 } as const;
 
 /** The time as Slack shows it in each reader's own clock, with the time in UTC for a reader it cannot. */
-function slackTimeOf(at: Date): string {
+export function slackTimeOf(at: Date): string {
   return `<!date^${String(Math.floor(at.getTime() / MS_PER_SECOND))}^{time}|${at.toISOString().slice(CLOCK.from, CLOCK.to)} UTC>`;
 }
 

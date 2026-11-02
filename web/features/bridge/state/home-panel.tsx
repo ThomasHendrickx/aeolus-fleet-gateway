@@ -1,6 +1,7 @@
 'use client';
 
 import { Send, ShoppingBasket } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { staleSaidOf } from '../services/deliveries';
 import { seenTextOf, type BridgeHome, type HomeItem } from '../services/items';
@@ -175,7 +176,7 @@ function ListBeside({ home, readAt, opening, isStayAware }: { home: BridgeHome; 
  * the feed is all it asks (CC16): it stays in the feed, seen. Beside the count, the person sends any
  * ship a message. Beside an open item, only the list it was opened from (aeolus-fleet#1538).
  */
-export function HomeLists({ home, now, opening }: { home: BridgeHome; now: string; opening: ItemOpening }) {
+export function HomeLists({ home, now, opening, argo }: { home: BridgeHome; now: string; opening: ItemOpening; argo?: ReactNode }) {
   const { waiting, stayAware } = home;
   const readAt = new Date(now);
   if (opening.opened !== undefined) {
@@ -202,6 +203,7 @@ export function HomeLists({ home, now, opening }: { home: BridgeHome; now: strin
           <WaitingRows items={waiting.items} readAt={readAt} opening={opening} />
         )}
       </section>
+      {argo}
       <section className="grid gap-3" aria-labelledby="bridge-stay-aware-heading">
         <div className="flex items-baseline justify-between gap-3">
           <h2 id="bridge-stay-aware-heading" className="text-section font-semibold">
@@ -243,15 +245,15 @@ function WaitingAsLastRead({ items, lastReadAt }: { items: readonly HomeItem[]; 
   );
 }
 
-/** Bridge home: its lists, with one item in focus at a time; as last read, what waited then. */
-export function HomePanel({ fleetId, home, now, decidePlaces }: { fleetId: string; home: BridgeHome; now: string; decidePlaces?: readonly RoutedPlace[] }) {
+/** Bridge home: its lists, with one item in focus at a time, and argo's section below what waits on the person, for an account allowed as argo; as last read, what waited then. */
+export function HomePanel({ fleetId, home, now, decidePlaces, argo }: { fleetId: string; home: BridgeHome; now: string; decidePlaces?: readonly RoutedPlace[]; argo?: ReactNode }) {
   const lastReadAt = useLastReadAt();
   if (lastReadAt !== undefined) {
     return <WaitingAsLastRead items={home.waiting.items} lastReadAt={lastReadAt} />;
   }
   return (
     <ItemFocus fleetId={fleetId} decidePlaces={decidePlaces}>
-      {(opening) => <HomeLists home={home} now={now} opening={opening} />}
+      {(opening) => <HomeLists home={home} now={now} opening={opening} argo={argo} />}
     </ItemFocus>
   );
 }

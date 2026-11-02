@@ -236,9 +236,13 @@ export interface ShownThere {
 /** What a delivery is handed to the person through: a wake's channel, a page of theirs in focus, which shows it (W6), or Slack, which shows it (gateway scopes 9.5). */
 export type HandOverChannel = WakeChannelName | 'page' | 'slack';
 
-/** The window a wake belongs to: its key holds until a wake of the channel is recorded, so a retry asks again with it. */
+/** Where what a wake is for waits: at the person's own ship, or at argo, for everyone allowed as argo (argo's inbox, AI4). */
+export type WaitsAt = 'personShip' | 'argo';
+
+/** The window a wake belongs to: its key holds until a wake of the channel is recorded, so a retry asks again with it. And where what it wakes for waits. */
 export interface WakeWindow {
   readonly key: string;
+  readonly waitsAt: WaitsAt;
 }
 
 /**
@@ -310,10 +314,11 @@ export interface WebPushSubscriptions {
   remove(fleetId: FleetId, removed: { shipId: ShipId; endpoint: string }): Promise<void>;
 }
 
-/** What a wake says (W4): something waits in the fleet, by its name, and the link to Bridge. Nothing else. */
+/** What a wake says (W4): something waits in the fleet, by its name, for the person or at argo, and the link to Bridge. Nothing else. */
 export interface Wake {
   readonly fleetName: string;
   readonly bridgeUrl: string;
+  readonly waitsAt: WaitsAt;
 }
 
 /** How a push service took a wake: sent, gone (it answered 404 or 410: the subscription ended), or failed otherwise. */

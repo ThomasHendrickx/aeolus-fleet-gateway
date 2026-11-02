@@ -1,16 +1,19 @@
-import { Bell, CheckCheck, Inbox, Ship, ShoppingBasket, type LucideIcon } from 'lucide-react';
+import { Bell, CheckCheck, Inbox, Ship, ShoppingBasket, UserRound, type LucideIcon } from 'lucide-react';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { BRIDGE_FLEET_PATH } from '../fleet/paths';
 import { BRIDGE_BASKET_PATH, BRIDGE_DONE_PATH, BRIDGE_PATH, BRIDGE_STAY_AWARE_PATH } from '../paths';
+import { ARGO_SECTION_ANCHOR } from '../services/argo-section';
 import { screenOf, type BridgeScreen, type PhoneTab } from '../services/shell';
 import type { ShellCounts } from './bridge-sidebar';
 import { ShellCount, type CountTone } from './shell-count';
 
 interface Tab {
-  readonly key: PhoneTab;
+  readonly key: PhoneTab | 'argo';
   readonly label: string;
   readonly path: string;
+  /** A place on the page it leads to. */
+  readonly anchor?: string;
   readonly Icon: LucideIcon;
   readonly count?: { readonly value: number | undefined; readonly tone: CountTone };
 }
@@ -33,12 +36,15 @@ function BasketBar({ fleetId, count }: { fleetId: string; count: number }) {
 /**
  * The phone's foot (home.html): the basket as a bar while it holds any,
  * except on the basket itself, above four tabs: Waiting, Aware, Done and
- * Fleet, each with its count, the tab the page in view is under current.
+ * Fleet, each with its count, the tab the page in view is under current;
+ * for an account allowed as argo, argo's tab beside Waiting, with argo's own
+ * count, leading to home's argo section (argo's inbox, AI4).
  */
 export function BridgeTabs({ fleetId, screen, counts }: { fleetId: string; screen: BridgeScreen; counts: ShellCounts }) {
   const { tab: current } = screenOf(screen);
   const tabs: Tab[] = [
     { key: 'waiting', label: 'Waiting', path: BRIDGE_PATH, Icon: Inbox, count: { value: counts.waiting, tone: 'waiting' } },
+    ...(counts.argo === undefined ? [] : [{ key: 'argo' as const, label: 'argo', path: BRIDGE_PATH, anchor: ARGO_SECTION_ANCHOR, Icon: UserRound, count: { value: counts.argo, tone: 'argo' as const } }]),
     { key: 'aware', label: 'Aware', path: BRIDGE_STAY_AWARE_PATH, Icon: Bell, count: { value: counts.stayAware, tone: 'plain' } },
     { key: 'done', label: 'Done', path: BRIDGE_DONE_PATH, Icon: CheckCheck },
     { key: 'fleet', label: 'Fleet', path: BRIDGE_FLEET_PATH, Icon: Ship, count: { value: counts.fleetAlerts, tone: 'attention' } },
@@ -47,10 +53,10 @@ export function BridgeTabs({ fleetId, screen, counts }: { fleetId: string; scree
     <div className="sticky bottom-0 z-30 bg-background sm:hidden">
       {counts.basket > 0 && screen !== 'basket' ? <BasketBar fleetId={fleetId} count={counts.basket} /> : null}
       <nav aria-label="Bridge" className="flex h-(--size-tabbar) border-t border-border pb-3">
-        {tabs.map(({ key, label, path, Icon, count }) => (
+        {tabs.map(({ key, label, path, anchor, Icon, count }) => (
           <a
             key={key}
-            href={inFleet(path, fleetId)}
+            href={anchor === undefined ? inFleet(path, fleetId) : `${inFleet(path, fleetId)}#${anchor}`}
             data-testid={`bridge-tab-${key}`}
             aria-current={key === current ? 'page' : undefined}
             className={`relative flex flex-1 flex-col items-center justify-center gap-1 text-micro font-medium ${key === current ? 'text-primary' : 'text-muted-foreground'}`}

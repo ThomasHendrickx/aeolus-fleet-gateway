@@ -12,6 +12,8 @@ import { cache } from 'react';
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { readYourFleet } from '../fleet/hooks/read-your-fleet';
 import { refusalCodeOf } from '../../../lib/gateway-api/page-api';
+import type { ArgoInboxNotice } from '../services/argo-inbox-notice';
+import type { ArgoSection } from '../services/argo-section';
 import type { WhoDidNotAnswer } from '../ui/unreadable-banner';
 import type { WakeChannels } from '../services/deliveries';
 import type { BasketView } from '../services/basket';
@@ -90,6 +92,25 @@ async function personRead<T>(call: Promise<T>): Promise<BridgeRead<T>> {
 /** Bridge home, read once per page: the shell's counts and home's lists share the read. */
 export const readBridgeHome = cache((api: GatewayApi): Promise<BridgeRead<BridgeHome>> => personRead(api.people.home.query()));
 
+/** Bridge home's notice of argo's read rule; none while the gateway does not answer it, as home shows without it. */
+export async function readArgoInboxNotice(api: GatewayApi): Promise<ArgoInboxNotice> {
+  try {
+    return await api.people.argoInboxNotice.query();
+  } catch {
+    return { kind: 'none' };
+  }
+}
+
+/** Bridge's argo section, read once per page: the shell's count and home's section share the read. None for an account not allowed as argo, or while the gateway does not answer it, as Bridge shows without it. */
+export const readArgoSection = cache(async (api: GatewayApi): Promise<ArgoSection | null> => {
+  try {
+    return await api.people.argoSection.query();
+  } catch {
+    return null;
+  }
+});
+
+
 /**
  * Why Slack shows the person nothing now, if it dropped out (Bridge, section
  * 9): null while it did not, or for an account the API refuses it to;
@@ -125,13 +146,13 @@ export async function readBasketCount(api: GatewayApi): Promise<number> {
 
 /**
  * The counts Bridge's shell shows on every page: what waits and the unseen
- * to stay aware of, from Bridge home's read, the basket's answers, and the
- * ships with an alert, from Your fleet's read. A count it cannot read now is
+ * to stay aware of, from Bridge home's read, the basket's answers, the
+ * ships with an alert, from Your fleet's read, and what waits at argo. A count it cannot read now is
  * left out.
  */
 export async function readShellCounts(api: GatewayApi): Promise<ShellCounts> {
-  const [home, basket, fleet] = await Promise.all([readBridgeHome(api), readBasketCount(api), readYourFleet(api)]);
-  return shellCountsOf({ home, basket, fleetAlerts: fleet.kind === 'read' ? fleet.value.counts.alert : undefined });
+  const [home, basket, fleet, argo] = await Promise.all([readBridgeHome(api), readBasketCount(api), readYourFleet(api), readArgoSection(api)]);
+  return shellCountsOf({ home, basket, fleetAlerts: fleet.kind === 'read' ? fleet.value.counts.alert : undefined, argo: argo?.count });
 }
 
 export function readRecordPage(api: GatewayApi, cursor: string | null): Promise<BridgeRead<RecordPage>> {
