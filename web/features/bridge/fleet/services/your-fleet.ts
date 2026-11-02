@@ -45,12 +45,15 @@ export function summaryOf(fleet: YourFleet): string {
   return `${shipsOf(fleet.shipCount)}: ${parts.join(', ')}`;
 }
 
-/** When a ship last did something, in the words of Your fleet's tiles (design/bridge-fleet-width): now, 25 min, 3 h, yesterday, 2 d; null while it did nothing yet. */
-export function ageOf(lastActivityAt: string | null, now: Date): string | null {
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+
+/** When a ship last did something, in the words of Your fleet's tiles (design/bridge-fleet-width): now, 25 min, 3 h, yesterday, 2 d up to 6 d, then the date (28 Oct); "No activity yet" while it did nothing. */
+export function ageOf(lastActivityAt: string | null, now: Date): string {
   if (lastActivityAt === null) {
-    return null;
+    return 'No activity yet';
   }
-  const minutes = Math.floor((now.getTime() - new Date(lastActivityAt).getTime()) / 60_000);
+  const at = new Date(lastActivityAt);
+  const minutes = Math.floor((now.getTime() - at.getTime()) / 60_000);
   if (minutes < 1) {
     return 'now';
   }
@@ -61,5 +64,9 @@ export function ageOf(lastActivityAt: string | null, now: Date): string | null {
   if (hours < 24) {
     return `${String(hours)} h`;
   }
-  return hours < 48 ? 'yesterday' : `${String(Math.floor(hours / 24))} d`;
+  const days = Math.floor(hours / 24);
+  if (days < 2) {
+    return 'yesterday';
+  }
+  return days < 7 ? `${String(days)} d` : `${String(at.getDate())} ${MONTHS[at.getMonth()] ?? ''}`;
 }

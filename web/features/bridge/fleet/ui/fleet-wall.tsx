@@ -55,7 +55,6 @@ function TileFrame({ href, title, className, children }: { href: string | undefi
  */
 function Tile({ group, tile, consoleUrl, now }: { group: FleetGroup; tile: FleetTile; consoleUrl: string | undefined; now: Date }) {
   const { shipId, name, state, note } = tile;
-  const age = ageOf(tile.lastActivityAt, now);
   const KindIcon = KIND_ICONS[group];
   return (
     <li className="min-w-0">
@@ -81,11 +80,9 @@ function Tile({ group, tile, consoleUrl, now }: { group: FleetGroup; tile: Fleet
             <StateIcon state={state} />
             {STATE_LABELS[state]}
           </span>
-          {age === null ? null : (
-            <span data-testid="fleet-tile-age" className="text-caption text-muted-foreground">
-              {age}
-            </span>
-          )}
+          <span data-testid="fleet-tile-age" className="text-caption text-muted-foreground">
+            {ageOf(tile.lastActivityAt, now)}
+          </span>
         </span>
         {state === 'working' ? (
           <i
