@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { FocusedDelivery } from '../services/deliveries';
 import type { RoutedPlace } from '../services/routing';
-import { DeliveryCard, infoLinesOf, putOf, type Opened, type StepFinished } from './delivery-card';
+import { DeliveryCard, infoLinesOf, putOf, sendLabelOf, type DeliveryControl, type Opened, type StepFinished } from './delivery-card';
 
 // A question opened in Bridge (CC11): the asker's pick preselected, one
 // button putting it in the basket (CC24), naming the option; one its asker
@@ -34,8 +34,8 @@ function openedOf(delivery: FocusedDelivery): Opened {
   return delivery.question === undefined ? { job: 'stay-aware', isAlert: true, wasNew: true } : { job: 'decide', isAlert: false, wasNew: true };
 }
 
-function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string; finished?: StepFinished | null; places?: readonly RoutedPlace[]; opened?: Opened } = {}): string {
-  const { inBasket = null, note = '', finished = null, places, opened = openedOf(delivery) } = shown;
+function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number | null; note: string | null } | null; note?: string; finished?: StepFinished | null; places?: readonly RoutedPlace[]; opened?: Opened; working?: DeliveryControl; failure?: string } = {}): string {
+  const { inBasket = null, note = '', finished = null, places, opened = openedOf(delivery), working, failure } = shown;
   const noop = () => undefined;
   return renderToStaticMarkup(
     createElement(DeliveryCard, {
@@ -49,11 +49,12 @@ function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number 
       finished,
       places,
       note,
-      working: undefined,
-      failure: undefined,
+      working,
+      failure,
       onNoteChange: noop,
       onAnswer: noop,
       onPut: noop,
+      onSend: noop,
       onRemove: noop,
       onDone: noop,
       onFinishStep: noop,
@@ -72,8 +73,7 @@ describe('a question opened in Bridge (CC11)', () => {
       picked: markup.includes('checked="" value="2"') && !markup.includes('checked="" value="1"'),
       theirPick: markup.includes('Their pick'),
       put: markup.includes('>Put option 2 in the basket<'),
-      sendsAtOnce: markup.includes('Send option') || markup.includes('Send the note alone'),
-    }).toEqual({ choices: 3, picked: true, theirPick: true, put: true, sendsAtOnce: false });
+    }).toEqual({ choices: 3, picked: true, theirPick: true, put: true });
   });
 
   it('says a question whose answer is in the basket is in it, not sent, with its note, its option picked, the basket and Remove beside it', () => {
@@ -443,6 +443,40 @@ describe('an opened item’s heading, text and screen (aeolus-fleet#1538)', () =
   });
 });
 
+describe('a question opened in Bridge can be answered at once, bypassing the basket (aeolus-fleet-gateway#202)', () => {
+  const buttonOf = (markup: string, testId: string) => new RegExp(`<button[^>]*data-testid="${testId}"[^>]*>`).exec(markup)?.[0] ?? '';
+  const colourOf = (button: string) => /bg-primary text-primary-foreground hover:bg-primary-hover/.exec(button)?.[0];
+
+  it('offers a Send button beside the basket one, in its colour, naming the chosen option', () => {
+    const markup = render(aQuestion());
+
+    expect({ send: markup.includes('>Send option 2<'), sameColour: colourOf(buttonOf(markup, 'bridge-send-answer')) === colourOf(buttonOf(markup, 'bridge-put-in-basket')) && colourOf(buttonOf(markup, 'bridge-send-answer')) !== undefined }).toEqual({ send: true, sameColour: true });
+  });
+
+  it('words the Send button by the option chosen, or the note alone', () => {
+    expect({ option: sendLabelOf(1), noteAlone: sendLabelOf(null) }).toEqual({ option: 'Send option 1', noteAlone: 'Send the note alone' });
+  });
+
+  it('shows pending at once: a spinner and its working label, disabled, the basket button disabled too', () => {
+    const markup = render(aQuestion(), { working: { kind: 'send' } });
+
+    const send = new RegExp('<button[^>]*data-testid="bridge-send-answer"[^>]*>(?:(?!</button>).)*</button>').exec(markup)?.[0] ?? '';
+
+    expect({
+      busy: send.includes('aria-busy="true"') && send.includes('disabled=""'),
+      spinner: send.includes('animate-spin'),
+      label: send.includes('Sending...'),
+      basketDisabled: /<button[^>]*data-testid="bridge-put-in-basket"[^>]*disabled=""/.test(markup),
+    }).toEqual({ busy: true, spinner: true, label: true, basketDisabled: true });
+  });
+
+  it('says a failure inline by the buttons, keeping the choice and the note', () => {
+    const markup = render(aQuestion(), { failure: 'The fleet did not take your answer: it is down', note: 'Wait for U4.' });
+
+    expect({ failure: markup.includes('The fleet did not take your answer: it is down'), choice: markup.includes('checked="" value="2"'), note: markup.includes('>Wait for U4.</textarea>'), sendBack: markup.includes('>Send option 2<') }).toEqual({ failure: true, choice: true, note: true, sendBack: true });
+  });
+});
+
 describe('an alert opened in Bridge offers to send its ship a message (aeolus-fleet #1547)', () => {
   const alert = aQuestion({ from: 'watch', title: 'builder-gateway: no report change for 2 h', question: undefined, body: 'Its last report, 17:46.', alertShip: 'builder-gateway' });
 
@@ -465,6 +499,7 @@ describe('an alert opened in Bridge offers to send its ship a message (aeolus-fl
         onNoteChange: noop,
         onAnswer: noop,
         onPut: noop,
+      onSend: noop,
         onRemove: noop,
         onDone: noop,
         onFinishStep: noop,

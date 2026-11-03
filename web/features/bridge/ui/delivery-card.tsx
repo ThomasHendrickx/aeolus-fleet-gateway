@@ -17,8 +17,8 @@ import { StaleIcon } from './stale-icon';
 /** A phone shows only the first paragraph of what an item says, as the sheets draw it; a desktop shows it whole. */
 export const PROSE = 'max-md:[&_p+p]:hidden';
 
-/** Which of the card's controls is working: an option of the question put in the basket, its entry removed, the note alone, done, or a step's cannot. */
-export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'remove' } | { kind: 'note' } | { kind: 'done' } | { kind: 'cannot' };
+/** Which of the card's controls is working: an option of the question put in the basket, its answer sent at once, its entry removed, the note alone, done, or a step's cannot. */
+export type DeliveryControl = { kind: 'option'; option: number } | { kind: 'remove' } | { kind: 'note' } | { kind: 'send' } | { kind: 'done' } | { kind: 'cannot' };
 
 /** How an item was opened: its job, whether a stay-aware one is an alert, and whether it was new until this opening. */
 export interface Opened {
@@ -54,6 +54,11 @@ export function putOf({ chosen, inBasket, note }: { chosen: number | null | unde
     return null;
   }
   return chosen === null ? { label: 'Put the note alone in the basket', isReady: note.trim() !== '' } : { label: `Put option ${String(chosen)} in the basket`, isReady: true };
+}
+
+/** What the button beside it sends at once, bypassing the basket: the same answer, named by the option chosen, or the note alone. */
+export function sendLabelOf(chosen: number | null): string {
+  return chosen === null ? 'Send the note alone' : `Send option ${String(chosen)}`;
 }
 
 /** Which info lines a question says: the asker's pick while the choice is it and nothing is in the basket, or it is stale (decide-1); that nothing is sent yet once another option is chosen (basket-1); neither while the choice is what the basket holds (basket-2). */
@@ -229,10 +234,11 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
 }
 
 /** A question's note field, always open (BH1), and the button putting the answer in the basket, sending nothing (CC24); neither while the choice is what the basket holds. */
-function QuestionControls({ from, put, isNothingSentSaid, note, isPutting, isWorking, failure, onNoteChange, onPut }: { from: string; put: Put | null; isNothingSentSaid: boolean; note: string; isPutting: boolean; isWorking: boolean; failure: string | undefined; onNoteChange: (note: string) => void; onPut: () => void }) {
+function QuestionControls({ from, put, sendLabel, isNothingSentSaid, note, working, failure, onNoteChange, onPut, onSend }: { from: string; put: Put | null; sendLabel: string; isNothingSentSaid: boolean; note: string; working: DeliveryControl | undefined; failure: string | undefined; onNoteChange: (note: string) => void; onPut: () => void; onSend: () => void }) {
   if (put === null) {
     return null;
   }
+  const isWorking = working !== undefined;
   return (
     <>
       <label className="grid gap-1">
@@ -241,10 +247,16 @@ function QuestionControls({ from, put, isNothingSentSaid, note, isPutting, isWor
         <span className="text-caption text-muted-foreground">Goes with the answer.</span>
       </label>
       {failure === undefined ? null : <Notice message={failure} isFailure />}
-      <ActionButton data-testid="bridge-put-in-basket" variant="primary" className="w-full justify-center sm:w-auto sm:justify-self-start" isPending={isPutting} pendingLabel="Putting in the basket..." disabled={isWorking || !put.isReady} onClick={onPut}>
-        <ShoppingBasket aria-hidden className="size-4" />
-        {put.label}
-      </ActionButton>
+      <div className="flex flex-wrap gap-2">
+        <ActionButton data-testid="bridge-put-in-basket" variant="primary" className="w-full justify-center sm:w-auto sm:justify-self-start" isPending={working?.kind === 'option' || working?.kind === 'note'} pendingLabel="Putting in the basket..." disabled={isWorking || !put.isReady} onClick={onPut}>
+          <ShoppingBasket aria-hidden className="size-4" />
+          {put.label}
+        </ActionButton>
+        <ActionButton data-testid="bridge-send-answer" variant="primary" className="w-full justify-center sm:w-auto sm:justify-self-start" isPending={working?.kind === 'send'} pendingLabel="Sending..." disabled={isWorking || !put.isReady} onClick={onSend}>
+          <Send aria-hidden className="size-4" />
+          {sendLabel}
+        </ActionButton>
+      </div>
       {isNothingSentSaid ? <InfoLine>Nothing is sent yet. {from} receives this answer when you send the basket.</InfoLine> : null}
     </>
   );
@@ -309,9 +321,10 @@ export function ScreenBar({ opened, title = screenTitleOf(opened), isWorking, on
 
 /**
  * One item in focus (design B, Signal). A question opens with the asker's
- * pick chosen (CC11), or what is in the basket; its one button puts that
+ * pick chosen (CC11), or what is in the basket; its first button puts that
  * option in the basket with the note, if any, or, with No option, only the
  * note chosen, the note alone, and sends nothing (CC24): the person sends
+ * the basket. Its second button sends that same answer at once, bypassing
  * the basket. A step (CC14) shows why and its link, then its
  * note field before Done and Cannot, each sending its outcome at once with
  * the note; once sent, the step shows its outcome in place of them. Any other item may get a note as its answer, and may
@@ -337,6 +350,7 @@ export function DeliveryCard({
   onNoteChange,
   onAnswer,
   onPut,
+  onSend,
   onRemove,
   onDone,
   onFinishStep,
@@ -369,6 +383,8 @@ export function DeliveryCard({
   onAnswer: (option: number | undefined) => void;
   /** Puts the option chosen of a question in the basket, with the note, or the note alone. */
   onPut: (option: number | null) => void;
+  /** Sends the option chosen of a question at once, with the note, or the note alone, bypassing the basket. */
+  onSend: (option: number | null) => void;
   /** Takes the question's answer out of the basket. */
   onRemove: () => void;
   onDone: () => void;
@@ -440,7 +456,7 @@ export function DeliveryCard({
           </div>
         </>
       ) : (
-        <QuestionControls from={delivery.from} put={putOf({ chosen, inBasket, note })} isNothingSentSaid={infoLines?.isNothingSentSaid === true} note={note} isPutting={working?.kind === (chosen === null ? 'note' : 'option')} isWorking={isWorking} failure={failure} onNoteChange={onNoteChange} onPut={() => { if (chosen !== undefined) { onPut(chosen); } }} />
+        <QuestionControls from={delivery.from} put={putOf({ chosen, inBasket, note })} sendLabel={sendLabelOf(chosen ?? null)} isNothingSentSaid={infoLines?.isNothingSentSaid === true} note={note} working={working} failure={failure} onNoteChange={onNoteChange} onPut={() => { if (chosen !== undefined) { onPut(chosen); } }} onSend={() => { if (chosen !== undefined) { onSend(chosen); } }} />
       )}
       {question === undefined || stale !== null || places === undefined ? null : (
         <footer data-testid="bridge-shown-in" className="grid gap-1 border-t border-border pt-3 text-caption text-muted-foreground">

@@ -164,6 +164,7 @@ function FocusedItems({ fleetId, decidePlaces, consoleUrl, children }: { fleetId
               setFocus({ delivery, opened, finished, inBasket: put });
               toasts.add(putToastOf(put.option));
             } }); }}
+        onSend={(option) => { settle({ control: { kind: 'send' }, action: () => answerDelivery({ fleet: fleetId, deliveryId: delivery.deliveryId, input: { questionId, option: option ?? undefined, note } }), onSettled: leave(`Your answer went to ${delivery.from}.`) }); }}
         onRemove={() => {
           if (questionId !== undefined) {
             settle({ control: { kind: 'remove' }, action: () => removeFromBasket(fleetId, questionId), onSettled: leave(`Your answer to “${delivery.title}” is out of the basket; the question still waits on you.`) });
