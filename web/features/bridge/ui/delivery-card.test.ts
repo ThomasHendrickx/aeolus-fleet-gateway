@@ -54,6 +54,7 @@ function render(delivery: FocusedDelivery, shown: { inBasket?: { option: number 
       onNoteChange: noop,
       onAnswer: noop,
       onPut: noop,
+      onSend: noop,
       onRemove: noop,
       onDone: noop,
       onFinishStep: noop,
@@ -459,10 +460,14 @@ describe('a question opened in Bridge can be answered at once, bypassing the bas
   it('shows pending at once: a spinner and its working label, disabled, the basket button disabled too', () => {
     const markup = render(aQuestion(), { working: { kind: 'send' } });
 
+    const send = new RegExp('<button[^>]*data-testid="bridge-send-answer"[^>]*>(?:(?!</button>).)*</button>').exec(markup)?.[0] ?? '';
+
     expect({
-      label: /<button[^>]*data-testid="bridge-send-answer"[^>]*aria-busy="true"[^>]*disabled=""[^>]*>(?:(?!<\/button>).)*animate-spin(?:(?!<\/button>).)*Sending\.\.\./.test(markup),
+      busy: send.includes('aria-busy="true"') && send.includes('disabled=""'),
+      spinner: send.includes('animate-spin'),
+      label: send.includes('Sending...'),
       basketDisabled: /<button[^>]*data-testid="bridge-put-in-basket"[^>]*disabled=""/.test(markup),
-    }).toEqual({ label: true, basketDisabled: true });
+    }).toEqual({ busy: true, spinner: true, label: true, basketDisabled: true });
   });
 
   it('says a failure inline by the buttons, keeping the choice and the note', () => {
@@ -494,6 +499,7 @@ describe('an alert opened in Bridge offers to send its ship a message (aeolus-fl
         onNoteChange: noop,
         onAnswer: noop,
         onPut: noop,
+      onSend: noop,
         onRemove: noop,
         onDone: noop,
         onFinishStep: noop,
