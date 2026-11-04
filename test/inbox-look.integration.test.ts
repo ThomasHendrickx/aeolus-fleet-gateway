@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaClient } from '../src/adapters/prisma/client.js';
+import { createHeldDeliveries, holdingDoor } from '../src/core/people/held-deliveries.js';
 import type { PersonShipDoor } from '../src/core/people/ports.js';
 import { createReadInbox, type ReadInbox } from '../src/core/people/read-inbox.js';
 import { ITEM_JOBS, routingDefaultsOf } from '../src/core/people/routing.js';
@@ -40,11 +41,13 @@ beforeEach(async () => {
   // The gateway crews Charlotte's person ship: the fakes know it by the tests' ids, the fleet by its own.
   await crews.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, crewToken: charlotteCrew, crewedAt: new Date() });
   calls = [];
-  const door = counted(createRestFleetDoor(fleet.url).person, calls);
+  const held = createHeldDeliveries();
+  const door = holdingDoor(counted(createRestFleetDoor(fleet.url).person, calls), held);
   readInbox = createReadInbox({
     crewPersonShip: fakeCrewPersonShip(crews),
     crews,
     door,
+    held,
     opened: memoryOpenedDeliveries(),
     routes: memoryRoutes([]),
     defaults: routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' as const }))),

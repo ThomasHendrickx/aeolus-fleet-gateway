@@ -1,6 +1,7 @@
 import { idSchema, receiveOutputSchema, sendOutputSchema, type FleetId, type MessageId, type ShipId } from '@aeolus-fleet/common';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 
+import { createHeldDeliveries, holdingDoor } from '../src/core/people/held-deliveries.js';
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaItemOutcomes } from '../src/adapters/prisma/item-outcomes.js';
@@ -80,11 +81,13 @@ afterEach(async () => {
 const charlotteSignedIn = (): PersonCaller => ({ fleetId, grantId: 'grant-charlotte' });
 
 function people() {
-  const door = createRestFleetDoor(fleet.url).person;
+  const held = createHeldDeliveries();
+  const door = holdingDoor(createRestFleetDoor(fleet.url).person, held);
   const deps = {
     crewPersonShip: () => Promise.resolve(ok({ shipId: charlotte.shipId, crewToken: charlotte.crewToken })),
     crews: createPrismaPersonCrews(prisma),
     door,
+    held,
     opened: createPrismaOpenedDeliveries(prisma),
     changes: { tell: () => Promise.resolve() },
     outcomes: createPrismaItemOutcomes(prisma),

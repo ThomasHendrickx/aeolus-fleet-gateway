@@ -6,6 +6,7 @@ import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import { asPersonCrew, personCrewOf, withOwnRefusal, type PersonCaller, type PersonCrewError } from './person-crew.js';
 import { outcomeTextOf, type ItemOutcome, type ItemOutcomes, type OutcomeKind, type Place, type Sighting } from './item-outcome.js';
+import type { HeldDeliveries } from './held-deliveries.js';
 import type { InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
 
 /** What a person dealt with a delivery as: answered, or done with it. */
@@ -72,6 +73,7 @@ export interface DealDeps {
   crewPersonShip: CrewPersonShip;
   crews: PersonCrews;
   door: PersonShipDoor;
+  held: HeldDeliveries;
   opened: OpenedDeliveries;
   changes: InboxChanges;
   outcomes: ItemOutcomes;

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
-import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes, holding } from '../../../test/support/people-fakes.js';
 import { memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { anAttioParty } from '../../../test/support/party-grant-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
@@ -53,7 +53,7 @@ function readHome(deliveries: PersonDelivery[], options: { offered?: { isEmailOf
   const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries, record });
   return {
     ...ship,
-    readHome: createReadBridgeHome({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, entries, outcomes, connections, routes: memoryRoutes(routes), defaults: CHAT_ON, parties, ownStepPartyOf, ...offered }),
+    readHome: createReadBridgeHome({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(ship.door), opened, entries, outcomes, connections, routes: memoryRoutes(routes), defaults: CHAT_ON, parties, ownStepPartyOf, ...offered }),
   };
 }
 

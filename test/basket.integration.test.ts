@@ -13,6 +13,7 @@ import { createSendStoredAnswers } from '../src/core/people/send-stored-answers.
 import { commission, register, retire, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
+import { holding } from './support/people-fakes.js';
 
 // The basket sent, against a real core and the gateway's own Postgres
 // (Bridge, section 9): Charlotte answers three questions into the basket and
@@ -140,7 +141,7 @@ function aSender(withDoor: PersonShipDoor = door) {
   return createSendStoredAnswers({
     entries: createPrismaBasketEntries(prisma),
     crews: createPrismaPersonCrews(prisma),
-    door: withDoor,
+    ...holding(withDoor),
     opened: createPrismaOpenedDeliveries(prisma),
     outcomes: createPrismaItemOutcomes(prisma),
     changes: { tell: () => Promise.resolve() },

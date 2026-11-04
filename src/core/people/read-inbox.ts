@@ -3,6 +3,7 @@ import { RECEIVE_MAX_UPPER_BOUND } from '@aeolus-fleet/common';
 import type { ConnectionStore, FleetRefusal } from '../connection/ports.js';
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
+import type { HeldDeliveries } from './held-deliveries.js';
 import { chatInboxEntryOf, chatOpenedEntryOf, type ChatInboxEntry } from './inbox-entry.js';
 import { asPersonCrew, type PersonCaller, type PersonCrewError, type PersonCrewToken } from './person-crew.js';
 import type { OpenedDeliveries, PersonCrews, PersonDelivery, PersonShipDoor } from './ports.js';
@@ -18,16 +19,18 @@ export interface Inbox {
 export type ReadInbox = (caller: PersonCaller) => Promise<Result<Inbox, PersonCrewError>>;
 
 /**
- * What waits for the caller's person ship: how many, and every one of them,
- * taken as received, the crew's own held ones again first, as many at a time
- * as one receive takes, each time past the ones taken already (aeolus-fleet
- * #1517). It stops once it took as many as wait, or once the fleet takes
- * nothing new, as a core that does not leave the taken ones out answers. It
- * asks how many wait first, so the person is never kept waiting while none
- * does.
+ * What waits for the caller's person ship: how many, and every one of them.
+ * It asks how many wait first, so the person is never kept waiting while none
+ * does, and a look is a read while the gateway holds as many as wait
+ * (aeolus-fleet #1647). Else it receives past the ones it holds, as many at a
+ * time as one receive takes, each time past the ones taken already
+ * (aeolus-fleet #1517); holding more than wait, it receives every one again,
+ * the crew's own held ones first. It stops once it took as many as wait, or
+ * once the fleet takes nothing new, as a core that does not leave the taken
+ * ones out answers.
  */
 export async function waitingFor(
-  deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor },
+  deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; held: HeldDeliveries },
   caller: PersonCaller,
 ): Promise<Result<{ crew: PersonCrewToken; waiting: number; deliveries: PersonDelivery[] }, PersonCrewError>> {
   const counted = await asPersonCrew(deps, { caller, run: (crew) => deps.door.inbox(crew.crewToken) });
@@ -36,7 +39,7 @@ export async function waitingFor(
   }
   const { waiting } = counted.value.value;
   let crew = counted.value.crew;
-  let deliveries: PersonDelivery[] = [];
+  let deliveries = stillHeld(deps.held, { crewToken: crew.crewToken, waiting });
   while (deliveries.length < waiting) {
     const excluding = deliveries.map(({ deliveryId }) => deliveryId);
     const taken = await asPersonCrew(deps, { caller, run: (held) => deps.door.pushReceive(held.crewToken, { max: RECEIVE_MAX_UPPER_BOUND, ...(excluding.length === 0 ? {} : { excluding }) }) });
@@ -51,7 +54,15 @@ export async function waitingFor(
     }
     deliveries = [...deliveries, ...fresh];
   }
+  deps.held.hold(crew.crewToken, deliveries);
   return ok({ crew, waiting, deliveries });
+}
+
+/** What the crew holds while it is no more than wait, so a receive reaches past it; else nothing, to receive every one again. */
+function stillHeld(held: HeldDeliveries, look: { crewToken: string; waiting: number }): PersonDelivery[] {
+  const { crewToken, waiting } = look;
+  const kept = held.of(crewToken);
+  return kept !== undefined && kept.length <= waiting ? [...kept] : [];
 }
 
 /**
@@ -59,12 +70,13 @@ export async function waitingFor(
  * its own workers read it with no person calling: taken as waitingFor takes
  * it, and refused as the fleet refuses, a crew that no longer works included.
  */
-export async function waitingOn(door: Pick<PersonShipDoor, 'inbox' | 'pushReceive'>, crewToken: string): Promise<Result<PersonDelivery[], FleetRefusal>> {
+export async function waitingOn(deps: { door: Pick<PersonShipDoor, 'inbox' | 'pushReceive'>; held: HeldDeliveries }, crewToken: string): Promise<Result<PersonDelivery[], FleetRefusal>> {
+  const { door, held } = deps;
   const counted = await door.inbox(crewToken);
   if (!counted.isOk) {
     return counted;
   }
-  let deliveries: PersonDelivery[] = [];
+  let deliveries = stillHeld(held, { crewToken, waiting: counted.value.waiting });
   while (deliveries.length < counted.value.waiting) {
     const excluding = deliveries.map(({ deliveryId }) => deliveryId);
     const taken = await door.pushReceive(crewToken, { max: RECEIVE_MAX_UPPER_BOUND, ...(excluding.length === 0 ? {} : { excluding }) });
@@ -78,6 +90,7 @@ export async function waitingOn(door: Pick<PersonShipDoor, 'inbox' | 'pushReceiv
     }
     deliveries = [...deliveries, ...fresh];
   }
+  held.hold(crewToken, deliveries);
   return ok(deliveries);
 }
 
@@ -92,7 +105,7 @@ export async function waitingOn(door: Pick<PersonShipDoor, 'inbox' | 'pushReceiv
  * leaves out of what waits is left out of the count too. The gateway's own
  * steps are never listed: they show in Bridge only (BH8).
  */
-export function createReadInbox(deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; opened: OpenedDeliveries; routes: Routes; defaults: RoutingDefaults; connections: Pick<ConnectionStore, 'binding'> }): ReadInbox {
+export function createReadInbox(deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; held: HeldDeliveries; opened: OpenedDeliveries; routes: Routes; defaults: RoutingDefaults; connections: Pick<ConnectionStore, 'binding'> }): ReadInbox {
   return async (caller) => {
     const waiting = await waitingFor(deps, caller);
     if (!waiting.isOk) {

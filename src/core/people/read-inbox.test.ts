@@ -225,7 +225,7 @@ describe('a look at what waits is a read once the gateway holds it (aeolus-fleet
 
   it('receives every one again once fewer wait than it holds', async () => {
     const waiting = manyDeliveries(15);
-    const look = readInbox(waiting);
+    const look = readInbox([...waiting]);
     await look.readInbox(CHARLOTTE_GRANT);
     look.calls.length = 0;
     look.ship.deliveries.splice(0, 1);

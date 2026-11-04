@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aBasketEntry, aPersonDelivery, fakePersonShipDoor, memoryBasketEntries, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { aBasketEntry, aPersonDelivery, fakePersonShipDoor, memoryBasketEntries, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, holding } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { BasketEntry } from './basket.js';
 import type { OpenedDelivery } from './ports.js';
@@ -84,7 +84,7 @@ beforeEach(async () => {
 
 /** The gateway's sender, as one instance runs it; a new one is the gateway after a restart, with what it stored. */
 function aSender() {
-  return createSendStoredAnswers({ entries, crews, door: ship.door, opened, outcomes, changes, clock: { now: () => AT } });
+  return createSendStoredAnswers({ entries, crews, ...holding(ship.door), opened, outcomes, changes, clock: { now: () => AT } });
 }
 
 /** The entries the fleet has not stored an answer for yet. */
@@ -173,6 +173,19 @@ describe('the gateway sends the answers stored as sending', () => {
     expect(ship.calls.filter((call) => call.startsWith('reply'))).toEqual([`reply(${HARBOUR.messageId})`, `reply(${HARBOUR.messageId})`]);
     expect(ship.replies.map(({ idempotencyKey }) => idempotencyKey)).toEqual([`answer-${HARBOUR.questionId}`]);
     expect(unsent()).toEqual([]);
+  });
+
+  it('looks at what waits at its next round by asking only how many wait, while it holds as many (aeolus-fleet #1647)', async () => {
+    await store(HARBOUR);
+    ship.ship.deliveries.push(aPersonDelivery());
+    ship.refusals.reply.push({ code: 'SERVICE_UNAVAILABLE', message: 'The fleet is busy' });
+    const sender = aSender();
+    await sender();
+    ship.calls.length = 0;
+
+    await sender();
+
+    expect(ship.calls.filter((call) => call.startsWith('inbox') || call.startsWith('pushReceive'))).toEqual(['inbox']);
   });
 
   it('keeps one the fleet refused in the basket, not sent, with why, not handled; the others are sent', async () => {

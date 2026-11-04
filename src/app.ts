@@ -213,6 +213,7 @@ import { createOpenDelivery } from './core/people/open-delivery.js';
 import { createReadBridgeHome } from './core/people/read-bridge-home.js';
 import { createReadRecord } from './core/people/read-record.js';
 import { createReadYourFleet } from './core/people/read-your-fleet.js';
+import { createHeldDeliveries, holdingDoor } from './core/people/held-deliveries.js';
 import { createReadInbox } from './core/people/read-inbox.js';
 import type { ItemJob } from './core/people/item-job.js';
 import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/routing.js';
@@ -447,6 +448,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
 
   const clock = options.clock ?? systemClock;
   const door = createRestFleetDoor(options.fleetUrl);
+  // What the gateway holds of each person ship's waiting deliveries, so a look at them is a read (aeolus-fleet #1647).
+  const heldDeliveries = createHeldDeliveries();
+  const personDoor = holdingDoor(door.person, heldDeliveries);
   const readConnection = createReadConnection({ door, store: connections });
   // A fleet's connection as the gateway holds it, asking the fleet nothing: what a fleet that is off reads.
   const heldConnection: ReadConnection = async (fleetId) => {
@@ -767,7 +771,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const slackPosts = createPrismaSlackPosts(prisma);
   const slackMessages = createSlackMessages({ apiUrl: slackApiUrl });
   const bridgeUrlOf = (fleetId: FleetId): string => `${issuer}/bridge?fleet=${encodeURIComponent(fleetId)}`;
-  const showInSlack = createShowInSlack({ links: slackLinks, apps: slackApps, posts: slackPosts, slack: slackMessages, door: door.person, sleep, clock, bridgeUrlOf });
+  const showInSlack = createShowInSlack({ links: slackLinks, apps: slackApps, posts: slackPosts, slack: slackMessages, door: personDoor, sleep, clock, bridgeUrlOf });
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
   const personCrews = createPrismaPersonCrews(prisma);
   // A person's pages in focus, on every instance: while one is, what arrives is handed through it (wake a person, W6).
@@ -779,9 +783,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     locks: waiterLocks,
     waitOnPersonShip: createWaitOnPersonShip({
       crews: personCrews,
-      door: door.person,
+      door: personDoor,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: door.person, connections, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
+      wakePerson: createWakePerson({ door: personDoor, connections, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,
@@ -795,11 +799,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const openedDeliveries = createPrismaOpenedDeliveries(prisma);
   const itemOutcomes = createPrismaItemOutcomes(prisma);
   // The gateway's own steps it sees complete: a sign-in to an outside server, a Slack link.
-  const finishOwnStep = createFinishOwnStep({ connections, sent: door, crews: personCrews, door: door.person, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock });
+  const finishOwnStep = createFinishOwnStep({ connections, sent: door, crews: personCrews, door: personDoor, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock });
   const basketEntries = createPrismaBasketEntries(prisma);
   const basketSends = createRoundWorker({
     name: 'basket',
-    round: createSendStoredAnswers({ entries: basketEntries, crews: personCrews, door: door.person, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock }),
+    round: createSendStoredAnswers({ entries: basketEntries, crews: personCrews, door: personDoor, held: heldDeliveries, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock }),
     sleep,
     intervalMs: BASKET_ROUND_MS,
     log: server.log,
@@ -870,7 +874,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     const outcomes = itemOutcomes;
     const entries = basketEntries;
     const changes = inboxChanges;
-    const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: door.person };
+    const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: personDoor, held: heldDeliveries };
     return {
       readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults, connections }),
       readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries, outcomes, connections, routes, defaults: routingDefaults, parties, ownStepPartyOf: ownStepPartyOf(options.publicUrl ?? DEFAULT_PUBLIC_URL), ...placesOffered }),
@@ -1029,16 +1033,16 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   };
   const slackEvents = createPrismaSlackEvents(prisma);
   const slackSends = createSlackEventWorker({
-    send: createSendSlackEvents({ events: slackEvents, apps: slackApps, crews: personCrews, sender: door, door: door.person, posts: slackPosts, slack: slackMessages, clock }),
+    send: createSendSlackEvents({ events: slackEvents, apps: slackApps, crews: personCrews, sender: door, door: personDoor, posts: slackPosts, slack: slackMessages, clock }),
     sleep,
     intervalMs: SLACK_EVENT_ROUND_MS,
     log: server.log,
   });
   registerSlackRoutes(server, {
     completeInstall: createCompleteInstall({ slack: slackTooling, apps: slackApps, workspaces: slackWorkspaces, states: slackInstallStates, clock, installRedirectUrl }),
-    answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock, bridgeUrlOf }),
-    seeInSlack: createSeeInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
-    doneInSlack: createDoneInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: door.person, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
+    answerInSlack: createAnswerInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: personDoor, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock, bridgeUrlOf }),
+    seeInSlack: createSeeInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: personDoor, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
+    doneInSlack: createDoneInSlack({ apps: slackApps, links: slackLinks, posts: slackPosts, crews: personCrews, door: personDoor, outcomes: itemOutcomes, opened: openedDeliveries, changes: inboxChanges, slack: slackMessages, signatures: createSlackSignatures(), clock }),
     completeLink: createCompleteLink({ workspaces: slackWorkspaces, apps: slackApps, links: slackLinks, signIn: slackSignIn, states: slackLinkStates, accountOf, shipNames, clock, linkRedirectUrl, steps: slackLinkSteps, finishStep: finishOwnStep }),
     takeSlackEvent: createTakeSlackEvent({ apps: slackApps, links: slackLinks, events: slackEvents, posts: slackPosts, sendNow: () => { slackSends.wake(); }, slack: slackMessages, signatures: createSlackSignatures(), clock, linkPageUrl }),
   });

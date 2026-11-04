@@ -5,6 +5,7 @@ import { askingOfEntry, basketCountOf, standingOf, type BasketEntries, type Bask
 import type { CrewPersonShip } from './crew-person-ship.js';
 import type { ItemOutcomes } from './item-outcome.js';
 import type { PersonCaller, PersonCrewError, PersonCrewToken } from './person-crew.js';
+import type { HeldDeliveries } from './held-deliveries.js';
 import type { OpenedDeliveries, OpenedDelivery, PersonCrews, PersonDelivery, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
 import { askingOf as askingOfDelivery, staleOf, type Asking } from './stale-item.js';
@@ -37,6 +38,7 @@ export interface BasketDeps {
   crewPersonShip: CrewPersonShip;
   crews: PersonCrews;
   door: PersonShipDoor;
+  held: HeldDeliveries;
   opened: OpenedDeliveries;
   entries: BasketEntries;
   outcomes: ItemOutcomes;
