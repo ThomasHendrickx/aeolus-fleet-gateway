@@ -22,6 +22,7 @@ import { migratedDatabase } from './support/database.js';
 import { memoryConnectionStore } from './support/fleet-fakes.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { aSlackApp, aSlackWorkspace, fakeShipNames, fakeSlackSignIn, memorySlackApps, memorySlackLinks, memorySlackWorkspaces, plainLinkStates } from './support/slack-fakes.js';
+import { memoryLetGoDeliveries } from './support/people-fakes.js';
 
 // Do what only a human can, against a real core and the gateway's own
 // Postgres (Bridge, CC14, CC23): builder-plugin asks Charlotte for two
@@ -82,7 +83,7 @@ const charlotteSignedIn = (): PersonCaller => ({ fleetId, grantId: 'grant-charlo
 
 function people() {
   const held = createHeldDeliveries();
-  const door = holdingDoor(createRestFleetDoor(fleet.url).person, held);
+  const door = holdingDoor(createRestFleetDoor(fleet.url).person, { held, letGo: memoryLetGoDeliveries() });
   const deps = {
     crewPersonShip: () => Promise.resolve(ok({ shipId: charlotte.shipId, crewToken: charlotte.crewToken })),
     crews: createPrismaPersonCrews(prisma),

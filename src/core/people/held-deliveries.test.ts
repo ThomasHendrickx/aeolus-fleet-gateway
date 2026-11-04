@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { aPersonDelivery, fakePersonShipDoor } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, fakePersonShipDoor, memoryLetGoDeliveries } from '../../../test/support/people-fakes.js';
 import { ok } from '../shared/result.js';
 import { createHeldDeliveries, holdingDoor } from './held-deliveries.js';
 import type { PersonShipDoor } from './ports.js';
 
 // What the gateway holds of a person ship's waiting deliveries lets go of
 // each one the fleet no longer counts waiting because of the gateway's own
-// call (aeolus-fleet #1647).
+// call, and tells every gateway instance so (aeolus-fleet #1647).
 
 const CREW = 'aeolus_ct_v1_charlotte';
 const QUESTION = aPersonDelivery();
@@ -17,7 +17,8 @@ function holding(answers: Partial<PersonShipDoor> = {}) {
   const held = createHeldDeliveries();
   held.hold(CREW, [QUESTION, NOTE]);
   const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [QUESTION, NOTE] });
-  return { held, door: holdingDoor({ ...ship.door, ...answers }, held) };
+  const letGo = memoryLetGoDeliveries();
+  return { held, letGo, door: holdingDoor({ ...ship.door, ...answers }, { held, letGo }) };
 }
 
 const heldIds = (held: ReturnType<typeof createHeldDeliveries>) => held.of(CREW)?.map(({ deliveryId }) => deliveryId);
@@ -31,12 +32,20 @@ describe('what the gateway holds lets go of what it acknowledged or handed for t
     expect(heldIds(held)).toEqual([NOTE.deliveryId]);
   });
 
-  it('keeps a delivery whose acknowledgement the fleet refused', async () => {
-    const { held, door } = holding();
+  it('tells every gateway instance the delivery it let go of', async () => {
+    const { letGo, door } = holding();
+
+    await door.ack(CREW, QUESTION.deliveryId);
+
+    expect(letGo.told).toEqual([QUESTION.deliveryId]);
+  });
+
+  it('keeps a delivery whose acknowledgement the fleet refused, telling no instance', async () => {
+    const { held, letGo, door } = holding();
 
     await door.ack('aeolus_ct_v1_other', QUESTION.deliveryId);
 
-    expect(heldIds(held)).toEqual([QUESTION.deliveryId, NOTE.deliveryId]);
+    expect({ held: heldIds(held), told: letGo.told }).toEqual({ held: [QUESTION.deliveryId, NOTE.deliveryId], told: [] });
   });
 
   it.each(['acknowledged', 'undeliverable'] as const)('lets go of a delivery the fleet answers %s when handed', async (state) => {
@@ -47,11 +56,28 @@ describe('what the gateway holds lets go of what it acknowledged or handed for t
     expect(heldIds(held)).toEqual([NOTE.deliveryId]);
   });
 
-  it('keeps a delivery handed over that still waits', async () => {
-    const { held, door } = holding();
+  it('keeps a delivery handed over that still waits, telling no instance', async () => {
+    const { held, letGo, door } = holding();
 
     await door.handed(CREW, { deliveryId: QUESTION.deliveryId, handOverNumber: 1, channel: 'web-push' });
 
-    expect(heldIds(held)).toEqual([QUESTION.deliveryId, NOTE.deliveryId]);
+    expect({ held: heldIds(held), told: letGo.told }).toEqual({ held: [QUESTION.deliveryId, NOTE.deliveryId], told: [] });
+  });
+
+  it('lets go of a delivery another instance let go of, whatever crew holds it', () => {
+    const { held } = holding();
+    held.hold('aeolus_ct_v1_charlotte_2', [QUESTION]);
+
+    held.letGo(QUESTION.deliveryId);
+
+    expect({ crew: heldIds(held), otherCrew: held.of('aeolus_ct_v1_charlotte_2') }).toEqual({ crew: [NOTE.deliveryId], otherCrew: [] });
+  });
+
+  it('forgets all it holds once it may have missed a let-go, so the next look receives again', () => {
+    const { held } = holding();
+
+    held.forgetAll();
+
+    expect(held.of(CREW)).toBeUndefined();
   });
 });

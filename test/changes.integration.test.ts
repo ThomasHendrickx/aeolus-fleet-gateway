@@ -39,6 +39,7 @@ beforeEach(async () => {
   resyncs = 0;
   listening = await listenToChanges(databaseUrl, {
     onChange: (change) => heard.push(change),
+    onLetGo: () => undefined,
     onResync: () => {
       resyncs += 1;
     },

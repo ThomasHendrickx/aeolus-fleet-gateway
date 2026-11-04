@@ -10,7 +10,7 @@ import { ITEM_JOBS, routingDefaultsOf } from '../src/core/people/routing.js';
 import { commission, register, signIn } from './support/argo.js';
 import { FLEET_ID, memoryConnectionStore } from './support/fleet-fakes.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
-import { CHARLOTTE_GRANT, fakeCrewPersonShip, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from './support/people-fakes.js';
+import { CHARLOTTE_GRANT, fakeCrewPersonShip, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes, memoryLetGoDeliveries } from './support/people-fakes.js';
 import { PERSON_SHIP_ID } from './support/sign-in-fakes.js';
 
 // A look at Charlotte's inbox, as Bridge and its workers take one, against a
@@ -42,7 +42,7 @@ beforeEach(async () => {
   await crews.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, crewToken: charlotteCrew, crewedAt: new Date() });
   calls = [];
   const held = createHeldDeliveries();
-  const door = holdingDoor(counted(createRestFleetDoor(fleet.url).person, calls), held);
+  const door = holdingDoor(counted(createRestFleetDoor(fleet.url).person, calls), { held, letGo: memoryLetGoDeliveries() });
   readInbox = createReadInbox({
     crewPersonShip: fakeCrewPersonShip(crews),
     crews,

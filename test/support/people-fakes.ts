@@ -7,7 +7,7 @@ import type { ItemOutcome, ItemOutcomes } from '../../src/core/people/item-outco
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
 import type { Route, Routes } from '../../src/core/people/routing.js';
 import { createHeldDeliveries, holdingDoor, type HeldDeliveries } from '../../src/core/people/held-deliveries.js';
-import type { AccountDoor, ConnectedChat, ConnectedChats, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
+import type { AccountDoor, ConnectedChat, ConnectedChats, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, LetGoDeliveries, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -490,5 +490,17 @@ export function memoryConnectedChats(held: HeldChat[] = []): ConnectedChats & { 
 /** The person ship's door as the gateway wires it, with what it holds of what waits (aeolus-fleet #1647): one gateway's, so a new one is the gateway after a restart. */
 export function holding(door: PersonShipDoor): { door: PersonShipDoor; held: HeldDeliveries } {
   const held = createHeldDeliveries();
-  return { door: holdingDoor(door, held), held };
+  return { door: holdingDoor(door, { held, letGo: memoryLetGoDeliveries() }), held };
+}
+
+/** The deliveries the gateway told every instance it let go of, in memory, in the order told. */
+export function memoryLetGoDeliveries(): LetGoDeliveries & { told: DeliveryId[] } {
+  const told: DeliveryId[] = [];
+  return {
+    told,
+    tell: (deliveryId) => {
+      told.push(deliveryId);
+      return Promise.resolve();
+    },
+  };
 }

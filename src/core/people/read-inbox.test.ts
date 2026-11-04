@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes, memoryLetGoDeliveries } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createHeldDeliveries, holdingDoor, type HeldDeliveries } from './held-deliveries.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
@@ -32,7 +32,7 @@ const CHAT_ON = routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' a
 function readInbox(deliveries: PersonDelivery[], options: { crewToken?: string; routes?: Route[]; isExcludingIgnored?: boolean; held?: HeldDeliveries } = {}) {
   const { crewToken = 'aeolus_ct_v1_charlotte', routes = [], isExcludingIgnored = false, held = createHeldDeliveries() } = options;
   const ship = fakePersonShipDoor({ crewToken, deliveries, isExcludingIgnored });
-  const door = holdingDoor(ship.door, held);
+  const door = holdingDoor(ship.door, { held, letGo: memoryLetGoDeliveries() });
   return { ...ship, door, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, held, opened, routes: memoryRoutes(routes), defaults: CHAT_ON, connections }) };
 }
 
