@@ -1,4 +1,4 @@
-import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
+import type { DeliveryId, FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { BasketEntries, BasketEntry } from '../../src/core/people/basket.js';

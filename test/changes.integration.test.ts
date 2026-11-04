@@ -127,7 +127,7 @@ describe("the changes to a fleet's pending requests, heard by the pages", () => 
   });
 
   it('starts while the database does not answer, without failing', async () => {
-    const waiting = await listenToChanges(aNewDatabaseUrl(inject('postgresUrl'), 'never_created'), { onChange: () => undefined, onResync: () => undefined });
+    const waiting = await listenToChanges(aNewDatabaseUrl(inject('postgresUrl'), 'never_created'), { onChange: () => undefined, onLetGo: () => undefined, onResync: () => undefined });
 
     await expect(waiting.close()).resolves.toBeUndefined();
   });

@@ -74,7 +74,7 @@ import { gatewayRouter, WAITING_SECRET_HEADER, type Context, type GatewayRouter 
 import { registerFrontDoor, type WebApp } from './adapters/http/front-door.js';
 import { registerOpenAiAppsChallenge } from './adapters/http/openai-apps-challenge.js';
 import { createChangeHub } from './adapters/http/live.js';
-import { createPrismaInboxChanges, listenToChanges } from './adapters/prisma/changes.js';
+import { createPrismaInboxChanges, createPrismaLetGoDeliveries, listenToChanges } from './adapters/prisma/changes.js';
 import { registerOAuthRoutes } from './adapters/http/oauth-routes.js';
 import { registerMcpEndpoint } from './adapters/http/mcp-endpoint.js';
 import { registerA2aEndpoint } from './adapters/http/a2a-endpoint.js';
@@ -450,7 +450,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const door = createRestFleetDoor(options.fleetUrl);
   // What the gateway holds of each person ship's waiting deliveries, so a look at them is a read (aeolus-fleet #1647).
   const heldDeliveries = createHeldDeliveries();
-  const personDoor = holdingDoor(door.person, heldDeliveries);
+  const personDoor = holdingDoor(door.person, { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) });
   const readConnection = createReadConnection({ door, store: connections });
   // A fleet's connection as the gateway holds it, asking the fleet nothing: what a fleet that is off reads.
   const heldConnection: ReadConnection = async (fleetId) => {
@@ -1178,7 +1178,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
           slackEdits.wake();
         }
       },
+      onLetGo: (deliveryId) => {
+        heldDeliveries.letGo(deliveryId);
+      },
       onResync: () => {
+        heldDeliveries.forgetAll();
         hub.resync();
         slackEdits.wake();
       },

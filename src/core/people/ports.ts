@@ -75,6 +75,15 @@ export interface InboxChanges {
   tell(change: InboxChange): Promise<void>;
 }
 
+/**
+ * Outbound port: tells every gateway instance that a delivery the gateway
+ * held as waiting waits no more, so none of them lists it waiting
+ * (aeolus-fleet #1647).
+ */
+export interface LetGoDeliveries {
+  tell(deliveryId: DeliveryId): Promise<void>;
+}
+
 /** A delivery to the person ship, as the fleet's push receive hands it. */
 export interface PersonDelivery {
   readonly deliveryId: DeliveryId;
