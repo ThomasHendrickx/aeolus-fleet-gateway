@@ -1,4 +1,4 @@
-import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
+import type { DeliveryId, FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
 import type { BasketEntries, BasketEntry } from '../../src/core/people/basket.js';
@@ -6,7 +6,8 @@ import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { ItemOutcome, ItemOutcomes } from '../../src/core/people/item-outcome.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
 import type { Route, Routes } from '../../src/core/people/routing.js';
-import type { AccountDoor, ConnectedChat, ConnectedChats, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
+import { createHeldDeliveries, holdingDoor, type HeldDeliveries } from '../../src/core/people/held-deliveries.js';
+import type { AccountDoor, ConnectedChat, ConnectedChats, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, LetGoDeliveries, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -143,7 +144,7 @@ export const SENT_MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank0sen';
  * core before excluding does, with the last number the gateway handed it with;
  * the ones it acknowledged, read again until handled; what its discover
  * answers; its record, newest first by delivery id; its name, as whoami
- * answers it; the crew token it takes, and the calls the gateway made.
+ * answers it; the crew token it takes, and the calls the gateway made; the ship, whose deliveries a test changes as the fleet would.
  */
 export function fakePersonShipDoor(ship: { crewToken: string; name?: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[]; isExcludingIgnored?: boolean }) {
   const calls: string[] = [];
@@ -257,7 +258,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
       });
     },
   };
-  return { door, calls, replies, sent, refusals, handOvers };
+  return { door, calls, replies, sent, refusals, handOvers, ship };
 }
 
 function recipientOf(to: PersonSelector): string {
@@ -483,5 +484,23 @@ export function memoryConnectedChats(held: HeldChat[] = []): ConnectedChats & { 
   return {
     held,
     list: (fleetId, shipId) => Promise.resolve(held.filter((chat) => chat.fleetId === fleetId && chat.shipId === shipId).map(({ name, liveUntil }) => ({ name, liveUntil }))),
+  };
+}
+
+/** The person ship's door as the gateway wires it, with what it holds of what waits (aeolus-fleet #1647): one gateway's, so a new one is the gateway after a restart. */
+export function holding(door: PersonShipDoor): { door: PersonShipDoor; held: HeldDeliveries } {
+  const held = createHeldDeliveries();
+  return { door: holdingDoor(door, { held, letGo: memoryLetGoDeliveries() }), held };
+}
+
+/** The deliveries the gateway told every instance it let go of, in memory, in the order told. */
+export function memoryLetGoDeliveries(): LetGoDeliveries & { told: DeliveryId[] } {
+  const told: DeliveryId[] = [];
+  return {
+    told,
+    tell: (deliveryId) => {
+      told.push(deliveryId);
+      return Promise.resolve();
+    },
   };
 }

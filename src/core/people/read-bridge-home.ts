@@ -13,6 +13,7 @@ import type { ItemOutcomes, Place } from './item-outcome.js';
 import { essenceOf, isCounted, jobOf, type ItemJob } from './item-job.js';
 import { itemStateOf, type ItemState } from './item-state.js';
 import { asPersonCrew, withOwnRefusal, type PersonCaller, type PersonCrewError } from './person-crew.js';
+import type { HeldDeliveries } from './held-deliveries.js';
 import type { OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
 import { RECORD_PAGE_SIZE, SEALED_TITLE } from './read-record.js';
@@ -99,6 +100,7 @@ export function createReadBridgeHome(deps: {
   crewPersonShip: CrewPersonShip;
   crews: PersonCrews;
   door: PersonShipDoor;
+  held: HeldDeliveries;
   opened: OpenedDeliveries;
   entries: BasketEntries;
   outcomes: Pick<ItemOutcomes, 'findMany'>;

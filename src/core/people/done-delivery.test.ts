@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
-import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, holding } from '../../../test/support/people-fakes.js';
 import { createDoneDelivery } from './done-delivery.js';
 import type { OpenedDelivery } from './ports.js';
 
@@ -50,7 +50,7 @@ beforeEach(async () => {
   await opened.save(TEXT);
   outcomes = memoryItemOutcomes();
   ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [] });
-  doneDelivery = createDoneDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, changes: memoryInboxChanges(), outcomes, clock: { now: () => AT } });
+  doneDelivery = createDoneDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(ship.door), opened, changes: memoryInboxChanges(), outcomes, clock: { now: () => AT } });
 });
 
 describe('a person marks a step done or that they cannot, with a note', () => {

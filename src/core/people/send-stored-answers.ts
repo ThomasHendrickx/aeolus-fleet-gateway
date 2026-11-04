@@ -6,6 +6,7 @@ import { answerKeyOf, answerOf, askingOfEntry, type BasketEntries, type BasketEn
 import type { ItemOutcomes } from './item-outcome.js';
 import { sightingOf } from './opened-of.js';
 import { isEndedCrew, KEY_UNAVAILABLE } from './person-crew.js';
+import type { HeldDeliveries } from './held-deliveries.js';
 import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from './ports.js';
 import { waitingOn } from './read-inbox.js';
 import { askingOf, staleOf, type Asking } from './stale-item.js';
@@ -51,6 +52,7 @@ interface SendDeps {
   entries: BasketEntries;
   crews: Pick<PersonCrews, 'find'>;
   door: Pick<PersonShipDoor, 'inbox' | 'pushReceive' | 'reply' | 'handled'>;
+  held: HeldDeliveries;
   opened: OpenedDeliveries;
   outcomes: ItemOutcomes;
   changes: InboxChanges;
@@ -105,7 +107,7 @@ async function sendShip(deps: SendDeps, ship: { fleetId: FleetId; shipId: ShipId
   if (crew === undefined) {
     return sending.map(() => 'kept');
   }
-  const waiting = await waitingOn(deps.door, crew.crewToken);
+  const waiting = await waitingOn(deps, crew.crewToken);
   if (!waiting.isOk) {
     for (const entry of sending) {
       await keepUnanswered(deps, entry);

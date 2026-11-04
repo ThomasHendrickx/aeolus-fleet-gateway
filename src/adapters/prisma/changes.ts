@@ -3,16 +3,18 @@
  * `gateway_changes` channel, so every gateway instance hears a change made
  * on any of them: a trigger announces each committed change to a fleet's
  * pending requests, naming only the fleet and the topic; the gateway tells
- * each change to a person ship's inbox, naming the fleet and the ship. One connection per
+ * each change to a person ship's inbox, naming the fleet and the ship, and
+ * each delivery it held as waiting and let go of, naming only the delivery
+ * (aeolus-fleet #1647). One connection per
  * instance listens; when it is lost, or the database does not answer at
  * start, it connects again and asks its listener to read everything anew,
  * as changes made meanwhile were not heard.
  */
-import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
+import { idSchema, type DeliveryId, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import pg from 'pg';
 import { z } from 'zod';
 
-import type { InboxChanges } from '../../core/people/ports.js';
+import type { InboxChanges, LetGoDeliveries } from '../../core/people/ports.js';
 import type { Db } from './client.js';
 
 /** A change a page may show: which fleet, and what changed in it: its requests, or a person ship's inbox. */
@@ -41,6 +43,17 @@ export function createPrismaInboxChanges(db: Db): InboxChanges {
   };
 }
 
+const letGoSchema = z.object({ topic: z.literal('letGo'), deliveryId: idSchema('delivery') });
+
+/** Tells every gateway instance that a delivery the gateway held as waiting waits no more. */
+export function createPrismaLetGoDeliveries(db: Db): LetGoDeliveries {
+  return {
+    tell: async (deliveryId) => {
+      await db.$executeRaw`SELECT pg_notify(${CHANNEL}, ${JSON.stringify({ topic: 'letGo', deliveryId })})`;
+    },
+  };
+}
+
 function parsedJson(text: string | undefined): unknown {
   try {
     return JSON.parse(text ?? 'null');
@@ -49,7 +62,7 @@ function parsedJson(text: string | undefined): unknown {
   }
 }
 
-export async function listenToChanges(databaseUrl: string, listener: { onChange: (change: Change) => void; onResync: () => void }): Promise<{ close(): Promise<void> }> {
+export async function listenToChanges(databaseUrl: string, listener: { onChange: (change: Change) => void; onLetGo: (deliveryId: DeliveryId) => void; onResync: () => void }): Promise<{ close(): Promise<void> }> {
   let client: pg.Client | undefined;
   let isClosed = false;
   let wait = RECONNECT_FIRST_MS;
@@ -58,9 +71,14 @@ export async function listenToChanges(databaseUrl: string, listener: { onChange:
   const connect = async (): Promise<void> => {
     const connecting = new pg.Client({ connectionString: databaseUrl, application_name: APPLICATION_NAME });
     connecting.on('notification', (notification) => {
-      const change = changeSchema.safeParse(parsedJson(notification.payload));
+      const payload = parsedJson(notification.payload);
+      const change = changeSchema.safeParse(payload);
       if (change.success) {
         listener.onChange(change.data);
+      }
+      const letGo = letGoSchema.safeParse(payload);
+      if (letGo.success) {
+        listener.onLetGo(letGo.data.deliveryId);
       }
     });
     // A lost connection is connected again; its 'end' follows any 'error'.

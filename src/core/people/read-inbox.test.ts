@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes, memoryLetGoDeliveries } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
+import { createHeldDeliveries, holdingDoor, type HeldDeliveries } from './held-deliveries.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import { createReadInbox } from './read-inbox.js';
 import { ITEM_JOBS, routingDefaultsOf, type Route } from './routing.js';
@@ -28,10 +29,11 @@ beforeEach(async () => {
 /** A chat on for every job, as the gateway's defaults have it (Bridge, CC19). */
 const CHAT_ON = routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' as const })));
 
-function readInbox(deliveries: PersonDelivery[], options: { crewToken?: string; routes?: Route[]; isExcludingIgnored?: boolean } = {}) {
-  const { crewToken = 'aeolus_ct_v1_charlotte', routes = [], isExcludingIgnored = false } = options;
+function readInbox(deliveries: PersonDelivery[], options: { crewToken?: string; routes?: Route[]; isExcludingIgnored?: boolean; held?: HeldDeliveries } = {}) {
+  const { crewToken = 'aeolus_ct_v1_charlotte', routes = [], isExcludingIgnored = false, held = createHeldDeliveries() } = options;
   const ship = fakePersonShipDoor({ crewToken, deliveries, isExcludingIgnored });
-  return { ...ship, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, routes: memoryRoutes(routes), defaults: CHAT_ON, connections }) };
+  const door = holdingDoor(ship.door, { held, letGo: memoryLetGoDeliveries() });
+  return { ...ship, door, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, held, opened, routes: memoryRoutes(routes), defaults: CHAT_ON, connections }) };
 }
 
 function aChatRoute(overrides: Partial<Route>): Route {
@@ -191,6 +193,69 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
 
   it('says the fleet did not answer when it refuses the person ship even crewed again', async () => {
     await expect(readInbox([], { crewToken: 'aeolus_ct_v1_other' }).readInbox(CHARLOTTE_GRANT)).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
+  });
+});
+
+describe('a look at what waits is a read once the gateway holds it (aeolus-fleet #1647)', () => {
+  /** The ids a look listed as waiting, in order. */
+  const listedOf = (read: Awaited<ReturnType<ReturnType<typeof readInbox>['readInbox']>>) => (read.isOk ? read.value.deliveries.map(({ deliveryId }) => deliveryId) : []);
+
+  it('looks again at as many waiting by asking only how many wait, listing what it holds', async () => {
+    const waiting = manyDeliveries(15);
+    const look = readInbox(waiting);
+    await look.readInbox(CHARLOTTE_GRANT);
+    look.calls.length = 0;
+
+    const again = await look.readInbox(CHARLOTTE_GRANT);
+
+    expect({ listed: listedOf(again), calls: look.calls }).toEqual({ listed: waiting.map(({ deliveryId }) => deliveryId), calls: ['inbox'] });
+  });
+
+  it('receives only past what it holds once more wait', async () => {
+    const waiting = manyDeliveries(16);
+    const look = readInbox(waiting.slice(0, 15));
+    await look.readInbox(CHARLOTTE_GRANT);
+    look.calls.length = 0;
+    look.ship.deliveries.push(waiting[15] ?? aPersonDelivery());
+
+    const again = await look.readInbox(CHARLOTTE_GRANT);
+
+    expect({ listed: listedOf(again), calls: look.calls }).toEqual({ listed: waiting.map(({ deliveryId }) => deliveryId), calls: ['inbox', 'pushReceive(10, excluding 15)'] });
+  });
+
+  it('receives every one again once fewer wait than it holds', async () => {
+    const waiting = manyDeliveries(15);
+    const look = readInbox([...waiting]);
+    await look.readInbox(CHARLOTTE_GRANT);
+    look.calls.length = 0;
+    look.ship.deliveries.splice(0, 1);
+
+    const again = await look.readInbox(CHARLOTTE_GRANT);
+
+    expect({ listed: listedOf(again), calls: look.calls }).toEqual({ listed: waiting.slice(1).map(({ deliveryId }) => deliveryId), calls: ['inbox', 'pushReceive(10)', 'pushReceive(10, excluding 10)'] });
+  });
+
+  it('lists the one that arrived and not the one the gateway acknowledged, as many waiting as before', async () => {
+    const waiting = manyDeliveries(16);
+    const look = readInbox(waiting.slice(0, 15));
+    await look.readInbox(CHARLOTTE_GRANT);
+    await look.door.ack('aeolus_ct_v1_charlotte', waiting[0]?.deliveryId ?? 'dlv_01m3tbfspe96yf1rnr4ank0001');
+    look.ship.deliveries.push(waiting[15] ?? aPersonDelivery());
+
+    const again = await look.readInbox(CHARLOTTE_GRANT);
+
+    expect(listedOf(again)).toEqual(waiting.slice(1).map(({ deliveryId }) => deliveryId));
+  });
+
+  it('receives what waits again under a new crew, as once the lease ended', async () => {
+    const held = createHeldDeliveries();
+    held.hold('aeolus_ct_v1_ended', manyDeliveries(1));
+    await crews.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, crewToken: 'aeolus_ct_v1_ended', crewedAt: new Date('2026-10-19T08:00:00.000Z') });
+    const look = readInbox([aPersonDelivery()], { held });
+
+    await look.readInbox(CHARLOTTE_GRANT);
+
+    expect(look.calls).toEqual(['inbox', 'inbox', 'pushReceive(10)']);
   });
 });
 

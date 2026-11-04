@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
-import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes, holding } from '../../../test/support/people-fakes.js';
 import { createAnswerDelivery } from './answer-delivery.js';
 import { createDoneDelivery } from './done-delivery.js';
 import { createOpenDelivery } from './open-delivery.js';
@@ -54,8 +54,9 @@ beforeEach(async () => {
   changes = memoryInboxChanges();
   outcomes = memoryItemOutcomes();
   ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [] });
-  answerDelivery = createAnswerDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, changes, outcomes, clock: { now: () => AT } });
-  doneDelivery = createDoneDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, changes, outcomes, clock: { now: () => AT } });
+  const gateway = holding(ship.door);
+  answerDelivery = createAnswerDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...gateway, opened, changes, outcomes, clock: { now: () => AT } });
+  doneDelivery = createDoneDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...gateway, opened, changes, outcomes, clock: { now: () => AT } });
 });
 
 describe('a person answers a delivery they opened', () => {
@@ -182,7 +183,7 @@ describe('a delivery the person dealt with', () => {
     { what: 'answered', deal: () => answerDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId, ...ANSWER }) },
     { what: 'done', deal: () => doneDelivery({ caller: CALLER, place: 'chat', deliveryId: OPENED.deliveryId }) },
   ])('is listed and opened by no client of the person once $what', async ({ deal }) => {
-    const asCrew = { crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened };
+    const asCrew = { crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(ship.door), opened };
     await deal();
 
     const read = await createReadInbox({ ...asCrew, connections: memoryConnectionStore(), routes: memoryRoutes(), defaults: routingDefaultsOf([{ job: 'everything-else', place: 'chat' }]) })(CALLER);

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
-import { CHARLOTTE_GRANT, aPersonDelivery, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { CHARLOTTE_GRANT, aPersonDelivery, fakeCrewPersonShip, fakePersonShipDoor, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, holding } from '../../../test/support/people-fakes.js';
 import type { PersonDelivery } from './ports.js';
 import { createOpenDelivery } from './open-delivery.js';
 
@@ -28,7 +28,7 @@ beforeEach(() => {
 
 function opening(deliveries: PersonDelivery[]) {
   const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries });
-  return { ...ship, openDelivery: createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, changes, outcomes, clock: { now: () => AT } }) };
+  return { ...ship, openDelivery: createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(ship.door), opened, changes, outcomes, clock: { now: () => AT } }) };
 }
 
 const CALLER = CHARLOTTE_GRANT;
@@ -120,7 +120,7 @@ describe('a person opens a delivery that waits for their person ship', () => {
   it('says the fleet did not answer when it refuses the acknowledgement, keeping what it opened so a second open goes on', async () => {
     const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [QUESTION] });
     const door = { ...ship.door, ack: () => Promise.resolve({ isOk: false as const, error: { code: 'UNAVAILABLE', message: 'The fleet did not answer' } }) };
-    const openDelivery = createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, opened, changes, outcomes, clock: { now: () => AT } });
+    const openDelivery = createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(door), opened, changes, outcomes, clock: { now: () => AT } });
 
     await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
     expect(opened.held.size).toBe(1);
@@ -137,7 +137,7 @@ describe('a person opens a delivery that waits for their person ship', () => {
   it('tells nothing when the fleet refused the acknowledgement', async () => {
     const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [QUESTION] });
     const door = { ...ship.door, ack: () => Promise.resolve({ isOk: false as const, error: { code: 'UNAVAILABLE', message: 'The fleet did not answer' } }) };
-    const openDelivery = createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, opened, changes, outcomes, clock: { now: () => AT } });
+    const openDelivery = createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(door), opened, changes, outcomes, clock: { now: () => AT } });
 
     await openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' });
 
@@ -292,7 +292,7 @@ describe('a person opens a question its asker withdrew or replaced: their look a
   it('is done with a question the person opened before, once it was withdrawn, at their next look', async () => {
     const ship = { crewToken: 'aeolus_ct_v1_charlotte', deliveries: [ASKING] };
     const fleet = fakePersonShipDoor(ship);
-    const openDelivery = createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: fleet.door, opened, changes, outcomes, clock: { now: () => AT } });
+    const openDelivery = createOpenDelivery({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(fleet.door), opened, changes, outcomes, clock: { now: () => AT } });
     await openDelivery({ caller: CALLER, deliveryId: ASKING.deliveryId, place: 'bridge' });
     ship.deliveries.push(WITHDRAWAL);
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, holding } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { BasketEntry } from './basket.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
@@ -57,7 +57,7 @@ async function store(entry: BasketEntry) {
 function removeWith(deliveries: PersonDelivery[] = []) {
   const crews = memoryPersonCrews();
   const ship = fakePersonShipDoor({ crewToken: CREW_TOKEN, deliveries });
-  return { ...ship, remove: createRemoveFromBasket({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door, opened, entries, outcomes, changes, clock: { now: () => AT } }) };
+  return { ...ship, remove: createRemoveFromBasket({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(ship.door), opened, entries, outcomes, changes, clock: { now: () => AT } }) };
 }
 
 describe('a person removes an entry from the basket', () => {
