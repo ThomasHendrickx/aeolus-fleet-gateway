@@ -143,7 +143,7 @@ export const SENT_MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank0sen';
  * core before excluding does, with the last number the gateway handed it with;
  * the ones it acknowledged, read again until handled; what its discover
  * answers; its record, newest first by delivery id; its name, as whoami
- * answers it; the crew token it takes, and the calls the gateway made.
+ * answers it; the crew token it takes, and the calls the gateway made; the ship, whose deliveries a test changes as the fleet would.
  */
 export function fakePersonShipDoor(ship: { crewToken: string; name?: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[]; isExcludingIgnored?: boolean }) {
   const calls: string[] = [];
@@ -257,7 +257,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
       });
     },
   };
-  return { door, calls, replies, sent, refusals, handOvers };
+  return { door, calls, replies, sent, refusals, handOvers, ship };
 }
 
 function recipientOf(to: PersonSelector): string {
