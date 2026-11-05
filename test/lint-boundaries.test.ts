@@ -53,4 +53,22 @@ describe('Bridge boundary', () => {
     const messages = await boundaryMessages('src/adapters/http/example.ts', "import { type ReadInbox } from '../../core/people/read-inbox.js';\nexport type Read = ReadInbox;\n");
     expect(messages).toEqual([]);
   });
+
+  it('keeps the core import rules in the MCP core', async () => {
+    const messages = await boundaryMessages('src/core/mcp-in/example.ts', "import { PrismaClient } from '@prisma/client';\nexport const client = PrismaClient;\n");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain('src/core');
+  });
+
+  it('keeps the core purity rules in the MCP core', async () => {
+    const messages = await boundaryMessages('src/core/mcp-out/example.ts', 'export const at = new Date();\n');
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain('clock');
+  });
+
+  it('keeps Prisma in its adapter in the MCP adapter', async () => {
+    const messages = await boundaryMessages('src/adapters/mcp/example.ts', "import { PrismaClient } from '@prisma/client';\nexport const client = PrismaClient;\n");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain('prisma adapter');
+  });
 });
