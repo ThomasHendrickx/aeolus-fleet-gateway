@@ -60,9 +60,9 @@ export async function openDelivery(fleet: string, deliveryId: string): Promise<A
   const bridgeHost = (await headers()).get('host') ?? '';
   return attempt(fleet, async (api) => {
     const opened = await api.people.open.mutate({ deliveryId });
-    const { contentType, payload, meetingId, ...entry } = opened;
+    const { contentType, payload, meetingId, said, ...entry } = opened;
     // A plain message's title is its first line, its Markdown marks taken off (#242).
-    return { ...entry, title: isPlainMessageType(contentType) ? plainTextOf(entry.title) : entry.title, payload, body: bodyOf({ contentType, payload }), question: questionOf({ contentType, payload }), step: stepOf({ contentType, payload }, bridgeHost), alert: alertOf({ contentType, payload }), meetingId: meetingId ?? undefined, alertShip: alertShipOf({ contentType, payload }) };
+    return { ...entry, title: isPlainMessageType(contentType) ? plainTextOf(entry.title) : entry.title, payload, body: bodyOf({ contentType, payload, said }), question: questionOf({ contentType, payload }), step: stepOf({ contentType, payload }, bridgeHost), alert: alertOf({ contentType, payload }), meetingId: meetingId ?? undefined, alertShip: alertShipOf({ contentType, payload }) };
   });
 }
 

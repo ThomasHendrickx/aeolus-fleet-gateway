@@ -5,6 +5,7 @@ import { ok, type Result } from '../shared/result.js';
 import { inboxEntryOf, titleOf, type InboxEntry } from './inbox-entry.js';
 import { asPersonCrew, KEY_UNAVAILABLE, SEALED_MESSAGE, withOwnRefusal, type PersonCaller, type PersonCrewError, type PersonCrewToken } from './person-crew.js';
 import { jobOf } from './item-job.js';
+import { meetingNoticeSaid } from './meeting-notice.js';
 import type { Place } from './item-outcome.js';
 import { handledOf, type DealDeps } from './opened-of.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
@@ -16,6 +17,8 @@ export interface OpenedView extends InboxEntry {
   readonly contentType: string;
   readonly payload: string;
   readonly meetingId: MeetingId | null;
+  /** The sentence a meeting notice says, in place of its payload; none for any other delivery. */
+  readonly said: string | null;
   readonly stale: Stale | null;
 }
 
@@ -202,5 +205,5 @@ async function openedAgain(deps: DealDeps, asked: { caller: PersonCaller; crew: 
 }
 
 function viewOf(delivery: PersonDelivery): Omit<OpenedView, 'stale'> {
-  return { ...inboxEntryOf(delivery), contentType: delivery.contentType, payload: delivery.payload, meetingId: delivery.meetingId };
+  return { ...inboxEntryOf(delivery), contentType: delivery.contentType, payload: delivery.payload, meetingId: delivery.meetingId, said: meetingNoticeSaid({ ...delivery, from: delivery.senderName }) };
 }

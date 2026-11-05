@@ -141,8 +141,11 @@ const BODIED = new Set([ALERT_CONTENT_TYPE, NOTICE_CONTENT_TYPE]);
 
 const bodiedSchema = z.object({ body: z.string() });
 
-/** An alert's or a notice's body; a plain message's text after its first line, its title; any other payload, or one that does not read, as it came. */
-export function bodyOf(opened: { contentType: string; payload: string }): string {
+/** A meeting notice's sentence; an alert's or a notice's body; a plain message's text after its first line, its title; any other payload, or one that does not read, as it came. */
+export function bodyOf(opened: { contentType: string; payload: string; said?: string | null }): string {
+  if (opened.said !== undefined && opened.said !== null) {
+    return opened.said;
+  }
   if (isPlainMessageType(opened.contentType)) {
     // A plain message's first line is its title (#242).
     const firstBreak = opened.payload.indexOf('\n');

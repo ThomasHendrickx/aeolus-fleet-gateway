@@ -19,6 +19,12 @@ import { personServerFor, type PersonToolsDeps } from './person-tools.js';
 
 const DISCOVERY: PersonDiscovery = { ships: [{ name: 'tracker', type: 'issue-tracker', kind: 'app', statement: null }], types: [{ type: 'issue-tracker', reachable: 1 }] };
 
+/** The text of a tool's first content block. */
+function textOf(called: Awaited<ReturnType<Client['callTool']>>): string {
+  const [first] = z.array(z.object({ text: z.string() })).parse(called.content);
+  return first?.text ?? '';
+}
+
 const unused = () => Promise.reject(new Error('not called in this test'));
 
 /** The person tools over use cases that answer as given, and what aeolus_send was asked. */
@@ -414,5 +420,28 @@ describe("every answer of a person's tools carries their inbox state (gateway #2
     const mcp = await connected(personTools().deps);
 
     await expect(mcp.callTool({ name: 'aeolus_ships', arguments: {} })).resolves.toEqual({ content: [{ type: 'text', text: JSON.stringify(DISCOVERY) }] });
+  });
+});
+
+describe('a person opens a delivery with aeolus_open', () => {
+  const OPENED = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0s02' as const, from: 'chief-of-staff', title: 'You were added to a meeting', sentAt: '2026-10-19T08:00:00.000Z', stale: null };
+
+  it('answers a meeting notice as its sentence, with the meeting to read, and without its payload or content type', async () => {
+    const meetingId = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' as const;
+    const opened = { ...OPENED, contentType: 'application/vnd.aeolus.meeting.added+json', payload: `{"meetingId":"${meetingId}"}`, meetingId, said: 'chief-of-staff added you to the meeting “Weekly heads”.' };
+    const mcp = await connected(personTools({ openDelivery: () => Promise.resolve(ok(opened)) }).deps);
+
+    const called = await mcp.callTool({ name: 'aeolus_open', arguments: { deliveryId: opened.deliveryId } });
+
+    expect(JSON.parse(textOf(called))).toEqual({ deliveryId: opened.deliveryId, from: 'chief-of-staff', title: 'You were added to a meeting', sentAt: '2026-10-19T08:00:00.000Z', said: opened.said, meetingId });
+  });
+
+  it('answers any other delivery whole, as before', async () => {
+    const opened = { ...OPENED, contentType: 'text/plain', payload: 'The build is red', meetingId: null, said: null };
+    const mcp = await connected(personTools({ openDelivery: () => Promise.resolve(ok(opened)) }).deps);
+
+    const called = await mcp.callTool({ name: 'aeolus_open', arguments: { deliveryId: opened.deliveryId } });
+
+    expect(JSON.parse(textOf(called))).toEqual({ ...OPENED, contentType: 'text/plain', payload: 'The build is red', meetingId: null });
   });
 });
