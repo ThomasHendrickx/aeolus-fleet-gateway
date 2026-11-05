@@ -114,6 +114,32 @@ function importRules({ patterns, syntax = [] }) {
   };
 }
 
+/**
+ * What Bridge (the top-level bridge/ folder) must never import: it reaches the
+ * person ship only through the gateway's person API (web/lib/gateway-api), so
+ * not the core, an adapter or the fleet's own package.
+ * @type {ImportRestriction[]}
+ */
+const bridgeForbiddenImports = [
+  { regex: '(^|/)src(/|$)', what: 'the gateway source (src/core and src/adapters)' },
+  { regex: '^@aeolus-fleet/core(/.+)?$', what: 'the fleet package' },
+].map(({ what, regex }) => ({
+  regex,
+  message: `Bridge must not import ${what}: it reaches the person ship only through the gateway's person API (web/lib/gateway-api).`,
+}));
+
+/** The gateway's MCP side, which serves MCP clients and never imports Bridge. */
+const mcpSideAdapterFiles = ['src/adapters/mcp/**/*.ts', 'src/adapters/http/{mcp-endpoint,mcp-task,person-tools}*.ts'];
+const mcpSideCoreFiles = ['src/core/{mcp-in,mcp-out}/**/*.ts'];
+
+/** @type {ImportRestriction[]} */
+const mcpSideForbiddenImports = [
+  {
+    regex: '^(\\.\\./)+bridge(/|$)',
+    message: 'The gateway\'s MCP side must not import Bridge: Bridge is one client of the person API, beside the MCP doors.',
+  },
+];
+
 export default defineConfig(
   globalIgnores(['**/node_modules/', '**/dist/', '**/coverage/', 'src/adapters/prisma/generated/', 'web/.next/', 'web/next-env.d.ts']),
 
@@ -193,5 +219,23 @@ export default defineConfig(
       'no-restricted-properties': ['error', ...noModuleMocks, ...noTestDoubles, ...coreImpure.properties],
       'no-restricted-globals': ['error', ...coreImpure.globals],
     },
+  },
+
+  {
+    name: 'aeolus/bridge',
+    files: ['bridge/**/*.{ts,tsx}'],
+    rules: importRules({ patterns: [...prismaOutsideItsAdapter, ...bridgeForbiddenImports] }),
+  },
+  {
+    // Repeats the Prisma list: this block's import rules replace the all-files ones for its files.
+    name: 'aeolus/mcp-side-adapters',
+    files: mcpSideAdapterFiles,
+    rules: importRules({ patterns: [...prismaOutsideItsAdapter, ...mcpSideForbiddenImports] }),
+  },
+  {
+    // Repeats the core lists: this block's import rules replace the core block's for its files.
+    name: 'aeolus/mcp-side-core',
+    files: mcpSideCoreFiles,
+    rules: importRules({ patterns: [...coreForbiddenImports, ...coreImpure.imports, ...mcpSideForbiddenImports], syntax: coreImpure.syntax }),
   },
 );

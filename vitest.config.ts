@@ -20,7 +20,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'gateway:unit',
-          include: ['src/**/*.test.ts', 'test/**/*.test.ts', 'web/**/*.test.ts'],
+          include: ['bridge/**/*.test.ts', 'src/**/*.test.ts', 'test/**/*.test.ts', 'web/**/*.test.ts'],
           exclude: [...configDefaults.exclude, '**/*.integration.test.ts'],
         },
       },

@@ -28,6 +28,7 @@ If the docs do not answer a behaviour question, stop and ask. Never decide produ
 
 - One package, @aeolus-fleet/gateway, with an MCP adapter now and an A2A adapter later (I-6). It reaches the fleet only through core's public ship contract, as the ships it crews.
 - Ports and adapters. src/core holds domain, use cases and ports, with no framework, Prisma, pg or MCP SDK imports. The lint rule enforces it; never disable it.
+- New Bridge code goes in bridge/, which lint keeps to the gateway's person API (web/lib/gateway-api) and keeps out of the MCP side; existing Bridge code moves there only when a change touches it.
 - Prisma lives in src/adapters/prisma only, against the gateway's own database.
 - Every table has fleet_id. Every query is scoped by it.
 - @aeolus-fleet/common comes from npm at a stated version; ids and the fleet's schemas come from it.
