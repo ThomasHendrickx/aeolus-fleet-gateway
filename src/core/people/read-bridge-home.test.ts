@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
-import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes, holding } from '../../../test/support/people-fakes.js';
+import { aBasketEntry, aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryBasketEntries, memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes, holding } from '../../../test/support/people-fakes.js';
 import { memoryPartyStore } from '../../../test/support/party-fakes.js';
 import { anAttioParty } from '../../../test/support/party-grant-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
@@ -9,6 +9,7 @@ import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import type { RecordedPersonDelivery } from './ports.js';
 import { createReadBridgeHome } from './read-bridge-home.js';
 import { routingDefaultsOf, type Route } from './routing.js';
+import { createStaleSightings } from './stale-sightings.js';
 
 // Bridge home (docs/design/bridge, CC18): what waits on the person with one
 // count, decide and do, and the stay-aware feed beside it, outside the count.
@@ -20,6 +21,8 @@ let connections: ReturnType<typeof memoryConnectionStore>;
 let routes: Route[];
 let outcomes: ReturnType<typeof memoryItemOutcomes>;
 let parties: ReturnType<typeof memoryPartyStore>;
+/** The gateway's clock, which a test moves on. */
+let now: Date;
 
 /** The gateway's own ship in the fleet, which sends the person its own steps (CC14). */
 const GATEWAY_SHIP_ID = 'shp_01m3tbfspe96yf1rnr4ank0gat';
@@ -40,6 +43,7 @@ beforeEach(async () => {
   routes = [];
   outcomes = memoryItemOutcomes();
   parties = memoryPartyStore();
+  now = new Date('2026-10-31T20:10:00.000Z');
   await connections.save({ fleetId: FLEET_ID, shipId: GATEWAY_SHIP_ID, name: 'gateway', crewToken: 'aeolus_ct_v1_gateway', crewedAt: new Date('2026-10-01T00:00:00.000Z') });
 });
 
@@ -53,7 +57,23 @@ function readHome(deliveries: PersonDelivery[], options: { offered?: { isEmailOf
   const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries, record });
   return {
     ...ship,
-    readHome: createReadBridgeHome({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(ship.door), opened, entries, outcomes, connections, routes: memoryRoutes(routes), defaults: CHAT_ON, parties, ownStepPartyOf, ...offered }),
+    readHome: createReadBridgeHome({
+      crewPersonShip: fakeCrewPersonShip(crews),
+      crews,
+      ...holding(ship.door),
+      opened,
+      entries,
+      outcomes,
+      changes: memoryInboxChanges(),
+      clock: { now: () => now },
+      sightings: createStaleSightings(),
+      connections,
+      routes: memoryRoutes(routes),
+      defaults: CHAT_ON,
+      parties,
+      ownStepPartyOf,
+      ...offered,
+    }),
   };
 }
 
@@ -285,6 +305,68 @@ describe('Bridge home: a question its asker withdrew or replaced (CC11, decision
         { deliveryId: QUESTION.deliveryId, stale: { kind: 'replaced', replacementId: REPLACEMENT.deliveryId, at: REPLACEMENT.sentAt.toISOString(), replacementTitle: REPLACEMENT.headline } },
       ],
     });
+  });
+
+  it('lists a withdrawn question until 5 s after Bridge first saw it withdrawn (#240)', async () => {
+    const reading = readHome([ASKING, WITHDRAWAL]);
+    await reading.readHome(CHARLOTTE_GRANT);
+    now = new Date(now.getTime() + 4999);
+
+    const home = await reading.readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toMatchObject({ count: 0, items: [{ deliveryId: QUESTION.deliveryId }] });
+  });
+
+  it('ends a withdrawn question 5 s after Bridge first saw it withdrawn: gone from the list, done as withdrawn by the gateway, its withdrawal seen (#240)', async () => {
+    const reading = readHome([ASKING, WITHDRAWAL]);
+    await reading.readHome(CHARLOTTE_GRANT);
+    now = new Date(now.getTime() + 5000);
+
+    const home = await reading.readHome(CHARLOTTE_GRANT);
+
+    expect({ shown: shownOf(home), outcomes: outcomes.held.map(({ deliveryId, place, kind, seen }) => ({ deliveryId, place, kind, seen })), handled: reading.calls.filter((call) => call.startsWith('handled')) }).toEqual({
+      shown: { count: 0, items: [] },
+      outcomes: [
+        { deliveryId: QUESTION.deliveryId, place: 'gateway', kind: 'withdrawn', seen: null },
+        { deliveryId: WITHDRAWAL.deliveryId, place: 'gateway', kind: 'seen', seen: null },
+      ],
+      handled: [`handled(${QUESTION.deliveryId})`, `handled(${WITHDRAWAL.deliveryId})`],
+    });
+  });
+
+  it('ends a replaced question 5 s after Bridge first saw it replaced, and keeps its replacement waiting (#240)', async () => {
+    const reading = readHome([ASKING, REPLACEMENT]);
+    await reading.readHome(CHARLOTTE_GRANT);
+    now = new Date(now.getTime() + 5000);
+
+    const home = await reading.readHome(CHARLOTTE_GRANT);
+
+    expect({ shown: shownOf(home), outcomes: outcomes.held.map(({ deliveryId, place, kind }) => ({ deliveryId, place, kind })) }).toEqual({
+      shown: { count: 1, items: [{ deliveryId: REPLACEMENT.deliveryId, stale: null }] },
+      outcomes: [{ deliveryId: QUESTION.deliveryId, place: 'gateway', kind: 'replaced' }],
+    });
+  });
+
+  it('ends a question the person opened, 5 s after Bridge first saw it withdrawn, still saying where they saw it (#240)', async () => {
+    await opened.save(anOpened({ deliveryId: QUESTION.deliveryId, senderShipId: ORCHESTRATOR, askedQuestionId: ASKED, openedIn: 'bridge' }));
+    const reading = readHome([WITHDRAWAL]);
+    await reading.readHome(CHARLOTTE_GRANT);
+    now = new Date(now.getTime() + 5000);
+
+    const home = await reading.readHome(CHARLOTTE_GRANT);
+
+    expect({ shown: shownOf(home), outcome: outcomes.held.find(({ deliveryId }) => deliveryId === QUESTION.deliveryId) }).toMatchObject({
+      shown: { count: 0, items: [] },
+      outcome: { place: 'gateway', kind: 'withdrawn', seen: { place: 'bridge' } },
+    });
+  });
+
+  it('counts the 5 s from when Bridge first saw it withdrawn, not from when the withdrawal was sent (#240)', async () => {
+    now = new Date(WITHDRAWAL.sentAt.getTime() + 60_000);
+
+    const home = await readHome([ASKING, WITHDRAWAL]).readHome(CHARLOTTE_GRANT);
+
+    expect(shownOf(home)).toMatchObject({ count: 0, items: [{ deliveryId: QUESTION.deliveryId }] });
   });
 
   it('keeps a question waiting, in the count, when another ship names it: only its asker withdraws it', async () => {
