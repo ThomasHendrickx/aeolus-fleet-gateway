@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, holding, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
+import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, holding, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
+import { createReadInbox } from './read-inbox.js';
+import { ITEM_JOBS, routingDefaultsOf } from './routing.js';
 import { createReadInboxState } from './read-inbox-state.js';
 
 // Every answer of a person's tools carries the state of their inbox beside
@@ -44,7 +46,8 @@ function somePersonDeliveries(waiting: number): PersonDelivery[] {
 function readInboxState(waiting: number | PersonDelivery[]) {
   const deliveries = typeof waiting === 'number' ? somePersonDeliveries(waiting) : waiting;
   const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries });
-  return { ...ship, readInboxState: createReadInboxState({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(ship.door), opened }) };
+  const { door, held } = holding(ship.door);
+  return { ...ship, door, held, readInboxState: createReadInboxState({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, held, opened }) };
 }
 
 const MEETING_ADDED = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0021', contentType: 'application/vnd.aeolus.meeting.added+json', payload: '{"meetingId":"mtg_01m5qa5j85mgd4z61d9c2k4mtg"}', headline: null, askedQuestionId: null });
@@ -72,6 +75,17 @@ describe("the state of a person's inbox, beside every answer of their tools", ()
     await opened.save({ ...OPENED, contentType: 'application/vnd.aeolus.meeting.mic+json' });
 
     await expect(readInboxState([...somePersonDeliveries(2), MEETING_ADDED]).readInboxState(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { waiting: 2, opened: 0 } });
+  });
+
+  it('gives the counts aeolus_inbox gives, as the notices are left out of both', async () => {
+    await opened.save({ ...OPENED, contentType: 'application/vnd.aeolus.meeting.mic+json' });
+    await opened.save({ ...OPENED, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0010' });
+    const { door, held, readInboxState: readState } = readInboxState([...somePersonDeliveries(2), MEETING_ADDED]);
+    const readInbox = createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, held, opened, routes: memoryRoutes([]), defaults: routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' as const }))), connections: memoryConnectionStore() });
+
+    const [state, inbox] = await Promise.all([readState(CHARLOTTE_GRANT), readInbox(CHARLOTTE_GRANT)]);
+
+    expect({ state: state.isOk && state.value, inbox: inbox.isOk && { waiting: inbox.value.waiting, opened: inbox.value.opened.length } }).toEqual({ state: { waiting: 2, opened: 1 }, inbox: { waiting: 2, opened: 1 } });
   });
 
   it('refuses a caller with no person ship', async () => {
