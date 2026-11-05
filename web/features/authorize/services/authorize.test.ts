@@ -29,6 +29,10 @@ describe('why a browser got nowhere connecting an MCP client, as the failed page
     expect(failedReasonText('somethingElse')).toBe('The connection did not go through. Start again from your MCP client.');
   });
 
+  it.each(['__proto__', 'constructor', 'toString'])('says the connection did not go through for the reason %s, which is no reason it names', (reason) => {
+    expect(failedReasonText(reason)).toBe('The connection did not go through. Start again from your MCP client.');
+  });
+
   it('says the connection did not go through when no reason is given', () => {
     expect(failedReasonText(undefined)).toBe('The connection did not go through. Start again from your MCP client.');
   });
