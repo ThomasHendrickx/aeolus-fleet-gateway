@@ -1,14 +1,11 @@
 /**
  * A step outcome (Bridge, CC14): how a step the person was asked ended,
  * done or cannot, with their note if they wrote one, sent to its asker in
- * reply to the step. Its content type and payload are common's
- * stepOutcomeSchema in its release after 0.35.0 (Bridge B2); they move to
- * common's then.
+ * reply to the step. Its content type and payload are common's.
  */
-export const STEP_OUTCOME_CONTENT_TYPE = 'application/vnd.aeolus.step-outcome+json';
+import type { StepOutcomeKind } from '@aeolus-fleet/common';
 
-/** How a step ended: the person did it, or cannot. */
-export type StepOutcomeKind = 'done' | 'cannot';
+export type { StepOutcomeKind };
 
 /** A note with text, trimmed; none for one empty or of spaces only, so the outcome goes without one. */
 export function noteOf(note: string | undefined): string | null {

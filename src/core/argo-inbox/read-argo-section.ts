@@ -1,6 +1,6 @@
-import type { DeliveryId, FleetId, ShipId } from '@aeolus-fleet/common';
+import { NOTICE_CONTENT_TYPE, type DeliveryId, type FleetId, type ShipId } from '@aeolus-fleet/common';
 
-import { essenceOf, NOTICE_CONTENT_TYPE } from '../people/item-job.js';
+import { essenceOf } from '../people/item-job.js';
 import { staleOf, type Asking, type Stale } from '../people/stale-item.js';
 import type { Clock } from '../shared/clock.js';
 import type { DoneAtArgo } from './argo-inbox.js';

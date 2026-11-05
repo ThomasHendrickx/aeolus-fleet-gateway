@@ -1,7 +1,7 @@
-import { ALERT_CONTENT_TYPE, QUESTION_CONTENT_TYPE, questionSchema } from '@aeolus-fleet/common';
+import { ALERT_CONTENT_TYPE, NOTICE_CONTENT_TYPE, QUESTION_CONTENT_TYPE, questionSchema, STEP_CONTENT_TYPE, STEP_REPLACEMENT_CONTENT_TYPE } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
-import { essenceOf, jobOf, NOTICE_CONTENT_TYPE, STEP_CONTENT_TYPE, STEP_REPLACEMENT_CONTENT_TYPE } from '../people/item-job.js';
+import { essenceOf, jobOf } from '../people/item-job.js';
 import type { PersonDelivery } from '../people/ports.js';
 import type { SlackButton, SlackItem, SlackMessage } from './ports.js';
 
@@ -54,7 +54,7 @@ const ITEMS = new Map<string, { noun: string; job: string }>([
   [NOTICE_CONTENT_TYPE, { noun: 'Notice', job: 'Stay aware' }],
 ]);
 
-/** What Slack reads of a step, as common's stepSchema words it from its release after 0.35.0 (Bridge B2); it moves to common's then. */
+/** What Slack reads of a step: its why and link, as common's stepSchema words them. */
 const stepSchema = z.object({ why: z.string(), link: z.url({ protocol: /^https?$/ }).optional() });
 
 /** The step a delivery asks: a step's own, or the new step a step replacement asks. */
