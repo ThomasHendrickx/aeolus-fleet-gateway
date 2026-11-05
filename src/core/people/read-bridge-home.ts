@@ -1,6 +1,7 @@
 import { ALERT_CONTENT_TYPE, QUESTION_CONTENT_TYPE, type ShipId } from '@aeolus-fleet/common';
 
 import type { ConnectionStore } from '../connection/ports.js';
+import type { Clock } from '../shared/clock.js';
 import { refuse } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { Party } from '../parties/party.js';
@@ -14,12 +15,14 @@ import { essenceOf, isCounted, jobOf, type ItemJob } from './item-job.js';
 import { itemStateOf, type ItemState } from './item-state.js';
 import { asPersonCrew, withOwnRefusal, type PersonCaller, type PersonCrewError } from './person-crew.js';
 import type { HeldDeliveries } from './held-deliveries.js';
-import type { OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
+import { endStale } from './open-delivery.js';
+import type { InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrews, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
 import { RECORD_PAGE_SIZE, SEALED_TITLE } from './read-record.js';
 import { placesOf } from './item-places.js';
 import { ownStepsInBridgeOnly, routingOf, type RoutingDefaults, type RoutingPlace, type Routes } from './routing.js';
 import { askingOf, staleOf, type Asking, type Stale } from './stale-item.js';
+import { STALE_SHOWN_FOR_MS, type StaleSightings } from './stale-sightings.js';
 
 /**
  * An item on Bridge home: by its title, with its job, an alert told from a
@@ -40,7 +43,7 @@ export interface HomeItem extends InboxEntry {
   readonly actInPlace: ActInPlace | null;
 }
 
-/** Bridge home: what waits on the person, decide and do, with its count, a stale question or step listed outside it; and the stay-aware feed, the unseen with the seen of the record's newest page, outside the count. */
+/** Bridge home: what waits on the person, decide and do, with its count, a stale question or step listed outside it for 5 s; and the stay-aware feed, the unseen with the seen of the record's newest page, outside the count. */
 export interface BridgeHome {
   readonly waiting: { readonly count: number; readonly items: HomeItem[] };
   readonly stayAware: HomeItem[];
@@ -86,7 +89,9 @@ function newestFirst(a: HomeItem, b: HomeItem): number {
  * what they opened and are not done with yet, kept to the jobs that wait on
  * them, decide and do (section 6), newest first, with their count. A
  * question or step its asker withdrew or replaced is listed stale, out of the count,
- * linked to its replacement; the withdrawal itself is not listed (CC11). The
+ * linked to its replacement, for 5 s from when the gateway first saw it
+ * stale; then the gateway ends it, so it leaves Bridge and every other place
+ * (#240). The withdrawal itself is not listed (CC11). The
  * alerts and notices that reached them are the stay-aware feed, outside the
  * count: those not seen, and those seen on the record's newest page, done
  * (CC16). Everything else is in the record. A
@@ -103,7 +108,10 @@ export function createReadBridgeHome(deps: {
   held: HeldDeliveries;
   opened: OpenedDeliveries;
   entries: BasketEntries;
-  outcomes: Pick<ItemOutcomes, 'findMany'>;
+  outcomes: ItemOutcomes;
+  changes: InboxChanges;
+  clock: Clock;
+  sightings: StaleSightings;
   connections: Pick<ConnectionStore, 'binding'>;
   routes: Routes;
   defaults: RoutingDefaults;
@@ -164,7 +172,15 @@ export function createReadBridgeHome(deps: {
       const item = { ...entry, title: delivery.isPayloadUnreadable ? SEALED_TITLE : entry.title, job: 'stay-aware' as const, state: 'done' as const, stale: null };
       return { ...item, seenIn: seenInOf.get(delivery.deliveryId) ?? null, inBasket: null, ...rowOf(item, delivery) };
     });
-    const items = [...taken, ...seen].filter(({ job }) => isCounted(job)).sort(newestFirst);
+    const now = deps.clock.now();
+    const isLeft = ({ deliveryId, stale }: HomeItem): boolean => stale !== null && now.getTime() - deps.sightings.firstSeen(deliveryId, now).getTime() >= STALE_SHOWN_FOR_MS;
+    const listed = [...taken, ...seen].filter(({ job }) => isCounted(job));
+    const left = listed.filter(isLeft);
+    for (const { deliveryId } of left) {
+      await endStale(deps, { caller, crew: waiting.value.crew, deliveryId, waiting: waiting.value.deliveries });
+      deps.sightings.forget(deliveryId);
+    }
+    const items = listed.filter((item) => !left.includes(item)).sort(newestFirst);
     return ok({ waiting: { count: items.filter(({ stale }) => stale === null).length, items }, stayAware: [...taken.filter(({ job }) => job === 'stay-aware'), ...seenFeed].sort(newestFirst) });
   };
 }

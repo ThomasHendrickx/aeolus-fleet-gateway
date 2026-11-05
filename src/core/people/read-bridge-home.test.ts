@@ -328,7 +328,7 @@ describe('Bridge home: a question its asker withdrew or replaced (CC11, decision
       shown: { count: 0, items: [] },
       outcomes: [
         { deliveryId: QUESTION.deliveryId, place: 'gateway', kind: 'withdrawn', seen: null },
-        { deliveryId: WITHDRAWAL.deliveryId, place: 'gateway', kind: 'seen', seen: null },
+        { deliveryId: WITHDRAWAL.deliveryId, place: 'gateway', kind: 'seen', seen: { place: 'gateway', at: now } },
       ],
       handled: [`handled(${QUESTION.deliveryId})`, `handled(${WITHDRAWAL.deliveryId})`],
     });

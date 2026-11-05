@@ -6,6 +6,7 @@ import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/cl
 import { createHeldDeliveries, holdingDoor } from '../src/core/people/held-deliveries.js';
 import type { PersonShipDoor } from '../src/core/people/ports.js';
 import { createOpenDelivery } from '../src/core/people/open-delivery.js';
+import { createStaleSightings } from '../src/core/people/stale-sightings.js';
 import { createReadBridgeHome } from '../src/core/people/read-bridge-home.js';
 import { createReadInbox } from '../src/core/people/read-inbox.js';
 import { ITEM_JOBS, routingDefaultsOf } from '../src/core/people/routing.js';
@@ -81,6 +82,9 @@ beforeAll(async () => {
     opened,
     entries: memoryBasketEntries(),
     outcomes: memoryItemOutcomes(),
+    changes: memoryInboxChanges(),
+    clock: { now: () => new Date() },
+    sightings: createStaleSightings(),
     connections,
     routes,
     defaults,

@@ -214,6 +214,7 @@ import { createReadBridgeHome } from './core/people/read-bridge-home.js';
 import { createReadRecord } from './core/people/read-record.js';
 import { createReadYourFleet } from './core/people/read-your-fleet.js';
 import { createHeldDeliveries, holdingDoor } from './core/people/held-deliveries.js';
+import { createStaleSightings } from './core/people/stale-sightings.js';
 import { createReadInbox } from './core/people/read-inbox.js';
 import type { ItemJob } from './core/people/item-job.js';
 import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/routing.js';
@@ -450,6 +451,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const door = createRestFleetDoor(options.fleetUrl);
   // What the gateway holds of each person ship's waiting deliveries, so a look at them is a read (aeolus-fleet #1647).
   const heldDeliveries = createHeldDeliveries();
+  // When the gateway first saw each stale question or step, so it leaves Bridge 5 s later (#240).
+  const staleSightings = createStaleSightings();
   const personDoor = holdingDoor(door.person, { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) });
   const readConnection = createReadConnection({ door, store: connections });
   // A fleet's connection as the gateway holds it, asking the fleet nothing: what a fleet that is off reads.
@@ -877,7 +880,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: personDoor, held: heldDeliveries };
     return {
       readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults, connections }),
-      readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries, outcomes, connections, routes, defaults: routingDefaults, parties, ownStepPartyOf: ownStepPartyOf(options.publicUrl ?? DEFAULT_PUBLIC_URL), ...placesOffered }),
+      readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries, outcomes, changes, clock, sightings: staleSightings, connections, routes, defaults: routingDefaults, parties, ownStepPartyOf: ownStepPartyOf(options.publicUrl ?? DEFAULT_PUBLIC_URL), ...placesOffered }),
       readRecord: createReadRecord({ ...asCrew, outcomes, connections, routes, defaults: routingDefaults, ...placesOffered }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes, outcomes, clock }),
