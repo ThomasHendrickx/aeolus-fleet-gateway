@@ -67,7 +67,7 @@ describe("the fleet's Harbour, read as the account", () => {
         answer({
           items: [
             { ...aTile(FIRST, 'reviewer'), state: 'working', note: 'reviewing #165', lastActivityAt: '2026-11-01T12:00:00.000Z' },
-            { ...aTile(SECOND, 'github'), kind: 'app', state: 'waiting' },
+            { ...aTile(SECOND, 'github'), kind: 'app', state: 'idle' },
           ],
           nextCursor: null,
           counts: null,
@@ -79,12 +79,12 @@ describe("the fleet's Harbour, read as the account", () => {
       isOk: true,
       value: [
         { shipId: FIRST, name: 'reviewer', kind: 'agent', state: 'working', note: 'reviewing #165', lastActivityAt: '2026-11-01T12:00:00.000Z' },
-        { shipId: SECOND, name: 'github', kind: 'app', state: 'waiting', note: null, lastActivityAt: null },
+        { shipId: SECOND, name: 'github', kind: 'app', state: 'idle', note: null, lastActivityAt: null },
       ],
     });
   });
 
-  it("answers core 0.38's awaiting crew and blocked ships as waiting, the state Bridge shows them in", async () => {
+  it('answers awaiting crew and blocked ships in those states, two states as core words them (docs/design/state-colours)', async () => {
     pages = new Map([
       [
         undefined,
@@ -102,8 +102,8 @@ describe("the fleet's Harbour, read as the account", () => {
     await expect(createActiveShips(base).list(AS_ACCOUNT)).resolves.toEqual({
       isOk: true,
       value: [
-        { shipId: FIRST, name: 'github', kind: 'app', state: 'waiting', note: null, lastActivityAt: null },
-        { shipId: SECOND, name: 'reviewer', kind: 'agent', state: 'waiting', note: 'needs a review', lastActivityAt: null },
+        { shipId: FIRST, name: 'github', kind: 'app', state: 'awaitingCrew', note: null, lastActivityAt: null },
+        { shipId: SECOND, name: 'reviewer', kind: 'agent', state: 'blocked', note: 'needs a review', lastActivityAt: null },
       ],
     });
   });
