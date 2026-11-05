@@ -5,7 +5,7 @@
 import type { HomeItem } from './items';
 
 /** The address parameter that names the open item, by its delivery. */
-const ITEM_PARAMETER = 'item';
+export const ITEM_PARAMETER = 'item';
 
 /** An item of a page's list that can be opened from the address: what opening it needs to know. */
 /** An item the page lists, with how its asker made it stale where the list says so. */

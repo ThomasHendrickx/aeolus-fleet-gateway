@@ -18,6 +18,10 @@ function render(first: RecordPage): string {
 }
 
 describe('Done (done.html)', () => {
+  it('keeps its list to a reading column, not the window, as the #242 mockups draw it', () => {
+    expect(/<section class="[^"]*max-w-\[44rem\]/.test(render({ items: [anItem()], nextCursor: null }))).toBe(true);
+  });
+
   it('says what came of each item and where, on a line of its own', () => {
     const answered = anItem({ deliveryId: 'dlv_02', job: 'decide', isAlert: false, from: 'orchestrator-1', title: 'Which goes first?', outcome: { place: 'slack', kind: 'answered', option: 2, optionLabel: 'Harbour first', note: null, seen: null, replacementTitle: null, at: '2026-10-31T19:58:00.000Z' } });
 

@@ -7,12 +7,15 @@ import { YourFleetPanel } from '../fleet/state/your-fleet-panel';
 import { readArgoInboxNotice, readArgoSection, readBridgeHome, readDecidePlaces, readSlackDroppedOut, readTimeOf } from '../hooks/read-bridge';
 import { readConsoleUrl } from '../hooks/read-console-url';
 import { argoInboxNoticeOf } from '../services/argo-inbox-notice';
-import { BRIDGE_PATH } from '../paths';
+import { inFleet } from '../../../lib/gateway-api/page-account';
+import { BRIDGE_MESSAGES_PATH, BRIDGE_PATH } from '../paths';
+import { HOME_MESSAGES } from '../services/messages';
 import { ArgoInboxNotice } from '../ui/argo-inbox-notice';
 import { ArgoSectionPanel } from './argo-section-panel';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { HomeColumns } from '../ui/home-columns';
+import { NewMessagesLine } from '../ui/new-messages-line';
 import { SlackDroppedOut } from '../ui/slack-dropped-out';
 import { HomePanel } from './home-panel';
 import { KeptRead } from './kept-read';
@@ -33,11 +36,21 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
   const readAt = readTimeOf(read);
   const home = read.kind === 'read' ? read.value : NOTHING;
   const now = new Date().toISOString();
+  const newMessages = home.messages.filter(({ state }) => state === 'new').length;
   const argo = argoSection === null ? undefined : <ArgoSectionPanel section={argoSection} now={now} />;
   const argoInboxNotice = argoInboxNoticeOf(argoNotice);
   return (
     <HomeColumns
-      heading={<KeptRead readAt={readAt}>{read.kind === 'unreadable' ? null : <HomeHeading waiting={home.waiting} />}</KeptRead>}
+      heading={
+        <KeptRead readAt={readAt}>
+          {read.kind === 'unreadable' ? null : (
+            <>
+              {home.messages.length > HOME_MESSAGES && newMessages > 0 ? <NewMessagesLine href={inFleet(BRIDGE_MESSAGES_PATH, fleetId)} newCount={newMessages} /> : null}
+              <HomeHeading waiting={home.waiting} />
+            </>
+          )}
+        </KeptRead>
+      }
       banner={
         <>
           {read.kind === 'unreadable' ? <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} /> : null}

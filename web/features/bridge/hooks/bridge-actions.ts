@@ -19,6 +19,7 @@ import { FLEET_PARAMETER } from '../../../lib/gateway-api/page-account';
 import { refusalCodeOf, refusalMessageOf, requestApi } from '../../../lib/gateway-api/page-api';
 import { serverCredentialOf } from '../../forms/server-credential';
 import { answerOf, bodyOf, questionOf, stepOf, type AnswerInput, type FocusedDelivery } from '../services/deliveries';
+import { isPlainMessageType, plainTextOf } from '../services/messages';
 import { alertOf } from '../services/stay-aware';
 import type { SubscriptionInput } from '../services/web-push';
 import { EVERY_APP_SHIP_SCOPES, type DecisionInput } from '../services/requests';
@@ -60,7 +61,8 @@ export async function openDelivery(fleet: string, deliveryId: string): Promise<A
   return attempt(fleet, async (api) => {
     const opened = await api.people.open.mutate({ deliveryId });
     const { contentType, payload, meetingId, ...entry } = opened;
-    return { ...entry, payload, body: bodyOf({ contentType, payload }), question: questionOf({ contentType, payload }), step: stepOf({ contentType, payload }, bridgeHost), alert: alertOf({ contentType, payload }), meetingId: meetingId ?? undefined, alertShip: alertShipOf({ contentType, payload }) };
+    // A plain message's title is its first line, its Markdown marks taken off (#242).
+    return { ...entry, title: isPlainMessageType(contentType) ? plainTextOf(entry.title) : entry.title, payload, body: bodyOf({ contentType, payload }), question: questionOf({ contentType, payload }), step: stepOf({ contentType, payload }, bridgeHost), alert: alertOf({ contentType, payload }), meetingId: meetingId ?? undefined, alertShip: alertShipOf({ contentType, payload }) };
   });
 }
 

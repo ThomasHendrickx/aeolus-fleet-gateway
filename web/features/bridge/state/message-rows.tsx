@@ -1,10 +1,11 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { doneMessage } from '../hooks/bridge-actions';
 import type { BridgeHome } from '../services/items';
-import { NOT_MARKED_DONE } from '../services/messages';
+import { messageAddressOf, notMarkedDoneOf } from '../services/messages';
 import { MessageRow } from '../ui/message-row';
 import type { ItemOpening } from './item-focus';
 
@@ -13,16 +14,31 @@ type Message = BridgeHome['messages'][number];
 /**
  * Plain messages' rows (#242): Done in place, Marking done... until the fleet
  * answers, then the row leaves the list, or says it was not marked done with
- * Done to try again; Open opens it in focus. Beside an open item, the rows
+ * Done to try again; Open opens it in focus, or from home on the Messages
+ * page, which opens it there. Beside an open item, the rows
  * have no buttons and the open one is marked. Home and the Messages page share them.
  */
-export function MessageRows({ fleetId, messages, readAt, opening }: { fleetId: string; messages: readonly Message[]; readAt: Date; opening: ItemOpening }) {
+export function MessageRows({ fleetId, messages, readAt, opening, isOpenedOnPage = false }: { fleetId: string; messages: readonly Message[]; readAt: Date; opening: ItemOpening; /** Whether Open leads to the Messages page, which opens it there (home). */ isOpenedOnPage?: boolean }) {
+  const router = useRouter();
   const [markingId, setMarkingId] = useState<string | undefined>();
+  const [goingId, setGoingId] = useState<string | undefined>();
   const [doneIds, setDoneIds] = useState<ReadonlySet<string>>(new Set());
   const [failure, setFailure] = useState<{ deliveryId: string; message: string } | undefined>();
   const [, startTransition] = useTransition();
   const isBeside = opening.opened !== undefined;
-  const isBusy = markingId !== undefined || opening.openingId !== undefined;
+  const openingId = goingId ?? opening.openingId;
+  const isBusy = markingId !== undefined || openingId !== undefined;
+
+  const open = (message: Message) => {
+    if (!isOpenedOnPage) {
+      opening.open(message);
+      return;
+    }
+    setGoingId(message.deliveryId);
+    startTransition(() => {
+      router.push(messageAddressOf({ fleetId, deliveryId: message.deliveryId }));
+    });
+  };
 
   const markDone = (message: Message) => {
     setMarkingId(message.deliveryId);
@@ -33,7 +49,7 @@ export function MessageRows({ fleetId, messages, readAt, opening }: { fleetId: s
       if (outcome.isOk) {
         setDoneIds((done) => new Set([...done, message.deliveryId]));
       } else {
-        setFailure({ deliveryId: message.deliveryId, message: outcome.code === undefined ? NOT_MARKED_DONE : `Not marked done: ${outcome.message}` });
+        setFailure({ deliveryId: message.deliveryId, message: notMarkedDoneOf(outcome.code === undefined ? undefined : outcome.message) });
       }
     });
   };
@@ -56,11 +72,11 @@ export function MessageRows({ fleetId, messages, readAt, opening }: { fleetId: s
             now={readAt}
             isOpen={opening.opened?.deliveryId === message.deliveryId}
             isMarkingDone={markingId === message.deliveryId}
-            isOpening={opening.openingId === message.deliveryId}
+            isOpening={openingId === message.deliveryId}
             isBusy={isBusy}
             failure={failureOf(message.deliveryId)}
             onDone={isBeside ? undefined : () => { markDone(message); }}
-            onOpen={() => { opening.open(message); }}
+            onOpen={() => { open(message); }}
           />
         ))}
     </ul>

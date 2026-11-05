@@ -36,7 +36,7 @@ describe('what an opened item shows of its payload (Bridge, CC15)', () => {
   });
 
   it('shows any other payload as it came, and one it cannot read as it came too', () => {
-    expect([bodyOf({ contentType: 'text/plain', payload: 'The build is red' }), bodyOf({ contentType: 'application/vnd.aeolus.notice+json', payload: 'not json' })]).toEqual(['The build is red', 'not json']);
+    expect([bodyOf({ contentType: 'application/json', payload: '{"build":"red"}' }), bodyOf({ contentType: 'application/vnd.aeolus.notice+json', payload: 'not json' })]).toEqual(['{"build":"red"}', 'not json']);
   });
 });
 

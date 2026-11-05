@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, MessageSquare, ShoppingBasket } from 'lucide-react';
+import { Bell, ChevronRight, MessageSquare, ShoppingBasket } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { useLeavingStale } from '../hooks/use-leaving-stale';
@@ -10,7 +10,7 @@ import { staleSaidOf } from '../services/deliveries';
 import { seenTextOf, type BridgeHome, type HomeItem } from '../services/items';
 import { lastReadTimeOf } from '../services/last-read';
 import type { WatchedItem } from '../services/leaving-stale';
-import { HOME_MESSAGES, messagesSaidOf, newMessagesSaidOf, showAllSaidOf } from '../services/messages';
+import { HOME_MESSAGES, messagesSaidOf, showAllSaidOf } from '../services/messages';
 import type { RoutedPlace } from '../services/routing';
 import { ActionButton } from '../ui/action-button';
 import { ItemRow } from '../ui/item-row';
@@ -130,21 +130,8 @@ export function StayAwareRows({ items, readAt, opening }: { items: readonly Home
  * was opened from, headed with its count, its rows without their buttons;
  * pressing a title opens that item in its place.
  */
-function ListBeside({ fleetId, home, readAt, opening, leaving }: { fleetId: string; home: BridgeHome; readAt: Date; opening: ItemOpening & { opened: NonNullable<ItemOpening['opened']> }; leaving: ReadonlySet<string> }) {
-  const { waiting, stayAware, messages } = home;
-  if (opening.opened.job === 'everything-else') {
-    return (
-      <section aria-labelledby="bridge-messages-heading">
-        <div className="flex items-baseline justify-between gap-3 px-3 py-2.5">
-          <h2 id="bridge-messages-heading" className="font-semibold">
-            Messages
-          </h2>
-          <span className="text-caption text-muted-foreground">{messagesSaidOf(messages.filter(({ state }) => state === 'new').length)}</span>
-        </div>
-        <MessageRows fleetId={fleetId} messages={messages} readAt={readAt} opening={opening} />
-      </section>
-    );
-  }
+function ListBeside({ home, readAt, opening, leaving }: { home: BridgeHome; readAt: Date; opening: ItemOpening & { opened: NonNullable<ItemOpening['opened']> }; leaving: ReadonlySet<string> }) {
+  const { waiting, stayAware } = home;
   return opening.opened.job === 'stay-aware' ? (
     <section aria-labelledby="bridge-stay-aware-heading">
       <div className="flex items-baseline justify-between gap-3 px-3 py-2.5">
@@ -171,8 +158,8 @@ function ListBeside({ fleetId, home, readAt, opening, leaving }: { fleetId: stri
  * struck through and outside the count, a replaced one leading to its replacement; and the stay-aware feed beside it, the
  * alerts and notices, a dot on those not seen, which alone it counts, outside the count. Opening one of
  * the feed is all it asks (CC16): it stays in the feed, seen. The count heads the page, above Your fleet
- * too (HomeHeading). The plain messages beneath what waits, outside the count, the 3 newest with a
- * link to all of them, and on a phone with more a line on top leading to the new ones (#242).
+ * too (HomeHeading). The plain messages beneath what waits, outside the count, the 3 newest closed
+ * by a link to all of them; one opens on the Messages page (#242).
  * Beside an open item, only the list it was opened from (aeolus-fleet#1538).
  */
 export function HomeLists({ fleetId, home, now, opening, argo, leaving = new Set() }: { fleetId: string; home: BridgeHome; now: string; opening: ItemOpening; argo?: ReactNode; /** The stale rows leaving now, in their last 300 ms (#240). */ leaving?: ReadonlySet<string> }) {
@@ -180,19 +167,11 @@ export function HomeLists({ fleetId, home, now, opening, argo, leaving = new Set
   const readAt = new Date(now);
   const { opened } = opening;
   if (opened !== undefined) {
-    return <ListBeside fleetId={fleetId} home={home} readAt={readAt} opening={{ ...opening, opened }} leaving={leaving} />;
+    return <ListBeside home={home} readAt={readAt} opening={{ ...opening, opened }} leaving={leaving} />;
   }
   const newMessages = messages.filter(({ state }) => state === 'new').length;
-  const messagesHref = inFleet(BRIDGE_MESSAGES_PATH, fleetId);
   return (
     <div className="grid gap-8">
-      {messages.length > HOME_MESSAGES && newMessages > 0 ? (
-        <a data-testid="bridge-new-messages" href={messagesHref} className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 sm:hidden">
-          <MessageSquare aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-          <span>{newMessagesSaidOf(newMessages)}</span>
-          <span className="ml-auto font-medium text-primary">Show</span>
-        </a>
-      ) : null}
       <section className="grid gap-3" aria-labelledby="bridge-waiting-heading">
         {waiting.items.length === 0 ? (
           <div data-testid="bridge-nothing-waits" className="grid justify-items-center gap-1 rounded-lg border border-border bg-card p-6 text-center">
@@ -212,10 +191,11 @@ export function HomeLists({ fleetId, home, now, opening, argo, leaving = new Set
             </h2>
             <span className="text-caption text-muted-foreground">{messagesSaidOf(newMessages)}</span>
           </div>
-          <MessageRows fleetId={fleetId} messages={messages.slice(0, HOME_MESSAGES)} readAt={readAt} opening={opening} />
+          <MessageRows fleetId={fleetId} messages={messages.slice(0, HOME_MESSAGES)} readAt={readAt} opening={opening} isOpenedOnPage />
           {messages.length > HOME_MESSAGES ? (
-            <a data-testid="bridge-all-messages" href={messagesHref} className="justify-self-start font-medium text-primary hover:underline">
+            <a data-testid="bridge-all-messages" href={inFleet(BRIDGE_MESSAGES_PATH, fleetId)} className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-card font-medium text-primary hover:bg-accent">
               {showAllSaidOf(messages.length)}
+              <ChevronRight aria-hidden="true" className="size-4" />
             </a>
           ) : null}
         </section>
@@ -279,7 +259,7 @@ export function HomePanel({ fleetId, home, now, decidePlaces, argo }: { fleetId:
   const leaving = new Set(items.filter((item) => showingOf(watchedItemOf(item)) === 'leaving').map(({ deliveryId }) => deliveryId));
   const shown = { ...home, waiting: { ...home.waiting, items } };
   return (
-    <ItemFocus fleetId={fleetId} decidePlaces={decidePlaces} known={[...items, ...home.stayAware, ...home.messages]}>
+    <ItemFocus fleetId={fleetId} decidePlaces={decidePlaces} known={[...items, ...home.stayAware]}>
       {(opening) => <HomeLists fleetId={fleetId} home={shown} now={now} opening={opening} argo={argo} leaving={leaving} />}
     </ItemFocus>
   );

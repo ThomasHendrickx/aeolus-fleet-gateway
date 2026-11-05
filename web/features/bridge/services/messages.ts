@@ -7,6 +7,10 @@
  * client.
  */
 
+import { FLEET_PARAMETER } from '../../../lib/gateway-api/page-account';
+import { BRIDGE_MESSAGES_PATH } from '../paths';
+import { ITEM_PARAMETER } from './item-address';
+
 /** How many of the newest messages home lists; the rest are a click away. */
 export const HOME_MESSAGES = 3;
 
@@ -61,5 +65,21 @@ export function markedDoneSaidOf({ done, failed }: { done: number; failed: reado
   return failed.length === 0 ? said : `${said} Not marked done: ${failed.map((title) => `“${title}”`).join(', ')}; the fleet did not answer. Try again.`;
 }
 
-/** What a row says when its Done did not end the message: the fleet's own words, or that it did not answer. */
-export const NOT_MARKED_DONE = 'Not marked done: the fleet did not answer. Try again.';
+/** What a row says when its Done did not end the message: the fleet's own words, or that it did not answer, and to try again. */
+export function notMarkedDoneOf(reason: string | undefined): string {
+  const said = reason === undefined ? 'the fleet did not answer' : reason.charAt(0).toLowerCase() + reason.slice(1).replace(/\.\s*$/, '');
+  return `Not marked done: ${said}. Try again.`;
+}
+
+const PLAIN_MESSAGE_TYPES: ReadonlySet<string> = new Set(['text/plain', 'text/markdown']);
+
+/** Whether an opened item is a plain message: text/plain or text/markdown, as Bridge lists them. */
+export function isPlainMessageType(contentType: string): boolean {
+  const [essence = ''] = contentType.split(';');
+  return PLAIN_MESSAGE_TYPES.has(essence.trim().toLowerCase());
+}
+
+/** Where a message opens from home: on the Messages page, the address naming it, so the page opens it. */
+export function messageAddressOf({ fleetId, deliveryId }: { fleetId: string; deliveryId: string }): string {
+  return `${BRIDGE_MESSAGES_PATH}?${new URLSearchParams({ [FLEET_PARAMETER]: fleetId, [ITEM_PARAMETER]: deliveryId }).toString()}`;
+}

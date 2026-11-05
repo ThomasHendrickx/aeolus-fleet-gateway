@@ -36,7 +36,7 @@ describe('the Messages page (#242)', () => {
   });
 
   it('offers to mark the seen ones done in one go', () => {
-    expect(/data-testid="bridge-mark-seen-done"[^>]*>Mark the 12 seen done</.test(pageOf(TWENTY))).toBe(true);
+    expect(/data-testid="bridge-mark-seen-done"[^>]*>.*Mark the 12 seen done</.test(pageOf(TWENTY))).toBe(true);
   });
 
   it('offers no marking in one go while none is seen', () => {
