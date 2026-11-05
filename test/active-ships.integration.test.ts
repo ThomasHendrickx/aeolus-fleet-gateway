@@ -48,7 +48,7 @@ describe("the fleet's active ships, from a real core", () => {
 
     const ships = listed.isOk ? listed.value.filter(({ name }) => ['reader', 'github', 'gone'].includes(name)) : [];
     expect(ships.map(({ lastActivityAt, ...rest }) => ({ ...rest, hasActivity: lastActivityAt !== null }))).toEqual([
-      { shipId: github.shipId, name: 'github', kind: 'app', state: 'waiting', note: null, hasActivity: false },
+      { shipId: github.shipId, name: 'github', kind: 'app', state: 'awaitingCrew', note: null, hasActivity: false },
       { shipId: reader.shipId, name: 'reader', kind: 'agent', state: 'working', note: 'reading the fleet', hasActivity: true },
     ]);
     expect(ships[1]?.lastActivityAt).toMatch(/^2\d{3}-\d\d-\d\dT/);
