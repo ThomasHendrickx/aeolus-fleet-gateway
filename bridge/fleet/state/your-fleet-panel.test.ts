@@ -63,6 +63,18 @@ describe('Your fleet beside Bridge home, drawn by Harbour from @aeolus-fleet/ui'
     expect(panel({ kind: 'read', value: FLEET }).includes('href="https://console.example/ships/shp_01m3tbfspe96yf1rnr4ank9orc"')).toBe(true);
   });
 
+  it("rings a tile focused by keyboard with the design system's focus outline, which the part's outline-none would otherwise hide (review of #276)", () => {
+    const tile = /<a[^>]*data-testid="harbour-tile"[^>]*>/.exec(panel({ kind: 'read', value: FLEET }))?.[0] ?? '';
+
+    expect(['focus-visible:outline-solid', 'focus-visible:outline-2', 'focus-visible:outline-ring'].map((name) => tile.split(/[ "]/).includes(name))).toEqual([true, true, true]);
+  });
+
+  it('hides the arrow on a pressed tile, as the mockup draws it (review of #276)', () => {
+    const tile = /<a[^>]*data-testid="harbour-tile"[^>]*>/.exec(panel({ kind: 'read', value: FLEET }))?.[0] ?? '';
+
+    expect(tile.split(/[ "]/).includes('[&:active>span.absolute]:opacity-0')).toBe(true);
+  });
+
   it('draws tiles that are not links while the console is not known', () => {
     const markup = renderToStaticMarkup(createElement(YourFleetPanel, { fleetId: 'flt_01', consoleUrl: undefined, read: { kind: 'read', value: FLEET }, phone: 'numbers' }));
 
