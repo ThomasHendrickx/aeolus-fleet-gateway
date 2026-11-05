@@ -19,13 +19,25 @@ export interface ChangesFollower {
   readonly changed: () => void;
 }
 
-/** Follows the page's stream: each change reads the page again, and the page is live while the stream is open. */
+/**
+ * Follows the page's stream: each change reads the page again, and the page
+ * is live while the stream is open. A change told while the stream was
+ * dropped reached no page, as a phone drops it while locked or in the
+ * background (aeolus-fleet#1661), so the stream opening again reads the page
+ * again; its first opening does not, as the page was just read.
+ */
 export function changesFollowerOf(page: FollowingPage): ChangesFollower {
+  let hasDropped = false;
   return {
     opened: () => {
       page.showLive(true);
+      if (hasDropped) {
+        hasDropped = false;
+        page.readAgain();
+      }
     },
     dropped: () => {
+      hasDropped = true;
       page.showLive(false);
     },
     changed: () => {
@@ -37,7 +49,8 @@ export function changesFollowerOf(page: FollowingPage): ChangesFollower {
 /**
  * Keeps the page in step with its fleet's requests: whenever one changes,
  * the page reads itself again on the server, as its own caller. The browser
- * opens the stream again by itself when it drops. Answers whether the stream
+ * opens the stream again by itself when it drops, and the page then reads
+ * itself again for what it missed. Answers whether the stream
  * is open now, so the page can say it is live.
  */
 export function useLiveRefresh(fleetId: string): boolean {
