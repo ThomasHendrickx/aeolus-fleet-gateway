@@ -71,9 +71,10 @@ export function yourFleetOf(ships: readonly ListedShip[]): YourFleet {
     const group = groupOf(ship.kind);
     return group === null ? [] : [{ group, tile: { shipId: ship.shipId, name: ship.name, state: ship.state, note: ship.note, lastActivityAt: ship.lastActivityAt } }];
   });
+  // The numbers are core's, which counts the viewer too: the sidebar's alert count reads the same number from core.
   const counts = { alert: 0, waiting: 0, working: 0, idle: 0 };
-  for (const { tile } of placed) {
-    counts[tile.state] += 1;
+  for (const { state } of ships) {
+    counts[state] += 1;
   }
   const groups = FLEET_GROUPS.map((group) => ({
     group,

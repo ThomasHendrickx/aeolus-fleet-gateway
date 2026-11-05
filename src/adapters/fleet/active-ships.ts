@@ -25,7 +25,7 @@ const harbourStateSchema = z.enum(['alert', 'waiting', 'awaitingCrew', 'blocked'
 
 /**
  * A page of fleet.harbour as Bridge reads it: common's tile with the state of
- * either core, and no numbers, which the gateway counts itself.
+ * either core. Its numbers are read apart (alertCount), from the first page.
  */
 const harbourPageSchema = z.object({
   items: z.array(harbourOutputSchema.shape.items.element.extend({ state: harbourStateSchema })),
