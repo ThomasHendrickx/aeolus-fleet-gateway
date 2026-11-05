@@ -2,8 +2,7 @@
  * Your fleet as Bridge shows it: Harbour from @aeolus-fleet/ui draws it
  * (aeolus-fleet docs/design/fleet-overview), each ship in one of the five
  * states (docs/design/state-colours). Here: what Harbour takes of the read,
- * each state's word and Harbour's lead line. Pure view logic, no React and
- * no API client.
+ * and each state's word. Pure view logic, no React and no API client.
  */
 import type { HarbourCounts, HarbourGroupKind, HarbourGroupShips } from '@aeolus-fleet/ui';
 
@@ -23,29 +22,6 @@ export const STATE_LABELS: Record<ShipState, string> = { alert: 'Alert', awaitin
 
 /** Each group as Harbour names its kind. */
 const HARBOUR_KINDS: Record<FleetGroup, HarbourGroupKind> = { people: 'people', agents: 'agents', plugins: 'plugins', throughTheGateway: 'gateway' };
-
-/** Harbour's lead line words each state so; working and idle first, as most ships are. */
-const SUMMARY_PARTS: readonly { state: ShipState; words: string }[] = [
-  { state: 'working', words: 'working' },
-  { state: 'idle', words: 'idle' },
-  { state: 'awaitingCrew', words: 'awaiting crew' },
-  { state: 'blocked', words: 'blocked' },
-  { state: 'alert', words: 'with an alert' },
-];
-
-/** How many ships, in words: "1 ship", "15 ships". */
-function shipsOf(count: number): string {
-  return `${String(count)} ${count === 1 ? 'ship' : 'ships'}`;
-}
-
-/** Harbour's lead line: the ships, then how many are in each state any ship is in. */
-export function summaryOf(fleet: YourFleet): string {
-  if (fleet.shipCount === 0) {
-    return 'No ships';
-  }
-  const parts = SUMMARY_PARTS.filter(({ state }) => fleet.counts[state] > 0).map(({ state, words }) => `${String(fleet.counts[state])} ${words}`);
-  return `${shipsOf(fleet.shipCount)}: ${parts.join(', ')}`;
-}
 
 /** Your fleet as Harbour takes it: the numbers, the ships first, and each group's tiles in the order Your fleet gives. */
 export function harbourOf(fleet: YourFleet): { counts: HarbourCounts; groups: HarbourGroupShips[] } {
