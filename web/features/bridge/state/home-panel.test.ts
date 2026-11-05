@@ -250,3 +250,44 @@ describe('Bridge home as last read, while the record cannot be read (states.html
     expect(markup.includes('builder-gateway: no report change for 2 h')).toBe(false);
   });
 });
+
+describe('plain messages on Bridge home (#242)', () => {
+  function aMessage(overrides: Partial<BridgeHome['messages'][number]> = {}): BridgeHome['messages'][number] {
+    return { ...anItem({ deliveryId: 'dlv_11', job: 'everything-else', from: 'builder-core', title: '# Staging is green again after the migration', sentAt: '2026-10-31T19:57:00.000Z' }), excerpt: 'The 0.38 migration ran on staging at 19:52 and every **Testcontainers** suite passes.', ...overrides };
+  }
+  const many = (count: number) => Array.from({ length: count }, (_, index) => aMessage({ deliveryId: `dlv_${String(100 + index)}`, title: `Message ${String(index + 1)}`, state: index < 8 ? 'new' : 'seen' }));
+
+  it('lists them beneath what waits, outside the count, each with its title and text as plain words, Done and Open', () => {
+    const markup = render({ waiting: { count: 1, items: [anItem()] }, stayAware: [], messages: [aMessage(), aMessage({ deliveryId: 'dlv_12', title: 'Thanks: the basket sheet is merged', state: 'seen', seenIn: 'bridge', excerpt: '' })] });
+
+    expect({
+      heading: markup.includes('>Messages<'),
+      said: markup.includes('1 new, outside the count'),
+      title: markup.includes('>Staging is green again after the migration<'),
+      text: markup.includes('The 0.38 migration ran on staging at 19:52 and every Testcontainers suite passes.'),
+      done: (markup.match(/data-testid="bridge-message-done"/g) ?? []).length,
+      open: (markup.match(/data-testid="bridge-message-open"/g) ?? []).length,
+      after: markup.indexOf('bridge-waiting-heading') < markup.indexOf('bridge-messages-heading'),
+    }).toEqual({ heading: true, said: true, title: true, text: true, done: 2, open: 2, after: true });
+  });
+
+  it('lists no Messages heading when no message is left', () => {
+    expect(render({ waiting: { count: 1, items: [anItem()] }, stayAware: [] }).includes('bridge-messages-heading')).toBe(false);
+  });
+
+  it('lists only the 3 newest with many, then leads to all of them', () => {
+    const markup = render({ waiting: { count: 0, items: [] }, stayAware: [], messages: many(20) });
+
+    expect({ rows: (markup.match(/data-testid="bridge-message-done"/g) ?? []).length, all: /href="\/bridge\/messages\?fleet=flt_01"[^>]*>Show all 20 messages</.test(markup) }).toEqual({ rows: 3, all: true });
+  });
+
+  it('says on a phone how many new messages wait below, with many, leading to them', () => {
+    const markup = render({ waiting: { count: 0, items: [] }, stayAware: [], messages: many(20) });
+
+    expect(/data-testid="bridge-new-messages"[^>]*>.*8 new messages.*Show/.test(markup)).toBe(true);
+  });
+
+  it('says nothing on top with as few messages as home lists', () => {
+    expect(render({ waiting: { count: 0, items: [] }, stayAware: [], messages: [aMessage()] }).includes('bridge-new-messages')).toBe(false);
+  });
+});

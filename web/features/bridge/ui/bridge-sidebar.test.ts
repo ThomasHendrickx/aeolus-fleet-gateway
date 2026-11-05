@@ -35,6 +35,13 @@ describe("Bridge's sidebar", () => {
     expect([entries.home?.text, entries['stay-aware']?.text, entries.done?.text, entries.fleet?.text]).toEqual(['Waiting on you4', 'Stay aware2', 'Done', 'Your fleet1']);
   });
 
+  it('shows Messages beneath Stay aware with its new ones counted, leading to the Messages page (#242)', () => {
+    const markup = sidebarOf({ counts: { ...COUNTS, messages: 8 } });
+    const entries = entriesOf(markup);
+
+    expect({ text: entries.messages?.text, href: entries.messages?.href, after: Object.keys(entries).indexOf('messages') - Object.keys(entries).indexOf('stay-aware') }).toEqual({ text: 'Messages8', href: '/bridge/messages?fleet=flt_01', after: 1 });
+  });
+
   it("leads to each of Bridge's pages in the fleet in view", () => {
     const entries = entriesOf(sidebarOf());
 
