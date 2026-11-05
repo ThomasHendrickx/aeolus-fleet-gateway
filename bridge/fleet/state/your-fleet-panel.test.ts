@@ -72,7 +72,7 @@ describe('Your fleet beside Bridge home, drawn by Harbour from @aeolus-fleet/ui'
   it('hides the arrow on a pressed tile, as the mockup draws it (review of #276)', () => {
     const tile = /<a[^>]*data-testid="harbour-tile"[^>]*>/.exec(panel({ kind: 'read', value: FLEET }))?.[0] ?? '';
 
-    expect(tile.split(/[ "]/).includes('[&:active>span.absolute]:opacity-0')).toBe(true);
+    expect(tile.replaceAll('&amp;', '&').replaceAll('&gt;', '>').split(/[ "]/).includes('[&:active>span.absolute]:opacity-0')).toBe(true);
   });
 
   it('draws tiles that are not links while the console is not known', () => {
