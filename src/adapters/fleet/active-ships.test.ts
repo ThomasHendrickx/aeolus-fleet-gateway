@@ -120,3 +120,26 @@ describe("the fleet's Harbour, read as the account", () => {
     await expect(createActiveShips(base).list(AS_ACCOUNT)).resolves.toEqual({ isOk: false, error: { code: 'UNAVAILABLE', message: 'The fleet answered no ships' } });
   });
 });
+
+describe("the count of ships with an alert, read from the fleet's Harbour numbers", () => {
+  const AS_ACCOUNT = { crewToken: 'aeolus_ct_v1_gateway', accountToken: 'aeolus_at_v1_thomas' };
+
+  it('reads one tile of the first page however many ships the fleet holds, and answers the alert number core counted', async () => {
+    pages = new Map([[undefined, answer({ items: [aTile(FIRST, 'scout')], nextCursor: 'next-page', counts: { ships: 3000, alert: 7, waiting: 10, working: 20, idle: 2963 } })]]);
+
+    await expect(createActiveShips(base).alertCount(AS_ACCOUNT)).resolves.toEqual({ isOk: true, value: 7 });
+    expect(asked).toEqual([{ path: '/trpc/fleet.harbour', input: { limit: 1 }, authorization: 'Bearer aeolus_ct_v1_gateway' }]);
+  });
+
+  it("answers the fleet's refusal", async () => {
+    pages = new Map([[undefined, { status: 403, body: { error: { message: 'fleet.harbour needs the fleet:read scope', data: { code: 'FORBIDDEN' } } } }]]);
+
+    await expect(createActiveShips(base).alertCount(AS_ACCOUNT)).resolves.toEqual({ isOk: false, error: { code: 'FORBIDDEN', message: 'fleet.harbour needs the fleet:read scope' } });
+  });
+
+  it('answers the fleet unavailable when the first page carries no numbers', async () => {
+    pages = new Map([[undefined, answer({ items: [], nextCursor: null, counts: null })]]);
+
+    await expect(createActiveShips(base).alertCount(AS_ACCOUNT)).resolves.toEqual({ isOk: false, error: { code: 'UNAVAILABLE', message: 'The fleet answered no numbers' } });
+  });
+});

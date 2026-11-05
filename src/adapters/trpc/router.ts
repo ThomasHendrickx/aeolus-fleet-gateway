@@ -82,6 +82,7 @@ import type { ReadSendTo } from '../../core/people/read-send-to.js';
 import type { ReadBridgeHome } from '../../core/people/read-bridge-home.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { ReadRecord } from '../../core/people/read-record.js';
+import type { ReadFleetAlertCount } from '../../core/people/read-fleet-alert-count.js';
 import type { ReadYourFleet } from '../../core/people/read-your-fleet.js';
 import type { ReadWakeChannels } from '../../core/people/read-wake-channels.js';
 import type { FocusPage } from '../../core/people/focus-page.js';
@@ -151,6 +152,7 @@ export interface Context {
   listOwnerChoices: ListOwnerChoices;
   /** Your fleet on Bridge home, read as the actor. */
   readYourFleet: ReadYourFleet;
+  readFleetAlertCount: ReadFleetAlertCount;
   /** What the overview tells an account of argo's inbox (argo's inbox, section 4). */
   readArgoInboxNotice: ReadArgoInboxNotice;
   readArgoSection: ReadArgoSection;
@@ -1276,6 +1278,17 @@ export const gatewayRouter = t.router({
         throw new TRPCError({ code: read.error.kind === 'SCOPE_NOT_HELD' ? 'FORBIDDEN' : 'BAD_GATEWAY', message: read.error.message });
       }
       return read.value;
+    }),
+    /**
+     * How many ships have an alert, for the shell of every Bridge page: the
+     * number the fleet counts, never the ships.
+     */
+    fleetAlertCount: servedProcedure.query(async ({ ctx }) => {
+      const read = await ctx.readFleetAlertCount({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken } });
+      if (!read.isOk) {
+        throw new TRPCError({ code: read.error.kind === 'SCOPE_NOT_HELD' ? 'FORBIDDEN' : 'BAD_GATEWAY', message: read.error.message });
+      }
+      return { count: read.value };
     }),
     /** A page of the person ship's record (CC12), newest first, after the cursor the last page answered. */
     record: personProcedure

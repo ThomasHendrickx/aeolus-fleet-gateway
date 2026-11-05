@@ -25,12 +25,15 @@ const harbourStateSchema = z.enum(['alert', 'waiting', 'awaitingCrew', 'blocked'
 
 /**
  * A page of fleet.harbour as Bridge reads it: common's tile with the state of
- * either core, and no numbers, which the gateway counts itself.
+ * either core. Its numbers are read apart (alertCount), from the first page.
  */
 const harbourPageSchema = z.object({
   items: z.array(harbourOutputSchema.shape.items.element.extend({ state: harbourStateSchema })),
   nextCursor: harbourOutputSchema.shape.nextCursor,
 });
+
+/** The numbers core answers on the first page of Harbour; Bridge's shell reads only the alert number. */
+const harbourNumbersSchema = z.object({ counts: z.object({ alert: z.int().nonnegative() }).nullable() });
 
 /**
  * The fleet's active ships as the actor reads them, for Your fleet: core's
@@ -43,6 +46,14 @@ const harbourPageSchema = z.object({
  */
 export function createActiveShips(fleetUrl: string): ActiveShips {
   return {
+    alertCount: async (as) => {
+      const read = await readAs(fleetUrl, { as, procedure: 'harbour', input: { limit: 1 }, isTrpcOnly: true });
+      if (!read.isOk) {
+        return read;
+      }
+      const numbers = harbourNumbersSchema.safeParse(read.value);
+      return numbers.success && numbers.data.counts !== null ? ok(numbers.data.counts.alert) : err({ code: 'UNAVAILABLE', message: 'The fleet answered no numbers' });
+    },
     list: async (as) => {
       const ships: ListedShip[] = [];
       let cursor: string | undefined;
