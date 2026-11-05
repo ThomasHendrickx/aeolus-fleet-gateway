@@ -99,7 +99,7 @@ describe('a person signs in from their MCP client through pagasae', () => {
     const read = await mcp.callTool({ name: 'aeolus_inbox', arguments: {} });
 
     expect({ tools: listed.tools.map(({ name }) => name), read }).toEqual({
-      tools: ['aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_meeting', 'aeolus_request_mic', 'aeolus_withdraw_mic_request', 'aeolus_release_mic', 'aeolus_ask_for_server'],
+      tools: ['aeolus_setup', 'aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_meeting', 'aeolus_request_mic', 'aeolus_withdraw_mic_request', 'aeolus_release_mic', 'aeolus_ask_for_server'],
       // pagasae names no person ship for Charlotte here, so the gateway asks the fleet nothing.
       read: { content: [{ type: 'text', text: 'You have no person ship in this fleet: your rights there do not let you message' }], isError: true },
     });
@@ -129,7 +129,7 @@ describe('a person signs in from their MCP client through pagasae', () => {
 
 describe('a person adds the plugin and signs in (chatgpt-plugin design, 6)', () => {
   /** The 11 tools of a signed-in person. */
-  const PERSON_TOOLS = ['aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_meeting', 'aeolus_request_mic', 'aeolus_withdraw_mic_request', 'aeolus_release_mic', 'aeolus_ask_for_server'];
+  const PERSON_TOOLS = ['aeolus_setup', 'aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_meeting', 'aeolus_request_mic', 'aeolus_withdraw_mic_request', 'aeolus_release_mic', 'aeolus_ask_for_server'];
 
   it('a person adds the plugin and signs in: with no pick page, the client lists the 11 tools at the plugin address', async () => {
     pagasae.answer(charlotteIn(pagasae, fleetId));

@@ -91,7 +91,7 @@ describe("a person's MCP client starts a message", () => {
 
     const listed = await mcp.listTools();
 
-    expect(listed.tools.map(({ name }) => name)).toEqual(['aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_meeting', 'aeolus_request_mic', 'aeolus_withdraw_mic_request', 'aeolus_release_mic', 'aeolus_ask_for_server']);
+    expect(listed.tools.map(({ name }) => name)).toEqual(['aeolus_setup', 'aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_meeting', 'aeolus_request_mic', 'aeolus_withdraw_mic_request', 'aeolus_release_mic', 'aeolus_ask_for_server']);
   });
 
   it('reads the ships and types their person ship may send to with aeolus_ships', async () => {
@@ -267,6 +267,7 @@ describe("a person's tools say what each call does (chatgpt-plugin design, 7.4)"
     const listed = await mcp.listTools();
 
     expect(Object.fromEntries(listed.tools.map(({ name, annotations }) => [name, annotations]))).toEqual({
+      aeolus_setup: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       aeolus_inbox: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       aeolus_ships: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       aeolus_meeting: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -295,6 +296,83 @@ describe("a person's tools say what each call does (chatgpt-plugin design, 7.4)"
       content: [{ type: 'text', text: message }],
       isError: true,
       _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${RESOURCE_METADATA}", error="invalid_token", error_description="${message}"`] },
+    });
+  });
+});
+
+describe("a person's chat sets itself up first, saying which client it is (gateway #257)", () => {
+  /** What aeolus_setup answered, parsed. */
+  async function setUp(client: unknown) {
+    const mcp = await connected(personTools().deps);
+    const answered = await mcp.callTool({ name: 'aeolus_setup', arguments: { client } });
+    const [first] = z.object({ content: z.array(z.object({ text: z.string() })) }).parse(answered).content;
+    return z.object({ client: z.string(), rules: z.array(z.string()), oneTimeSetup: z.array(z.string()) }).parse(JSON.parse(first?.text ?? ''));
+  }
+
+  it('the server instructions say to call aeolus_setup first in a conversation, naming the clients', async () => {
+    const mcp = await connected(personTools().deps);
+
+    expect(mcp.getInstructions()).toBe(
+      'Aeolus: your person ship in the fleet, its inbox and its messages. At the start of every conversation, before anything else, call aeolus_setup with the client this chat runs in (claude, claude-code, chatgpt or copilot) and follow what it answers.',
+    );
+  });
+
+  it("aeolus_setup's description says to call it first, and its client is required, one of the four", async () => {
+    const listed = await (await connected(personTools().deps)).listTools();
+    const setup = listed.tools.find(({ name }) => name === 'aeolus_setup');
+
+    expect({ starts: setup?.description?.startsWith('Call this first in every conversation, before any other Aeolus tool'), inputSchema: setup?.inputSchema }).toEqual({
+      starts: true,
+      inputSchema: { type: 'object', properties: { client: { type: 'string', enum: ['claude', 'claude-code', 'chatgpt', 'copilot'] } }, required: ['client'] },
+    });
+  });
+
+  it('answers claude the Monitor tick first, then the fallback for a chat with no Monitor tool, as Thomas set it on #257', async () => {
+    await expect(setUp('claude')).resolves.toMatchObject({
+      client: 'claude',
+      rules: [
+        'Load the Monitor tool (ToolSearch select:Monitor).',
+        'Start a Monitor with command `while true; do sleep 120; echo "tick $(date +%H:%M)"; done`, description "person ship inbox tick", timeout_ms 1800000. The shell cannot call the gateway, so the script only ticks; each tick wakes the chat.',
+        'On every tick: call aeolus_inbox and compare its deliveryIds with the ones already seen. Something new: show it (sender, title, job; for a question the asker\'s pick), numbered. Do not open it. Nothing new: reply only "." and nothing else.',
+        'When the Monitor expires (30 minutes), start it again right away, same command. Never let it lapse.',
+        'Never decide, answer or mark done for the person; answer only with their choice, in their words.',
+        'If this chat has no Monitor tool, say so, and instead call aeolus_inbox at the start and at the end of every turn.',
+      ],
+    });
+  });
+
+  it('answers claude-code the same rules as claude', async () => {
+    const [claude, claudeCode] = [await setUp('claude'), await setUp('claude-code')];
+
+    expect(claudeCode.rules).toEqual(claude.rules);
+  });
+
+  it.each([
+    { client: 'chatgpt' },
+    { client: 'copilot' },
+  ])('answers $client, which has no Monitor tool, to check the inbox at the start and end of every turn', async ({ client }) => {
+    await expect(setUp(client)).resolves.toMatchObject({
+      rules: ['Call aeolus_inbox at the start and at the end of every turn, and say what is new since the last look: sender, title and job, for a question the asker\'s pick, numbered. Do not open it.', 'Never decide, answer or mark done for the person; answer only with their choice, in their words.'],
+    });
+  });
+
+  it.each([
+    { client: 'claude', where: 'profile instructions' },
+    { client: 'claude-code', where: 'CLAUDE.md' },
+    { client: 'chatgpt', where: 'custom instructions' },
+    { client: 'copilot', where: 'personal instructions' },
+  ])('walks the person once through setting $client up, in its $where, so every new conversation calls aeolus_setup first', async ({ client, where }) => {
+    const { oneTimeSetup } = await setUp(client);
+
+    expect(oneTimeSetup.some((step) => step.includes(where) && step.includes(`call aeolus_setup with client ${client} first`))).toBe(true);
+  });
+
+  it.each([{ given: 'gemini' }, { given: undefined }])('refuses a client that is none of the four, given $given', async ({ given }) => {
+    const mcp = await connected(personTools().deps);
+
+    await expect(mcp.callTool({ name: 'aeolus_setup', arguments: given === undefined ? {} : { client: given } })).resolves.toEqual({
+      content: [{ type: 'text', text: 'aeolus_setup takes the client this chat runs in: claude, claude-code, chatgpt or copilot' }],
+      isError: true,
     });
   });
 });
