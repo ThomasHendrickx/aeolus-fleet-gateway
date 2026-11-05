@@ -28,7 +28,7 @@ function render(home: HomeRead): string {
 /** Home's lists as the page shows them, nothing open, the rows leaving named. */
 function lists(home: HomeRead, leaving: ReadonlySet<string> = new Set()): string {
   const opening: ItemOpening = { open: () => undefined, openingId: undefined, putPick: () => undefined, puttingId: undefined, failure: undefined, opened: undefined };
-  return renderToStaticMarkup(createElement(HomeLists, { home: { messages: [], ...home }, now: NOW, opening, leaving }));
+  return renderToStaticMarkup(createElement(HomeLists, { fleetId: 'flt_01', home: { messages: [], ...home }, now: NOW, opening, leaving }));
 }
 
 describe('Bridge home (CC18)', () => {
@@ -197,7 +197,7 @@ describe('the list beside an open item (decide.html, stay-aware.html, aeolus-fle
 
   function renderOpen(opened: ItemOpening['opened']): string {
     const opening: ItemOpening = { open: () => undefined, openingId: undefined, putPick: () => undefined, puttingId: undefined, failure: undefined, opened };
-    return renderToStaticMarkup(createElement(HomeLists, { home: HOME, now: NOW, opening }));
+    return renderToStaticMarkup(createElement(HomeLists, { fleetId: 'flt_01', home: HOME, now: NOW, opening }));
   }
 
   it('shows what waits beside an open question, its count in the heading, the open one marked, and no buttons on the rows', () => {

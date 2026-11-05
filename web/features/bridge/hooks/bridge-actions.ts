@@ -114,6 +114,37 @@ export async function doneDelivery({ fleet, deliveryId, step }: { fleet: string;
   });
 }
 
+/** From a plain message's row (#242): opens it first while new, as the person's own press, so it is seen in Bridge, then is done with it. */
+export async function doneMessage({ fleet, deliveryId, isNew }: { fleet: string; deliveryId: string; isNew: boolean }): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    if (isNew) {
+      await api.people.open.mutate({ deliveryId });
+    }
+    await api.people.done.mutate({ deliveryId });
+    return undefined;
+  });
+}
+
+/** The seen plain messages done in one go (#242), each on its own, so one the fleet does not take is kept and named by its title; a sign-in that ended stops them all. */
+export async function markMessagesDone({ fleet, messages }: { fleet: string; messages: readonly { deliveryId: string; title: string }[] }): Promise<ActionOutcome<{ done: number; failed: string[] }>> {
+  return attempt(fleet, async (api) => {
+    let done = 0;
+    const failed: string[] = [];
+    for (const { deliveryId, title } of messages) {
+      try {
+        await api.people.done.mutate({ deliveryId });
+        done += 1;
+      } catch (error) {
+        if (refusalCodeOf(error) === 'UNAUTHORIZED') {
+          throw error;
+        }
+        failed.push(title);
+      }
+    }
+    return { done, failed };
+  });
+}
+
 /**
  * Who the person can send a message to (aeolus-fleet #1547): the ships their
  * person ship may send to now, each in its state as Your fleet shows it, and

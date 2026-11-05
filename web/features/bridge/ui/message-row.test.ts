@@ -47,7 +47,7 @@ describe("a plain message's row (#242)", () => {
   it('says on the row when it was not marked done, Done staying to try again', () => {
     const markup = rowOf({ failure: 'Not marked done: the fleet did not answer. Try again.' });
 
-    expect({ said: markup.includes('Not marked done: the fleet did not answer. Try again.'), done: />Done</.test(markup) }).toEqual({ said: true, done: true });
+    expect({ said: markup.includes('Not marked done: the fleet did not answer. Try again.'), done: markup.includes('>Done<') }).toEqual({ said: true, done: true });
   });
 
   it('shows no buttons beside an open item', () => {

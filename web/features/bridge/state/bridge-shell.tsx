@@ -17,7 +17,7 @@ import { KeptRead } from './kept-read';
 import { ShellFrame, SidebarPerson, type ShellAccount } from './shell-frame';
 
 /** The shell before its counts are read: none shown, the basket left out. */
-const NO_COUNTS: ShellCounts = { waiting: undefined, stayAware: undefined, basket: 0, fleetAlerts: undefined };
+const NO_COUNTS: ShellCounts = { waiting: undefined, stayAware: undefined, messages: undefined, basket: 0, fleetAlerts: undefined };
 
 /** The counts once read; while what waits cannot be read, the browser shows them as last read (states.html). */
 async function Counted({ counts, children }: { counts: Promise<ShellCounts>; children: (counts: ShellCounts) => ReactNode }) {

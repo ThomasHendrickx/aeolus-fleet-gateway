@@ -10,7 +10,7 @@ import { BridgeSidebar, type ShellCounts } from './bridge-sidebar';
 // any, Stay aware, Done and Your fleet, each with its count; then the
 // settings; the person at the foot.
 
-const COUNTS: ShellCounts = { waiting: 4, stayAware: 2, basket: 0, fleetAlerts: 1 };
+const COUNTS: ShellCounts = { waiting: 4, stayAware: 2, messages: 0, basket: 0, fleetAlerts: 1 };
 
 const ACCOUNT_URL = 'https://account.aeolus.test';
 
@@ -49,7 +49,7 @@ describe("Bridge's sidebar", () => {
   });
 
   it('shows no count at nought, nor while it is not known', () => {
-    const entries = entriesOf(sidebarOf({ counts: { waiting: 0, stayAware: undefined, basket: 0, fleetAlerts: undefined } }));
+    const entries = entriesOf(sidebarOf({ counts: { waiting: 0, stayAware: undefined, messages: undefined, basket: 0, fleetAlerts: undefined } }));
 
     expect([entries.home?.text, entries['stay-aware']?.text, entries.fleet?.text]).toEqual(['Waiting on you', 'Stay aware', 'Your fleet']);
   });
