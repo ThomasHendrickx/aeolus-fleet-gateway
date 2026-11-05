@@ -8,7 +8,8 @@ import type { HomeItem } from './items';
 const ITEM_PARAMETER = 'item';
 
 /** An item of a page's list that can be opened from the address: what opening it needs to know. */
-export type KnownItem = Pick<HomeItem, 'deliveryId' | 'job' | 'isAlert' | 'state' | 'inBasket'>;
+/** An item the page lists, with how its asker made it stale where the list says so. */
+export type KnownItem = Pick<HomeItem, 'deliveryId' | 'job' | 'isAlert' | 'state' | 'inBasket'> & { readonly stale?: HomeItem['stale'] };
 
 /** What the address asks for: nothing, an item of the page's list to open, or an item no longer in the inbox. */
 export type AddressedItem = { kind: 'none' } | { kind: 'open'; item: KnownItem } | { kind: 'gone' };

@@ -7,7 +7,7 @@ import { meetingPathOf } from '../../meeting/paths';
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { answerDelivery, doneDelivery, openDelivery, putInBasket, putPickInBasket, removeFromBasket, type ActionOutcome } from '../hooks/bridge-actions';
 import { BRIDGE_BASKET_PATH } from '../paths';
-import type { FocusedDelivery } from '../services/deliveries';
+import { staleAsListedOf, type FocusedDelivery } from '../services/deliveries';
 import { addressWithItem, itemOfAddress, type KnownItem } from '../services/item-address';
 import { openedScreenOf } from '../services/shell';
 import type { HomeItem } from '../services/items';
@@ -121,6 +121,13 @@ function FocusedItems({ fleetId, decidePlaces, consoleUrl, known, children }: { 
     }
   });
   const focusedId = focus?.delivery.deliveryId;
+  // The list reads itself again as the fleet changes: an open item its asker withdrew or replaced meanwhile turns read-only as its row does (#240).
+  const listedStale = known.find(({ deliveryId }) => deliveryId === focusedId)?.stale ?? null;
+  useEffect(() => {
+    if (listedStale !== null && focusedId !== undefined) {
+      setFocus((focused) => (focused === undefined ? focused : { ...focused, delivery: staleAsListedOf(focused.delivery, [{ deliveryId: focusedId, stale: listedStale }]) }));
+    }
+  }, [listedStale, focusedId]);
   const wasFocusSynced = useRef(false);
   useEffect(() => {
     // The first run is the page as the address left it, which the opening above reads.
