@@ -113,3 +113,13 @@ describe('an open question its asker withdraws while it is open (#240)', () => {
     expect(staleAsListedOf(OPEN, [{ deliveryId: 'dlv_01', stale: null }, { deliveryId: 'dlv_02', stale: WITHDRAWN }])).toBe(OPEN);
   });
 });
+
+describe('an opened plain message (#242 review)', () => {
+  it('shows the text after its first line, which is its title', () => {
+    expect(bodyOf({ contentType: 'text/markdown', payload: '# Staging is green\n\nThe migration ran.' })).toBe('The migration ran.');
+  });
+
+  it('shows nothing more for a message of one line', () => {
+    expect(bodyOf({ contentType: 'text/plain', payload: 'Thanks: the basket sheet is merged' })).toBe('');
+  });
+});

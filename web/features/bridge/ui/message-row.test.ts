@@ -54,3 +54,25 @@ describe("a plain message's row (#242)", () => {
     expect(rowOf({ onDone: undefined }).includes('bridge-message-done')).toBe(false);
   });
 });
+
+describe("a plain message's row, as drawn (#242 review)", () => {
+  it('draws a check before Done', () => {
+    expect(/data-testid="bridge-message-done"[^>]*><svg[^>]*lucide-check/.test(rowOf())).toBe(true);
+  });
+
+  it('says a failure as a line beneath its buttons, not a box', () => {
+    const markup = rowOf({ failure: 'Not marked done: the fleet did not answer. Try again.' });
+
+    expect({ line: /data-testid="bridge-message-failure"[^>]*><svg[^>]*lucide-circle-alert/.test(markup), box: markup.includes('data-testid="bridge-failure"') }).toEqual({ line: true, box: false });
+  });
+
+  it('lists only its title and line beside an open item, the open one said Seen', () => {
+    const markup = rowOf({ onDone: undefined, isOpen: true });
+
+    expect({ text: markup.includes('The 0.38 migration'), seen: markup.includes('>Seen<') }).toEqual({ text: false, seen: true });
+  });
+
+  it('keeps its text to a reading width', () => {
+    expect(/<p class="[^"]*max-w-\[560px\][^"]*">The 0.38 migration/.test(rowOf())).toBe(true);
+  });
+});

@@ -434,7 +434,8 @@ describe('an opened item’s heading, text and screen (aeolus-fleet#1538)', () =
     const screenBar = /<div data-testid="bridge-item-screen-bar" class="([^"]*)"[^>]*>(.*?)<\/div>/.exec(markup);
 
     expect({
-      phoneOnly: (screenBar?.[1] ?? '').split(' ').includes('md:hidden'),
+      // The shell's top bar titles it on a phone (#242 review): this bar only fills the width between.
+      phoneOnly: ['hidden', 'sm:flex', 'md:hidden'].every((each) => (screenBar?.[1] ?? '').split(' ').includes(each)),
       back: /<button[^>]*aria-label="Back to the list"/.test(screenBar?.[2] ?? ''),
       chevron: (screenBar?.[2] ?? '').includes('lucide-chevron-left'),
       title: (screenBar?.[2] ?? '').includes('>Question<'),
@@ -537,5 +538,19 @@ describe('an alert or a notice opened in Bridge (stay-aware.html)', () => {
     const markup = render(aQuestion({ from: 'trierarch', title: 'trierarch plugin 0.35.1 released', question: undefined }), { opened: { job: 'stay-aware', isAlert: false, wasNew: true } });
 
     expect({ tile: markup.includes('data-testid="bridge-alert-tile"'), health: markup.includes('Health'), clears: markup.includes('data-testid="bridge-alert-clears"') }).toEqual({ tile: false, health: false, clears: false });
+  });
+});
+
+describe('an opened plain message (#242 review)', () => {
+  const MESSAGE = aQuestion({ title: 'Staging is green again after the migration', payload: 'Staging is green again after the migration\nThe migration ran.', body: 'The migration ran.', question: undefined });
+
+  it('says under its answer field that it is optional and goes to the sender as the person, the field at a reading width', () => {
+    const markup = render(MESSAGE, { opened: { job: 'everything-else', isAlert: false, wasNew: true } });
+
+    expect({ hint: markup.includes('Optional. Sent to orchestrator-1 as you.'), width: /<label class="[^"]*max-w-\[620px\]/.test(markup) }).toEqual({ hint: true, width: true });
+  });
+
+  it('draws a check before Done', () => {
+    expect(/data-testid="bridge-done"[^>]*><svg[^>]*lucide-check/.test(render(MESSAGE, { opened: { job: 'everything-else', isAlert: false, wasNew: true } }))).toBe(true);
   });
 });

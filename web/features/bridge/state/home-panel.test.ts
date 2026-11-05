@@ -278,16 +278,7 @@ describe('plain messages on Bridge home (#242)', () => {
   it('lists only the 3 newest with many, then leads to all of them', () => {
     const markup = render({ waiting: { count: 0, items: [] }, stayAware: [], messages: many(20) });
 
-    expect({ rows: (markup.match(/data-testid="bridge-message-done"/g) ?? []).length, all: /href="\/bridge\/messages\?fleet=flt_01"[^>]*>Show all 20 messages</.test(markup) }).toEqual({ rows: 3, all: true });
+    expect({ rows: (markup.match(/data-testid="bridge-message-done"/g) ?? []).length, all: /href="\/bridge\/messages\?fleet=flt_01"[^>]*>Show all 20 messages<svg[^>]*lucide-chevron-right/.test(markup) }).toEqual({ rows: 3, all: true });
   });
 
-  it('says on a phone how many new messages wait below, with many, leading to them', () => {
-    const markup = render({ waiting: { count: 0, items: [] }, stayAware: [], messages: many(20) });
-
-    expect(/data-testid="bridge-new-messages"[^>]*>.*8 new messages.*Show/.test(markup)).toBe(true);
-  });
-
-  it('says nothing on top with as few messages as home lists', () => {
-    expect(render({ waiting: { count: 0, items: [] }, stayAware: [], messages: [aMessage()] }).includes('bridge-new-messages')).toBe(false);
-  });
 });

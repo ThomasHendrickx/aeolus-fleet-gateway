@@ -47,3 +47,17 @@ describe('the Messages page (#242)', () => {
     expect(pageOf([]).includes('No message waits. What you marked done is in Done.')).toBe(true);
   });
 });
+
+describe('the Messages page, as drawn (#242 review)', () => {
+  it('puts Mark the 12 seen done in its heading row, with its double check', () => {
+    expect(/data-testid="bridge-messages-head".*<button[^>]*data-testid="bridge-mark-seen-done"[^>]*><svg[^>]*lucide-check-check/.test(pageOf(TWENTY))).toBe(true);
+  });
+
+  it('keeps its list to a column, not the window', () => {
+    expect(/<section class="[^"]*max-w-\[44rem\]/.test(pageOf(TWENTY))).toBe(true);
+  });
+
+  it('keeps the sentence under its heading to a desktop', () => {
+    expect(/<p class="[^"]*max-sm:hidden[^"]*">8 new, 12 seen/.test(pageOf(TWENTY))).toBe(true);
+  });
+});
