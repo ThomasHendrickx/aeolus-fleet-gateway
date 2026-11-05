@@ -1,13 +1,14 @@
 'use client';
 
 import { Toast } from '@base-ui/react/toast';
-import { useState, useTransition, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 
 import { meetingPathOf } from '../../meeting/paths';
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { answerDelivery, doneDelivery, openDelivery, putInBasket, putPickInBasket, removeFromBasket, type ActionOutcome } from '../hooks/bridge-actions';
 import { BRIDGE_BASKET_PATH } from '../paths';
 import type { FocusedDelivery } from '../services/deliveries';
+import { addressWithItem, itemOfAddress, type KnownItem } from '../services/item-address';
 import { openedScreenOf } from '../services/shell';
 import type { HomeItem } from '../services/items';
 import type { RoutedPlace } from '../services/routing';
@@ -59,16 +60,16 @@ export interface ItemOpening {
  * any ship one (aeolus-fleet #1547). The open item shows beside its list on
  * a desktop, and on its own screen on a phone (aeolus-fleet#1538).
  */
-export function ItemFocus({ fleetId, decidePlaces, consoleUrl, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; /** The fleet's console, where an opened alert's ship shows its Health. */ consoleUrl?: string; children: (opening: ItemOpening) => ReactNode }) {
+export function ItemFocus({ fleetId, decidePlaces, consoleUrl, known, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; /** The fleet's console, where an opened alert's ship shows its Health. */ consoleUrl?: string; /** The items the page lists, where the address finds the one to open again. */ known: readonly KnownItem[]; children: (opening: ItemOpening) => ReactNode }) {
   return (
     <Toast.Provider>
-      <FocusedItems fleetId={fleetId} decidePlaces={decidePlaces} consoleUrl={consoleUrl}>{children}</FocusedItems>
+      <FocusedItems fleetId={fleetId} decidePlaces={decidePlaces} consoleUrl={consoleUrl} known={known}>{children}</FocusedItems>
       <BasketToasts />
     </Toast.Provider>
   );
 }
 
-function FocusedItems({ fleetId, decidePlaces, consoleUrl, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; consoleUrl?: string; children: (opening: ItemOpening) => ReactNode }) {
+function FocusedItems({ fleetId, decidePlaces, consoleUrl, known, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; consoleUrl?: string; known: readonly KnownItem[]; children: (opening: ItemOpening) => ReactNode }) {
   const toasts = Toast.useToastManager();
   const sendMessage = useSendMessage();
   const [focus, setFocus] = useState<{ delivery: FocusedDelivery; opened: Opened; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
@@ -103,6 +104,32 @@ function FocusedItems({ fleetId, decidePlaces, consoleUrl, children }: { fleetId
       }
     });
   };
+
+  // The address names the open item: a refresh, or the address opened anew, opens it again.
+  const wasAddressRead = useRef(false);
+  useEffect(() => {
+    if (wasAddressRead.current) {
+      return;
+    }
+    wasAddressRead.current = true;
+    const addressed = itemOfAddress(window.location.href, known);
+    if (addressed.kind === 'open') {
+      open(addressed.item);
+    } else if (addressed.kind === 'gone') {
+      window.history.replaceState(window.history.state, '', addressWithItem(window.location.href, undefined));
+      setDone('That item is no longer in your inbox.');
+    }
+  });
+  const focusedId = focus?.delivery.deliveryId;
+  const wasFocusSynced = useRef(false);
+  useEffect(() => {
+    // The first run is the page as the address left it, which the opening above reads.
+    if (!wasFocusSynced.current) {
+      wasFocusSynced.current = true;
+      return;
+    }
+    window.history.replaceState(window.history.state, '', addressWithItem(window.location.href, focusedId));
+  }, [focusedId]);
 
   /** Opens a question and puts its asker's pick in the basket, with no note, from its row: nothing is sent (CC24). */
   const putPick = (item: ToPut, option: number) => {

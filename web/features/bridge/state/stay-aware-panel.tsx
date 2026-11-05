@@ -15,7 +15,7 @@ import { ItemFocus } from './item-focus';
  */
 export function StayAwarePanel({ fleetId, consoleUrl, stayAware, now }: { fleetId: string; consoleUrl: string | undefined; stayAware: readonly HomeItem[]; now: string }) {
   return (
-    <ItemFocus fleetId={fleetId} consoleUrl={consoleUrl}>
+    <ItemFocus fleetId={fleetId} consoleUrl={consoleUrl} known={stayAware}>
       {(opening) => (
         <section className="grid gap-3" aria-labelledby="bridge-stay-aware-heading">
           <div className={`flex items-baseline justify-between gap-3 max-sm:sr-only ${opening.opened === undefined ? '' : 'px-3 pt-2.5'}`}>

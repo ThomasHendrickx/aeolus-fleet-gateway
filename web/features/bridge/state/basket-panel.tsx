@@ -217,7 +217,7 @@ export function BasketPanel({ fleetId, basket }: { fleetId: string; basket: Bask
   };
 
   return (
-    <ItemFocus fleetId={fleetId}>
+    <ItemFocus fleetId={fleetId} known={basket.entries.map((entry) => ({ deliveryId: entry.deliveryId, job: 'decide', isAlert: false, state: 'seen', inBasket: { option: entry.option, note: entry.note } }))}>
       {(opening) => (
         <section className="grid gap-4" aria-labelledby="bridge-basket-heading">
           <div className="hidden sm:block">

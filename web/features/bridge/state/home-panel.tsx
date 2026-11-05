@@ -222,7 +222,7 @@ export function HomePanel({ fleetId, home, now, decidePlaces, argo }: { fleetId:
     return <WaitingAsLastRead items={home.waiting.items} lastReadAt={lastReadAt} />;
   }
   return (
-    <ItemFocus fleetId={fleetId} decidePlaces={decidePlaces}>
+    <ItemFocus fleetId={fleetId} decidePlaces={decidePlaces} known={[...home.waiting.items, ...home.stayAware]}>
       {(opening) => <HomeLists home={home} now={now} opening={opening} argo={argo} />}
     </ItemFocus>
   );
