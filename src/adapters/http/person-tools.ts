@@ -1,7 +1,8 @@
 /**
  * The tools a signed-in person's MCP client is served (Q20, decision 0057):
  * their person ship's calls, which the gateway makes as the ship's crew, so
- * the chat holds no crew token: its inbox, and starting a message where the
+ * the chat holds no crew token: setting the chat up for the client it runs
+ * in, which the server's instructions say to call first (gateway #257); its inbox, and starting a message where the
  * fleet lets it (aeolus-fleet #1046); taking part in a meeting: reading it,
  * contributing and their own mic calls (decision 0061, M19); and asking for
  * an outside MCP server as their account (decision 0056). Each tool states
@@ -25,6 +26,7 @@ import type { GrantCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { SendMessage } from '../../core/people/send-message.js';
 import type { AskForServer } from '../../core/requests/ask-for-server.js';
+import { setupFor, SETUP_CLIENTS } from './person-setup.js';
 import { runningVersion } from './version.js';
 
 /** The fleet's payload limit, in KB, as the tools state it. */
@@ -51,6 +53,23 @@ const READS = { readOnlyHint: true, destructiveHint: false, openWorldHint: false
 const CHANGES_OWN = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 /** Reaches another party: a message to a ship, or a request to an approver. */
 const REACHES_OTHERS = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
+
+const SETUP_TOOL = {
+  name: 'aeolus_setup',
+  title: 'Set up this chat',
+  description: [
+    'Call this first in every conversation, before any other Aeolus tool, with the client this chat runs in.',
+    'It answers the rules for this chat, which make it check the person\'s inbox as often as the client allows, and the steps to walk the person through once in their client, so every new conversation calls it first.',
+  ].join(' '),
+  inputSchema: { type: 'object' as const, properties: { client: { type: 'string', enum: [...SETUP_CLIENTS] } }, required: ['client'] },
+  annotations: READS,
+};
+
+/** The setup clients as a sentence names them. */
+const CLIENTS_NAMED = 'claude, claude-code, chatgpt or copilot';
+
+/** What the model reads before any call, where the client gives it the server's instructions; the setup tool's description says it too. */
+const INSTRUCTIONS = `Aeolus: your person ship in the fleet, its inbox and its messages. At the start of every conversation, before anything else, call ${SETUP_TOOL.name} with the client this chat runs in (${CLIENTS_NAMED}) and follow what it answers.`;
 
 const INBOX_TOOL = {
   name: 'aeolus_inbox',
@@ -194,8 +213,9 @@ const ASK_FOR_SERVER_TOOL = {
 const SIGN_IN = [{ type: 'oauth2' as const }];
 
 /** The tools a signed-in person is served, in the order tools/list answers them; the plugin package names them in its review cases. */
-export const PERSON_TOOLS = [INBOX_TOOL, OPEN_TOOL, ANSWER_TOOL, DONE_TOOL, SHIPS_TOOL, SEND_TOOL, MEETING_TOOL, REQUEST_MIC_TOOL, WITHDRAW_MIC_REQUEST_TOOL, RELEASE_MIC_TOOL, ASK_FOR_SERVER_TOOL].map((tool) => ({ ...tool, securitySchemes: SIGN_IN }));
+export const PERSON_TOOLS = [SETUP_TOOL, INBOX_TOOL, OPEN_TOOL, ANSWER_TOOL, DONE_TOOL, SHIPS_TOOL, SEND_TOOL, MEETING_TOOL, REQUEST_MIC_TOOL, WITHDRAW_MIC_REQUEST_TOOL, RELEASE_MIC_TOOL, ASK_FOR_SERVER_TOOL].map((tool) => ({ ...tool, securitySchemes: SIGN_IN }));
 
+const setupArgumentsSchema = z.object({ client: z.enum(SETUP_CLIENTS) });
 const deliveryArgumentsSchema = z.object({ deliveryId: z.string() });
 const doneArgumentsSchema = z.object({ deliveryId: z.string(), outcome: z.enum(['done', 'cannot']).optional(), note: z.string().optional() });
 const askForServerArgumentsSchema = z.object({ url: z.string() });
@@ -236,7 +256,7 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
     error.kind === SIGNED_OUT
       ? { ...toolError(error.message), _meta: { [WWW_AUTHENTICATE_META]: [`Bearer resource_metadata="${served.resourceMetadata}", error="invalid_token", error_description="${error.message}"`] } }
       : toolError(error.message);
-  const mcp = new McpServer({ name: 'Aeolus', version: runningVersion() }, { capabilities: { tools: {} } });
+  const mcp = new McpServer({ name: 'Aeolus', version: runningVersion() }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
   mcp.server.setRequestHandler('tools/list', () => ({ tools: PERSON_TOOLS }));
   const changeOwnMic = async (call: { name: string; change: OwnMicChange; args: unknown }) => {
     const sent = meetingArgumentsSchema.omit({ cursor: true }).safeParse(call.args);
@@ -248,6 +268,10 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
   };
   mcp.server.setRequestHandler('tools/call', async ({ params }) => {
     switch (params.name) {
+      case SETUP_TOOL.name: {
+        const sent = setupArgumentsSchema.safeParse(params.arguments);
+        return sent.success ? answered(setupFor(sent.data.client)) : toolError(`${SETUP_TOOL.name} takes the client this chat runs in: ${CLIENTS_NAMED}`);
+      }
       case INBOX_TOOL.name: {
         const read = await deps.readInbox(caller);
         return read.isOk ? answered(read.value) : refused(read.error);
