@@ -1,6 +1,6 @@
 # The person's inbox state on every tool answer, and a setup call per client
 
-Design for gateway #256 (part 1) and #257 (part 2), stage 1: purpose, lessons and questions. No detailed decision is taken before the purpose is agreed.
+Design for gateway #256 (part 1) and #257 (part 2): purpose, lessons, and Thomas's answers to its questions (section 5).
 
 Thomas, on Bridge, 5 Nov (option 3, both parts), verbatim: "For 1 -> I still want each call to have the answer for that specific call. This extra info is put in the response as part of metadata, as state of the users inbox.
 For 2 -> Yes, it should also help the chat on how to actually make this more deterministic. Maybe an endpoint that can be called at initialization that requires the chat to say which one it is, and it then gets the instructions on how to setup the chat so it works optimally with the gateway."
@@ -10,7 +10,7 @@ For 2 -> Yes, it should also help the chat on how to actually make this more det
 **What it is.** Two changes to the tools a signed-in person's chat is served (`src/adapters/http/person-tools.ts`):
 
 1. Every tool answer keeps its own answer for that call unchanged, and also carries the state of the person's inbox: what waits on them now.
-2. A call the chat makes when it starts, in which it says which client it is (claude.ai, Claude desktop, Claude mobile, Claude Code, ChatGPT), and which answers the instructions for setting up that chat to work best with the gateway.
+2. A call the chat makes when it starts, in which it says which client it is (claude.ai, Claude desktop, Claude mobile, Claude Code, ChatGPT, Copilot), and which answers the instructions for setting up that chat to work best with the gateway.
 
 **For whom.** A person whose chat is their person ship through the Aeolus Gateway connector. A chat runs only when the person writes, so today it notices a new delivery only when the person asks for the inbox.
 
@@ -66,34 +66,30 @@ So the only places every client's model is known to read are a tool's `content`,
 | Claude Code reads 4,096 characters of instructions; tool results are capped (Claude Code 25,000 tokens, claude.ai about 150,000 characters). | code.claude.com/docs/en/mcp; claude.com/docs/connectors/building | Instructions short; state small |
 | Before 1.0.0, no compatibility layers or polish for zero customers. | decision 0013 | No version branches per client beyond what the person needs to set up |
 
-## 5. Questions
+## 5. Decisions taken
 
-**Q1. The purpose.** Is section 1 the purpose, as written?
-Pick: as written.
+Thomas, on Bridge, 5 Nov. Each answer is recorded here and not argued again.
 
-**Q2. Where the inbox state travels (#256).** Thomas said "metadata". Options:
-1. MCP `_meta` only, under `dev.aeolus-fleet/inbox`. Literal metadata, but ChatGPT hides it from the model and no Claude client documents showing it: the chat would likely never notice.
-2. A second text content block after the answer's own block, which stays the first block and unchanged, headed as the inbox state. Every client's model reads it.
-3. Both: the second block for the model, and the same state in `_meta` for a client that renders it.
+| Question | Answer |
+| --- | --- |
+| Q1 The purpose | Section 1, as written. |
+| Q2 Where the inbox state travels (#256) | A second text content block after the answer's own block. The answer's block stays the first block and unchanged; the second is headed as the person's inbox state. Not MCP `_meta`: no model is known to read it. |
+| Q3 What the inbox state holds (#256) | Counts only: how many deliveries wait, and how many are opened and not dealt with. One core call per tool answer; the chat calls `aeolus_inbox` for the items. |
+| Q4 The setup call (#257) | A tool the chat calls first in a conversation, with a required argument saying which client it is, answering that client's setup. The server instructions and the tool's description say to call it first. |
+| Q5 What setup covers (#257) | Rules for the chat in this conversation, and one-time steps the chat walks the person through in their client so every new conversation checks the inbox. Thomas's note, verbatim: "Lets also see what we can cover using the current scripts and other techniques that are available in the different technologies. This is our way to use the understanding of that tool to give the most optimal way for the user to use that interface (claude, chatgpt, copilot, ... )" |
 
-Pick: 2. It is the one place every model reads, it leaves the call's own answer as it is, and `_meta` has no reader today (decision 0013).
+## 6. What each client's setup can use
 
-**Q3. What the inbox state holds (#256).** Options:
-1. How many deliveries wait and how many are opened and not dealt with: one core call per tool answer.
-2. Those counts and each waiting delivery's sender, title and job, as `aeolus_inbox` lists them: a full inbox read on every call.
-3. The counts, and how many wait by job (decide, do, stay-aware, everything else): the job needs each delivery, so the cost is that of option 2.
+Q5's note asks the setup answer to use what each client offers, not one text for all. The build checks each row in that client before its setup text is written; a row marked unverified is a place to look, not a fact.
 
-Pick: 1. The chat calls `aeolus_inbox` when the count says something waits; every other call stays one core call heavier, not a receive heavier.
+| Client | What it offers for checking the inbox at the start | Source |
+| --- | --- | --- |
+| claude.ai, Claude desktop, Claude mobile | Profile preferences, read in every conversation; a project's instructions, read in the project's conversations. The connector is turned on per chat. | support.claude.com, custom connectors (connector); preferences and projects unverified |
+| Claude Code | Server instructions, read at session start; hooks on session start and on each prompt, which the aeolus-fleet plugin's scripts already use for agent ships; a line in CLAUDE.md | code.claude.com/docs/en/mcp; plugin hooks unverified for a person's connector |
+| ChatGPT | Server instructions; the ChatGPT plugin's skill (`plugin/skills/aeolus`); custom instructions and memory | developers.openai.com/apps-sdk; custom instructions unverified |
+| Copilot | Its custom instructions file; whether it reads server instructions | unverified |
 
-**Q4. The setup call (#257).** Options:
-1. A tool, such as `aeolus_setup`, with a required `client` (claude.ai, Claude desktop, Claude mobile, Claude Code, ChatGPT, other), answering that client's setup. The server instructions and the tool's description say to call it first in a conversation.
-2. No tool: the gateway reads `clientInfo` on each request and answers per client instructions in `server/discover`. No model step, but `clientInfo` is optional and SHOULD NOT change behaviour, its names are undocumented, and Claude's chat clients may not read instructions.
-3. Both.
+## 7. Done when
 
-Pick: 1. It is Thomas's form, it works in every client, and its answer reaches the model as any tool answer does.
-
-**Q5. What "setup" covers (#257).** Options:
-1. Rules for the chat in this conversation (check the inbox first, say what the inbox state on each answer shows), and one-time steps the chat walks the person through in their client so every new conversation starts by checking (such as a line in Claude's profile preferences or a project's instructions, ChatGPT's custom instructions).
-2. Rules for the chat in this conversation only.
-
-Pick: 1. Only a setting the person makes once runs before the chat's first call; without it, a new conversation checks only if the model calls the setup tool by itself.
+- #256: every person tool's answer keeps its own content block first and unchanged, and adds a second text block with how many deliveries wait and how many are opened and not dealt with; reading it confirms no delivery.
+- #257: a setup tool takes a required client and answers that client's rules for the chat and its one-time setup steps, built from section 6 as checked; the server instructions and the tool's description say to call it first in a conversation.
