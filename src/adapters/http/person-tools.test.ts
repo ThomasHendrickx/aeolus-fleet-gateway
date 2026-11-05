@@ -32,6 +32,8 @@ function personTools(overrides: Partial<PersonToolsDeps> = {}) {
     askForServer: unused,
     readMeeting: unused,
     changeOwnMic: unused,
+    // A fleet that does not answer the inbox state, so each answer goes alone; the state's own tests give it.
+    readInboxState: () => Promise.resolve(err({ kind: 'FLEET_UNAVAILABLE', message: 'The fleet did not answer' })),
     listShips: () => Promise.resolve(ok(DISCOVERY)),
     sendMessage: (input) => {
       asked.push(input);
@@ -294,5 +296,45 @@ describe("a person's tools say what each call does (chatgpt-plugin design, 7.4)"
       isError: true,
       _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${RESOURCE_METADATA}", error="invalid_token", error_description="${message}"`] },
     });
+  });
+});
+
+describe("every answer of a person's tools carries their inbox state (gateway #256)", () => {
+  /** Two deliveries wait on Charlotte and one is opened and not dealt with. */
+  const readInboxState = () => Promise.resolve(ok({ waiting: 2, opened: 1 }));
+  const INBOX_STATE = { type: 'text', text: "Your inbox state, what waits on you now: {\"waiting\":2,\"opened\":1}. aeolus_inbox lists the items." };
+
+  it("keeps the call's own answer as the first block, unchanged, and gives the inbox state as a second block", async () => {
+    const mcp = await connected(personTools({ readInboxState }).deps);
+
+    await expect(mcp.callTool({ name: 'aeolus_ships', arguments: {} })).resolves.toEqual({ content: [{ type: 'text', text: JSON.stringify(DISCOVERY) }, INBOX_STATE] });
+  });
+
+  it('gives the inbox state beside a refusal too, the refusal first', async () => {
+    const mcp = await connected(personTools({ readInboxState, sendMessage: () => Promise.resolve(err({ kind: 'SEND_REFUSED', message: 'The fleet did not take your message: No active ship is named nobody' })) }).deps);
+
+    await expect(mcp.callTool({ name: 'aeolus_send', arguments: { ship: 'nobody', contentType: 'text/plain', payload: 'Hello' } })).resolves.toEqual({
+      content: [{ type: 'text', text: 'The fleet did not take your message: No active ship is named nobody' }, INBOX_STATE],
+      isError: true,
+    });
+  });
+
+  it('reads the state after the call, so a delivery the person is done with counts opened no more', async () => {
+    let state = { waiting: 0, opened: 1 };
+    const doneDelivery: DoneDelivery = (input) => {
+      state = { waiting: 0, opened: 0 };
+      return Promise.resolve(ok({ deliveryId: input.deliveryId, isHandled: true as const }));
+    };
+    const mcp = await connected(personTools({ doneDelivery, readInboxState: () => Promise.resolve(ok(state)) }).deps);
+
+    const done = await mcp.callTool({ name: 'aeolus_done', arguments: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' } });
+
+    expect(z.object({ content: z.array(z.object({ text: z.string() })) }).parse(done).content[1]?.text).toBe('Your inbox state, what waits on you now: {"waiting":0,"opened":0}. aeolus_inbox lists the items.');
+  });
+
+  it('answers the call alone when the fleet does not answer the inbox state', async () => {
+    const mcp = await connected(personTools().deps);
+
+    await expect(mcp.callTool({ name: 'aeolus_ships', arguments: {} })).resolves.toEqual({ content: [{ type: 'text', text: JSON.stringify(DISCOVERY) }] });
   });
 });
