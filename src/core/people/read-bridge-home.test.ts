@@ -52,9 +52,9 @@ function ownStepPartyOf(href: string): string | undefined {
   return /\/outside-parties\/([^/?]+)/.exec(href)?.[1];
 }
 
-function readHome(deliveries: PersonDelivery[], options: { offered?: { isEmailOffered: boolean; isWebPushOffered: boolean }; record?: RecordedPersonDelivery[] } = {}) {
-  const { offered = { isEmailOffered: false, isWebPushOffered: true }, record = [] } = options;
-  const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries, record });
+function readHome(deliveries: PersonDelivery[], options: { offered?: { isEmailOffered: boolean; isWebPushOffered: boolean }; record?: RecordedPersonDelivery[]; acknowledged?: PersonDelivery[] } = {}) {
+  const { offered = { isEmailOffered: false, isWebPushOffered: true }, record = [], acknowledged = [] } = options;
+  const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries, record, acknowledged });
   return {
     ...ship,
     readHome: createReadBridgeHome({
@@ -646,5 +646,57 @@ describe('Bridge home: what each row says and acts on in place (aeolus-fleet#153
     const home = await readHome([ALERT], { offered: { isEmailOffered: false, isWebPushOffered: false } }).readHome(CHARLOTTE_GRANT);
 
     expect(home.isOk ? home.value.stayAware.map(({ places }) => places) : home).toEqual([['chat']]);
+  });
+});
+
+describe('Bridge home: plain messages to the person (#242)', () => {
+  const MESSAGE = aPersonDelivery({
+    deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0011',
+    sentAt: new Date('2026-10-31T19:52:00.000Z'),
+    senderName: 'builder-core',
+    contentType: 'text/markdown; charset=utf-8',
+    payload: '# Staging is green again after the migration\n\nThe 0.38 migration ran on staging at 19:52 and every Testcontainers suite passes.',
+    headline: null,
+  });
+  const PLAIN = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0012', sentAt: new Date('2026-10-31T19:00:00.000Z'), senderName: 'design-bridge-201', contentType: 'text/plain', payload: 'Thanks: the basket sheet is merged', headline: null });
+  const SEEN = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0013', sentAt: new Date('2026-10-31T18:00:00.000Z'), senderName: 'design-bridge-201', contentType: 'text/plain', payload: 'PR #203 is in\nThe Send button sits beside "Put option N in the basket".', headline: null });
+
+  function messagesOf(home: Awaited<ReturnType<ReturnType<typeof readHome>['readHome']>>) {
+    return home.isOk ? home.value.messages.map(({ deliveryId, title, excerpt, state, from, job }) => ({ deliveryId, title, excerpt, state, from, job })) : home;
+  }
+
+  it('lists a text/markdown or text/plain message to the person, newest first, with its first line as title and the text after it, outside the count', async () => {
+    const home = await readHome([PLAIN, MESSAGE, QUESTION]).readHome(CHARLOTTE_GRANT);
+
+    expect({ messages: messagesOf(home), count: home.isOk ? home.value.waiting.count : home }).toEqual({
+      messages: [
+        { deliveryId: MESSAGE.deliveryId, title: '# Staging is green again after the migration', excerpt: 'The 0.38 migration ran on staging at 19:52 and every Testcontainers suite passes.', state: 'new', from: 'builder-core', job: 'everything-else' },
+        { deliveryId: PLAIN.deliveryId, title: 'Thanks: the basket sheet is merged', excerpt: '', state: 'new', from: 'design-bridge-201', job: 'everything-else' },
+      ],
+      count: 1,
+    });
+  });
+
+  it('lists a message the person opened as seen, its text read again from the fleet', async () => {
+    await opened.save(anOpened({ deliveryId: SEEN.deliveryId, from: 'design-bridge-201', title: 'PR #203 is in', contentType: 'text/plain', askedQuestionId: null, openedIn: 'bridge', sentAt: SEEN.sentAt }));
+    const reading = readHome([], { acknowledged: [SEEN] });
+
+    const home = await reading.readHome(CHARLOTTE_GRANT);
+
+    expect(messagesOf(home)).toEqual([{ deliveryId: SEEN.deliveryId, title: 'PR #203 is in', excerpt: 'The Send button sits beside "Put option N in the basket".', state: 'seen', from: 'design-bridge-201', job: 'everything-else' }]);
+  });
+
+  it('lists no other message the record only keeps, such as a withdrawal or an answer in a thread', async () => {
+    const home = await readHome([aPersonDelivery({ ...TEXT, contentType: 'application/json' })]).readHome(CHARLOTTE_GRANT);
+
+    expect(messagesOf(home)).toEqual([]);
+  });
+
+  it('cuts the text it lists after its first line, so the payload never travels whole', async () => {
+    const long = aPersonDelivery({ ...PLAIN, payload: `Title\n${'a'.repeat(1000)}` });
+
+    const home = await readHome([long]).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? home.value.messages[0]?.excerpt.length : home).toBe(280);
   });
 });

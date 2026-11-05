@@ -9,7 +9,7 @@ import { BridgeTabs } from './bridge-tabs';
 // The phone's foot (home.html, basket.html; aeolus-fleet#1515): four tabs
 // with their counts, and the basket as a bar above them while it holds any.
 
-const COUNTS: ShellCounts = { waiting: 4, stayAware: 2, basket: 0, fleetAlerts: 1 };
+const COUNTS: ShellCounts = { waiting: 4, stayAware: 2, messages: 0, basket: 0, fleetAlerts: 1 };
 
 function tabsOf({ screen = 'home', counts = COUNTS }: { screen?: BridgeScreen; counts?: ShellCounts } = {}): string {
   return renderToStaticMarkup(createElement(BridgeTabs, { fleetId: 'flt_01', screen, counts }));

@@ -7,7 +7,7 @@
 import type { HomeItem } from './items';
 
 /** Bridge's pages, each a screen of the shell. */
-export type BridgeScreen = 'home' | 'basket' | 'stay-aware' | 'done' | 'fleet' | 'routing' | 'outside-parties' | 'settings';
+export type BridgeScreen = 'home' | 'basket' | 'stay-aware' | 'messages' | 'done' | 'fleet' | 'routing' | 'outside-parties' | 'settings';
 
 /** The phone's four tabs. */
 export type PhoneTab = 'waiting' | 'aware' | 'done' | 'fleet';
@@ -26,6 +26,7 @@ const SCREENS: Record<BridgeScreen, ScreenNaming> = {
   home: { name: 'Bridge', phoneTitle: 'Bridge', hasBack: false, tab: 'waiting' },
   basket: { name: 'Basket', phoneTitle: 'Basket', hasBack: true, tab: 'waiting' },
   'stay-aware': { name: 'Stay aware', phoneTitle: 'Stay aware', hasBack: false, tab: 'aware' },
+  messages: { name: 'Messages', phoneTitle: 'Messages', hasBack: true, tab: 'waiting' },
   done: { name: 'Done', phoneTitle: 'Done', hasBack: false, tab: 'done' },
   fleet: { name: 'Your fleet', phoneTitle: 'Fleet', hasBack: false, tab: 'fleet' },
   routing: { name: 'Where things show', phoneTitle: 'Where things show', hasBack: true, tab: null },
@@ -53,6 +54,8 @@ export function openedScreenOf(job: HomeItem['job']): string {
 export interface ShellCounts {
   readonly waiting: number | undefined;
   readonly stayAware: number | undefined;
+  /** The plain messages not seen yet (#242), outside what waits. */
+  readonly messages: number | undefined;
   readonly basket: number;
   readonly fleetAlerts: number | undefined;
   /** What waits at argo, apart from what waits on the person (argo's inbox, AI4); none for an account not allowed as argo. */
@@ -61,19 +64,19 @@ export interface ShellCounts {
 
 /** Bridge home as the shell reads it: its counts, none for an account with no person ship, or not readable now. */
 export type HomeForCounts =
-  | { readonly kind: 'read'; readonly value: { readonly waiting: { readonly count: number }; readonly stayAware: readonly { readonly state: string }[] } }
+  | { readonly kind: 'read'; readonly value: { readonly waiting: { readonly count: number }; readonly stayAware: readonly { readonly state: string }[]; readonly messages: readonly { readonly state: string }[] } }
   | { readonly kind: 'none' }
   | { readonly kind: 'unreadable' };
 
-/** What waits as home counts it; of the stay-aware feed only the alerts and notices not seen yet (CC16); what waits at argo in a count of its own. */
+/** What waits as home counts it; of the stay-aware feed only the alerts and notices not seen yet (CC16); of the plain messages only the new ones (#242); what waits at argo in a count of its own. */
 export function shellCountsOf({ home, basket, fleetAlerts, argo }: { home: HomeForCounts; basket: number; fleetAlerts: number | undefined; argo?: number | undefined }): ShellCounts {
   const others = { basket, fleetAlerts, ...(argo === undefined ? {} : { argo }) };
   switch (home.kind) {
     case 'read':
-      return { waiting: home.value.waiting.count, stayAware: home.value.stayAware.filter(({ state }) => state === 'new').length, ...others };
+      return { waiting: home.value.waiting.count, stayAware: home.value.stayAware.filter(({ state }) => state === 'new').length, messages: home.value.messages.filter(({ state }) => state === 'new').length, ...others };
     case 'none':
-      return { waiting: 0, stayAware: 0, ...others };
+      return { waiting: 0, stayAware: 0, messages: 0, ...others };
     case 'unreadable':
-      return { waiting: undefined, stayAware: undefined, ...others };
+      return { waiting: undefined, stayAware: undefined, messages: undefined, ...others };
   }
 }

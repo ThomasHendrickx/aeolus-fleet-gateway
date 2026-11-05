@@ -59,7 +59,7 @@ function Back({ fleetId, hasBack, opened, below }: { fleetId: string; hasBack: b
  * message, as the #1560 sheet draws it), then Live and the avatar. Live shows while the
  * page follows its changes.
  */
-export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, phoneAction, below, avatar }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; isLive: boolean; opened: OpenedItem | undefined; phoneAction: ReactNode; below?: PageBelow; avatar: ReactNode }) {
+export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, phoneCount, phoneAction, below, avatar }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; isLive: boolean; opened: OpenedItem | undefined; /** The count the page names itself with on a phone, as Messages 20. */ phoneCount?: number | undefined; phoneAction: ReactNode; below?: PageBelow; avatar: ReactNode }) {
   const { name, phoneTitle, hasBack } = screenOf(screen);
   const crumb = opened !== undefined && screen === 'home' ? OPENED_FROM_HOME : name;
   return (
@@ -89,15 +89,17 @@ export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, phone
       </span>
       <span data-testid="bridge-title" className={`min-w-0 flex-1 truncate font-semibold tracking-tight sm:hidden ${hasBack || opened !== undefined || below !== undefined ? 'text-lg' : 'text-title-touch'}`}>
         {opened?.title ?? below?.name ?? phoneTitle}
+        {opened === undefined && below === undefined && phoneCount !== undefined ? <span className="ml-1.5 font-normal text-muted-foreground">{phoneCount}</span> : null}
       </span>
       {phoneAction === null ? null : <span className="sm:hidden">{phoneAction}</span>}
       {isLive ? (
-        <span data-testid="bridge-live" className="inline-flex items-center gap-1.5 text-meta text-muted-foreground">
+        <span data-testid="bridge-live" className={`inline-flex items-center gap-1.5 text-meta text-muted-foreground ${opened === undefined ? '' : 'max-sm:hidden'}`}>
           <i aria-hidden className="inline-block size-2 rounded-full bg-tone-ok-fg" />
           Live
         </span>
       ) : null}
-      <span className="sm:hidden">{avatar}</span>
+      {/* An open item's own screen on a phone has its back chevron and title alone (#242). */}
+      {opened === undefined ? <span className="sm:hidden">{avatar}</span> : null}
     </header>
   );
 }

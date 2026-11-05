@@ -4,12 +4,27 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 
 import type { OpenedItem } from '../ui/bridge-top-bar';
 
-const OpenedItemContext = createContext<{ opened: OpenedItem | undefined; setOpened: (opened: OpenedItem | undefined) => void } | undefined>(undefined);
+const OpenedItemContext = createContext<{ opened: OpenedItem | undefined; setOpened: (opened: OpenedItem | undefined) => void; setPhoneCount: (count: number | undefined) => void } | undefined>(undefined);
 
-/** Holds the item open in place of its list, if any, for the shell's phone title. */
-export function OpenedItemProvider({ children }: { children: (opened: OpenedItem | undefined) => ReactNode }) {
+/** Holds the item open in place of its list, if any, and the count the page names itself with, for the shell's phone title. */
+export function OpenedItemProvider({ children }: { children: (opened: OpenedItem | undefined, phoneCount: number | undefined) => ReactNode }) {
   const [opened, setOpened] = useState<OpenedItem | undefined>();
-  return <OpenedItemContext value={{ opened, setOpened }}>{children(opened)}</OpenedItemContext>;
+  const [phoneCount, setPhoneCount] = useState<number | undefined>();
+  return <OpenedItemContext value={{ opened, setOpened, setPhoneCount }}>{children(opened, phoneCount)}</OpenedItemContext>;
+}
+
+/** Names the page's count beside its title in the shell's phone title, as Messages 20 (#242); outside Bridge's shell it does nothing. */
+export function usePhoneCount(count: number): void {
+  const setPhoneCount = useContext(OpenedItemContext)?.setPhoneCount;
+  useEffect(() => {
+    if (setPhoneCount === undefined) {
+      return undefined;
+    }
+    setPhoneCount(count);
+    return () => {
+      setPhoneCount(undefined);
+    };
+  }, [setPhoneCount, count]);
 }
 
 /**

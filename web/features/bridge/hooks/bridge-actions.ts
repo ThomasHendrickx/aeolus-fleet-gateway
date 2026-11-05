@@ -19,6 +19,7 @@ import { FLEET_PARAMETER } from '../../../lib/gateway-api/page-account';
 import { refusalCodeOf, refusalMessageOf, requestApi } from '../../../lib/gateway-api/page-api';
 import { serverCredentialOf } from '../../forms/server-credential';
 import { answerOf, bodyOf, questionOf, stepOf, type AnswerInput, type FocusedDelivery } from '../services/deliveries';
+import { isPlainMessageType, plainTextOf } from '../services/messages';
 import { alertOf } from '../services/stay-aware';
 import type { SubscriptionInput } from '../services/web-push';
 import { EVERY_APP_SHIP_SCOPES, type DecisionInput } from '../services/requests';
@@ -60,7 +61,8 @@ export async function openDelivery(fleet: string, deliveryId: string): Promise<A
   return attempt(fleet, async (api) => {
     const opened = await api.people.open.mutate({ deliveryId });
     const { contentType, payload, meetingId, ...entry } = opened;
-    return { ...entry, payload, body: bodyOf({ contentType, payload }), question: questionOf({ contentType, payload }), step: stepOf({ contentType, payload }, bridgeHost), alert: alertOf({ contentType, payload }), meetingId: meetingId ?? undefined, alertShip: alertShipOf({ contentType, payload }) };
+    // A plain message's title is its first line, its Markdown marks taken off (#242).
+    return { ...entry, title: isPlainMessageType(contentType) ? plainTextOf(entry.title) : entry.title, payload, body: bodyOf({ contentType, payload }), question: questionOf({ contentType, payload }), step: stepOf({ contentType, payload }, bridgeHost), alert: alertOf({ contentType, payload }), meetingId: meetingId ?? undefined, alertShip: alertShipOf({ contentType, payload }) };
   });
 }
 
@@ -111,6 +113,37 @@ export async function doneDelivery({ fleet, deliveryId, step }: { fleet: string;
   return attempt(fleet, async (api) => {
     await api.people.done.mutate(step === undefined ? { deliveryId } : { deliveryId, ...step });
     return undefined;
+  });
+}
+
+/** From a plain message's row (#242): opens it first while new, as the person's own press, so it is seen in Bridge, then is done with it. */
+export async function doneMessage({ fleet, deliveryId, isNew }: { fleet: string; deliveryId: string; isNew: boolean }): Promise<ActionOutcome<undefined>> {
+  return attempt(fleet, async (api) => {
+    if (isNew) {
+      await api.people.open.mutate({ deliveryId });
+    }
+    await api.people.done.mutate({ deliveryId });
+    return undefined;
+  });
+}
+
+/** The seen plain messages done in one go (#242), each on its own, so one the fleet does not take is kept and named by its title; a sign-in that ended stops them all. */
+export async function markMessagesDone({ fleet, messages }: { fleet: string; messages: readonly { deliveryId: string; title: string }[] }): Promise<ActionOutcome<{ done: number; failed: string[] }>> {
+  return attempt(fleet, async (api) => {
+    let done = 0;
+    const failed: string[] = [];
+    for (const { deliveryId, title } of messages) {
+      try {
+        await api.people.done.mutate({ deliveryId });
+        done += 1;
+      } catch (error) {
+        if (refusalCodeOf(error) === 'UNAUTHORIZED') {
+          throw error;
+        }
+        failed.push(title);
+      }
+    }
+    return { done, failed };
   });
 }
 

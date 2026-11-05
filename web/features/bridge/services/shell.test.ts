@@ -49,18 +49,26 @@ describe("the shell's counts", () => {
   const anItem = (state: 'new' | 'seen') => ({ state });
 
   it('counts what waits as home counts it, and only the unseen to stay aware of', () => {
-    expect(shellCountsOf({ home: { kind: 'read', value: { waiting: { count: 3 }, stayAware: [anItem('new'), anItem('seen'), anItem('new')] } }, basket: 1, fleetAlerts: 2 })).toEqual({ waiting: 3, stayAware: 2, basket: 1, fleetAlerts: 2 });
+    expect(shellCountsOf({ home: { kind: 'read', value: { waiting: { count: 3 }, stayAware: [anItem('new'), anItem('seen'), anItem('new')], messages: [] } }, basket: 1, fleetAlerts: 2 })).toEqual({ waiting: 3, stayAware: 2, messages: 0, basket: 1, fleetAlerts: 2 });
+  });
+
+  it('counts the new plain messages, apart from what waits (#242)', () => {
+    expect(shellCountsOf({ home: { kind: 'read', value: { waiting: { count: 3 }, stayAware: [], messages: [anItem('new'), anItem('seen'), anItem('new')] } }, basket: 0, fleetAlerts: undefined }).messages).toBe(2);
+  });
+
+  it('names the Messages page under the Waiting tab, leading back to home (#242)', () => {
+    expect(screenOf('messages')).toEqual({ name: 'Messages', phoneTitle: 'Messages', hasBack: true, tab: 'waiting' });
   });
 
   it("keeps the argo count apart from what waits on the person: its own, for an account allowed as argo", () => {
-    expect(shellCountsOf({ home: { kind: 'read', value: { waiting: { count: 2 }, stayAware: [] } }, basket: 0, fleetAlerts: undefined, argo: 4 })).toEqual({ waiting: 2, stayAware: 0, basket: 0, fleetAlerts: undefined, argo: 4 });
+    expect(shellCountsOf({ home: { kind: 'read', value: { waiting: { count: 2 }, stayAware: [], messages: [] } }, basket: 0, fleetAlerts: undefined, argo: 4 })).toEqual({ waiting: 2, stayAware: 0, messages: 0, basket: 0, fleetAlerts: undefined, argo: 4 });
   });
 
   it('counts nothing waiting for an account with no person ship', () => {
-    expect(shellCountsOf({ home: { kind: 'none' }, basket: 0, fleetAlerts: undefined })).toEqual({ waiting: 0, stayAware: 0, basket: 0, fleetAlerts: undefined });
+    expect(shellCountsOf({ home: { kind: 'none' }, basket: 0, fleetAlerts: undefined })).toEqual({ waiting: 0, stayAware: 0, messages: 0, basket: 0, fleetAlerts: undefined });
   });
 
   it('leaves out what waits and the unseen while the record cannot be read', () => {
-    expect(shellCountsOf({ home: { kind: 'unreadable' }, basket: 0, fleetAlerts: 1 })).toEqual({ waiting: undefined, stayAware: undefined, basket: 0, fleetAlerts: 1 });
+    expect(shellCountsOf({ home: { kind: 'unreadable' }, basket: 0, fleetAlerts: 1 })).toEqual({ waiting: undefined, stayAware: undefined, messages: undefined, basket: 0, fleetAlerts: 1 });
   });
 });

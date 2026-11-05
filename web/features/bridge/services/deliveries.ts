@@ -8,6 +8,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 
 import type { GatewayRouter } from '../../../../src/adapters/trpc/router.js';
 import type { AlertView } from './stay-aware';
+import { isPlainMessageType } from './messages';
 
 /** The channels that wake a person when something waits for their person ship, as the API shows them (wake a person, W8). */
 export type WakeChannels = inferRouterOutputs<GatewayRouter>['people']['wakeChannels'];
@@ -140,8 +141,13 @@ const BODIED = new Set([ALERT_CONTENT_TYPE, NOTICE_CONTENT_TYPE]);
 
 const bodiedSchema = z.object({ body: z.string() });
 
-/** An alert's or a notice's body; any other payload, or one that does not read, as it came. */
+/** An alert's or a notice's body; a plain message's text after its first line, its title; any other payload, or one that does not read, as it came. */
 export function bodyOf(opened: { contentType: string; payload: string }): string {
+  if (isPlainMessageType(opened.contentType)) {
+    // A plain message's first line is its title (#242).
+    const firstBreak = opened.payload.indexOf('\n');
+    return firstBreak === -1 ? '' : opened.payload.slice(firstBreak + 1).trim();
+  }
   const [essence = ''] = opened.contentType.split(';');
   if (!BODIED.has(essence.trim().toLowerCase())) {
     return opened.payload;
