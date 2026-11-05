@@ -203,6 +203,16 @@ describe('Bridge home: what waits on the person, with one count (CC18)', () => {
     expect(home.isOk ? home.value.waiting : home).toEqual({ count: 0, items: [] });
   });
 
+  it("lists a meeting's added, mic and ended notices nowhere: not waiting, not stay-aware, not a message", async () => {
+    const notices = ['added', 'mic', 'ended'].map((kind, index) =>
+      aPersonDelivery({ deliveryId: `dlv_01m3tbfspe96yf1rnr4ank003${String(index)}`, contentType: `application/vnd.aeolus.meeting.${kind}+json`, payload: '{"meetingId":"mtg_01m5qa5j85mgd4z61d9c2k4mtg"}', headline: null, meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' }),
+    );
+
+    const home = await readHome(notices).readHome(CHARLOTTE_GRANT);
+
+    expect(home.isOk ? { waiting: home.value.waiting.items, stayAware: home.value.stayAware, messages: home.value.messages } : home).toEqual({ waiting: [], stayAware: [], messages: [] });
+  });
+
   it('puts the alerts and notices that reached the person in the stay-aware feed, newest first, outside the count', async () => {
     const home = await readHome([NOTICE, QUESTION, ALERT]).readHome(CHARLOTTE_GRANT);
 
