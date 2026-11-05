@@ -50,6 +50,9 @@ function Places({ places }: { places: readonly Place[] }) {
 }
 
 /** A row's ground: the open item on the highlight with an inset bar in the primary colour, a stale one muted (decide.html). */
+/** A leaving row fades and its height closes; with reduced motion it stays whole until it goes at 5 s (#240). */
+export const LEAVING = 'overflow-hidden motion-safe:animate-row-leave';
+
 function groundOf({ isOpen, isStale }: { isOpen: boolean; isStale: boolean }): string {
   if (isOpen) {
     return 'bg-highlight shadow-[inset_2px_0_0_var(--primary)]';
@@ -72,6 +75,7 @@ export function ItemRow({
   isNew,
   isOpen = false,
   staleKind,
+  isLeaving = false,
   outcome,
   failure,
   onOpen,
@@ -87,6 +91,8 @@ export function ItemRow({
   isOpen?: boolean;
   /** How its asker made it stale, withdrawn or replaced, outside the count; none while it stands. */
   staleKind?: Stale['kind'];
+  /** Whether it is a stale row leaving, in its last 300 ms in the list (#240). */
+  isLeaving?: boolean;
   /** What the row says of where the item stands, such as Seen or In the basket: option 2; nothing while new. */
   outcome: string | undefined;
   failure: string | undefined;
@@ -105,7 +111,7 @@ export function ItemRow({
   const titleClass = 'min-w-0 break-words text-left text-body-touch font-medium sm:truncate sm:text-body';
   const title = staleKind === undefined ? item.title : <s className="decoration-muted-foreground">{item.title}</s>;
   return (
-    <li data-testid="bridge-item" data-stale={staleKind !== undefined} aria-current={isOpen ? true : undefined} className={`grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1.5 border-t border-border px-3 py-2.5 first:border-t-0 ${groundOf({ isOpen, isStale: staleKind !== undefined })}`}>
+    <li data-testid="bridge-item" data-stale={staleKind !== undefined} data-leaving={isLeaving || undefined} aria-current={isOpen ? true : undefined} className={`grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1.5 border-t border-border px-3 py-2.5 first:border-t-0 ${groundOf({ isOpen, isStale: staleKind !== undefined })} ${isLeaving ? LEAVING : ''}`}>
       <JobIcon aria-hidden="true" className={`mt-0.5 size-4 ${look.tone}`} />
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex min-w-0 items-baseline sm:items-center">

@@ -12,7 +12,7 @@ import { ArgoSectionPanel } from './argo-section-panel';
 const NOW = '2026-11-01T20:20:00.000Z';
 
 /** The router the page sits under; a static render never navigates. */
-const ROUTER: AppRouterInstance = { back: () => undefined, forward: () => undefined, refresh: () => undefined, push: () => undefined, replace: () => undefined, prefetch: () => undefined };
+const ROUTER: AppRouterInstance = { back: () => undefined, forward: () => undefined, refresh: () => undefined, push: () => undefined, replace: () => undefined, prefetch: () => undefined, bfcacheId: 'argo-section-panel-test' };
 
 const QUESTION: ArgoSection['items'][number] = {
   deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9002',

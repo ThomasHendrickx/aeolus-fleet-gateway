@@ -16,7 +16,7 @@ function anItem(overrides: Partial<HomeItem> = {}): HomeItem {
 const NOW = '2026-10-31T20:00:00.000Z';
 
 /** The router the page sits under; a static render never navigates. */
-const ROUTER: AppRouterInstance = { back: () => undefined, forward: () => undefined, refresh: () => undefined, push: () => undefined, replace: () => undefined, prefetch: () => undefined };
+const ROUTER: AppRouterInstance = { back: () => undefined, forward: () => undefined, refresh: () => undefined, push: () => undefined, replace: () => undefined, prefetch: () => undefined, bfcacheId: 'home-panel-test' };
 
 function render(home: BridgeHome): string {
   return renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: ROUTER }, createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW })));
@@ -229,7 +229,7 @@ describe('Bridge home as last read, while the record cannot be read (states.html
     stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', from: 'watch', title: 'builder-gateway: no report change for 2 h' })],
   };
   const markup = renderToStaticMarkup(
-    createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW }) }),
+    createElement(AppRouterContext.Provider, { value: ROUTER }, createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW }) })),
   );
 
   it('shows what waited as last read, faded and not to be opened, saying so under it', () => {

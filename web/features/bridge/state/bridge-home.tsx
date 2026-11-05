@@ -9,7 +9,7 @@ import { readConsoleUrl } from '../hooks/read-console-url';
 import { argoInboxNoticeOf } from '../services/argo-inbox-notice';
 import { BRIDGE_PATH } from '../paths';
 import { ArgoInboxNotice } from '../ui/argo-inbox-notice';
-import { ArgoSectionList } from '../ui/argo-section';
+import { ArgoSectionPanel } from './argo-section-panel';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { HomeColumns } from '../ui/home-columns';
@@ -33,7 +33,7 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
   const readAt = readTimeOf(read);
   const home = read.kind === 'read' ? read.value : NOTHING;
   const now = new Date().toISOString();
-  const argo = argoSection === null ? undefined : <ArgoSectionList section={argoSection} now={now} />;
+  const argo = argoSection === null ? undefined : <ArgoSectionPanel section={argoSection} now={now} />;
   const argoInboxNotice = argoInboxNoticeOf(argoNotice);
   return (
     <HomeColumns
