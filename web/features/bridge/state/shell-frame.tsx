@@ -82,7 +82,7 @@ export function ShellFrame({ fleetId, fleetName, screen, below, account, switche
   return (
     <SendMessageProvider fleetId={fleetId}>
       <OpenedItemProvider>
-        {(opened) => (
+        {(opened, phoneCount) => (
           <>
             <BridgeTopBar
               fleetId={fleetId}
@@ -90,6 +90,7 @@ export function ShellFrame({ fleetId, fleetName, screen, below, account, switche
               screen={screen}
               isLive={isLive}
               opened={opened}
+              phoneCount={phoneCount}
               below={below}
               phoneAction={screen === 'home' && opened === undefined ? <SendMessageButton look="icon" /> : null}
               avatar={account === undefined ? null : <PhoneAvatar fleetId={fleetId} switcher={switcher} account={account} />}

@@ -88,7 +88,7 @@ export function DonePanel({ fleetId, first, now }: { fleetId: string; first: Rec
   return (
     <ItemSplit
       list={
-        <section className="grid gap-3" aria-labelledby="bridge-done-heading">
+        <section className={`grid gap-3 ${open === undefined ? 'max-w-[44rem]' : ''}`} aria-labelledby="bridge-done-heading">
           <div className={open === undefined ? '' : 'md:px-3 md:pt-3'}>
             <h1 id="bridge-done-heading" className="text-heading font-semibold">
               Done

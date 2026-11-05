@@ -10,7 +10,7 @@ import { BridgeSidebar, type ShellCounts } from './bridge-sidebar';
 // any, Stay aware, Done and Your fleet, each with its count; then the
 // settings; the person at the foot.
 
-const COUNTS: ShellCounts = { waiting: 4, stayAware: 2, basket: 0, fleetAlerts: 1 };
+const COUNTS: ShellCounts = { waiting: 4, stayAware: 2, messages: 0, basket: 0, fleetAlerts: 1 };
 
 const ACCOUNT_URL = 'https://account.aeolus.test';
 
@@ -35,6 +35,13 @@ describe("Bridge's sidebar", () => {
     expect([entries.home?.text, entries['stay-aware']?.text, entries.done?.text, entries.fleet?.text]).toEqual(['Waiting on you4', 'Stay aware2', 'Done', 'Your fleet1']);
   });
 
+  it('shows Messages beneath Stay aware with its new ones counted, leading to the Messages page (#242)', () => {
+    const markup = sidebarOf({ counts: { ...COUNTS, messages: 8 } });
+    const entries = entriesOf(markup);
+
+    expect({ text: entries.messages?.text, href: entries.messages?.href, after: Object.keys(entries).indexOf('messages') - Object.keys(entries).indexOf('stay-aware') }).toEqual({ text: 'Messages8', href: '/bridge/messages?fleet=flt_01', after: 1 });
+  });
+
   it("leads to each of Bridge's pages in the fleet in view", () => {
     const entries = entriesOf(sidebarOf());
 
@@ -42,7 +49,7 @@ describe("Bridge's sidebar", () => {
   });
 
   it('shows no count at nought, nor while it is not known', () => {
-    const entries = entriesOf(sidebarOf({ counts: { waiting: 0, stayAware: undefined, basket: 0, fleetAlerts: undefined } }));
+    const entries = entriesOf(sidebarOf({ counts: { waiting: 0, stayAware: undefined, messages: undefined, basket: 0, fleetAlerts: undefined } }));
 
     expect([entries.home?.text, entries['stay-aware']?.text, entries.fleet?.text]).toEqual(['Waiting on you', 'Stay aware', 'Your fleet']);
   });

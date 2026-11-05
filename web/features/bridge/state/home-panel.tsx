@@ -1,18 +1,22 @@
 'use client';
 
-import { Bell, ShoppingBasket } from 'lucide-react';
+import { Bell, ChevronRight, MessageSquare, ShoppingBasket } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { useLeavingStale } from '../hooks/use-leaving-stale';
+import { inFleet } from '../../../lib/gateway-api/page-account';
+import { BRIDGE_MESSAGES_PATH } from '../paths';
 import { staleSaidOf } from '../services/deliveries';
 import { seenTextOf, type BridgeHome, type HomeItem } from '../services/items';
 import { lastReadTimeOf } from '../services/last-read';
 import type { WatchedItem } from '../services/leaving-stale';
+import { HOME_MESSAGES, messagesSaidOf, showAllSaidOf } from '../services/messages';
 import type { RoutedPlace } from '../services/routing';
 import { ActionButton } from '../ui/action-button';
 import { ItemRow } from '../ui/item-row';
 import { RowLink } from '../ui/row-link';
 import { ItemFocus, type ItemOpening } from './item-focus';
+import { MessageRows } from './message-rows';
 import { useLastReadAt } from './kept-read';
 
 /** What a row says of its item: stale, in the basket, seen, or nothing while new. A stale one clears itself (#240). */
@@ -126,9 +130,9 @@ export function StayAwareRows({ items, readAt, opening }: { items: readonly Home
  * was opened from, headed with its count, its rows without their buttons;
  * pressing a title opens that item in its place.
  */
-function ListBeside({ home, readAt, opening, isStayAware, leaving }: { home: BridgeHome; readAt: Date; opening: ItemOpening; isStayAware: boolean; leaving: ReadonlySet<string> }) {
+function ListBeside({ home, readAt, opening, leaving }: { home: BridgeHome; readAt: Date; opening: ItemOpening & { opened: NonNullable<ItemOpening['opened']> }; leaving: ReadonlySet<string> }) {
   const { waiting, stayAware } = home;
-  return isStayAware ? (
+  return opening.opened.job === 'stay-aware' ? (
     <section aria-labelledby="bridge-stay-aware-heading">
       <div className="flex items-baseline justify-between gap-3 px-3 py-2.5">
         <h2 id="bridge-stay-aware-heading" className="font-semibold">
@@ -154,14 +158,18 @@ function ListBeside({ home, readAt, opening, isStayAware, leaving }: { home: Bri
  * struck through and outside the count, a replaced one leading to its replacement; and the stay-aware feed beside it, the
  * alerts and notices, a dot on those not seen, which alone it counts, outside the count. Opening one of
  * the feed is all it asks (CC16): it stays in the feed, seen. The count heads the page, above Your fleet
- * too (HomeHeading). Beside an open item, only the list it was opened from (aeolus-fleet#1538).
+ * too (HomeHeading). The plain messages beneath what waits, outside the count, the 3 newest closed
+ * by a link to all of them; one opens on the Messages page (#242).
+ * Beside an open item, only the list it was opened from (aeolus-fleet#1538).
  */
-export function HomeLists({ home, now, opening, argo, leaving = new Set() }: { home: BridgeHome; now: string; opening: ItemOpening; argo?: ReactNode; /** The stale rows leaving now, in their last 300 ms (#240). */ leaving?: ReadonlySet<string> }) {
-  const { waiting, stayAware } = home;
+export function HomeLists({ fleetId, home, now, opening, argo, leaving = new Set() }: { fleetId: string; home: BridgeHome; now: string; opening: ItemOpening; argo?: ReactNode; /** The stale rows leaving now, in their last 300 ms (#240). */ leaving?: ReadonlySet<string> }) {
+  const { waiting, stayAware, messages } = home;
   const readAt = new Date(now);
-  if (opening.opened !== undefined) {
-    return <ListBeside home={home} readAt={readAt} opening={opening} isStayAware={opening.opened.job === 'stay-aware'} leaving={leaving} />;
+  const { opened } = opening;
+  if (opened !== undefined) {
+    return <ListBeside home={home} readAt={readAt} opening={{ ...opening, opened }} leaving={leaving} />;
   }
+  const newMessages = messages.filter(({ state }) => state === 'new').length;
   return (
     <div className="grid gap-8">
       <section className="grid gap-3" aria-labelledby="bridge-waiting-heading">
@@ -174,6 +182,24 @@ export function HomeLists({ home, now, opening, argo, leaving = new Set() }: { h
           <WaitingRows items={waiting.items} readAt={readAt} opening={opening} leaving={leaving} />
         )}
       </section>
+      {messages.length === 0 ? null : (
+        <section className="grid gap-3" aria-labelledby="bridge-messages-heading">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 id="bridge-messages-heading" className="inline-flex items-center gap-2 text-section font-semibold">
+              <MessageSquare aria-hidden="true" className="size-4 shrink-0" />
+              Messages
+            </h2>
+            <span className="text-caption text-muted-foreground">{messagesSaidOf(newMessages)}</span>
+          </div>
+          <MessageRows fleetId={fleetId} messages={messages.slice(0, HOME_MESSAGES)} readAt={readAt} opening={opening} isOpenedOnPage />
+          {messages.length > HOME_MESSAGES ? (
+            <a data-testid="bridge-all-messages" href={inFleet(BRIDGE_MESSAGES_PATH, fleetId)} className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-card font-medium text-primary hover:bg-accent">
+              {showAllSaidOf(messages.length)}
+              <ChevronRight aria-hidden="true" className="size-4" />
+            </a>
+          ) : null}
+        </section>
+      )}
       {argo}
       <section className="grid gap-3" aria-labelledby="bridge-stay-aware-heading">
         <div className="flex items-baseline justify-between gap-3">
@@ -234,7 +260,7 @@ export function HomePanel({ fleetId, home, now, decidePlaces, argo }: { fleetId:
   const shown = { ...home, waiting: { ...home.waiting, items } };
   return (
     <ItemFocus fleetId={fleetId} decidePlaces={decidePlaces} known={[...items, ...home.stayAware]}>
-      {(opening) => <HomeLists home={shown} now={now} opening={opening} argo={argo} leaving={leaving} />}
+      {(opening) => <HomeLists fleetId={fleetId} home={shown} now={now} opening={opening} argo={argo} leaving={leaving} />}
     </ItemFocus>
   );
 }

@@ -36,7 +36,7 @@ describe('what an opened item shows of its payload (Bridge, CC15)', () => {
   });
 
   it('shows any other payload as it came, and one it cannot read as it came too', () => {
-    expect([bodyOf({ contentType: 'text/plain', payload: 'The build is red' }), bodyOf({ contentType: 'application/vnd.aeolus.notice+json', payload: 'not json' })]).toEqual(['The build is red', 'not json']);
+    expect([bodyOf({ contentType: 'application/json', payload: '{"build":"red"}' }), bodyOf({ contentType: 'application/vnd.aeolus.notice+json', payload: 'not json' })]).toEqual(['{"build":"red"}', 'not json']);
   });
 });
 
@@ -111,5 +111,15 @@ describe('an open question its asker withdraws while it is open (#240)', () => {
 
   it('stays as it is while its row stands, or another row is withdrawn', () => {
     expect(staleAsListedOf(OPEN, [{ deliveryId: 'dlv_01', stale: null }, { deliveryId: 'dlv_02', stale: WITHDRAWN }])).toBe(OPEN);
+  });
+});
+
+describe('an opened plain message (#242 review)', () => {
+  it('shows the text after its first line, which is its title', () => {
+    expect(bodyOf({ contentType: 'text/markdown', payload: '# Staging is green\n\nThe migration ran.' })).toBe('The migration ran.');
+  });
+
+  it('shows nothing more for a message of one line', () => {
+    expect(bodyOf({ contentType: 'text/plain', payload: 'Thanks: the basket sheet is merged' })).toBe('');
   });
 });

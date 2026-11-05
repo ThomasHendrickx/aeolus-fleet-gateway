@@ -20,6 +20,7 @@ import type { InboxChanges, OpenedDeliveries, OpenedDelivery, PersonCrews, Perso
 import { waitingFor } from './read-inbox.js';
 import { RECORD_PAGE_SIZE, SEALED_TITLE } from './read-record.js';
 import { placesOf } from './item-places.js';
+import { excerptOf, isPlainMessage } from './plain-message.js';
 import { ownStepsInBridgeOnly, routingOf, type RoutingDefaults, type RoutingPlace, type Routes } from './routing.js';
 import { askingOf, staleOf, type Asking, type Stale } from './stale-item.js';
 import { STALE_SHOWN_FOR_MS, type StaleSightings } from './stale-sightings.js';
@@ -43,10 +44,16 @@ export interface HomeItem extends InboxEntry {
   readonly actInPlace: ActInPlace | null;
 }
 
-/** Bridge home: what waits on the person, decide and do, with its count, a stale question or step listed outside it for 5 s; and the stay-aware feed, the unseen with the seen of the record's newest page, outside the count. */
+/** A plain message on Bridge home (#242): an item with the text after its first line, cut to the longest Bridge lists. */
+export interface HomeMessage extends HomeItem {
+  readonly excerpt: string;
+}
+
+/** Bridge home: what waits on the person, decide and do, with its count, a stale question or step listed outside it for 5 s; the stay-aware feed, the unseen with the seen of the record's newest page, outside the count; and the plain messages not done, outside it too. */
 export interface BridgeHome {
   readonly waiting: { readonly count: number; readonly items: HomeItem[] };
   readonly stayAware: HomeItem[];
+  readonly messages: HomeMessage[];
 }
 
 export type ReadBridgeHome = (caller: PersonCaller) => Promise<Result<BridgeHome, PersonCrewError>>;
@@ -79,7 +86,7 @@ function signInActionOf({ partyOf, parties }: { partyOf: OwnStepPartyOf; parties
   };
 }
 
-function newestFirst(a: HomeItem, b: HomeItem): number {
+function newestFirst<T extends HomeItem>(a: T, b: T): number {
   return b.sentAt.localeCompare(a.sentAt);
 }
 
@@ -94,7 +101,10 @@ function newestFirst(a: HomeItem, b: HomeItem): number {
  * (#240). The withdrawal itself is not listed (CC11). The
  * alerts and notices that reached them are the stay-aware feed, outside the
  * count: those not seen, and those seen on the record's newest page, done
- * (CC16). Everything else is in the record. A
+ * (CC16). The plain messages to the person, text/plain or text/markdown,
+ * new and opened, are listed with their text until done, outside the count
+ * (#242); the text of one opened is read again from the fleet, as the
+ * gateway keeps no payload. Everything else is in the record. A
  * question whose answer is in the basket says so, and still waits until the
  * basket is sent (section 9, rule 1). Each item names where it was seen, the
  * places besides Bridge that show it, and what its row does in place; the
@@ -181,6 +191,30 @@ export function createReadBridgeHome(deps: {
       deps.sightings.forget(deliveryId);
     }
     const items = listed.filter((item) => !left.includes(item)).sort(newestFirst);
-    return ok({ waiting: { count: items.filter(({ stale }) => stale === null).length, items }, stayAware: [...taken.filter(({ job }) => job === 'stay-aware'), ...seenFeed].sort(newestFirst) });
+    const recorded = new Map(page.value.items.map((delivery) => [delivery.deliveryId, delivery]));
+    /** The text of a message the person opened: from the record's newest page, else read again; none while the fleet cannot give it. */
+    const openedTextOf = async (deliveryId: OpenedDelivery['deliveryId']): Promise<string> => {
+      const inRecord = recorded.get(deliveryId);
+      if (inRecord !== undefined) {
+        return inRecord.payload;
+      }
+      const reread = await asPersonCrew(deps, { caller, run: (crew) => withOwnRefusal(deps.door.delivery(crew.crewToken, deliveryId)) });
+      return reread.isOk && reread.value.value.isOk ? reread.value.value.value.payload : '';
+    };
+    const takenMessages: HomeMessage[] = waiting.value.deliveries
+      .filter(({ contentType }) => isPlainMessage(contentType))
+      .flatMap((delivery) => {
+        const item = taken.find(({ deliveryId }) => deliveryId === delivery.deliveryId);
+        return item === undefined ? [] : [{ ...item, excerpt: excerptOf(delivery.payload) }];
+      });
+    const openedTypes = new Map(opened.map(({ deliveryId, contentType }) => [deliveryId, contentType ?? '']));
+    const seenMessages: HomeMessage[] = await Promise.all(
+      seen.filter(({ deliveryId }) => isPlainMessage(openedTypes.get(deliveryId) ?? '')).map(async (item) => ({ ...item, excerpt: excerptOf(await openedTextOf(item.deliveryId)) })),
+    );
+    return ok({
+      waiting: { count: items.filter(({ stale }) => stale === null).length, items },
+      stayAware: [...taken.filter(({ job }) => job === 'stay-aware'), ...seenFeed].sort(newestFirst),
+      messages: [...takenMessages, ...seenMessages].sort(newestFirst),
+    });
   };
 }

@@ -8,7 +8,8 @@
  * an outside MCP server as their account (decision 0056). Each tool states
  * what its call does in its three hints and that it needs the person's
  * sign-in, as ChatGPT's plugin directory reads them (chatgpt-plugin design,
- * 7.4).
+ * 7.4). Every answer carries the person's inbox state as a second block
+ * after its own (gateway #256).
  */
 import { idSchema, PAYLOAD_MAX_BYTES } from '@aeolus-fleet/common';
 import { McpServer } from '@modelcontextprotocol/server';
@@ -24,6 +25,7 @@ import type { ListShips } from '../../core/people/list-ships.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { GrantCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
+import type { InboxState, ReadInboxState } from '../../core/people/read-inbox-state.js';
 import type { SendMessage } from '../../core/people/send-message.js';
 import type { AskForServer } from '../../core/requests/ask-for-server.js';
 import { setupFor, SETUP_CLIENTS } from './person-setup.js';
@@ -37,6 +39,7 @@ const CHAT: Place = 'chat';
 
 export interface PersonToolsDeps {
   readInbox: ReadInbox;
+  readInboxState: ReadInboxState;
   openDelivery: OpenDelivery;
   answerDelivery: AnswerDelivery;
   doneDelivery: DoneDelivery;
@@ -242,6 +245,13 @@ const answered = (value: unknown) => ({ content: [{ type: 'text' as const, text:
 /** A tool error the person's model reads. */
 const toolError = (message: string) => ({ content: [{ type: 'text' as const, text: message }], isError: true });
 
+/**
+ * The inbox state as the block after a tool's own answer (design Q2): text,
+ * since no client is known to give a result's _meta to its model, and headed
+ * so the model reads it apart from the answer.
+ */
+const inboxStateBlock = (state: InboxState) => ({ type: 'text' as const, text: `Your inbox state, what waits on you now: ${JSON.stringify(state)}. ${INBOX_TOOL.name} lists the items.` });
+
 /** Who a person's tools serve, and where the endpoint serving them names its protected resource metadata (RFC 9728). */
 export interface PersonServed {
   caller: GrantCaller;
@@ -266,7 +276,14 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
     const changed = await deps.changeOwnMic({ caller, meetingId: sent.data.meetingId, change: call.change });
     return changed.isOk ? answered({}) : refused(changed.error);
   };
-  mcp.server.setRequestHandler('tools/call', async ({ params }) => {
+  mcp.server.setRequestHandler('tools/call', async (request) => {
+    const result = await called(request.params);
+    // Read after the call, so it counts what the call changed; a state the fleet does not answer leaves the answer alone.
+    const state = await deps.readInboxState(caller);
+    return state.isOk ? { ...result, content: [...result.content, inboxStateBlock(state.value)] } : result;
+  });
+  /** A call's own answer. */
+  const called = async (params: { name: string; arguments?: Record<string, unknown> | undefined }) => {
     switch (params.name) {
       case SETUP_TOOL.name: {
         const sent = setupArgumentsSchema.safeParse(params.arguments);
@@ -336,6 +353,6 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
         return change === undefined ? toolError(`No tool ${params.name}: your person ship has ${PERSON_TOOLS.map(({ name }) => name).join(', ')}`) : changeOwnMic({ name: params.name, change, args: params.arguments });
       }
     }
-  });
+  };
   return mcp;
 }

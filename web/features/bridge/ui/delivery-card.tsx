@@ -308,9 +308,9 @@ function Separator() {
 }
 
 /** An opened item's own screen on a phone: back to the list by its chevron, titled by its job (decide.html, do.html). A desktop shows the list beside it instead. */
-export function ScreenBar({ opened, title = screenTitleOf(opened), isWorking, onBack }: { opened: Opened; title?: string; isWorking: boolean; onBack: () => void }) {
+export function ScreenBar({ opened, title = screenTitleOf(opened), isWorking, isShellTitled = false, onBack }: { opened: Opened; title?: string; isWorking: boolean; /** Whether the shell's top bar titles it on a phone, so this bar only fills the width between a phone and a desktop. */ isShellTitled?: boolean; onBack: () => void }) {
   return (
-    <div data-testid="bridge-item-screen-bar" className="-mx-1 flex items-center gap-1 md:hidden">
+    <div data-testid="bridge-item-screen-bar" className={`-mx-1 items-center gap-1 md:hidden ${isShellTitled ? 'hidden sm:flex' : 'flex'}`}>
       <button type="button" data-testid="bridge-back" aria-label="Back to the list" onClick={onBack} disabled={isWorking} className="inline-flex size-9 items-center justify-center rounded-md hover:bg-accent disabled:opacity-70">
         <ChevronLeft aria-hidden="true" className="size-5" />
       </button>
@@ -405,7 +405,7 @@ export function DeliveryCard({
   const sendShip = delivery.alertShip !== undefined && onSendMessage !== undefined ? <SendShipButton ship={delivery.alertShip} onSendMessage={onSendMessage} /> : null;
   return (
     <section data-testid="bridge-delivery" className="grid min-w-0 content-start gap-3 text-card-foreground md:p-5">
-      <ScreenBar opened={opened} isWorking={isWorking} onBack={onBack} />
+      <ScreenBar opened={opened} isWorking={isWorking} isShellTitled onBack={onBack} />
       <ItemHeading delivery={delivery} opened={opened} timeZone={timeZone} />
       <h2 className="text-heading font-semibold">{stale === null ? (question?.title ?? delivery.title) : <s className="decoration-muted-foreground">{question?.title ?? delivery.title}</s>}</h2>
       {meetingHref === undefined ? null : (
@@ -441,16 +441,18 @@ export function DeliveryCard({
         finished === null ? <StepControls from={delivery.from} note={note} working={working} failure={failure} onNoteChange={onNoteChange} onFinish={onFinishStep} /> : <StepOutcomeNotice from={delivery.from} finished={finished} timeZone={timeZone} />
       ) : question === undefined ? (
         <>
-          <label className="grid gap-1">
+          <label className="grid max-w-[620px] gap-1">
             <span>Your answer</span>
             <textarea data-testid="bridge-note" rows={2} value={note} onChange={(event) => { onNoteChange(event.target.value); }} className="rounded-md border border-input bg-background p-2" />
+            <span className="text-caption text-muted-foreground">{`Optional. Sent to ${delivery.from} as you.`}</span>
           </label>
           {failure === undefined ? null : <Notice message={failure} isFailure />}
           <div className="flex flex-wrap gap-2">
             <ActionButton data-testid="bridge-answer" variant="primary" isPending={working?.kind === 'note'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onAnswer(undefined); }}>
               Answer
             </ActionButton>
-            <ActionButton data-testid="bridge-done" isPending={working?.kind === 'done'} pendingLabel="Marking done..." disabled={isWorking} onClick={onDone}>
+            <ActionButton data-testid="bridge-done" className="gap-1.5" isPending={working?.kind === 'done'} pendingLabel="Marking done..." disabled={isWorking} onClick={onDone}>
+              <Check aria-hidden="true" className="size-3.5" />
               Done
             </ActionButton>
           </div>

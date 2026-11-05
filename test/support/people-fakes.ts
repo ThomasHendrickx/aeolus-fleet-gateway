@@ -144,9 +144,9 @@ export const SENT_MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank0sen';
  * core before excluding does, with the last number the gateway handed it with;
  * the ones it acknowledged, read again until handled; what its discover
  * answers; its record, newest first by delivery id; its name, as whoami
- * answers it; the crew token it takes, and the calls the gateway made; the ship, whose deliveries a test changes as the fleet would.
+ * answers it; the deliveries acknowledged before, read again until handled; the crew token it takes, and the calls the gateway made; the ship, whose deliveries a test changes as the fleet would.
  */
-export function fakePersonShipDoor(ship: { crewToken: string; name?: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[]; isExcludingIgnored?: boolean }) {
+export function fakePersonShipDoor(ship: { crewToken: string; name?: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[]; isExcludingIgnored?: boolean; acknowledged?: PersonDelivery[] }) {
   const calls: string[] = [];
   /** The replies the fleet took, as sent. */
   const replies: Parameters<PersonShipDoor['reply']>[1][] = [];
@@ -157,7 +157,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
   /** The hand-overs the gateway reported, in order. */
   const handOvers: Parameters<PersonShipDoor['handed']>[1][] = [];
   /** The deliveries the ship acknowledged and has not handled yet. */
-  let acknowledged: PersonDelivery[] = [];
+  let acknowledged: PersonDelivery[] = ship.acknowledged ?? [];
   const refusal: FleetRefusal = { code: 'UNAUTHORIZED', message: 'The crew token is not valid' };
   const crewed = <T>(crewToken: string, value: () => T): Promise<Result<T, FleetRefusal>> => Promise.resolve(crewToken === ship.crewToken ? ok(value()) : err(refusal));
   const door: PersonShipDoor = {
