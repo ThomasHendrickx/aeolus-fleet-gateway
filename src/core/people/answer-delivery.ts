@@ -9,6 +9,9 @@ import { asPersonCrew, withOwnRefusal, type PersonCaller } from './person-crew.j
 
 export type AnswerDelivery = (input: { caller: PersonCaller; place: Place; deliveryId: string; contentType: string; payload: string }) => Promise<Result<Dealt, DealtError | DomainError<'SEND_REFUSED'>>>;
 
+/** The fleet's code for a ship it cannot address because it was retired. */
+const ASKER_RETIRED = 'NOT_FOUND';
+
 /** The option an answer to a question picked; none for a note alone or any other reply. */
 function optionOf({ contentType, payload }: { contentType: string; payload: string }): number | null {
   if (!isAnswerContentType(contentType)) {
@@ -53,6 +56,11 @@ export function createAnswerDelivery(deps: DealDeps): AnswerDelivery {
     const sent = await asPersonCrew(deps, { caller, run: (crew) => withOwnRefusal(deps.door.reply(crew.crewToken, reply)) });
     if (!sent.isOk) {
       return sent;
+    }
+    if (!sent.value.value.isOk && sent.value.value.error.code === ASKER_RETIRED) {
+      // Core's ship contract answers a ship it cannot address, a retired one, as NOT_FOUND: no answer can ever be taken, so the question is done, not sent.
+      const cleared = await handledOf(deps, { caller, delivery, as: { place, kind: 'notSent', option: optionOf({ contentType, payload }), note: noteOfAnswer({ contentType, payload }) } });
+      return cleared.isOk ? refuse('SEND_REFUSED', `${delivery.from} was retired, so it cannot receive an answer: the question is cleared`) : cleared;
     }
     if (!sent.value.value.isOk) {
       return refuse('SEND_REFUSED', `The fleet did not take your answer: ${sent.value.value.error.message}`);
