@@ -216,6 +216,7 @@ import { createReadYourFleet } from './core/people/read-your-fleet.js';
 import { createHeldDeliveries, holdingDoor } from './core/people/held-deliveries.js';
 import { createStaleSightings } from './core/people/stale-sightings.js';
 import { createReadInbox } from './core/people/read-inbox.js';
+import { createReadInboxState } from './core/people/read-inbox-state.js';
 import type { ItemJob } from './core/people/item-job.js';
 import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/routing.js';
 import { createPrismaRoutes } from './adapters/prisma/routes.js';
@@ -880,6 +881,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     const asCrew = { crewPersonShip: createCrewPersonShip({ accountTokenOf, connections, door, crews, clock }), crews, door: personDoor, held: heldDeliveries };
     return {
       readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults, connections }),
+      readInboxState: createReadInboxState({ ...asCrew, opened }),
       readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries, outcomes, changes, clock, sightings: staleSightings, connections, routes, defaults: routingDefaults, parties, ownStepPartyOf: ownStepPartyOf(options.publicUrl ?? DEFAULT_PUBLIC_URL), ...placesOffered }),
       readRecord: createReadRecord({ ...asCrew, outcomes, connections, routes, defaults: routingDefaults, ...placesOffered }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
