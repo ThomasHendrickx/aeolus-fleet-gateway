@@ -1,7 +1,7 @@
 import { ANSWER_CONTENT_TYPE } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
-import { answerOf, bodyOf, questionOf, stepOf } from './deliveries';
+import { answerOf, bodyOf, questionOf, staleAsListedOf, stepOf, type FocusedDelivery } from './deliveries';
 
 const QUESTION_ID = '0b3f6a52-7c1e-4d0f-9a43-2f6c1d8e5b71';
 
@@ -92,5 +92,24 @@ describe('a step, as Bridge shows it (CC14)', () => {
     { what: 'a step withdrawal', contentType: 'application/vnd.aeolus.step-withdrawal+json', payload: JSON.stringify({ stepId: STEP.id }) },
   ])('reads no step of $what', ({ contentType, payload }) => {
     expect(stepOf({ contentType, payload }, 'gateway.example.com')).toBeUndefined();
+  });
+});
+
+describe('an open question its asker withdraws while it is open (#240)', () => {
+  const OPEN: FocusedDelivery = { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Basket sheet: one Send button, or one per ship?', sentAt: '2026-10-31T19:49:00.000Z', payload: '{}', body: '', question: undefined, step: undefined, alert: undefined, meetingId: undefined, stale: null };
+  const WITHDRAWN = { kind: 'withdrawn' as const, replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null };
+
+  it('turns read-only, withdrawn, once its row in the list says it is', () => {
+    expect(staleAsListedOf(OPEN, [{ deliveryId: 'dlv_01', stale: WITHDRAWN }]).stale).toEqual(WITHDRAWN);
+  });
+
+  it('stays read-only once its row has left the list', () => {
+    const withdrawn = staleAsListedOf(OPEN, [{ deliveryId: 'dlv_01', stale: WITHDRAWN }]);
+
+    expect(staleAsListedOf(withdrawn, []).stale).toEqual(WITHDRAWN);
+  });
+
+  it('stays as it is while its row stands, or another row is withdrawn', () => {
+    expect(staleAsListedOf(OPEN, [{ deliveryId: 'dlv_01', stale: null }, { deliveryId: 'dlv_02', stale: WITHDRAWN }])).toBe(OPEN);
   });
 });
