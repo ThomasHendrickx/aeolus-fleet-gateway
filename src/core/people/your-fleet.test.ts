@@ -77,6 +77,12 @@ describe('the numbers of your fleet', () => {
     expect([fleet.shipCount, fleet.counts]).toEqual([5, { alert: 1, waiting: 2, working: 1, idle: 1 }]);
   });
 
+  it("counts a viewer's alert too, so the numbers are the ones core counts and the sidebar shows", () => {
+    const fleet = yourFleetOf([aShip({ name: 'console', kind: 'viewer', state: 'alert' }), aShip({ name: 'reviewer', state: 'alert' })]);
+
+    expect([fleet.shipCount, fleet.counts.alert]).toEqual([1, 2]);
+  });
+
   it('counts nothing in a fleet with no ships', () => {
     expect(yourFleetOf([])).toEqual({ shipCount: 0, counts: { alert: 0, waiting: 0, working: 0, idle: 0 }, groups: [] });
   });
