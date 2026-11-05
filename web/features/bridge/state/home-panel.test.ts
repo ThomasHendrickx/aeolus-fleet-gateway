@@ -18,14 +18,17 @@ const NOW = '2026-10-31T20:00:00.000Z';
 /** The router the page sits under; a static render never navigates. */
 const ROUTER: AppRouterInstance = { back: () => undefined, forward: () => undefined, refresh: () => undefined, push: () => undefined, replace: () => undefined, prefetch: () => undefined, bfcacheId: 'home-panel-test' };
 
-function render(home: BridgeHome): string {
-  return renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: ROUTER }, createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW })));
+/** Bridge home with no plain message, unless one is given. */
+type HomeRead = Omit<BridgeHome, 'messages'> & { messages?: BridgeHome['messages'] };
+
+function render(home: HomeRead): string {
+  return renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: ROUTER }, createElement(HomePanel, { fleetId: 'flt_01', home: { messages: [], ...home }, now: NOW })));
 }
 
 /** Home's lists as the page shows them, nothing open, the rows leaving named. */
-function lists(home: BridgeHome, leaving: ReadonlySet<string> = new Set()): string {
+function lists(home: HomeRead, leaving: ReadonlySet<string> = new Set()): string {
   const opening: ItemOpening = { open: () => undefined, openingId: undefined, putPick: () => undefined, puttingId: undefined, failure: undefined, opened: undefined };
-  return renderToStaticMarkup(createElement(HomeLists, { home, now: NOW, opening, leaving }));
+  return renderToStaticMarkup(createElement(HomeLists, { home: { messages: [], ...home }, now: NOW, opening, leaving }));
 }
 
 describe('Bridge home (CC18)', () => {
@@ -189,6 +192,7 @@ describe('the list beside an open item (decide.html, stay-aware.html, aeolus-fle
   const HOME: BridgeHome = {
     waiting: { count: 2, items: [anItem(), anItem({ deliveryId: 'dlv_02', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin', state: 'seen', actInPlace: { kind: 'openLink', href: 'https://github.com/new', host: 'github.com' } })] },
     stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', isAlert: true, from: 'watch', title: 'builder-gateway: no report change for 2 h' })],
+    messages: [],
   };
 
   function renderOpen(opened: ItemOpening['opened']): string {
@@ -227,6 +231,7 @@ describe('Bridge home as last read, while the record cannot be read (states.html
   const home: BridgeHome = {
     waiting: { count: 2, items: [anItem(), anItem({ deliveryId: 'dlv_02', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin' })] },
     stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', from: 'watch', title: 'builder-gateway: no report change for 2 h' })],
+    messages: [],
   };
   const markup = renderToStaticMarkup(
     createElement(AppRouterContext.Provider, { value: ROUTER }, createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW }) })),

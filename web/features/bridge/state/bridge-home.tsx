@@ -20,7 +20,7 @@ import { HomeHeading } from './home-heading';
 import { RecordUnreadable } from './record-unreadable';
 
 /** For an account with no person ship nothing waits, and nothing reaches it unasked. */
-const NOTHING = { waiting: { count: 0, items: [] }, stayAware: [] };
+const NOTHING = { waiting: { count: 0, items: [] }, stayAware: [], messages: [] };
 
 /**
  * Your fleet beside home once both are read; the fleet was asked for at the
