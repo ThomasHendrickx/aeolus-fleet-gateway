@@ -3,6 +3,7 @@
 import { Toast } from '@base-ui/react/toast';
 import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 
+import { replaceAddress } from '../../../../bridge/item-address/hooks/replace-address';
 import { meetingPathOf } from '../../meeting/paths';
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { answerDelivery, doneDelivery, openDelivery, putInBasket, putPickInBasket, removeFromBasket, type ActionOutcome } from '../hooks/bridge-actions';
@@ -116,7 +117,7 @@ function FocusedItems({ fleetId, decidePlaces, consoleUrl, known, children }: { 
     if (addressed.kind === 'open') {
       open(addressed.item);
     } else if (addressed.kind === 'gone') {
-      window.history.replaceState(window.history.state, '', addressWithItem(window.location.href, undefined));
+      replaceAddress(window.history, addressWithItem(window.location.href, undefined));
       setDone('That item is no longer in your inbox.');
     }
   });
@@ -135,7 +136,7 @@ function FocusedItems({ fleetId, decidePlaces, consoleUrl, known, children }: { 
       wasFocusSynced.current = true;
       return;
     }
-    window.history.replaceState(window.history.state, '', addressWithItem(window.location.href, focusedId));
+    replaceAddress(window.history, addressWithItem(window.location.href, focusedId));
   }, [focusedId]);
 
   /** Opens a question and puts its asker's pick in the basket, with no note, from its row: nothing is sent (CC24). */
