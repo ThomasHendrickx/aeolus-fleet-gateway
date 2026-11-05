@@ -1,6 +1,6 @@
 # Bridge: plain messages to a person show in Bridge
 
-Mockups for [#242](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/242). Not approved yet; once approved they are the acceptance criteria for the build.
+Mockups for [#242](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/242). Approved by Thomas on 5 Nov, with the variant for many messages: they are the acceptance criteria for the build.
 
 Thomas, 5 Nov: "Plain messages send to the user should also be visible in bridge as message, now i only see actions and questions (or I have not yet received any messages)".
 
@@ -39,7 +39,7 @@ What a ship tells the person in plain words reaches them where they look, Bridge
 
 Drawn in the kit of [`../bridge-fleet-width`](../bridge-fleet-width) (the approved Bridge sheets' Compact look, tokens and Geist fonts inlined); each PNG is its HTML in Chromium at 1x. A purple tag names the moment drawn and is not part of Bridge.
 
-## Questions
+## Picks, approved
 
 1. **Where messages show.** Drawn: their own Messages list beneath Waiting on you, outside the count. The alternative: in the Stay aware feed, beside alerts and notices; but those are done once seen, and a message waits for Done.
 2. **Which content types.** Drawn: text/plain and text/markdown only.

@@ -1,6 +1,6 @@
 # Bridge: a withdrawn item leaves the overview after 5 seconds
 
-Mockups for [#240](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/240). Not approved yet; once approved they are the acceptance criteria for the build.
+Mockups for [#240](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/240). Approved by Thomas on 5 Nov, option 1 with the picks below: they are the acceptance criteria for the build.
 
 Thomas, 5 Nov: "The widrawn questions or statements (anything someone takes back out of the inbox of a user) needs to disappear after 5 seconds. For the Bridge application, when a user has it open, it will remain there but no more actions are possible. Same as what is now. But the item will disappear in the overview and refreshing the screen or clicking somewhere else removes it. --> the same rules apply for argo messages (like I see those for argo as well in my bridge)."
 
@@ -42,7 +42,7 @@ What the asker took back no longer asks anything of the person, so it should not
 
 Drawn in the kit of [`../bridge-fleet-width`](../bridge-fleet-width) (the approved Bridge sheets' Compact look, tokens and Geist fonts inlined); each PNG is its HTML in Chromium at 1x. A purple tag names the moment drawn and is not part of Bridge.
 
-## Questions
+## Picks, approved
 
 1. **"Statements".** Only questions and steps can be withdrawn or replaced in the fleet's protocol; alerts and notices cannot. Drawn: "statements" read as steps.
 2. **Who ends a withdrawn item of the person's.** Drawn: the gateway marks it done when it leaves, 5 s after the withdrawal reached it, so Done holds it and a chat's inbox drops it. Without that, it would stay seen-not-done in the fleet forever.
