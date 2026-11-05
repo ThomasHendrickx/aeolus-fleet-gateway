@@ -352,3 +352,31 @@ describe('a replacement', () => {
     expect(read.isOk && read.value.deliveries.map(({ job, pick }) => ({ job, pick }))).toEqual([{ job: 'decide', pick: { option: 2, why: 'One check is still running.' } }]);
   });
 });
+
+describe('a chat lists no meeting notice: it is informational or out of date, and the record keeps it (decision 0061)', () => {
+  const noticeOf = (suffix: string, contentType: string) =>
+    aPersonDelivery({ deliveryId: `dlv_01m3tbfspe96yf1rnr4ank${suffix}`, messageId: `msg_01m3tbfspe96yf1rnr4ank${suffix}`, contentType, payload: '{"meetingId":"mtg_01m5qa5j85mgd4z61d9c2k4mtg"}', headline: null, askedQuestionId: null });
+  const NOTICES = [noticeOf('0021', 'application/vnd.aeolus.meeting.added+json'), noticeOf('0022', 'application/vnd.aeolus.meeting.mic+json'), noticeOf('0023', 'application/vnd.aeolus.meeting.ended+json')];
+
+  it('leaves out the added, mic and ended notices that wait, counting only what it lists', async () => {
+    const read = await readInbox([...NOTICES, aPersonDelivery()]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk && { waiting: read.value.waiting, listed: read.value.deliveries.map(({ deliveryId }) => deliveryId) }).toEqual({ waiting: 1, listed: ['dlv_01m3tbfspe96yf1rnr4ank0001'] });
+  });
+
+  it('leaves out a meeting notice the person opened', async () => {
+    await opened.save({ ...OPENED, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0021', contentType: 'application/vnd.aeolus.meeting.added+json' });
+
+    const read = await readInbox([]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk && read.value.opened).toEqual([]);
+  });
+
+  it("lists a meeting's own contribution, which is a message", async () => {
+    const contribution = aPersonDelivery({ ...noticeOf('0024', 'text/plain'), payload: 'Marketing is on track', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
+
+    const read = await readInbox([contribution]).readInbox(CHARLOTTE_GRANT);
+
+    expect(read.isOk && read.value.deliveries.map(({ deliveryId }) => deliveryId)).toEqual([contribution.deliveryId]);
+  });
+});
