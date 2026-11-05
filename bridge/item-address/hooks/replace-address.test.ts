@@ -9,7 +9,7 @@ import { replaceAddress, type AddressHistory } from './replace-address';
  * re-read (router.refresh, the live stream's read again) writes the router's
  * address back into the browser.
  */
-function aRouterHistory(address: string): AddressHistory & { readonly address: string; readAgain: () => void } {
+function aRouterHistory(address: string): AddressHistory & { readonly state: unknown; readonly address: string; readAgain: () => void } {
   let browserAddress = address;
   let routerAddress = address;
   let state: unknown = { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ['', {}] };
