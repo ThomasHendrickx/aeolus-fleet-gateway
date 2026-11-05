@@ -129,7 +129,8 @@ const bridgeForbiddenImports = [
 }));
 
 /** The gateway's MCP side, which serves MCP clients and never imports Bridge. */
-const mcpSideFiles = ['src/adapters/mcp/**/*.ts', 'src/adapters/http/{mcp-endpoint,mcp-task,person-tools}*.ts', 'src/core/{mcp-in,mcp-out}/**/*.ts'];
+const mcpSideAdapterFiles = ['src/adapters/mcp/**/*.ts', 'src/adapters/http/{mcp-endpoint,mcp-task,person-tools}*.ts'];
+const mcpSideCoreFiles = ['src/core/{mcp-in,mcp-out}/**/*.ts'];
 
 /** @type {ImportRestriction[]} */
 const mcpSideForbiddenImports = [
@@ -226,8 +227,15 @@ export default defineConfig(
     rules: importRules({ patterns: [...prismaOutsideItsAdapter, ...bridgeForbiddenImports] }),
   },
   {
-    name: 'aeolus/mcp-side',
-    files: mcpSideFiles,
-    rules: importRules({ patterns: mcpSideForbiddenImports }),
+    // Repeats the Prisma list: this block's import rules replace the all-files ones for its files.
+    name: 'aeolus/mcp-side-adapters',
+    files: mcpSideAdapterFiles,
+    rules: importRules({ patterns: [...prismaOutsideItsAdapter, ...mcpSideForbiddenImports] }),
+  },
+  {
+    // Repeats the core lists: this block's import rules replace the core block's for its files.
+    name: 'aeolus/mcp-side-core',
+    files: mcpSideCoreFiles,
+    rules: importRules({ patterns: [...coreForbiddenImports, ...coreImpure.imports, ...mcpSideForbiddenImports], syntax: coreImpure.syntax }),
   },
 );
