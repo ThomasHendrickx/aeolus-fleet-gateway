@@ -4,7 +4,7 @@
  * and are counted in what waits; stay aware reaches them unasked, outside the
  * count; everything else is in the record only.
  */
-import { ALERT_CONTENT_TYPE, QUESTION_CONTENT_TYPE, REPLACEMENT_CONTENT_TYPE } from '@aeolus-fleet/common';
+import { ALERT_CONTENT_TYPE, MEETING_ADDED_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, QUESTION_CONTENT_TYPE, REPLACEMENT_CONTENT_TYPE } from '@aeolus-fleet/common';
 
 /** The step, its withdrawal and replacement, and notice content types (CC14, CC15), as common names them from its release after 0.35.0; they move to common's constants then. */
 export const STEP_CONTENT_TYPE = 'application/vnd.aeolus.step+json';
@@ -29,6 +29,13 @@ const JOBS = new Map<string, ItemJob>([
 export function essenceOf(contentType: string): string {
   const [essence = ''] = contentType.split(';');
   return essence.trim().toLowerCase();
+}
+
+const MEETING_NOTICES: ReadonlySet<string> = new Set([MEETING_ADDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE]);
+
+/** Whether a delivery is a meeting's added, mic or ended notice (decision 0061, M11): informational or soon out of date, so no list of what waits holds it; the record keeps it. */
+export function isMeetingNotice(contentType: string): boolean {
+  return MEETING_NOTICES.has(essenceOf(contentType));
 }
 
 export function jobOf(contentType: string): ItemJob {

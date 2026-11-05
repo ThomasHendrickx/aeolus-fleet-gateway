@@ -4,6 +4,7 @@ import type { ConnectionStore, FleetRefusal } from '../connection/ports.js';
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import type { HeldDeliveries } from './held-deliveries.js';
+import { isMeetingNotice } from './item-job.js';
 import { chatInboxEntryOf, chatOpenedEntryOf, type ChatInboxEntry } from './inbox-entry.js';
 import { asPersonCrew, type PersonCaller, type PersonCrewError, type PersonCrewToken } from './person-crew.js';
 import type { OpenedDeliveries, PersonCrews, PersonDelivery, PersonShipDoor } from './ports.js';
@@ -103,7 +104,9 @@ export async function waitingOn(deps: { door: Pick<PersonShipDoor, 'inbox' | 'pu
  * only. A chat is a pull place (Bridge, CC7): it lists only the items of the
  * jobs on for it, every one not done whenever it arrived (CC20); what it
  * leaves out of what waits is left out of the count too. The gateway's own
- * steps are never listed: they show in Bridge only (BH8).
+ * steps are never listed: they show in Bridge only (BH8). A meeting's added,
+ * mic and ended notices are never listed either, nor counted: the record
+ * keeps them.
  */
 export function createReadInbox(deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; held: HeldDeliveries; opened: OpenedDeliveries; routes: Routes; defaults: RoutingDefaults; connections: Pick<ConnectionStore, 'binding'> }): ReadInbox {
   return async (caller) => {
@@ -115,13 +118,13 @@ export function createReadInbox(deps: { crewPersonShip: CrewPersonShip; crews: P
     const [routes, gateway] = await Promise.all([deps.routes.list(ship), deps.connections.binding(ship.fleetId)]);
     const routing = ownStepsInBridgeOnly(routingOf(routes, deps.defaults), gateway?.shipId);
     const isWaiting = new Set<string>(waiting.value.deliveries.map(({ deliveryId }) => deliveryId));
-    const listed = waiting.value.deliveries.filter((delivery) => routing.isShowing('chat', delivery));
+    const listed = waiting.value.deliveries.filter((delivery) => !isMeetingNotice(delivery.contentType) && routing.isShowing('chat', delivery));
     const opened = await deps.opened.list(ship.fleetId, ship.shipId);
     return ok({
       waiting: waiting.value.waiting - (waiting.value.deliveries.length - listed.length),
       deliveries: listed.map(chatInboxEntryOf),
       // One opened before the gateway kept its content type is everything else.
-      opened: opened.filter(({ deliveryId, contentType, sentAt, senderShipId }) => !isWaiting.has(deliveryId) && routing.isShowing('chat', { contentType: contentType ?? '', sentAt, senderShipId })).map(chatOpenedEntryOf),
+      opened: opened.filter(({ deliveryId, contentType, sentAt, senderShipId }) => !isWaiting.has(deliveryId) && !isMeetingNotice(contentType ?? '') && routing.isShowing('chat', { contentType: contentType ?? '', sentAt, senderShipId })).map(chatOpenedEntryOf),
     });
   };
 }
