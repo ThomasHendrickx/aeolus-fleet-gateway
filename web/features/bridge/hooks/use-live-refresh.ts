@@ -6,29 +6,31 @@ import { useEffect, useState } from 'react';
 /** The page's live updates, which the web app's server follows on the gateway's API for the browser. */
 export const CHANGES_PATH = '/bridge/changes';
 
-/** The browser's stream of the page's changes, as an EventSource answers it. */
-export interface ChangesStream {
-  onopen: ((event: Event) => void) | null;
-  onerror: ((event: Event) => void) | null;
-  onmessage: ((event: Event) => void) | null;
-}
-
 /** What the page does as its stream goes: read itself again, and say whether it is live. */
 export interface FollowingPage {
   readonly readAgain: () => void;
   readonly showLive: (isLive: boolean) => void;
 }
 
+/** What the page hears of its stream: it opened, it dropped, or it told a change. */
+export interface ChangesFollower {
+  readonly opened: () => void;
+  readonly dropped: () => void;
+  readonly changed: () => void;
+}
+
 /** Follows the page's stream: each change reads the page again, and the page is live while the stream is open. */
-export function followChangesStream(changes: ChangesStream, page: FollowingPage): void {
-  changes.onopen = () => {
-    page.showLive(true);
-  };
-  changes.onerror = () => {
-    page.showLive(false);
-  };
-  changes.onmessage = () => {
-    page.readAgain();
+export function changesFollowerOf(page: FollowingPage): ChangesFollower {
+  return {
+    opened: () => {
+      page.showLive(true);
+    },
+    dropped: () => {
+      page.showLive(false);
+    },
+    changed: () => {
+      page.readAgain();
+    },
   };
 }
 
@@ -43,7 +45,10 @@ export function useLiveRefresh(fleetId: string): boolean {
   const [isLive, setIsLive] = useState(false);
   useEffect(() => {
     const changes = new EventSource(`${CHANGES_PATH}?fleet=${encodeURIComponent(fleetId)}`);
-    followChangesStream(changes, { readAgain: () => { router.refresh(); }, showLive: setIsLive });
+    const follower = changesFollowerOf({ readAgain: () => { router.refresh(); }, showLive: setIsLive });
+    changes.onopen = follower.opened;
+    changes.onerror = follower.dropped;
+    changes.onmessage = follower.changed;
     return () => {
       changes.close();
     };
