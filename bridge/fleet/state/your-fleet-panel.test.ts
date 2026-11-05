@@ -92,10 +92,10 @@ describe('Your fleet beside Bridge home, drawn by Harbour from @aeolus-fleet/ui'
 });
 
 describe("the phone's Fleet tab, drawn by Harbour from @aeolus-fleet/ui", () => {
-  it("leaves the heading to the phone's top bar, straight to the numbers; Your fleet and the lead line on a wider screen", () => {
+  it("leaves the heading to the phone's top bar, straight to the numbers; Your fleet on a wider screen, with no lead line: Harbour's numbers say it (Thomas, 5 Nov)", () => {
     const markup = fleetPage({ kind: 'read', value: FLEET });
 
-    expect([/<div class="max-sm:sr-only"><h1[^>]*>Your fleet<\/h1>/.test(markup), markup.includes('<p class="max-sm:hidden text-muted-foreground">5 ships:')]).toEqual([true, true]);
+    expect([/<div class="max-sm:sr-only"><h1[^>]*>Your fleet<\/h1><\/div>/.test(markup), markup.includes('5 ships')]).toEqual([true, false]);
   });
 
   it("shows Harbour's six numbers and a tile per ship", () => {
