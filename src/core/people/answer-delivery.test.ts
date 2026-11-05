@@ -115,6 +115,19 @@ describe('a person answers a delivery they opened', () => {
     expect({ calls: ship.calls, kept: opened.held.size }).toEqual({ calls: [`reply(${OPENED.messageId})`], kept: 1 });
   });
 
+  it('clears a question whose asker was retired, done as not sent, saying why: nothing can be answered to a retired ship', async () => {
+    ship.refusals.reply.push({ code: 'NOT_FOUND', message: 'tracker is retired: a retired ship is never addressed again' });
+
+    const answered = await answerDelivery({ caller: CALLER, place: 'bridge', deliveryId: OPENED.deliveryId, ...ANSWER });
+
+    expect({ answered, calls: ship.calls, kept: opened.held.size, outcomes: outcomes.held }).toMatchObject({
+      answered: { isOk: false, error: { kind: 'SEND_REFUSED', message: 'tracker was retired, so it cannot receive an answer: the question is cleared' } },
+      calls: [`reply(${OPENED.messageId})`, `handled(${OPENED.deliveryId})`],
+      kept: 0,
+      outcomes: [{ deliveryId: OPENED.deliveryId, place: 'bridge', kind: 'notSent' }],
+    });
+  });
+
   it.each([
     { what: 'a delivery the person did not open', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0009' },
     { what: "a delivery another person ship opened", deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003' },
