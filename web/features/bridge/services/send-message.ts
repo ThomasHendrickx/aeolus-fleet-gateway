@@ -10,7 +10,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 import { z } from 'zod';
 
 import type { GatewayRouter } from '../../../../src/adapters/trpc/router.js';
-import { SHIP_STATES, type ShipState, type YourFleet } from '../fleet/services/your-fleet';
+import { SHIP_STATES, type ShipState, type YourFleet } from '../../../../bridge/fleet/services/your-fleet';
 
 /** Who the person can send a message to, as the API answers it: the ships their person ship may send to now, and the name it sends as. */
 export type SendTo = inferRouterOutputs<GatewayRouter>['people']['sendTo'];
@@ -23,8 +23,8 @@ export interface SendableShip {
 
 /**
  * The ships the person ship may send to, each in its state as Your fleet
- * shows it, in Your fleet's order: alerts first, then waiting, working and
- * idle, ties by name; a ship Your fleet does not show, or every ship when it
+ * shows it, in Your fleet's order: alerts first, then awaiting crew, blocked,
+ * working and idle, ties by name; a ship Your fleet does not show, or every ship when it
  * could not be read, comes after, with no state.
  */
 export function sendableShipsOf(ships: readonly string[], fleet: YourFleet | undefined): readonly SendableShip[] {

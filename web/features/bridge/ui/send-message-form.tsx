@@ -5,7 +5,7 @@ import { CircleAlert, Info, LoaderCircle, RotateCw, Search, Send, Ship, X } from
 import { useState } from 'react';
 
 import { BUTTONS } from '../../forms/ui/look';
-import { STATE_LABELS, type ShipState } from '../fleet/services/your-fleet';
+import { STATE_LABELS, type ShipState } from '../../../../bridge/fleet/services/your-fleet';
 import { isSendable, shipsMatching, type SendableShip, type SendFailure } from '../services/send-message';
 
 /** Where the form stands: written in, on its way to the fleet, or failed, kept for the person. */
@@ -20,7 +20,8 @@ export type SendToRead =
 /** Each state's tone, as Your fleet colours its word. */
 const STATE_TONES: Record<ShipState, string> = {
   alert: 'bg-tone-attention-bg text-tone-attention-fg',
-  waiting: 'bg-tone-waiting-bg text-tone-waiting-fg',
+  awaitingCrew: 'bg-tone-waiting-bg text-tone-waiting-fg',
+  blocked: 'bg-tone-blocked-bg text-tone-blocked-fg',
   working: 'bg-tone-ok-bg text-tone-ok-fg',
   idle: 'bg-tone-ended-bg text-tone-ended-fg',
 };

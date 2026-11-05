@@ -2,7 +2,7 @@ import { cache } from 'react';
 
 import type { GatewayApi } from '../../../../lib/gateway-api/gateway-api';
 import { refusalCodeOf, refusalMessageOf } from '../../../../lib/gateway-api/page-api';
-import type { YourFleet } from '../services/your-fleet';
+import type { YourFleet } from '../../../../../bridge/fleet/services/your-fleet';
 
 /**
  * What Bridge read of Your fleet: the fleet as the account reads it; that the

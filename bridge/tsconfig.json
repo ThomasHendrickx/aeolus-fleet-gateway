@@ -1,0 +1,6 @@
+{
+  // Bridge is part of the web app: its files compile as the web app's do, beside it.
+  "extends": "../web/tsconfig.json",
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}

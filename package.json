@@ -36,7 +36,7 @@
     "postinstall": "prisma generate",
     "generate": "prisma generate",
     "build": "tsc --project tsconfig.build.json && next build web",
-    "typecheck": "tsc --project tsconfig.json && next typegen web && tsc --project web/tsconfig.json",
+    "typecheck": "tsc --project tsconfig.json && next typegen web && tsc --project web/tsconfig.json && tsc --project bridge/tsconfig.json",
     "lint": "eslint --max-warnings 0 .",
     "test": "vitest run",
     "test:unit": "vitest run --project '*:unit'",
@@ -47,8 +47,8 @@
   },
   "dependencies": {
     "@a2a-js/sdk": "1.3.0",
-    "@aeolus-fleet/common": "^0.37.0",
-    "@aeolus-fleet/ui": "^0.37.0",
+    "@aeolus-fleet/common": "^0.38.0",
+    "@aeolus-fleet/ui": "^0.38.0",
     "@base-ui/react": "^1.9.0",
     "@fastify/websocket": "^11.3.4",
     "@modelcontextprotocol/client": "^2.3.1",
@@ -72,7 +72,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@aeolus-fleet/core": "^0.37.0",
+    "@aeolus-fleet/core": "^0.38.0",
     "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/ext-tasks": "0.2.2",
     "@tailwindcss/postcss": "^4.3.3",
