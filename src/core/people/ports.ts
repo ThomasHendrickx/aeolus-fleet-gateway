@@ -341,6 +341,8 @@ export interface WebPush {
 /** Outbound port: the fleet's active ships as the actor reads them (fleet.list), each with its kind, its crew's report and its open alerts; retired ships are not read. */
 export interface ActiveShips {
   list(as: ActorCredential): Promise<Result<ListedShip[], FleetRefusal>>;
+  /** How many ships the actor reads are in an alert, from the numbers the fleet counts itself: one read, whatever the number of ships. */
+  alertCount(as: ActorCredential): Promise<Result<number, FleetRefusal>>;
 }
 
 /** An MCP client signed in through the gateway as a person ship: its client's name, and until when its sign-in lives. */

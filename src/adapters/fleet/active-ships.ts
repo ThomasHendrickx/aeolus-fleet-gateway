@@ -32,6 +32,9 @@ const harbourPageSchema = z.object({
   nextCursor: harbourOutputSchema.shape.nextCursor,
 });
 
+/** The numbers core answers on the first page of Harbour; Bridge's shell reads only the alert number. */
+const harbourNumbersSchema = z.object({ counts: z.object({ alert: z.int().nonnegative() }).nullable() });
+
 /**
  * The fleet's active ships as the actor reads them, for Your fleet: core's
  * Harbour (fleet.harbour, docs/design/fleet-overview) answers each ship's
@@ -43,6 +46,14 @@ const harbourPageSchema = z.object({
  */
 export function createActiveShips(fleetUrl: string): ActiveShips {
   return {
+    alertCount: async (as) => {
+      const read = await readAs(fleetUrl, { as, procedure: 'harbour', input: { limit: 1 }, isTrpcOnly: true });
+      if (!read.isOk) {
+        return read;
+      }
+      const numbers = harbourNumbersSchema.safeParse(read.value);
+      return numbers.success && numbers.data.counts !== null ? ok(numbers.data.counts.alert) : err({ code: 'UNAVAILABLE', message: 'The fleet answered no numbers' });
+    },
     list: async (as) => {
       const ships: ListedShip[] = [];
       let cursor: string | undefined;

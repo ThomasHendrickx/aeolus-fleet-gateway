@@ -10,7 +10,7 @@
 import { cache } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
-import { readYourFleet } from '../fleet/hooks/read-your-fleet';
+import { readFleetAlertCount } from '../fleet/hooks/read-fleet-alert-count';
 import { refusalCodeOf } from '../../../lib/gateway-api/page-api';
 import type { ArgoInboxNotice } from '../services/argo-inbox-notice';
 import type { ArgoSection } from '../services/argo-section';
@@ -147,12 +147,12 @@ export async function readBasketCount(api: GatewayApi): Promise<number> {
 /**
  * The counts Bridge's shell shows on every page: what waits and the unseen
  * to stay aware of, from Bridge home's read, the basket's answers, the
- * ships with an alert, from Your fleet's read, and what waits at argo. A count it cannot read now is
+ * ships with an alert, the number the fleet counts, and what waits at argo. A count it cannot read now is
  * left out.
  */
 export async function readShellCounts(api: GatewayApi): Promise<ShellCounts> {
-  const [home, basket, fleet, argo] = await Promise.all([readBridgeHome(api), readBasketCount(api), readYourFleet(api), readArgoSection(api)]);
-  return shellCountsOf({ home, basket, fleetAlerts: fleet.kind === 'read' ? fleet.value.counts.alert : undefined, argo: argo?.count });
+  const [home, basket, fleet, argo] = await Promise.all([readBridgeHome(api), readBasketCount(api), readFleetAlertCount(api), readArgoSection(api)]);
+  return shellCountsOf({ home, basket, fleetAlerts: fleet, argo: argo?.count });
 }
 
 export function readRecordPage(api: GatewayApi, cursor: string | null): Promise<BridgeRead<RecordPage>> {

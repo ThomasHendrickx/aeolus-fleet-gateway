@@ -25,6 +25,7 @@ function activeShips(answer: { readonly ships: readonly ListedShip[] } | FleetRe
   const readAs: ActorCredential[] = [];
   return {
     readAs,
+    alertCount: () => Promise.resolve(ok(0)),
     list: (as) => {
       readAs.push(as);
       return Promise.resolve('ships' in answer ? ok([...answer.ships]) : err(answer));
