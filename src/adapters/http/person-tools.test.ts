@@ -3,6 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { meetingWords } from './person-words.js';
 import { HEADS_MEETING_ID, aMeetingRead } from '../../../test/support/meeting-fakes.js';
 import { CHARLOTTE_GRANT, SENT_MESSAGE_ID } from '../../../test/support/people-fakes.js';
 import type { ChangeOwnMic } from '../../core/meetings/change-own-mic.js';
@@ -224,7 +225,7 @@ describe("a person's MCP client takes part in a meeting", () => {
     const read = await mcp.callTool({ name: 'aeolus_meeting', arguments: { meetingId: HEADS_MEETING_ID, cursor: 'msg_01m5qa5j85mgd4z61d9c2k0001' } });
 
     expect({ read, asked }).toEqual({
-      read: { content: [{ type: 'text', text: JSON.stringify({ ...aMeetingRead(), yourMic: { kind: 'requested', place: 1 } }) }] },
+      read: { content: [{ type: 'text', text: meetingWords({ meeting: aMeetingRead(), mic: { kind: 'requested', place: 1 } }) }] },
       asked: [{ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID, cursor: 'msg_01m5qa5j85mgd4z61d9c2k0001' }],
     });
   });
@@ -433,15 +434,24 @@ describe('a person opens a delivery with aeolus_open', () => {
 
     const called = await mcp.callTool({ name: 'aeolus_open', arguments: { deliveryId: opened.deliveryId } });
 
-    expect(JSON.parse(textOf(called))).toEqual({ deliveryId: opened.deliveryId, from: 'chief-of-staff', title: 'You were added to a meeting', sentAt: '2026-10-19T08:00:00.000Z', said: opened.said, meetingId });
+    expect(textOf(called)).toBe(`chief-of-staff added you to the meeting “Weekly heads”. (meetingId ${meetingId})`);
   });
 
-  it('answers any other delivery whole, as before', async () => {
+  it('answers any other delivery whole, in words', async () => {
     const opened = { ...OPENED, contentType: 'text/plain', payload: 'The build is red', meetingId: null, said: null };
     const mcp = await connected(personTools({ openDelivery: () => Promise.resolve(ok(opened)) }).deps);
 
     const called = await mcp.callTool({ name: 'aeolus_open', arguments: { deliveryId: opened.deliveryId } });
 
-    expect(JSON.parse(textOf(called))).toEqual({ ...OPENED, contentType: 'text/plain', payload: 'The build is red', meetingId: null });
+    expect(textOf(called)).toBe('chief-of-staff, 2026-10-19 08:00 UTC: You were added to a meeting\nThe build is red');
+  });
+
+  it('answers the inbox in words, with the deliveryId to open each by', async () => {
+    const entry = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' as const, from: 'tracker', title: 'The build is red', sentAt: '2026-10-19T08:00:00.000Z', job: 'everything-else' as const, pick: null };
+    const mcp = await connected(personTools({ readInbox: () => Promise.resolve(ok({ waiting: 1, deliveries: [entry], opened: [] })) }).deps);
+
+    const called = await mcp.callTool({ name: 'aeolus_inbox', arguments: {} });
+
+    expect(textOf(called)).toBe('1 waits for you.\nWaiting:\n1. tracker, 2026-10-19 08:00 UTC, a message: The build is red (deliveryId dlv_01m3tbfspe96yf1rnr4ank0001)\nOpened and not answered or done yet: none.');
   });
 });

@@ -22,7 +22,8 @@ import type { AnswerDelivery } from '../../core/people/answer-delivery.js';
 import type { DoneDelivery } from '../../core/people/done-delivery.js';
 import type { Place } from '../../core/people/item-outcome.js';
 import type { ListShips } from '../../core/people/list-ships.js';
-import type { OpenDelivery, OpenedView } from '../../core/people/open-delivery.js';
+import { inboxWords, meetingWords, openedWords } from './person-words.js';
+import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { GrantCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
 import type { InboxState, ReadInboxState } from '../../core/people/read-inbox-state.js';
@@ -240,11 +241,7 @@ const SIGNED_OUT = 'SIGNED_OUT';
 const WWW_AUTHENTICATE_META = 'mcp/www_authenticate';
 
 /** A tool's answer as one text block of JSON. */
-/** A meeting notice is answered as its sentence with the meeting to read, never as its payload and content type; any other delivery whole. */
-function openedAnswerOf(opened: OpenedView) {
-  const { deliveryId, from, title, sentAt, meetingId, said } = opened;
-  return said === null ? { deliveryId, from, title, sentAt, contentType: opened.contentType, payload: opened.payload, meetingId, stale: opened.stale } : { deliveryId, from, title, sentAt, said, meetingId };
-}
+const told = (text: string) => ({ content: [{ type: 'text' as const, text }] });
 
 const answered = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
 
@@ -297,7 +294,7 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
       }
       case INBOX_TOOL.name: {
         const read = await deps.readInbox(caller);
-        return read.isOk ? answered(read.value) : refused(read.error);
+        return read.isOk ? told(inboxWords(read.value)) : refused(read.error);
       }
       case OPEN_TOOL.name: {
         const sent = deliveryArgumentsSchema.safeParse(params.arguments);
@@ -305,7 +302,7 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
           return toolError(`${OPEN_TOOL.name} takes the deliveryId your inbox lists`);
         }
         const dealt = await deps.openDelivery({ caller, place: CHAT, deliveryId: sent.data.deliveryId });
-        return dealt.isOk ? answered(openedAnswerOf(dealt.value)) : refused(dealt.error);
+        return dealt.isOk ? told(openedWords(dealt.value)) : refused(dealt.error);
       }
       case DONE_TOOL.name: {
         const sent = doneArgumentsSchema.safeParse(params.arguments);
@@ -344,7 +341,7 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
         }
         const { cursor, meetingId } = sent.data;
         const read = await deps.readMeeting({ caller, meetingId, ...(cursor === undefined ? {} : { cursor }) });
-        return read.isOk ? answered({ ...read.value.meeting, yourMic: read.value.mic }) : refused(read.error);
+        return read.isOk ? told(meetingWords(read.value)) : refused(read.error);
       }
       case ASK_FOR_SERVER_TOOL.name: {
         const sent = askForServerArgumentsSchema.safeParse(params.arguments);
