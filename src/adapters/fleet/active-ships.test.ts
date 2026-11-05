@@ -84,6 +84,30 @@ describe("the fleet's Harbour, read as the account", () => {
     });
   });
 
+  it("answers core 0.38's awaiting crew and blocked ships as waiting, the state Bridge shows them in", async () => {
+    pages = new Map([
+      [
+        undefined,
+        answer({
+          items: [
+            { ...aTile(FIRST, 'github'), kind: 'app', state: 'awaitingCrew' },
+            { ...aTile(SECOND, 'reviewer'), state: 'blocked', note: 'needs a review' },
+          ],
+          nextCursor: null,
+          counts: { ships: 2, alert: 0, awaitingCrew: 1, blocked: 1, working: 0, idle: 0 },
+        }),
+      ],
+    ]);
+
+    await expect(createActiveShips(base).list(AS_ACCOUNT)).resolves.toEqual({
+      isOk: true,
+      value: [
+        { shipId: FIRST, name: 'github', kind: 'app', state: 'waiting', note: null, lastActivityAt: null },
+        { shipId: SECOND, name: 'reviewer', kind: 'agent', state: 'waiting', note: 'needs a review', lastActivityAt: null },
+      ],
+    });
+  });
+
   it("answers the fleet's refusal", async () => {
     pages = new Map([[undefined, { status: 403, body: { error: { message: 'fleet.harbour needs the fleet:read scope', data: { code: 'FORBIDDEN' } } } }]]);
 

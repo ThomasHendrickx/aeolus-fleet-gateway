@@ -1,10 +1,36 @@
 import { harbourOutputSchema } from '@aeolus-fleet/common';
 import { PAGE_SIZE_MAX } from '@aeolus-fleet/common/rules';
+import { z } from 'zod';
 
-import type { ListedShip } from '../../core/people/your-fleet.js';
+import type { ListedShip, ShipState } from '../../core/people/your-fleet.js';
 import type { ActiveShips } from '../../core/people/ports.js';
 import { err, ok } from '../../core/shared/result.js';
 import { readAs } from './actor-door.js';
+
+/**
+ * Bridge's state of each state core answers. Core 0.38.0 splits waiting into
+ * awaiting crew and blocked (aeolus-fleet#1618), the two things waiting meant;
+ * Bridge still shows both as waiting.
+ */
+const SHIP_STATE_OF: Readonly<Record<'alert' | 'waiting' | 'awaitingCrew' | 'blocked' | 'working' | 'idle', ShipState>> = {
+  alert: 'alert',
+  waiting: 'waiting',
+  awaitingCrew: 'waiting',
+  blocked: 'waiting',
+  working: 'working',
+  idle: 'idle',
+};
+
+const harbourStateSchema = z.enum(['alert', 'waiting', 'awaitingCrew', 'blocked', 'working', 'idle']).transform((state) => SHIP_STATE_OF[state]);
+
+/**
+ * A page of fleet.harbour as Bridge reads it: common's tile with the state of
+ * either core, and no numbers, which the gateway counts itself.
+ */
+const harbourPageSchema = z.object({
+  items: z.array(harbourOutputSchema.shape.items.element.extend({ state: harbourStateSchema })),
+  nextCursor: harbourOutputSchema.shape.nextCursor,
+});
 
 /**
  * The fleet's active ships as the actor reads them, for Your fleet: core's
@@ -25,7 +51,7 @@ export function createActiveShips(fleetUrl: string): ActiveShips {
         if (!read.isOk) {
           return read;
         }
-        const page = harbourOutputSchema.safeParse(read.value);
+        const page = harbourPageSchema.safeParse(read.value);
         if (!page.success) {
           return err({ code: 'UNAVAILABLE', message: 'The fleet answered no ships' });
         }
