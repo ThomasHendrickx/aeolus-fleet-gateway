@@ -1,8 +1,7 @@
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import { STEP_CONTENT_TYPE, type FleetId, type ShipId } from '@aeolus-fleet/common';
 
 import type { ConnectionStore } from '../connection/ports.js';
 import type { CallSender } from '../mcp-in/ports.js';
-import { STEP_CONTENT_TYPE } from '../people/item-job.js';
 import type { SlackLinkSteps } from './ports.js';
 
 /** Asks a person with no Slack link, in a fleet whose workspace is connected, to link Slack, unless they were asked since their last link. */

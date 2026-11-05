@@ -1,8 +1,10 @@
+import { STEP_OUTCOME_CONTENT_TYPE } from '@aeolus-fleet/common';
+
 import type { ItemOutcomes } from '../people/item-outcome.js';
 import { alreadyTextOf } from '../people/opened-of.js';
 import { KEY_UNAVAILABLE, SEALED_MESSAGE } from '../people/person-crew.js';
 import type { InboxChanges, OpenedDeliveries, PersonCrews, PersonShipDoor } from '../people/ports.js';
-import { STEP_OUTCOME_CONTENT_TYPE, stepOutcomePayloadOf } from '../people/step-outcome.js';
+import { stepOutcomePayloadOf } from '../people/step-outcome.js';
 import type { Clock } from '../shared/clock.js';
 import { ok, type Result } from '../shared/result.js';
 import type { SlackApps, SlackLinks, SlackMessages, SlackPosts, SlackSignatures } from './ports.js';

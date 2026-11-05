@@ -36,6 +36,12 @@ import {
   type Party,
   type ReceivedDelivery,
   type ShipId,
+  isStepReplacementContentType,
+  isStepWithdrawalContentType,
+  recordOutputSchema,
+  stepReplacementSchema,
+  stepSchema,
+  stepWithdrawalSchema,
 } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
@@ -45,7 +51,7 @@ import type { MeetingRead, MeetingShip, OwnMicChange, PersonMeetingDoor } from '
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
-import { essenceOf, jobOf, STEP_REPLACEMENT_CONTENT_TYPE, STEP_WITHDRAWAL_CONTENT_TYPE } from '../../core/people/item-job.js';
+import { jobOf } from '../../core/people/item-job.js';
 import type { AccountDoor, PersonDelivery, PersonShipDoor } from '../../core/people/ports.js';
 import type { Owners } from '../../core/requests/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
@@ -128,7 +134,7 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
 /** A delivery to a person ship as the gateway shows it, with its headline and the questions and steps it asks and withdraws read from its payload. */
 function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, contentType, payload, sentAt, inReplyTo, meetingId }: ReceivedDelivery): PersonDelivery {
   const asked = askedQuestionOf({ contentType, payload });
-  const replacingStep = isStepReplacement(contentType) ? parsedOf(stepReplacementSchema, payload) : undefined;
+  const replacingStep = isStepReplacementContentType(contentType) ? parsedOf(replacingStepSchema, payload) : undefined;
   return {
     deliveryId,
     messageId,
@@ -140,7 +146,7 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     askedQuestionId: asked?.id ?? null,
     withdrawnQuestionId: withdrawalOf({ contentType, payload })?.questionId ?? null,
     stepId: replacingStep?.step.id ?? (jobOf(contentType) === 'do' ? (parsedOf(stepIdSchema, payload) ?? null) : null),
-    withdrawnStepId: replacingStep?.stepId ?? (isStepWithdrawal(contentType) ? (parsedOf(stepWithdrawalSchema, payload) ?? null) : null),
+    withdrawnStepId: replacingStep?.stepId ?? (isStepWithdrawalContentType(contentType) ? (parsedOf(withdrawnStepIdSchema, payload) ?? null) : null),
     pick: asked?.pick.option ?? null,
     stepLink: (replacingStep === undefined ? (jobOf(contentType) === 'do' ? parsedOf(stepLinkSchema, payload) : undefined) : parsedOf(replacingStepLinkSchema, payload)) ?? null,
     sentAt: new Date(sentAt),
@@ -187,7 +193,7 @@ function meetingReadOf(read: MeetingOutput): MeetingRead {
 
 /** The headline of an item (Bridge, CC10): a question's title, the new one's of a replacement, a step's title, an alert's or a notice's headline; none for any other message, or one whose payload does not read. */
 export function itemHeadlineOf(carried: { contentType: string; payload: string }): string | null {
-  const replacingStep = isStepReplacement(carried.contentType) ? parsedOf(stepReplacementSchema, carried.payload) : undefined;
+  const replacingStep = isStepReplacementContentType(carried.contentType) ? parsedOf(replacingStepSchema, carried.payload) : undefined;
   return askedQuestionOf(carried)?.title ?? replacingStep?.step.title ?? headlineOf(carried);
 }
 
@@ -202,40 +208,12 @@ function askedQuestionOf(carried: { contentType: string; payload: string }) {
   return isQuestionContentType(carried.contentType) ? parsedOf(questionSchema, carried.payload) : (withdrawalOf(carried)?.replacement ?? undefined);
 }
 
-/**
- * A page of `ship.record` (core's release after 0.35.0, Bridge B1), as
- * common words it there: until common carries recordOutputSchema, the
- * gateway reads it with this one, which moves to common's then.
- */
-const recordOutputSchema = z.object({
-  items: z.array(deliveryOutputSchema.extend({ isPayloadUnreadable: z.boolean() })),
-  nextCursor: idSchema('delivery').nullable(),
-});
+/** The uuid of the step a step asks (Bridge, CC14). */
+const stepIdSchema = stepSchema.transform(({ id }) => id);
 
-/**
- * The uuid of the step a step asks (Bridge, CC14), as common's stepSchema
- * words it in its release after 0.35.0 (Bridge B2): until common carries it,
- * the gateway reads it with this one, which moves to common's then.
- */
-const stepIdSchema = z.object({ id: z.uuid() }).transform(({ id }) => id);
-
-/**
- * The step a step withdrawal names, and the one a step replacement names
- * with the new step it asks (Bridge, CC14), as common's stepWithdrawalSchema
- * and stepReplacementSchema word them in its release after 0.35.0: until
- * the gateway takes that release, it reads them with these, which move to
- * common's then.
- */
-const stepWithdrawalSchema = z.object({ stepId: z.uuid() }).transform(({ stepId }) => stepId);
-const stepReplacementSchema = z.object({ stepId: z.uuid(), step: z.object({ id: z.uuid(), title: z.string().min(1) }) }).refine(({ stepId, step }) => step.id !== stepId);
-
-function isStepWithdrawal(contentType: string): boolean {
-  return essenceOf(contentType) === STEP_WITHDRAWAL_CONTENT_TYPE;
-}
-
-function isStepReplacement(contentType: string): boolean {
-  return essenceOf(contentType) === STEP_REPLACEMENT_CONTENT_TYPE;
-}
+/** The step a step withdrawal names, and the one a step replacement names (Bridge, CC14). */
+const withdrawnStepIdSchema = stepWithdrawalSchema.transform(({ stepId }) => stepId);
+const replacingStepSchema = stepReplacementSchema.refine(({ stepId, step }) => step.id !== stepId);
 
 /** The link where a step is done, read as stepSchema words it there: an http or https URL; none of a step without one. */
 const stepLinkSchema = z.object({ link: z.url({ protocol: /^https?$/ }) }).transform(({ link }) => link);

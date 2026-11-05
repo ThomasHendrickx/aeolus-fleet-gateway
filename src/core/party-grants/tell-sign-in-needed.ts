@@ -1,9 +1,8 @@
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import { STEP_CONTENT_TYPE, type FleetId, type ShipId } from '@aeolus-fleet/common';
 
 import type { ConnectionStore } from '../connection/ports.js';
 import type { CallSender } from '../mcp-in/ports.js';
 import type { PartyStore } from '../parties/ports.js';
-import { STEP_CONTENT_TYPE } from '../people/item-job.js';
 import type { GrantLost } from './party-grant.js';
 import type { SignInNotices } from './ports.js';
 

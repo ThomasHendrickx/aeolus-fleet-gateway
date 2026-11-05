@@ -1,9 +1,11 @@
+import { STEP_OUTCOME_CONTENT_TYPE } from '@aeolus-fleet/common';
+
 import { refuse, type DomainError } from '../shared/errors.js';
 import type { Result } from '../shared/result.js';
 import type { Place } from './item-outcome.js';
 import { handledOf, openedOf, type Dealt, type DealDeps, type DealtError } from './opened-of.js';
 import { asPersonCrew, withOwnRefusal, type PersonCaller } from './person-crew.js';
-import { noteOf, STEP_OUTCOME_CONTENT_TYPE, stepOutcomePayloadOf, type StepOutcomeKind } from './step-outcome.js';
+import { noteOf, stepOutcomePayloadOf, type StepOutcomeKind } from './step-outcome.js';
 
 export type DoneDelivery = (input: {
   caller: PersonCaller;

@@ -4,13 +4,7 @@
  * and are counted in what waits; stay aware reaches them unasked, outside the
  * count; everything else is in the record only.
  */
-import { ALERT_CONTENT_TYPE, MEETING_ADDED_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, QUESTION_CONTENT_TYPE, REPLACEMENT_CONTENT_TYPE } from '@aeolus-fleet/common';
-
-/** The step, its withdrawal and replacement, and notice content types (CC14, CC15), as common names them from its release after 0.35.0; they move to common's constants then. */
-export const STEP_CONTENT_TYPE = 'application/vnd.aeolus.step+json';
-export const STEP_WITHDRAWAL_CONTENT_TYPE = 'application/vnd.aeolus.step-withdrawal+json';
-export const STEP_REPLACEMENT_CONTENT_TYPE = 'application/vnd.aeolus.step-replacement+json';
-export const NOTICE_CONTENT_TYPE = 'application/vnd.aeolus.notice+json';
+import { ALERT_CONTENT_TYPE, MEETING_ADDED_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, NOTICE_CONTENT_TYPE, QUESTION_CONTENT_TYPE, REPLACEMENT_CONTENT_TYPE, STEP_CONTENT_TYPE, STEP_REPLACEMENT_CONTENT_TYPE } from '@aeolus-fleet/common';
 
 export type ItemJob = 'decide' | 'do' | 'stay-aware' | 'everything-else';
 

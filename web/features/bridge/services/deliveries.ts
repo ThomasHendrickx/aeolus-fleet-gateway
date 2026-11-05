@@ -2,7 +2,7 @@
  * An item that reached a person, as Bridge shows it once opened, and the
  * answer its form sends: pure view logic, no React and no API client.
  */
-import { ALERT_CONTENT_TYPE, ANSWER_CONTENT_TYPE, answerSchema, isQuestionContentType, questionSchema, withdrawalOf, type Question } from '@aeolus-fleet/common';
+import { ALERT_CONTENT_TYPE, ANSWER_CONTENT_TYPE, answerSchema, isQuestionContentType, NOTICE_CONTENT_TYPE, questionSchema, STEP_CONTENT_TYPE, STEP_REPLACEMENT_CONTENT_TYPE, stepSchema, withdrawalOf, type Question } from '@aeolus-fleet/common';
 import { z } from 'zod';
 import type { inferRouterOutputs } from '@trpc/server';
 
@@ -102,13 +102,6 @@ function stepLinkOf(href: string, bridgeHost: string): StepLink {
   return { href, address: `${url.host}${url.pathname.replace(/\/$/, '')}`, isOutside: url.host !== bridgeHost };
 }
 
-/** The step and step replacement content types (CC14), as common names them from its release after 0.35.0; they move to common's constants then. */
-const STEP_CONTENT_TYPE = 'application/vnd.aeolus.step+json';
-const STEP_REPLACEMENT_CONTENT_TYPE = 'application/vnd.aeolus.step-replacement+json';
-
-/** What Bridge reads of a step, as common's stepSchema words it from its release after 0.35.0 (Bridge B2); it moves to common's then. */
-const stepSchema = z.object({ title: z.string().min(1), why: z.string(), link: z.url({ protocol: /^https?$/ }).optional() });
-
 /** The schema a step is read with, by content type: a step's own, or the new step a step replacement asks. */
 const STEP_SCHEMAS = new Map<string, z.ZodType<z.infer<typeof stepSchema>>>([
   [STEP_CONTENT_TYPE, stepSchema],
@@ -133,9 +126,6 @@ export function stepOf(opened: { contentType: string; payload: string }, bridgeH
     return undefined;
   }
 }
-
-/** The notice content type (CC15), as common names it from its release after 0.35.0; it moves to common's constant then. */
-const NOTICE_CONTENT_TYPE = 'application/vnd.aeolus.notice+json';
 
 const BODIED = new Set([ALERT_CONTENT_TYPE, NOTICE_CONTENT_TYPE]);
 
