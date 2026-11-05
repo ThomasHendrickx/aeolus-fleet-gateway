@@ -3,6 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { meetingWords } from './person-words.js';
 import { HEADS_MEETING_ID, aMeetingRead } from '../../../test/support/meeting-fakes.js';
 import { CHARLOTTE_GRANT, SENT_MESSAGE_ID } from '../../../test/support/people-fakes.js';
 import type { ChangeOwnMic } from '../../core/meetings/change-own-mic.js';
@@ -18,6 +19,12 @@ import { personServerFor, type PersonToolsDeps } from './person-tools.js';
 // #1046). The tools only translate; the use cases decide.
 
 const DISCOVERY: PersonDiscovery = { ships: [{ name: 'tracker', type: 'issue-tracker', kind: 'app', statement: null }], types: [{ type: 'issue-tracker', reachable: 1 }] };
+
+/** The text of a tool's first content block. */
+function textOf(called: Awaited<ReturnType<Client['callTool']>>): string {
+  const [first] = z.array(z.object({ text: z.string() })).parse(called.content);
+  return first?.text ?? '';
+}
 
 const unused = () => Promise.reject(new Error('not called in this test'));
 
@@ -218,7 +225,7 @@ describe("a person's MCP client takes part in a meeting", () => {
     const read = await mcp.callTool({ name: 'aeolus_meeting', arguments: { meetingId: HEADS_MEETING_ID, cursor: 'msg_01m5qa5j85mgd4z61d9c2k0001' } });
 
     expect({ read, asked }).toEqual({
-      read: { content: [{ type: 'text', text: JSON.stringify({ ...aMeetingRead(), yourMic: { kind: 'requested', place: 1 } }) }] },
+      read: { content: [{ type: 'text', text: meetingWords({ meeting: aMeetingRead(), mic: { kind: 'requested', place: 1 } }) }] },
       asked: [{ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID, cursor: 'msg_01m5qa5j85mgd4z61d9c2k0001' }],
     });
   });
@@ -414,5 +421,37 @@ describe("every answer of a person's tools carries their inbox state (gateway #2
     const mcp = await connected(personTools().deps);
 
     await expect(mcp.callTool({ name: 'aeolus_ships', arguments: {} })).resolves.toEqual({ content: [{ type: 'text', text: JSON.stringify(DISCOVERY) }] });
+  });
+});
+
+describe('a person opens a delivery with aeolus_open', () => {
+  const OPENED = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0s02' as const, from: 'chief-of-staff', title: 'You were added to a meeting', sentAt: '2026-10-19T08:00:00.000Z', stale: null };
+
+  it('answers a meeting notice as its sentence, with the meeting to read, and without its payload or content type', async () => {
+    const meetingId = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' as const;
+    const opened = { ...OPENED, contentType: 'application/vnd.aeolus.meeting.added+json', payload: `{"meetingId":"${meetingId}"}`, meetingId, said: 'chief-of-staff added you to the meeting “Weekly heads”.' };
+    const mcp = await connected(personTools({ openDelivery: () => Promise.resolve(ok(opened)) }).deps);
+
+    const called = await mcp.callTool({ name: 'aeolus_open', arguments: { deliveryId: opened.deliveryId } });
+
+    expect(textOf(called)).toBe(`chief-of-staff added you to the meeting “Weekly heads”. (meetingId ${meetingId})`);
+  });
+
+  it('answers any other delivery whole, in words', async () => {
+    const opened = { ...OPENED, contentType: 'text/plain', payload: 'The build is red', meetingId: null, said: null };
+    const mcp = await connected(personTools({ openDelivery: () => Promise.resolve(ok(opened)) }).deps);
+
+    const called = await mcp.callTool({ name: 'aeolus_open', arguments: { deliveryId: opened.deliveryId } });
+
+    expect(textOf(called)).toBe('chief-of-staff, 2026-10-19 08:00 UTC: You were added to a meeting\nThe build is red');
+  });
+
+  it('answers the inbox in words, with the deliveryId to open each by', async () => {
+    const entry = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' as const, from: 'tracker', title: 'The build is red', sentAt: '2026-10-19T08:00:00.000Z', job: 'everything-else' as const, pick: null };
+    const mcp = await connected(personTools({ readInbox: () => Promise.resolve(ok({ waiting: 1, deliveries: [entry], opened: [] })) }).deps);
+
+    const called = await mcp.callTool({ name: 'aeolus_inbox', arguments: {} });
+
+    expect(textOf(called)).toBe('1 waits for you.\nWaiting:\n1. tracker, 2026-10-19 08:00 UTC, a message: The build is red (deliveryId dlv_01m3tbfspe96yf1rnr4ank0001)\nOpened and not answered or done yet: none.');
   });
 });

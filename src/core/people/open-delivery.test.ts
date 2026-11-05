@@ -39,7 +39,7 @@ describe('a person opens a delivery that waits for their person ship', () => {
 
     await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toEqual({
       isOk: true,
-      value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null, stale: null },
+      value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null, said: null, stale: null },
     });
   });
 
@@ -48,6 +48,13 @@ describe('a person opens a delivery that waits for their person ship', () => {
     const { openDelivery } = opening([contribution]);
 
     await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
+  });
+
+  it('says a meeting notice as a sentence, so the person is never shown its payload', async () => {
+    const notice = aPersonDelivery({ ...NOTE, senderName: 'tracker', contentType: 'application/vnd.aeolus.meeting.mic+json', payload: '{"meetingId":"mtg_01m5qa5j85mgd4z61d9c2k4mtg"}', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
+    const { openDelivery } = opening([notice]);
+
+    await expect(openDelivery({ caller: CALLER, deliveryId: notice.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: true, value: { said: 'You hold the mic of a meeting.' } });
   });
 
   it('acknowledges it for the person, once it kept what an answer and the inbox need: its message, its sender, title, content type, the question it asks and when it was sent, never its payload', async () => {
@@ -178,7 +185,7 @@ describe('a person opens again a delivery they opened, from any client (aeolus-f
     expect({ again, isSame: JSON.stringify(again) === JSON.stringify(first) }).toEqual({
       again: {
         isOk: true,
-        value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null, stale: null },
+        value: { deliveryId: QUESTION.deliveryId, from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', contentType: QUESTION.contentType, payload: QUESTION.payload, meetingId: null, said: null, stale: null },
       },
       isSame: true,
     });

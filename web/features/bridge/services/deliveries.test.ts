@@ -35,6 +35,10 @@ describe('what an opened item shows of its payload (Bridge, CC15)', () => {
     ]).toEqual(['Its last report, 17:46.', 'Ready for review.']);
   });
 
+  it('shows the sentence a meeting notice says, not its JSON', () => {
+    expect(bodyOf({ contentType: 'application/vnd.aeolus.meeting.added+json', payload: '{"meetingId":"mtg_x"}', said: 'chief-of-staff added you to the meeting “Weekly heads”.' })).toBe('chief-of-staff added you to the meeting “Weekly heads”.');
+  });
+
   it('shows any other payload as it came, and one it cannot read as it came too', () => {
     expect([bodyOf({ contentType: 'application/json', payload: '{"build":"red"}' }), bodyOf({ contentType: 'application/vnd.aeolus.notice+json', payload: 'not json' })]).toEqual(['{"build":"red"}', 'not json']);
   });
