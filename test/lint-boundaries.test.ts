@@ -1,7 +1,9 @@
 import { ESLint } from 'eslint';
+import tseslint from 'typescript-eslint';
 import { describe, expect, it } from 'vitest';
 
-const eslint = new ESLint();
+// The files linted here do not exist, so type information is off; the boundaries need none.
+const eslint = new ESLint({ overrideConfig: [tseslint.configs.disableTypeChecked, { languageOptions: { parserOptions: { projectService: false } } }] });
 
 /** The messages of the import boundaries for source text linted as if it lived at `filePath`. */
 async function boundaryMessages(filePath: string, source: string): Promise<string[]> {
