@@ -28,12 +28,14 @@ What a ship tells the person in plain words reaches them where they look, Bridge
 | A row | The message icon, a dot while new, its first line as the title with Markdown marks taken off, Message, the sender, the places, its age; two lines of its text; Done in place and Open |
 | Done | Marking done... while it goes; then it leaves the list and is in Done ("Done in Bridge"). If the fleet does not answer, the row says so and Done stays |
 | Open | Opening marks it Seen: its whole text in Markdown, Your answer, Answer and Done, as Bridge draws an opened message today. Answer sends the text to the sender as the person and the message is done |
+| Many (20 questions and steps, 20 messages) | What waits stays whole: it is the count. Home shows only the 3 newest messages, then "Show all 20 messages". Bridge's sidebar gets Messages beneath Stay aware, counting the new ones; on the phone, a line on top of the Waiting tab, "8 new messages", leads to the Messages screen |
+| The Messages page | Every message, newest on top, Done and Open on each; "Mark the 12 seen done" ends the read ones in one go after a confirmation, never the new ones |
 
 | File | What it shows |
 | --- | --- |
-| [wide.html](wide.html), [wide.png](wide.png) | 1920 × 1080: before; a message arrives; marking done, the failure; done; open, typing, answered, done; Done; light and dark |
+| [wide.html](wide.html), [wide.png](wide.png) | 1920 × 1080: before; a message arrives; marking done, the failure; done; open, typing, answered, done; Done; with 20 and 20: home, home scrolled whole, the Messages page, marking the seen ones done; light and dark |
 | [laptop.html](laptop.html), [laptop.png](laptop.png) | The same at 1440 × 900 |
-| [phone.html](phone.html), [phone.png](phone.png) | 375 × 780: the Waiting tab before and after, its states; a message on its own screen; light and dark |
+| [phone.html](phone.html), [phone.png](phone.png) | 375 × 780: the Waiting tab before and after, its states; a message on its own screen; with 20 and 20: the Waiting tab's first screen and scrolled whole, the Messages screen; light and dark |
 
 Drawn in the kit of [`../bridge-fleet-width`](../bridge-fleet-width) (the approved Bridge sheets' Compact look, tokens and Geist fonts inlined); each PNG is its HTML in Chromium at 1x. A purple tag names the moment drawn and is not part of Bridge.
 
@@ -42,3 +44,4 @@ Drawn in the kit of [`../bridge-fleet-width`](../bridge-fleet-width) (the approv
 1. **Where messages show.** Drawn: their own Messages list beneath Waiting on you, outside the count. The alternative: in the Stay aware feed, beside alerts and notices; but those are done once seen, and a message waits for Done.
 2. **Which content types.** Drawn: text/plain and text/markdown only.
 3. **The row.** Drawn: first line as title, two lines of text, Done in place.
+4. **Many messages** (Thomas, on the first sheets: "Add a variant where you have 20 questions/actions and 20 messages --> this needs a mechanic to make this manageable in the UI"). Drawn: 3 newest on home, a Messages page in the sidebar with its new ones counted, and marking the seen ones done in one go.
