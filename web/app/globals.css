@@ -17,6 +17,9 @@
 /* The header every Aeolus app shows and the atoms it stands on come from common (header design H2). */
 @source '../../node_modules/@aeolus-fleet/ui/dist';
 
+/* Bridge's own folder, beside the web app (decision 0073). */
+@source '../../bridge';
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
@@ -51,6 +54,9 @@
   --color-tone-active-bg: var(--tone-active-bg);
   --color-tone-active-fg: var(--tone-active-fg);
   --color-tone-active-border: var(--tone-active-border);
+  --color-tone-blocked-bg: var(--tone-blocked-bg);
+  --color-tone-blocked-fg: var(--tone-blocked-fg);
+  --color-tone-blocked-border: var(--tone-blocked-border);
   --color-tone-ok-bg: var(--tone-ok-bg);
   --color-tone-ok-fg: var(--tone-ok-fg);
   --color-tone-ok-border: var(--tone-ok-border);
@@ -60,6 +66,7 @@
   --color-tone-ended-bg: var(--tone-ended-bg);
   --color-tone-ended-fg: var(--tone-ended-fg);
   --color-tone-ended-border: var(--tone-ended-border);
+  --color-live-band: var(--live-band);
 }
 
 @theme {

@@ -7,7 +7,7 @@ import { BridgeSkeleton } from '../../ui/bridge-skeleton';
 import { readConsoleUrl } from '../../hooks/read-console-url';
 import { readYourFleet } from '../hooks/read-your-fleet';
 import { BRIDGE_FLEET_PATH } from '../paths';
-import { FleetPage } from './fleet-page';
+import { FleetPage } from '../../../../../bridge/fleet/state/fleet-page';
 
 async function FleetParts({ api, fleetId }: { api: GatewayApi; fleetId: string }) {
   const [read, consoleUrl] = await Promise.all([readYourFleet(api), readConsoleUrl(fleetId)]);

@@ -74,8 +74,8 @@ describe('Your fleet beside Bridge home, drawn by Harbour from @aeolus-fleet/ui'
     const whileSomethingWaits = panel({ kind: 'read', value: FLEET }, 'hidden');
 
     expect([
-      /<div class="lg:hidden"><div class="@container min-w-0" data-testid="harbour-numbers"/.test(whenNothingWaits),
-      /<div class="max-lg:hidden"><section aria-label="Harbour"/.test(whenNothingWaits),
+      whenNothingWaits.includes('<div class="lg:hidden"><div class="@container min-w-0" data-testid="harbour-numbers"'),
+      whenNothingWaits.includes('<div class="max-lg:hidden"><section aria-label="Harbour"'),
       whileSomethingWaits.includes('data-testid="bridge-your-fleet" class="max-lg:hidden'),
     ]).toEqual([true, true, true]);
   });

@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { readYourFleet, type FleetRead } from '../fleet/hooks/read-your-fleet';
-import { YourFleetPanel } from '../fleet/state/your-fleet-panel';
+import { YourFleetPanel } from '../../../../bridge/fleet/state/your-fleet-panel';
 import { readArgoInboxNotice, readArgoSection, readBridgeHome, readDecidePlaces, readSlackDroppedOut, readTimeOf } from '../hooks/read-bridge';
 import { readConsoleUrl } from '../hooks/read-console-url';
 import { argoInboxNoticeOf } from '../services/argo-inbox-notice';

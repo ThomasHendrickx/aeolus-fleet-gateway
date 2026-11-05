@@ -48,7 +48,7 @@ describe('a person reads Your fleet', () => {
     expect(read).toEqual(
       ok({
         shipCount: 1,
-        counts: { alert: 0, waiting: 0, working: 1, idle: 0 },
+        counts: { alert: 0, awaitingCrew: 0, blocked: 0, working: 1, idle: 0 },
         groups: [{ group: 'agents', tiles: [{ shipId: 'shp_01m3tbfspe96yf1rnr4ank9rev', name: 'reviewer', state: 'working', note: 'reviewing #165', lastActivityAt: '2026-11-01T12:00:00.000Z' }] }],
       }),
     );
