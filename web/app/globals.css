@@ -105,6 +105,21 @@
   --text-code: var(--text-code);
   --text-code--line-height: var(--text-code--line-height);
 
+  /* A stale row leaving Bridge's list fades and its height closes (#240). */
+  --animate-row-leave: row-leave var(--duration-slow) var(--ease-exit) forwards;
+
+  @keyframes row-leave {
+    from {
+      max-height: 12rem;
+    }
+    to {
+      max-height: 0;
+      opacity: 0;
+      padding-block: 0;
+      border-top-width: 0;
+    }
+  }
+
   /* A row that just appeared starts on --highlight and fades back (Table). */
   --animate-highlight: highlight-fade var(--duration-highlight) var(--ease-standard);
 

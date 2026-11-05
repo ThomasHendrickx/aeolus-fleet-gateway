@@ -78,7 +78,8 @@ function keptOf(deps: DealDeps, opening: { caller: PersonCaller; shipId: OpenedD
     stepId: delivery.stepId,
     withdrawnStepId: delivery.withdrawnStepId,
     stepLink: delivery.stepLink,
-    openedIn: place,
+    // The gateway ending an item on its own is no sighting by the person.
+    openedIn: place === 'gateway' ? null : place,
     sentAt: delivery.sentAt,
     openedAt: deps.clock.now(),
   };
@@ -121,6 +122,31 @@ export async function doneIfStale(deps: DealDeps, look: { caller: PersonCaller; 
     await doneWith(deps, { ...withEach, deliveryId: withdrawer.deliveryId, kind: 'seen' });
   }
   return stale;
+}
+
+/**
+ * The gateway ends a question or step its asker withdrew or replaced, once it
+ * left Bridge's lists (Bridge #240): as doneIfStale does when the person
+ * looks at it, done by the gateway. One the person never opened is
+ * acknowledged first, as no sighting of theirs. What the fleet does not take
+ * now is tried again at the next read.
+ */
+export async function endStale(deps: DealDeps, ending: { caller: PersonCaller; crew: PersonCrewToken; deliveryId: string; waiting: readonly PersonDelivery[] }): Promise<void> {
+  const { caller, crew, deliveryId, waiting } = ending;
+  const place = 'gateway';
+  let looked = await deps.opened.find(caller.fleetId, { shipId: crew.shipId, deliveryId });
+  if (looked === undefined) {
+    const delivery = waiting.find((each) => each.deliveryId === deliveryId);
+    if (delivery === undefined) {
+      return;
+    }
+    looked = keptOf(deps, { caller, shipId: crew.shipId, delivery, place });
+    const acknowledged = await seenNow(deps, { caller, kept: looked });
+    if (!acknowledged.isOk) {
+      return;
+    }
+  }
+  await doneIfStale(deps, { caller, crew, looked, waiting, place });
 }
 
 /** Reports a delivery the person did not open themselves handled, acknowledging it first while it still waits. */

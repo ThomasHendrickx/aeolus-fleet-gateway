@@ -1,3 +1,4 @@
+import { AppRouterContext, type AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -14,8 +15,17 @@ function anItem(overrides: Partial<HomeItem> = {}): HomeItem {
 /** When the page read Bridge home: the items' ages are from it. */
 const NOW = '2026-10-31T20:00:00.000Z';
 
+/** The router the page sits under; a static render never navigates. */
+const ROUTER: AppRouterInstance = { back: () => undefined, forward: () => undefined, refresh: () => undefined, push: () => undefined, replace: () => undefined, prefetch: () => undefined, bfcacheId: 'home-panel-test' };
+
 function render(home: BridgeHome): string {
-  return renderToStaticMarkup(createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW }));
+  return renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: ROUTER }, createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW })));
+}
+
+/** Home's lists as the page shows them, nothing open, the rows leaving named. */
+function lists(home: BridgeHome, leaving: ReadonlySet<string> = new Set()): string {
+  const opening: ItemOpening = { open: () => undefined, openingId: undefined, putPick: () => undefined, puttingId: undefined, failure: undefined, opened: undefined };
+  return renderToStaticMarkup(createElement(HomeLists, { home, now: NOW, opening, leaving }));
 }
 
 describe('Bridge home (CC18)', () => {
@@ -55,20 +65,21 @@ describe('Bridge home (CC18)', () => {
     expect({ nothingWaits: markup.includes('data-testid="bridge-nothing-waits"'), nothingNew: markup.includes('Nothing new. What you saw is in Done.') }).toEqual({ nothingWaits: true, nothingNew: true });
   });
 
-  it('shows a withdrawn question stale, outside the count: struck through, with when it was withdrawn and its icon, not faded', () => {
-    const markup = render({ waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_02', title: 'Hold PR #1488?' }), anItem({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } })] }, stayAware: [] });
+  it('shows a withdrawn question stale, outside the count: struck through, with when it was withdrawn and its icon, not faded; it clears itself (#240)', () => {
+    const markup = lists({ waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_02', title: 'Hold PR #1488?' }), anItem({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } })] }, stayAware: [] });
 
     expect({
-      stale: markup.includes('Withdrawn by orchestrator-1 at 20:09 UTC: open it to clear it'),
+      stale: markup.includes('Withdrawn by orchestrator-1 at 20:09 UTC<'),
+      clearByHand: markup.includes('open it to clear it'),
       struck: /<s[^>]*>Which goes first: the Compact look \(U4\) or Harbour\?<\/s>/.test(markup),
       icon: markup.includes('aria-label="Withdrawn"'),
       faded: markup.includes('opacity-60'),
       marked: (markup.match(/data-testid="bridge-item" data-stale="true"/g) ?? []).length,
-    }).toEqual({ stale: true, struck: true, icon: true, faded: false, marked: 1 });
+    }).toEqual({ stale: true, clearByHand: false, struck: true, icon: true, faded: false, marked: 1 });
   });
 
   it('links a replaced question to its replacement, the new item', () => {
-    const markup = render({
+    const markup = lists({
       waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_03', title: 'Which goes first, now that U4 slipped?' }), anItem({ stale: { kind: 'replaced', replacementId: 'dlv_03', at: '2026-10-31T20:10:00.000Z', replacementTitle: 'Which goes first, now that U4 slipped?' } })] },
       stayAware: [],
     });
@@ -77,12 +88,24 @@ describe('Bridge home (CC18)', () => {
   });
 
   it('links a replaced step to its replacement, the new step', () => {
-    const markup = render({
+    const markup = lists({
       waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_03', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory' }), anItem({ job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin', stale: { kind: 'replaced', replacementId: 'dlv_03', at: '2026-10-31T20:11:00.000Z', replacementTitle: 'Create the GitHub repository aeolus-fleet-memory' } })] },
       stayAware: [],
     });
 
     expect({ stale: markup.includes('Replaced by orchestrator-1 at 20:11 UTC with “Create the GitHub repository aeolus-fleet-memory”'), struck: /<s[^>]*>Create the GitHub repository aeolus-fleet-memory-plugin<\/s>/.test(markup), link: markup.includes('Open the new step') }).toEqual({ stale: true, struck: true, link: true });
+  });
+
+  it('never shows a question already withdrawn when Bridge home is first read: Bridge was not open at the withdrawal (#240)', () => {
+    const markup = render({ waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_02', title: 'Hold PR #1488?' }), anItem({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } })] }, stayAware: [] });
+
+    expect({ rows: (markup.match(/data-testid="bridge-item"/g) ?? []).length, withdrawn: markup.includes('Which goes first') }).toEqual({ rows: 1, withdrawn: false });
+  });
+
+  it('draws a withdrawn row leaving in its last 300 ms, and the others not (#240)', () => {
+    const markup = lists({ waiting: { count: 1, items: [anItem({ deliveryId: 'dlv_02', title: 'Hold PR #1488?' }), anItem({ stale: { kind: 'withdrawn', replacementId: null, at: '2026-10-31T20:09:00.000Z', replacementTitle: null } })] }, stayAware: [] }, new Set(['dlv_01']));
+
+    expect((markup.match(/data-leaving="true"/g) ?? []).length).toBe(1);
   });
 
   it('says on its row that a question is in the basket with the note alone', () => {
@@ -206,7 +229,7 @@ describe('Bridge home as last read, while the record cannot be read (states.html
     stayAware: [anItem({ deliveryId: 'dlv_03', job: 'stay-aware', from: 'watch', title: 'builder-gateway: no report change for 2 h' })],
   };
   const markup = renderToStaticMarkup(
-    createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW }) }),
+    createElement(AppRouterContext.Provider, { value: ROUTER }, createElement(AsLastRead, { at: '2026-10-31T20:14:00.000Z', children: createElement(HomePanel, { fleetId: 'flt_01', home, now: NOW }) })),
   );
 
   it('shows what waited as last read, faded and not to be opened, saying so under it', () => {

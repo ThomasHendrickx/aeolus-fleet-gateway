@@ -50,6 +50,15 @@ function utcClockOf(at: string): string {
   return `${new Date(at).toISOString().slice(11, 16)} UTC`;
 }
 
+/** The open item as its row in the list says it (#240): withdrawn or replaced once the row is, read-only from then on, even once the row has left the list; the same item while it stands. */
+export function staleAsListedOf(open: FocusedDelivery, listed: readonly { readonly deliveryId: string; readonly stale: Stale | null }[]): FocusedDelivery {
+  if (open.stale !== null) {
+    return open;
+  }
+  const stale = listed.find(({ deliveryId }) => deliveryId === open.deliveryId)?.stale ?? null;
+  return stale === null ? open : { ...open, stale };
+}
+
 /**
  * Who withdrew or replaced it and when, and a replacement's title, as the
  * mockups word it (basket.html); the time in UTC unless said otherwise, as

@@ -4,6 +4,7 @@ import { ARGO_SECTION_ANCHOR, argoActionOf, doneLineOf, type ArgoSection } from 
 import { ageOf } from '../services/items';
 import { SIZES } from './action-button';
 import { ArgoMark } from './argo-mark';
+import { LEAVING } from './item-row';
 import { JOB_LOOKS } from './job-looks';
 
 type ArgoItem = ArgoSection['items'][number];
@@ -24,13 +25,13 @@ function Separator() {
 }
 
 /** One message waiting at argo: its look, a dot while new, its title, then For argo, its kind and its sender, its age, and its one button to act on it in the console as argo. */
-function ArgoRow({ item, now }: { item: ArgoItem; now: Date }) {
+function ArgoRow({ item, now, isLeaving }: { item: ArgoItem; now: Date; isLeaving: boolean }) {
   const look = LOOKS[item.look];
   const Icon = look.icon;
   const isStale = item.stale !== null;
   const StaleMark = item.stale?.kind === 'replaced' ? Replace : Ban;
   return (
-    <li data-testid="bridge-argo-item" data-stale={isStale} className={`grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1.5 border-t border-border px-3 py-2.5 first:border-t-0 ${isStale ? 'bg-muted' : ''}`}>
+    <li data-testid="bridge-argo-item" data-stale={isStale} data-leaving={isLeaving || undefined} className={`grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1.5 border-t border-border px-3 py-2.5 first:border-t-0 ${isStale ? 'bg-muted' : ''} ${isLeaving ? LEAVING : ''}`}>
       <Icon aria-hidden="true" className={`mt-0.5 size-4 ${look.tone}`} />
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex min-w-0 items-baseline sm:items-center">
@@ -81,7 +82,7 @@ function ArgoRow({ item, now }: { item: ArgoItem; now: Date }) {
  * by whom and where; and what acting does to the sign-in as argo (AI2,
  * AI4). Only an account allowed as argo is given it.
  */
-export function ArgoSectionList({ section, now }: { section: ArgoSection; now: string }) {
+export function ArgoSectionList({ section, now, leaving = new Set() }: { section: ArgoSection; now: string; /** The stale rows leaving now, in their last 300 ms (#240). */ leaving?: ReadonlySet<string> }) {
   const readAt = new Date(now);
   return (
     <section id={ARGO_SECTION_ANCHOR} data-testid="bridge-argo" aria-labelledby="bridge-argo-heading" className="grid scroll-mt-4 gap-2">
@@ -104,7 +105,7 @@ export function ArgoSectionList({ section, now }: { section: ArgoSection; now: s
       ) : (
         <ul className="overflow-hidden rounded-lg border border-primary bg-card shadow-[inset_3px_0_0_var(--primary)]">
           {section.items.map((item) => (
-            <ArgoRow key={item.deliveryId} item={item} now={readAt} />
+            <ArgoRow key={item.deliveryId} item={item} now={readAt} isLeaving={leaving.has(item.deliveryId)} />
           ))}
         </ul>
       )}

@@ -3,9 +3,11 @@
 import { Bell, ShoppingBasket } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { useLeavingStale } from '../hooks/use-leaving-stale';
 import { staleSaidOf } from '../services/deliveries';
 import { seenTextOf, type BridgeHome, type HomeItem } from '../services/items';
 import { lastReadTimeOf } from '../services/last-read';
+import type { WatchedItem } from '../services/leaving-stale';
 import type { RoutedPlace } from '../services/routing';
 import { ActionButton } from '../ui/action-button';
 import { ItemRow } from '../ui/item-row';
@@ -13,7 +15,7 @@ import { RowLink } from '../ui/row-link';
 import { ItemFocus, type ItemOpening } from './item-focus';
 import { useLastReadAt } from './kept-read';
 
-/** What a row says of its item: stale, in the basket, seen, or nothing while new. */
+/** What a row says of its item: stale, in the basket, seen, or nothing while new. A stale one clears itself (#240). */
 function rowOutcomeOf(item: HomeItem): string | undefined {
   const { stale, inBasket } = item;
   if (stale === null && inBasket !== null) {
@@ -22,8 +24,7 @@ function rowOutcomeOf(item: HomeItem): string | undefined {
   if (stale === null) {
     return item.state === 'seen' ? seenTextOf(item.seenIn) : undefined;
   }
-  const said = staleSaidOf(stale, { from: item.from });
-  return stale.kind === 'withdrawn' ? `${said}: open it to clear it` : said;
+  return staleSaidOf(stale, { from: item.from });
 }
 
 /** Opens a replaced question's or step's replacement, the new item, of the same job. */
@@ -86,7 +87,7 @@ function openerOf(item: HomeItem, opening: ItemOpening): (() => void) | undefine
 }
 
 /** The rows of what waits: each with its actions while the list is shown alone, without them beside an open item, the open one marked. */
-function WaitingRows({ items, readAt, opening }: { items: readonly HomeItem[]; readAt: Date; opening: ItemOpening }) {
+function WaitingRows({ items, readAt, opening, leaving }: { items: readonly HomeItem[]; readAt: Date; opening: ItemOpening; leaving: ReadonlySet<string> }) {
   const isBeside = opening.opened !== undefined;
   return (
     <ul className={isBeside ? 'border-t border-border' : 'overflow-hidden rounded-lg border border-border bg-card'}>
@@ -98,6 +99,7 @@ function WaitingRows({ items, readAt, opening }: { items: readonly HomeItem[]; r
           isNew={item.state === 'new'}
           isOpen={opening.opened?.deliveryId === item.deliveryId}
           staleKind={item.stale?.kind}
+          isLeaving={leaving.has(item.deliveryId)}
           outcome={rowOutcomeOf(item)}
           failure={opening.failure?.deliveryId === item.deliveryId ? opening.failure.message : undefined}
           onOpen={openerOf(item, opening)}
@@ -124,7 +126,7 @@ export function StayAwareRows({ items, readAt, opening }: { items: readonly Home
  * was opened from, headed with its count, its rows without their buttons;
  * pressing a title opens that item in its place.
  */
-function ListBeside({ home, readAt, opening, isStayAware }: { home: BridgeHome; readAt: Date; opening: ItemOpening; isStayAware: boolean }) {
+function ListBeside({ home, readAt, opening, isStayAware, leaving }: { home: BridgeHome; readAt: Date; opening: ItemOpening; isStayAware: boolean; leaving: ReadonlySet<string> }) {
   const { waiting, stayAware } = home;
   return isStayAware ? (
     <section aria-labelledby="bridge-stay-aware-heading">
@@ -141,7 +143,7 @@ function ListBeside({ home, readAt, opening, isStayAware }: { home: BridgeHome; 
       <h1 id="bridge-waiting-heading" className="px-3 py-2.5 font-semibold">
         Waiting on you <span data-testid="bridge-count" className="text-tone-waiting-fg">{waiting.count}</span>
       </h1>
-      <WaitingRows items={waiting.items} readAt={readAt} opening={opening} />
+      <WaitingRows items={waiting.items} readAt={readAt} opening={opening} leaving={leaving} />
     </section>
   );
 }
@@ -154,11 +156,11 @@ function ListBeside({ home, readAt, opening, isStayAware }: { home: BridgeHome; 
  * the feed is all it asks (CC16): it stays in the feed, seen. The count heads the page, above Your fleet
  * too (HomeHeading). Beside an open item, only the list it was opened from (aeolus-fleet#1538).
  */
-export function HomeLists({ home, now, opening, argo }: { home: BridgeHome; now: string; opening: ItemOpening; argo?: ReactNode }) {
+export function HomeLists({ home, now, opening, argo, leaving = new Set() }: { home: BridgeHome; now: string; opening: ItemOpening; argo?: ReactNode; /** The stale rows leaving now, in their last 300 ms (#240). */ leaving?: ReadonlySet<string> }) {
   const { waiting, stayAware } = home;
   const readAt = new Date(now);
   if (opening.opened !== undefined) {
-    return <ListBeside home={home} readAt={readAt} opening={opening} isStayAware={opening.opened.job === 'stay-aware'} />;
+    return <ListBeside home={home} readAt={readAt} opening={opening} isStayAware={opening.opened.job === 'stay-aware'} leaving={leaving} />;
   }
   return (
     <div className="grid gap-8">
@@ -169,7 +171,7 @@ export function HomeLists({ home, now, opening, argo }: { home: BridgeHome; now:
             <span className="text-muted-foreground">Your ships have what they need from you. A question or a step shows here the moment one arrives.</span>
           </div>
         ) : (
-          <WaitingRows items={waiting.items} readAt={readAt} opening={opening} />
+          <WaitingRows items={waiting.items} readAt={readAt} opening={opening} leaving={leaving} />
         )}
       </section>
       {argo}
@@ -215,15 +217,24 @@ function WaitingAsLastRead({ items, lastReadAt }: { items: readonly HomeItem[]; 
   );
 }
 
-/** Bridge home: its lists, with one item in focus at a time, and argo's section below what waits on the person, for an account allowed as argo; as last read, what waited then. */
+/** An item as the page watches its asker's withdrawals. */
+function watchedItemOf({ deliveryId, stale }: HomeItem): WatchedItem {
+  return { deliveryId, isStale: stale !== null };
+}
+
+/** Bridge home: its lists, with one item in focus at a time, a stale one leaving 5 s after its withdrawal reached the page (#240), and argo's section below what waits on the person, for an account allowed as argo; as last read, what waited then. */
 export function HomePanel({ fleetId, home, now, decidePlaces, argo }: { fleetId: string; home: BridgeHome; now: string; decidePlaces?: readonly RoutedPlace[]; argo?: ReactNode }) {
   const lastReadAt = useLastReadAt();
+  const showingOf = useLeavingStale(home.waiting.items.map(watchedItemOf));
   if (lastReadAt !== undefined) {
     return <WaitingAsLastRead items={home.waiting.items} lastReadAt={lastReadAt} />;
   }
+  const items = home.waiting.items.filter((item) => showingOf(watchedItemOf(item)) !== 'gone');
+  const leaving = new Set(items.filter((item) => showingOf(watchedItemOf(item)) === 'leaving').map(({ deliveryId }) => deliveryId));
+  const shown = { ...home, waiting: { ...home.waiting, items } };
   return (
-    <ItemFocus fleetId={fleetId} decidePlaces={decidePlaces} known={[...home.waiting.items, ...home.stayAware]}>
-      {(opening) => <HomeLists home={home} now={now} opening={opening} argo={argo} />}
+    <ItemFocus fleetId={fleetId} decidePlaces={decidePlaces} known={[...items, ...home.stayAware]}>
+      {(opening) => <HomeLists home={shown} now={now} opening={opening} argo={argo} leaving={leaving} />}
     </ItemFocus>
   );
 }

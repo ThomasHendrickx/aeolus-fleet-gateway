@@ -37,8 +37,8 @@ const QUESTION = anItem({
   consoleUrl: 'https://fleet.example/inbox?message=dlv_01m3tbfspe96yf1rnr4ank9002',
 });
 
-function sectionOf(section: ArgoSection): string {
-  return renderToStaticMarkup(createElement(ArgoSectionList, { section, now: NOW }));
+function sectionOf(section: ArgoSection, leaving: ReadonlySet<string> = new Set()): string {
+  return renderToStaticMarkup(createElement(ArgoSectionList, { section, now: NOW, leaving }));
 }
 
 function textOf(markup: string): string {
@@ -90,5 +90,11 @@ describe("Bridge's argo section", () => {
     const [item] = itemsOf(sectionOf({ count: 0, items: [{ ...QUESTION, isNew: false, stale: { kind: 'withdrawn', replacementId: null, at: '2026-11-01T20:00:00.000Z', replacementTitle: null } }], done: null }));
 
     expect(item?.text).toBe('Which repository holds the memory plugin? For argo · Question · builder-memory · Withdrawn 25 min Answer in the console as argo');
+  });
+
+  it('draws a withdrawn question leaving in its last 300 ms, as the person\'s own (#240)', () => {
+    const markup = sectionOf({ count: 1, items: [anItem(), { ...QUESTION, stale: { kind: 'withdrawn', replacementId: null, at: '2026-11-01T20:00:00.000Z', replacementTitle: null } }], done: null }, new Set([QUESTION.deliveryId]));
+
+    expect((markup.match(/data-leaving="true"/g) ?? []).length).toBe(1);
   });
 });
