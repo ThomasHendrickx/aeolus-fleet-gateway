@@ -1,8 +1,4 @@
-import type { Metadata } from 'next';
-
 import { ConsoleFrame } from '../features/frame/state/console-frame';
-
-export const metadata: Metadata = { title: 'Not found' };
 
 /** An address with no page, in the gateway's own frame: said so, with the way to Bridge. */
 export default function NotFound() {

@@ -3,11 +3,12 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 import { readTheme } from '../features/frame/hooks/read-theme';
+import { GATEWAY_PAGE_TITLE } from '../lib/page-title';
 import { geistMono, geistSans } from './fonts';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Aeolus',
+  title: GATEWAY_PAGE_TITLE,
   robots: { index: false, follow: false },
 };
 
