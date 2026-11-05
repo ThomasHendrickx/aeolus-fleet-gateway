@@ -1,4 +1,4 @@
-import { ALERT_CONTENT_TYPE, NOTICE_CONTENT_TYPE, QUESTION_CONTENT_TYPE, questionSchema, STEP_CONTENT_TYPE, STEP_REPLACEMENT_CONTENT_TYPE } from '@aeolus-fleet/common';
+import { ALERT_CONTENT_TYPE, NOTICE_CONTENT_TYPE, QUESTION_CONTENT_TYPE, questionSchema, STEP_CONTENT_TYPE, STEP_REPLACEMENT_CONTENT_TYPE, stepSchema } from '@aeolus-fleet/common';
 import { z } from 'zod';
 
 import { essenceOf, jobOf } from '../people/item-job.js';
@@ -53,9 +53,6 @@ const ITEMS = new Map<string, { noun: string; job: string }>([
   [ALERT_CONTENT_TYPE, { noun: 'Alert', job: 'Stay aware' }],
   [NOTICE_CONTENT_TYPE, { noun: 'Notice', job: 'Stay aware' }],
 ]);
-
-/** What Slack reads of a step: its why and link, as common's stepSchema words them. */
-const stepSchema = z.object({ why: z.string(), link: z.url({ protocol: /^https?$/ }).optional() });
 
 /** The step a delivery asks: a step's own, or the new step a step replacement asks. */
 const STEP_SCHEMAS = new Map<string, z.ZodType<z.infer<typeof stepSchema>>>([
