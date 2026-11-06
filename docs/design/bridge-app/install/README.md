@@ -50,7 +50,9 @@ Context: #267 makes Aeolus installable without an app store, and comes before iP
 
 ### 2. How does a person find out they can install Aeolus?
 
-Asked on Aeolus. Context: Chrome and Edge on desktop and Android offer their own install button in the address bar or menu once Aeolus has a manifest. iPhone and iPad Safari offer none: the person must know Share, then Add to Home Screen, and on iPhone push (#268) needs that. The approved home leads with what waits, so an install ask there competes with it.
+**Answered: option 1, approved by Thomas.**
+
+Context: Chrome and Edge on desktop and Android offer their own install button in the address bar or menu once Aeolus has a manifest. iPhone and iPad Safari offer none: the person must know Share, then Add to Home Screen, and on iPhone push (#268) needs that. The approved home leads with what waits, so an install ask there competes with it.
 
 1. **Install Aeolus under More and Settings.** An Install Aeolus entry in Settings (More on phone, the sidebar on desktop) shows this browser's way: the browser's own install prompt where it has one, the Share then Add to Home Screen steps on iPhone. It disappears inside the installed app.
 2. **Also a one-time note on phone home.** As option 1, plus a dismissible note under the home's lead card on a phone browser the first time, until installed or dismissed.
