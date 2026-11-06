@@ -21,10 +21,73 @@ export async function runGateway(args: string[], environment: Record<string, str
   }
 }
 
-/** A gateway started from its source with `start`, as the bin runs, until the test stops it. */
+/** The groups started and not yet stopped, which the end of this process ends. */
+const groups = new Set<number>();
+
+function endGroups(): void {
+  for (const pid of groups) {
+    try {
+      process.kill(-pid, 'SIGTERM');
+    } catch {
+      // The group is gone already.
+    }
+  }
+  groups.clear();
+}
+
+/** Signals that end a test run: the process ends its groups, then ends as the signal would have ended it. */
+const ENDING_SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP'] as const;
+
+let isEndingRegistered = false;
+
+/** A group is in its own group so it outlives its parent: the parent's exit and ending signals must end it. */
+function endGroupsWhenThisProcessEnds(): void {
+  if (isEndingRegistered) {
+    return;
+  }
+  isEndingRegistered = true;
+  process.on('exit', endGroups);
+  for (const signal of ENDING_SIGNALS) {
+    process.once(signal, () => {
+      endGroups();
+      process.kill(process.pid, signal);
+    });
+  }
+}
+
+/** A process started in a group of its own, until the test stops it. */
 export interface RunningGateway {
-  /** Ends the gateway and every process it started (npx, tsx, its web app's server), and waits until it exited. */
+  /** The pid of the group's leader. */
+  pid: number;
+  /** Ends the process and every process it started (npx, tsx, its web app's server), and waits until it exited. */
   stop(): Promise<void>;
+}
+
+/** Starts a command (its file, then its arguments) in a process group of its own, so stopping it ends the whole group. */
+export function startProcessGroup(command: string[], environment: Record<string, string>): RunningGateway {
+  const [file = '', ...args] = command;
+  const child = spawn(file, args, { env: { ...process.env, ...environment }, stdio: 'ignore', detached: true });
+  endGroupsWhenThisProcessEnds();
+  if (child.pid !== undefined) {
+    groups.add(child.pid);
+  }
+  const exited = new Promise<void>((resolve) => {
+    child.once('exit', () => {
+      if (child.pid !== undefined) {
+        groups.delete(child.pid);
+      }
+      resolve();
+    });
+  });
+  return {
+    pid: child.pid ?? 0,
+    stop: async () => {
+      if (child.pid !== undefined && child.exitCode === null) {
+        process.kill(-child.pid, 'SIGTERM');
+      }
+      await exited;
+    },
+  };
 }
 
 /**
@@ -33,18 +96,5 @@ export interface RunningGateway {
  * own web app's development server.
  */
 export function startGateway(environment: Record<string, string>): RunningGateway {
-  const gateway = spawn('npx', ['tsx', 'src/bin/aeolus-gateway.ts', 'start'], { env: { ...process.env, ...environment }, stdio: 'ignore', detached: true });
-  const exited = new Promise<void>((resolve) => {
-    gateway.once('exit', () => {
-      resolve();
-    });
-  });
-  return {
-    stop: async () => {
-      if (gateway.pid !== undefined && gateway.exitCode === null) {
-        process.kill(-gateway.pid, 'SIGTERM');
-      }
-      await exited;
-    },
-  };
+  return startProcessGroup(['npx', 'tsx', 'src/bin/aeolus-gateway.ts', 'start'], environment);
 }
