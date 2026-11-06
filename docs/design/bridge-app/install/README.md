@@ -29,6 +29,10 @@ The [app design's lessons](../README.md#2-lessons-to-check-against) apply. These
 | Aeolus's promise: no message is ever lost | With no connection, the installed app says so and that nothing is lost, rather than showing a stale copy or a browser error page |
 | [Decision 0073](https://github.com/ThomasHendrickx/aeolus-fleet/blob/main/docs/decisions/0073-bridge-stays-in-the-gateway.md) and decision 0013 | New code goes in `bridge/` behind its lint boundary. No compatibility layers or paid-product polish: installation is the browser's own, with the least Aeolus adds to it |
 
+## Open point: the app's address
+
+The app gets its own repository (Thomas). Whether it keeps the gateway's address or gets its own is not decided yet; it is settled with that repository's structure, not in this design. Question 3 and the wake worker are drawn for the gateway's address today. If the app gets its own address, the window holds that address's pages, the gateway's outside-parties and console pages leave it, and the wake worker and its browser subscriptions belong to the new address, so each browser turns web push on again there.
+
 ## Questions for Thomas
 
 ### 1. Does the purpose describe what installing Aeolus is for?
