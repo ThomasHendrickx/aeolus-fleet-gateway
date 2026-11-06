@@ -1,8 +1,8 @@
 # Installing Aeolus
 
-Design for [#267](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/267), the second part of the [approved Bridge app order](../README.md#3-parts-and-order). The person sees **Aeolus**, never Bridge ([naming requirement](../pages/README.md#user-facing-name)); Bridge names this part of the gateway in code and design only. This document holds the proposed purpose and the lessons to check it against. Detailed design and screens follow once Thomas approves the purpose.
+Design for [#267](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/267), the second part of the [approved Bridge app order](../README.md#3-parts-and-order). The person sees **Aeolus**, never Bridge ([naming requirement](../pages/README.md#user-facing-name)); Bridge names this part of the gateway in code and design only. Thomas approved the purpose (question 1, option 1). The questions below settle the install path before the detailed design and before/after screens.
 
-## Purpose, proposed
+## Purpose, approved
 
 A person adds Aeolus to their phone's home screen or their computer's desktop and dock, from the browser they already use, without an app store. They then open it like any other app: its own icon and the name Aeolus, its own window without browser bars, straight onto the home the [pages design](../pages/README.md) approved.
 
@@ -33,7 +33,9 @@ The [app design's lessons](../README.md#2-lessons-to-check-against) apply. These
 
 ### 1. Does the purpose describe what installing Aeolus is for?
 
-Asked on Bridge. Context: #267 makes Aeolus installable without an app store, and comes before iPhone push. This confirms the purpose before the install path, icon, sign-in return and offline screen are designed.
+**Answered: option 1, approved by Thomas.**
+
+Context: #267 makes Aeolus installable without an app store, and comes before iPhone push. This confirms the purpose before the install path, icon, sign-in return and offline screen are designed.
 
 1. **Agree with this purpose.** Phone and desktop, the same Bridge at the same addresses with no content copy, opening onto home or the addressed item, sign-in returning into the installed app, no new notification on install, nothing offline beyond saying so.
 2. **Phone first.** Only the phone home screen now; desktop installation becomes its own issue.
@@ -41,3 +43,46 @@ Asked on Bridge. Context: #267 makes Aeolus installable without an app store, an
 4. **None of these.** Say what installing Aeolus is for.
 
 **Pick: 1.** It gives the app a familiar place on phone and desktop for the cost of the browser's own install, unblocks iPhone push, and keeps one record with no stale copy against the promise that nothing is lost.
+
+### 2. How does a person find out they can install Aeolus?
+
+Asked on Aeolus. Context: Chrome and Edge on desktop and Android offer their own install button in the address bar or menu once Aeolus has a manifest. iPhone and iPad Safari offer none: the person must know Share, then Add to Home Screen, and on iPhone push (#268) needs that. The approved home leads with what waits, so an install ask there competes with it.
+
+1. **Install Aeolus under More and Settings.** An Install Aeolus entry in Settings (More on phone, the sidebar on desktop) shows this browser's way: the browser's own install prompt where it has one, the Share then Add to Home Screen steps on iPhone. It disappears inside the installed app.
+2. **Also a one-time note on phone home.** As option 1, plus a dismissible note under the home's lead card on a phone browser the first time, until installed or dismissed.
+3. **The browser alone.** Aeolus says nothing; the person uses the browser's own menu. iPhone users must know Add to Home Screen themselves.
+4. **None of these.** Say how the person should learn it.
+
+**Pick: 1.** Findable on every browser, iPhone included, without putting an ask ahead of what waits on home; option 2 adds a note the person has to clear.
+
+### 3. Which pages open inside the installed Aeolus window?
+
+Asked on Aeolus. Context: The gateway serves Bridge (/bridge), the outside-parties pages Bridge links to, and its console pages (sign-in, meetings, Slack) on one address. Sign-in goes through pagasae and the Account app is another app. Out-of-window pages open in the browser, or in the browser's in-app sheet on iPhone, with a way back.
+
+1. **Bridge and its outside-parties pages.** The app opens at /bridge; Bridge and the outside-parties pages stay in the window. Sign-in passes through and returns into the window. The Account app, the console pages and outside links (a PR, a step's link) open in the browser, as their outward arrow already says.
+2. **Bridge only.** Only /bridge stays in the window; the outside-parties pages open in the browser too.
+3. **Every gateway page.** Bridge, outside parties and the console pages all stay in the window; only other apps and outside links open the browser.
+4. **None of these.** Say what belongs in the app window.
+
+**Pick: 1.** The installed app is the person's Aeolus: what Bridge links to as its own pages stays, what is marked as leaving leaves, matching the approved navigation's outward arrows.
+
+### 4. What does the installed window and app switcher title say?
+
+Asked on Aeolus. Context: Today every Bridge page is titled "Bridge · Aeolus" (#285, after aeolus-fleet#1674's <Surface> · Aeolus). The installed app's name is Aeolus, and the window title, task switcher and browser tab show the page title. Thomas: "We dont show Bridge, we show Aeolus".
+
+1. **Aeolus.** Every Bridge page is titled Aeolus, in the browser tab and in the installed window alike. The gateway's other pages keep Gateway · Aeolus.
+2. **The place, then Aeolus.** Home · Aeolus, Done · Aeolus, a conversation as <ship> · Aeolus: tells windows and tabs apart.
+3. **Keep Bridge · Aeolus.** Only the app's name is Aeolus; page titles stay as #285 set them.
+4. **None of these.** Say what the title shows.
+
+**Pick: 1.** It follows the naming requirement with the least change: one title; option 2 is useful with many tabs but names every page for little gain.
+
+### 5. When the person opens an Aeolus link and has the app installed, where does it open?
+
+Asked on Aeolus. Context: A link to a question in Slack or mail opens the browser by default. Desktop Chrome and Edge, and Android, can open such links in the installed app instead when the manifest asks; iPhone cannot, and opens Safari, signed in apart from the home screen app. A pressed wake already opens /bridge through the existing service worker.
+
+1. **In the installed app where the browser allows.** Ask for links within Aeolus to open in the installed app, reusing its open window and moving it to the addressed item. On iPhone the link opens Safari, which opens the item as today.
+2. **Wherever the browser opens it.** Ask nothing; links open in a browser tab, the app opens only from its icon or a wake.
+3. **None of these.** Say where a link should land.
+
+**Pick: 1.** One window that follows the item, as #268 will need for a pushed item, and no duplicate windows; iPhone stays as good as today.
