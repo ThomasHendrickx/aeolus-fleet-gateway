@@ -154,7 +154,7 @@ flowchart TD
 | # | Approved disposition | Why |
 | --- | --- | --- |
 | 1 | Show the real Aeolus mark with the Aeolus name, retain an explicit app/fleet switch, and mark Fleets and account as opening the Account app | Bridge is recognisable without losing the existing app and fleet choices. Current code already draws the outward arrow; the old issue describes an earlier build |
-| 2 | Do not introduce global content search in this slice. Offer finding a ship within Conversations; content search can be separately designed if needed | The old kit's search box has no agreed behaviour. A decorative search field would promise a capability not yet designed |
+| 2 | Do not introduce global content search in this slice. Offer finding a ship within Conversations; content search is tracked in [#246, Bridge: tabs and search](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/246) | The old kit's search box has no agreed behaviour. A decorative search field would promise a capability not yet designed |
 | 3 | Use compact Done rows with sender, outcome, where acted and time. Drop repeated “Opening one reads it back whole.”; retain access to the whole item and places where they matter | Scanning outcomes is easier without losing the record or the ability to open it |
 | 4 | Four phone tabs: Home, Conversations, Fleet, More. Done and awareness under More; argo only when allowed. Basket visible while unsent | Conversation and attention remain distinct views of the same items, without a tab per message type |
 | 5 | Move the phone home Send action into Conversations as “Message a ship”. Keep sending a new message available on both widths | The action belongs with exchanges, rather than becoming a second action competing with what waits on home |
