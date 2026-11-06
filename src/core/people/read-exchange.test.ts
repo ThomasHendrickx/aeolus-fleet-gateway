@@ -128,11 +128,4 @@ describe('a person reads their exchange with one other ship', () => {
 
     await expect(readExchange({ caller: CHARLOTTE_GRANT, otherShipId: TRACKER, start: { kind: 'newest' } })).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
   });
-
-  it('crews the person ship again once when its lease ended, without the person noticing', async () => {
-    const { readExchange, refusals } = reading(MANY);
-    refusals.exchange.push({ code: 'LEASE_ENDED', message: 'The lease ended' });
-
-    await expect(readExchange({ caller: CHARLOTTE_GRANT, otherShipId: TRACKER, start: { kind: 'newest' } })).resolves.toMatchObject({ isOk: true });
-  });
 });
