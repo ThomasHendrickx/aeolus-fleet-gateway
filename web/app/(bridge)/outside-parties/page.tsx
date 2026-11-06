@@ -1,11 +1,7 @@
-import type { Metadata } from 'next';
-
 import { OutsideParties } from '../../../features/outside-parties/ui/outside-parties';
 import { OUTSIDE_PARTIES_PATH } from '../../../features/outside-parties/paths';
 import { BridgeNoSignIn, BridgeShell } from '../../../features/bridge/state/bridge-shell';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
-
-export const metadata: Metadata = { title: 'Outside parties' };
 
 export default async function OutsidePartiesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const parameters = await searchParams;
