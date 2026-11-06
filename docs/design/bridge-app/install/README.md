@@ -25,13 +25,17 @@ The [app design's lessons](../README.md#2-lessons-to-check-against) apply. These
 | [Navigation design](../../../../design/bridge-navigation/README.md): opening another app's pages from Bridge switched the layout completely | Leaving Aeolus for the Account app or an outside link from the installed window is visible, and the way back into Aeolus is clear |
 | Bridge's addresses carry the fleet (`?fleet=`); a person may belong to more than one fleet | The installed app opens the fleet the person chose, and changing fleet stays possible inside it |
 | A service worker already exists: `web/public/wake-worker.js` shows a wake and opens Bridge when pressed (wake a person, W4, W8), registered from Settings with the browser's consent | Use the existing worker and its consent rule; do not add a second worker or ask notification permission on install. A refused or missing permission leaves the installed app fully useful |
-| The gateway's console pages share Bridge's origin | The installed app is Aeolus for the person, not the gateway's console. What opens inside the app window and what opens in the browser is decided, not left to the browser |
+| Bridge shares the gateway's origin today with its console pages; Aeolus moves to `app.aeolus-fleet.dev` | The installed app is Aeolus for the person, not the gateway's console. Links that leave the app's address say so; a gateway page opened from Aeolus opens in the browser |
 | Aeolus's promise: no message is ever lost | With no connection, the installed app says so and that nothing is lost, rather than showing a stale copy or a browser error page |
 | [Decision 0073](https://github.com/ThomasHendrickx/aeolus-fleet/blob/main/docs/decisions/0073-bridge-stays-in-the-gateway.md) and decision 0013 | New code goes in `bridge/` behind its lint boundary. No compatibility layers or paid-product polish: installation is the browser's own, with the least Aeolus adds to it |
 
-## Open point: the app's address
+## The app's address
 
-The app gets its own repository (Thomas). Whether it keeps the gateway's address or gets its own is not decided yet; it is settled with that repository's structure, not in this design. Question 3 and the wake worker are drawn for the gateway's address today. If the app gets its own address, the window holds that address's pages, the gateway's outside-parties and console pages leave it, and the wake worker and its browser subscriptions belong to the new address, so each browser turns web push on again there.
+Thomas: "It will live under app.aeolus-fleet.dev". Aeolus has its own address, apart from the gateway's, and its own repository. The installed app is everything under `app.aeolus-fleet.dev` and nothing else: a browser keeps an installed app's window to one address. Sign-in passes through pagasae and returns into the window, through a way back at the app's own address. The gateway's pages (outside parties, console), the Account app and outside links open in the browser, as their outward arrow says.
+
+The purpose's "same addresses" holds within that address: the installed app and the browser open the same `app.aeolus-fleet.dev` addresses. Links to today's Bridge addresses on the gateway are the new repository's concern, not this design's.
+
+The app serves its own service worker at its own address. The gateway's existing wake worker and the browsers subscribed to it stay as they are and can open the app's address from a wake, in the browser. A wake reaches the installed app, and an iPhone at all, only from a subscription made inside the app at its address; making that subscription is #268's, under #269's preferences.
 
 ## Questions for Thomas
 
@@ -63,7 +67,9 @@ Context: Chrome and Edge on desktop and Android offer their own install button i
 
 ### 3. Which pages open inside the installed Aeolus window?
 
-Asked on Aeolus. Context: The gateway serves Bridge (/bridge), the outside-parties pages Bridge links to, and its console pages (sign-in, meetings, Slack) on one address. Sign-in goes through pagasae and the Account app is another app. Out-of-window pages open in the browser, or in the browser's in-app sheet on iPhone, with a way back.
+**Withdrawn.** Thomas gave Aeolus its own address, which answers it: see [the app's address](#the-apps-address).
+
+Context: The gateway serves Bridge (/bridge), the outside-parties pages Bridge links to, and its console pages (sign-in, meetings, Slack) on one address. Sign-in goes through pagasae and the Account app is another app. Out-of-window pages open in the browser, or in the browser's in-app sheet on iPhone, with a way back.
 
 1. **Bridge and its outside-parties pages.** The app opens at /bridge; Bridge and the outside-parties pages stay in the window. Sign-in passes through and returns into the window. The Account app, the console pages and outside links (a PR, a step's link) open in the browser, as their outward arrow already says.
 2. **Bridge only.** Only /bridge stays in the window; the outside-parties pages open in the browser too.
