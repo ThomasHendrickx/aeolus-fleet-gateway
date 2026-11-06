@@ -2,8 +2,6 @@
 
 The gateway's pages, as people see them: sign-in and picking a fleet, a person's own page, waiting for approval at an outside MCP client, pending requests, adding an outside MCP server, and the errors (refused, expired, access_denied). Users see Aeolus, never pagasae. Every proposal uses the console's tokens, tone families and parts (aeolus-fleet `docs/design/README.md`), in light and dark, phone first.
 
-Each proposal has four sheets: `<letter>-phone-light.png`, `<letter>-phone-dark.png`, `<letter>-desktop-light.png`, `<letter>-desktop-dark.png`.
-
 What all three share, from decisions 0054 and 0056 and flows F5, F9 and F10:
 
 - The handshake: the outside party's mark and the fleet's mark side by side (Slack's lesson), so who meets whom is seen, not read.
@@ -37,7 +35,7 @@ Every flow is a row of steps, like a parcel tracker: Sign in, Fleet, Connected f
 
 ## Decision
 
-Thomas picked B, Signal (20 Oct), and asked for the pages that manage connections and for how A2A fits. B's sheets now hold both.
+Thomas picked B, Signal (20 Oct), and asked for the pages that manage connections and for how A2A fits. B holds both.
 
 ## Managing outside parties (B)
 
