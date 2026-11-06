@@ -20,6 +20,9 @@ describe("a person's sign-in to a party, sealed into the state the authorization
     const sealed = seals.seal(SIGN_IN);
     const link = createSlackLinkSeals(SECRET).seal({ fleetId: SIGN_IN.fleetId, accountId: SIGN_IN.accountId, personShipId: SIGN_IN.personShipId, expiresAt: SIGN_IN.expiresAt });
 
-    expect([createPartySignInSeals('another-gateway-secret-of-32-characters').open(sealed), seals.open(`${sealed.slice(0, -2)}xx`), seals.open(link)]).toEqual([undefined, undefined, undefined]);
+    const bytes = Buffer.from(sealed, 'base64url');
+    bytes.writeUInt8(bytes.readUInt8(bytes.length - 1) ^ 1, bytes.length - 1);
+
+    expect([createPartySignInSeals('another-gateway-secret-of-32-characters').open(sealed), seals.open(bytes.toString('base64url')), seals.open(link)]).toEqual([undefined, undefined, undefined]);
   });
 });
