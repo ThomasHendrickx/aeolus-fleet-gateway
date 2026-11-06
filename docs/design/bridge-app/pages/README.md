@@ -28,7 +28,7 @@ Thomas chose conversations with additional views of the same items (option 1).
 
 A ship discusses a design, asks a question, reports progress and asks the person to take a step. Those items can remain together in the conversation. The same unanswered question can also appear in a view of everything needing the person across conversations. Answering in either place is one answer on the same item. An alert can appear in its conversation and an awareness view.
 
-This preserves the context of the exchange while keeping an ask from disappearing in a busy chat. Message type does not dictate a separate screen. Conversation grouping, screens, tabs and the meaning of a flow remain open; no navigation proposal is approved.
+This preserves the context of the exchange while keeping an ask from disappearing in a busy chat. Message type does not dictate a separate screen. A flow means following related discussion, questions, steps and outcomes together, without prescribed stages or an automatic next step (Thomas, option 1). Conversation grouping, screens and tabs remain open; no navigation proposal is approved.
 
 ## Questions
 
@@ -45,6 +45,8 @@ This preserves the context of the exchange while keeping an ask from disappearin
 
 ### 2. What should the person follow in a flow?
 
+**Answered: option 1, approved by Thomas.**
+
 Context: discuss a proposed change, choose a design, take a human-only step, then review what was produced. Does flow mean seeing that related context together, or explicit progress and what comes next? Current questions and steps alone establish no new work process.
 
 1. **Related discussion, questions, steps and outcomes together.** Understand the course of the work and return to its context, without prescribed stages or an automatic next step.
@@ -52,4 +54,15 @@ Context: discuss a proposed change, choose a design, take a human-only step, the
 3. **Keep flows for later.** Design conversations and additional views first.
 4. **None of these.** Describe the intended flow, preferably with an example.
 
-**Pick: 1.** Make a question and its outcome understandable in context without assuming a staged process Thomas has not described. Awaiting Thomas's answer.
+**Pick: 1.** Make a question and its outcome understandable in context without assuming a staged process Thomas has not described.
+
+### 3. What makes one conversation?
+
+Context: the same ship may discuss the Bridge design and an unrelated release. Grouping by ship is familiar but mixes subjects; grouping by work requires explicitly assigning each item rather than guessing from its text. Meetings already have their own identity and remain their own design part.
+
+1. **One conversation with each ship.** All direct exchanges together; reply links lead back to the item being answered. Additional views expose what needs the person across chats.
+2. **Separate conversations by subject or piece of work.** A ship can have several conversations with the person. Each item explicitly belongs to one; who starts and names it remains to design.
+3. **A chat with each ship, with separate discussions inside it.** The ship remains the place to go; a related discussion can also be followed on its own.
+4. **None of these.** Describe what the person expects to open and follow together.
+
+**Pick: 1.** A familiar starting point without assigning a subject to every item; explicit reply links keep related context reachable. If following one piece of work separately is essential, option 2 or 3 fits better. Awaiting Thomas's answer.
