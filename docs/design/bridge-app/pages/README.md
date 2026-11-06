@@ -20,7 +20,7 @@ Use [Thomas's reference](../reference/look-and-feel.jpg) for the warm light grou
 
 Thomas: "I have a potential nice visual of the bridge setup. The names and icons and so on dont fit, but look and feel really work for me".
 
-Use Aeolus's language, Lucide icons and the real mark from [aeolus-fleet brand/](https://github.com/ThomasHendrickx/aeolus-fleet/tree/main/brand). The reference's names, icons and logo are not the design. Its layout remains a question for Thomas; its Submit decision button does not change the approved basket.
+Use Aeolus's language, icons following the [Aeolus design system](https://github.com/ThomasHendrickx/aeolus-fleet/blob/main/docs/design/README.md), and the real mark from [aeolus-fleet brand/](https://github.com/ThomasHendrickx/aeolus-fleet/tree/main/brand). The reference's names, icons and logo are not the design. Its layout remains a question for Thomas; its Submit decision button does not change the approved basket.
 
 ## Interaction, approved
 
