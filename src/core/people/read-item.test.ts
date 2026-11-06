@@ -29,7 +29,7 @@ describe('a person reads one item whole', () => {
 
     await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: WAITING.deliveryId })).resolves.toEqual({
       isOk: true,
-      value: { deliveryId: WAITING.deliveryId, from: 'tracker', title: 'The build is red', sentAt: '2026-10-19T08:00:00.000Z', contentType: 'text/plain', payload: 'The build is red', meetingId: null, said: null, stale: null },
+      value: { deliveryId: WAITING.deliveryId, from: 'tracker', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', title: 'The build is red', sentAt: '2026-10-19T08:00:00.000Z', contentType: 'text/plain', payload: 'The build is red', meetingId: null, said: null, stale: null },
     });
     expect(calls.some((call) => call.startsWith('ack('))).toBe(false);
     expect(opened.held.size).toBe(0);
@@ -46,7 +46,7 @@ describe('a person reads one item whole', () => {
 
     await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: DONE.deliveryId })).resolves.toEqual({
       isOk: true,
-      value: { deliveryId: DONE.deliveryId, from: 'tracker', title: 'Release 1.4 is out', sentAt: '2026-10-19T08:00:00.000Z', contentType: 'text/plain', payload: 'Release 1.4 is out', meetingId: null, said: null, stale: null },
+      value: { deliveryId: DONE.deliveryId, from: 'tracker', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', title: 'Release 1.4 is out', sentAt: '2026-10-19T08:00:00.000Z', contentType: 'text/plain', payload: 'Release 1.4 is out', meetingId: null, said: null, stale: null },
     });
     expect(calls.some((call) => call.startsWith('ack(') || call.startsWith('handled('))).toBe(false);
     expect(opened.held.size).toBe(0);

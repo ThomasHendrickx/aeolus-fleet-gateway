@@ -67,13 +67,13 @@ function manyDeliveries(count: number): PersonDelivery[] {
   });
 }
 
-const OPENED_ENTRY = { deliveryId: OPENED.deliveryId, from: 'tracker', title: 'The build is red', sentAt: '2026-10-19T07:00:00.000Z', job: 'everything-else', pick: null };
+const OPENED_ENTRY = { deliveryId: OPENED.deliveryId, from: 'tracker', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', title: 'The build is red', sentAt: '2026-10-19T07:00:00.000Z', job: 'everything-else', pick: null };
 
 describe("a person reads their person ship's inbox: what waits, by titles only", () => {
   it('lists each waiting delivery by who sent it, when, and its title, never its payload', async () => {
     await expect(readInbox([aPersonDelivery()]).readInbox(CHARLOTTE_GRANT)).resolves.toEqual({
       isOk: true,
-      value: { waiting: 1, deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', job: 'decide', pick: null }], opened: [] },
+      value: { waiting: 1, deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', job: 'decide', pick: null }], opened: [] },
     });
   });
 
@@ -137,7 +137,7 @@ describe("a person reads their person ship's inbox: what waits, by titles only",
 
     await expect(readInbox([aPersonDelivery()]).readInbox(CHARLOTTE_GRANT)).resolves.toEqual({
       isOk: true,
-      value: { waiting: 1, deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', job: 'decide', pick: null }], opened: [OPENED_ENTRY] },
+      value: { waiting: 1, deliveries: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', job: 'decide', pick: null }], opened: [OPENED_ENTRY] },
     });
   });
 
