@@ -14,6 +14,14 @@ This part establishes how the person works across conversations and additional v
 
 The [app design's lessons](../README.md#2-lessons-to-check-against) apply: the actual build is the before, not a reconstruction from the kit; every #260 difference needs a disposition; page refreshes and live changes must preserve the open item's address (#282); working functionality alone does not establish a usable path.
 
+## Look and feel
+
+Use [Thomas's reference](../reference/look-and-feel.jpg) for the warm light ground, navy primary, soft cards, spacing and the question card inline in a conversation.
+
+Thomas: "I have a potential nice visual of the bridge setup. The names and icons and so on dont fit, but look and feel really work for me".
+
+Use Aeolus's language, Lucide icons and the real mark from [aeolus-fleet brand/](https://github.com/ThomasHendrickx/aeolus-fleet/tree/main/brand). The reference's names, icons and logo are not the design. Its layout remains a question for Thomas; its Submit decision button does not change the approved basket.
+
 ## Interaction, approved
 
 Thomas chose conversations with additional views of the same items (option 1).
