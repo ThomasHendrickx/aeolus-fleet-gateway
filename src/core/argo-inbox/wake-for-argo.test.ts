@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { anArgoEntry, fakeArgoInboxFleet, memoryArgoAccounts, memoryArgoWakes } from '../../../test/support/argo-inbox-fakes.js';
+import { anArgoEntry, fakeArgoInboxFleet, memoryArgoAccounts, memoryArgoWakes, TRIERARCH } from '../../../test/support/argo-inbox-fakes.js';
 import { FLEET_ID, memoryConnectionStore, SHIP_ID } from '../../../test/support/fleet-fakes.js';
-import { memoryFocusedPages, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { memoryFocusedPages, memoryQuietHours, memoryQuietShips, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { PersonShip, WakeChannel, WakeChannelName, WakeWindow } from '../people/ports.js';
 import { createPersonWakes } from '../people/person-wakes.js';
+import type { QuietHours } from '../people/quiet-hours.js';
+import type { QuietShip } from '../people/quiet-ships.js';
 import { ITEM_JOBS, routingDefaultsOf, type Route } from '../people/routing.js';
 import { ok } from '../shared/result.js';
 import { createFollowArgoInbox } from './follow-argo-inbox.js';
@@ -63,12 +65,12 @@ beforeEach(async () => {
   focused = memoryFocusedPages();
 });
 
-function waking(channels: WakeChannel[], routes: Route[] = []) {
+function waking(channels: WakeChannel[], routes: Route[] = [], preferences: { quietHours?: QuietHours[]; quietShips?: QuietShip[] } = {}) {
   return createWakeForArgo({
     connections,
     accounts,
     inboxOf: follow.inboxOf,
-    people: createPersonWakes({ channels, routes: memoryRoutes(routes), defaults: EVERY_JOB_WAKES, focused, focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => now } }),
+    people: createPersonWakes({ channels, routes: memoryRoutes(routes), defaults: EVERY_JOB_WAKES, quietHours: memoryQuietHours(preferences.quietHours ?? []), quietShips: memoryQuietShips(preferences.quietShips ?? []), focused, focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => now } }),
     argoWakes,
     clock: { now: () => now },
   });
@@ -194,6 +196,55 @@ describe('the wake for what waits at argo', () => {
     await round(waking([push.channel]));
 
     expect(push.woken).toEqual([]);
+  });
+});
+
+describe("the wake for what waits at argo, with the person's preferences (preferences design)", () => {
+  /** Quiet hours in UTC from 20:00 to 20:30, in effect at START unless changed. */
+  function someQuietHours(overrides: Partial<QuietHours> = {}): QuietHours {
+    return { ...THOMAS, isOn: true, fromMinute: 20 * 60, toMinute: 20 * 60 + 30, timeZone: 'UTC', changedAt: new Date('2026-10-30T00:00:00.000Z'), ...overrides };
+  }
+
+  it('gives no wake for a message from a quiet ship', async () => {
+    const push = aChannel('web-push');
+    const wakeForArgo = waking([push.channel], [], { quietShips: [{ ...THOMAS, quietShipId: TRIERARCH.shipId, name: TRIERARCH.name, isQuiet: true, changedAt: new Date('2026-10-30T00:00:00.000Z') }] });
+    fleet.send(anArgoEntry(1));
+
+    await round(wakeForArgo);
+    later(30);
+    await round(wakeForArgo);
+
+    expect(push.woken).toEqual([]);
+  });
+
+  it('gives no wake during quiet hours, and one at their end for what still waits', async () => {
+    const push = aChannel('web-push');
+    const wakeForArgo = waking([push.channel], [], { quietHours: [someQuietHours()] });
+    fleet.send(anArgoEntry(1));
+    fleet.send(anArgoEntry(2));
+    const wokenAfter: number[] = [];
+
+    for (const minutes of [0, 10, 10]) {
+      later(minutes);
+      await round(wakeForArgo);
+      wokenAfter.push(push.woken.length);
+    }
+
+    expect(wokenAfter).toEqual([0, 0, 1]);
+  });
+
+  it('wakes by the next window once quiet hours are turned off during them', async () => {
+    const push = aChannel('web-push');
+    const quietHours = [someQuietHours()];
+    const wakeForArgo = waking([push.channel], [], { quietHours });
+    fleet.send(anArgoEntry(1));
+    await round(wakeForArgo);
+
+    quietHours.splice(0, 1, someQuietHours({ isOn: false }));
+    later(10);
+    await round(wakeForArgo);
+
+    expect(push.woken).toHaveLength(1);
   });
 });
 
