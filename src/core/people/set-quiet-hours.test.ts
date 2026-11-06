@@ -1,16 +1,18 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { CHARLOTTE_GRANT, fakeCrewPersonShip, memoryPersonCrews, memoryQuietHours } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, holding, memoryPersonCrews, memoryQuietHours } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { ok } from '../shared/result.js';
+import type { PersonDelivery } from './ports.js';
 import { createReadQuietHours } from './read-quiet-hours.js';
 import { createSetQuietHours } from './set-quiet-hours.js';
 
 // A person sets their quiet hours through the person API (preferences
 // design): one daily window in the time zone of the device that set them,
 // kept per fleet and person ship, off by default. A person's client reads
-// them, and while they are in effect, since when and until when.
+// them, and while they are in effect, since when, until when and how many
+// of what waits arrived since.
 
 const NOW = new Date('2026-11-06T23:30:00.000Z');
 const TEN_PM = 22 * 60;
@@ -26,7 +28,13 @@ beforeEach(() => {
 });
 
 const setQuietHours = () => createSetQuietHours({ crewPersonShip: fakeCrewPersonShip(crews), quietHours, clock: { now: () => NOW } });
-const readQuietHours = (now = NOW) => createReadQuietHours({ crewPersonShip: fakeCrewPersonShip(crews), quietHours, clock: { now: () => now } });
+function readQuietHours(now = NOW, waiting: PersonDelivery[] = []) {
+  const { door, held } = holding(fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: waiting }).door);
+  return createReadQuietHours({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, held, quietHours, clock: { now: () => now } });
+}
+
+/** A delivery waiting for the person, sent at the instant. */
+const waitingSince = (index: number, sentAt: string) => aPersonDelivery({ deliveryId: `dlv_01m3tbfspe96yf1rnr4ank${String(index).padStart(4, '0')}`, sentAt: new Date(sentAt) });
 
 describe('a person sets their quiet hours', () => {
   it('keeps them for their own person ship, with when they were set', async () => {
@@ -61,10 +69,11 @@ describe("a person's client reads their quiet hours", () => {
     await expect(readQuietHours()(CHARLOTTE_GRANT)).resolves.toEqual(ok({ isOn: false, window: null, quietNow: null }));
   });
 
-  it('reads them on, with since when and until when while in effect', async () => {
+  it('reads them on while in effect, with since when, until when and how many of what waits arrived since', async () => {
     await setQuietHours()({ caller: CHARLOTTE_GRANT, isOn: true, ...BRUSSELS_NIGHT });
+    const waiting = [waitingSince(1, '2026-11-06T20:59:59.999Z'), waitingSince(2, '2026-11-06T21:00:00.000Z'), waitingSince(3, '2026-11-06T23:00:00.000Z')];
 
-    await expect(readQuietHours()(CHARLOTTE_GRANT)).resolves.toEqual(ok({ isOn: true, window: BRUSSELS_NIGHT, quietNow: { since: new Date('2026-11-06T21:00:00.000Z'), until: new Date('2026-11-07T06:00:00.000Z') } }));
+    await expect(readQuietHours(NOW, waiting)(CHARLOTTE_GRANT)).resolves.toEqual(ok({ isOn: true, window: BRUSSELS_NIGHT, quietNow: { since: new Date('2026-11-06T21:00:00.000Z'), until: new Date('2026-11-07T06:00:00.000Z'), arrived: 2 } }));
   });
 
   it('reads them on and not in effect outside their window', async () => {
