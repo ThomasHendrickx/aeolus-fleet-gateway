@@ -62,12 +62,12 @@ describe('a person reads one item whole', () => {
   it('refuses a delivery that is not the person ship\'s own', async () => {
     const { readItem } = reading({ deliveries: [WAITING], record: [DONE] });
 
-    await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0zzz' })).resolves.toMatchObject({ isOk: false, error: { code: 'NO_SUCH_DELIVERY' } });
+    await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0zzz' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
   });
 
   it('refuses a done item whose payload the fleet cannot unseal now', async () => {
     const { readItem } = reading({ record: [{ ...DONE, payload: '', isPayloadUnreadable: true }] });
 
-    await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: DONE.deliveryId })).resolves.toMatchObject({ isOk: false, error: { code: 'KEY_UNAVAILABLE' } });
+    await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: DONE.deliveryId })).resolves.toMatchObject({ isOk: false, error: { kind: 'KEY_UNAVAILABLE' } });
   });
 });
