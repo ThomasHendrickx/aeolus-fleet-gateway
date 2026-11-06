@@ -1,6 +1,6 @@
-# Bridge pages: sheets for approval
+# Bridge pages: approved sheets
 
-[Interactive proposed screens](index.html?tools) use the agreed home/conversation relationship and Thomas's [look-and-feel reference](../../reference/look-and-feel.jpg). They are proposals until Thomas approves them; see the [detailed design and seven #260 dispositions](../README.md#proposed-detailed-design).
+[Interactive screens](index.html?tools) use the agreed home/conversation relationship and Thomas's [look-and-feel reference](../../reference/look-and-feel.jpg). Thomas approved the detailed design and these sheets at commit `0f9b5f74`, with one naming requirement: show **Aeolus** to the person. He explicitly said no redraw was needed. The images retain their original Bridge and proposal labels; the [approved design and naming requirement](../README.md#user-facing-name) take precedence for the build. See the [seven #260 dispositions](../README.md#the-seven-260-dispositions-approved).
 
 ## Before and after
 
@@ -35,12 +35,12 @@ The URLs below show the HTML state; corresponding `after-<state>-375-light.png` 
 
 The HTML offers a small simulated path from question to pending and outcome, or to the unsent basket; it calls no fleet or gateway API and sends no messages. It is a screen prototype, not a working implementation. Other controls communicate the proposed design; their real behaviour is defined in the detailed design and existing agreements. Use `?tools` for the state selector and theme switch.
 
-## Acceptance if approved
+## Approved acceptance criteria
 
 - Preserve one item and outcome across home, conversation, awareness, Done, basket and other clients. Core's scope and reach remain authoritative.
 - Opening from home, an additional view or an item address reaches that item in its ship's conversation; Back returns to the origin. Refresh and live updates keep the item address and reading position.
 - Keep direct Send and putting in the basket as #202 specifies. Do not make a question's ordinary chat reply silently choose an option. Steps send Done/Cannot and the optional note immediately.
-- Apply the seven #260 dispositions in the detailed design explicitly. The new navigation is part of this proposal; earlier navigation suggestions were not approved.
+- Apply the seven #260 dispositions in the detailed design explicitly. The new navigation is approved; earlier navigation suggestions were not approved.
 - Ready, busy, success, refused, empty, loading, record failure and partial failure retain the meaning shown here. Controls give immediate pending feedback, preserve input on failure and show a durable outcome on success.
 - Use the look-and-feel reference with the real Aeolus mark, ship names and design-system icons, including accessible names and visible focus. No fictitious meeting controls appear ahead of #279.
 - Reflow from 360 to 2560 px. Check the three drawn widths, both themes, long content, keyboard focus, reduced motion and phone keyboard appearance in the build.

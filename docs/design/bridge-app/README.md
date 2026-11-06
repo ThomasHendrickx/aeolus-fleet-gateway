@@ -1,6 +1,6 @@
 # Bridge as the app
 
-Purpose and proposed parts for [#265](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/265). Thomas approved the purpose and the parts in the proposed order (questions 1 and 2, option 1 for each). The next part is #266, including #260: its detailed design and screens need approval before its build.
+Purpose and proposed parts for [#265](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/265). Thomas approved the purpose and the parts in the proposed order (questions 1 and 2, option 1 for each). The first part, #266 including #260, has an [approved detailed design and screens](pages/README.md). The user-facing name is Aeolus; the existing sheets need no redraw.
 
 ## 1. Purpose
 
