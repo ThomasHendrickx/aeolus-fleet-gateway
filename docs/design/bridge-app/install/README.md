@@ -80,7 +80,7 @@ Context: The gateway serves Bridge (/bridge), the outside-parties pages Bridge l
 
 ### 4. What does the installed window and app switcher title say?
 
-**Answered: option 4.** Thomas: "We are moving bridge to to app.aeolus-fleet.dev and it will be made into a new repository ThomasHendrickx/aeolus-app". Asked again for the title at that address, with the same options 1 and 2. Thomas: "Ask orchestrator-1 first on the changes being made to the code of bridge, after that is cleared up and you still have a question regarding this, you can ask it again." Open with orchestrator-1.
+**Answered: option 4.** Thomas: "We are moving bridge to to app.aeolus-fleet.dev and it will be made into a new repository ThomasHendrickx/aeolus-app". Asked again for the title at that address, with the same options 1 and 2. Thomas: "Ask orchestrator-1 first on the changes being made to the code of bridge, after that is cleared up and you still have a question regarding this, you can ask it again." Settled with orchestrator-1 from what is decided: the page-title rule (aeolus-fleet#1674, "<App> · Aeolus ... Bridge != Gateway and Admin != Account") tells apps apart on a shared address; Aeolus now has its own address and shows Aeolus, so the window and tab title is **Aeolus**, with no page name and no Bridge. The gateway's existing Bridge pages keep `Bridge · Aeolus` until the app replaces them.
 
 Context: Today every Bridge page is titled "Bridge · Aeolus" (#285, after aeolus-fleet#1674's <Surface> · Aeolus). The installed app's name is Aeolus, and the window title, task switcher and browser tab show the page title. Thomas: "We dont show Bridge, we show Aeolus".
 
@@ -105,7 +105,7 @@ Context: A link to a question in Slack or mail opens the browser by default. Des
 
 ## Detailed design, proposed
 
-Drawn from the approved purpose, Thomas's answers to questions 2 and 5 and the app's address. The [before and after sheets](mockups/comparison.html) show it in both themes; [every sheet](mockups/index.html) renders the approved pages sheets inside today's browser and the installed window, with Aeolus shown in place of Bridge. The window title follows question 4, still open; the sheets show its pick, Aeolus.
+Drawn from the approved purpose, Thomas's answers to questions 2 and 5 and the app's address. The [before and after sheets](mockups/comparison.html) show it in both themes; [every sheet](mockups/index.html) renders the approved pages sheets inside today's browser and the installed window, with Aeolus shown in place of Bridge. The window and tab title is Aeolus (question 4).
 
 ### The parts
 
