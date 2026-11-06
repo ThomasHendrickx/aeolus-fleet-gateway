@@ -93,7 +93,9 @@ Context: Today every Bridge page is titled "Bridge · Aeolus" (#285, after aeolu
 
 ### 5. When the person opens an Aeolus link and has the app installed, where does it open?
 
-Asked on Aeolus. Context: A link to a question in Slack or mail opens the browser by default. Desktop Chrome and Edge, and Android, can open such links in the installed app instead when the manifest asks; iPhone cannot, and opens Safari, signed in apart from the home screen app. A pressed wake already opens /bridge through the existing service worker.
+**Answered: option 1, approved by Thomas.**
+
+Context: A link to a question in Slack or mail opens the browser by default. Desktop Chrome and Edge, and Android, can open such links in the installed app instead when the manifest asks; iPhone cannot, and opens Safari, signed in apart from the home screen app. A pressed wake already opens /bridge through the existing service worker.
 
 1. **In the installed app where the browser allows.** Ask for links within Aeolus to open in the installed app, reusing its open window and moving it to the addressed item. On iPhone the link opens Safari, which opens the item as today.
 2. **Wherever the browser opens it.** Ask nothing; links open in a browser tab, the app opens only from its icon or a wake.
