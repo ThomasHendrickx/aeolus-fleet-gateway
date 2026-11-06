@@ -115,11 +115,11 @@ Drawn from the approved purpose, Thomas's answers to questions 2 and 5 and the a
 | Icon | The Slate tiles from aeolus-fleet `brand/`: `icon-192.png`, `icon-512.png` and `apple-touch-icon.png`, copied, never redrawn. `brand/` has no maskable tile, so Android draws the rounded tile inside its own shape; a maskable tile belongs in `brand/` ([aeolus-fleet#1682](https://github.com/ThomasHendrickx/aeolus-fleet/issues/1682)) |
 | Install Aeolus | An entry under More on a phone and under Settings on a larger window (question 2). Where the browser offers its own install (Chrome, Edge, Android), the entry's Install button opens that prompt. On iPhone and iPad, it shows Safari's three taps. Where a browser offers neither, it says to use the browser's menu. Inside the installed app the entry does not show |
 | Opening | The installed window shows the approved home, or the item an address names, with no browser bars. Reloading and reopening keep the address (#282) |
-| Signing in | Signing in passes through the shared sign-in over the window and returns into it, to the asked address. The app opened from an iPhone home screen without its own sign-in says once why it asks, since Safari's sign-in does not reach it; in a browser the sign-in starts at once, as today |
+| Signing in | Signing in passes through the shared sign-in over the window and returns into it, to the asked address. The app opened from an iPhone home screen without its own sign-in says once why it asks, since Safari's sign-in does not reach it: "Welcome aboard" on Aeolus's own sea (navy, the light slate mark, wind and waves). In a browser the sign-in starts at once, as today. The sheet draws the shared sign-in on the same sea; that page is pagasae's, so its look is a change there |
 | Leaving | The Account app, the gateway's pages and outside links open in the browser: over the app with Done on iPhone, in a browser tab on a computer. Their outward arrow already says they leave |
 | Links (question 5) | The manifest asks for links within Aeolus to open in the installed app, reusing its open window and moving it to the addressed item, where the browser allows (Chrome and Edge on a computer, Android). On iPhone a link opens Safari, which opens the item as today |
 | Service worker | The app's own, at its address. It serves one page when a navigation fails for want of a connection, and caches only that page and what it draws with: never questions, steps, messages or the fleet. Push and its consent stay with #268 and #269; installing asks no permission |
-| No connection | "No connection. Aeolus cannot reach your fleet. Nothing is lost: what waits for you stays in the fleet and shows here once you are back." with Try again. An open page that loses its connection keeps the existing live state and failure messages of the pages design |
+| No connection | "Sails lowered" over the wind crossed out (Thomas's wording), then "Your fleet can't hear us right now. Nothing is lost: what waits for you stays in the fleet and shows here once the wind is back." with Try again. An open page that loses its connection keeps the existing live state and failure messages of the pages design |
 
 ### The path, happy and unhappy
 
@@ -162,7 +162,7 @@ The build lives in ThomasHendrickx/aeolus-app at `app.aeolus-fleet.dev`, under t
 
 ## Design approval
 
-Asked on Aeolus.
+**First answer: option 2, revise.** Thomas: the Install Aeolus row's arrow was oversized and pushed the text aside; the no connection screen can be more branded, "Sails lowered. Your fleet can't hear us right now.", with a visual iterating on the no-connection one; the sign-in screens were plain and can take Aeolus-themed visuals and background. All three are redrawn above. Asked again on Aeolus.
 
 1. **Approve.** The detailed design and sheets become the acceptance criteria for the build in aeolus-app.
 2. **Revise what the note names.** Change the named sheets or behaviour before approval.
