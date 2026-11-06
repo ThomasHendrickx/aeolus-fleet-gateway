@@ -21,10 +21,31 @@ export async function runGateway(args: string[], environment: Record<string, str
   }
 }
 
-/** A gateway started from its source with `start`, as the bin runs, until the test stops it. */
+/** A process started in a group of its own, until the test stops it. */
 export interface RunningGateway {
-  /** Ends the gateway and every process it started (npx, tsx, its web app's server), and waits until it exited. */
+  /** The pid of the group's leader. */
+  pid: number;
+  /** Ends the process and every process it started (npx, tsx, its web app's server), and waits until it exited. */
   stop(): Promise<void>;
+}
+
+/** Starts a command in a process group of its own, so stopping it ends the whole group. */
+export function startProcessGroup(command: string, args: string[], environment: Record<string, string>): RunningGateway {
+  const child = spawn(command, args, { env: { ...process.env, ...environment }, stdio: 'ignore', detached: true });
+  const exited = new Promise<void>((resolve) => {
+    child.once('exit', () => {
+      resolve();
+    });
+  });
+  return {
+    pid: child.pid ?? 0,
+    stop: async () => {
+      if (child.pid !== undefined && child.exitCode === null) {
+        process.kill(-child.pid, 'SIGTERM');
+      }
+      await exited;
+    },
+  };
 }
 
 /**
@@ -33,18 +54,5 @@ export interface RunningGateway {
  * own web app's development server.
  */
 export function startGateway(environment: Record<string, string>): RunningGateway {
-  const gateway = spawn('npx', ['tsx', 'src/bin/aeolus-gateway.ts', 'start'], { env: { ...process.env, ...environment }, stdio: 'ignore', detached: true });
-  const exited = new Promise<void>((resolve) => {
-    gateway.once('exit', () => {
-      resolve();
-    });
-  });
-  return {
-    stop: async () => {
-      if (gateway.pid !== undefined && gateway.exitCode === null) {
-        process.kill(-gateway.pid, 'SIGTERM');
-      }
-      await exited;
-    },
-  };
+  return startProcessGroup('npx', ['tsx', 'src/bin/aeolus-gateway.ts', 'start'], environment);
 }
