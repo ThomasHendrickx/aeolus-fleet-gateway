@@ -159,3 +159,13 @@ flowchart TD
 ### Build boundaries
 
 The build lives in ThomasHendrickx/aeolus-app at `app.aeolus-fleet.dev`, under that repository's structure. It adds a manifest, the copied brand icons, the Install Aeolus entry, the sign-in explanation for the iPhone home screen app, and a service worker with the no-connection page only. It adds no content cache, no new fleet functionality and no notification. Accessibility follows the pages design: keyboard focus, visible focus, both themes, 360 to 2560 px.
+
+## Design approval
+
+Asked on Aeolus.
+
+1. **Approve.** The detailed design and sheets become the acceptance criteria for the build in aeolus-app.
+2. **Revise what the note names.** Change the named sheets or behaviour before approval.
+3. **None of these.** Say what the design misses.
+
+**Pick: 1.** It follows every answer, adds only what the browser's own install needs, and covers each unhappy path without a stale copy of the record.
