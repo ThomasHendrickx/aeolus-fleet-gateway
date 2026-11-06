@@ -81,6 +81,7 @@ import type { SendMessage } from '../../core/people/send-message.js';
 import type { ReadSendTo } from '../../core/people/read-send-to.js';
 import type { ReadBridgeHome } from '../../core/people/read-bridge-home.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
+import type { ReadItem } from '../../core/people/read-item.js';
 import type { ReadRecord } from '../../core/people/read-record.js';
 import type { ReadFleetAlertCount } from '../../core/people/read-fleet-alert-count.js';
 import type { ReadYourFleet } from '../../core/people/read-your-fleet.js';
@@ -192,6 +193,7 @@ export interface Context {
     readBridgeHome: ReadBridgeHome;
     readRecord: ReadRecord;
     openDelivery: OpenDelivery;
+    readItem: ReadItem;
     answerDelivery: AnswerDelivery;
     doneDelivery: DoneDelivery;
     readBasket: ReadBasket;
@@ -1294,6 +1296,8 @@ export const gatewayRouter = t.router({
     record: personProcedure
       .input(z.strictObject({ cursor: idSchema('delivery').nullable() }))
       .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readRecord({ caller: ctx.caller, cursor: input.cursor }))),
+    /** One item whole by its delivery id, waiting, opened or done, acknowledging nothing. */
+    item: personProcedure.input(z.strictObject({ deliveryId: idSchema('delivery') })).query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readItem({ caller: ctx.caller, ...input }))),
     /** Opens one delivery, whole; the gateway acknowledges it for them. */
     open: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.openDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
     /** Answers a delivery they opened, to its sender. */
