@@ -80,7 +80,7 @@ Context: The gateway serves Bridge (/bridge), the outside-parties pages Bridge l
 
 ### 4. What does the installed window and app switcher title say?
 
-**Answered: option 4.** Thomas: "We are moving bridge to to app.aeolus-fleet.dev and it will be made into a new repository ThomasHendrickx/aeolus-app". Asked again for the title at that address, with the same options 1 and 2.
+**Answered: option 4.** Thomas: "We are moving bridge to to app.aeolus-fleet.dev and it will be made into a new repository ThomasHendrickx/aeolus-app". Asked again for the title at that address, with the same options 1 and 2. Thomas: "Ask orchestrator-1 first on the changes being made to the code of bridge, after that is cleared up and you still have a question regarding this, you can ask it again." Open with orchestrator-1.
 
 Context: Today every Bridge page is titled "Bridge · Aeolus" (#285, after aeolus-fleet#1674's <Surface> · Aeolus). The installed app's name is Aeolus, and the window title, task switcher and browser tab show the page title. Thomas: "We dont show Bridge, we show Aeolus".
 
