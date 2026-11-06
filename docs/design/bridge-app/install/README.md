@@ -31,7 +31,7 @@ The [app design's lessons](../README.md#2-lessons-to-check-against) apply. These
 
 ## The app's address
 
-Thomas: "It will live under app.aeolus-fleet.dev". Aeolus has its own address, apart from the gateway's, and its own repository. The installed app is everything under `app.aeolus-fleet.dev` and nothing else: a browser keeps an installed app's window to one address. Sign-in passes through pagasae and returns into the window, through a way back at the app's own address. The gateway's pages (outside parties, console), the Account app and outside links open in the browser, as their outward arrow says.
+Thomas: "It will live under app.aeolus-fleet.dev". Aeolus has its own address, apart from the gateway's, and its own repository, ThomasHendrickx/aeolus-app. The installed app is everything under `app.aeolus-fleet.dev` and nothing else: a browser keeps an installed app's window to one address. Sign-in passes through pagasae and returns into the window, through a way back at the app's own address. The gateway's pages (outside parties, console), the Account app and outside links open in the browser, as their outward arrow says.
 
 The purpose's "same addresses" holds within that address: the installed app and the browser open the same `app.aeolus-fleet.dev` addresses. Links to today's Bridge addresses on the gateway are the new repository's concern, not this design's.
 
@@ -80,7 +80,9 @@ Context: The gateway serves Bridge (/bridge), the outside-parties pages Bridge l
 
 ### 4. What does the installed window and app switcher title say?
 
-Asked on Aeolus. Context: Today every Bridge page is titled "Bridge · Aeolus" (#285, after aeolus-fleet#1674's <Surface> · Aeolus). The installed app's name is Aeolus, and the window title, task switcher and browser tab show the page title. Thomas: "We dont show Bridge, we show Aeolus".
+**Answered: option 4.** Thomas: "We are moving bridge to to app.aeolus-fleet.dev and it will be made into a new repository ThomasHendrickx/aeolus-app". Asked again for the title at that address, with the same options 1 and 2.
+
+Context: Today every Bridge page is titled "Bridge · Aeolus" (#285, after aeolus-fleet#1674's <Surface> · Aeolus). The installed app's name is Aeolus, and the window title, task switcher and browser tab show the page title. Thomas: "We dont show Bridge, we show Aeolus".
 
 1. **Aeolus.** Every Bridge page is titled Aeolus, in the browser tab and in the installed window alike. The gateway's other pages keep Gateway · Aeolus.
 2. **The place, then Aeolus.** Home · Aeolus, Done · Aeolus, a conversation as <ship> · Aeolus: tells windows and tabs apart.
