@@ -833,7 +833,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // A wake of its own for what waits at argo, for every person allowed as argo, at once after each read of argo's inbox, and on its own round as windows pass (argo's inbox, AI5).
   const argoWakes = createRoundWorker({
     name: "argo's wakes",
-    round: createWakeForArgo({ connections, accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, people: createPersonWakes({ channels: wakeChannels, routes, defaults: routingDefaults, focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock }), argoWakes: createPrismaArgoWakes(prisma), clock }),
+    round: createWakeForArgo({ connections, accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, people: createPersonWakes({ channels: wakeChannels, routes, defaults: routingDefaults, quietHours, quietShips, focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock }), argoWakes: createPrismaArgoWakes(prisma), clock }),
     sleep,
     intervalMs: ARGO_WAKES_ROUND_MS,
     log: server.log,

@@ -65,12 +65,12 @@ beforeEach(async () => {
   focused = memoryFocusedPages();
 });
 
-function waking(channels: WakeChannel[], routes: Route[] = [], preferences: { quietHours?: QuietHours[]; quietShips?: QuietShip[] } = {}) {
+function waking(channels: WakeChannel[], preferences: { routes?: Route[]; quietHours?: QuietHours[]; quietShips?: QuietShip[] } = {}) {
   return createWakeForArgo({
     connections,
     accounts,
     inboxOf: follow.inboxOf,
-    people: createPersonWakes({ channels, routes: memoryRoutes(routes), defaults: EVERY_JOB_WAKES, quietHours: memoryQuietHours(preferences.quietHours ?? []), quietShips: memoryQuietShips(preferences.quietShips ?? []), focused, focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => now } }),
+    people: createPersonWakes({ channels, routes: memoryRoutes(preferences.routes ?? []), defaults: EVERY_JOB_WAKES, quietHours: memoryQuietHours(preferences.quietHours ?? []), quietShips: memoryQuietShips(preferences.quietShips ?? []), focused, focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => now } }),
     argoWakes,
     clock: { now: () => now },
   });
@@ -126,7 +126,7 @@ describe('the wake for what waits at argo', () => {
     const turnedOff: Route[] = ITEM_JOBS.map((job) => ({ ...THOMAS, job, place: 'email', isOn: false, changedAt: new Date('2026-10-30T00:00:00.000Z') }));
     fleet.send(anArgoEntry(1));
 
-    await round(waking([push.channel, email.channel], turnedOff));
+    await round(waking([push.channel, email.channel], { routes: turnedOff }));
 
     expect([...push.woken, ...email.woken]).toEqual([]);
   });
@@ -207,7 +207,7 @@ describe("the wake for what waits at argo, with the person's preferences (prefer
 
   it('gives no wake for a message from a quiet ship', async () => {
     const push = aChannel('web-push');
-    const wakeForArgo = waking([push.channel], [], { quietShips: [{ ...THOMAS, quietShipId: TRIERARCH.shipId, name: TRIERARCH.name, isQuiet: true, changedAt: new Date('2026-10-30T00:00:00.000Z') }] });
+    const wakeForArgo = waking([push.channel], { quietShips: [{ ...THOMAS, quietShipId: TRIERARCH.shipId, name: TRIERARCH.name, isQuiet: true, changedAt: new Date('2026-10-30T00:00:00.000Z') }] });
     fleet.send(anArgoEntry(1));
 
     await round(wakeForArgo);
@@ -219,7 +219,7 @@ describe("the wake for what waits at argo, with the person's preferences (prefer
 
   it('gives no wake during quiet hours, and one at their end for what still waits', async () => {
     const push = aChannel('web-push');
-    const wakeForArgo = waking([push.channel], [], { quietHours: [someQuietHours()] });
+    const wakeForArgo = waking([push.channel], { quietHours: [someQuietHours()] });
     fleet.send(anArgoEntry(1));
     fleet.send(anArgoEntry(2));
     const wokenAfter: number[] = [];
@@ -236,7 +236,7 @@ describe("the wake for what waits at argo, with the person's preferences (prefer
   it('wakes by the next window once quiet hours are turned off during them', async () => {
     const push = aChannel('web-push');
     const quietHours = [someQuietHours()];
-    const wakeForArgo = waking([push.channel], [], { quietHours });
+    const wakeForArgo = waking([push.channel], { quietHours });
     fleet.send(anArgoEntry(1));
     await round(wakeForArgo);
 

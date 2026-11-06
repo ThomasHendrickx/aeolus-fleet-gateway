@@ -42,7 +42,9 @@ function withoutKeys<K, V>(map: ReadonlyMap<K, V>, keys: Iterable<K>): Map<K, V>
  * person, W1 to W10): through the channels on for the message's job (W8),
  * each at most once per its window, gathering what arrives inside it (W3),
  * and not while a page of the person is in focus, which shows it instead
- * (W6). It is kept apart from the person's own wake: its own windows, its own
+ * (W6). A quiet ship's message wakes nobody, and during the person's quiet
+ * hours no wake goes out: it is tried again once they end or a window
+ * passes, whichever comes first (preferences design). It is kept apart from the person's own wake: its own windows, its own
  * keys, and it says it waits at argo. A message done at argo is no longer
  * open, so done inside a window it wakes nobody.
  *
@@ -102,11 +104,17 @@ export function createWakeForArgo(deps: {
       return { ship, pending: new Map(), dueAt: null };
     }
     const now = deps.clock.now();
+    const [showing, quietUntil] = await Promise.all([deps.people.showing(ship, [...pending.values()].map(itemOf)), deps.people.quietUntil(ship)]);
+    if (quietUntil !== undefined) {
+      // Looked at again once a window passes, so quiet hours turned off meanwhile wake by then.
+      const nextWindowMs = Math.min(...showing.map(({ windowMs }) => windowMs));
+      return { ship, pending, dueAt: showing.length === 0 ? null : new Date(Math.min(quietUntil.getTime(), now.getTime() + nextWindowMs)) };
+    }
     const shown = new Set<string>();
     const kept: WakeChannelName[] = [];
     const heldUntil: number[] = [];
     let isRetried = false;
-    for (const channel of await deps.people.showing(ship, [...pending.values()].map(itemOf))) {
+    for (const channel of showing) {
       const lastSentAt = await deps.argoWakes.lastSentAt(ship, channel.name);
       if (lastSentAt !== undefined && lastSentAt.getTime() + channel.windowMs > now.getTime()) {
         heldUntil.push(lastSentAt.getTime() + channel.windowMs);
