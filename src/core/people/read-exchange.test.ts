@@ -19,18 +19,18 @@ function suffix(n: number): string {
 
 /** The nth message of the exchange with the tracker: odd ones from the tracker, even ones the person's own. */
 function aMessage(n: number, overrides: Partial<ExchangeMessage> = {}): ExchangeFixture['messages'][number] {
-  const own = n % 2 === 0;
+  const isOwn = n % 2 === 0;
   return {
     deliveryId: `dlv_01m3tbfspe96yf1rnr4ank${suffix(n)}`,
     messageId: `msg_01m3tbfspe96yf1rnr4ank${suffix(n)}`,
     otherShipId: TRACKER,
-    senderShipId: own ? CHARLOTTE : TRACKER,
+    senderShipId: isOwn ? CHARLOTTE : TRACKER,
     payload: `Message ${String(n)}`,
     isPayloadUnreadable: false,
     contentType: 'text/plain',
     inReplyTo: null,
     sentAt: '2026-11-06T10:00:00.000Z',
-    deliveryState: own ? 'acknowledged' : null,
+    deliveryState: isOwn ? 'acknowledged' : null,
     ...overrides,
   };
 }
