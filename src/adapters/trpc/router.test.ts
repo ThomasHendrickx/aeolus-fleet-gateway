@@ -77,6 +77,8 @@ const MANAGING_APPROVER_CREW = 'aeolus_ct_v1_managing_approver';
 const REQUEST_ID = 'req_01m5c7hmbt9f1vrkwb37az0001';
 const CURSOR_CLIENT = 'https://cursor.example.com/client.json';
 const DELIVERY = 'dlv_01m3tbfspe96yf1rnr4ank9dlv';
+/** A delivery id as the fleet writes one, for the queries that check it. */
+const READ_DELIVERY = 'dlv_01m3tbfspe96yf1rnr4ank0001';
 const QUESTION_ID = '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e';
 const DECIDED = 'req_01m5c7hmbt9f1vrkwb37az0002';
 const ORDERBOT_REQUEST: PendingRequest = {
@@ -176,6 +178,12 @@ function aContext(cookie: string | undefined, crewToken?: string): {
           deliveryId === DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
             ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} waits for you: read your inbox again` }),
+        ),
+      readItem: ({ caller, deliveryId }) =>
+        Promise.resolve(
+          deliveryId === READ_DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
+            ? ok({ deliveryId: READ_DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
+            : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} is yours: read your inbox again` }),
         ),
       answerDelivery: (input) => {
         answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId, contentType: input.contentType, payload: input.payload });
@@ -1027,6 +1035,18 @@ describe("a person reads and deals with their person ship's deliveries through t
     await expect(caller.people.putInBasket({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9txt', option: 1, optionLabel: 'Compact look first', note: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     await expect(caller.people.removeFromBasket({ questionId: QUESTION_ID })).rejects.toMatchObject({ code: 'CONFLICT' });
     await expect(caller.people.removeFromBasket({ questionId: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('reads one whole by its delivery id, without opening it', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.item({ deliveryId: READ_DELIVERY })).resolves.toMatchObject({ contentType: 'text/plain', payload: 'Publish it?', meetingId: null });
+  });
+
+  it('says a delivery that is not its own is not found when read', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.item({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0zzz' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('says a delivery that no longer waits is not found', async () => {
