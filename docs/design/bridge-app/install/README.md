@@ -1,6 +1,6 @@
 # Installing Aeolus
 
-Design for [#267](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/267), the second part of the [approved Bridge app order](../README.md#3-parts-and-order). The person sees **Aeolus**, never Bridge ([naming requirement](../pages/README.md#user-facing-name)); Bridge names this part of the gateway in code and design only. Thomas approved the purpose (question 1, option 1). The questions below settle the install path before the detailed design and before/after screens.
+Design for [#267](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/267), the second part of the [approved Bridge app order](../README.md#3-parts-and-order). The person sees **Aeolus**, never Bridge ([naming requirement](../pages/README.md#user-facing-name)); Bridge names this part of the gateway in code and design only. Thomas approved the purpose (question 1, option 1). Thomas approved the detailed design and [before/after sheets](mockups/comparison.html); they are the acceptance criteria for the build in ThomasHendrickx/aeolus-app.
 
 ## Purpose, approved
 
@@ -103,7 +103,7 @@ Context: A link to a question in Slack or mail opens the browser by default. Des
 
 **Pick: 1.** One window that follows the item, as #268 will need for a pushed item, and no duplicate windows; iPhone stays as good as today.
 
-## Detailed design, proposed
+## Detailed design, approved
 
 Drawn from the approved purpose, Thomas's answers to questions 2 and 5 and the app's address. The [before and after sheets](mockups/comparison.html) show it in both themes; [every sheet](mockups/index.html) renders the approved pages sheets inside today's browser and the installed window, with Aeolus shown in place of Bridge. The window and tab title is Aeolus (question 4).
 
@@ -115,7 +115,7 @@ Drawn from the approved purpose, Thomas's answers to questions 2 and 5 and the a
 | Icon | The Slate tiles from aeolus-fleet `brand/`: `icon-192.png`, `icon-512.png` and `apple-touch-icon.png`, copied, never redrawn. `brand/` has no maskable tile, so Android draws the rounded tile inside its own shape; a maskable tile belongs in `brand/` ([aeolus-fleet#1682](https://github.com/ThomasHendrickx/aeolus-fleet/issues/1682)) |
 | Install Aeolus | An entry under More on a phone and under Settings on a larger window (question 2). Where the browser offers its own install (Chrome, Edge, Android), the entry's Install button opens that prompt. On iPhone and iPad, it shows Safari's three taps. Where a browser offers neither, it says to use the browser's menu. Inside the installed app the entry does not show |
 | Opening | The installed window shows the approved home, or the item an address names, with no browser bars. Reloading and reopening keep the address (#282) |
-| Signing in | Signing in passes through the shared sign-in over the window and returns into it, to the asked address. The app opened from an iPhone home screen without its own sign-in says once why it asks, since Safari's sign-in does not reach it: "Welcome aboard" on Aeolus's own sea (navy, the light slate mark, wind and waves). In a browser the sign-in starts at once, as today. The sheet draws the shared sign-in on the same sea; that page is pagasae's, so its look is a change there |
+| Signing in | Signing in passes through the shared sign-in over the window and returns into it, to the asked address. The app opened from an iPhone home screen without its own sign-in says once why it asks, since Safari's sign-in does not reach it: "Welcome aboard" on Aeolus's own sea (navy, the light slate mark, wind and waves). In a browser the sign-in starts at once, as today. The sheet draws the shared sign-in on the same sea; that page is pagasae's, so its look is a change there ([pagasae#200](https://github.com/ThomasHendrickx/pagasae/issues/200)) |
 | Leaving | The Account app, the gateway's pages and outside links open in the browser: over the app with Done on iPhone, in a browser tab on a computer. Their outward arrow already says they leave |
 | Links (question 5) | The manifest asks for links within Aeolus to open in the installed app, reusing its open window and moving it to the addressed item, where the browser allows (Chrome and Edge on a computer, Android). On iPhone a link opens Safari, which opens the item as today |
 | Service worker | The app's own, at its address. It serves one page when a navigation fails for want of a connection, and caches only that page and what it draws with: never questions, steps, messages or the fleet. Push and its consent stay with #268 and #269; installing asks no permission |
@@ -162,7 +162,9 @@ The build lives in ThomasHendrickx/aeolus-app at `app.aeolus-fleet.dev`, under t
 
 ## Design approval
 
-**First answer: option 2, revise.** Thomas: the Install Aeolus row's arrow was oversized and pushed the text aside; the no connection screen can be more branded, "Sails lowered. Your fleet can't hear us right now.", with a visual iterating on the no-connection one; the sign-in screens were plain and can take Aeolus-themed visuals and background. All three are redrawn above. Asked again on Aeolus.
+**First answer: option 2, revise.** Thomas: the Install Aeolus row's arrow was oversized and pushed the text aside; the no connection screen can be more branded, "Sails lowered. Your fleet can't hear us right now.", with a visual iterating on the no-connection one; the sign-in screens were plain and can take Aeolus-themed visuals and background. All three are redrawn above.
+
+**Answered: option 1, approved by Thomas.** The design and sheets are the acceptance criteria for the build in aeolus-app; the sea on the shared sign-in is [pagasae#200](https://github.com/ThomasHendrickx/pagasae/issues/200).
 
 1. **Approve.** The detailed design and sheets become the acceptance criteria for the build in aeolus-app.
 2. **Revise what the note names.** Change the named sheets or behaviour before approval.

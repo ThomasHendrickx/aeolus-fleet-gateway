@@ -111,7 +111,7 @@ const S={
 };
 const order=Object.keys(S);
 if(sheet==='index'){document.getElementById('app').innerHTML=`<div style="padding:28px;font:15px Geist,system-ui"><h1>Installing Aeolus: sheets</h1><ul>${order.map(k=>`<li><a href="?sheet=${k}&theme=${theme}">${k}</a></li>`).join('')}</ul></div>`}
-else{document.getElementById('app').innerHTML=`<div class="sheet">${S[sheet]()}<span class="draftx">#267 · proposal, not approved</span></div>`}
+else{document.getElementById('app').innerHTML=`<div class="sheet">${S[sheet]()}<span class="draftx">#267 · approved design</span></div>`}
 // The approved pages sheets keep their labels; inside these sheets the person sees Aeolus.
 document.querySelectorAll('iframe.frame').forEach(f=>f.addEventListener('load',()=>{try{const d=f.contentDocument;const st=d.createElement('style');st.textContent='.draft,.demo-tools{display:none!important}';d.head.appendChild(st);const w=d.createTreeWalker(d.body,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){n.nodeValue=n.nodeValue.replace(/Bridge/g,'Aeolus')}}catch(e){}}));
 </script></body></html>
