@@ -91,7 +91,13 @@ import type { TurnOffWebPush } from '../../core/people/turn-off-web-push.js';
 import type { TurnOnWebPush } from '../../core/people/turn-on-web-push.js';
 import type { PersonShip } from '../../core/people/ports.js';
 import type { ReadChats } from '../../core/people/read-chats.js';
+import type { QuietSpell, QuietWindow } from '../../core/people/quiet-hours.js';
+import type { ReadQuietAmong } from '../../core/people/read-quiet-among.js';
+import type { ReadQuietHours } from '../../core/people/read-quiet-hours.js';
+import type { QuietShipView, ReadQuietShips } from '../../core/people/read-quiet-ships.js';
 import type { ReadRouting } from '../../core/people/read-routing.js';
+import type { SetQuietHours } from '../../core/people/set-quiet-hours.js';
+import type { TurnShipQuiet } from '../../core/people/turn-ship-quiet.js';
 import { ITEM_JOBS, ROUTING_PLACES } from '../../core/people/routing.js';
 import type { TurnRoute } from '../../core/people/turn-route.js';
 import type { ReadAuthorization } from '../../core/oauth/read-authorization.js';
@@ -205,6 +211,11 @@ export interface Context {
     readChats: ReadChats;
     readRouting: ReadRouting;
     turnRoute: TurnRoute;
+    readQuietHours: ReadQuietHours;
+    setQuietHours: SetQuietHours;
+    readQuietShips: ReadQuietShips;
+    readQuietAmong: ReadQuietAmong;
+    turnShipQuiet: TurnShipQuiet;
     turnOnWebPush: TurnOnWebPush;
     turnOffWebPush: TurnOffWebPush;
     focusPage: FocusPage;
@@ -641,9 +652,22 @@ const PERSON_CODES = {
   CONFLICT: 'CONFLICT',
   CHANNEL_NOT_OFFERED: 'PRECONDITION_FAILED',
   INVALID_SUBSCRIPTION: 'BAD_REQUEST',
+  INVALID_QUIET_HOURS: 'BAD_REQUEST',
   NO_SUCH_MEETING: 'NOT_FOUND',
   MIC_REFUSED: 'CONFLICT',
 } as const satisfies Record<string, TRPCError['code']>;
+
+/** A time of the day as a person's client sends and shows it, "HH:MM" on a 24 hour clock. */
+const timeOfDaySchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'A time of the day, as HH:MM');
+const MINUTES_PER_HOUR = 60;
+/** The most ships a person's client asks about at once, as many as a page of conversations shows and more. */
+const QUIET_AMONG_MAX = 100;
+
+const minuteOfDayOf = (time: string): number => Number(time.slice(0, 2)) * MINUTES_PER_HOUR + Number(time.slice(3, 5));
+const timeOfDayOf = (minute: number): string => `${String(Math.floor(minute / MINUTES_PER_HOUR)).padStart(2, '0')}:${String(minute % MINUTES_PER_HOUR).padStart(2, '0')}`;
+const quietWindowViewOf = ({ fromMinute, toMinute, timeZone }: QuietWindow) => ({ from: timeOfDayOf(fromMinute), to: timeOfDayOf(toMinute), timeZone });
+const quietSpellViewOf = ({ since, until, arrived }: QuietSpell & { arrived: number }) => ({ since: since.toISOString(), until: until.toISOString(), arrived });
+const quietShipOf = ({ shipId, name, since }: QuietShipView) => ({ shipId, name, since: since.toISOString() });
 
 /** A message a person writes to a ship in Bridge: text or Markdown, as its form says. */
 const MESSAGE_CONTENT_TYPE = 'text/markdown';
@@ -1337,6 +1361,30 @@ export const gatewayRouter = t.router({
       .input(z.strictObject({ job: z.enum(ITEM_JOBS), place: z.enum(ROUTING_PLACES), isOn: z.boolean() }))
       .mutation(async ({ ctx, input }) => {
         personAnswerOf(await ctx.person.turnRoute({ caller: ctx.caller, ...input }));
+      }),
+    /** Their quiet hours (preferences design): on or off, the window they set, and while in effect, since and until when, and how many of what waits arrived since. */
+    quietHours: personProcedure.query(async ({ ctx }) => {
+      const { isOn, window, quietNow } = personAnswerOf(await ctx.person.readQuietHours(ctx.caller));
+      return { isOn, window: window === null ? null : quietWindowViewOf(window), quietNow: quietNow === null ? null : quietSpellViewOf(quietNow) };
+    }),
+    /** Sets their quiet hours, one daily window in the time zone of the device that set them; it applies at once. */
+    setQuietHours: personProcedure
+      .input(z.strictObject({ isOn: z.boolean(), from: timeOfDaySchema, to: timeOfDaySchema, timeZone: z.string().min(1) }))
+      .mutation(async ({ ctx, input: { isOn, from, to, timeZone } }) => {
+        personAnswerOf(await ctx.person.setQuietHours({ caller: ctx.caller, isOn, fromMinute: minuteOfDayOf(from), toMinute: minuteOfDayOf(to), timeZone }));
+      }),
+    /** A page of their quiet ships, the latest quieted first, after the cursor the last page answered. */
+    quietShips: personProcedure.input(z.strictObject({ cursor: idSchema('ship').nullable() })).query(async ({ ctx, input }) => {
+      const { ships, nextCursor } = personAnswerOf(await ctx.person.readQuietShips({ caller: ctx.caller, cursor: input.cursor }));
+      return { ships: ships.map(quietShipOf), nextCursor };
+    }),
+    /** Which of the ships asked are quiet, to mark them in a conversation and the list of conversations. */
+    quietAmong: personProcedure.input(z.strictObject({ shipIds: z.array(idSchema('ship')).max(QUIET_AMONG_MAX) })).query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readQuietAmong({ caller: ctx.caller, shipIds: input.shipIds })).map(quietShipOf)),
+    /** Quiets a ship, so it never wakes them, or wakes it again; it applies at once. */
+    turnShipQuiet: personProcedure
+      .input(z.strictObject({ shipId: idSchema('ship'), name: z.string().min(1), isQuiet: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        personAnswerOf(await ctx.person.turnShipQuiet({ caller: ctx.caller, ...input }));
       }),
     /** Turns web push on for the browser that sent its subscription; its wakes name the fleet as the person's shared sign-in states it. */
     turnOnWebPush: personProcedure.input(webPushSubscriptionInputSchema).mutation(async ({ ctx, input }) => {

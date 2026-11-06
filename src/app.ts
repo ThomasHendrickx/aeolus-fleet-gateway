@@ -192,6 +192,11 @@ import { createPrismaArgoSlackPosts } from './adapters/prisma/argo-slack-posts.j
 import { createReadArgoSection } from './core/argo-inbox/read-argo-section.js';
 import { createWakeForArgo } from './core/argo-inbox/wake-for-argo.js';
 import { createPersonWakes } from './core/people/person-wakes.js';
+import { createReadQuietAmong } from './core/people/read-quiet-among.js';
+import { createReadQuietHours } from './core/people/read-quiet-hours.js';
+import { createReadQuietShips } from './core/people/read-quiet-ships.js';
+import { createSetQuietHours } from './core/people/set-quiet-hours.js';
+import { createTurnShipQuiet } from './core/people/turn-ship-quiet.js';
 import { createPrismaArgoWakes } from './adapters/prisma/argo-wakes.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createExchangeIdJag } from './core/oauth/exchange-id-jag.js';
@@ -908,6 +913,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       }),
       readChats: createReadChats({ crewPersonShip: asCrew.crewPersonShip, chats: createPrismaConnectedChats(prisma), clock }),
       readRouting: createReadRouting({ crewPersonShip: asCrew.crewPersonShip, routes, defaults: routingDefaults, ...placesOffered }),
+      readQuietHours: createReadQuietHours({ ...asCrew, quietHours, clock }),
+      setQuietHours: createSetQuietHours({ crewPersonShip: asCrew.crewPersonShip, quietHours, clock }),
+      readQuietShips: createReadQuietShips({ crewPersonShip: asCrew.crewPersonShip, quietShips }),
+      readQuietAmong: createReadQuietAmong({ crewPersonShip: asCrew.crewPersonShip, quietShips }),
+      turnShipQuiet: createTurnShipQuiet({ crewPersonShip: asCrew.crewPersonShip, quietShips, clock }),
       turnRoute: createTurnRoute({ crewPersonShip: asCrew.crewPersonShip, routes, defaults: routingDefaults, ...placesOffered, clock }),
       turnOnWebPush: createTurnOnWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions, resolver: systemHostResolver, isWebPushOffered: options.webPush !== undefined, clock }),
       turnOffWebPush: createTurnOffWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions }),
