@@ -160,32 +160,32 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readInbox: (caller) =>
         Promise.resolve(
           [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
-            ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, pick: null }], opened: [] })
+            ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, pick: null }], opened: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       readBridgeHome: (caller) =>
         Promise.resolve(
           grantOf(caller) === PERSON_TOKEN
-            ? ok({ waiting: { count: 1, items: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, isAlert: false, state: 'new' as const, seenIn: null, stale: null, inBasket: null, places: ['chat' as const], actInPlace: { kind: 'putPick' as const, option: 1 } }] }, stayAware: [], messages: [] })
+            ? ok({ waiting: { count: 1, items: [{ deliveryId: DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, isAlert: false, state: 'new' as const, seenIn: null, stale: null, inBasket: null, places: ['chat' as const], actInPlace: { kind: 'putPick' as const, option: 1 } }] }, stayAware: [], messages: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       readRecord: ({ cursor }) =>
         Promise.resolve(
           ok({
-            items: [{ deliveryId: DELIVERY, from: 'watch', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-20T09:00:00.000Z', job: 'stay-aware' as const, isAlert: true, state: 'done' as const, places: [], contentType: 'application/vnd.aeolus.alert+json', payload: '{}', outcome: { place: 'bridge' as const, kind: 'seen' as const, option: null, optionLabel: null, note: null, seen: { place: 'bridge' as const, at: '2026-10-20T09:05:00.000Z' }, replacementTitle: null, at: '2026-10-20T09:05:00.000Z' } }],
+            items: [{ deliveryId: DELIVERY, from: 'watch', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0wch' as const, title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-20T09:00:00.000Z', job: 'stay-aware' as const, isAlert: true, state: 'done' as const, places: [], contentType: 'application/vnd.aeolus.alert+json', payload: '{}', outcome: { place: 'bridge' as const, kind: 'seen' as const, option: null, optionLabel: null, note: null, seen: { place: 'bridge' as const, at: '2026-10-20T09:05:00.000Z' }, replacementTitle: null, at: '2026-10-20T09:05:00.000Z' } }],
             nextCursor: cursor,
           }),
         ),
       openDelivery: ({ caller, deliveryId }) =>
         Promise.resolve(
           deliveryId === DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
-            ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
+            ? ok({ deliveryId: DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} waits for you: read your inbox again` }),
         ),
       readItem: ({ caller, deliveryId }) =>
         Promise.resolve(
           deliveryId === READ_DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
-            ? ok({ deliveryId: READ_DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
+            ? ok({ deliveryId: READ_DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} is yours: read your inbox again` }),
         ),
       answerDelivery: (input) => {
@@ -941,7 +941,7 @@ describe("a person reads and deals with their person ship's deliveries through t
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).resolves.toEqual({
       waiting: 1,
-      deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide', pick: null }],
+      deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide', pick: null }],
       opened: [],
     });
   });

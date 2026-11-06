@@ -10,7 +10,7 @@ import { StayAwarePanel } from './stay-aware-panel';
 // outside the count.
 
 function anItem(overrides: Partial<HomeItem> = {}): HomeItem {
-  return { deliveryId: 'dlv_01', from: 'watch', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-31T19:47:00.000Z', job: 'stay-aware', isAlert: true, state: 'new', stale: null, inBasket: null, seenIn: null, places: [], actInPlace: null, ...overrides };
+  return { deliveryId: 'dlv_01', from: 'watch', fromShipId: 'shp_01', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-31T19:47:00.000Z', job: 'stay-aware', isAlert: true, state: 'new', stale: null, inBasket: null, seenIn: null, places: [], actInPlace: null, ...overrides };
 }
 
 const SEEN = anItem({ deliveryId: 'dlv_02', from: 'trierarch', title: 'trierarch plugin 0.35.1 released', sentAt: '2026-10-31T15:00:00.000Z', isAlert: false, state: 'done', seenIn: 'bridge' });

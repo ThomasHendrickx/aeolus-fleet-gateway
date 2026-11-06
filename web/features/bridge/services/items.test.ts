@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ageOf, clockTimeOf, dayOf, doneOutcomeOf, endedOf, fromWordsOf, historyOf, jobLabelOf, jobWordOf, screenTitleOf, seenWordsOf, type RecordItem } from './items';
 
 function anItem(overrides: Partial<RecordItem> = {}): RecordItem {
-  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', isAlert: false, state: 'done', places: [], contentType: 'application/vnd.aeolus.question+json', payload: '{}', outcome: null, ...overrides };
+  return { deliveryId: 'dlv_01', from: 'orchestrator-1', fromShipId: 'shp_01', title: 'Which goes first?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', isAlert: false, state: 'done', places: [], contentType: 'application/vnd.aeolus.question+json', payload: '{}', outcome: null, ...overrides };
 }
 
 type Outcome = NonNullable<RecordItem['outcome']>;

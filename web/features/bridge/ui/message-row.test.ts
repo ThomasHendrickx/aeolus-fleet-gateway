@@ -14,6 +14,7 @@ const NOW = new Date('2026-10-31T20:00:00.000Z');
 const MESSAGE: BridgeHome['messages'][number] = {
   deliveryId: 'dlv_11',
   from: 'builder-core',
+  fromShipId: 'shp_01',
   title: 'Staging is green again after the migration',
   sentAt: '2026-10-31T19:57:00.000Z',
   job: 'everything-else',

@@ -425,7 +425,7 @@ describe("every answer of a person's tools carries their inbox state (gateway #2
 });
 
 describe('a person opens a delivery with aeolus_open', () => {
-  const OPENED = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0s02' as const, from: 'chief-of-staff', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0cos', title: 'You were added to a meeting', sentAt: '2026-10-19T08:00:00.000Z', stale: null };
+  const OPENED = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0s02' as const, from: 'chief-of-staff', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0cos' as const, title: 'You were added to a meeting', sentAt: '2026-10-19T08:00:00.000Z', stale: null };
 
   it('answers a meeting notice as its sentence, with the meeting to read, and without its payload or content type', async () => {
     const meetingId = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' as const;
@@ -447,7 +447,7 @@ describe('a person opens a delivery with aeolus_open', () => {
   });
 
   it('answers the inbox in words, with the deliveryId to open each by', async () => {
-    const entry = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' as const, from: 'tracker', title: 'The build is red', sentAt: '2026-10-19T08:00:00.000Z', job: 'everything-else' as const, pick: null };
+    const entry = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' as const, from: 'tracker', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk' as const, title: 'The build is red', sentAt: '2026-10-19T08:00:00.000Z', job: 'everything-else' as const, pick: null };
     const mcp = await connected(personTools({ readInbox: () => Promise.resolve(ok({ waiting: 1, deliveries: [entry], opened: [] })) }).deps);
 
     const called = await mcp.callTool({ name: 'aeolus_inbox', arguments: {} });

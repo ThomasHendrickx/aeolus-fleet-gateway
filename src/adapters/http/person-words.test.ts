@@ -7,7 +7,7 @@ import { inboxWords, meetingWords, openedWords } from './person-words.js';
 // What a person's chat reads aloud: sentences with the times in words, the
 // ids only where the chat must pass one back, never a content type.
 
-const ENTRY = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', job: 'decide', pick: { option: 1, why: 'Every check is green' } } as const;
+const ENTRY = { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', from: 'tracker', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', title: 'Go for release 1.4?', sentAt: '2026-10-19T08:00:00.000Z', job: 'decide', pick: { option: 1, why: 'Every check is green' } } as const;
 
 describe('the inbox, in words', () => {
   it('says how many wait, each with who sent it, when, its job, the asker\'s pick and the deliveryId to open it by', () => {
@@ -29,7 +29,7 @@ describe('the inbox, in words', () => {
 
 describe('a meeting notice opened, in words', () => {
   it('says its sentence and the meeting to read, no payload and no content type', () => {
-    expect(openedWords({ deliveryId: ENTRY.deliveryId, from: 'chief-of-staff', title: 'You were added to a meeting', sentAt: ENTRY.sentAt, contentType: 'application/vnd.aeolus.meeting.added+json', payload: '{}', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg', said: 'chief-of-staff added you to the meeting “Weekly heads”.', stale: null })).toBe(
+    expect(openedWords({ deliveryId: ENTRY.deliveryId, from: 'chief-of-staff', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0cos', title: 'You were added to a meeting', sentAt: ENTRY.sentAt, contentType: 'application/vnd.aeolus.meeting.added+json', payload: '{}', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg', said: 'chief-of-staff added you to the meeting “Weekly heads”.', stale: null })).toBe(
       'chief-of-staff added you to the meeting “Weekly heads”. (meetingId mtg_01m5qa5j85mgd4z61d9c2k4mtg)',
     );
   });

@@ -8,7 +8,7 @@ import { AsLastRead } from './kept-read';
 import { SendMessageProvider } from './send-message';
 
 function anItem(overrides: Partial<HomeItem> = {}): HomeItem {
-  return { deliveryId: 'dlv_01', from: 'orchestrator-1', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', isAlert: false, state: 'new', stale: null, inBasket: null, seenIn: null, places: [], actInPlace: null, ...overrides };
+  return { deliveryId: 'dlv_01', from: 'orchestrator-1', fromShipId: 'shp_01', title: 'Which goes first: the Compact look (U4) or Harbour?', sentAt: '2026-10-31T19:48:00.000Z', job: 'decide', isAlert: false, state: 'new', stale: null, inBasket: null, seenIn: null, places: [], actInPlace: null, ...overrides };
 }
 
 const WAITING = { count: 2, items: [anItem(), anItem({ deliveryId: 'dlv_02', job: 'do', title: 'Create the GitHub repository aeolus-fleet-memory-plugin' })] };

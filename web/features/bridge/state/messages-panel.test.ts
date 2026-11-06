@@ -15,7 +15,7 @@ const NOW = '2026-10-31T20:00:00.000Z';
 const ROUTER: AppRouterInstance = { back: () => undefined, forward: () => undefined, refresh: () => undefined, push: () => undefined, replace: () => undefined, prefetch: () => undefined, bfcacheId: 'messages-panel-test' };
 
 function aMessage(index: number, state: 'new' | 'seen'): BridgeHome['messages'][number] {
-  return { deliveryId: `dlv_${String(100 + index)}`, from: 'builder-core', title: `Message ${String(index)}`, sentAt: '2026-10-31T19:57:00.000Z', job: 'everything-else', isAlert: false, state, stale: null, inBasket: null, seenIn: state === 'seen' ? 'bridge' : null, places: [], actInPlace: null, excerpt: '' };
+  return { deliveryId: `dlv_${String(100 + index)}`, from: 'builder-core', fromShipId: 'shp_01', title: `Message ${String(index)}`, sentAt: '2026-10-31T19:57:00.000Z', job: 'everything-else', isAlert: false, state, stale: null, inBasket: null, seenIn: state === 'seen' ? 'bridge' : null, places: [], actInPlace: null, excerpt: '' };
 }
 
 function pageOf(messages: BridgeHome['messages']): string {

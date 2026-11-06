@@ -24,6 +24,7 @@ function anItem(overrides: Partial<RecordItem> = {}): RecordItem {
   return {
     deliveryId: 'dlv_01',
     from: 'orchestrator-1',
+    fromShipId: 'shp_01',
     title: QUESTION.title,
     sentAt: '2026-10-31T19:41:00.000Z',
     job: 'decide',
