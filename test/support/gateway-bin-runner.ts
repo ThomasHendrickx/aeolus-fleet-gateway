@@ -6,7 +6,7 @@ import { startProcessGroup } from './gateway-bin.js';
  * mode in the first argument says. gateway-bin.test.ts ends it and looks for the pid.
  */
 const mode = process.argv[2];
-const child = startProcessGroup('sleep', ['600'], {});
+const child = startProcessGroup(['sleep', '600'], {});
 process.stdout.write(`${String(child.pid)}\n`);
 if (mode === 'exit') {
   process.exit(0);

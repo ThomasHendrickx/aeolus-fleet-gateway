@@ -2,6 +2,9 @@ import { spawn } from 'node:child_process';
 
 import { describe, expect, it } from 'vitest';
 
+/** A run of the stand-in starts through tsx, which takes seconds on a busy machine. */
+const RUN_TIMEOUT_MS = 30_000;
+
 /** Whether a process with this pid still exists. */
 function isAlive(pid: number): boolean {
   try {
@@ -21,7 +24,7 @@ async function startRun(mode: 'exit' | 'wait'): Promise<{ run: ReturnType<typeof
     });
   });
   const childPid = await new Promise<number>((resolve) => {
-    run.stdout?.once('data', (chunk: Buffer) => {
+    run.stdout.once('data', (chunk: Buffer) => {
       resolve(Number(chunk.toString().trim()));
     });
   });
@@ -34,7 +37,7 @@ describe('a process a test run starts in its own group', () => {
     await ended;
 
     await expect.poll(() => isAlive(childPid)).toBe(false);
-  });
+  }, RUN_TIMEOUT_MS);
 
   it.each(['SIGTERM', 'SIGINT', 'SIGHUP'] as const)('is gone when the run is interrupted by %s', async (signal) => {
     const { run, childPid, ended } = await startRun('wait');
@@ -44,5 +47,5 @@ describe('a process a test run starts in its own group', () => {
     await ended;
 
     await expect.poll(() => isAlive(childPid)).toBe(false);
-  });
+  }, RUN_TIMEOUT_MS);
 });
