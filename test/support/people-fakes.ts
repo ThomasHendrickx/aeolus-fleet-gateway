@@ -5,6 +5,8 @@ import type { BasketEntries, BasketEntry } from '../../src/core/people/basket.js
 import type { CrewPersonShip } from '../../src/core/people/crew-person-ship.js';
 import type { ItemOutcome, ItemOutcomes } from '../../src/core/people/item-outcome.js';
 import type { PersonCaller } from '../../src/core/people/person-crew.js';
+import type { QuietHours, QuietHoursStore } from '../../src/core/people/quiet-hours.js';
+import type { QuietShip, QuietShips } from '../../src/core/people/quiet-ships.js';
 import type { Route, Routes } from '../../src/core/people/routing.js';
 import { createHeldDeliveries, holdingDoor, type HeldDeliveries } from '../../src/core/people/held-deliveries.js';
 import type { AccountDoor, ConnectedChat, ConnectedChats, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, LetGoDeliveries, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
@@ -471,6 +473,41 @@ export function memoryRoutes(held: Route[] = []): Routes & { held: Route[] } {
     save: (route) => {
       const index = held.findIndex((each) => each.fleetId === route.fleetId && each.shipId === route.shipId && each.job === route.job && each.place === route.place);
       held.splice(index < 0 ? held.length : index, index < 0 ? 0 : 1, route);
+      return Promise.resolve();
+    },
+  };
+}
+
+/** Each person's quiet hours, in memory. */
+export function memoryQuietHours(held: QuietHours[] = []): QuietHoursStore & { held: QuietHours[] } {
+  return {
+    held,
+    find: ({ fleetId, shipId }) => Promise.resolve(held.find((hours) => hours.fleetId === fleetId && hours.shipId === shipId)),
+    save: (hours) => {
+      const index = held.findIndex((each) => each.fleetId === hours.fleetId && each.shipId === hours.shipId);
+      held.splice(index < 0 ? held.length : index, index < 0 ? 0 : 1, hours);
+      return Promise.resolve();
+    },
+  };
+}
+
+/** Each person's quiet ships, in memory, listed the latest quieted first. */
+export function memoryQuietShips(held: QuietShip[] = []): QuietShips & { held: QuietShip[] } {
+  const ofShip = ({ fleetId, shipId }: { fleetId: FleetId; shipId: ShipId }) => held.filter((each) => each.fleetId === fleetId && each.shipId === shipId);
+  return {
+    held,
+    among: (ship, shipIds) => Promise.resolve(ofShip(ship).filter(({ quietShipId }) => shipIds.includes(quietShipId))),
+    listQuiet: (ship, { cursor, limit }) => {
+      const quiet = ofShip(ship)
+        .filter(({ isQuiet }) => isQuiet)
+        .sort((a, b) => b.changedAt.getTime() - a.changedAt.getTime() || b.quietShipId.localeCompare(a.quietShipId));
+      const start = cursor === null ? 0 : quiet.findIndex(({ quietShipId }) => quietShipId === cursor) + 1;
+      const ships = quiet.slice(start, start + limit);
+      return Promise.resolve({ ships, nextCursor: start + limit < quiet.length ? (ships.at(-1)?.quietShipId ?? null) : null });
+    },
+    save: (quietShip) => {
+      const index = held.findIndex((each) => each.fleetId === quietShip.fleetId && each.shipId === quietShip.shipId && each.quietShipId === quietShip.quietShipId);
+      held.splice(index < 0 ? held.length : index, index < 0 ? 0 : 1, quietShip);
       return Promise.resolve();
     },
   };
