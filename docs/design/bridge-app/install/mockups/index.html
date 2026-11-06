@@ -1,0 +1,100 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Installing Aeolus: design for approval</title><link rel="stylesheet" href="../../pages/mockups/mockup.css"><style>
+body{margin:0;background:#dcdad6;font-family:var(--font-geist-sans),Geist,system-ui,sans-serif;color:#182a3d;display:block;min-height:0}
+.dark body,body.darkpage{background:#0b121b}
+.sheet{display:inline-flex;gap:28px;padding:28px 28px 34px;align-items:flex-start;position:relative}
+.cap{font:600 13px/1.4 Geist,system-ui;color:#182a3d;margin:0 0 10px;max-width:390px}.cap small{display:block;font-weight:400;color:#56616d}
+.dark .cap{color:#edf1f6}.dark .cap small{color:#a3afbc}
+.phone{width:390px;height:844px;border-radius:46px;background:#111;padding:10px;box-sizing:border-box;box-shadow:0 10px 40px #0003}
+.screen{position:relative;width:100%;height:100%;border-radius:37px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column}
+.status{height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 28px;font:600 14px Geist,system-ui;color:var(--ink);background:var(--bg)}
+.island{width:110px;height:30px;border-radius:20px;background:#000}
+.frame{flex:1;border:0;width:100%;display:block;background:var(--bg)}
+.safari{flex:none;background:var(--surface);border-top:1px solid var(--line);padding:8px 14px 22px}
+.urlbar{background:var(--soft);border-radius:12px;padding:9px 12px;font:14px Geist,system-ui;color:var(--ink);text-align:center}
+.safaritools{display:flex;justify-content:space-between;padding:10px 12px 0;color:#2f7cf6}
+.safaritools svg{width:22px;height:22px}
+.overlay{position:absolute;inset:0;background:#0006;display:flex;align-items:flex-end}
+.sheetpanel{background:var(--surface);color:var(--ink);width:100%;border-radius:16px 16px 0 0;padding:18px 18px 30px;box-sizing:border-box;font:15px/1.4 Geist,system-ui}
+.sheetpanel .opt{display:flex;justify-content:space-between;align-items:center;padding:13px 4px;border-bottom:1px solid var(--line)}
+.sheetpanel .opt.hl{background:var(--wash);border-radius:10px;padding:13px 10px;font-weight:600}
+.addcard{display:flex;gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:12px;margin:12px 0}
+.addcard img{width:56px;height:56px;border-radius:13px}
+.ios-head{display:flex;justify-content:space-between;font-weight:600;padding-bottom:10px}.ios-head span{color:#2f7cf6;font-weight:400}.ios-head b{color:#2f7cf6}
+.springboard{flex:1;background:linear-gradient(160deg,#5d7da8,#2c4566 60%,#1b2b41);display:grid;grid-template-columns:repeat(4,1fr);gap:22px 10px;padding:30px 18px;align-content:start}
+.app{display:flex;flex-direction:column;align-items:center;gap:6px;font:12px Geist,system-ui;color:#fff}
+.app i{width:62px;height:62px;border-radius:15px;background:#ffffff30;display:block}
+.app img{width:62px;height:62px;border-radius:15px;display:block}
+.app.new img{outline:3px solid #fff8;outline-offset:3px}
+.desk{width:1200px;height:760px;border-radius:12px;overflow:hidden;background:var(--bg);box-shadow:0 10px 40px #0003;display:flex;flex-direction:column;border:1px solid #0002}
+.chrome-tabs{height:38px;flex:none;background:#dfe3e8;display:flex;align-items:flex-end;padding:0 10px;gap:6px}
+.dark .chrome-tabs{background:#1f2730}
+.chrome-tab{background:var(--surface);color:var(--ink);border-radius:9px 9px 0 0;padding:8px 14px;font:13px Geist,system-ui;display:flex;gap:8px;align-items:center;min-width:180px}
+.chrome-tab img,.titlebar img{width:16px;height:16px;border-radius:4px}
+.chrome-bar{height:42px;flex:none;background:var(--surface);display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--line)}
+.omni{flex:1;background:var(--soft);border-radius:18px;padding:8px 14px;font:13px Geist,system-ui;color:var(--ink);display:flex;justify-content:space-between;align-items:center}
+.omni svg,.chrome-bar>svg{width:18px;height:18px;color:var(--muted);flex:none}
+.omni .install{color:var(--navy)}
+.titlebar{height:34px;flex:none;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:0 12px;font:600 13px Geist,system-ui;color:var(--ink)}
+.dots{display:flex;gap:7px;margin-right:6px}.dots i{width:12px;height:12px;border-radius:50%;background:#e0605a;display:block}.dots i+i{background:#e8b44a}.dots i+i+i{background:#5fbf55}
+.prompt{position:absolute;top:84px;right:120px;width:340px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 30px #0003;padding:18px;font:14px/1.45 Geist,system-ui}
+.prompt .row{display:flex;gap:12px;align-items:center}.prompt img{width:40px;height:40px;border-radius:9px}
+.prompt .btns{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.btnx{border:1px solid var(--line);border-radius:8px;padding:7px 14px;background:var(--surface);color:var(--ink);font:500 14px Geist,system-ui}
+.btnx.primary{background:var(--navy);color:var(--navyText);border-color:var(--navy)}
+.page{flex:1;overflow:hidden;background:var(--bg);color:var(--ink);font:15px/1.5 Geist,system-ui;padding:20px;box-sizing:border-box}
+.page h1{font-size:24px;margin:6px 0 4px}.page .muted{color:var(--muted)}
+.cardx{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:16px;box-shadow:var(--shadow)}
+.steps{margin:12px 0 0;padding:0;list-style:none;counter-reset:s}
+.steps li{counter-increment:s;display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.steps li:before{content:counter(s);width:26px;height:26px;border-radius:50%;background:var(--wash);color:var(--navy);display:grid;place-items:center;font-weight:600;flex:none}
+.steps svg{width:18px;height:18px;vertical-align:-3px;color:var(--navy)}
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;height:100%;gap:10px;padding:0 24px}
+.center svg.big{width:40px;height:40px;color:var(--muted)}
+.brandline{display:flex;gap:10px;align-items:center;font-weight:600;font-size:17px}.brandline svg{width:28px;height:28px}
+.dark .brandline g{color:#a8c5ed}
+.slack{width:330px;flex:none;background:#3f0e40;color:#fff;font:14px/1.45 Geist,system-ui;padding:16px;box-sizing:border-box}
+.slack .msg{background:#ffffff14;border-radius:8px;padding:10px;margin-top:12px}.slack a{color:#9fd0ff}
+.label{position:absolute;left:12px;top:8px;font:11px Geist,system-ui;color:#fff;background:#182a3dcc;padding:3px 8px;border-radius:6px;z-index:5}
+.inapp{position:absolute;inset:44px 0 0;background:var(--surface);border-radius:12px 12px 0 0;box-shadow:0 -6px 30px #0004;display:flex;flex-direction:column}
+.inapp header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);font:13px Geist,system-ui;color:var(--muted)}.inapp header b{color:#2f7cf6;font-weight:600}
+.draftx{position:absolute;right:28px;bottom:10px;font:10px Geist,system-ui;color:#56616d}
+</style></head><body><div id="app"></div><script>
+const q=new URLSearchParams(location.search),sheet=q.get('sheet')||'index',theme=q.get('theme')||'light';
+document.documentElement.classList.toggle('dark',theme==='dark');
+const svg=(p,c='')=>`<svg class="${c}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+const I={share:'<path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>',plus:'<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/><path d="M12 8v8"/>',wifi:'<path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/>',down:'<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',login:'<path d="m10 17 5-5-5-5"/><path d="M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>',left:'<path d="m15 18-6-6 6-6"/>',right:'<path d="m9 18 6-6-6-6"/>',book:'<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',tabs:'<rect width="18" height="18" x="3" y="3" rx="2"/><rect width="10" height="10" x="7" y="7" rx="1"/>',up:'<path d="M7 7h10v10"/><path d="M7 17 17 7"/>'};
+const mark=`<svg viewBox="0 0 64 64" role="img" aria-label="Aeolus"><g color="#1A3860"><mask id="wind" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#fff"/><path d="M0 34 C14 29 26 38 64 30" stroke="#000" stroke-width="5" fill="none"/></mask><g mask="url(#wind)"><path d="M30 6 L15.5 48" stroke="currentColor" stroke-width="7" stroke-linecap="round" fill="none"/><path d="M34.5 5 C44 17 50.5 31 52.5 48 H34.5 Z" fill="currentColor"/></g><path d="M7 53.5 H57 L52.4 59.2 C47.5 59.2 46.6 60.9 42.2 60.9 C37.8 60.9 36.6 59.2 32 59.2 C27.4 59.2 26.2 60.9 21.8 60.9 C17.4 60.9 16.5 59.2 11.6 59.2 Z" fill="currentColor"/></g></svg>`;
+const APP='../../pages/mockups/index.html';
+const TITLE='Aeolus';
+const shot=(name)=>`<img class="frame" style="object-fit:cover;object-position:top" src="../../pages/mockups/${name}-${theme}.png" alt="">`;
+const frame=(state,w)=>`<iframe class="frame" data-state="${state}" src="${APP}?state=${state}&theme=${theme}" ${w?`style="width:${w}px"`:''}></iframe>`;
+const status=()=>`<div class="status"><span>9:41</span><span class="island"></span><span>5G ▮</span></div>`;
+const safari=(host='app.aeolus-fleet.dev')=>`<div class="safari"><div class="urlbar">${host}</div><div class="safaritools">${svg(I.left)}${svg(I.right)}${svg(I.share)}${svg(I.book)}${svg(I.tabs)}</div></div>`;
+const phone=(cap,body)=>`<figure><p class="cap">${cap}</p><div class="phone"><div class="screen">${body}</div></div></figure>`;
+const desk=(cap,body)=>`<figure><p class="cap">${cap}</p><div class="desk" style="position:relative">${body}</div></figure>`;
+const chrome=(title,icon,installIcon,host='app.aeolus-fleet.dev')=>`<div class="chrome-tabs"><div class="chrome-tab"><img src="${icon}" alt="">${title}</div></div><div class="chrome-bar">${svg(I.left)}${svg(I.right)}<div class="omni"><span>${host}/</span>${installIcon?`<span class="install" title="Install Aeolus">${svg(I.down)}</span>`:''}</div></div>`;
+const titlebar=()=>`<div class="titlebar"><span class="dots"><i></i><i></i><i></i></span><img src="icon-512.png" alt="">${TITLE}</div>`;
+const springboard=(icon,label)=>`<div class="springboard">${['Mail','Calendar','Photos','Camera','Maps','Slack','Notes','Settings'].map(n=>`<span class="app"><i></i>${n}</span>`).join('')}<span class="app new"><img src="${icon}" alt="">${label}</span></div>`;
+const S={
+'before-phone-add':()=>phone('Before: Add to Home Screen in Safari<small>No manifest: Safari names it after the page title.</small>',status()+shot('before-home-375')+safari('gateway.aeolus-fleet.dev')+`<div class="overlay"><div class="sheetpanel"><div class="ios-head"><span>Cancel</span>Add to Home Screen<b>Add</b></div><div class="addcard"><img src="before-apple-icon.png" alt=""><div><b>Bridge · Aeolus</b><div class="muted" style="font-size:13px">gateway.aeolus-fleet.dev</div></div></div><div class="muted" style="font-size:13px">An icon will be added to your Home Screen so you can quickly access this website.</div></div></div>`),
+'before-phone-open':()=>phone('Before: opened from the home screen<small>A Safari tab, with Safari\'s bars, signed in as Safari is.</small>',status()+shot('before-home-375')+safari('gateway.aeolus-fleet.dev')),
+'before-desktop':()=>desk('Before: Chrome on a laptop<small>No install offer in the address bar; the tab says Bridge · Aeolus.</small>',chrome('Bridge · Aeolus','before-apple-icon.png',false,'gateway.aeolus-fleet.dev')+shot('before-home-1440')),
+'after-more':()=>phone('After: More, in the browser<small>Install Aeolus sits with Settings; home stays as approved.</small>',status()+`<div class="page"><h1>More</h1><p class="muted">Aeolus fleet</p><div class="cardx" style="display:flex;gap:12px;align-items:center"><span class="brandline" style="font-size:15px">${svg(I.plus)}</span><div style="flex:1"><b>Install Aeolus</b><div class="muted" style="font-size:13px">On your home screen, without an app store</div></div>${svg(I.right)}</div><div class="cardx"><b>Stay aware</b><div class="muted" style="font-size:13px">Alerts and notices · 2 unseen</div></div><div class="cardx"><b>Done</b><div class="muted" style="font-size:13px">Read back outcomes and where you acted</div></div><div class="cardx"><b>Where things show</b><div class="muted" style="font-size:13px">Your choices for Aeolus, Slack and chats</div></div><div class="cardx"><b>Fleets and account</b><div class="muted" style="font-size:13px">Opens the Account app</div></div></div>`+safari()),
+'after-iphone-steps':()=>phone('After: Install Aeolus on iPhone<small>Safari has no install button, so Aeolus shows its three taps.</small>',status()+`<div class="page"><p class="muted">‹ More</p><h1>Install Aeolus</h1><p class="muted">Add Aeolus to your home screen. It opens in its own window, and on iPhone it is where notifications can reach you.</p><div class="cardx"><div class="brandline"><img src="apple-touch-icon.png" alt="" style="width:44px;height:44px;border-radius:10px">Aeolus</div><ol class="steps"><li><span>Tap ${svg(I.share)} Share in Safari's bar</span></li><li><span>Tap ${svg(I.plus)} Add to Home Screen</span></li><li><span>Tap Add, then open Aeolus from your home screen</span></li></ol></div><p class="muted" style="font-size:13px;margin-top:14px">Aeolus on your home screen signs in on its own, apart from Safari: you sign in once there.</p></div>`+safari()),
+'after-iphone-add':()=>phone('After: Add to Home Screen<small>The manifest names it Aeolus with the brand tile.</small>',status()+frame('home')+safari()+`<div class="overlay"><div class="sheetpanel"><div class="ios-head"><span>Cancel</span>Add to Home Screen<b>Add</b></div><div class="addcard"><img src="apple-touch-icon.png" alt=""><div><b>Aeolus</b><div class="muted" style="font-size:13px">app.aeolus-fleet.dev</div></div></div><div class="opt">Open as Web App<span style="color:#34c759">●</span></div></div></div>`),
+'after-homescreen':()=>phone('After: on the home screen<small>The Slate tile from brand/, named Aeolus.</small>',status().replace('background:var(--bg)','')+springboard('apple-touch-icon.png','Aeolus')),
+'after-signin':()=>phone('After: first open from the home screen<small>Signed in in Safari, not yet here: Aeolus says why, once.</small>',status()+`<div class="page"><div class="center"><div class="brandline">${mark}Aeolus</div><h1>Sign in to Aeolus</h1><p class="muted">Aeolus on your home screen keeps its own sign-in, apart from Safari. Sign in once here; you come back to where you were going.</p><button class="btnx primary">${'Sign in'}</button></div></div>`),
+'after-signin-sheet':()=>phone('After: sign-in passes through<small>pagasae opens over the app and returns into it.</small>',status()+frame('home')+`<div class="inapp"><header><b>Done</b><span>🔒 Aeolus sign-in</span><span></span></header><div class="page"><div class="center"><div class="brandline">${mark}Aeolus</div><h1>Sign in</h1><div class="cardx" style="width:100%;text-align:left">Email<div class="urlbar" style="text-align:left;margin-top:6px">thomas@…</div></div><button class="btnx primary" style="margin-top:12px">Continue</button></div></div></div>`),
+'after-standalone':()=>phone('After: Aeolus installed<small>Its own window onto the approved home; no browser bars.</small>',status()+frame('home')),
+'after-leave':()=>phone('After: leaving Aeolus<small>Fleets and account opens the Account app over Aeolus, with Done to return.</small>',status()+frame('more')+`<div class="inapp"><header><b>Done</b><span>🔒 account.aeolus-fleet.dev</span>${svg(I.up).replace('<svg','<svg style="width:16px"')}</header><div class="page"><h1>Account</h1><p class="muted">The Account app: fleets, sign-in and people.</p></div></div>`),
+'after-offline':()=>phone('After: no connection<small>Says so, keeps nothing stale, and nothing is lost.</small>',status()+`<div class="page"><div class="center">${svg(I.wifi,'big')}<h1>No connection</h1><p class="muted">Aeolus cannot reach your fleet. Nothing is lost: what waits for you stays in the fleet and shows here once you are back.</p><button class="btnx primary">Try again</button></div></div>`),
+'after-desktop-install':()=>desk('After: Install Aeolus on a laptop<small>Settings offers the browser\'s own install; the address bar offers it too.</small>',chrome(TITLE,'icon-512.png',true)+`<div class="page" style="padding:32px 48px"><h1>Settings</h1><div class="cardx" style="max-width:560px;display:flex;gap:16px;align-items:center"><img src="icon-512.png" alt="" style="width:48px;height:48px;border-radius:11px"><div style="flex:1"><b>Install Aeolus</b><div class="muted" style="font-size:14px">Open Aeolus in its own window, from your dock or start menu.</div></div><button class="btnx primary">${'Install'}</button></div><div class="cardx" style="max-width:560px"><b>Where things show</b><div class="muted" style="font-size:14px">Your choices for Aeolus, Slack and chats</div></div></div><div class="prompt"><div class="row"><img src="icon-512.png" alt=""><div><b>Install app?</b><div class="muted">Aeolus · app.aeolus-fleet.dev</div></div></div><div class="btns"><span class="btnx">Cancel</span><span class="btnx primary">Install</span></div></div>`),
+'after-desktop-window':()=>desk('After: the installed window<small>Its own window titled Aeolus, onto the approved home.</small>',titlebar()+frame('home',1200)),
+'after-link':()=>desk('After: a link from Slack<small>The open Aeolus window moves to the question; no second window.</small>',`<div style="display:flex;flex:1;min-height:0"><div class="slack"><b># aeolus</b><div class="msg">orchestrator-1 asks you a question:<br><a>app.aeolus-fleet.dev/…/question</a></div></div><div style="flex:1;display:flex;flex-direction:column;min-width:0">${titlebar()}${frame('conversation',870)}</div></div>`),
+};
+const order=Object.keys(S);
+if(sheet==='index'){document.getElementById('app').innerHTML=`<div style="padding:28px;font:15px Geist,system-ui"><h1>Installing Aeolus: sheets</h1><ul>${order.map(k=>`<li><a href="?sheet=${k}&theme=${theme}">${k}</a></li>`).join('')}</ul></div>`}
+else{document.getElementById('app').innerHTML=`<div class="sheet">${S[sheet]()}<span class="draftx">#267 · proposal, not approved</span></div>`}
+// The approved pages sheets keep their labels; inside these sheets the person sees Aeolus.
+document.querySelectorAll('iframe.frame').forEach(f=>f.addEventListener('load',()=>{try{const d=f.contentDocument;const st=d.createElement('style');st.textContent='.draft,.demo-tools{display:none!important}';d.head.appendChild(st);const w=d.createTreeWalker(d.body,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){n.nodeValue=n.nodeValue.replace(/Bridge/g,'Aeolus')}}catch(e){}}));
+</script></body></html>

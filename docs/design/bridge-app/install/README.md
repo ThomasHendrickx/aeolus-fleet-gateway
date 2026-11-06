@@ -102,3 +102,60 @@ Context: A link to a question in Slack or mail opens the browser by default. Des
 3. **None of these.** Say where a link should land.
 
 **Pick: 1.** One window that follows the item, as #268 will need for a pushed item, and no duplicate windows; iPhone stays as good as today.
+
+## Detailed design, proposed
+
+Drawn from the approved purpose, Thomas's answers to questions 2 and 5 and the app's address. The [before and after sheets](mockups/comparison.html) show it in both themes; [every sheet](mockups/index.html) renders the approved pages sheets inside today's browser and the installed window, with Aeolus shown in place of Bridge. The window title follows question 4, still open; the sheets show its pick, Aeolus.
+
+### The parts
+
+| Part | Proposed |
+| --- | --- |
+| Manifest | Name and short name Aeolus, start and scope the whole of `app.aeolus-fleet.dev`, its own window (standalone), the warm ground and navy of the [look and feel](../reference/look-and-feel.jpg) as background and theme colour. The start address opens home in the fleet the person last chose, as opening the app's address in a browser does |
+| Icon | The Slate tiles from aeolus-fleet `brand/`: `icon-192.png`, `icon-512.png` and `apple-touch-icon.png`, copied, never redrawn. `brand/` has no maskable tile, so Android draws the rounded tile inside its own shape; a maskable tile belongs in `brand/` ([aeolus-fleet#1682](https://github.com/ThomasHendrickx/aeolus-fleet/issues/1682)) |
+| Install Aeolus | An entry under More on a phone and under Settings on a larger window (question 2). Where the browser offers its own install (Chrome, Edge, Android), the entry's Install button opens that prompt. On iPhone and iPad, it shows Safari's three taps. Where a browser offers neither, it says to use the browser's menu. Inside the installed app the entry does not show |
+| Opening | The installed window shows the approved home, or the item an address names, with no browser bars. Reloading and reopening keep the address (#282) |
+| Signing in | Signing in passes through the shared sign-in over the window and returns into it, to the asked address. The app opened from an iPhone home screen without its own sign-in says once why it asks, since Safari's sign-in does not reach it; in a browser the sign-in starts at once, as today |
+| Leaving | The Account app, the gateway's pages and outside links open in the browser: over the app with Done on iPhone, in a browser tab on a computer. Their outward arrow already says they leave |
+| Links (question 5) | The manifest asks for links within Aeolus to open in the installed app, reusing its open window and moving it to the addressed item, where the browser allows (Chrome and Edge on a computer, Android). On iPhone a link opens Safari, which opens the item as today |
+| Service worker | The app's own, at its address. It serves one page when a navigation fails for want of a connection, and caches only that page and what it draws with: never questions, steps, messages or the fleet. Push and its consent stay with #268 and #269; installing asks no permission |
+| No connection | "No connection. Aeolus cannot reach your fleet. Nothing is lost: what waits for you stays in the fleet and shows here once you are back." with Try again. An open page that loses its connection keeps the existing live state and failure messages of the pages design |
+
+### The path, happy and unhappy
+
+```mermaid
+flowchart TD
+  M[More or Settings: Install Aeolus] --> K{This browser}
+  K -->|offers its own install| P[Browser's install prompt]
+  K -->|iPhone or iPad Safari| T[Three taps: Share, Add to Home Screen, Add]
+  K -->|neither| X[Use the browser's menu; Aeolus stays usable in the browser]
+  P -->|Install| H[Aeolus on the home screen, dock or start menu]
+  P -->|Cancel| B[Aeolus stays in the browser; the entry stays under Settings]
+  T --> H
+  H --> O[Open Aeolus in its own window]
+  L[A link to an Aeolus item] --> C{Installed, and the browser opens links in apps?}
+  C -->|yes| W[The open window moves to the item]
+  C -->|no, iPhone or not installed| BT[Browser opens the item as today]
+  O --> S{Signed in here?}
+  W --> S
+  S -->|yes| A[Home or the addressed item]
+  S -->|no, iPhone home screen| E[Sign in to Aeolus: why it asks, once]
+  S -->|no, elsewhere| G[Shared sign-in over the window]
+  E --> G
+  G -->|signed in| A
+  G -->|fails or cancelled| F[Sign-in failed page with try again, inside the window]
+  A --> N{Connection?}
+  N -->|lost on opening| Z[No connection page: nothing is lost, Try again]
+  Z --> O
+  A -->|item unavailable or no access| U[The pages design's explanation and a way back]
+  A -->|Account app or outside link| Y[Opens in the browser; Done or the window returns to Aeolus]
+```
+
+- Refusing or not knowing how to install leaves Aeolus as useful in the browser as today.
+- Removing the app from the home screen removes nothing from the fleet; the record stays.
+- Installing changes no notification setting and asks no permission. On iPhone, push becomes possible once installed, under #268 and #269.
+- More than one fleet: the installed app opens the fleet last chosen; the existing fleet switch changes it inside the window.
+
+### Build boundaries
+
+The build lives in ThomasHendrickx/aeolus-app at `app.aeolus-fleet.dev`, under that repository's structure. It adds a manifest, the copied brand icons, the Install Aeolus entry, the sign-in explanation for the iPhone home screen app, and a service worker with the no-connection page only. It adds no content cache, no new fleet functionality and no notification. Accessibility follows the pages design: keyboard focus, visible focus, both themes, 360 to 2560 px.
