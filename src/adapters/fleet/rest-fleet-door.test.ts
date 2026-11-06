@@ -405,6 +405,64 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     expect(sent().map(({ body }) => body)).toEqual([{ limit: 20 }]);
   });
 
+  describe('the exchange calls (aeolus-fleet exchange-read, core main)', () => {
+    const OTHER = 'shp_01m3tbfspe96yf1rnr4ank9trk';
+    const entry = { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', senderShipId: PERSON_SHIP, payload: 'On it', isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0001', sentAt: '2026-11-06T10:00:00.000Z', deliveryState: 'acknowledged' };
+
+    it.each([
+      [{ kind: 'newest' as const }, { otherShipId: OTHER, limit: 20 }],
+      [{ kind: 'before' as const, cursor: 'dlv_01m3tbfspe96yf1rnr4ank0005' as const }, { otherShipId: OTHER, limit: 20, before: 'dlv_01m3tbfspe96yf1rnr4ank0005' }],
+      [{ kind: 'after' as const, cursor: 'dlv_01m3tbfspe96yf1rnr4ank0005' as const }, { otherShipId: OTHER, limit: 20, after: 'dlv_01m3tbfspe96yf1rnr4ank0005' }],
+      [{ kind: 'around' as const, messageId: 'msg_01m3tbfspe96yf1rnr4ank0002' as const }, { otherShipId: OTHER, limit: 20, around: 'msg_01m3tbfspe96yf1rnr4ank0002' }],
+    ])('asks for a page of an exchange starting %j with the ship id as the body', async (start, body) => {
+      answer = { status: 200, body: { items: [entry], olderCursor: 'dlv_01m3tbfspe96yf1rnr4ank0002', newerCursor: null } };
+
+      const page = await createRestFleetDoor(base).person.exchange('aeolus_ct_v1_charlotte', { otherShipId: OTHER, start, limit: 20 });
+
+      expect(page).toEqual({ isOk: true, value: { items: [entry], olderCursor: 'dlv_01m3tbfspe96yf1rnr4ank0002', newerCursor: null } });
+      expect(sent().map(({ url, authorization, body: sentBody }) => ({ url, authorization, body: sentBody }))).toEqual([{ url: '/api/v1/ship/exchange', authorization: 'Bearer aeolus_ct_v1_charlotte', body }]);
+    });
+
+    it('answers the fleet\'s refusal of an exchange read', async () => {
+      answer = { status: 404, body: { code: 'SHIP_NOT_FOUND', message: 'No such ship' } };
+
+      await expect(createRestFleetDoor(base).person.exchange('aeolus_ct_v1_charlotte', { otherShipId: OTHER, start: { kind: 'newest' }, limit: 20 })).resolves.toEqual({ isOk: false, error: { code: 'SHIP_NOT_FOUND', message: 'No such ship' } });
+    });
+
+    it('lists the exchanges after a cursor, each with its other ship and newest message', async () => {
+      const exchange = { otherShipId: OTHER, otherShipName: 'tracker', otherShipType: 'tracker', otherShipKind: 'agent', unacknowledged: 2, newestMessage: { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', senderShipId: OTHER, payload: 'Build is red', isPayloadUnreadable: false, contentType: 'text/plain', sentAt: '2026-11-06T10:00:00.000Z' } };
+      answer = { status: 200, body: { items: [exchange], nextCursor: 'msg_01m3tbfspe96yf1rnr4ank0003' } };
+
+      const page = await createRestFleetDoor(base).person.exchanges('aeolus_ct_v1_charlotte', { cursor: 'msg_01m3tbfspe96yf1rnr4ank0009', limit: 20 });
+
+      expect(page).toEqual({ isOk: true, value: { items: [exchange], nextCursor: 'msg_01m3tbfspe96yf1rnr4ank0003' } });
+      expect(sent().map(({ url, body }) => ({ url, body }))).toEqual([{ url: '/api/v1/ship/exchanges', body: { cursor: 'msg_01m3tbfspe96yf1rnr4ank0009', limit: 20 } }]);
+    });
+
+    it('lists the newest exchanges when no cursor is given', async () => {
+      answer = { status: 200, body: { items: [], nextCursor: null } };
+
+      await createRestFleetDoor(base).person.exchanges('aeolus_ct_v1_charlotte', { cursor: null, limit: 20 });
+
+      expect(sent().map(({ body }) => body)).toEqual([{ limit: 20 }]);
+    });
+
+    it('marks an exchange seen up to a message and says how many it acknowledged', async () => {
+      answer = { status: 200, body: { acknowledged: 3 } };
+
+      const marked = await createRestFleetDoor(base).person.ackUpTo('aeolus_ct_v1_charlotte', { otherShipId: OTHER, messageId: 'msg_01m3tbfspe96yf1rnr4ank0003' });
+
+      expect(marked).toEqual({ isOk: true, value: { acknowledged: 3 } });
+      expect(sent().map(({ url, body }) => ({ url, body }))).toEqual([{ url: '/api/v1/ship/ackUpTo', body: { otherShipId: OTHER, messageId: 'msg_01m3tbfspe96yf1rnr4ank0003' } }]);
+    });
+
+    it('answers the fleet\'s refusal of a mark that a ship other than a person ship made', async () => {
+      answer = { status: 403, body: { code: 'FORBIDDEN', message: "Only a person ship's crew marks an exchange seen" } };
+
+      await expect(createRestFleetDoor(base).person.ackUpTo('aeolus_ct_v1_charlotte', { otherShipId: OTHER, messageId: 'msg_01m3tbfspe96yf1rnr4ank0003' })).resolves.toMatchObject({ isOk: false, error: { code: 'FORBIDDEN' } });
+    });
+  });
+
   it('forwards shouldSkipHanded to the push receive of a person ship, and leaves it out when not asked', async () => {
     answer = { status: 200, body: { deliveries: [] } };
 
