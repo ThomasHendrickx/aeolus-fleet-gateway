@@ -34,14 +34,6 @@ What the asker took back no longer asks anything of the person, so it should not
 | Bridge not open at the withdrawal | Never shows it |
 | Done | Holds it: "Withdrawn by orchestrator-1", "Withdrawn by builder-gateway, replaced by “…”", as an opened one is today |
 
-| File | What it shows |
-| --- | --- |
-| [wide.html](wide.html), [wide.png](wide.png) | 1920 × 1080: before, 0 s, 4.7 s, 5 s, open when withdrawn, Done; light and dark |
-| [laptop.html](laptop.html), [laptop.png](laptop.png) | The same at 1440 × 900 |
-| [phone.html](phone.html), [phone.png](phone.png) | 375 × 780: the Waiting tab and the argo tab, before, 0 s, 4.7 s, 5 s; the open question; light and dark |
-
-Drawn in the kit of [`../bridge-fleet-width`](../bridge-fleet-width) (the approved Bridge sheets' Compact look, tokens and Geist fonts inlined); each PNG is its HTML in Chromium at 1x. A purple tag names the moment drawn and is not part of Bridge.
-
 ## Picks, approved
 
 1. **"Statements".** Only questions and steps can be withdrawn or replaced in the fleet's protocol; alerts and notices cannot. Drawn: "statements" read as steps.

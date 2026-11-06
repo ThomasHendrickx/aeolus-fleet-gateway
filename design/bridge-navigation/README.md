@@ -6,13 +6,6 @@ Thomas: "the non bridge gateway screens need to be adjusted to fit into the new 
 
 Bridge's sidebar leads to three settings: Where things show, Outside parties and Fleets and account. Each "before" is the build (gateway main, v0.36.3) shot in Chromium at 1x against a stand-in for the gateway's API. Its plain "Aeolus" bar is drawn without the account's app switcher, which the stand-in does not answer, and the round "N" is Next's dev badge. Each "after" is drawn in the approved Bridge sheets' kit (aeolus-fleet `docs/design/bridge/mockups`, Compact look), with the tokens and Geist fonts inlined; each PNG is its HTML rendered at 1x.
 
-| File | What it shows |
-| --- | --- |
-| [outside-parties-wide.html](outside-parties-wide.html), [png](outside-parties-wide.png) | Outside parties and Add MCP server at 1900 × 1000, before and after, light and dark |
-| [outside-parties-laptop.html](outside-parties-laptop.html), [png](outside-parties-laptop.png) | The same at 1440 × 900 |
-| [outside-parties-phone.html](outside-parties-phone.html), [png](outside-parties-phone.png) | The same at 375 × 780 |
-| [where-things-show.html](where-things-show.html), [png](where-things-show.png) | Where things show as built, at the three widths, light and dark: already inside Bridge |
-
 ## What changes
 
 | Page | Before (as built) | After |
