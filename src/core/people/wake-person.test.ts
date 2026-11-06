@@ -327,7 +327,7 @@ describe('waking a person', () => {
     const email = aChannel('email');
     const wakesSent = memoryWakesSent();
     const crashing = { ...ship.door, handed: () => Promise.reject(new Error('the gateway stopped')) };
-    await expect(createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
+    await expect(createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, quietHours: memoryQuietHours(), quietShips: memoryQuietShips(), attemptEnded: () => undefined, door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
 
     await waking({ ship, channels: [email.channel], wakesSent })(SHIP, CREW_TOKEN);
 
@@ -339,7 +339,7 @@ describe('waking a person', () => {
     const refusing = { ...ship.door, handed: () => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) };
     const wakesSent = memoryWakesSent();
 
-    const woken = await createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
+    const woken = await createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, quietHours: memoryQuietHours(), quietShips: memoryQuietShips(), attemptEnded: () => undefined, door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
 
     expect({ woken, sent: wakesSent.sent }).toEqual({ woken: err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }), sent: [{ channel: 'email', at: NOW }] });
   });
@@ -356,7 +356,7 @@ describe('waking a person', () => {
         return handedCalls === 2 ? Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) : ship.door.handed(crewToken, handOver);
       },
     };
-    const wakePerson = createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: refusingOnce, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
+    const wakePerson = createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, quietHours: memoryQuietHours(), quietShips: memoryQuietShips(), attemptEnded: () => undefined, door: refusingOnce, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
 
     const first = await wakePerson(SHIP, CREW_TOKEN);
     const retried = await wakePerson(SHIP, CREW_TOKEN);

@@ -221,6 +221,7 @@ import { createReadInbox } from './core/people/read-inbox.js';
 import { createReadInboxState } from './core/people/read-inbox-state.js';
 import type { ItemJob } from './core/people/item-job.js';
 import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/routing.js';
+import { createPrismaQuietHours, createPrismaQuietShips } from './adapters/prisma/quiet-preferences.js';
 import { createPrismaRoutes } from './adapters/prisma/routes.js';
 import { createReadWakeChannels } from './core/people/read-wake-channels.js';
 import { createReadChats } from './core/people/read-chats.js';
@@ -769,6 +770,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   ];
   // Where each person routed each job besides Bridge, the configuration's defaults where they chose nothing (Bridge, section 8).
   const routes = createPrismaRoutes(prisma);
+  const quietHours = createPrismaQuietHours(prisma);
+  const quietShips = createPrismaQuietShips(prisma);
   const routingDefaults = routingDefaultsOf(options.routingOnByDefault ?? ROUTING_ON_BY_DEFAULT);
   const placesOffered = { isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), isWebPushOffered: options.webPush !== undefined };
   // What waits for a linked person shows in Slack before anything wakes them (gateway scopes 9.5).
@@ -793,7 +796,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: personDoor,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: personDoor, connections, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
+      wakePerson: createWakePerson({ door: personDoor, connections, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, quietHours, quietShips, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,
