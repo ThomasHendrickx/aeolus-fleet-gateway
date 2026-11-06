@@ -21,6 +21,12 @@
   "bin": {
     "aeolus-gateway": "dist/bin/aeolus-gateway.js"
   },
+  "exports": {
+    "./api": {
+      "types": "./dist/adapters/trpc/router.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "web/.next",
