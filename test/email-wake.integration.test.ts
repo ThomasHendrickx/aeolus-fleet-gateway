@@ -274,3 +274,89 @@ describe('a person woken by email (wake a person, S4)', () => {
     }, 120_000);
   });
 });
+
+describe("a person's quiet hours and quiet ships (preferences design)", () => {
+  const ONE_HOUR_MINUTES = 60;
+  const MINUTES_PER_DAY = 24 * 60;
+
+  /** "HH:MM" of the minute of the day. */
+  const timeOf = (minute: number): string => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+
+  /** Quiet hours in UTC from an hour ago to an hour from now, so they are in effect. */
+  function aroundNow(): { from: string; to: string } {
+    const now = new Date();
+    const minute = now.getUTCHours() * 60 + now.getUTCMinutes();
+    return { from: timeOf((minute + MINUTES_PER_DAY - ONE_HOUR_MINUTES) % MINUTES_PER_DAY), to: timeOf((minute + ONE_HOUR_MINUTES) % MINUTES_PER_DAY) };
+  }
+
+  async function personCall(procedure: string, body: unknown): Promise<Response> {
+    return fetch(`${address}/trpc/people.${procedure}`, { method: 'POST', headers: { 'content-type': 'application/json', ...asCharlotte() }, body: JSON.stringify(body) });
+  }
+
+  async function personRead(procedure: string, input?: unknown): Promise<unknown> {
+    const search = input === undefined ? '' : `?input=${encodeURIComponent(JSON.stringify(input))}`;
+    const read = await fetch(`${address}/trpc/people.${procedure}${search}`, { headers: asCharlotte() });
+    expect(read.status).toBe(200);
+    return z.object({ result: z.object({ data: z.unknown() }) }).parse(await read.json()).result.data;
+  }
+
+  async function trackerShipId(): Promise<ShipId> {
+    const who = await createRestFleetDoor(fleet.url).whoami(tracker);
+    if (!who.isOk) {
+      throw new Error('the tracker is not crewed');
+    }
+    return who.value.shipId;
+  }
+
+  const waitMs = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it('sets and reads quiet hours, in effect now, through the person API', async () => {
+    const { from, to } = aroundNow();
+
+    expect((await personCall('setQuietHours', { isOn: true, from, to, timeZone: 'UTC' })).status).toBe(200);
+
+    const read = z.object({ isOn: z.boolean(), window: z.unknown(), quietNow: z.object({ since: z.iso.datetime(), until: z.iso.datetime() }).nullable() }).parse(await personRead('quietHours'));
+    expect({ isOn: read.isOn, window: read.window, isQuietNow: read.quietNow !== null }).toEqual({ isOn: true, window: { from, to, timeZone: 'UTC' }, isQuietNow: true });
+  });
+
+  it('refuses quiet hours that end when they start', async () => {
+    expect((await personCall('setQuietHours', { isOn: true, from: '22:00', to: '22:00', timeZone: 'UTC' })).status).toBe(400);
+  });
+
+  it('quiets a ship, lists it, and marks it among the ships asked, through the person API', async () => {
+    const shipId = await trackerShipId();
+
+    expect((await personCall('turnShipQuiet', { shipId, name: 'tracker', isQuiet: true })).status).toBe(200);
+
+    const quietShipSchema = z.object({ shipId: z.string(), name: z.string(), since: z.iso.datetime() });
+    const listed = z.object({ ships: z.array(quietShipSchema), nextCursor: z.string().nullable() }).parse(await personRead('quietShips', { cursor: null }));
+    const among = z.array(quietShipSchema).parse(await personRead('quietAmong', { shipIds: [shipId, charlotteShipId] }));
+    expect({ listed: listed.ships.map(({ shipId: id, name }) => ({ id, name })), nextCursor: listed.nextCursor, among: among.map(({ shipId: id }) => id) }).toEqual({ listed: [{ id: shipId, name: 'tracker' }], nextCursor: null, among: [shipId] });
+  });
+
+  it('gets no email from a quiet ship, and its delivery waits unhanded', async () => {
+    await turnEmailOn();
+    expect((await personCall('turnShipQuiet', { shipId: await trackerShipId(), name: 'tracker', isQuiet: true })).status).toBe(200);
+
+    const messageId = await trackerSendsCharlotte();
+
+    await expect.poll(async () => (await historyOf(messageId)).some(({ type }) => type === 'DeliveryReceived'), { timeout: SEEN_WITHIN_MS }).toBe(true);
+    expect({ wakes: pagasae.wakes, handOvers: await handOvers(messageId) }).toEqual({ wakes: [], handOvers: [] });
+  });
+
+  it('gets no email during quiet hours, and one by the next window once they are turned off', async () => {
+    await turnEmailOn();
+    const { from, to } = aroundNow();
+    expect((await personCall('setQuietHours', { isOn: true, from, to, timeZone: 'UTC' })).status).toBe(200);
+    const messageId = await trackerSendsCharlotte();
+    await expect.poll(async () => (await historyOf(messageId)).some(({ type }) => type === 'DeliveryReceived'), { timeout: SEEN_WITHIN_MS }).toBe(true);
+    // Past a whole window, the waiter looked again and still sent nothing.
+    await waitMs(WINDOW_MS + 2_000);
+    const duringQuietHours = { wakes: pagasae.wakes.length, handOvers: await handOvers(messageId) };
+
+    expect((await personCall('setQuietHours', { isOn: false, from, to, timeZone: 'UTC' })).status).toBe(200);
+
+    await expect.poll(async () => handOvers(messageId), { timeout: SEEN_WITHIN_MS + WINDOW_MS }).toEqual(['email']);
+    expect({ duringQuietHours, wakes: pagasae.wakes.length }).toEqual({ duringQuietHours: { wakes: 0, handOvers: [] }, wakes: 1 });
+  }, 90_000);
+});

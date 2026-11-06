@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { memoryFocusedPages, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { memoryFocusedPages, memoryQuietHours, memoryQuietShips, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { ok } from '../shared/result.js';
 import { createPersonWakes, type WakeItem } from './person-wakes.js';
@@ -37,6 +37,8 @@ describe("People's published port for a wake", () => {
       channels: [aChannel('web-push'), aChannel('email', { isOn: false })],
       routes: memoryRoutes([aRoute({ job: 'everything-else', place: 'web-push' }), aRoute({ job: 'everything-else', place: 'email' })]),
       defaults: routingDefaultsOf([]),
+      quietHours: memoryQuietHours(),
+      quietShips: memoryQuietShips(),
       focused,
       focusFreshMs: FOCUS_FRESH_MS,
       clock: { now: () => NOW },
@@ -47,12 +49,26 @@ describe("People's published port for a wake", () => {
 
   it('finds a page of the person in focus only while it was seen so lately', async () => {
     const focused = memoryFocusedPages();
-    const people = createPersonWakes({ channels: [], routes: memoryRoutes(), defaults: routingDefaultsOf([]), focused, focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
+    const people = createPersonWakes({ channels: [], routes: memoryRoutes(), defaults: routingDefaultsOf([]), quietHours: memoryQuietHours(), quietShips: memoryQuietShips(), focused, focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
     await focused.save({ ...SHIP, pageId: 'page-1', seenAt: new Date(NOW.getTime() - 2 * FOCUS_FRESH_MS) });
     const isInFocusWhenStale = await people.isInFocus(SHIP);
 
     await focused.save({ ...SHIP, pageId: 'page-1', seenAt: NOW });
 
     expect({ isInFocusWhenStale, isInFocusNow: await people.isInFocus(SHIP) }).toEqual({ isInFocusWhenStale: false, isInFocusNow: true });
+  });
+
+  it("leaves a quiet ship's items out of every channel", async () => {
+    const quietShips = memoryQuietShips([{ ...SHIP, quietShipId: TRIERARCH_SHIP_ID, name: 'trierarch', isQuiet: true, changedAt: NOW }]);
+    const people = createPersonWakes({ channels: [aChannel('web-push')], routes: memoryRoutes([aRoute({})]), defaults: routingDefaultsOf([]), quietHours: memoryQuietHours(), quietShips, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
+
+    await expect(people.showing(SHIP, [anItem('report', 'text/plain')])).resolves.toEqual([]);
+  });
+
+  it('says until when the quiet hours in effect hold, and nothing outside them', async () => {
+    const quietHours = memoryQuietHours([{ ...SHIP, isOn: true, fromMinute: 20 * 60, toMinute: 21 * 60, timeZone: 'UTC', changedAt: NOW }]);
+    const at = (now: Date) => createPersonWakes({ channels: [], routes: memoryRoutes(), defaults: routingDefaultsOf([]), quietHours, quietShips: memoryQuietShips(), focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => now } });
+
+    expect({ inside: await at(NOW).quietUntil(SHIP), outside: await at(new Date('2026-11-01T21:00:00.000Z')).quietUntil(SHIP) }).toEqual({ inside: new Date('2026-11-01T21:00:00.000Z'), outside: undefined });
   });
 });

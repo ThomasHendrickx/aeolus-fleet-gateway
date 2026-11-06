@@ -360,6 +360,34 @@ model Route {
   @@map("routes")
 }
 
+/// A person's quiet hours (preferences design): one daily window, a start and an end as minutes of the day in the time zone of the device that set them; while on and in effect, nothing wakes them.
+model QuietHours {
+  fleetId    String   @map("fleet_id")
+  shipId     String   @map("ship_id")
+  isOn       Boolean  @map("is_on")
+  fromMinute Int      @map("from_minute")
+  toMinute   Int      @map("to_minute")
+  timeZone   String   @map("time_zone")
+  changedAt  DateTime @map("changed_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId])
+  @@map("quiet_hours")
+}
+
+/// A ship a person quieted, which never wakes them, or woke again, which wakes them for what it sends after (preferences design); the name it had when quieted.
+model QuietShip {
+  fleetId     String   @map("fleet_id")
+  shipId      String   @map("ship_id")
+  quietShipId String   @map("quiet_ship_id")
+  name        String
+  isQuiet     Boolean  @map("is_quiet")
+  changedAt   DateTime @map("changed_at") @db.Timestamptz(3)
+
+  @@id([fleetId, shipId, quietShipId])
+  @@index([fleetId, shipId, isQuiet, changedAt(sort: Desc), quietShipId(sort: Desc)], map: "quiet_ships_listed_idx")
+  @@map("quiet_ships")
+}
+
 /// When a channel last woke a person ship, so it sends at most one wake per its window (wake a person, W3).
 model WakeSent {
   fleetId String   @map("fleet_id")

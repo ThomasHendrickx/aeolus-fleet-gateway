@@ -50,6 +50,9 @@ function grantOf(caller: PersonCaller): string {
 }
 
 /** Bridge's argo section as the gateway answers it for an account allowed as argo. */
+const QUIET_SINCE = new Date('2026-11-06T21:00:00.000Z');
+const QUIET_UNTIL = new Date('2026-11-07T06:05:00.000Z');
+const QUIET_SHIP_ID = 'shp_01m3tb1zgr5h2ffee12xnch8w1';
 const ARGO_SECTION = { count: 1, items: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank9001' as const, title: 'thomas-mac is low on disk: 4% free', from: 'trierarch', sentAt: '2026-11-01T09:01:00.000Z', kind: 'report' as const, look: 'alert' as const, isNew: true, stale: null, consoleUrl: 'https://fleet.example/inbox?message=dlv_01m3tbfspe96yf1rnr4ank9001' }], done: null };
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
@@ -157,32 +160,32 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readInbox: (caller) =>
         Promise.resolve(
           [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
-            ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, pick: null }], opened: [] })
+            ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, pick: null }], opened: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       readBridgeHome: (caller) =>
         Promise.resolve(
           grantOf(caller) === PERSON_TOKEN
-            ? ok({ waiting: { count: 1, items: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, isAlert: false, state: 'new' as const, seenIn: null, stale: null, inBasket: null, places: ['chat' as const], actInPlace: { kind: 'putPick' as const, option: 1 } }] }, stayAware: [], messages: [] })
+            ? ok({ waiting: { count: 1, items: [{ deliveryId: DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, isAlert: false, state: 'new' as const, seenIn: null, stale: null, inBasket: null, places: ['chat' as const], actInPlace: { kind: 'putPick' as const, option: 1 } }] }, stayAware: [], messages: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
       readRecord: ({ cursor }) =>
         Promise.resolve(
           ok({
-            items: [{ deliveryId: DELIVERY, from: 'watch', title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-20T09:00:00.000Z', job: 'stay-aware' as const, isAlert: true, state: 'done' as const, places: [], contentType: 'application/vnd.aeolus.alert+json', payload: '{}', outcome: { place: 'bridge' as const, kind: 'seen' as const, option: null, optionLabel: null, note: null, seen: { place: 'bridge' as const, at: '2026-10-20T09:05:00.000Z' }, replacementTitle: null, at: '2026-10-20T09:05:00.000Z' } }],
+            items: [{ deliveryId: DELIVERY, from: 'watch', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0wch' as const, title: 'builder-gateway: no report change for 2 h', sentAt: '2026-10-20T09:00:00.000Z', job: 'stay-aware' as const, isAlert: true, state: 'done' as const, places: [], contentType: 'application/vnd.aeolus.alert+json', payload: '{}', outcome: { place: 'bridge' as const, kind: 'seen' as const, option: null, optionLabel: null, note: null, seen: { place: 'bridge' as const, at: '2026-10-20T09:05:00.000Z' }, replacementTitle: null, at: '2026-10-20T09:05:00.000Z' } }],
             nextCursor: cursor,
           }),
         ),
       openDelivery: ({ caller, deliveryId }) =>
         Promise.resolve(
           deliveryId === DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
-            ? ok({ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
+            ? ok({ deliveryId: DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} waits for you: read your inbox again` }),
         ),
       readItem: ({ caller, deliveryId }) =>
         Promise.resolve(
           deliveryId === READ_DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
-            ? ok({ deliveryId: READ_DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
+            ? ok({ deliveryId: READ_DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} is yours: read your inbox again` }),
         ),
       answerDelivery: (input) => {
@@ -252,6 +255,17 @@ function aContext(cookie: string | undefined, crewToken?: string): {
           return Promise.resolve(err({ kind: 'CHANNEL_NOT_OFFERED' as const, message: 'This gateway sends no email' }));
         }
         answers.push({ grantId: grantOf(caller), route: `${job}:${place}:${isOn ? 'on' : 'off'}` });
+        return Promise.resolve(ok(undefined));
+      },
+      readQuietHours: () => Promise.resolve(ok({ isOn: true, window: { fromMinute: 22 * 60, toMinute: 7 * 60 + 5, timeZone: 'Europe/Brussels' }, quietNow: { since: QUIET_SINCE, until: QUIET_UNTIL, arrived: 3 } })),
+      setQuietHours: ({ caller, isOn, fromMinute, toMinute, timeZone }) => {
+        answers.push({ grantId: grantOf(caller), quietHours: `${isOn ? 'on' : 'off'} ${String(fromMinute)}-${String(toMinute)} ${timeZone}` });
+        return Promise.resolve(ok(undefined));
+      },
+      readQuietShips: () => Promise.resolve(ok({ ships: [{ shipId: QUIET_SHIP_ID, name: 'watcher', since: QUIET_SINCE }], nextCursor: null })),
+      readQuietAmong: ({ shipIds }) => Promise.resolve(ok(shipIds.includes(QUIET_SHIP_ID) ? [{ shipId: QUIET_SHIP_ID, name: 'watcher', since: QUIET_SINCE }] : [])),
+      turnShipQuiet: ({ caller, shipId, name, isQuiet }) => {
+        answers.push({ grantId: grantOf(caller), quietShip: `${shipId} ${name} ${isQuiet ? 'quiet' : 'woken again'}` });
         return Promise.resolve(ok(undefined));
       },
       // Seen again only once the page lets go, as the test reads what it held meanwhile.
@@ -927,7 +941,7 @@ describe("a person reads and deals with their person ship's deliveries through t
 
     await expect(gatewayRouter.createCaller(context).people.inbox()).resolves.toEqual({
       waiting: 1,
-      deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide', pick: null }],
+      deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide', pick: null }],
       opened: [],
     });
   });
@@ -1197,6 +1211,54 @@ describe('a person turns on the channels that wake them, through the API (wake a
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.wakeChannels()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe('a person sets quiet hours and quiet ships through the API (preferences design)', () => {
+  it('sets quiet hours as times of the day, kept as minutes of the day', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await gatewayRouter.createCaller(context).people.setQuietHours({ isOn: true, from: '22:00', to: '07:05', timeZone: 'Europe/Brussels' });
+
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, quietHours: 'on 1320-425 Europe/Brussels' }]);
+  });
+
+  it('reads quiet hours as times of the day, since and until when they hold, and how many arrived since', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.quietHours()).resolves.toEqual({ isOn: true, window: { from: '22:00', to: '07:05', timeZone: 'Europe/Brussels' }, quietNow: { since: '2026-11-06T21:00:00.000Z', until: '2026-11-07T06:05:00.000Z', arrived: 3 } });
+  });
+
+  it('refuses a time that is not one of the day, setting nothing', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.setQuietHours({ isOn: true, from: '24:00', to: '07:00', timeZone: 'UTC' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(answers).toEqual([]);
+  });
+
+  it('quiets a ship as its own account', async () => {
+    const { context, answers } = aContext(PERSON_COOKIE);
+
+    await gatewayRouter.createCaller(context).people.turnShipQuiet({ shipId: QUIET_SHIP_ID, name: 'watcher', isQuiet: true });
+
+    expect(answers).toEqual([{ grantId: PERSON_TOKEN, quietShip: `${QUIET_SHIP_ID} watcher quiet` }]);
+  });
+
+  it('lists quiet ships and the quiet ones among those asked, each since when', async () => {
+    const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
+    const watcher = { shipId: QUIET_SHIP_ID, name: 'watcher', since: '2026-11-06T21:00:00.000Z' };
+
+    expect({ listed: await caller.people.quietShips({ cursor: null }), among: await caller.people.quietAmong({ shipIds: [QUIET_SHIP_ID] }) }).toEqual({ listed: { ships: [watcher], nextCursor: null }, among: [watcher] });
+  });
+
+  it('refuses to be asked about more than 100 ships at once', async () => {
+    const shipIds = Array.from({ length: 101 }, () => QUIET_SHIP_ID);
+
+    await expect(gatewayRouter.createCaller(aContext(PERSON_COOKIE).context).people.quietAmong({ shipIds })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('refuses any other actor: only a person sets their quiet hours', async () => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).people.quietHours()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 

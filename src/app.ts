@@ -192,6 +192,11 @@ import { createPrismaArgoSlackPosts } from './adapters/prisma/argo-slack-posts.j
 import { createReadArgoSection } from './core/argo-inbox/read-argo-section.js';
 import { createWakeForArgo } from './core/argo-inbox/wake-for-argo.js';
 import { createPersonWakes } from './core/people/person-wakes.js';
+import { createReadQuietAmong } from './core/people/read-quiet-among.js';
+import { createReadQuietHours } from './core/people/read-quiet-hours.js';
+import { createReadQuietShips } from './core/people/read-quiet-ships.js';
+import { createSetQuietHours } from './core/people/set-quiet-hours.js';
+import { createTurnShipQuiet } from './core/people/turn-ship-quiet.js';
 import { createPrismaArgoWakes } from './adapters/prisma/argo-wakes.js';
 import { createCompleteSignIn } from './core/sign-in/complete-sign-in.js';
 import { createExchangeIdJag } from './core/oauth/exchange-id-jag.js';
@@ -221,6 +226,7 @@ import { createReadInbox } from './core/people/read-inbox.js';
 import { createReadInboxState } from './core/people/read-inbox-state.js';
 import type { ItemJob } from './core/people/item-job.js';
 import { ITEM_JOBS, routingDefaultsOf, type RoutingPlace } from './core/people/routing.js';
+import { createPrismaQuietHours, createPrismaQuietShips } from './adapters/prisma/quiet-preferences.js';
 import { createPrismaRoutes } from './adapters/prisma/routes.js';
 import { createReadWakeChannels } from './core/people/read-wake-channels.js';
 import { createReadChats } from './core/people/read-chats.js';
@@ -769,6 +775,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   ];
   // Where each person routed each job besides Bridge, the configuration's defaults where they chose nothing (Bridge, section 8).
   const routes = createPrismaRoutes(prisma);
+  const quietHours = createPrismaQuietHours(prisma);
+  const quietShips = createPrismaQuietShips(prisma);
   const routingDefaults = routingDefaultsOf(options.routingOnByDefault ?? ROUTING_ON_BY_DEFAULT);
   const placesOffered = { isEmailOffered: wakeChannels.some(({ name }) => name === 'email'), isWebPushOffered: options.webPush !== undefined };
   // What waits for a linked person shows in Slack before anything wakes them (gateway scopes 9.5).
@@ -793,7 +801,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       crews: personCrews,
       door: personDoor,
       changes: inboxChanges,
-      wakePerson: createWakePerson({ door: personDoor, connections, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
+      wakePerson: createWakePerson({ door: personDoor, connections, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, quietHours, quietShips, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
       clock,
       sleep,
       againWaitsMs: WAITER_AGAIN_WAITS_MS,
@@ -830,7 +838,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // A wake of its own for what waits at argo, for every person allowed as argo, at once after each read of argo's inbox, and on its own round as windows pass (argo's inbox, AI5).
   const argoWakes = createRoundWorker({
     name: "argo's wakes",
-    round: createWakeForArgo({ connections, accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, people: createPersonWakes({ channels: wakeChannels, routes, defaults: routingDefaults, focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock }), argoWakes: createPrismaArgoWakes(prisma), clock }),
+    round: createWakeForArgo({ connections, accounts: argoAccounts, inboxOf: followArgoInbox.inboxOf, people: createPersonWakes({ channels: wakeChannels, routes, defaults: routingDefaults, quietHours, quietShips, focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock }), argoWakes: createPrismaArgoWakes(prisma), clock }),
     sleep,
     intervalMs: ARGO_WAKES_ROUND_MS,
     log: server.log,
@@ -905,6 +913,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       }),
       readChats: createReadChats({ crewPersonShip: asCrew.crewPersonShip, chats: createPrismaConnectedChats(prisma), clock }),
       readRouting: createReadRouting({ crewPersonShip: asCrew.crewPersonShip, routes, defaults: routingDefaults, ...placesOffered }),
+      readQuietHours: createReadQuietHours({ ...asCrew, quietHours, clock }),
+      setQuietHours: createSetQuietHours({ crewPersonShip: asCrew.crewPersonShip, quietHours, clock }),
+      readQuietShips: createReadQuietShips({ crewPersonShip: asCrew.crewPersonShip, quietShips }),
+      readQuietAmong: createReadQuietAmong({ crewPersonShip: asCrew.crewPersonShip, quietShips }),
+      turnShipQuiet: createTurnShipQuiet({ crewPersonShip: asCrew.crewPersonShip, quietShips, clock }),
       turnRoute: createTurnRoute({ crewPersonShip: asCrew.crewPersonShip, routes, defaults: routingDefaults, ...placesOffered, clock }),
       turnOnWebPush: createTurnOnWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions, resolver: systemHostResolver, isWebPushOffered: options.webPush !== undefined, clock }),
       turnOffWebPush: createTurnOffWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions }),

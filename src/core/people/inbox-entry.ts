@@ -1,4 +1,4 @@
-import { MEETING_ADDED_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, QUESTION_CONTENT_TYPE, REPLACEMENT_CONTENT_TYPE, questionSchema, replacementSchema, type DeliveryId, type Question } from '@aeolus-fleet/common';
+import { MEETING_ADDED_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, QUESTION_CONTENT_TYPE, REPLACEMENT_CONTENT_TYPE, questionSchema, replacementSchema, type DeliveryId, type Question, type ShipId } from '@aeolus-fleet/common';
 
 import { essenceOf, jobOf, type ItemJob } from './item-job.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
@@ -10,6 +10,8 @@ export const TITLE_MAX_LENGTH = 80;
 export interface InboxEntry {
   readonly deliveryId: DeliveryId;
   readonly from: string;
+  /** The sender's ship id, by which a person's client quiets it (preferences design). */
+  readonly fromShipId: ShipId;
   readonly title: string;
   readonly sentAt: string;
 }
@@ -28,11 +30,11 @@ export function titleOf(delivery: PersonDelivery): string {
 }
 
 export function inboxEntryOf(delivery: PersonDelivery): InboxEntry {
-  return { deliveryId: delivery.deliveryId, from: delivery.senderName, title: titleOf(delivery), sentAt: delivery.sentAt.toISOString() };
+  return { deliveryId: delivery.deliveryId, from: delivery.senderName, fromShipId: delivery.senderShipId, title: titleOf(delivery), sentAt: delivery.sentAt.toISOString() };
 }
 
 export function openedEntryOf(opened: OpenedDelivery): InboxEntry {
-  return { deliveryId: opened.deliveryId, from: opened.from, title: opened.title, sentAt: opened.sentAt.toISOString() };
+  return { deliveryId: opened.deliveryId, from: opened.from, fromShipId: opened.senderShipId, title: opened.title, sentAt: opened.sentAt.toISOString() };
 }
 
 /** The option the asker of a question would pick, and why. */

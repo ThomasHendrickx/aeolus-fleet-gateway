@@ -5,6 +5,8 @@ import type { Clock } from "../shared/clock.js";
 import { err, ok, type Result } from "../shared/result.js";
 import type { RoutingDefaults, Routing, Routes } from "./routing.js";
 import { ownStepsInBridgeOnly, routingOf } from "./routing.js";
+import { quietSpellAt, type QuietHoursStore } from "./quiet-hours.js";
+import { withQuietShips, type QuietShips } from "./quiet-ships.js";
 import type {
   FocusedPages,
   HandOverChannel,
@@ -58,7 +60,11 @@ export type WakePerson = (
  * person routed there, even while a page is in focus; nothing wakes for those
  * (gateway scopes 9.5 step 5). It is asked at every wake, fresh deliveries
  * or none, so what it left unfinished is finished, and while anything is
- * left the wake counts as failed, so it is tried again.
+ * left the wake counts as failed, so it is tried again. The person's
+ * preferences are read anew at every wake too: a quiet ship's deliveries
+ * wake nobody and wait unhanded, and during quiet hours no wake goes out;
+ * the wake is held back until they end or a channel's window passes,
+ * whichever comes first, so turning them off applies by the next window.
  */
 export function createWakePerson(deps: {
   door: Pick<PersonShipDoor, "pushReceive" | "handed">;
@@ -70,6 +76,9 @@ export function createWakePerson(deps: {
   /** Where each person routed each job (Bridge, section 8), and the defaults where they chose nothing. */
   routes: Routes;
   defaults: RoutingDefaults;
+  /** The person's quiet hours and quiet ships (preferences design). */
+  quietHours: Pick<QuietHoursStore, "find">;
+  quietShips: Pick<QuietShips, "among">;
   wakesSent: WakesSent;
   focused: FocusedPages;
   /** How long a page counts in focus since it was last seen so. */
@@ -154,7 +163,11 @@ export function createWakePerson(deps: {
       const refused = await handEach(allFresh, "page");
       return refused === undefined ? ok({ kind: "settled" }) : err(refused);
     }
-    const showsOf = (channel: WakeChannel) => (delivery: PushedPersonDelivery): boolean => routing.isShowing(channel.name, delivery);
+    const senderShipIds = [...new Set(allFresh.map(({ senderShipId }) => senderShipId))];
+    const [quietShips, quietHours] = await Promise.all([deps.quietShips.among(ship, senderShipIds), deps.quietHours.find(ship)]);
+    // A quiet ship wakes nobody: what it sent waits unhanded.
+    const wakeRouting = withQuietShips(routing, quietShips);
+    const showsOf = (channel: WakeChannel) => (delivery: PushedPersonDelivery): boolean => wakeRouting.isShowing(channel.name, delivery);
     const turnedOn = (
       await Promise.all(
         deps.channels.map(async (channel) =>
@@ -197,6 +210,12 @@ export function createWakePerson(deps: {
     }
     if (fresh.length === 0) {
       return ok({ kind: "settled" });
+    }
+    const quiet = quietHours === undefined ? undefined : quietSpellAt(quietHours, now);
+    if (quiet !== undefined) {
+      // Looked at again once a window passes, so quiet hours turned off meanwhile wake by then.
+      const nextWindowMs = Math.min(...turnedOn.filter((channel) => fresh.some(showsOf(channel))).map(({ windowMs }) => windowMs));
+      return ok({ kind: "inWindow", until: new Date(Math.min(quiet.until.getTime(), now.getTime() + nextWindowMs)) });
     }
     const refusedBefore =
       refusedInAttempt.get(attemptKey(ship)) ?? new Set<WakeChannelName>();

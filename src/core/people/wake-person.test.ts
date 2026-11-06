@@ -2,11 +2,13 @@ import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
 import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, memoryFocusedPages, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, memoryFocusedPages, memoryQuietHours, memoryQuietShips, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { FocusedPages, PersonShip, PushedPersonDelivery, ShownElsewhere, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
+import type { QuietHours } from './quiet-hours.js';
+import type { QuietShip } from './quiet-ships.js';
 import { ITEM_JOBS, routingDefaultsOf, type Route, type RoutingDefaults } from './routing.js';
 import { createWakePerson } from './wake-person.js';
 
@@ -108,8 +110,10 @@ function connected() {
   return connections;
 }
 
-function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[]; wakesSent?: WakesSent; focused?: FocusedPages; endedAttempts?: { channel: WakeChannelName; reason: string }[]; shownElsewhere?: ShownElsewhere; routes?: Route[]; defaults?: RoutingDefaults }) {
+function waking(deps: { ship: ReturnType<typeof aShip>; channels: WakeChannel[]; wakesSent?: WakesSent; focused?: FocusedPages; endedAttempts?: { channel: WakeChannelName; reason: string }[]; shownElsewhere?: ShownElsewhere; routes?: Route[]; defaults?: RoutingDefaults; quietHours?: QuietHours[]; quietShips?: QuietShip[] }) {
   return createWakePerson({
+    quietHours: memoryQuietHours(deps.quietHours ?? []),
+    quietShips: memoryQuietShips(deps.quietShips ?? []),
     connections: connected(),
     routes: memoryRoutes(deps.routes ?? []),
     defaults: deps.defaults ?? EVERY_JOB_WAKES,
@@ -323,7 +327,7 @@ describe('waking a person', () => {
     const email = aChannel('email');
     const wakesSent = memoryWakesSent();
     const crashing = { ...ship.door, handed: () => Promise.reject(new Error('the gateway stopped')) };
-    await expect(createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
+    await expect(createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, quietHours: memoryQuietHours(), quietShips: memoryQuietShips(), attemptEnded: () => undefined, door: crashing, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN)).rejects.toThrow('the gateway stopped');
 
     await waking({ ship, channels: [email.channel], wakesSent })(SHIP, CREW_TOKEN);
 
@@ -335,7 +339,7 @@ describe('waking a person', () => {
     const refusing = { ...ship.door, handed: () => Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) };
     const wakesSent = memoryWakesSent();
 
-    const woken = await createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
+    const woken = await createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, quietHours: memoryQuietHours(), quietShips: memoryQuietShips(), attemptEnded: () => undefined, door: refusing, channels: [aChannel('email').channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } })(SHIP, CREW_TOKEN);
 
     expect({ woken, sent: wakesSent.sent }).toEqual({ woken: err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' }), sent: [{ channel: 'email', at: NOW }] });
   });
@@ -352,7 +356,7 @@ describe('waking a person', () => {
         return handedCalls === 2 ? Promise.resolve(err({ code: 'UNAVAILABLE', message: 'The fleet did not answer' })) : ship.door.handed(crewToken, handOver);
       },
     };
-    const wakePerson = createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, attemptEnded: () => undefined, door: refusingOnce, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
+    const wakePerson = createWakePerson({ connections: connected(), routes: memoryRoutes(), defaults: EVERY_JOB_WAKES, quietHours: memoryQuietHours(), quietShips: memoryQuietShips(), attemptEnded: () => undefined, door: refusingOnce, channels: [email.channel], wakesSent, focused: memoryFocusedPages(), focusFreshMs: FOCUS_FRESH_MS, clock: { now: () => NOW } });
 
     const first = await wakePerson(SHIP, CREW_TOKEN);
     const retried = await wakePerson(SHIP, CREW_TOKEN);
@@ -591,5 +595,107 @@ describe('waking a person per job (Bridge, section 8)', () => {
       ['dlv_01m3tbfspe96yf1rnr4ank0001', 'email'],
       ['dlv_01m3tbfspe96yf1rnr4ank0002', 'web-push'],
     ]);
+  });
+});
+
+/** The ship aPersonDelivery names as the sender, and another. */
+const TRACKER = 'shp_01m3tbfspe96yf1rnr4ank9trk';
+const OTHER_SHIP = 'shp_01m3tbfspe96yf1rnr4ank0oth';
+const TEN_MINUTES_MS = 600_000;
+
+function aQuietShip(overrides: Partial<QuietShip> = {}): QuietShip {
+  return { ...SHIP, quietShipId: TRACKER, name: 'tracker', isQuiet: true, changedAt: TURNED_ON_AT, ...overrides };
+}
+
+/** Quiet hours in UTC from 11:00 to 13:00, in effect at NOW unless changed. */
+function someQuietHours(overrides: Partial<QuietHours> = {}): QuietHours {
+  return { ...SHIP, isOn: true, fromMinute: 11 * 60, toMinute: 13 * 60, timeZone: 'UTC', changedAt: TURNED_ON_AT, ...overrides };
+}
+
+describe('waking a person with their preferences (preferences design)', () => {
+  it("sends no wake for a quiet ship's delivery, and leaves it waiting, unhanded", async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email');
+
+    const woken = await waking({ ship, channels: [email.channel], quietShips: [aQuietShip()] })(SHIP, CREW_TOKEN);
+
+    expect({ woken, wakes: email.woken.length, handOvers: ship.handOvers }).toEqual({ woken: ok({ kind: 'settled' }), wakes: 0, handOvers: [] });
+  });
+
+  it("wakes for another ship's delivery beside a quiet ship's, handing only that", async () => {
+    const ship = aShip([aDelivery(1), aDelivery(2, { senderShipId: OTHER_SHIP })]);
+    const email = aChannel('email');
+
+    await waking({ ship, channels: [email.channel], quietShips: [aQuietShip()] })(SHIP, CREW_TOKEN);
+
+    expect({ wakes: email.woken.length, handed: ship.handOvers.map(({ deliveryId }) => deliveryId) }).toEqual({ wakes: 1, handed: ['dlv_01m3tbfspe96yf1rnr4ank0002'] });
+  });
+
+  it('wakes for what a ship woken again sent since, never for what it sent before', async () => {
+    const wokenAgainAt = new Date('2026-10-23T11:00:00.000Z');
+    const ship = aShip([aDelivery(1, { sentAt: new Date('2026-10-23T10:59:59.999Z') }), aDelivery(2, { sentAt: wokenAgainAt })]);
+    const email = aChannel('email');
+
+    await waking({ ship, channels: [email.channel], quietShips: [aQuietShip({ isQuiet: false, changedAt: wokenAgainAt })] })(SHIP, CREW_TOKEN);
+
+    expect(ship.handOvers.map(({ deliveryId }) => deliveryId)).toEqual(['dlv_01m3tbfspe96yf1rnr4ank0002']);
+  });
+
+  it('sends no wake during quiet hours and hands nothing, looking again once a window passed', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const webPush = aChannel('web-push', { windowMs: TEN_MINUTES_MS });
+
+    const woken = await waking({ ship, channels: [webPush.channel], quietHours: [someQuietHours()] })(SHIP, CREW_TOKEN);
+
+    expect({ woken, wakes: webPush.woken.length, handOvers: ship.handOvers }).toEqual({ woken: ok({ kind: 'inWindow', until: new Date('2026-10-23T12:10:00.000Z') }), wakes: 0, handOvers: [] });
+  });
+
+  it('looks again at the end of quiet hours when that comes before a window passed', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email');
+
+    const woken = await waking({ ship, channels: [email.channel], quietHours: [someQuietHours({ toMinute: 12 * 60 + 30 })] })(SHIP, CREW_TOKEN);
+
+    expect(woken).toEqual(ok({ kind: 'inWindow', until: new Date('2026-10-23T12:30:00.000Z') }));
+  });
+
+  it('sends one wake per channel at the end of quiet hours for everything that waited, each handed', async () => {
+    const deliveries = Array.from({ length: 3 }, (_, index) => aDelivery(index + 1, { sentAt: new Date(`2026-10-23T0${String(index + 2)}:00:00.000Z`) }));
+    const ship = aShip(deliveries);
+    const email = aChannel('email');
+    const webPush = aChannel('web-push', { windowMs: TEN_MINUTES_MS });
+
+    await waking({ ship, channels: [webPush.channel, email.channel], quietHours: [someQuietHours({ fromMinute: 60, toMinute: 12 * 60 })] })(SHIP, CREW_TOKEN);
+
+    expect({ webPush: webPush.woken.length, email: email.woken.length, handed: ship.handOvers.length }).toEqual({ webPush: 1, email: 1, handed: 3 });
+  });
+
+  it('wakes during quiet hours turned off', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email');
+
+    await waking({ ship, channels: [email.channel], quietHours: [someQuietHours({ isOn: false })] })(SHIP, CREW_TOKEN);
+
+    expect(email.woken).toEqual([SHIP]);
+  });
+
+  it('still hands through a page in focus during quiet hours, and sends no wake (W6)', async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email');
+    const focused = memoryFocusedPages();
+    await focused.save({ ...SHIP, pageId: 'page-1', seenAt: NOW });
+
+    await waking({ ship, channels: [email.channel], focused, quietHours: [someQuietHours()] })(SHIP, CREW_TOKEN);
+
+    expect({ wakes: email.woken.length, handOvers: ship.handOvers.map(({ channel }) => channel) }).toEqual({ wakes: 0, handOvers: ['page'] });
+  });
+
+  it("keeps quiet hours to the person's own fleet and person ship", async () => {
+    const ship = aShip([aDelivery(1)]);
+    const email = aChannel('email');
+
+    await waking({ ship, channels: [email.channel], quietHours: [someQuietHours({ shipId: OTHER_SHIP })], quietShips: [aQuietShip({ shipId: OTHER_SHIP })] })(SHIP, CREW_TOKEN);
+
+    expect(email.woken).toEqual([SHIP]);
   });
 });
