@@ -129,6 +129,50 @@ export interface RecordPage {
   readonly nextCursor: DeliveryId | null;
 }
 
+/** A message of a person ship's exchange with one other ship, whole, from either ship; on the person's own, where the other ship's delivery of it stands. */
+export interface ExchangeMessage {
+  readonly messageId: MessageId;
+  readonly senderShipId: ShipId;
+  /** Empty when the fleet cannot unseal it now (isPayloadUnreadable). */
+  readonly payload: string;
+  readonly isPayloadUnreadable: boolean;
+  readonly contentType: string;
+  readonly inReplyTo: MessageId | null;
+  /** ISO 8601 in UTC. */
+  readonly sentAt: string;
+  readonly deliveryState: DeliveryState | null;
+}
+
+/** Where a page of an exchange starts: the newest, older than a delivery, newer than a delivery, or around one message. */
+export type ExchangeStart =
+  | { readonly kind: 'newest' }
+  | { readonly kind: 'before'; readonly cursor: DeliveryId }
+  | { readonly kind: 'after'; readonly cursor: DeliveryId }
+  | { readonly kind: 'around'; readonly messageId: MessageId };
+
+/** A page of an exchange, newest first, with the cursors to the older and newer messages; null while none lie that way. */
+export interface ExchangePage {
+  readonly items: readonly ExchangeMessage[];
+  readonly olderCursor: DeliveryId | null;
+  readonly newerCursor: DeliveryId | null;
+}
+
+/** One exchange of the person ship's list: the other ship, how many of its messages are not yet acknowledged, and the newest message between them. */
+export interface ExchangeSummary {
+  readonly otherShipId: ShipId;
+  readonly otherShipName: string;
+  readonly otherShipType: string;
+  readonly otherShipKind: ShipKind;
+  readonly unacknowledged: number;
+  readonly newestMessage: Omit<ExchangeMessage, 'inReplyTo' | 'deliveryState'>;
+}
+
+/** A page of the person ship's exchanges, newest first, and the cursor of the next; null on the last. */
+export interface ExchangeList {
+  readonly items: readonly ExchangeSummary[];
+  readonly nextCursor: MessageId | null;
+}
+
 /** What a person ship may send to now, as the fleet's discover answers it: each ship by name, with what it offers, and each type. */
 export interface PersonDiscovery {
   readonly ships: readonly { readonly name: string; readonly type: string; readonly kind: ShipKind; readonly statement: DiscoveredStatement }[];
@@ -158,6 +202,12 @@ export interface PersonShipDoor {
   pushReceive(crewToken: string, take: { max: number; shouldSkipHanded?: boolean; excluding?: readonly DeliveryId[] }): Promise<Result<PushedPersonDelivery[], FleetRefusal>>;
   /** A page of the ship's record (Bridge, CC12): its deliveries in every state and across its leases, newest first, after the cursor; records nothing. */
   record(crewToken: string, page: { cursor: DeliveryId | null; limit: number }): Promise<Result<RecordPage, FleetRefusal>>;
+  /** A page of the ship's exchange with one other ship (aeolus-fleet exchange-read): both ways, whole, newest first; records nothing. */
+  exchange(crewToken: string, asked: { otherShipId: ShipId; start: ExchangeStart; limit: number }): Promise<Result<ExchangePage, FleetRefusal>>;
+  /** A page of the ship's exchanges, newest first, from core's rollup; records nothing. */
+  exchanges(crewToken: string, page: { cursor: MessageId | null; limit: number }): Promise<Result<ExchangeList, FleetRefusal>>;
+  /** Acknowledges the other ship's plain messages to the ship up to one message, in one call: how many it acknowledged; questions, steps, alerts and notices stay as they are. */
+  ackUpTo(crewToken: string, seen: { otherShipId: ShipId; messageId: MessageId }): Promise<Result<{ acknowledged: number }, FleetRefusal>>;
   /** Acknowledges a delivery the person opened: their own act confirms it (interop 5.1). */
   ack(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
   /** Reads a delivery the ship acknowledged again, whole, while it is not handled, recording nothing (decision 0040). */

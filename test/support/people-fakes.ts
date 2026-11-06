@@ -9,7 +9,7 @@ import type { QuietHours, QuietHoursStore } from '../../src/core/people/quiet-ho
 import type { QuietShip, QuietShips } from '../../src/core/people/quiet-ships.js';
 import type { Route, Routes } from '../../src/core/people/routing.js';
 import { createHeldDeliveries, holdingDoor, type HeldDeliveries } from '../../src/core/people/held-deliveries.js';
-import type { AccountDoor, ConnectedChat, ConnectedChats, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, InboxChanges, LetGoDeliveries, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
+import type { AccountDoor, ConnectedChat, ConnectedChats, FocusedPage, FocusedPages, Wake, WebPush, WebPushSent, WebPushSubscription, WebPushSubscriptions, InboxChange, ExchangeMessage, ExchangeSummary, InboxChanges, LetGoDeliveries, OpenedDeliveries, OpenedDelivery, PersonCrew, PersonCrews, PersonDelivery, PersonDiscovery, PersonSelector, PersonShipDoor, RecordedPersonDelivery } from '../../src/core/people/ports.js';
 import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
@@ -148,14 +148,16 @@ export const SENT_MESSAGE_ID: MessageId = 'msg_01m3tbfspe96yf1rnr4ank0sen';
  * answers; its record, newest first by delivery id; its name, as whoami
  * answers it; the deliveries acknowledged before, read again until handled; the crew token it takes, and the calls the gateway made; the ship, whose deliveries a test changes as the fleet would.
  */
-export function fakePersonShipDoor(ship: { crewToken: string; name?: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[]; isExcludingIgnored?: boolean; acknowledged?: PersonDelivery[] }) {
+export function fakePersonShipDoor(ship: { crewToken: string; name?: string; deliveries: PersonDelivery[]; discovery?: PersonDiscovery; record?: RecordedPersonDelivery[]; isExcludingIgnored?: boolean; acknowledged?: PersonDelivery[]; exchanges?: ExchangeFixture }) {
   const calls: string[] = [];
   /** The replies the fleet took, as sent. */
   const replies: Parameters<PersonShipDoor['reply']>[1][] = [];
   /** The messages the fleet took, as sent. */
   const sent: Parameters<PersonShipDoor['send']>[1][] = [];
   /** The fleet's answers to come for each call, before it takes them. */
-  const refusals: { inbox: FleetRefusal[]; pushReceive: FleetRefusal[]; record: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[]; whoami: FleetRefusal[] } = { inbox: [], pushReceive: [], record: [], reply: [], handled: [], discover: [], send: [], delivery: [], whoami: [] };
+  const refusals: { inbox: FleetRefusal[]; pushReceive: FleetRefusal[]; record: FleetRefusal[]; reply: FleetRefusal[]; handled: FleetRefusal[]; discover: FleetRefusal[]; send: FleetRefusal[]; delivery: FleetRefusal[]; whoami: FleetRefusal[]; exchange: FleetRefusal[]; exchanges: FleetRefusal[]; ackUpTo: FleetRefusal[] } = { inbox: [], pushReceive: [], record: [], reply: [], handled: [], discover: [], send: [], delivery: [], whoami: [], exchange: [], exchanges: [], ackUpTo: [] };
+  /** The messages the person ship's crew marked seen, by ship, so a second mark of the same finds none left. */
+  const seen = new Set<MessageId>();
   /** The hand-overs the gateway reported, in order. */
   const handOvers: Parameters<PersonShipDoor['handed']>[1][] = [];
   /** The deliveries the ship acknowledged and has not handled yet. */
@@ -190,6 +192,53 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
         const newestFirst = [...(ship.record ?? [])].sort((a, b) => b.deliveryId.localeCompare(a.deliveryId)).filter(({ deliveryId }) => cursor === null || deliveryId < cursor);
         const items = newestFirst.slice(0, limit);
         return { items, nextCursor: newestFirst.length > limit ? (items.at(-1)?.deliveryId ?? null) : null };
+      });
+    },
+    exchange: (crewToken, { otherShipId, start, limit }) => {
+      calls.push(`exchange(${otherShipId}, ${start.kind})`);
+      const refused = refusals.exchange.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
+      const newestFirst = (ship.exchanges?.messages ?? []).filter((message) => message.otherShipId === otherShipId).sort((a, b) => b.deliveryId.localeCompare(a.deliveryId));
+      if (!newestFirst.length && !(ship.exchanges?.summaries ?? []).some((summary) => summary.otherShipId === otherShipId)) {
+        return Promise.resolve(err({ code: 'SHIP_NOT_FOUND', message: `Ship ${otherShipId} does not exist` }));
+      }
+      const around = start.kind === 'around' ? newestFirst.findIndex(({ messageId }) => messageId === start.messageId) : -1;
+      if (start.kind === 'around' && around < 0) {
+        return Promise.resolve(err({ code: 'MESSAGE_NOT_FOUND', message: `Message ${start.messageId} is not in this exchange` }));
+      }
+      const first = start.kind === 'around' ? Math.max(0, around - Math.floor(limit / 2)) : start.kind === 'before' ? newestFirst.findIndex(({ deliveryId }) => deliveryId < start.cursor) : start.kind === 'after' ? Math.max(0, newestFirst.findLastIndex(({ deliveryId }) => deliveryId > start.cursor) + 1 - limit) : 0;
+      const from = first < 0 ? newestFirst.length : first;
+      const items = newestFirst.slice(from, from + limit);
+      return crewed(crewToken, () => ({
+        items: items.map(({ deliveryId, otherShipId: _other, ...message }) => message),
+        olderCursor: from + items.length < newestFirst.length ? (items.at(-1)?.deliveryId ?? null) : null,
+        newerCursor: from > 0 ? (items[0]?.deliveryId ?? null) : null,
+      }));
+    },
+    exchanges: (crewToken, { cursor, limit }) => {
+      calls.push(`exchanges(${cursor ?? 'newest'})`);
+      const refused = refusals.exchanges.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
+      return crewed(crewToken, () => {
+        const newestFirst = [...(ship.exchanges?.summaries ?? [])].sort((a, b) => b.newestMessage.messageId.localeCompare(a.newestMessage.messageId)).filter(({ newestMessage }) => cursor === null || newestMessage.messageId < cursor);
+        const items = newestFirst.slice(0, limit);
+        return { items, nextCursor: newestFirst.length > limit ? (items.at(-1)?.newestMessage.messageId ?? null) : null };
+      });
+    },
+    ackUpTo: (crewToken, { otherShipId, messageId }) => {
+      calls.push(`ackUpTo(${otherShipId}, ${messageId})`);
+      const refused = refusals.ackUpTo.shift();
+      if (refused) {
+        return Promise.resolve(err(refused));
+      }
+      return crewed(crewToken, () => {
+        const unseen = (ship.exchanges?.messages ?? []).filter((message) => message.otherShipId === otherShipId && message.senderShipId === otherShipId && message.messageId <= messageId && !seen.has(message.messageId));
+        unseen.forEach((message) => seen.add(message.messageId));
+        return { acknowledged: unseen.length };
       });
     },
     ack: (crewToken, deliveryId) => {
@@ -261,6 +310,12 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
     },
   };
   return { door, calls, replies, sent, refusals, handOvers, ship };
+}
+
+/** What a person ship's fleet holds of its exchanges: the list, and each message with the delivery it travelled in and the ship on the other side. */
+export interface ExchangeFixture {
+  readonly summaries: ExchangeSummary[];
+  readonly messages: (ExchangeMessage & { deliveryId: DeliveryId; otherShipId: ShipId })[];
 }
 
 function recipientOf(to: PersonSelector): string {
