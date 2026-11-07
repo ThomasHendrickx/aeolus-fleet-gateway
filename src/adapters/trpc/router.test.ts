@@ -274,6 +274,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
         answers.push({ grantId: grantOf(caller), quietHours: `${isOn ? 'on' : 'off'} ${String(fromMinute)}-${String(toMinute)} ${timeZone}` });
         return Promise.resolve(ok(undefined));
       },
+      readWaitingAmong: ({ shipIds }) => Promise.resolve(ok(shipIds.includes(QUIET_SHIP_ID) ? [{ shipId: QUIET_SHIP_ID, count: 2 }] : [])),
       readQuietShips: () => Promise.resolve(ok({ ships: [{ shipId: QUIET_SHIP_ID, name: 'watcher', since: QUIET_SINCE }], nextCursor: null })),
       readQuietAmong: ({ shipIds }) => Promise.resolve(ok(shipIds.includes(QUIET_SHIP_ID) ? [{ shipId: QUIET_SHIP_ID, name: 'watcher', since: QUIET_SINCE }] : [])),
       turnShipQuiet: ({ caller, shipId, name, isQuiet }) => {
@@ -1308,6 +1309,18 @@ describe('a person sets quiet hours and quiet ships through the API (preferences
     const watcher = { shipId: QUIET_SHIP_ID, name: 'watcher', since: '2026-11-06T21:00:00.000Z' };
 
     expect({ listed: await caller.people.quietShips({ cursor: null }), among: await caller.people.quietAmong({ shipIds: [QUIET_SHIP_ID] }) }).toEqual({ listed: { ships: [watcher], nextCursor: null }, among: [watcher] });
+  });
+
+  it('reads how many questions and steps wait from each of the ships asked', async () => {
+    const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
+
+    await expect(caller.people.waitingAmong({ shipIds: [QUIET_SHIP_ID] })).resolves.toEqual([{ shipId: QUIET_SHIP_ID, count: 2 }]);
+  });
+
+  it('refuses to be asked about the waiting of more than 100 ships at once', async () => {
+    const shipIds = Array.from({ length: 101 }, () => QUIET_SHIP_ID);
+
+    await expect(gatewayRouter.createCaller(aContext(PERSON_COOKIE).context).people.waitingAmong({ shipIds })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
   it('refuses to be asked about more than 100 ships at once', async () => {
