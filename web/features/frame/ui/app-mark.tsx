@@ -14,6 +14,7 @@ export function AppMark({ size = 28, className = '' }: { size?: keyof typeof SIZ
   return (
     <span
       aria-hidden
+      data-slot="avatar"
       className={classNames(
         'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-sm bg-primary font-semibold text-primary-foreground uppercase select-none',
         SIZES[size],
