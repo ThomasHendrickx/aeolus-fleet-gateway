@@ -202,11 +202,11 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
       }
       const newestFirst = (ship.exchanges?.messages ?? []).filter((message) => message.otherShipId === otherShipId).sort((a, b) => b.deliveryId.localeCompare(a.deliveryId));
       if (!newestFirst.length && !(ship.exchanges?.summaries ?? []).some((summary) => summary.otherShipId === otherShipId)) {
-        return Promise.resolve(err({ code: 'SHIP_NOT_FOUND', message: `Ship ${otherShipId} does not exist` }));
+        return Promise.resolve(err({ code: 'NOT_FOUND', message: `Ship ${otherShipId} does not exist` }));
       }
       const around = start.kind === 'around' ? newestFirst.findIndex(({ messageId }) => messageId === start.messageId) : -1;
       if (start.kind === 'around' && around < 0) {
-        return Promise.resolve(err({ code: 'MESSAGE_NOT_FOUND', message: `Message ${start.messageId} is not in this exchange` }));
+        return Promise.resolve(err({ code: 'NOT_FOUND', message: `Message ${start.messageId} is not in this exchange` }));
       }
       const first = start.kind === 'around' ? Math.max(0, around - Math.floor(limit / 2)) : start.kind === 'before' ? newestFirst.findIndex(({ deliveryId }) => deliveryId < start.cursor) : start.kind === 'after' ? Math.max(0, newestFirst.findLastIndex(({ deliveryId }) => deliveryId > start.cursor) + 1 - limit) : 0;
       const from = first < 0 ? newestFirst.length : first;

@@ -23,6 +23,6 @@ export function createReadExchange(deps: { crewPersonShip: CrewPersonShip; crews
       return read;
     }
     const page = read.value.value;
-    return page.isOk ? ok(page.value) : exchangeRefusalOf(page.error, 'The exchange cannot be read');
+    return page.isOk ? ok(page.value) : exchangeRefusalOf(page.error, { doing: 'The exchange cannot be read', missing: start.kind === 'around' ? 'message' : 'ship' });
   };
 }
