@@ -78,6 +78,7 @@ import type { MeetingRead } from '../../core/meetings/ports.js';
 import type { PersonMeeting, ReadMeeting } from '../../core/meetings/read-meeting.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { SendMessage } from '../../core/people/send-message.js';
+import type { ReadWaitingCount } from '../../core/people/read-waiting-count.js';
 import type { ReadSendTo } from '../../core/people/read-send-to.js';
 import type { ReadBridgeHome } from '../../core/people/read-bridge-home.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
@@ -200,6 +201,7 @@ export interface Context {
   person?: {
     readInbox: ReadInbox;
     readBridgeHome: ReadBridgeHome;
+    readWaitingCount: ReadWaitingCount;
     readRecord: ReadRecord;
     openDelivery: OpenDelivery;
     readItem: ReadItem;
@@ -1286,6 +1288,8 @@ export const gatewayRouter = t.router({
     inbox: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readInbox(ctx.caller))),
     /** Bridge home (CC18): what waits on the person with its count, decide and do, and the stay-aware feed. */
     home: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readBridgeHome(ctx.caller))),
+    /** The count of what waits on the person: questions and steps waiting plus plain messages not yet seen, alerts and notices left out. It feeds the app's Home indicator and icon badge. */
+    waitingCount: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readWaitingCount(ctx.caller))),
     /**
      * What the overview tells the account of argo's inbox (argo's inbox,
      * section 4): that argo has not let the gateway read it, to an account
