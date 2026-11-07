@@ -18,6 +18,7 @@ export const exchangeOutputSchema = z.object({
       inReplyTo: idSchema('message').nullable(),
       sentAt: z.iso.datetime(),
       deliveryState: deliveryStateSchema.nullable(),
+      receivedDelivery: z.object({ deliveryId: idSchema('delivery'), state: deliveryStateSchema }).nullable(),
     }),
   ),
   olderCursor: idSchema('delivery').nullable(),

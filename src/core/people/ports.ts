@@ -141,6 +141,8 @@ export interface ExchangeMessage {
   /** ISO 8601 in UTC. */
   readonly sentAt: string;
   readonly deliveryState: DeliveryState | null;
+  /** On a message the person ship received, its own delivery of it, whatever its state; null on its own message. */
+  readonly receivedDelivery: { readonly deliveryId: DeliveryId; readonly state: DeliveryState } | null;
 }
 
 /** Where a page of an exchange starts: the newest, older than a delivery, newer than a delivery, or around one message. */
@@ -164,7 +166,7 @@ export interface ExchangeSummary {
   readonly otherShipType: string;
   readonly otherShipKind: ShipKind;
   readonly unacknowledged: number;
-  readonly newestMessage: Omit<ExchangeMessage, 'inReplyTo' | 'deliveryState'>;
+  readonly newestMessage: Omit<ExchangeMessage, 'inReplyTo' | 'deliveryState' | 'receivedDelivery'>;
 }
 
 /** A page of the person ship's exchanges, newest first, and the cursor of the next; null on the last. */
