@@ -20,7 +20,9 @@ export function AppMark({ size = 28, className = '' }: { size?: keyof typeof SIZ
         className,
       )}
     >
-      <Ship aria-hidden />
+      <span>
+        <Ship aria-hidden />
+      </span>
     </span>
   );
 }
