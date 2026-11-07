@@ -212,7 +212,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
       const from = first < 0 ? newestFirst.length : first;
       const items = newestFirst.slice(from, from + limit);
       return crewed(crewToken, () => ({
-        items: items.map(({ messageId, senderShipId, payload, isPayloadUnreadable, contentType, inReplyTo, sentAt, deliveryState }) => ({ messageId, senderShipId, payload, isPayloadUnreadable, contentType, inReplyTo, sentAt, deliveryState })),
+        items: items.map(({ messageId, senderShipId, payload, isPayloadUnreadable, contentType, inReplyTo, sentAt, deliveryState, receivedDelivery }) => ({ messageId, senderShipId, payload, isPayloadUnreadable, contentType, inReplyTo, sentAt, deliveryState, receivedDelivery })),
         olderCursor: from + items.length < newestFirst.length ? (items.at(-1)?.deliveryId ?? null) : null,
         newerCursor: from > 0 ? (items[0]?.deliveryId ?? null) : null,
       }));

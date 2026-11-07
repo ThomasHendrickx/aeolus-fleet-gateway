@@ -407,7 +407,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
 
   describe('the exchange calls (aeolus-fleet exchange-read, core main)', () => {
     const OTHER = 'shp_01m3tbfspe96yf1rnr4ank9trk';
-    const entry = { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', senderShipId: PERSON_SHIP, payload: 'On it', isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0001', sentAt: '2026-11-06T10:00:00.000Z', deliveryState: 'acknowledged' };
+    const entry = { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', senderShipId: PERSON_SHIP, payload: 'On it', isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0001', sentAt: '2026-11-06T10:00:00.000Z', deliveryState: 'acknowledged', receivedDelivery: null };
 
     it.each([
       [{ kind: 'newest' as const }, { otherShipId: OTHER, limit: 20 }],
@@ -421,6 +421,16 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
 
       expect(page).toEqual({ isOk: true, value: { items: [entry], olderCursor: 'dlv_01m3tbfspe96yf1rnr4ank0002', newerCursor: null } });
       expect(sent().map(({ url, authorization, body: sentBody }) => ({ url, authorization, body: sentBody }))).toEqual([{ url: '/api/v1/ship/exchange', authorization: 'Bearer aeolus_ct_v1_charlotte', body }]);
+    });
+
+    it('carries the reader\'s own delivery of a message it received, and null on its own message', async () => {
+      const received = { ...entry, senderShipId: OTHER, deliveryState: null, receivedDelivery: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003', state: 'handed' } };
+      const own = { ...entry, receivedDelivery: null };
+      answer = { status: 200, body: { items: [received, own], olderCursor: null, newerCursor: null } };
+
+      const page = await createRestFleetDoor(base).person.exchange('aeolus_ct_v1_charlotte', { otherShipId: OTHER, start: { kind: 'newest' }, limit: 20 });
+
+      expect(page).toEqual({ isOk: true, value: { items: [received, own], olderCursor: null, newerCursor: null } });
     });
 
     it('answers the fleet\'s refusal of an exchange read', async () => {
