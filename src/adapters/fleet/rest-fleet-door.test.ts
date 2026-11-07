@@ -434,9 +434,9 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     });
 
     it('answers the fleet\'s refusal of an exchange read', async () => {
-      answer = { status: 404, body: { code: 'SHIP_NOT_FOUND', message: 'No such ship' } };
+      answer = { status: 404, body: { code: 'NOT_FOUND', message: 'No such ship' } };
 
-      await expect(createRestFleetDoor(base).person.exchange('aeolus_ct_v1_charlotte', { otherShipId: OTHER, start: { kind: 'newest' }, limit: 20 })).resolves.toEqual({ isOk: false, error: { code: 'SHIP_NOT_FOUND', message: 'No such ship' } });
+      await expect(createRestFleetDoor(base).person.exchange('aeolus_ct_v1_charlotte', { otherShipId: OTHER, start: { kind: 'newest' }, limit: 20 })).resolves.toEqual({ isOk: false, error: { code: 'NOT_FOUND', message: 'No such ship' } });
     });
 
     it('lists the exchanges after a cursor, each with its other ship and newest message', async () => {

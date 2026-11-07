@@ -22,6 +22,6 @@ export function createMarkSeen(deps: { crewPersonShip: CrewPersonShip; crews: Pe
       return marked;
     }
     const answered = marked.value.value;
-    return answered.isOk ? ok(answered.value) : exchangeRefusalOf(answered.error, 'The exchange cannot be marked seen');
+    return answered.isOk ? ok(answered.value) : exchangeRefusalOf(answered.error, { doing: 'The exchange cannot be marked seen', missing: 'message' });
   };
 }

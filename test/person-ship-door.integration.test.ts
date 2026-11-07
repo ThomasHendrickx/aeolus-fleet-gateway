@@ -199,28 +199,35 @@ describe("a person ship reads its exchange with one ship (aeolus-fleet exchange-
 });
 
 describe('a person ship reads an exchange that is not there (aeolus-fleet exchange-read, section 7)', () => {
-  it('means a message not in the exchange as no such message', async () => {
+  async function trackerShipId() {
     const found = await door.discover(charlotte);
-    const trackerId = found.isOk ? (found.value.ships.find(({ name }) => name === 'tracker')?.id ?? '') : '';
+    const tracker = found.isOk ? found.value.ships.find(({ name }) => name === 'tracker') : undefined;
+    if (tracker === undefined) {
+      throw new Error('charlotte does not find the tracker');
+    }
+    return tracker.id;
+  }
+
+  it('means a message not in the exchange as no such message', async () => {
+    const trackerId = await trackerShipId();
 
     const page = await door.exchange(charlotte, { otherShipId: trackerId, start: { kind: 'around', messageId: 'msg_01m3tbfspe96yf1rnr4ank0001' }, limit: 20 });
 
-    expect(!page.isOk && exchangeRefusalOf(page.error, 'The exchange cannot be read', 'message').error.kind).toBe('NO_SUCH_MESSAGE');
+    expect(!page.isOk && exchangeRefusalOf(page.error, { doing: 'The exchange cannot be read', missing: 'message' }).error.kind).toBe('NO_SUCH_MESSAGE');
   });
 
   it('means a message not from that ship to the person ship, marked seen, as no such message', async () => {
-    const found = await door.discover(charlotte);
-    const trackerId = found.isOk ? (found.value.ships.find(({ name }) => name === 'tracker')?.id ?? '') : '';
+    const trackerId = await trackerShipId();
 
     const marked = await door.ackUpTo(charlotte, { otherShipId: trackerId, messageId: 'msg_01m3tbfspe96yf1rnr4ank0001' });
 
-    expect(!marked.isOk && exchangeRefusalOf(marked.error, 'The exchange cannot be marked seen', 'message').error.kind).toBe('NO_SUCH_MESSAGE');
+    expect(!marked.isOk && exchangeRefusalOf(marked.error, { doing: 'The exchange cannot be marked seen', missing: 'message' }).error.kind).toBe('NO_SUCH_MESSAGE');
   });
 
   it('means a ship that is not in the fleet as no such ship', async () => {
     const page = await door.exchange(charlotte, { otherShipId: 'shp_01m3tbfspe96yf1rnr4ank0001', start: { kind: 'newest' }, limit: 20 });
 
-    expect(!page.isOk && exchangeRefusalOf(page.error, 'The exchange cannot be read', 'ship').error.kind).toBe('NO_SUCH_SHIP');
+    expect(!page.isOk && exchangeRefusalOf(page.error, { doing: 'The exchange cannot be read', missing: 'ship' }).error.kind).toBe('NO_SUCH_SHIP');
   });
 });
 

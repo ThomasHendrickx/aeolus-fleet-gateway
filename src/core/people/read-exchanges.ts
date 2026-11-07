@@ -22,6 +22,6 @@ export function createReadExchanges(deps: { crewPersonShip: CrewPersonShip; crew
       return read;
     }
     const page = read.value.value;
-    return page.isOk ? ok(page.value) : exchangeRefusalOf(page.error, 'The exchanges cannot be read');
+    return page.isOk ? ok(page.value) : exchangeRefusalOf(page.error, { doing: 'The exchanges cannot be read', missing: 'ship' });
   };
 }

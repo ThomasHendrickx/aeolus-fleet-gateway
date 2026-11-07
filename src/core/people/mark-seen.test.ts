@@ -42,16 +42,9 @@ describe('a person marks an exchange seen up to one message', () => {
 
   it('refuses a message that is not from that ship to the person ship', async () => {
     const { markSeen, refusals } = marking();
-    refusals.ackUpTo.push({ code: 'MESSAGE_NOT_FOUND', message: 'No such message' });
+    refusals.ackUpTo.push({ code: 'NOT_FOUND', message: 'No such message' });
 
     await expect(markSeen({ caller: CHARLOTTE_GRANT, otherShipId: TRACKER, messageId: 'msg_01m3tbfspe96yf1rnr4ank0zzz' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_MESSAGE' } });
-  });
-
-  it('refuses a ship that is not in the fleet', async () => {
-    const { markSeen, refusals } = marking();
-    refusals.ackUpTo.push({ code: 'SHIP_NOT_FOUND', message: 'No such ship' });
-
-    await expect(markSeen({ caller: CHARLOTTE_GRANT, otherShipId: TRACKER, messageId: 'msg_01m3tbfspe96yf1rnr4ank0003' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_SHIP' } });
   });
 
   it('says nothing was marked when the fleet does not answer, so the person marks again', async () => {
