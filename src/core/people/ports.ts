@@ -173,9 +173,9 @@ export interface ExchangeList {
   readonly nextCursor: MessageId | null;
 }
 
-/** What a person ship may send to now, as the fleet's discover answers it: each ship by name, with what it offers, and each type. */
+/** What a person ship may send to now, as the fleet's discover answers it: each ship by id and name, with what it offers, and each type. */
 export interface PersonDiscovery {
-  readonly ships: readonly { readonly name: string; readonly type: string; readonly kind: ShipKind; readonly statement: DiscoveredStatement }[];
+  readonly ships: readonly { readonly id: ShipId; readonly name: string; readonly type: string; readonly kind: ShipKind; readonly statement: DiscoveredStatement }[];
   readonly types: readonly { readonly type: string; readonly reachable: number }[];
 }
 

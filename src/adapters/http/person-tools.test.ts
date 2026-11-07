@@ -18,7 +18,7 @@ import { personServerFor, type PersonToolsDeps } from './person-tools.js';
 // their person ship may send to, and aeolus_send sends as it (aeolus-fleet
 // #1046). The tools only translate; the use cases decide.
 
-const DISCOVERY: PersonDiscovery = { ships: [{ name: 'tracker', type: 'issue-tracker', kind: 'app', statement: null }], types: [{ type: 'issue-tracker', reachable: 1 }] };
+const DISCOVERY: PersonDiscovery = { ships: [{ id: 'shp_01m3tbfspe96yf1rnr4ank9h1a', name: 'tracker', type: 'issue-tracker', kind: 'app', statement: null }], types: [{ type: 'issue-tracker', reachable: 1 }] };
 
 /** The text of a tool's first content block. */
 function textOf(called: Awaited<ReturnType<Client['callTool']>>): string {
