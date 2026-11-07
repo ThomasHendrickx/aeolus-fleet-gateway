@@ -8,6 +8,7 @@ import type { PersonShipDoor } from '../src/core/people/ports.js';
 import { createOpenDelivery } from '../src/core/people/open-delivery.js';
 import { createStaleSightings } from '../src/core/people/stale-sightings.js';
 import { createReadBridgeHome } from '../src/core/people/read-bridge-home.js';
+import { createReadWaitingAmong } from '../src/core/people/read-waiting-among.js';
 import { createReadWaitingCount } from '../src/core/people/read-waiting-count.js';
 import { createReadInbox } from '../src/core/people/read-inbox.js';
 import { ITEM_JOBS, routingDefaultsOf } from '../src/core/people/routing.js';
@@ -38,7 +39,7 @@ const SETUP_TIMEOUT_MS = 600_000;
 const P95_LIMIT_MS = 300;
 
 /** The most core calls one look makes: home counts and reads the record, the inbox counts, opening counts and acknowledges. */
-const CORE_CALLS_LIMIT = { 'Bridge home': 2, inbox: 1, 'waiting count': 1, 'opening a question': 2 };
+const CORE_CALLS_LIMIT = { 'Bridge home': 2, inbox: 1, 'waiting count': 1, 'waiting among': 1, 'opening a question': 2 };
 
 let fleet: FleetServer;
 let core: PrismaClient;
@@ -50,6 +51,8 @@ let calls: string[];
 let readHome: ReturnType<typeof createReadBridgeHome>;
 let readInbox: ReturnType<typeof createReadInbox>;
 let readWaitingCount: ReturnType<typeof createReadWaitingCount>;
+let readWaitingAmong: ReturnType<typeof createReadWaitingAmong>;
+let trackerShipId: ShipId;
 let openDelivery: ReturnType<typeof createOpenDelivery>;
 /** The questions still open, oldest first, as opening takes them one by one. */
 let toOpen: DeliveryId[];
@@ -61,7 +64,9 @@ beforeAll(async () => {
   const charlotte = await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } });
   charlotteShipId = charlotte.shipId;
   charlotteCrew = await register(fleet, charlotte);
-  tracker = await register(fleet, await commission(fleet, { cookie, ship: { name: 'tracker', type: 'issue-tracker', kind: 'app' } }));
+  const trackerCommission = await commission(fleet, { cookie, ship: { name: 'tracker', type: 'issue-tracker', kind: 'app' } });
+  trackerShipId = trackerCommission.shipId;
+  tracker = await register(fleet, trackerCommission);
   await retireShips();
   await seedHistory();
   await askOpenQuestions();
@@ -77,6 +82,7 @@ beforeAll(async () => {
   const defaults = routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' as const })));
   readInbox = createReadInbox({ crewPersonShip, crews, door, held, opened, routes, defaults, connections });
   readWaitingCount = createReadWaitingCount({ crewPersonShip, crews, door, held, opened });
+  readWaitingAmong = createReadWaitingAmong({ crewPersonShip, crews, door, held, opened });
   readHome = createReadBridgeHome({
     crewPersonShip,
     crews,
@@ -226,10 +232,17 @@ describe('Bridge with 300 open questions (aeolus-fleet #1651)', () => {
     await expect(readWaitingCount(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { count: OPEN_QUESTIONS } });
   });
 
+  it('counts the 300 open questions to the tracker alone, among 100 ships', async () => {
+    const strangers = Array.from({ length: 99 }, (_, index): ShipId => `shp_1${String(index).padStart(25, '0')}`);
+
+    await expect(readWaitingAmong({ caller: CHARLOTTE_GRANT, shipIds: [trackerShipId, ...strangers] })).resolves.toEqual({ isOk: true, value: [{ shipId: trackerShipId, count: OPEN_QUESTIONS }] });
+  });
+
   it.each([
     ['Bridge home', () => readHome(CHARLOTTE_GRANT)],
     ['inbox', () => readInbox(CHARLOTTE_GRANT)],
     ['waiting count', () => readWaitingCount(CHARLOTTE_GRANT)],
+    ['waiting among', () => readWaitingAmong({ caller: CHARLOTTE_GRANT, shipIds: [trackerShipId] })],
     [
       'opening a question',
       async () => {
