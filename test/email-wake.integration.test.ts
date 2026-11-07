@@ -334,6 +334,26 @@ describe("a person's quiet hours and quiet ships (preferences design)", () => {
     expect({ listed: listed.ships.map(({ shipId: id, name }) => ({ id, name })), nextCursor: listed.nextCursor, among: among.map(({ shipId: id }) => id) }).toEqual({ listed: [{ id: shipId, name: 'tracker' }], nextCursor: null, among: [shipId] });
   });
 
+  it('counts the questions waiting from each of the ships asked, through the person API', async () => {
+    const shipId = await trackerShipId();
+    const asked = await fetch(`${fleet.url}/api/v1/ship/send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
+      body: JSON.stringify({
+        selector: { kind: 'ship', name: 'charlotte' },
+        contentType: 'application/vnd.aeolus.question+json',
+        payload: JSON.stringify({ id: crypto.randomUUID(), title: 'Go for release 1.4?', context: '', options: [{ key: 1, label: 'Yes' }] }),
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    });
+    expect(asked.status).toBe(200);
+    await trackerSendsCharlotte();
+
+    const waiting = z.array(z.object({ shipId: z.string(), count: z.number() })).parse(await personRead('waitingAmong', { shipIds: [shipId, charlotteShipId] }));
+
+    expect(waiting).toEqual([{ shipId, count: 1 }]);
+  });
+
   it('gets no email from a quiet ship, and its delivery waits unhanded', async () => {
     await turnEmailOn();
     expect((await personCall('turnShipQuiet', { shipId: await trackerShipId(), name: 'tracker', isQuiet: true })).status).toBe(200);

@@ -1,12 +1,11 @@
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import type { HeldDeliveries } from './held-deliveries.js';
-import { isCounted, jobOf } from './item-job.js';
+import { itemsToDeal } from './items-to-deal.js';
 import type { PersonCaller, PersonCrewError } from './person-crew.js';
 import { isPlainMessage } from './plain-message.js';
 import type { OpenedDeliveries, PersonCrews, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
-import { askingOf, staleOf, type Asking } from './stale-item.js';
 
 /** What waits on a person: the questions and steps to deal with, and the plain messages not yet seen. */
 export interface WaitingCount {
@@ -30,15 +29,7 @@ export function createReadWaitingCount(deps: { crewPersonShip: CrewPersonShip; c
     if (!waiting.isOk) {
       return waiting;
     }
-    const opened = await deps.opened.list(caller.fleetId, waiting.value.crew.shipId);
-    const isWaiting = new Set<string>(waiting.value.deliveries.map(({ deliveryId }) => deliveryId));
-    const openedNow = opened.filter(({ deliveryId }) => !isWaiting.has(deliveryId));
-    const asking: Asking[] = [...waiting.value.deliveries.map(askingOf), ...opened];
-    const toDeal = [
-      ...waiting.value.deliveries.map((delivery) => ({ job: jobOf(delivery.contentType), asking: askingOf(delivery) })),
-      // One opened before the gateway kept its content type waited as a question.
-      ...openedNow.map((delivery) => ({ job: delivery.contentType === null ? ('decide' as const) : jobOf(delivery.contentType), asking: delivery })),
-    ].filter(({ job, asking: each }) => isCounted(job) && staleOf(each, asking) === null);
+    const toDeal = await itemsToDeal(deps, { fleetId: caller.fleetId, ...waiting.value });
     const unseenMessages = waiting.value.deliveries.filter(({ contentType }) => isPlainMessage(contentType));
     return ok({ count: toDeal.length + unseenMessages.length });
   };

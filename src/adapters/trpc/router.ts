@@ -78,6 +78,7 @@ import type { MeetingRead } from '../../core/meetings/ports.js';
 import type { PersonMeeting, ReadMeeting } from '../../core/meetings/read-meeting.js';
 import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { SendMessage } from '../../core/people/send-message.js';
+import type { ReadWaitingAmong } from '../../core/people/read-waiting-among.js';
 import type { ReadWaitingCount } from '../../core/people/read-waiting-count.js';
 import type { ReadSendTo } from '../../core/people/read-send-to.js';
 import type { ReadBridgeHome } from '../../core/people/read-bridge-home.js';
@@ -202,6 +203,7 @@ export interface Context {
     readInbox: ReadInbox;
     readBridgeHome: ReadBridgeHome;
     readWaitingCount: ReadWaitingCount;
+    readWaitingAmong: ReadWaitingAmong;
     readRecord: ReadRecord;
     openDelivery: OpenDelivery;
     readItem: ReadItem;
@@ -1417,6 +1419,8 @@ export const gatewayRouter = t.router({
     }),
     /** Which of the ships asked are quiet, to mark them in a conversation and the list of conversations. */
     quietAmong: personProcedure.input(z.strictObject({ shipIds: z.array(idSchema('ship')).max(QUIET_AMONG_MAX) })).query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readQuietAmong({ caller: ctx.caller, shipIds: input.shipIds })).map(quietShipOf)),
+    /** How many questions and steps wait on the person from each of the ships asked, for the rows of the list of conversations; a ship with none waiting is left out. */
+    waitingAmong: personProcedure.input(z.strictObject({ shipIds: z.array(idSchema('ship')).max(QUIET_AMONG_MAX) })).query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readWaitingAmong({ caller: ctx.caller, shipIds: input.shipIds }))),
     /** Quiets a ship, so it never wakes them, or wakes it again; it applies at once. */
     turnShipQuiet: personProcedure
       .input(z.strictObject({ shipId: idSchema('ship'), name: z.string().min(1), isQuiet: z.boolean() }))

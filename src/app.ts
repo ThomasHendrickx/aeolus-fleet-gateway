@@ -239,6 +239,7 @@ import { createTurnRoute } from './core/people/turn-route.js';
 import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
 import { createReadMeeting } from './core/meetings/read-meeting.js';
+import { createReadWaitingAmong } from './core/people/read-waiting-among.js';
 import { createReadWaitingCount } from './core/people/read-waiting-count.js';
 import { createReadSendTo } from './core/people/read-send-to.js';
 import { createSendMessage } from './core/people/send-message.js';
@@ -899,6 +900,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       readInbox: createReadInbox({ ...asCrew, opened, routes, defaults: routingDefaults, connections }),
       readInboxState: createReadInboxState({ ...asCrew, opened }),
       readWaitingCount: createReadWaitingCount({ ...asCrew, opened }),
+      readWaitingAmong: createReadWaitingAmong({ ...asCrew, opened }),
       readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries, outcomes, changes, clock, sightings: staleSightings, connections, routes, defaults: routingDefaults, parties, ownStepPartyOf: ownStepPartyOf(options.publicUrl ?? DEFAULT_PUBLIC_URL), ...placesOffered }),
       readRecord: createReadRecord({ ...asCrew, outcomes, connections, routes, defaults: routingDefaults, ...placesOffered }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
