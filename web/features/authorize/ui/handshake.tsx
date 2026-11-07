@@ -1,5 +1,6 @@
 import { Avatar } from '@aeolus-fleet/ui';
 import { ArrowLeftRight } from 'lucide-react';
+import { AppMark } from '../../frame/ui/app-mark';
 
 /** Who meets whom: the outside party's mark and name, and the fleet's mark, side by side. */
 export function Handshake({ partyName }: { partyName: string }) {
@@ -11,7 +12,7 @@ export function Handshake({ partyName }: { partyName: string }) {
       </figure>
       <ArrowLeftRight aria-hidden className="size-4 text-muted-foreground" />
       <figure className="grid justify-items-center gap-1">
-        <Avatar kind="app" size={36} className="size-10 rounded-md [&_svg]:size-6" />
+        <AppMark size={36} className="size-10 rounded-md [&_svg]:size-6" />
         <figcaption>Aeolus</figcaption>
       </figure>
     </div>
