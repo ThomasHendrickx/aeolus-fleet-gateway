@@ -8,6 +8,7 @@ import type { PersonShipDoor } from '../src/core/people/ports.js';
 import { createOpenDelivery } from '../src/core/people/open-delivery.js';
 import { createStaleSightings } from '../src/core/people/stale-sightings.js';
 import { createReadBridgeHome } from '../src/core/people/read-bridge-home.js';
+import { createReadWaitingCount } from '../src/core/people/read-waiting-count.js';
 import { createReadInbox } from '../src/core/people/read-inbox.js';
 import { ITEM_JOBS, routingDefaultsOf } from '../src/core/people/routing.js';
 import { commission, register, signIn } from './support/argo.js';
@@ -37,7 +38,7 @@ const SETUP_TIMEOUT_MS = 600_000;
 const P95_LIMIT_MS = 300;
 
 /** The most core calls one look makes: home counts and reads the record, the inbox counts, opening counts and acknowledges. */
-const CORE_CALLS_LIMIT = { 'Bridge home': 2, inbox: 1, 'opening a question': 2 };
+const CORE_CALLS_LIMIT = { 'Bridge home': 2, inbox: 1, 'waiting count': 1, 'opening a question': 2 };
 
 let fleet: FleetServer;
 let core: PrismaClient;
@@ -48,6 +49,7 @@ let charlotteShipId: ShipId;
 let calls: string[];
 let readHome: ReturnType<typeof createReadBridgeHome>;
 let readInbox: ReturnType<typeof createReadInbox>;
+let readWaitingCount: ReturnType<typeof createReadWaitingCount>;
 let openDelivery: ReturnType<typeof createOpenDelivery>;
 /** The questions still open, oldest first, as opening takes them one by one. */
 let toOpen: DeliveryId[];
@@ -74,6 +76,7 @@ beforeAll(async () => {
   const [opened, routes, connections] = [memoryOpenedDeliveries(), memoryRoutes([]), memoryConnectionStore()];
   const defaults = routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' as const })));
   readInbox = createReadInbox({ crewPersonShip, crews, door, held, opened, routes, defaults, connections });
+  readWaitingCount = createReadWaitingCount({ crewPersonShip, crews, door, held, opened });
   readHome = createReadBridgeHome({
     crewPersonShip,
     crews,
@@ -219,9 +222,14 @@ async function measure(look: () => Promise<unknown>): Promise<Measured> {
 }
 
 describe('Bridge with 300 open questions (aeolus-fleet #1651)', () => {
+  it('counts the 300 open questions and none of the 150 answered or withdrawn behind them', async () => {
+    await expect(readWaitingCount(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { count: OPEN_QUESTIONS } });
+  });
+
   it.each([
     ['Bridge home', () => readHome(CHARLOTTE_GRANT)],
     ['inbox', () => readInbox(CHARLOTTE_GRANT)],
+    ['waiting count', () => readWaitingCount(CHARLOTTE_GRANT)],
     [
       'opening a question',
       async () => {
