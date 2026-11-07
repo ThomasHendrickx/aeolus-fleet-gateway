@@ -169,6 +169,34 @@ describe('a person ship reads again a delivery the person opened (aeolus-fleet #
   });
 });
 
+describe("a person ship reads its exchange with one ship (aeolus-fleet exchange-read, section 7)", () => {
+  it('carries the person ship\'s own delivery of a message it received, whose id answers it, and none on its own message', async () => {
+    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
+      body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType: 'text/plain', payload: 'Issue 7 is closed', idempotencyKey: 'tracker-1' }),
+    });
+    expect(sent.status).toBe(200);
+    const taken = await door.pushReceive(charlotte, { max: 1 });
+    const [received] = taken.isOk ? taken.value : [];
+    if (received === undefined) {
+      throw new Error('charlotte received no delivery');
+    }
+    expect((await door.ack(charlotte, received.deliveryId)).isOk).toBe(true);
+    const replied = await door.reply(charlotte, { to: received.senderShipId, inReplyTo: received.messageId, contentType: 'text/plain', payload: 'Thanks', idempotencyKey: 'charlotte-1' });
+    expect(replied.isOk).toBe(true);
+
+    const page = await door.exchange(charlotte, { otherShipId: received.senderShipId, start: { kind: 'newest' }, limit: 20 });
+
+    expect(page.isOk && page.value.items.map(({ payload, receivedDelivery }) => ({ payload, receivedDelivery }))).toEqual([
+      { payload: 'Thanks', receivedDelivery: null },
+      { payload: 'Issue 7 is closed', receivedDelivery: { deliveryId: received.deliveryId, state: 'acknowledged' } },
+    ]);
+    const delivery = page.isOk ? page.value.items[1]?.receivedDelivery : null;
+    expect((await door.handled(charlotte, delivery?.deliveryId ?? received.deliveryId)).isOk).toBe(true);
+  });
+});
+
 describe("a person ship's inbox, as the gateway's waiter asks it (wake a person, W5)", () => {
   /** The tracker sends charlotte a note. */
   async function trackerSendsCharlotte(key: string) {

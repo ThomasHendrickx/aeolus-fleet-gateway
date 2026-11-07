@@ -11,7 +11,7 @@ const TRACKER = 'shp_01m3tbfspe96yf1rnr4ank9trk';
 
 function aMessage(n: number): ExchangeFixture['messages'][number] {
   const suffix = String(n).padStart(4, '0');
-  return { deliveryId: `dlv_01m3tbfspe96yf1rnr4ank${suffix}`, messageId: `msg_01m3tbfspe96yf1rnr4ank${suffix}`, otherShipId: TRACKER, senderShipId: TRACKER, payload: `Message ${String(n)}`, isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: null, sentAt: '2026-11-06T10:00:00.000Z', deliveryState: null };
+  return { deliveryId: `dlv_01m3tbfspe96yf1rnr4ank${suffix}`, messageId: `msg_01m3tbfspe96yf1rnr4ank${suffix}`, otherShipId: TRACKER, senderShipId: TRACKER, payload: `Message ${String(n)}`, isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: null, sentAt: '2026-11-06T10:00:00.000Z', deliveryState: null, receivedDelivery: null };
 }
 
 let crews: ReturnType<typeof memoryPersonCrews>;

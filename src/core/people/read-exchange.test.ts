@@ -31,6 +31,7 @@ function aMessage(n: number, overrides: Partial<ExchangeMessage> = {}): Exchange
     inReplyTo: null,
     sentAt: '2026-11-06T10:00:00.000Z',
     deliveryState: isOwn ? 'acknowledged' : null,
+    receivedDelivery: isOwn ? null : { deliveryId: `dlv_01m3tbfspe96yf1rnr4ank${suffix(n)}`, state: 'handed' },
     ...overrides,
   };
 }
@@ -61,8 +62,8 @@ describe('a person reads their exchange with one other ship', () => {
     expect(numbersOf(page)).toEqual([45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26]);
     expect(page).toMatchObject({ isOk: true, value: { olderCursor: 'dlv_01m3tbfspe96yf1rnr4ank0026', newerCursor: null } });
     expect(page.isOk && page.value.items.slice(0, 2)).toEqual([
-      { messageId: 'msg_01m3tbfspe96yf1rnr4ank0045', senderShipId: TRACKER, payload: 'Message 45', isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: null, sentAt: '2026-11-06T10:00:00.000Z', deliveryState: null },
-      { messageId: 'msg_01m3tbfspe96yf1rnr4ank0044', senderShipId: CHARLOTTE, payload: 'Message 44', isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: null, sentAt: '2026-11-06T10:00:00.000Z', deliveryState: 'acknowledged' },
+      { messageId: 'msg_01m3tbfspe96yf1rnr4ank0045', senderShipId: TRACKER, payload: 'Message 45', isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: null, sentAt: '2026-11-06T10:00:00.000Z', deliveryState: null, receivedDelivery: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0045', state: 'handed' } },
+      { messageId: 'msg_01m3tbfspe96yf1rnr4ank0044', senderShipId: CHARLOTTE, payload: 'Message 44', isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: null, sentAt: '2026-11-06T10:00:00.000Z', deliveryState: 'acknowledged', receivedDelivery: null },
     ]);
   });
 
