@@ -297,7 +297,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
             ? ok({ meeting: aMeetingRead(), mic: { kind: 'requested' as const, place: 1 } })
             : err({ kind: 'NO_SUCH_MEETING' as const, message: `The fleet did not read the meeting to you: Meeting ${meetingId} does not exist` }),
         ),
-      readSendTo: (caller) => Promise.resolve(grantOf(caller) === PERSON_TOKEN ? ok({ sentAs: 'charlotte', ships: [{ id: 'shp_01m3tbfspe96yf1rnr4ank9trk', name: 'builder-core' }, { id: 'shp_01m3tbfspe96yf1rnr4ank9h1a', name: 'tracker' }] }) : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' })),
+      readSendTo: (caller) => Promise.resolve(grantOf(caller) === PERSON_TOKEN ? ok({ sentAs: 'charlotte', ships: ['builder-core', 'tracker'], shipIds: { 'builder-core': 'shp_01m3tbfspe96yf1rnr4ank9trk', tracker: 'shp_01m3tbfspe96yf1rnr4ank9h1a' } }) : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' })),
       sendMessage: (input) => {
         answers.push({ grantId: grantOf(input.caller), to: JSON.stringify(input.to), contentType: input.contentType, payload: input.payload, idempotencyKey: input.idempotencyKey ?? '' });
         return Promise.resolve(ok({ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0009' as const }));
@@ -1736,7 +1736,7 @@ describe("a person sends a ship a message from Bridge through the gateway's API 
   it('reads who they can send a message to in Bridge as their own account', async () => {
     const { context } = aContext(PERSON_COOKIE);
 
-    await expect(gatewayRouter.createCaller(context).people.sendTo()).resolves.toEqual({ sentAs: 'charlotte', ships: [{ id: 'shp_01m3tbfspe96yf1rnr4ank9trk', name: 'builder-core' }, { id: 'shp_01m3tbfspe96yf1rnr4ank9h1a', name: 'tracker' }] });
+    await expect(gatewayRouter.createCaller(context).people.sendTo()).resolves.toEqual({ sentAs: 'charlotte', ships: ['builder-core', 'tracker'], shipIds: { 'builder-core': 'shp_01m3tbfspe96yf1rnr4ank9trk', tracker: 'shp_01m3tbfspe96yf1rnr4ank9h1a' } });
   });
 
   it('sends a ship a message from Bridge as their own account, as Markdown, once under the key the page gives', async () => {

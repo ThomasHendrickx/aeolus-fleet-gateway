@@ -1,3 +1,5 @@
+import type { ShipId } from '@aeolus-fleet/common';
+
 import type { FleetRefusal } from '../connection/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
@@ -8,10 +10,11 @@ import type { PersonCrews, PersonShipDoor } from './ports.js';
 /** The fleet's code for a call it gave no answer to. */
 const NO_ANSWER = 'UNAVAILABLE';
 
-/** Who the person can send a message to: the ships their person ship may send to now, by name, and the person ship's name it is sent as. */
+/** Who the person can send a message to: the ships their person ship may send to now, by name, each name's ship id, and the person ship's name it is sent as. */
 export interface SendTo {
   readonly sentAs: string;
   readonly ships: readonly string[];
+  readonly shipIds: Readonly<Record<string, ShipId>>;
 }
 
 export type ReadSendTo = (caller: PersonCaller) => Promise<Result<SendTo, PersonCrewError | DomainError<'SEND_REFUSED'>>>;
@@ -33,7 +36,7 @@ export function createReadSendTo(deps: { crewPersonShip: CrewPersonShip; crews: 
           return withOwnRefusal(Promise.resolve(who));
         }
         const found = await deps.door.discover(crew.crewToken);
-        const sendTo: Result<SendTo, FleetRefusal> = found.isOk ? ok({ sentAs: who.value.name, ships: found.value.ships.map(({ name }) => name).toSorted((one, other) => one.localeCompare(other)) }) : found;
+        const sendTo: Result<SendTo, FleetRefusal> = found.isOk ? ok({ sentAs: who.value.name, ships: found.value.ships.map(({ name }) => name).toSorted((one, other) => one.localeCompare(other)), shipIds: Object.fromEntries(found.value.ships.map(({ id, name }) => [name, id])) }) : found;
         return withOwnRefusal(Promise.resolve(sendTo));
       },
     });
