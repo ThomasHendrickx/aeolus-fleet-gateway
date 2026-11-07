@@ -12,8 +12,8 @@ import { createReadSendTo } from './read-send-to.js';
 /** What the fleet's discover answers Charlotte's person ship. */
 const DISCOVERY: PersonDiscovery = {
   ships: [
-    { name: 'tracker', type: 'issue-tracker', kind: 'app', statement: null },
-    { name: 'builder-core', type: 'builder', kind: 'agent', statement: null },
+    { id: 'shp_01m3tbfspe96yf1rnr4ank9h1a', name: 'tracker', type: 'issue-tracker', kind: 'app', statement: null },
+    { id: 'shp_01m3tbfspe96yf1rnr4ank9trk', name: 'builder-core', type: 'builder', kind: 'agent', statement: null },
   ],
   types: [
     { type: 'issue-tracker', reachable: 1 },
@@ -33,10 +33,10 @@ function reading() {
 }
 
 describe('a person reads who they can send a message to in Bridge', () => {
-  it('answers the ships the fleet says their person ship may send to, by name, and the name it sends as', async () => {
+  it('answers the ships the fleet says their person ship may send to, by name with its id, and the name it sends as', async () => {
     const { readSendTo } = reading();
 
-    await expect(readSendTo(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { sentAs: 'charlotte', ships: ['builder-core', 'tracker'] } });
+    await expect(readSendTo(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { sentAs: 'charlotte', ships: ['builder-core', 'tracker'], shipIds: { 'builder-core': 'shp_01m3tbfspe96yf1rnr4ank9trk', tracker: 'shp_01m3tbfspe96yf1rnr4ank9h1a' } } });
   });
 
   it("says why when the fleet refuses their person ship's discover", async () => {

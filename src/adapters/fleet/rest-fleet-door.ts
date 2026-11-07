@@ -413,7 +413,7 @@ export function createRestFleetDoor(
       },
       discover: async (crewToken) => {
         const found = await call({ path: '/ship/discover', method: 'GET', crewToken, answers: discoverOutputSchema });
-        return found.isOk ? ok({ ships: found.value.ships.map(({ name, type, kind, statement }) => ({ name, type, kind, statement })), types: found.value.types }) : found;
+        return found.isOk ? ok({ ships: found.value.ships.map(({ id, name, type, kind, statement }) => ({ id, name, type, kind, statement })), types: found.value.types }) : found;
       },
       send: (crewToken, { to, contentType, payload, idempotencyKey }) =>
         call({ path: '/ship/send', method: 'POST', crewToken, body: { selector: to, contentType, payload, idempotencyKey }, answers: sendOutputSchema }),
