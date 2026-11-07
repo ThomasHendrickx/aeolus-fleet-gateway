@@ -1,4 +1,4 @@
-import { Avatar } from '@aeolus-fleet/ui';
+import { AppMark } from './app-mark';
 import type { ReactNode } from 'react';
 
 /**
@@ -9,7 +9,7 @@ export function SignInFrame({ children }: { children: ReactNode }) {
   return (
     <main data-testid="sign-in-frame" className="mx-auto grid min-h-dvh w-full max-w-110 content-center justify-items-center gap-4 px-4 py-8 text-center">
       <div className="flex items-center gap-2 font-semibold">
-        <Avatar kind="app" />
+        <AppMark />
         Aeolus
       </div>
       <div className="grid w-full gap-4">{children}</div>
