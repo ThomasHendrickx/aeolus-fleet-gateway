@@ -166,6 +166,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
             ? ok({ waiting: 1, deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide' as const, pick: null }], opened: [] })
             : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' }),
         ),
+      readWaitingCount: (caller) => Promise.resolve(grantOf(caller) === PERSON_TOKEN ? ok({ count: 4 }) : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' })),
       readBridgeHome: (caller) =>
         Promise.resolve(
           grantOf(caller) === PERSON_TOKEN
@@ -955,6 +956,12 @@ describe("a person reads and deals with their person ship's deliveries through t
       deliveries: [{ deliveryId: DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd', title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', job: 'decide', pick: null }],
       opened: [],
     });
+  });
+
+  it('reads the count of what waits on the person as their own account', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.waitingCount()).resolves.toEqual({ count: 4 });
   });
 
   it('reads Bridge home: what waits with its count, and the stay-aware feed (Bridge, CC18)', async () => {
