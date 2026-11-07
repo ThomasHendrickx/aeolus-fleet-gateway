@@ -54,7 +54,7 @@ describe('a person ship discovers what it may send to', () => {
     const found = await door.discover(charlotte);
 
     expect(found.isOk && { tracker: found.value.ships.find(({ name }) => name === 'tracker'), type: found.value.types.find(({ type }) => type === 'issue-tracker') }).toEqual({
-      tracker: { name: 'tracker', type: 'issue-tracker', kind: 'app', statement: { by: 'crew', version: 1, summary: 'The issue tracker', capabilities: [{ name: 'open-issue', description: 'Opens an issue' }] } },
+      tracker: { id: expect.stringMatching(/^shp_/), name: 'tracker', type: 'issue-tracker', kind: 'app', statement: { by: 'crew', version: 1, summary: 'The issue tracker', capabilities: [{ name: 'open-issue', description: 'Opens an issue' }] } },
       type: { type: 'issue-tracker', reachable: 1 },
     });
   });

@@ -13,12 +13,13 @@ import type { PersonDiscovery } from './ports.js';
 const DISCOVERY: PersonDiscovery = {
   ships: [
     {
+      id: 'shp_01m3tbfspe96yf1rnr4ank9h1a',
       name: 'tracker',
       type: 'issue-tracker',
       kind: 'app',
       statement: { by: 'crew', summary: 'The issue tracker', capabilities: [{ name: 'open-issue', description: 'Opens an issue' }] },
     },
-    { name: 'dirk', type: 'person', kind: 'person', statement: null },
+    { id: 'shp_01m3tbfspe96yf1rnr4ank9trk', name: 'dirk', type: 'person', kind: 'person', statement: null },
   ],
   types: [{ type: 'issue-tracker', reachable: 1 }],
 };
