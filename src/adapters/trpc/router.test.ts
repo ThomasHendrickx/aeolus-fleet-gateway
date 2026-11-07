@@ -82,6 +82,9 @@ const CURSOR_CLIENT = 'https://cursor.example.com/client.json';
 const DELIVERY = 'dlv_01m3tbfspe96yf1rnr4ank9dlv';
 /** A delivery id as the fleet writes one, for the queries that check it. */
 const READ_DELIVERY = 'dlv_01m3tbfspe96yf1rnr4ank0001';
+/** A ship and a message of the person ship's exchange with it, as the fleet writes their ids. */
+const EXCHANGE_SHIP = 'shp_01m3tbfspe96yf1rnr4ank9trk';
+const EXCHANGE_MESSAGE = 'msg_01m3tbfspe96yf1rnr4ank0002';
 const QUESTION_ID = '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e';
 const DECIDED = 'req_01m5c7hmbt9f1vrkwb37az0002';
 const ORDERBOT_REQUEST: PendingRequest = {
@@ -188,6 +191,14 @@ function aContext(cookie: string | undefined, crewToken?: string): {
             ? ok({ deliveryId: READ_DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} is yours: read your inbox again` }),
         ),
+      readExchange: ({ caller, otherShipId, start }) =>
+        Promise.resolve(
+          otherShipId === EXCHANGE_SHIP && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
+            ? ok({ items: [], olderCursor: start.kind === 'before' ? null : DELIVERY, newerCursor: null })
+            : err({ kind: 'NO_SUCH_SHIP' as const, message: `No ship ${otherShipId} is in this fleet` }),
+        ),
+      readExchanges: ({ caller, cursor }) => Promise.resolve(grantOf(caller) === PERSON_TOKEN ? ok({ items: [], nextCursor: cursor }) : err({ kind: 'NOT_A_PERSON' as const, message: 'You have no person ship' })),
+      markSeen: ({ messageId }) => Promise.resolve(messageId === EXCHANGE_MESSAGE ? ok({ acknowledged: 2 }) : err({ kind: 'NO_SUCH_MESSAGE' as const, message: `No message ${messageId} is in this exchange` })),
       answerDelivery: (input) => {
         answers.push({ grantId: grantOf(input.caller), deliveryId: input.deliveryId, contentType: input.contentType, payload: input.payload });
         return Promise.resolve(ok({ deliveryId: DELIVERY, isHandled: true as const }));
@@ -1061,6 +1072,47 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context } = aContext(PERSON_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.item({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0zzz' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('reads a page of the exchange with one ship, from the newest, older than a delivery, newer, or around a message', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+    const people = gatewayRouter.createCaller(context).people;
+
+    await expect(people.exchange({ otherShipId: EXCHANGE_SHIP })).resolves.toEqual({ items: [], olderCursor: DELIVERY, newerCursor: null });
+    await expect(people.exchange({ otherShipId: EXCHANGE_SHIP, before: READ_DELIVERY })).resolves.toMatchObject({ olderCursor: null });
+    await expect(people.exchange({ otherShipId: EXCHANGE_SHIP, after: READ_DELIVERY })).resolves.toMatchObject({ items: [] });
+    await expect(people.exchange({ otherShipId: EXCHANGE_SHIP, around: EXCHANGE_MESSAGE })).resolves.toMatchObject({ items: [] });
+  });
+
+  it('refuses an exchange page that starts from more than one place', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.exchange({ otherShipId: EXCHANGE_SHIP, before: READ_DELIVERY, around: EXCHANGE_MESSAGE })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('says a ship that is not in the fleet is not found when its exchange is read', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.exchange({ otherShipId: 'shp_01m3tbfspe96yf1rnr4ank0zzz' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('lists the exchanges after a cursor', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.exchanges({ cursor: EXCHANGE_MESSAGE })).resolves.toEqual({ items: [], nextCursor: EXCHANGE_MESSAGE });
+    await expect(gatewayRouter.createCaller(context).people.exchanges({})).resolves.toEqual({ items: [], nextCursor: null });
+  });
+
+  it('marks an exchange seen up to a message and says how many it acknowledged', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.seenUpTo({ otherShipId: EXCHANGE_SHIP, messageId: EXCHANGE_MESSAGE })).resolves.toEqual({ acknowledged: 2 });
+  });
+
+  it('says a message that is not in the exchange is not found when it is marked seen', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.seenUpTo({ otherShipId: EXCHANGE_SHIP, messageId: 'msg_01m3tbfspe96yf1rnr4ank0zzz' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('says a delivery that no longer waits is not found', async () => {

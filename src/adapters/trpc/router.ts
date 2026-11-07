@@ -81,6 +81,9 @@ import type { SendMessage } from '../../core/people/send-message.js';
 import type { ReadSendTo } from '../../core/people/read-send-to.js';
 import type { ReadBridgeHome } from '../../core/people/read-bridge-home.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
+import type { MarkSeen } from '../../core/people/mark-seen.js';
+import type { ReadExchange } from '../../core/people/read-exchange.js';
+import type { ReadExchanges } from '../../core/people/read-exchanges.js';
 import type { ReadItem } from '../../core/people/read-item.js';
 import type { ReadRecord } from '../../core/people/read-record.js';
 import type { ReadFleetAlertCount } from '../../core/people/read-fleet-alert-count.js';
@@ -200,6 +203,9 @@ export interface Context {
     readRecord: ReadRecord;
     openDelivery: OpenDelivery;
     readItem: ReadItem;
+    readExchange: ReadExchange;
+    readExchanges: ReadExchanges;
+    markSeen: MarkSeen;
     answerDelivery: AnswerDelivery;
     doneDelivery: DoneDelivery;
     readBasket: ReadBasket;
@@ -643,6 +649,8 @@ const PERSON_CODES = {
   FLEET_UNAVAILABLE: 'BAD_GATEWAY',
   KEY_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
   NO_SUCH_DELIVERY: 'NOT_FOUND',
+  NO_SUCH_SHIP: 'NOT_FOUND',
+  NO_SUCH_MESSAGE: 'NOT_FOUND',
   ALREADY_DECIDED: 'CONFLICT',
   SEND_REFUSED: 'BAD_REQUEST',
   NOT_A_QUESTION: 'BAD_REQUEST',
@@ -1322,6 +1330,31 @@ export const gatewayRouter = t.router({
       .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readRecord({ caller: ctx.caller, cursor: input.cursor }))),
     /** One item whole by its delivery id, waiting, opened or done, acknowledging nothing. */
     item: personProcedure.input(z.strictObject({ deliveryId: idSchema('delivery') })).query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readItem({ caller: ctx.caller, ...input }))),
+    /**
+     * A page of the person ship's exchange with one other ship (the chat with
+     * it), both ways, whole, 20 a page, newest first: from the newest, older
+     * than a delivery, newer than one, or around one message. Reading
+     * acknowledges nothing, and the gateway keeps no copy.
+     */
+    exchange: personProcedure
+      .input(
+        z
+          .strictObject({ otherShipId: idSchema('ship'), before: idSchema('delivery').optional(), after: idSchema('delivery').optional(), around: idSchema('message').optional() })
+          .refine(({ before, after, around }) => [before, after, around].filter((from) => from !== undefined).length <= 1, 'Pass at most one of before, after and around'),
+      )
+      .query(async ({ ctx, input }) => {
+        const { otherShipId, before, after, around } = input;
+        const start = before !== undefined ? ({ kind: 'before', cursor: before } as const) : after !== undefined ? ({ kind: 'after', cursor: after } as const) : around !== undefined ? ({ kind: 'around', messageId: around } as const) : ({ kind: 'newest' } as const);
+        return personAnswerOf(await ctx.person.readExchange({ caller: ctx.caller, otherShipId, start }));
+      }),
+    /** The latest exchange per other ship, 20 a page, newest first, with how many of its messages are not yet seen, from core's rollup. */
+    exchanges: personProcedure
+      .input(z.strictObject({ cursor: idSchema('message').optional() }))
+      .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readExchanges({ caller: ctx.caller, cursor: input.cursor ?? null }))),
+    /** Marks one ship's plain messages seen up to one message, in one call; questions, steps, alerts and notices stay as they are. */
+    seenUpTo: personProcedure
+      .input(z.strictObject({ otherShipId: idSchema('ship'), messageId: idSchema('message') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.markSeen({ caller: ctx.caller, ...input }))),
     /** Opens one delivery, whole; the gateway acknowledges it for them. */
     open: personProcedure.input(z.strictObject({ deliveryId: z.string().min(1) })).mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.openDelivery({ caller: ctx.caller, place: 'bridge', ...input }))),
     /** Answers a delivery they opened, to its sender. */

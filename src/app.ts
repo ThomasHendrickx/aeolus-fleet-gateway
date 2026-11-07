@@ -215,6 +215,9 @@ import { createSendBasket } from './core/people/send-basket.js';
 import { createSendStoredAnswers } from './core/people/send-stored-answers.js';
 import { createListShips } from './core/people/list-ships.js';
 import { createOpenDelivery } from './core/people/open-delivery.js';
+import { createMarkSeen } from './core/people/mark-seen.js';
+import { createReadExchange } from './core/people/read-exchange.js';
+import { createReadExchanges } from './core/people/read-exchanges.js';
 import { createReadItem } from './core/people/read-item.js';
 import { createReadBridgeHome } from './core/people/read-bridge-home.js';
 import { createReadRecord } from './core/people/read-record.js';
@@ -898,6 +901,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       readRecord: createReadRecord({ ...asCrew, outcomes, connections, routes, defaults: routingDefaults, ...placesOffered }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       readItem: createReadItem({ ...asCrew, opened }),
+      readExchange: createReadExchange(asCrew),
+      readExchanges: createReadExchanges(asCrew),
+      markSeen: createMarkSeen(asCrew),
       answerDelivery: createAnswerDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       doneDelivery: createDoneDelivery({ ...asCrew, opened, changes, outcomes, clock }),
       readBasket: createReadBasket({ ...asCrew, opened, entries, outcomes }),
