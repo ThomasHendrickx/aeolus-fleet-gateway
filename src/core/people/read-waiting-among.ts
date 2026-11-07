@@ -3,10 +3,10 @@ import type { ShipId } from '@aeolus-fleet/common';
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import type { HeldDeliveries } from './held-deliveries.js';
+import { itemsToDeal } from './items-to-deal.js';
 import type { PersonCaller, PersonCrewError } from './person-crew.js';
 import type { OpenedDeliveries, PersonCrews, PersonShipDoor } from './ports.js';
 import { waitingFor } from './read-inbox.js';
-import { itemsToDeal } from './read-waiting-count.js';
 
 /** How many questions and steps from one ship wait on the person. */
 export interface WaitingFromShip {
