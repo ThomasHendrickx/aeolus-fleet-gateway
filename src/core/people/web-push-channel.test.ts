@@ -99,13 +99,13 @@ describe('the web push channel', () => {
   });
 
   it.each([
-    ['a step', STEP, 'step'],
-    ['an alert', ALERT, 'alert'],
-    ['a notice', aPersonDelivery({ contentType: 'application/vnd.aeolus.notice+json', askedQuestionId: null }), 'notice'],
-    ['a plain message', MESSAGE, 'message'],
-    ['a question replacement', aPersonDelivery({ contentType: 'application/vnd.aeolus.question-replacement+json' }), 'question'],
-    ['a meeting notice', aPersonDelivery({ contentType: 'application/vnd.aeolus.meeting.added+json', askedQuestionId: null }), 'message'],
-  ])('names the job of %s as Bridge reads its content type', async (_name, delivery, job) => {
+    { what: 'a step', delivery: STEP, job: 'step' },
+    { what: 'an alert', delivery: ALERT, job: 'alert' },
+    { what: 'a notice', delivery: aPersonDelivery({ contentType: 'application/vnd.aeolus.notice+json', askedQuestionId: null }), job: 'notice' },
+    { what: 'a plain message', delivery: MESSAGE, job: 'message' },
+    { what: 'a question replacement', delivery: aPersonDelivery({ contentType: 'application/vnd.aeolus.question-replacement+json' }), job: 'question' },
+    { what: 'a meeting notice', delivery: aPersonDelivery({ contentType: 'application/vnd.aeolus.meeting.added+json', askedQuestionId: null }), job: 'message' },
+  ])('names the job of $what as Bridge reads its content type', async ({ delivery, job }) => {
     await subscriptions.save(aWebPushSubscription());
 
     await webPushChannel().wake(SHIP, forPersonShip([delivery]));

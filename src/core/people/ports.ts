@@ -11,6 +11,7 @@ import type { DiscoveredStatement } from '../mcp-in/ports.js';
 import type { Result } from '../shared/result.js';
 import type { Place } from './item-outcome.js';
 import type { Routing } from './routing.js';
+import type { WakeJob } from './wake-job.js';
 import type { ListedShip } from './your-fleet.js';
 
 /** A call the gateway makes for an account: the account's token beside the gateway's own crew token, so the account acts through the gateway's ship. */
@@ -300,11 +301,16 @@ export type HandOverChannel = WakeChannelName | 'page' | 'slack';
 /** Where what a wake is for waits: at the person's own ship, or at argo, for everyone allowed as argo (argo's inbox, AI4). */
 export type WaitsAt = 'personShip' | 'argo';
 
-/** The window a wake belongs to: its key holds until a wake of the channel is recorded, so a retry asks again with it. And where what it wakes for waits. */
-export interface WakeWindow {
-  readonly key: string;
-  readonly waitsAt: WaitsAt;
-}
+/**
+ * The window a wake belongs to: its key holds until a wake of the channel is
+ * recorded, so a retry asks again with it. And where what it wakes for
+ * waits: at argo, or at the person's own ship, with the fresh deliveries the
+ * wake covers and the crew token of the ship's crew, so a channel can name
+ * them and count what waits.
+ */
+export type WakeWindow =
+  | { readonly key: string; readonly waitsAt: 'argo' }
+  | { readonly key: string; readonly waitsAt: 'personShip'; readonly crewToken: string; readonly deliveries: readonly PersonDelivery[] };
 
 /**
  * Outbound port: one way to wake a person (wake a person, W1, W4): it says
@@ -377,11 +383,25 @@ export interface WebPushSubscriptions {
   remove(fleetId: FleetId, removed: { shipId: ShipId; endpoint: string }): Promise<void>;
 }
 
-/** What a wake says (W4): something waits in the fleet, by its name, for the person or at argo, and the link to Bridge. Nothing else. */
-export interface Wake {
+/**
+ * What a web push wake says (W4): something waits in the fleet, by its name,
+ * and the link to Bridge. A wake for argo's inbox says nothing more. The
+ * person's own wake says the count of what waits on their person ship and,
+ * for one delivery, its sender and job and the ids a client builds the
+ * item's address from; for several, how many of each job. Never an item's
+ * title, text, options or any payload text.
+ */
+export type Wake =
+  | { readonly fleetName: string; readonly bridgeUrl: string; readonly waitsAt: 'argo' }
+  | (PersonShipWake & { readonly senderName: string; readonly job: WakeJob; readonly deliveryId: DeliveryId; readonly senderShipId: ShipId; readonly fleetId: FleetId })
+  | (PersonShipWake & { readonly jobs: Readonly<Record<WakeJob, number>> });
+
+/** What every wake of the person's own ship says: the fleet, the link to Bridge, and the count of what waits (people.waitingCount). */
+interface PersonShipWake {
   readonly fleetName: string;
   readonly bridgeUrl: string;
-  readonly waitsAt: WaitsAt;
+  readonly waitsAt: 'personShip';
+  readonly count: number;
 }
 
 /** How a push service took a wake: sent, gone (it answered 404 or 410: the subscription ended), or failed otherwise. */

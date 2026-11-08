@@ -53,7 +53,7 @@ function channel(options: { url?: string } = {}) {
 
 describe('the email channel, through pagasae (wake a person, W2)', () => {
   it("asks pagasae to wake the person ship's account, naming the ship, with the gateway's installation token", async () => {
-    const woken = await channel().wake(SHIP, { key: 'window-1', waitsAt: 'personShip' });
+    const woken = await channel().wake(SHIP, { key: 'window-1', waitsAt: 'personShip', crewToken: 'aeolus_ct_v1_charlotte', deliveries: [] });
 
     expect(woken).toEqual(ok(undefined));
     expect(received.map(({ method, url, headers, body }) => ({ method, url, authorization: headers.authorization, body }))).toEqual([
@@ -70,23 +70,23 @@ describe('the email channel, through pagasae (wake a person, W2)', () => {
   it('says the wake did not go out when pagasae refuses it', async () => {
     answer = { status: 404, body: '{"error":"unknown_person_ship"}' };
 
-    await expect(channel().wake(SHIP, { key: 'window-1', waitsAt: 'personShip' })).resolves.toEqual(err({ kind: 'refused', reason: 'pagasae answered 404: unknown_person_ship' }));
+    await expect(channel().wake(SHIP, { key: 'window-1', waitsAt: 'personShip', crewToken: 'aeolus_ct_v1_charlotte', deliveries: [] })).resolves.toEqual(err({ kind: 'refused', reason: 'pagasae answered 404: unknown_person_ship' }));
   });
 
   it('says the wake is refused for good when pagasae does not know the caller', async () => {
     answer = { status: 401, body: '{"error":"unauthorized"}' };
 
-    await expect(channel().wake(SHIP, { key: 'window-1', waitsAt: 'personShip' })).resolves.toEqual(err({ kind: 'refused', reason: 'pagasae answered 401: unauthorized' }));
+    await expect(channel().wake(SHIP, { key: 'window-1', waitsAt: 'personShip', crewToken: 'aeolus_ct_v1_charlotte', deliveries: [] })).resolves.toEqual(err({ kind: 'refused', reason: 'pagasae answered 401: unauthorized' }));
   });
 
   it('says the wake did not go out when pagasae could not mail', async () => {
     answer = { status: 503, body: '{"error":"not_mailed"}' };
 
-    await expect(channel().wake(SHIP, { key: 'window-1', waitsAt: 'personShip' })).resolves.toEqual(err({ kind: 'unavailable', reason: 'pagasae answered 503: not_mailed' }));
+    await expect(channel().wake(SHIP, { key: 'window-1', waitsAt: 'personShip', crewToken: 'aeolus_ct_v1_charlotte', deliveries: [] })).resolves.toEqual(err({ kind: 'unavailable', reason: 'pagasae answered 503: not_mailed' }));
   });
 
   it('says the wake did not go out when pagasae does not answer', async () => {
-    await expect(channel({ url: 'http://127.0.0.1:9' }).wake(SHIP, { key: 'window-1', waitsAt: 'personShip' })).resolves.toEqual(err({ kind: 'unavailable', reason: 'pagasae did not answer' }));
+    await expect(channel({ url: 'http://127.0.0.1:9' }).wake(SHIP, { key: 'window-1', waitsAt: 'personShip', crewToken: 'aeolus_ct_v1_charlotte', deliveries: [] })).resolves.toEqual(err({ kind: 'unavailable', reason: 'pagasae did not answer' }));
   });
 
   it('reaches every person, the jobs it wakes for routed per job (Bridge, section 8), with its window from the configuration', async () => {

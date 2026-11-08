@@ -166,13 +166,13 @@ describe('the wake for what waits at argo', () => {
   it("keeps the argo wake apart from the person's own: its own window, saying it waits at argo", async () => {
     const push = aChannel('web-push');
     // The person's own wake went out just now: its window does not hold argo's back.
-    await push.channel.wake(THOMAS, { key: 'web-push:first', waitsAt: 'personShip' });
+    await push.channel.wake(THOMAS, { key: 'web-push:first', waitsAt: 'personShip', crewToken: 'aeolus_ct_v1_thomas', deliveries: [] });
     fleet.send(anArgoEntry(1));
 
     await round(waking([push.channel]));
 
     expect(push.woken.map(({ window }) => window)).toEqual([
-      { key: 'web-push:first', waitsAt: 'personShip' },
+      { key: 'web-push:first', waitsAt: 'personShip', crewToken: 'aeolus_ct_v1_thomas', deliveries: [] },
       { key: 'argo:web-push:first', waitsAt: 'argo' },
     ]);
     expect(argoWakes.sent).toEqual([{ ship: THOMAS, channel: 'web-push', sentAt: START }]);

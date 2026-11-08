@@ -115,6 +115,17 @@ async function handOvers(): Promise<{ handOverNumber: unknown; channel: unknown 
   }
 }
 
+/** The id of the one delivery that reached Charlotte's person ship, as core keeps it. */
+async function charlottesDeliveryId(): Promise<string | undefined> {
+  const core = createPrismaClient(fleet.databaseUrl);
+  try {
+    const rows = await core.$queryRaw<{ id: string }[]>`SELECT d."id" FROM "deliveries" d JOIN "ships" s ON s."id" = d."recipient_ship_id" AND s."fleet_id" = d."fleet_id" WHERE s."name" = 'charlotte'`;
+    return rows.length === 1 ? rows[0]?.id : undefined;
+  } finally {
+    await core.$disconnect();
+  }
+}
+
 /** Charlotte's page in focus: the stream it holds open while so. */
 async function charlottesPageInFocus() {
   const stop = new AbortController();
@@ -143,8 +154,9 @@ describe('a person who turned web push on, as a delivery reaches their person sh
   it("is woken in their browser: the fleet, the Bridge link, the message's sender and job, the delivery, ship and fleet ids, and the count, never its text", async () => {
     await trackerSendsCharlotte();
 
-    await expect.poll(() => pushService.taken.map(({ text }): unknown => JSON.parse(text)), { timeout: WOKEN_WITHIN_MS }).toEqual([
-      { fleetName: 'Acme', bridgeUrl: `${address}/bridge?fleet=${fleetId}`, waitsAt: 'personShip', count: 1, senderName: 'tracker', job: 'message', deliveryId: expect.stringMatching(/^dlv_/), senderShipId: trackerShipId, fleetId },
+    await expect.poll(() => pushService.taken.length, { timeout: WOKEN_WITHIN_MS }).toBe(1);
+    expect(pushService.taken.map(({ text }): unknown => JSON.parse(text))).toEqual([
+      { fleetName: 'Acme', bridgeUrl: `${address}/bridge?fleet=${fleetId}`, waitsAt: 'personShip', count: 1, senderName: 'tracker', job: 'message', deliveryId: await charlottesDeliveryId(), senderShipId: trackerShipId, fleetId },
     ]);
     expect(pushService.taken.map(({ text }) => text.includes('Issue 7 is closed'))).toEqual([false]);
   });
