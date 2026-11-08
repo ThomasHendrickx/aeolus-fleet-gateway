@@ -51,20 +51,20 @@ async function crewed(name: string, scopes?: string[]): Promise<{ shipId: ShipId
   return sender;
 }
 
-async function call(crewToken: string, procedure: string, body: unknown): Promise<unknown> {
-  const response = await fetch(`${fleet.url}/api/v1/ship/${procedure}`, {
+async function call(ship: { crewToken: string }, step: { procedure: string; body: unknown }): Promise<unknown> {
+  const response = await fetch(`${fleet.url}/api/v1/ship/${step.procedure}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${crewToken}` },
-    body: JSON.stringify(body),
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${ship.crewToken}` },
+    body: JSON.stringify(step.body),
   });
   if (!response.ok) {
-    throw new Error(`${procedure} failed: ${await response.text()}`);
+    throw new Error(`${step.procedure} failed: ${await response.text()}`);
   }
   return response.json();
 }
 
 async function sendsToCharlotte(from: { crewToken: string }, message: { contentType: string; payload: string }): Promise<void> {
-  await call(from.crewToken, 'send', { selector: { kind: 'ship', name: 'charlotte' }, ...message, idempotencyKey: crypto.randomUUID(), model: 'claude-opus-5-5' });
+  await call(from, { procedure: 'send', body: { selector: { kind: 'ship', name: 'charlotte' }, ...message, idempotencyKey: crypto.randomUUID(), model: 'claude-opus-5-5' } });
 }
 
 async function counted(): Promise<number> {
@@ -86,8 +86,8 @@ describe('the count of what waits on a person leaves out the plain messages of a
 
   it('leaves out a plain message contributed to a meeting', async () => {
     const chief = await crewed('chief-of-staff', ['messages:send', 'messages:receive', 'meetings:open']);
-    const opened = z.object({ meetingId: z.string() }).parse(await call(chief.crewToken, 'openMeeting', { ships: [{ name: 'charlotte' }], title: 'Weekly heads', idempotencyKey: crypto.randomUUID(), model: 'claude-opus-5-5' }));
-    await call(chief.crewToken, 'send', { selector: { kind: 'meeting', meetingId: opened.meetingId }, ...plain('For the meeting'), idempotencyKey: crypto.randomUUID(), model: 'claude-opus-5-5' });
+    const opened = z.object({ meetingId: z.string() }).parse(await call(chief, { procedure: 'openMeeting', body: { ships: [{ name: 'charlotte' }], title: 'Weekly heads', idempotencyKey: crypto.randomUUID(), model: 'claude-opus-5-5' } }));
+    await call(chief, { procedure: 'send', body: { selector: { kind: 'meeting', meetingId: opened.meetingId }, ...plain('For the meeting'), idempotencyKey: crypto.randomUUID(), model: 'claude-opus-5-5' } });
 
     expect(await counted()).toBe(0);
   });

@@ -20,10 +20,10 @@ export type ReadWaitingCount = (caller: PersonCaller) => Promise<Result<WaitingC
 /** The same count for a person ship, read with the crew token the gateway holds, as its wakes say it with no person calling. */
 export type CountWaitingOn = (ship: PersonShip, crewToken: string) => Promise<Result<number, FleetRefusal>>;
 
-/** The questions and steps to deal with, plus the plain messages waiting, which the person has not seen. */
+/** The questions and steps to deal with, plus the plain messages waiting, which the person has not seen: one contributed to a meeting is in no exchange, so it cannot be opened and is left out. */
 async function countOf(deps: { opened: OpenedDeliveries }, waiting: { fleetId: FleetId; crew: PersonCrewToken; deliveries: readonly PersonDelivery[] }): Promise<number> {
   const toDeal = await itemsToDeal(deps, waiting);
-  const unseenMessages = waiting.deliveries.filter(({ contentType }) => isPlainMessage(contentType));
+  const unseenMessages = waiting.deliveries.filter(({ contentType, meetingId }) => isPlainMessage(contentType) && meetingId === null);
   return toDeal.length + unseenMessages.length;
 }
 
