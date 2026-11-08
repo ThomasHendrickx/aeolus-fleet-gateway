@@ -348,6 +348,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     listOwnerChoices: () => Promise.resolve(ok([])),
     readYourFleet: () => Promise.resolve(ok(YOUR_FLEET)),
     readFleetAlertCount: () => Promise.resolve(ok(2)),
+    readFleetRetention: () => Promise.resolve(ok({ days: 90, keptFrom: '2026-08-10T00:00:00.000Z' })),
     readArgoSection: ({ accountId }) => Promise.resolve(accountId === 'acc-charlotte' ? ARGO_SECTION : null),
     readArgoInboxNotice: ({ accountId }) => Promise.resolve(accountId === 'acc-charlotte' ? { kind: 'notLetRead' as const, gatewayShip: { shipId: MANAGER, name: 'gateway' } } : { kind: 'none' as const }),
     retireParty: unused,
@@ -1205,6 +1206,21 @@ describe("a person reads Your fleet through the gateway's API (Bridge home)", ()
     const unavailable = { ...context, readYourFleet: () => Promise.resolve(err({ kind: 'FLEET_UNAVAILABLE' as const, message: 'The fleet did not list its ships: The fleet did not answer' })) };
 
     await expect(gatewayRouter.createCaller(unavailable).people.yourFleet()).rejects.toMatchObject({ code: 'BAD_GATEWAY', message: 'The fleet did not list its ships: The fleet did not answer' });
+  });
+});
+
+describe("a client reads the fleet's retention, through the API", () => {
+  it('answers the days and from when messages are kept', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller(context).people.fleetRetention()).resolves.toEqual({ days: 90, keptFrom: '2026-08-10T00:00:00.000Z' });
+  });
+
+  it('is forbidden to an account the fleet does not let read it', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+    const refused = { ...context, readFleetRetention: () => Promise.resolve(err({ kind: 'SCOPE_NOT_HELD' as const, message: 'no scope' })) };
+
+    await expect(gatewayRouter.createCaller(refused).people.fleetRetention()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 
