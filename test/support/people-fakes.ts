@@ -14,6 +14,7 @@ import { err, ok, type Result } from '../../src/core/shared/result.js';
 
 import { FLEET_ID } from './fleet-fakes.js';
 import { PERSON_SHIP_ID } from './sign-in-fakes.js';
+import { FIXED_CLOCK } from './fixed-clock.js';
 
 /**
  * The fleet as a person ship sees it in a test (core 0.28, aeolus-fleet
@@ -132,6 +133,7 @@ export function aPersonDelivery(overrides: Partial<PersonDelivery> = {}): Person
     sentAt: new Date('2026-10-19T08:00:00.000Z'),
     inReplyTo: null,
     meetingId: null,
+    senderStatus: 'crewed',
     ...overrides,
   };
 }
@@ -591,7 +593,7 @@ export function memoryConnectedChats(held: HeldChat[] = []): ConnectedChats & { 
 
 /** The person ship's door as the gateway wires it, with what it holds of what waits (aeolus-fleet #1647): one gateway's, so a new one is the gateway after a restart. */
 export function holding(door: PersonShipDoor): { door: PersonShipDoor; held: HeldDeliveries } {
-  const held = createHeldDeliveries();
+  const held = createHeldDeliveries(FIXED_CLOCK);
   return { door: holdingDoor(door, { held, letGo: memoryLetGoDeliveries() }), held };
 }
 

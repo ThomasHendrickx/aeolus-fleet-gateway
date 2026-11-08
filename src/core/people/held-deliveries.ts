@@ -11,10 +11,19 @@
  * time), on every instance, so one arriving as another instance acknowledges
  * one is still received. An instance that may have missed a let-go forgets
  * all it holds. Held in memory only: a restart receives once again.
+ *
+ * A plain message whose sender is not retired is held for a minute only: the
+ * sender may retire, which no count of what waits shows, and the person's
+ * count leaves a retired sender's plain messages out (#322).
  */
 import type { DeliveryId } from '@aeolus-fleet/common';
 
+import type { Clock } from '../shared/clock.js';
+import { isPlainMessage } from './plain-message.js';
 import type { LetGoDeliveries, PersonDelivery, PersonShipDoor } from './ports.js';
+
+/** How long the gateway trusts the sender status of a plain message it holds: a retire changes no count of what waits, so it receives the message again after this. */
+export const HELD_SENDER_STATUS_MAX_AGE_MS = 60_000;
 
 export interface HeldDeliveries {
   /** What the crew received and holds, oldest first; none before its first look. */
@@ -25,11 +34,20 @@ export interface HeldDeliveries {
   forgetAll(): void;
 }
 
-export function createHeldDeliveries(): HeldDeliveries {
+export function createHeldDeliveries(clock: Clock): HeldDeliveries {
   const byCrew = new Map<string, readonly PersonDelivery[]>();
+  /** When each delivery was received, by the delivery itself, so one received anew starts its minute again. */
+  const heldAt = new WeakMap<PersonDelivery, number>();
+  const isStale = (delivery: PersonDelivery): boolean =>
+    isPlainMessage(delivery.contentType) && delivery.senderStatus !== 'retired' && clock.now().getTime() - (heldAt.get(delivery) ?? 0) >= HELD_SENDER_STATUS_MAX_AGE_MS;
   return {
-    of: (crewToken) => byCrew.get(crewToken),
+    of: (crewToken) => byCrew.get(crewToken)?.filter((delivery) => !isStale(delivery)),
     hold: (crewToken, deliveries) => {
+      for (const delivery of deliveries) {
+        if (!heldAt.has(delivery)) {
+          heldAt.set(delivery, clock.now().getTime());
+        }
+      }
       byCrew.set(crewToken, deliveries);
     },
     letGo: (deliveryId) => {

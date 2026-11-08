@@ -4,6 +4,7 @@ import { aPersonDelivery, fakePersonShipDoor, memoryLetGoDeliveries } from '../.
 import { ok } from '../shared/result.js';
 import { createHeldDeliveries, holdingDoor } from './held-deliveries.js';
 import type { PersonShipDoor } from './ports.js';
+import { FIXED_CLOCK } from '../../../test/support/fixed-clock.js';
 
 // What the gateway holds of a person ship's waiting deliveries lets go of
 // each one the fleet no longer counts waiting because of the gateway's own
@@ -14,7 +15,7 @@ const QUESTION = aPersonDelivery();
 const NOTE = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002' });
 
 function holding(answers: Partial<PersonShipDoor> = {}) {
-  const held = createHeldDeliveries();
+  const held = createHeldDeliveries(FIXED_CLOCK);
   held.hold(CREW, [QUESTION, NOTE]);
   const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [QUESTION, NOTE] });
   const letGo = memoryLetGoDeliveries();
@@ -79,5 +80,50 @@ describe('what the gateway holds lets go of what it acknowledged or handed for t
     held.forgetAll();
 
     expect(held.of(CREW)).toBeUndefined();
+  });
+});
+
+describe('what the gateway holds of a plain message stands for a minute, as its sender may retire meanwhile (#322)', () => {
+  const MINUTE_MS = 60_000;
+  const START = new Date('2026-11-08T10:00:00.000Z');
+  const NOTE_OF_LIVE_SENDER = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003', contentType: 'text/plain', headline: null, askedQuestionId: null, senderStatus: 'crewed' });
+  const NOTE_OF_RETIRED_SENDER = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0004', contentType: 'text/plain', headline: null, askedQuestionId: null, senderStatus: 'retired' });
+
+  function heldAt() {
+    let now = START;
+    const held = createHeldDeliveries({ now: () => now });
+    held.hold(CREW, [QUESTION, NOTE_OF_LIVE_SENDER, NOTE_OF_RETIRED_SENDER]);
+    return {
+      held,
+      after: (ms: number) => {
+        now = new Date(START.getTime() + ms);
+      },
+    };
+  }
+
+  it('holds all of them just inside the minute', () => {
+    const { held, after } = heldAt();
+
+    after(MINUTE_MS - 1);
+
+    expect(heldIds(held)).toEqual([QUESTION.deliveryId, NOTE_OF_LIVE_SENDER.deliveryId, NOTE_OF_RETIRED_SENDER.deliveryId]);
+  });
+
+  it('holds a plain message of a sender not retired no longer once the minute is over, so it is received again', () => {
+    const { held, after } = heldAt();
+
+    after(MINUTE_MS);
+
+    expect(heldIds(held)).toEqual([QUESTION.deliveryId, NOTE_OF_RETIRED_SENDER.deliveryId]);
+  });
+
+  it('holds a plain message again for a minute from the time it is held anew', () => {
+    const { held, after } = heldAt();
+    after(MINUTE_MS);
+    held.hold(CREW, [QUESTION, aPersonDelivery({ ...NOTE_OF_LIVE_SENDER })]);
+
+    after(MINUTE_MS + MINUTE_MS - 1);
+
+    expect(heldIds(held)).toEqual([QUESTION.deliveryId, NOTE_OF_LIVE_SENDER.deliveryId]);
   });
 });

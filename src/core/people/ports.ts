@@ -111,6 +111,8 @@ export interface PersonDelivery {
   readonly inReplyTo: MessageId | null;
   /** The meeting its message was contributed to or tells of; none outside a meeting (decision 0061). */
   readonly meetingId: MeetingId | null;
+  /** Whether the ship that sent it is crewed, awaits its crew or is retired, as core says on every delivery. */
+  readonly senderStatus: 'awaitingCrew' | 'crewed' | 'retired';
 }
 
 /** A delivery as the person ship's push receive hands it: with the last number it was handed with under this lease, null while never handed (decision 0040). */

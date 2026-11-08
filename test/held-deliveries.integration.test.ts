@@ -5,6 +5,7 @@ import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/cl
 import { createHeldDeliveries, holdingDoor, type HeldDeliveries } from '../src/core/people/held-deliveries.js';
 import { migratedDatabase } from './support/database.js';
 import { aPersonDelivery, fakePersonShipDoor } from './support/people-fakes.js';
+import { FIXED_CLOCK } from './support/fixed-clock.js';
 
 // Two gateway instances on one database each hold what waits for the same
 // person ship (aeolus-fleet #1647): a delivery one of them acknowledges is let
@@ -35,7 +36,7 @@ afterEach(async () => {
 
 /** A gateway instance: what it holds, hearing what any instance lets go of, and how often it read everything anew. */
 async function anInstance(): Promise<{ held: HeldDeliveries; resyncs: () => number }> {
-  const held = createHeldDeliveries();
+  const held = createHeldDeliveries(FIXED_CLOCK);
   held.hold(CREW, [QUESTION, NOTE]);
   let resyncs = 0;
   listening.push(
