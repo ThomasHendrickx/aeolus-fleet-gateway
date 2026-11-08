@@ -37,6 +37,7 @@ let address: string;
 let fleetId: FleetId;
 let charlotte: { shipId: ShipId; crewToken: string };
 let tracker: string;
+let trackerShipId: ShipId;
 /** The path of Charlotte's browser at the push service. */
 const FIREFOX = '/firefox';
 
@@ -51,6 +52,11 @@ beforeEach(async () => {
   }
   fleetId = who.value.fleetId;
   charlotte = { shipId: who.value.shipId, crewToken: charlotteCrew };
+  const trackerWho = await createRestFleetDoor(fleet.url).whoami(tracker);
+  if (!trackerWho.isOk) {
+    throw new Error('the tracker is not crewed');
+  }
+  trackerShipId = trackerWho.value.shipId;
   const databaseUrl = await migratedDatabase(inject('postgresUrl'));
   prisma = createPrismaClient(databaseUrl);
   // The gateway crewed Charlotte's person ship at an earlier sign-in, and they turned web push on in one browser, for everything else, the job of the tracker's plain messages (Bridge, section 8).
@@ -134,12 +140,13 @@ async function charlottesPageInFocus() {
 }
 
 describe('a person who turned web push on, as a delivery reaches their person ship', () => {
-  it('is woken in their browser: the fleet by its name and the Bridge link, nothing else', async () => {
+  it("is woken in their browser: the fleet, the Bridge link, the message's sender and job, the delivery, ship and fleet ids, and the count, never its text", async () => {
     await trackerSendsCharlotte();
 
-    await expect.poll(() => pushService.taken.map(({ text }) => text), { timeout: WOKEN_WITHIN_MS }).toEqual([
-      JSON.stringify({ fleetName: 'Acme', bridgeUrl: `${address}/bridge?fleet=${fleetId}`, waitsAt: 'personShip' }),
+    await expect.poll(() => pushService.taken.map(({ text }): unknown => JSON.parse(text)), { timeout: WOKEN_WITHIN_MS }).toEqual([
+      { fleetName: 'Acme', bridgeUrl: `${address}/bridge?fleet=${fleetId}`, waitsAt: 'personShip', count: 1, senderName: 'tracker', job: 'message', deliveryId: expect.stringMatching(/^dlv_/), senderShipId: trackerShipId, fleetId },
     ]);
+    expect(pushService.taken.map(({ text }) => text.includes('Issue 7 is closed'))).toEqual([false]);
   });
 
   it('has the delivery reported handed, number 1, through web push', async () => {
@@ -170,7 +177,10 @@ describe('a person who turned web push on, as a delivery reaches their person sh
     }
 
     await expect.poll(async () => (await handOvers()).length, { timeout: WOKEN_WITHIN_MS + WINDOW_MS }).toBe(10);
-    expect({ wakes: pushService.taken.length, channels: new Set((await handOvers()).map(({ channel }) => channel)) }).toEqual({ wakes: 1, channels: new Set(['web-push']) });
+    expect({ wakes: pushService.taken.map(({ text }): unknown => JSON.parse(text)), channels: new Set((await handOvers()).map(({ channel }) => channel)) }).toEqual({
+      wakes: [{ fleetName: 'Acme', bridgeUrl: `${address}/bridge?fleet=${fleetId}`, waitsAt: 'personShip', count: 10, jobs: { question: 0, step: 0, alert: 0, notice: 0, message: 10 } }],
+      channels: new Set(['web-push']),
+    });
   });
 
   it('forgets a browser whose push service says its subscription is gone, handing nothing', async () => {

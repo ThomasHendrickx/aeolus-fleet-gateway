@@ -43,6 +43,12 @@ describe("the service worker's notification of a wake", () => {
     });
   });
 
+  it("shows and opens the person's own wake as before, though it names its sender, job, item and count", async () => {
+    const wake = { fleetName: 'Aeolus fleet', bridgeUrl: BRIDGE_URL, waitsAt: 'personShip', count: 3, senderName: 'tracker', job: 'question', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8sv' };
+
+    await expect(shownFor(wake)).resolves.toEqual({ title: 'Aeolus fleet', options: { body: 'Something waits for you.', data: { bridgeUrl: BRIDGE_URL }, tag: 'aeolus-wake' } });
+  });
+
   it("keeps the person's own wake as it is, under its own tag", async () => {
     await expect(shownFor({ fleetName: 'Aeolus fleet', bridgeUrl: BRIDGE_URL, waitsAt: 'personShip' })).resolves.toEqual({
       title: 'Aeolus fleet',

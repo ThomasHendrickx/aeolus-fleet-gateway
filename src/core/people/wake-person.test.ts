@@ -6,7 +6,7 @@ import { aPersonDelivery, memoryFocusedPages, memoryQuietHours, memoryQuietShips
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { FocusedPages, PersonShip, PushedPersonDelivery, ShownElsewhere, WakeChannel, WakeChannelName, WakesSent } from './ports.js';
+import type { FocusedPages, PersonShip, PushedPersonDelivery, ShownElsewhere, WakeChannel, WakeChannelName, WakesSent, WakeWindow } from './ports.js';
 import type { QuietHours } from './quiet-hours.js';
 import type { QuietShip } from './quiet-ships.js';
 import { ITEM_JOBS, routingDefaultsOf, type Route, type RoutingDefaults } from './routing.js';
@@ -507,6 +507,24 @@ describe('waking a person per job (Bridge, section 8)', () => {
       emails: 1,
       handOvers: [{ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', handOverNumber: 1, channel: 'email' }],
     });
+  });
+
+  it("tells each channel the fresh deliveries its wake covers, only those of the jobs on for it, and the person ship's crew token", async () => {
+    const windows: WakeWindow[] = [];
+    const push: WakeChannel = {
+      ...aChannel('web-push').channel,
+      wake: (_ship, window) => {
+        windows.push(window);
+        return Promise.resolve(ok(undefined));
+      },
+    };
+    const email = aChannel('email');
+
+    await waking({ ship: aShip([aDelivery(1), aDelivery(2, PLAIN_TEXT), aDelivery(3)]), channels: [email.channel, push], defaults: NOTHING_ON, routes: [aRoute({ job: 'decide', place: 'web-push' }), aRoute({ job: 'everything-else', place: 'email' })] })(SHIP, CREW_TOKEN);
+
+    expect(windows.map((window) => (window.waitsAt === 'personShip' ? { crewToken: window.crewToken, deliveryIds: window.deliveries.map(({ deliveryId }) => deliveryId) } : window))).toEqual([
+      { crewToken: CREW_TOKEN, deliveryIds: ['dlv_01m3tbfspe96yf1rnr4ank0001', 'dlv_01m3tbfspe96yf1rnr4ank0003'] },
+    ]);
   });
 
   it('sends no wake while no fresh delivery is of a job on for any channel', async () => {
