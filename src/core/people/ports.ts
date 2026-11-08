@@ -371,6 +371,8 @@ export interface WebPushSubscriptions {
   list(fleetId: FleetId, shipId: ShipId): Promise<WebPushSubscription[]>;
   /** Keeps it, or keeps it anew when its endpoint was kept before. */
   save(subscription: WebPushSubscription): Promise<void>;
+  /** Keeps it in place of the person ship's subscription at the endpoint its push service replaced, in one unit of work; keeps nothing when the person ship has none there. */
+  replace(subscription: WebPushSubscription, replacedEndpoint: string): Promise<'replaced' | 'notFound'>;
   markGone(fleetId: FleetId, gone: { shipId: ShipId; endpoint: string; goneAt: Date }): Promise<void>;
   remove(fleetId: FleetId, removed: { shipId: ShipId; endpoint: string }): Promise<void>;
 }

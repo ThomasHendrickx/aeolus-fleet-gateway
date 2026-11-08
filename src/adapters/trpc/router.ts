@@ -742,6 +742,7 @@ const webPushSubscriptionInputSchema = z.strictObject({
   endpoint: z.string().min(1),
   keys: z.strictObject({ p256dh: z.string().min(1), auth: z.string().min(1) }),
   browser: z.string(),
+  replacedEndpoint: z.string().min(1).optional(),
 });
 
 /** The fleet's name as the account's shared sign-in states it, which their web push wakes say (wake a person, W4) and the gateway's Slack bot is named (gateway scopes B5). */
