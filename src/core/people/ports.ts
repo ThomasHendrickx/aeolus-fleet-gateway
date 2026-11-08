@@ -419,6 +419,17 @@ export interface ActiveShips {
   alertCount(as: ActorCredential): Promise<Result<number, FleetRefusal>>;
 }
 
+/** How long the fleet keeps its finished history (decision 0066): its days, and from when messages are kept, each null for none. */
+export interface Retention {
+  readonly days: number | null;
+  readonly keptFrom: string | null;
+}
+
+/** Outbound port: the fleet's retention as the actor reads it, one row of the fleet whatever its size. */
+export interface FleetRetention {
+  retention(as: ActorCredential): Promise<Result<Retention, FleetRefusal>>;
+}
+
 /** An MCP client signed in through the gateway as a person ship: its client's name, and until when its sign-in lives. */
 export interface ConnectedChat {
   readonly name: string;
