@@ -4,6 +4,7 @@ import { aPersonDelivery, fakePersonShipDoor, memoryLetGoDeliveries } from '../.
 import { ok } from '../shared/result.js';
 import { createHeldDeliveries, holdingDoor } from './held-deliveries.js';
 import type { PersonShipDoor } from './ports.js';
+import { FIXED_CLOCK } from '../../../test/support/fixed-clock.js';
 
 // What the gateway holds of a person ship's waiting deliveries lets go of
 // each one the fleet no longer counts waiting because of the gateway's own
@@ -14,7 +15,7 @@ const QUESTION = aPersonDelivery();
 const NOTE = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002' });
 
 function holding(answers: Partial<PersonShipDoor> = {}) {
-  const held = createHeldDeliveries();
+  const held = createHeldDeliveries(FIXED_CLOCK);
   held.hold(CREW, [QUESTION, NOTE]);
   const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [QUESTION, NOTE] });
   const letGo = memoryLetGoDeliveries();

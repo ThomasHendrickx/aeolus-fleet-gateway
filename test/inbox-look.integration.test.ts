@@ -12,6 +12,7 @@ import { FLEET_ID, memoryConnectionStore } from './support/fleet-fakes.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { CHARLOTTE_GRANT, fakeCrewPersonShip, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes, memoryLetGoDeliveries } from './support/people-fakes.js';
 import { PERSON_SHIP_ID } from './support/sign-in-fakes.js';
+import { FIXED_CLOCK } from './support/fixed-clock.js';
 
 // A look at Charlotte's inbox, as Bridge and its workers take one, against a
 // real core (aeolus-fleet #1647): with more than 10 waiting, a look is a read,
@@ -41,7 +42,7 @@ beforeEach(async () => {
   // The gateway crews Charlotte's person ship: the fakes know it by the tests' ids, the fleet by its own.
   await crews.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, crewToken: charlotteCrew, crewedAt: new Date() });
   calls = [];
-  const held = createHeldDeliveries();
+  const held = createHeldDeliveries(FIXED_CLOCK);
   const door = holdingDoor(counted(createRestFleetDoor(fleet.url).person, calls), { held, letGo: memoryLetGoDeliveries() });
   readInbox = createReadInbox({
     crewPersonShip: fakeCrewPersonShip(crews),

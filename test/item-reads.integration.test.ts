@@ -12,6 +12,7 @@ import { FLEET_ID, memoryConnectionStore } from './support/fleet-fakes.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { CHARLOTTE_GRANT, aBasketEntry, fakeCrewPersonShip, memoryBasketEntries, memoryLetGoDeliveries, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from './support/people-fakes.js';
 import { PERSON_SHIP_ID } from './support/sign-in-fakes.js';
+import { FIXED_CLOCK } from './support/fixed-clock.js';
 
 // One item opened from a push, against a real core: its places, its basket
 // entry and its message id come from reads bounded to that one item, so they
@@ -34,7 +35,7 @@ beforeEach(async () => {
   tracker = await register(fleet, await commission(fleet, { cookie, ship: { name: 'tracker', type: 'agent' } }));
   const crews = memoryPersonCrews();
   await crews.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, crewToken: charlotteCrew, crewedAt: new Date() });
-  const held = createHeldDeliveries();
+  const held = createHeldDeliveries(FIXED_CLOCK);
   reads = [];
   entries = counting(memoryBasketEntries());
   readItem = createReadItem({

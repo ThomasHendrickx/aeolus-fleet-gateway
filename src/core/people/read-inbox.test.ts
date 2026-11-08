@@ -7,6 +7,7 @@ import { createHeldDeliveries, holdingDoor, type HeldDeliveries } from './held-d
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import { createReadInbox } from './read-inbox.js';
 import { ITEM_JOBS, routingDefaultsOf, type Route } from './routing.js';
+import { FIXED_CLOCK } from '../../../test/support/fixed-clock.js';
 
 // A person reads their own person ship's inbox from their MCP client, which
 // holds no crew token: the gateway crews the ship for them (decisions 0054,
@@ -30,7 +31,7 @@ beforeEach(async () => {
 const CHAT_ON = routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' as const })));
 
 function readInbox(deliveries: PersonDelivery[], options: { crewToken?: string; routes?: Route[]; isExcludingIgnored?: boolean; held?: HeldDeliveries } = {}) {
-  const { crewToken = 'aeolus_ct_v1_charlotte', routes = [], isExcludingIgnored = false, held = createHeldDeliveries() } = options;
+  const { crewToken = 'aeolus_ct_v1_charlotte', routes = [], isExcludingIgnored = false, held = createHeldDeliveries(FIXED_CLOCK) } = options;
   const ship = fakePersonShipDoor({ crewToken, deliveries, isExcludingIgnored });
   const door = holdingDoor(ship.door, { held, letGo: memoryLetGoDeliveries() });
   return { ...ship, door, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, held, opened, routes: memoryRoutes(routes), defaults: CHAT_ON, connections }) };
@@ -236,7 +237,7 @@ describe('a look at what waits is a read once the gateway holds it (aeolus-fleet
   });
 
   it('receives what waits again under a new crew, as once the lease ended', async () => {
-    const held = createHeldDeliveries();
+    const held = createHeldDeliveries(FIXED_CLOCK);
     held.hold('aeolus_ct_v1_ended', manyDeliveries(1));
     await crews.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, crewToken: 'aeolus_ct_v1_ended', crewedAt: new Date('2026-10-19T08:00:00.000Z') });
     const look = readInbox([aPersonDelivery()], { held });

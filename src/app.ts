@@ -464,7 +464,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const clock = options.clock ?? systemClock;
   const door = createRestFleetDoor(options.fleetUrl);
   // What the gateway holds of each person ship's waiting deliveries, so a look at them is a read (aeolus-fleet #1647).
-  const heldDeliveries = createHeldDeliveries();
+  const heldDeliveries = createHeldDeliveries(clock);
   // When the gateway first saw each stale question or step, so it leaves Bridge 5 s later (#240).
   const staleSightings = createStaleSightings();
   const personDoor = holdingDoor(door.person, { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) });

@@ -18,6 +18,7 @@ import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { CHARLOTTE_GRANT, fakeCrewPersonShip, memoryBasketEntries, memoryInboxChanges, memoryItemOutcomes, memoryLetGoDeliveries, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from './support/people-fakes.js';
 import { memoryPartyStore } from './support/party-fakes.js';
 import { PERSON_SHIP_ID } from './support/sign-in-fakes.js';
+import { FIXED_CLOCK } from './support/fixed-clock.js';
 
 // Bridge at the load Thomas feels (aeolus-fleet #1651, after #1646 and #1647):
 // a person ship with 300 open questions, 100 answered and 50 withdrawn behind
@@ -75,7 +76,7 @@ beforeAll(async () => {
   // The gateway crews Charlotte's person ship: the fakes know it by the tests' ids, the fleet by its own.
   await crews.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, crewToken: charlotteCrew, crewedAt: new Date() });
   calls = [];
-  const held = createHeldDeliveries();
+  const held = createHeldDeliveries(FIXED_CLOCK);
   const door = holdingDoor(counted(createRestFleetDoor(fleet.url).person, calls), { held, letGo: memoryLetGoDeliveries() });
   const crewPersonShip = fakeCrewPersonShip(crews);
   const [opened, routes, connections] = [memoryOpenedDeliveries(), memoryRoutes([]), memoryConnectionStore()];

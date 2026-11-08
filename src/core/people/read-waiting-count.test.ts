@@ -6,6 +6,7 @@ import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createHeldDeliveries } from './held-deliveries.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import { createCountWaitingOn, createReadWaitingCount } from './read-waiting-count.js';
+import { FIXED_CLOCK } from '../../../test/support/fixed-clock.js';
 
 // The count behind the app's Home indicator and icon badge: what waits on the
 // person, questions and steps waiting, plus plain messages not yet seen.
@@ -104,7 +105,7 @@ describe('a person reads the count of what waits on them', () => {
   it('counts no plain message contributed to a meeting, for a person read and a wake alike', async () => {
     const contributed = aPersonDelivery({ ...MESSAGE, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0008', meetingId: 'mtg_01m3tbfspe96yf1rnr4ank0001' });
     const { door } = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [QUESTION, MESSAGE, contributed] });
-    const held = createHeldDeliveries();
+    const held = createHeldDeliveries(FIXED_CLOCK);
 
     const wake = await createCountWaitingOn({ door, held, opened })({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }, 'aeolus_ct_v1_charlotte');
     const read = await counting([QUESTION, MESSAGE, contributed]).readWaitingCount(CHARLOTTE_GRANT);
@@ -118,7 +119,7 @@ describe('a person reads the count of what waits on them', () => {
     const waiting = [QUESTION, MESSAGE, fromAwaiting, fromRetired];
     const { door } = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: waiting });
 
-    const wake = await createCountWaitingOn({ door, held: createHeldDeliveries(), opened })({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }, 'aeolus_ct_v1_charlotte');
+    const wake = await createCountWaitingOn({ door, held: createHeldDeliveries(FIXED_CLOCK), opened })({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }, 'aeolus_ct_v1_charlotte');
     const read = await counting(waiting).readWaitingCount(CHARLOTTE_GRANT);
 
     expect({ wake, read }).toEqual({ wake: { isOk: true, value: 3 }, read: { isOk: true, value: { count: 3 } } });
