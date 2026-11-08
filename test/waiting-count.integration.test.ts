@@ -22,6 +22,13 @@ let cookie: string;
 let readWaitingCount: ReadWaitingCount;
 let countWaitingOn: CountWaitingOn;
 let charlotteCrewToken: string;
+/** The gateway's clock, which a test moves on. */
+const time = {
+  at: new Date('2026-11-08T10:00:00.000Z'),
+  passes: (ms: number) => {
+    time.at = new Date(time.at.getTime() + ms);
+  },
+};
 /** The ships that send to Charlotte, by name: their ids and crew tokens. */
 let senders: Map<string, { shipId: ShipId; crewToken: string }>;
 
@@ -33,7 +40,7 @@ beforeEach(async () => {
   charlotteCrewToken = charlotte;
   const crews = memoryPersonCrews();
   await crews.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, crewToken: charlotte, crewedAt: new Date() });
-  const held = createHeldDeliveries();
+  const held = createHeldDeliveries({ now: () => time.at });
   readWaitingCount = createReadWaitingCount({
     crewPersonShip: fakeCrewPersonShip(crews),
     crews,
@@ -104,6 +111,20 @@ describe('the count of what waits on a person leaves out the plain messages of a
 });
 
 describe('the count of what waits on a person leaves out the plain messages of a retired sender (Fixes #322)', () => {
+  it('corrects the count a minute after a ship retires that the gateway had counted, for the count and the push wake alike', async () => {
+    const stayer = await crewed('stayer');
+    const leaver = await crewed('leaver');
+    await sendsToCharlotte(stayer, plain('Still here'));
+    await sendsToCharlotte(leaver, plain('One'));
+    await sendsToCharlotte(leaver, plain('Two'));
+    expect({ count: await counted(), wake: await wakeCounted() }).toEqual({ count: 3, wake: 3 });
+
+    await retire(fleet, { cookie, shipId: leaver.shipId });
+    time.passes(60_000);
+
+    expect({ count: await counted(), wake: await wakeCounted() }).toEqual({ count: 1, wake: 1 });
+  });
+
   it('leaves out the plain messages a ship sent before argo retired it, and keeps those of a ship still crewed, for the count and the push wake alike', async () => {
     const stayer = await crewed('stayer');
     const leaver = await crewed('leaver');
