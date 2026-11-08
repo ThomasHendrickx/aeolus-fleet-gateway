@@ -132,6 +132,7 @@ export function aPersonDelivery(overrides: Partial<PersonDelivery> = {}): Person
     sentAt: new Date('2026-10-19T08:00:00.000Z'),
     inReplyTo: null,
     meetingId: null,
+    senderStatus: 'crewed',
     ...overrides,
   };
 }

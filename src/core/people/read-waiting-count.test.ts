@@ -112,6 +112,24 @@ describe('a person reads the count of what waits on them', () => {
     expect({ wake, read }).toEqual({ wake: { isOk: true, value: 2 }, read: { isOk: true, value: { count: 2 } } });
   });
 
+  it('counts no plain message of a retired sender, for a person read and a wake alike, but counts that of a ship awaiting its crew', async () => {
+    const fromRetired = aPersonDelivery({ ...MESSAGE, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0016', senderStatus: 'retired' });
+    const fromAwaiting = aPersonDelivery({ ...MESSAGE, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0017', senderStatus: 'awaitingCrew' });
+    const waiting = [QUESTION, MESSAGE, fromAwaiting, fromRetired];
+    const { door } = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: waiting });
+
+    const wake = await createCountWaitingOn({ door, held: createHeldDeliveries(), opened })({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }, 'aeolus_ct_v1_charlotte');
+    const read = await counting(waiting).readWaitingCount(CHARLOTTE_GRANT);
+
+    expect({ wake, read }).toEqual({ wake: { isOk: true, value: 3 }, read: { isOk: true, value: { count: 3 } } });
+  });
+
+  it('counts a question of a retired sender, which the person can still answer', async () => {
+    const fromRetired = aPersonDelivery({ ...QUESTION, senderStatus: 'retired' });
+
+    await expect(counting([fromRetired]).readWaitingCount(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { count: 1 } });
+  });
+
   it('asks the fleet only how many wait while none does, and reads no record', async () => {
     const { calls, readWaitingCount } = counting([]);
 
