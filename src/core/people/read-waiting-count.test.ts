@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, holding, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
+import { createHeldDeliveries } from './held-deliveries.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
 import { createCountWaitingOn, createReadWaitingCount } from './read-waiting-count.js';
 
@@ -98,6 +99,17 @@ describe('a person reads the count of what waits on them', () => {
     await opened.save(anOpened({ deliveryId: QUESTION.deliveryId, askedQuestionId: 'q-1' }));
 
     await expect(counting([QUESTION]).readWaitingCount(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { count: 1 } });
+  });
+
+  it('counts no plain message contributed to a meeting, for a person read and a wake alike', async () => {
+    const contributed = aPersonDelivery({ ...MESSAGE, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0008', meetingId: 'mtg_01m3tbfspe96yf1rnr4ank0001' });
+    const { door } = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [QUESTION, MESSAGE, contributed] });
+    const held = createHeldDeliveries();
+
+    const wake = await createCountWaitingOn({ door, held, opened })({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }, 'aeolus_ct_v1_charlotte');
+    const read = await counting([QUESTION, MESSAGE, contributed]).readWaitingCount(CHARLOTTE_GRANT);
+
+    expect({ wake, read }).toEqual({ wake: { isOk: true, value: 2 }, read: { isOk: true, value: { count: 2 } } });
   });
 
   it('asks the fleet only how many wait while none does, and reads no record', async () => {
