@@ -10,9 +10,10 @@ const retentionSchema = fleetLimitsOutputSchema.pick({ retention: true });
 /**
  * The fleet's retention as the actor reads it, from core's fleet.limits
  * (fleet:read): the days it keeps its finished history and from when messages
- * are kept, each null for none. Core answers it from the fleet's own row, so
- * the read costs the same in a fleet of any size. Limits has no REST door for
- * a read, so it goes over tRPC with the headers a REST call carries.
+ * are kept, each null for none. The same call also counts the fleet's ships,
+ * so the use case shares one answer per fleet instead of calling it per read.
+ * Limits has no REST door for a read, so it goes over tRPC with the headers a
+ * REST call carries.
  */
 export function createFleetRetention(fleetUrl: string): FleetRetention {
   return {

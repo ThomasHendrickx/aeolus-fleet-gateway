@@ -642,7 +642,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const listOwnerChoices = createListOwnerChoices({ ships: createFleetShips(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
   const activeShips = createActiveShips(options.fleetUrl);
   const readYourFleet = createReadYourFleet({ ships: activeShips, credentialOf: (actor, sent) => credentialOf(actor, sent) });
-  const readFleetRetention = createReadFleetRetention({ retention: createFleetRetention(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const readFleetRetention = createReadFleetRetention({ retention: createFleetRetention(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent), clock });
   const readFleetAlertCount = createReadFleetAlertCount({ ships: activeShips, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // An account's credential needs its account token, set up with the sign-in below.
   const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock, credentialOf: (actor, sent) => credentialOf(actor, sent) });
