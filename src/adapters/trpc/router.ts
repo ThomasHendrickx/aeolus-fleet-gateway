@@ -88,6 +88,7 @@ import type { ReadExchange } from '../../core/people/read-exchange.js';
 import type { ReadExchanges } from '../../core/people/read-exchanges.js';
 import type { ReadItem } from '../../core/people/read-item.js';
 import type { ReadRecord } from '../../core/people/read-record.js';
+import type { ReadFleetRetention } from '../../core/people/read-fleet-retention.js';
 import type { ReadFleetAlertCount } from '../../core/people/read-fleet-alert-count.js';
 import type { ReadYourFleet } from '../../core/people/read-your-fleet.js';
 import type { ReadWakeChannels } from '../../core/people/read-wake-channels.js';
@@ -165,6 +166,7 @@ export interface Context {
   /** Your fleet on Bridge home, read as the actor. */
   readYourFleet: ReadYourFleet;
   readFleetAlertCount: ReadFleetAlertCount;
+  readFleetRetention: ReadFleetRetention;
   /** What the overview tells an account of argo's inbox (argo's inbox, section 4). */
   readArgoInboxNotice: ReadArgoInboxNotice;
   readArgoSection: ReadArgoSection;
@@ -1330,6 +1332,18 @@ export const gatewayRouter = t.router({
         throw new TRPCError({ code: read.error.kind === 'SCOPE_NOT_HELD' ? 'FORBIDDEN' : 'BAD_GATEWAY', message: read.error.message });
       }
       return { count: read.value };
+    }),
+    /**
+     * The fleet's retention, its days and keptFrom (null for none), as core
+     * answers them: where an exchange's history ends because the fleet no
+     * longer keeps earlier messages.
+     */
+    fleetRetention: servedProcedure.query(async ({ ctx }) => {
+      const read = await ctx.readFleetRetention({ actor: ctx.actor, as: { cookie: ctx.cookie, crewToken: ctx.crewToken } });
+      if (!read.isOk) {
+        throw new TRPCError({ code: read.error.kind === 'SCOPE_NOT_HELD' ? 'FORBIDDEN' : 'BAD_GATEWAY', message: read.error.message });
+      }
+      return read.value;
     }),
     /** A page of the person ship's record (CC12), newest first, after the cursor the last page answered. */
     record: personProcedure

@@ -139,6 +139,13 @@ async function setOperatorLogin(url: string, ticket: string): Promise<void> {
   }
 }
 
+/** A new database, migrated by core's own bin, for a test that runs core's app itself. */
+export async function aMigratedDatabase(adminUrl: string): Promise<string> {
+  const databaseUrl = aNewDatabaseUrl(adminUrl, 'fleet');
+  await run(process.execPath, [coreBin(), 'migrate'], { env: { ...process.env, DATABASE_URL: databaseUrl } });
+  return databaseUrl;
+}
+
 /** Migrates a new database, creates its fleet and argo, and starts core on a free port, answering once it serves its version. */
 export async function startFleetServer(adminUrl: string): Promise<FleetServer> {
   const databaseUrl = aNewDatabaseUrl(adminUrl, 'fleet');

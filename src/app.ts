@@ -221,6 +221,7 @@ import { createReadExchanges } from './core/people/read-exchanges.js';
 import { createReadItem } from './core/people/read-item.js';
 import { createReadBridgeHome } from './core/people/read-bridge-home.js';
 import { createReadRecord } from './core/people/read-record.js';
+import { createReadFleetRetention } from './core/people/read-fleet-retention.js';
 import { createReadFleetAlertCount } from './core/people/read-fleet-alert-count.js';
 import { createReadYourFleet } from './core/people/read-your-fleet.js';
 import { createHeldDeliveries, holdingDoor } from './core/people/held-deliveries.js';
@@ -287,6 +288,7 @@ import { createRetireParty } from './core/parties/retire-party.js';
 import { createChangePartyOwner, createChangePartyScopes } from './core/parties/change-party.js';
 import { logRefusedFacts } from './adapters/fleet/logged-verified-facts.js';
 import { createActiveShips } from './adapters/fleet/active-ships.js';
+import { createFleetRetention } from './adapters/fleet/fleet-retention.js';
 import { createFleetShips } from './adapters/fleet/fleet-ships.js';
 import { createProxyShipReads } from './adapters/fleet/proxy-ship-reads.js';
 import { createShipNames } from './adapters/fleet/ship-names.js';
@@ -640,6 +642,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const listOwnerChoices = createListOwnerChoices({ ships: createFleetShips(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent) });
   const activeShips = createActiveShips(options.fleetUrl);
   const readYourFleet = createReadYourFleet({ ships: activeShips, credentialOf: (actor, sent) => credentialOf(actor, sent) });
+  const readFleetRetention = createReadFleetRetention({ retention: createFleetRetention(options.fleetUrl), credentialOf: (actor, sent) => credentialOf(actor, sent), clock });
   const readFleetAlertCount = createReadFleetAlertCount({ ships: activeShips, credentialOf: (actor, sent) => credentialOf(actor, sent) });
   // An account's credential needs its account token, set up with the sign-in below.
   const setOutsidePartiesOnly = createSetOutsideParties({ switches: outsidePartySwitches, network: createFleetNetwork(options.fleetUrl), clock, credentialOf: (actor, sent) => credentialOf(actor, sent) });
@@ -1160,6 +1163,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     listOwnerChoices,
     readYourFleet,
     readFleetAlertCount,
+    readFleetRetention,
     readArgoInboxNotice,
     readArgoSection,
     checkServer,
