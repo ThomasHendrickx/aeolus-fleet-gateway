@@ -24,6 +24,8 @@ export interface WebPushTurnedOn {
   readonly endpoint: string;
   readonly keys: { readonly p256dh: string; readonly auth: string };
   readonly browser: string;
+  /** The endpoint of the subscription this one replaces, as the browser's push service told it (pushsubscriptionchange): it goes as this one is kept. */
+  readonly replacedEndpoint?: string;
 }
 
 export type TurnOnWebPush = (input: WebPushTurnedOn) => Promise<Result<undefined, PersonCrewError | DomainError<'CHANNEL_NOT_OFFERED' | 'INVALID_SUBSCRIPTION'>>>;
@@ -39,10 +41,12 @@ function isHttpsUrl(text: string): boolean {
  * reached over https at public addresses only, as A2A webhooks are: an
  * endpoint whose host is, or resolves to, any private, loopback or
  * link-local address is refused. Refused where the gateway holds no push
- * keys.
+ * keys. A subscription the push service replaced is kept in place of the
+ * one it replaces, so that one never shows as ended; one the person ship
+ * does not hold is refused.
  */
 export function createTurnOnWebPush(deps: { crewPersonShip: CrewPersonShip; subscriptions: WebPushSubscriptions; resolver: HostResolver; isWebPushOffered: boolean; clock: Clock }): TurnOnWebPush {
-  return async ({ caller, fleetName, endpoint, keys, browser }) => {
+  return async ({ caller, fleetName, endpoint, keys, browser, replacedEndpoint }) => {
     if (!deps.isWebPushOffered) {
       return refuse('CHANNEL_NOT_OFFERED', 'This gateway sends no web push');
     }
@@ -62,7 +66,17 @@ export function createTurnOnWebPush(deps: { crewPersonShip: CrewPersonShip; subs
     if (!crew.isOk) {
       return crew;
     }
-    await deps.subscriptions.save({ fleetId: caller.fleetId, shipId: crew.value.shipId, endpoint, keys, browser, fleetName, addedAt: deps.clock.now(), goneAt: null });
-    return ok(undefined);
+    const subscription = { fleetId: caller.fleetId, shipId: crew.value.shipId, endpoint, keys, browser, fleetName, addedAt: deps.clock.now(), goneAt: null };
+    if (replacedEndpoint === undefined) {
+      await deps.subscriptions.save(subscription);
+      return ok(undefined);
+    }
+    const replacing = await deps.subscriptions.replace(subscription, replacedEndpoint);
+    switch (replacing) {
+      case 'replaced':
+        return ok(undefined);
+      case 'notFound':
+        return refuse('INVALID_SUBSCRIPTION', 'The endpoint it replaces is not one of your browsers');
+    }
   };
 }

@@ -107,6 +107,39 @@ describe('a person turns web push on for a browser', () => {
   });
 });
 
+describe("a person's browser turns web push on with a subscription its push service replaced", () => {
+  const REPLACED = 'https://updates.push.services.mozilla.com/wpush/v2/firefox-0';
+
+  it('keeps the new subscription and drops the one it replaces, so it never shows as ended', async () => {
+    await subscriptions.save(aWebPushSubscription({ endpoint: REPLACED }));
+    await subscriptions.save(aWebPushSubscription({ endpoint: 'https://push.example/chrome' }));
+
+    await expect(turnOn()({ caller: CALLER, fleetName: 'Acme', ...FIREFOX, replacedEndpoint: REPLACED })).resolves.toEqual({ isOk: true, value: undefined });
+
+    expect(subscriptions.held.map(({ endpoint }) => endpoint)).toEqual(['https://push.example/chrome', FIREFOX.endpoint]);
+  });
+
+  it.each([
+    ["another person's", aWebPushSubscription({ shipId: 'shp_01m3tb1zgr5h2ffee12xnch8zz', endpoint: REPLACED })],
+    ["another fleet's", aWebPushSubscription({ fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8zz', endpoint: REPLACED })],
+    ['none they turned on', aWebPushSubscription({ endpoint: 'https://push.example/chrome' })],
+  ])('refuses to replace an endpoint that is %s, keeping everything as it was', async (_whose, held) => {
+    await subscriptions.save(held);
+
+    const turned = await turnOn()({ caller: CALLER, fleetName: 'Acme', ...FIREFOX, replacedEndpoint: REPLACED });
+
+    expect({ kind: !turned.isOk && turned.error.kind, held: subscriptions.held }).toEqual({ kind: 'INVALID_SUBSCRIPTION', held: [held] });
+  });
+
+  it('checks the new subscription as any other, keeping the one it would replace when refused', async () => {
+    await subscriptions.save(aWebPushSubscription({ endpoint: REPLACED }));
+
+    const turned = await turnOn()({ caller: CALLER, fleetName: 'Acme', ...FIREFOX, endpoint: 'https://inside.example/push', replacedEndpoint: REPLACED });
+
+    expect({ kind: !turned.isOk && turned.error.kind, held: subscriptions.held.map(({ endpoint }) => endpoint) }).toEqual({ kind: 'INVALID_SUBSCRIPTION', held: [REPLACED] });
+  });
+});
+
 describe('a person removes a browser', () => {
   it('forgets it, so it takes no wake again', async () => {
     await subscriptions.save(aWebPushSubscription({ endpoint: 'https://push.example/firefox' }));

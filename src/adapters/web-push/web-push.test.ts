@@ -8,7 +8,18 @@ import { createWebPush } from './web-push.js';
 // The gateway's web push: a wake to one browser through its push service,
 // encrypted for that browser and signed with the gateway's push keys (VAPID).
 
-const WAKE = { fleetName: 'Acme', bridgeUrl: 'https://gateway.example/bridge?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv', waitsAt: 'personShip' as const };
+const BRIDGE_URL = 'https://gateway.example/bridge?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv';
+const WAKE = {
+  fleetName: 'Acme',
+  bridgeUrl: BRIDGE_URL,
+  waitsAt: 'personShip' as const,
+  count: 2,
+  senderName: 'tracker',
+  job: 'question' as const,
+  deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001' as const,
+  senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk' as const,
+  fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8sv' as const,
+};
 const keys = webPushLibrary.generateVAPIDKeys();
 
 let service: Awaited<ReturnType<typeof startPushService>>;
@@ -37,16 +48,25 @@ function subscriptionOf(path: string) {
 }
 
 describe('a wake sent to a browser through its push service', () => {
-  it('says only the fleet by its name and the Bridge link, as the browser reads it', async () => {
+  it('says, for one delivery, the fleet, the Bridge link, its sender and job, the delivery, ship and fleet ids, and the count, as the browser reads it', async () => {
     const sent = await webPush().send(subscriptionOf('/firefox'), WAKE);
 
-    expect({ sent, read: service.taken.map(({ text }) => text) }).toEqual({ sent: 'sent', read: ['{"fleetName":"Acme","bridgeUrl":"https://gateway.example/bridge?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv","waitsAt":"personShip"}'] });
+    expect({ sent, read: service.taken.map(({ text }) => text) }).toEqual({
+      sent: 'sent',
+      read: [`{"fleetName":"Acme","bridgeUrl":"${BRIDGE_URL}","waitsAt":"personShip","count":2,"senderName":"tracker","job":"question","deliveryId":"dlv_01m3tbfspe96yf1rnr4ank0001","senderShipId":"shp_01m3tbfspe96yf1rnr4ank9trk","fleetId":"flt_01m3tb1zgr5h2ffee12xnch8sv"}`],
+    });
+  });
+
+  it('says, for several deliveries, how many of each job and the count', async () => {
+    await webPush().send(subscriptionOf('/firefox'), { fleetName: 'Acme', bridgeUrl: BRIDGE_URL, waitsAt: 'personShip', count: 12, jobs: { question: 1, step: 0, alert: 1, notice: 0, message: 10 } });
+
+    expect(service.taken.map(({ text }) => text)).toEqual([`{"fleetName":"Acme","bridgeUrl":"${BRIDGE_URL}","waitsAt":"personShip","count":12,"jobs":{"question":1,"step":0,"alert":1,"notice":0,"message":10}}`]);
   });
 
   it('says it waits at argo for a wake for argo, and nothing more', async () => {
-    await webPush().send(subscriptionOf('/firefox'), { ...WAKE, waitsAt: 'argo' });
+    await webPush().send(subscriptionOf('/firefox'), { fleetName: 'Acme', bridgeUrl: BRIDGE_URL, waitsAt: 'argo' });
 
-    expect(service.taken.map(({ text }) => text)).toEqual(['{"fleetName":"Acme","bridgeUrl":"https://gateway.example/bridge?fleet=flt_01m3tb1zgr5h2ffee12xnch8sv","waitsAt":"argo"}']);
+    expect(service.taken.map(({ text }) => text)).toEqual([`{"fleetName":"Acme","bridgeUrl":"${BRIDGE_URL}","waitsAt":"argo"}`]);
   });
 
   it("is signed with the gateway's push keys", async () => {

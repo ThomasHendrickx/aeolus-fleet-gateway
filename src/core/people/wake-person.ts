@@ -247,7 +247,7 @@ export function createWakePerson(deps: {
     for (const channel of due) {
       // The channel's last recorded wake names the window: every try before the next one is recorded asks with the same key.
       const lastSentAt = windows.find((window) => window.channel === channel)?.lastSentAt;
-      const woken = await channel.wake(ship, { key: `${channel.name}:${lastSentAt === undefined ? 'first' : lastSentAt.toISOString()}`, waitsAt: 'personShip' });
+      const woken = await channel.wake(ship, { key: `${channel.name}:${lastSentAt === undefined ? 'first' : lastSentAt.toISOString()}`, waitsAt: 'personShip', crewToken, deliveries: fresh.filter(showsOf(channel)) });
       if (woken.isOk) {
         wentOut.push(channel);
       } else if (woken.error.kind === "refused") {

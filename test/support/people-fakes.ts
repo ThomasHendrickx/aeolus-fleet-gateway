@@ -470,6 +470,16 @@ export function memoryWebPushSubscriptions(): WebPushSubscriptions & { held: Web
       held.splice(index < 0 ? held.length : index, index < 0 ? 0 : 1, subscription);
       return Promise.resolve();
     },
+    replace: (subscription, replacedEndpoint) => {
+      const index = held.findIndex(isSame(subscription.fleetId, { shipId: subscription.shipId, endpoint: replacedEndpoint }));
+      if (index < 0) {
+        return Promise.resolve('notFound');
+      }
+      held.splice(index, 1);
+      const kept = held.findIndex(isSame(subscription.fleetId, subscription));
+      held.splice(kept < 0 ? held.length : kept, kept < 0 ? 0 : 1, subscription);
+      return Promise.resolve('replaced');
+    },
     markGone: (fleetId, gone) => {
       const index = held.findIndex(isSame(fleetId, gone));
       const subscription = held[index];

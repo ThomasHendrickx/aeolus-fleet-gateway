@@ -243,11 +243,11 @@ function aContext(cookie: string | undefined, crewToken?: string): {
             },
           }),
         ),
-      turnOnWebPush: ({ caller, fleetName, endpoint, browser }) => {
+      turnOnWebPush: ({ caller, fleetName, endpoint, browser, replacedEndpoint }) => {
         if (!endpoint.startsWith('https://')) {
           return Promise.resolve(err({ kind: 'INVALID_SUBSCRIPTION' as const, message: "The push service's endpoint must be an https URL of at most 2048 characters" }));
         }
-        answers.push({ grantId: grantOf(caller), webPushOn: endpoint, browser, fleetName });
+        answers.push({ grantId: grantOf(caller), webPushOn: endpoint, browser, fleetName, ...(replacedEndpoint === undefined ? {} : { replacedEndpoint }) });
         return Promise.resolve(ok(undefined));
       },
       turnOffWebPush: ({ caller, endpoint }) => {
@@ -1241,6 +1241,16 @@ describe('a person turns on the channels that wake them, through the API (wake a
 
     expect(answers).toEqual([{ grantId: SHARED_ACCOUNT_TOKEN, webPushOn: FIREFOX.endpoint, browser: 'Firefox on Linux', fleetName: 'Acme' }]);
     await expect(caller.people.wakeChannels()).resolves.toMatchObject({ webPush: { publicKey: WEB_PUSH_KEY, browsers: [{ endpoint: FIREFOX.endpoint, browser: 'Firefox on Linux', addedAt: '2026-10-23T10:00:00.000Z', isGone: false }] } });
+  });
+
+  it('turns web push on with a subscription that replaces the endpoint its push service ended', async () => {
+    const { context, answers } = aContext(undefined);
+    const signIns = fakeSharedSignIn({});
+    const caller = gatewayRouter.createCaller({ ...context, signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET, accountApps: (signIn) => signIns.apps(signIn) });
+
+    await caller.people.turnOnWebPush({ ...FIREFOX, replacedEndpoint: 'https://updates.push.services.mozilla.com/wpush/v2/firefox-0' });
+
+    expect(answers).toEqual([{ grantId: SHARED_ACCOUNT_TOKEN, webPushOn: FIREFOX.endpoint, browser: 'Firefox on Linux', fleetName: 'Acme', replacedEndpoint: 'https://updates.push.services.mozilla.com/wpush/v2/firefox-0' }]);
   });
 
   it('refuses a subscription the push service could not have given, saying why', async () => {

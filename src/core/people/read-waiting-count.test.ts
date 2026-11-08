@@ -4,7 +4,7 @@ import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { aPersonDelivery, CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, holding, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { OpenedDelivery, PersonDelivery } from './ports.js';
-import { createReadWaitingCount } from './read-waiting-count.js';
+import { createCountWaitingOn, createReadWaitingCount } from './read-waiting-count.js';
 
 // The count behind the app's Home indicator and icon badge: what waits on the
 // person, questions and steps waiting, plus plain messages not yet seen.
@@ -110,5 +110,21 @@ describe('a person reads the count of what waits on them', () => {
 
   it('refuses a caller with no person ship', async () => {
     await expect(counting([QUESTION]).readWaitingCount({ fleetId: FLEET_ID, grantId: 'grant-2' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_A_PERSON' } });
+  });
+});
+
+describe("the gateway counts what waits on a person ship with the crew token it holds, as its wakes say it", () => {
+  it('counts as the person reads it: questions and steps waiting and plain messages not yet seen, no alert or notice', async () => {
+    const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [QUESTION, STEP, MESSAGE, ALERT, NOTICE] });
+    const { door, held } = holding(ship.door);
+
+    await expect(createCountWaitingOn({ door, held, opened })({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }, 'aeolus_ct_v1_charlotte')).resolves.toEqual({ isOk: true, value: 3 });
+  });
+
+  it('says what the fleet refused', async () => {
+    const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [QUESTION] });
+    const { door, held } = holding(ship.door);
+
+    await expect(createCountWaitingOn({ door, held, opened })({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }, 'aeolus_ct_v1_old')).resolves.toEqual({ isOk: false, error: { code: 'UNAUTHORIZED', message: 'The crew token is not valid' } });
   });
 });

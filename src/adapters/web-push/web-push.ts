@@ -16,7 +16,7 @@ import { isIP } from 'node:net';
 // web-push is CommonJS: Node's ESM loader finds no named exports on it, only the module itself.
 import webPush from 'web-push';
 
-import type { WebPush, WebPushSent } from '../../core/people/ports.js';
+import type { Wake, WebPush, WebPushSent } from '../../core/people/ports.js';
 import { allowedLookup } from '../webhooks/allowed-lookup.js';
 
 /** How long a wake stays with the push service while the browser is away: a day. */
@@ -26,6 +26,21 @@ const GONE_STATUSES = new Set([404, 410]);
 
 const HTTP_OK_FIRST = 200;
 const HTTP_OK_LAST = 299;
+
+/** What the browser reads: what the wake says, field by field, so nothing else ever travels with it. */
+function bodyOf(wake: Wake): string {
+  const { fleetName, bridgeUrl } = wake;
+  if (wake.waitsAt === 'argo') {
+    return JSON.stringify({ fleetName, bridgeUrl, waitsAt: wake.waitsAt });
+  }
+  const { waitsAt, count } = wake;
+  if ('jobs' in wake) {
+    const { question, step, alert, notice, message } = wake.jobs;
+    return JSON.stringify({ fleetName, bridgeUrl, waitsAt, count, jobs: { question, step, alert, notice, message } });
+  }
+  const { senderName, job, deliveryId, senderShipId, fleetId } = wake;
+  return JSON.stringify({ fleetName, bridgeUrl, waitsAt, count, senderName, job, deliveryId, senderShipId, fleetId });
+}
 
 export function createWebPush(deps: {
   publicKey: string;
@@ -42,7 +57,7 @@ export function createWebPush(deps: {
         let request: ReturnType<typeof webPush.generateRequestDetails>;
         let target: URL;
         try {
-          request = webPush.generateRequestDetails({ endpoint, keys: browserKeys }, JSON.stringify({ fleetName: wake.fleetName, bridgeUrl: wake.bridgeUrl, waitsAt: wake.waitsAt }), {
+          request = webPush.generateRequestDetails({ endpoint, keys: browserKeys }, bodyOf(wake), {
             vapidDetails: { subject: deps.subject, publicKey: deps.publicKey, privateKey: deps.privateKey },
             TTL: TIME_TO_LIVE_SECONDS,
           });

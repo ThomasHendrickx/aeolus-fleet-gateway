@@ -240,7 +240,7 @@ import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
 import { createReadMeeting } from './core/meetings/read-meeting.js';
 import { createReadWaitingAmong } from './core/people/read-waiting-among.js';
-import { createReadWaitingCount } from './core/people/read-waiting-count.js';
+import { createCountWaitingOn, createReadWaitingCount } from './core/people/read-waiting-count.js';
 import { createReadSendTo } from './core/people/read-send-to.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
@@ -750,6 +750,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
   // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
   const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, argoAccounts, clock });
+  const openedDeliveries = createPrismaOpenedDeliveries(prisma);
   // pagasae sends the email, asked with the gateway's installation token (wake a person, W2); without either, email wakes no one.
   // The browsers people turned web push on in (wake a person, W8).
   const webPushSubscriptions = createPrismaWebPushSubscriptions(prisma);
@@ -772,6 +773,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
             subscriptions: webPushSubscriptions,
             // A push service is reached at public addresses only, checked as its host resolves at each send.
             webPush: createWebPush({ ...options.webPush, timeoutMs: WEB_PUSH_TIMEOUT_MS, addressesOf: (host) => systemHostResolver.addressesOf(host), isAllowedAddress: options.isAllowedPushAddress ?? isPublicAddress }),
+            // The count a wake says, read as people.waitingCount reads it.
+            countWaiting: createCountWaitingOn({ door: personDoor, held: heldDeliveries, opened: openedDeliveries }),
             clock,
             windowMs: options.webPushWakeWindowMs ?? WEB_PUSH_WAKE_WINDOW_MS,
             bridgeUrlOf: (fleetId) => `${issuer}/bridge?fleet=${encodeURIComponent(fleetId)}`,
@@ -817,7 +820,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     log: server.log,
   });
   // The basket's answers stored as sending, sent by the gateway on its own, after a restart too (Bridge, section 9).
-  const openedDeliveries = createPrismaOpenedDeliveries(prisma);
   const itemOutcomes = createPrismaItemOutcomes(prisma);
   // The gateway's own steps it sees complete: a sign-in to an outside server, a Slack link.
   const finishOwnStep = createFinishOwnStep({ connections, sent: door, crews: personCrews, door: personDoor, opened: openedDeliveries, outcomes: itemOutcomes, changes: inboxChanges, clock });
