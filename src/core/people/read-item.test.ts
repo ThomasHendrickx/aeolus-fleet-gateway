@@ -1,26 +1,43 @@
+import { QUESTION_CONTENT_TYPE } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { CHARLOTTE_GRANT, aPersonDelivery, fakeCrewPersonShip, fakePersonShipDoor, holding, memoryOpenedDeliveries, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
+import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
+import { CHARLOTTE_GRANT, aBasketEntry, aPersonDelivery, fakeCrewPersonShip, fakePersonShipDoor, holding, memoryBasketEntries, memoryOpenedDeliveries, memoryPersonCrews, memoryRoutes } from '../../../test/support/people-fakes.js';
 import type { PersonDelivery, RecordedPersonDelivery } from './ports.js';
 import { createReadItem } from './read-item.js';
+import { ITEM_JOBS, routingDefaultsOf, type Route } from './routing.js';
 
 // A person's client shows one item whole by its delivery id, in any state,
-// without acknowledging it: what opening returns, minus the acknowledging.
+// without acknowledging it: what opening returns, minus the acknowledging,
+// with its message, the places that show it and its answer in the basket.
 
 const WAITING = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', contentType: 'text/plain', payload: 'The build is red', headline: null });
 const DONE: RecordedPersonDelivery = { ...aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001', messageId: 'msg_01m3tbfspe96yf1rnr4ank0001', contentType: 'text/plain', payload: 'Release 1.4 is out', headline: null }), state: 'handled', isPayloadUnreadable: false };
 
+const QUESTION_ID = '5d1c3f0e-7a2b-4c9d-8e6f-1a2b3c4d5e6f';
+const QUESTION = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003', messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', contentType: QUESTION_CONTENT_TYPE, payload: JSON.stringify({ id: QUESTION_ID, title: 'Harbour first?', context: '', options: [{ key: 1, label: 'Yes' }] }), headline: 'Harbour first?', askedQuestionId: QUESTION_ID });
+
 let crews: ReturnType<typeof memoryPersonCrews>;
 let opened: ReturnType<typeof memoryOpenedDeliveries>;
+let entries: ReturnType<typeof memoryBasketEntries>;
 
 beforeEach(() => {
   crews = memoryPersonCrews();
   opened = memoryOpenedDeliveries();
+  entries = memoryBasketEntries();
 });
 
-function reading(ship: { deliveries?: PersonDelivery[]; acknowledged?: PersonDelivery[]; record?: RecordedPersonDelivery[] }) {
-  const fleet = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [], ...ship });
-  return { ...fleet, readItem: createReadItem({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(fleet.door), opened }) };
+/** The gateway's defaults (CC19): a chat on for every job. */
+const CHAT_ON = routingDefaultsOf(ITEM_JOBS.map((job) => ({ job, place: 'chat' as const })));
+
+function reading(ship: { deliveries?: PersonDelivery[]; acknowledged?: PersonDelivery[]; record?: RecordedPersonDelivery[]; routes?: Route[] }) {
+  const { routes = [], ...onBoard } = ship;
+  const fleet = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [], ...onBoard });
+  return {
+    ...fleet,
+    readItem: createReadItem({ crewPersonShip: fakeCrewPersonShip(crews), crews, ...holding(fleet.door), opened, entries, connections: memoryConnectionStore(), routes: memoryRoutes(routes), defaults: CHAT_ON, isEmailOffered: false, isWebPushOffered: false }),
+  };
 }
 
 describe('a person reads one item whole', () => {
@@ -29,7 +46,7 @@ describe('a person reads one item whole', () => {
 
     await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: WAITING.deliveryId })).resolves.toEqual({
       isOk: true,
-      value: { deliveryId: WAITING.deliveryId, from: 'tracker', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', title: 'The build is red', sentAt: '2026-10-19T08:00:00.000Z', contentType: 'text/plain', payload: 'The build is red', meetingId: null, said: null, stale: null },
+      value: { deliveryId: WAITING.deliveryId, from: 'tracker', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', title: 'The build is red', sentAt: '2026-10-19T08:00:00.000Z', contentType: 'text/plain', payload: 'The build is red', meetingId: null, said: null, stale: null, messageId: WAITING.messageId, places: ['chat'], inBasket: null },
     });
     expect(calls.some((call) => call.startsWith('ack('))).toBe(false);
     expect(opened.held.size).toBe(0);
@@ -46,7 +63,7 @@ describe('a person reads one item whole', () => {
 
     await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: DONE.deliveryId })).resolves.toEqual({
       isOk: true,
-      value: { deliveryId: DONE.deliveryId, from: 'tracker', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', title: 'Release 1.4 is out', sentAt: '2026-10-19T08:00:00.000Z', contentType: 'text/plain', payload: 'Release 1.4 is out', meetingId: null, said: null, stale: null },
+      value: { deliveryId: DONE.deliveryId, from: 'tracker', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk', title: 'Release 1.4 is out', sentAt: '2026-10-19T08:00:00.000Z', contentType: 'text/plain', payload: 'Release 1.4 is out', meetingId: null, said: null, stale: null, messageId: DONE.messageId, places: ['chat'], inBasket: null },
     });
     expect(calls.some((call) => call.startsWith('ack(') || call.startsWith('handled('))).toBe(false);
     expect(opened.held.size).toBe(0);
@@ -69,5 +86,39 @@ describe('a person reads one item whole', () => {
     const { readItem } = reading({ record: [{ ...DONE, payload: '', isPayloadUnreadable: true }] });
 
     await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: DONE.deliveryId })).resolves.toMatchObject({ isOk: false, error: { kind: 'KEY_UNAVAILABLE' } });
+  });
+
+  it('names the message of an item acknowledged and not done, so the client reads the exchange around it', async () => {
+    const { readItem } = reading({ acknowledged: [WAITING] });
+
+    await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: WAITING.deliveryId })).resolves.toMatchObject({ isOk: true, value: { messageId: WAITING.messageId } });
+  });
+
+  it('names the places besides Bridge that show the item, as routing per job has them', async () => {
+    const routes: Route[] = [{ fleetId: CHARLOTTE_GRANT.fleetId, shipId: PERSON_SHIP_ID, job: 'decide', place: 'slack', isOn: true, changedAt: new Date('2026-10-01T00:00:00.000Z') }];
+    const { readItem } = reading({ deliveries: [QUESTION], routes });
+
+    await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: QUESTION.deliveryId })).resolves.toMatchObject({ isOk: true, value: { places: ['slack', 'chat'] } });
+  });
+
+  it('shows the answer to a question as it waits in the basket, the option and the note', async () => {
+    await entries.save(aBasketEntry({ questionId: QUESTION_ID, deliveryId: QUESTION.deliveryId, option: 2, note: 'Harbour first' }));
+    const { readItem } = reading({ deliveries: [QUESTION] });
+
+    await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: QUESTION.deliveryId })).resolves.toMatchObject({ isOk: true, value: { inBasket: { option: 2, note: 'Harbour first' } } });
+  });
+
+  it('shows no basket entry for a question whose answer the basket does not hold', async () => {
+    await entries.save(aBasketEntry({ questionId: 'a-question-of-another-delivery', deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0zzz' }));
+    const { readItem } = reading({ deliveries: [QUESTION] });
+
+    await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: QUESTION.deliveryId })).resolves.toMatchObject({ isOk: true, value: { inBasket: null } });
+  });
+
+  it('reads the basket by the item\'s question alone, never the whole of it', async () => {
+    const { readItem } = reading({ deliveries: [QUESTION] });
+    entries.list = () => Promise.reject(new Error('The whole basket was read'));
+
+    await expect(readItem({ caller: CHARLOTTE_GRANT, deliveryId: QUESTION.deliveryId })).resolves.toMatchObject({ isOk: true });
   });
 });

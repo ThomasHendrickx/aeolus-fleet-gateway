@@ -906,7 +906,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       readBridgeHome: createReadBridgeHome({ ...asCrew, opened, entries, outcomes, changes, clock, sightings: staleSightings, connections, routes, defaults: routingDefaults, parties, ownStepPartyOf: ownStepPartyOf(options.publicUrl ?? DEFAULT_PUBLIC_URL), ...placesOffered }),
       readRecord: createReadRecord({ ...asCrew, outcomes, connections, routes, defaults: routingDefaults, ...placesOffered }),
       openDelivery: createOpenDelivery({ ...asCrew, opened, changes, outcomes, clock }),
-      readItem: createReadItem({ ...asCrew, opened }),
+      readItem: createReadItem({ ...asCrew, opened, entries, connections, routes, defaults: routingDefaults, ...placesOffered }),
       readExchange: createReadExchange(asCrew),
       readExchanges: createReadExchanges(asCrew),
       markSeen: createMarkSeen(asCrew),
