@@ -15,7 +15,7 @@ let reply: { status: number; body: unknown };
 beforeEach(async () => {
   asked = [];
   server = createServer((request, response) => {
-    asked.push({ path: new URL(request.url ?? '', 'http://x').pathname, authorization: request.headers.authorization });
+    asked.push({ path: new URL(request.url ?? '', 'http://x').pathname, authorization: request.headers.authorization, accountToken: request.headers['aeolus-account-token'] });
     response.writeHead(reply.status, { 'content-type': 'application/json' }).end(JSON.stringify(reply.body));
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -38,12 +38,12 @@ function limits(retention: unknown) {
 }
 
 describe("the fleet's retention, read as the account", () => {
-  it("reads fleet.limits as the gateway's ship presenting the account", async () => {
+  it("reads fleet.limits as the gateway's ship, presenting the account's token", async () => {
     reply = limits({ days: null, keptFrom: null });
 
     await createFleetRetention(base).retention(AS_ACCOUNT);
 
-    expect(asked).toEqual([{ path: '/trpc/fleet.limits', authorization: 'Bearer aeolus_ct_v1_gateway' }]);
+    expect(asked).toEqual([{ path: '/trpc/fleet.limits', authorization: 'Bearer aeolus_ct_v1_gateway', accountToken: 'aeolus_at_v1_thomas' }]);
   });
 
   it('answers the days and keptFrom as core worded them', async () => {
