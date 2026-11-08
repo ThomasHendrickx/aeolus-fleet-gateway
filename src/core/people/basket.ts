@@ -57,6 +57,11 @@ export interface BasketEntries {
   sendingShips(page: { after: { fleetId: FleetId; shipId: ShipId } | null; limit: number }): Promise<{ fleetId: FleetId; shipId: ShipId }[]>;
 }
 
+/** The answer an entry holds, as an item shows it: the option picked and the note; none while the basket holds no entry. */
+export function basketAnswerOf(entry: BasketEntry | undefined): { readonly option: number | null; readonly note: string | null } | null {
+  return entry === undefined ? null : { option: entry.option, note: entry.note };
+}
+
 /**
  * What an entry stands as now: as kept (waiting, sending, refused with
  * why); its question withdrawn or replaced by its asker (section 9, rule

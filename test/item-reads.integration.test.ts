@@ -95,7 +95,7 @@ async function trackerAsks(title: string): Promise<string> {
   const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
-    body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType: QUESTION_CONTENT_TYPE, payload: JSON.stringify({ id, title, context: '', options: [{ key: 1, label: 'Yes' }] }), idempotencyKey: crypto.randomUUID(), model: 'claude-opus-5-5' }),
+    body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType: QUESTION_CONTENT_TYPE, payload: JSON.stringify({ id, title, context: '', options: [{ key: 1, label: 'Yes' }], pick: { option: 1, why: 'The only one' } }), idempotencyKey: crypto.randomUUID(), model: 'claude-opus-5-5' }),
   });
   expect(sent.status).toBe(200);
   return id;

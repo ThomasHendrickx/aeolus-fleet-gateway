@@ -7,7 +7,7 @@ import { ok, type Result } from '../shared/result.js';
 import type { Party } from '../parties/party.js';
 import type { PartyStore } from '../parties/ports.js';
 import { actInPlaceOf, type ActInPlace, type ActingItem, type OwnStepActionOf, type OwnStepPartyOf } from './act-in-place.js';
-import type { BasketEntries, BasketEntry } from './basket.js';
+import { basketAnswerOf, type BasketEntries, type BasketEntry } from './basket.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import { inboxEntryOf, openedEntryOf, type InboxEntry } from './inbox-entry.js';
 import type { ItemOutcomes, Place } from './item-outcome.js';
@@ -68,10 +68,7 @@ function openedJobOf(opened: OpenedDelivery): ItemJob {
 
 /** The answer in the basket to the question a delivery asks, by its delivery; none while the basket holds none. */
 function inBasketOf(entries: readonly BasketEntry[]): (deliveryId: string) => HomeItem['inBasket'] {
-  return (deliveryId) => {
-    const entry = entries.find((each) => each.deliveryId === deliveryId);
-    return entry === undefined ? null : { option: entry.option, note: entry.note };
-  };
+  return (deliveryId) => basketAnswerOf(entries.find((each) => each.deliveryId === deliveryId));
 }
 
 /** The gateway's own words for its sign-in step's action: Sign in to the party's server's own title where it keeps one, else to its name (aeolus-fleet#1535). */

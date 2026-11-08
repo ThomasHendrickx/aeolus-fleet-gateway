@@ -189,7 +189,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       readItem: ({ caller, deliveryId }) =>
         Promise.resolve(
           deliveryId === READ_DELIVERY && [PERSON_TOKEN, SHARED_ACCOUNT_TOKEN].includes(grantOf(caller))
-            ? ok({ deliveryId: READ_DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null })
+            ? ok({ deliveryId: READ_DELIVERY, from: 'prd-writer', fromShipId: 'shp_01m3tbfspe96yf1rnr4ank0prd' as const, title: 'Publish the PRD draft to Linear?', sentAt: '2026-10-20T09:00:00.000Z', contentType: 'text/plain', payload: 'Publish it?', meetingId: null, said: null, stale: null, messageId: 'msg_01m3tbfspe96yf1rnr4ank0001' as const, places: ['chat' as const], inBasket: null })
             : err({ kind: 'NO_SUCH_DELIVERY' as const, message: `No delivery ${deliveryId} is yours: read your inbox again` }),
         ),
       readExchange: ({ caller, otherShipId, start }) =>
@@ -1073,7 +1073,7 @@ describe("a person reads and deals with their person ship's deliveries through t
   it('reads one whole by its delivery id, without opening it', async () => {
     const { context } = aContext(PERSON_COOKIE);
 
-    await expect(gatewayRouter.createCaller(context).people.item({ deliveryId: READ_DELIVERY })).resolves.toMatchObject({ contentType: 'text/plain', payload: 'Publish it?', meetingId: null });
+    await expect(gatewayRouter.createCaller(context).people.item({ deliveryId: READ_DELIVERY })).resolves.toMatchObject({ contentType: 'text/plain', payload: 'Publish it?', meetingId: null, messageId: 'msg_01m3tbfspe96yf1rnr4ank0001', places: ['chat'], inBasket: null });
   });
 
   it('says a delivery that is not its own is not found when read', async () => {
