@@ -63,6 +63,32 @@ describe('the browsers a person turned web push on in, in Postgres (W8)', () => 
     await expect(Promise.all([subscriptions.list(FLEET, shipId), subscriptions.list(OTHER_FLEET, shipId)])).resolves.toEqual([[{ ...gone, goneAt: AT }], [elsewhere]]);
   });
 
+  it('keeps a subscription in place of the one its push service replaced, in its fleet and person ship only', async () => {
+    const subscriptions = createPrismaWebPushSubscriptions(prisma);
+    const shipId: ShipId = 'shp_01m3tb1zgr5h2ffee12xnch8w6';
+    const replaced = aWebPushSubscription({ fleetId: FLEET, shipId, endpoint: 'https://push.example/firefox-0', addedAt: AT });
+    const elsewhere = aWebPushSubscription({ fleetId: OTHER_FLEET, shipId, endpoint: replaced.endpoint });
+    await Promise.all([subscriptions.save(replaced), subscriptions.save(elsewhere)]);
+    const renewed = aWebPushSubscription({ fleetId: FLEET, shipId, endpoint: 'https://push.example/firefox-1', addedAt: new Date(AT.getTime() + 1000) });
+
+    const replacing = await subscriptions.replace(renewed, replaced.endpoint);
+
+    await expect(Promise.all([subscriptions.list(FLEET, shipId), subscriptions.list(OTHER_FLEET, shipId)])).resolves.toEqual([[renewed], [elsewhere]]);
+    expect(replacing).toBe('replaced');
+  });
+
+  it("keeps nothing when the endpoint it replaces is not the person ship's", async () => {
+    const subscriptions = createPrismaWebPushSubscriptions(prisma);
+    const shipId: ShipId = 'shp_01m3tb1zgr5h2ffee12xnch8w7';
+    const someoneElses = aWebPushSubscription({ fleetId: FLEET, shipId: 'shp_01m3tb1zgr5h2ffee12xnch8w8', endpoint: 'https://push.example/firefox-0' });
+    await subscriptions.save(someoneElses);
+
+    const replacing = await subscriptions.replace(aWebPushSubscription({ fleetId: FLEET, shipId, endpoint: 'https://push.example/firefox-1' }), someoneElses.endpoint);
+
+    await expect(Promise.all([subscriptions.list(FLEET, shipId), subscriptions.list(FLEET, someoneElses.shipId)])).resolves.toEqual([[], [someoneElses]]);
+    expect(replacing).toBe('notFound');
+  });
+
   it('is forgotten with its fleet (decision 0021)', async () => {
     const subscriptions = createPrismaWebPushSubscriptions(prisma);
     const fleetId: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch9fh';
