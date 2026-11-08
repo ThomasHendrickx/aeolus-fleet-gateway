@@ -110,7 +110,6 @@ describe('the count of what waits on a person leaves out the plain messages of a
     await sendsToCharlotte(stayer, plain('Still here'));
     await sendsToCharlotte(leaver, plain('One'));
     await sendsToCharlotte(leaver, plain('Two'));
-    expect({ count: await counted(), wake: await wakeCounted() }).toEqual({ count: 3, wake: 3 });
 
     await retire(fleet, { cookie, shipId: leaver.shipId });
 

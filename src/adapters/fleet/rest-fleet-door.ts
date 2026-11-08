@@ -133,7 +133,7 @@ async function callOnce<T>(fleetUrl: string, request: FleetCall<T>): Promise<Res
 }
 
 /** A delivery to a person ship as the gateway shows it, with its headline and the questions and steps it asks and withdraws read from its payload. */
-function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, contentType, payload, sentAt, inReplyTo, meetingId }: ReceivedDelivery): PersonDelivery {
+function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, contentType, payload, sentAt, inReplyTo, meetingId, senderStatus }: ReceivedDelivery): PersonDelivery {
   const asked = askedQuestionOf({ contentType, payload });
   const replacingStep = isStepReplacementContentType(contentType) ? parsedOf(replacingStepSchema, payload) : undefined;
   return {
@@ -153,6 +153,7 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     sentAt: new Date(sentAt),
     inReplyTo,
     meetingId,
+    senderStatus,
   };
 }
 
