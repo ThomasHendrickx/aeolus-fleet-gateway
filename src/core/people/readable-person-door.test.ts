@@ -1,7 +1,7 @@
 import { QUESTION_CONTENT_TYPE, STEP_CONTENT_TYPE } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
-import { aPersonDelivery, fakePersonShipDoor, memoryLetGoDeliveries, memoryOpenedDeliveries, fakeCrewPersonShip, memoryPersonCrews, CHARLOTTE_GRANT, memoryBasketEntries, memoryItemOutcomes, memoryInboxChanges, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, fakePersonShipDoor, memoryLetGoDeliveries, memoryOpenedDeliveries, fakeCrewPersonShip, memoryPersonCrews, CHARLOTTE_GRANT, memoryBasketEntries, memoryItemOutcomes, memoryInboxChanges, memoryRoutes, memoryUnreadableReplies, SENT_MESSAGE_ID } from '../../../test/support/people-fakes.js';
 import { createReadBridgeHome } from './read-bridge-home.js';
 import { createReadWaitingCount } from './read-waiting-count.js';
 import { createStaleSightings } from './stale-sightings.js';
@@ -27,7 +27,7 @@ function setup(contentType: string, payload: string) {
   const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [delivery] });
   const opened = memoryOpenedDeliveries();
   const { held } = createReadablePersonState({ held: createHeldDeliveries(FIXED_CLOCK), opened });
-  const door = createReadablePersonDoor(holdingDoor(ship.door, { held, letGo: memoryLetGoDeliveries() }), { opened, clock: FIXED_CLOCK });
+  const door = createReadablePersonDoor(holdingDoor(ship.door, { held, letGo: memoryLetGoDeliveries() }), { opened, replies: memoryUnreadableReplies(), clock: FIXED_CLOCK });
   return { delivery, ship, door, held, opened };
 }
 
@@ -35,7 +35,9 @@ describe('a person never reads a malformed question or step', () => {
   it.each([QUESTION_CONTENT_TYPE, STEP_CONTENT_TYPE])('returns %s to its sender before acknowledging and handling it', async (contentType) => {
     const { door, ship, delivery } = setup(contentType, '{}');
     expect(await door.pushReceive(CREW, { max: 10 })).toEqual({ isOk: true, value: [] });
-    expect(ship.replies).toEqual([{ to: delivery.senderShipId, inReplyTo: delivery.messageId, contentType: 'text/plain', payload: expect.stringContaining('could not be read'), idempotencyKey: `unreadable-${delivery.deliveryId}` }]);
+    expect(ship.replies).toMatchObject([{ to: delivery.senderShipId, inReplyTo: delivery.messageId, contentType: 'text/plain', idempotencyKey: `unreadable-${delivery.deliveryId}` }]);
+    expect(ship.replies).toHaveLength(1);
+    expect(ship.replies[0]?.payload).toContain('could not be read');
     expect(ship.replies[0]?.payload).toContain('title');
     expect(ship.calls.filter((call) => call !== 'whoami').slice(1)).toEqual([`reply(${delivery.messageId})`, `ack(${delivery.deliveryId})`, `handled(${delivery.deliveryId})`]);
     expect(ship.ship.deliveries).toEqual([]);
@@ -62,7 +64,7 @@ describe('a person never reads a malformed question or step', () => {
     const { door, ship, delivery, opened } = setup(STEP_CONTENT_TYPE, '{}');
     ship.refusals.handled.push(UNAVAILABLE);
     expect(await door.pushReceive(CREW, { max: 10 })).toEqual({ isOk: false, error: UNAVAILABLE });
-    const restarted = createReadablePersonDoor(ship.door, { opened, clock: FIXED_CLOCK });
+    const restarted = createReadablePersonDoor(ship.door, { opened, replies: memoryUnreadableReplies(), clock: FIXED_CLOCK });
     await restarted.inbox(CREW);
     expect(ship.replies.map(({ idempotencyKey }) => idempotencyKey)).toEqual([`unreadable-${delivery.deliveryId}`, `unreadable-${delivery.deliveryId}`]);
     expect(await ship.door.delivery(CREW, delivery.deliveryId)).toMatchObject({ isOk: false });
@@ -74,7 +76,7 @@ describe('stored malformed deliveries', () => {
     const { delivery } = setup(contentType, '{}');
     const message = { ...delivery, sentAt: delivery.sentAt.toISOString(), isPayloadUnreadable: false, deliveryState: 'handled' as const, receivedDelivery: { deliveryId: delivery.deliveryId, state: 'handled' as const }, otherShipId: delivery.senderShipId };
     const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [], acknowledged: [delivery], record: [{ ...delivery, state: 'handled', isPayloadUnreadable: false }], exchanges: { messages: [message], summaries: [{ otherShipId: delivery.senderShipId, otherShipName: delivery.senderName, otherShipType: 'worker', otherShipKind: 'agent', unacknowledged: 0, newestMessage: message }] } });
-    const door = createReadablePersonDoor(ship.door, { opened: memoryOpenedDeliveries(), clock: FIXED_CLOCK });
+    const door = createReadablePersonDoor(ship.door, { opened: memoryOpenedDeliveries(), replies: memoryUnreadableReplies(), clock: FIXED_CLOCK });
     expect(await door.record(CREW, { cursor: null, limit: 20 })).toEqual({ isOk: true, value: { items: [], nextCursor: null } });
     expect(await door.exchange(CREW, { otherShipId: delivery.senderShipId, start: { kind: 'newest' }, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
     expect(await door.exchanges(CREW, { cursor: null, limit: 20 })).toEqual({ isOk: true, value: { items: [], nextCursor: null } });
@@ -122,4 +124,31 @@ it.each([QUESTION_CONTENT_TYPE, STEP_CONTENT_TYPE])('leaves a malformed %s out o
   };
   expect(await createReadBridgeHome(deps)(CHARLOTTE_GRANT)).toEqual({ isOk: true, value: { waiting: { count: 0, items: [] }, stayAware: [], messages: [] } });
   expect(await createReadWaitingCount(deps)(CHARLOTTE_GRANT)).toEqual({ isOk: true, value: { count: 0 } });
+});
+
+it.each([[QUESTION_CONTENT_TYPE, QUESTION], [STEP_CONTENT_TYPE, STEP]])('preserves a stored valid %s and the record cursor', async (contentType, payload) => {
+  const delivery = { ...aPersonDelivery({ contentType, payload }), state: 'handled' as const, isPayloadUnreadable: false };
+  const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [], record: [delivery] });
+  const door = createReadablePersonDoor(ship.door, { opened: memoryOpenedDeliveries(), replies: memoryUnreadableReplies(), clock: FIXED_CLOCK });
+  expect(await door.record(CREW, { cursor: null, limit: 20 })).toEqual({ isOk: true, value: { items: [delivery], nextCursor: null } });
+});
+
+it('preserves the unreadable flag for a sealed question whose key is unavailable', async () => {
+  const delivery = { ...aPersonDelivery({ payload: '' }), state: 'handled' as const, isPayloadUnreadable: true };
+  const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [], record: [delivery] });
+  const door = createReadablePersonDoor(ship.door, { opened: memoryOpenedDeliveries(), replies: memoryUnreadableReplies(), clock: FIXED_CLOCK });
+  expect(await door.record(CREW, { cursor: null, limit: 20 })).toEqual({ isOk: true, value: { items: [delivery], nextCursor: null } });
+  expect(ship.replies).toEqual([]);
+});
+
+it('hides the stored rejection reply from exchanges and summaries while preserving an ordinary reply', async () => {
+  const original = aPersonDelivery();
+  const reply = { messageId: SENT_MESSAGE_ID, senderShipId: PERSON_SHIP_ID, payload: 'Could not be read', contentType: 'text/plain', inReplyTo: original.messageId, sentAt: original.sentAt.toISOString(), deliveryState: null, receivedDelivery: null, isPayloadUnreadable: false, deliveryId: original.deliveryId, otherShipId: original.senderShipId };
+  const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [], exchanges: { messages: [reply], summaries: [{ otherShipId: original.senderShipId, otherShipName: 'worker', otherShipType: 'worker', otherShipKind: 'agent', unacknowledged: 0, newestMessage: reply }] } });
+  const replies = memoryUnreadableReplies();
+  const door = createReadablePersonDoor(ship.door, { opened: memoryOpenedDeliveries(), replies, clock: FIXED_CLOCK });
+  expect(await door.exchange(CREW, { otherShipId: original.senderShipId, start: { kind: 'newest' }, limit: 20 })).toMatchObject({ isOk: true, value: { items: [reply] } });
+  await replies.save(FLEET_ID, { shipId: PERSON_SHIP_ID, messageId: SENT_MESSAGE_ID });
+  expect(await door.exchange(CREW, { otherShipId: original.senderShipId, start: { kind: 'newest' }, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
+  expect(await door.exchanges(CREW, { cursor: null, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
 });
