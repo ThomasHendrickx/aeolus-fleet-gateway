@@ -12,6 +12,7 @@ import type { CrewPersonShip } from './crew-person-ship.js';
 import { inboxEntryOf, openedEntryOf, type InboxEntry } from './inbox-entry.js';
 import type { ItemOutcomes, Place } from './item-outcome.js';
 import { essenceOf, isCounted, jobOf, type ItemJob } from './item-job.js';
+import { itemReasonOf } from './item-reason.js';
 import { itemStateOf, type ItemState } from './item-state.js';
 import { asPersonCrew, withOwnRefusal, type PersonCaller, type PersonCrewError } from './person-crew.js';
 import type { HeldDeliveries } from './held-deliveries.js';
@@ -33,6 +34,7 @@ import { STALE_SHOWN_FOR_MS, type StaleSightings } from './stale-sightings.js';
  * it, and what its row does in place.
  */
 export interface HomeItem extends InboxEntry {
+  readonly reason?: string;
   readonly job: ItemJob;
   readonly isAlert: boolean;
   readonly state: ItemState;
@@ -163,7 +165,7 @@ export function createReadBridgeHome(deps: {
     });
     const taken: HomeItem[] = waiting.value.deliveries.map((delivery) => {
       const item = { ...inboxEntryOf(delivery), job: jobOf(delivery.contentType), state: 'new' as const, stale: staleOf(askingOf(delivery), asking) };
-      return { ...item, seenIn: null, inBasket: inBasket(delivery.deliveryId), ...rowOf(item, delivery) };
+      return { ...item, ...itemReasonOf(delivery), seenIn: null, inBasket: inBasket(delivery.deliveryId), ...rowOf(item, delivery) };
     });
     const seen: HomeItem[] = opened
       .filter(({ deliveryId }) => !isTaken.has(deliveryId))
@@ -187,7 +189,7 @@ export function createReadBridgeHome(deps: {
       await endStale(deps, { caller, crew: waiting.value.crew, deliveryId, waiting: waiting.value.deliveries });
       deps.sightings.forget(deliveryId);
     }
-    const items = listed.filter((item) => !left.includes(item)).sort(newestFirst);
+    const waitingItems = listed.filter((item) => !left.includes(item)).sort(newestFirst);
     const recorded = new Map(page.value.items.map((delivery) => [delivery.deliveryId, delivery]));
     /** The text of a message the person opened: from the record's newest page, else read again; none while the fleet cannot give it. */
     const openedTextOf = async (deliveryId: OpenedDelivery['deliveryId']): Promise<string> => {
@@ -198,13 +200,19 @@ export function createReadBridgeHome(deps: {
       const reread = await asPersonCrew(deps, { caller, run: (crew) => withOwnRefusal(deps.door.delivery(crew.crewToken, deliveryId)) });
       return reread.isOk && reread.value.value.isOk ? reread.value.value.value.payload : '';
     };
+    const openedTypes = new Map(opened.map(({ deliveryId, contentType }) => [deliveryId, contentType ?? '']));
+    const items = await Promise.all(waitingItems.map(async (item) => {
+      if (isTaken.has(item.deliveryId) || !isCounted(jobOf(openedTypes.get(item.deliveryId) ?? ''))) {
+        return item;
+      }
+      return { ...item, ...itemReasonOf({ contentType: openedTypes.get(item.deliveryId) ?? '', payload: await openedTextOf(item.deliveryId) }) };
+    }));
     const takenMessages: HomeMessage[] = waiting.value.deliveries
       .filter(({ contentType }) => isPlainMessage(contentType))
       .flatMap((delivery) => {
         const item = taken.find(({ deliveryId }) => deliveryId === delivery.deliveryId);
         return item === undefined ? [] : [{ ...item, excerpt: excerptOf(delivery.payload) }];
       });
-    const openedTypes = new Map(opened.map(({ deliveryId, contentType }) => [deliveryId, contentType ?? '']));
     const seenMessages: HomeMessage[] = await Promise.all(
       seen.filter(({ deliveryId }) => isPlainMessage(openedTypes.get(deliveryId) ?? '')).map(async (item) => ({ ...item, excerpt: excerptOf(await openedTextOf(item.deliveryId)) })),
     );

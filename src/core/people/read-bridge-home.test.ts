@@ -114,6 +114,22 @@ function anOpened(overrides: Partial<OpenedDelivery> = {}): OpenedDelivery {
 }
 
 describe('Bridge home: what waits on the person, with one count (CC18)', () => {
+  it.each([
+    ['question context', { delivery: QUESTION, payload: { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Choose', context: '  The asker\'s words.\n' + 'More detail. '.repeat(100), options: [{ key: 1, label: 'Yes' }], pick: { option: 1, why: 'Ready' } }, reason: '  The asker\'s words.\n' + 'More detail. '.repeat(100) }],
+    ['step why', { delivery: STEP, payload: { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Create', why: 'The build needs it.' }, reason: 'The build needs it.' }],
+    ['neither', { delivery: STEP, payload: { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Create', why: '' }, reason: undefined }],
+  ])('passes through the asker reason for %s, new and opened', async (_name, { delivery, payload, reason }) => {
+    const asking = aPersonDelivery({ ...delivery, payload: JSON.stringify(payload) });
+    const fresh = await readHome([asking]).readHome(CHARLOTTE_GRANT);
+    await opened.save(anOpened({ deliveryId: asking.deliveryId, contentType: asking.contentType }));
+    const seen = await readHome([], { acknowledged: [asking] }).readHome(CHARLOTTE_GRANT);
+
+    for (const home of [fresh, seen]) {
+      expect(home.isOk && home.value.waiting.items[0]).toEqual(expect.objectContaining(reason === undefined ? {} : { reason }));
+      if (reason === undefined) expect(home.isOk && home.value.waiting.items[0]).not.toHaveProperty('reason');
+    }
+  });
+
   it('lists the questions and steps that wait, newest first, and counts them', async () => {
     const home = await readHome([STEP, QUESTION]).readHome(CHARLOTTE_GRANT);
 
@@ -685,6 +701,24 @@ describe('Bridge home: plain messages to the person (#242)', () => {
       ],
       count: 1,
     });
+  });
+
+  it('reads an opened plain message only once, with no extra read for a reason', async () => {
+    await opened.save(anOpened({ deliveryId: SEEN.deliveryId, contentType: 'text/plain', askedQuestionId: null }));
+    const reading = readHome([], { acknowledged: [SEEN] });
+
+    await reading.readHome(CHARLOTTE_GRANT);
+
+    expect(reading.calls.filter((call) => call.startsWith('delivery('))).toEqual([`delivery(${SEEN.deliveryId})`]);
+  });
+
+  it.each(['application/vnd.aeolus.notice+json', 'application/json', null])('reads no reason payload for an opened item of content type %s', async (contentType) => {
+    await opened.save(anOpened({ contentType, askedQuestionId: null }));
+    const reading = readHome([]);
+
+    await reading.readHome(CHARLOTTE_GRANT);
+
+    expect(reading.calls.filter((call) => call.startsWith('delivery('))).toEqual([]);
   });
 
   it('lists a message the person opened as seen, its text read again from the fleet', async () => {
