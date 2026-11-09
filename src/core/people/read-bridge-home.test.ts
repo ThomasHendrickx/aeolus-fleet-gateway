@@ -115,10 +115,10 @@ function anOpened(overrides: Partial<OpenedDelivery> = {}): OpenedDelivery {
 
 describe('Bridge home: what waits on the person, with one count (CC18)', () => {
   it.each([
-    ['question context', QUESTION, { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Choose', context: '  The asker\'s words.\n' + 'More detail. '.repeat(100), options: [{ key: 1, label: 'Yes' }], pick: { option: 1, why: 'Ready' } }, '  The asker\'s words.\n' + 'More detail. '.repeat(100)],
-    ['step why', STEP, { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Create', why: 'The build needs it.' }, 'The build needs it.'],
-    ['neither', STEP, { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Create', why: '' }, undefined],
-  ])('passes through the asker reason for %s, new and opened', async (_name, delivery, payload, reason) => {
+    ['question context', { delivery: QUESTION, payload: { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Choose', context: '  The asker\'s words.\n' + 'More detail. '.repeat(100), options: [{ key: 1, label: 'Yes' }], pick: { option: 1, why: 'Ready' } }, reason: '  The asker\'s words.\n' + 'More detail. '.repeat(100) }],
+    ['step why', { delivery: STEP, payload: { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Create', why: 'The build needs it.' }, reason: 'The build needs it.' }],
+    ['neither', { delivery: STEP, payload: { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Create', why: '' }, reason: undefined }],
+  ])('passes through the asker reason for %s, new and opened', async (_name, { delivery, payload, reason }) => {
     const asking = aPersonDelivery({ ...delivery, payload: JSON.stringify(payload) });
     const fresh = await readHome([asking]).readHome(CHARLOTTE_GRANT);
     await opened.save(anOpened({ deliveryId: asking.deliveryId, contentType: asking.contentType }));
