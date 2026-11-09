@@ -812,7 +812,7 @@ const accountInViewOutputSchema = z.discriminatedUnion('kind', [
 
 const appLinkOutputSchema = z.object({ app: z.string(), url: z.string() });
 const accountAppsOutputSchema = z.object({
-  account: z.object({ id: z.string(), email: z.string() }),
+  account: z.object({ id: z.string(), email: z.string(), firstName: z.string().optional() }),
   apps: z.array(appLinkOutputSchema),
   fleets: z.array(z.object({ id: z.string(), name: z.string(), apps: z.array(appLinkOutputSchema) })),
 });
