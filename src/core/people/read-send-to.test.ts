@@ -27,8 +27,8 @@ beforeEach(() => {
   crews = memoryPersonCrews();
 });
 
-function reading() {
-  const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', name: 'charlotte', deliveries: [], discovery: DISCOVERY });
+function reading(discovery: PersonDiscovery = DISCOVERY) {
+  const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', name: 'charlotte', deliveries: [], discovery });
   return { ...ship, readSendTo: createReadSendTo({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: ship.door }) };
 }
 
@@ -37,6 +37,22 @@ describe('a person reads who they can send a message to in Bridge', () => {
     const { readSendTo } = reading();
 
     await expect(readSendTo(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { sentAs: 'charlotte', ships: ['builder-core', 'tracker'], shipIds: { 'builder-core': 'shp_01m3tbfspe96yf1rnr4ank9trk', tracker: 'shp_01m3tbfspe96yf1rnr4ank9h1a' } } });
+  });
+
+  it('passes each reachable ship summary through, omitting ships with no crew summary', async () => {
+    const discovery: PersonDiscovery = {
+      ...DISCOVERY,
+      ships: [
+        { id: 'shp_01m3tbfspe96yf1rnr4ank9trk', name: 'builder-core', type: 'builder', kind: 'agent', statement: { by: 'crew', summary: '  Builds the fleet.\nKeeps its promises.  ', capabilities: [] } },
+        { id: 'shp_01m3tbfspe96yf1rnr4ank9h1a', name: 'tracker', type: 'issue-tracker', kind: 'app', statement: null },
+        { id: 'shp_01m3tbfspe96yf1rnr4ank9com', name: 'commissioned', type: 'builder', kind: 'agent', statement: { by: 'commission' } },
+      ],
+    };
+
+    await expect(reading(discovery).readSendTo(CHARLOTTE_GRANT)).resolves.toMatchObject({
+      isOk: true,
+      value: { shipSummaries: { 'builder-core': '  Builds the fleet.\nKeeps its promises.  ' } },
+    });
   });
 
   it("says why when the fleet refuses their person ship's discover", async () => {
