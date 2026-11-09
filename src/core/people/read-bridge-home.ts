@@ -202,7 +202,7 @@ export function createReadBridgeHome(deps: {
     };
     const openedTypes = new Map(opened.map(({ deliveryId, contentType }) => [deliveryId, contentType ?? '']));
     const items = await Promise.all(waitingItems.map(async (item) => {
-      if (isTaken.has(item.deliveryId)) {
+      if (isTaken.has(item.deliveryId) || !isCounted(jobOf(openedTypes.get(item.deliveryId) ?? ''))) {
         return item;
       }
       return { ...item, ...itemReasonOf({ contentType: openedTypes.get(item.deliveryId) ?? '', payload: await openedTextOf(item.deliveryId) }) };
