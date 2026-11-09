@@ -1,7 +1,7 @@
 import { QUESTION_CONTENT_TYPE, STEP_CONTENT_TYPE } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
-import { aPersonDelivery, fakePersonShipDoor, memoryLetGoDeliveries } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, fakePersonShipDoor, memoryLetGoDeliveries, memoryOpenedDeliveries } from '../../../test/support/people-fakes.js';
 import { FIXED_CLOCK } from '../../../test/support/fixed-clock.js';
 import { createHeldDeliveries, holdingDoor } from './held-deliveries.js';
 import { createReadablePersonDoor } from './readable-person-door.js';
@@ -16,8 +16,9 @@ function setup(contentType: string, payload: string) {
   const delivery = aPersonDelivery({ contentType, payload });
   const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [delivery] });
   const held = createHeldDeliveries(FIXED_CLOCK);
-  const door = createReadablePersonDoor(holdingDoor(ship.door, { held, letGo: memoryLetGoDeliveries() }));
-  return { delivery, ship, door, held };
+  const opened = memoryOpenedDeliveries();
+  const door = createReadablePersonDoor(holdingDoor(ship.door, { held, letGo: memoryLetGoDeliveries() }), { opened, clock: FIXED_CLOCK });
+  return { delivery, ship, door, held, opened };
 }
 
 describe('a person never reads a malformed question or step', () => {
@@ -48,12 +49,12 @@ describe('a person never reads a malformed question or step', () => {
   });
 
   it('uses the same reply key after a restart between reply and handling', async () => {
-    const { door, ship, delivery } = setup(STEP_CONTENT_TYPE, '{}');
+    const { door, ship, delivery, opened } = setup(STEP_CONTENT_TYPE, '{}');
     ship.refusals.handled.push(UNAVAILABLE);
     expect(await door.pushReceive(CREW, { max: 10 })).toEqual({ isOk: false, error: UNAVAILABLE });
-    const restarted = createReadablePersonDoor(ship.door);
-    await restarted.delivery(CREW, delivery.deliveryId);
-    expect(ship.replies.map(({ idempotencyKey }) => idempotencyKey)).toEqual([`unreadable-${delivery.deliveryId}`, `unreadable-${delivery.deliveryId}`]);
+    const restarted = createReadablePersonDoor(ship.door, { opened, clock: FIXED_CLOCK });
+    await restarted.pushReceive(CREW, { max: 10 });
+    expect(ship.replies.map(({ idempotencyKey }) => idempotencyKey)).toEqual([`unreadable-${delivery.deliveryId}`]);
     expect(await ship.door.delivery(CREW, delivery.deliveryId)).toMatchObject({ isOk: false });
   });
 });
@@ -63,10 +64,16 @@ describe('a person never reads a malformed question or step', () => {
     const { delivery } = setup(contentType, '{}');
     const message = { ...delivery, sentAt: delivery.sentAt.toISOString(), isPayloadUnreadable: false, deliveryState: 'handled' as const, receivedDelivery: { deliveryId: delivery.deliveryId, state: 'handled' as const }, otherShipId: delivery.senderShipId };
     const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [], acknowledged: [delivery], record: [{ ...delivery, state: 'handled', isPayloadUnreadable: false }], exchanges: { messages: [message], summaries: [{ otherShipId: delivery.senderShipId, otherShipName: delivery.senderName, otherShipType: 'worker', otherShipKind: 'agent', unacknowledged: 0, newestMessage: message }] } });
-    const door = createReadablePersonDoor(ship.door);
+    const door = createReadablePersonDoor(ship.door, { opened: memoryOpenedDeliveries(), clock: FIXED_CLOCK });
     expect(await door.record(CREW, { cursor: null, limit: 20 })).toEqual({ isOk: true, value: { items: [], nextCursor: null } });
     expect(await door.exchange(CREW, { otherShipId: delivery.senderShipId, start: { kind: 'newest' }, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
     expect(await door.exchanges(CREW, { cursor: null, limit: 20 })).toEqual({ isOk: true, value: { items: [], nextCursor: null } });
     expect(await door.delivery(CREW, delivery.deliveryId)).toMatchObject({ isOk: false, error: { code: 'DELIVERY_NOT_FOUND' } });
   });
+});
+
+ it('receives a malformed delivery again even when the held cache already has it', () => {
+  const { held, delivery } = setup(QUESTION_CONTENT_TYPE, '{}');
+  held.hold(CREW, [delivery]);
+  expect(held.of(CREW)).toEqual([]);
 });
