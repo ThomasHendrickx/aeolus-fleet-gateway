@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryPersonCrews, type ExchangeFixture } from '../../../test/support/people-fakes.js';
-import type { ExchangeMessage } from './ports.js';
+import { ok } from '../shared/result.js';
+import type { ExchangePage, ExchangeMessage } from './ports.js';
 import { createReadExchange } from './read-exchange.js';
 
 // A person's client shows what their person ship and one other ship said to
@@ -54,6 +55,16 @@ function numbersOf(page: { isOk: boolean; value?: { items: readonly { payload: s
 }
 
 describe('a person reads their exchange with one other ship', () => {
+  it.each([
+    { items: [], olderCursor: null, newerCursor: null, prunedUpTo: '2026-10-08T12:00:00.000Z' },
+    { items: [], olderCursor: null, newerCursor: null },
+  ] satisfies ExchangePage[])('passes the core page through unchanged, including its optional pruned edge: %j', async (page) => {
+    const fleet = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [] });
+    const readExchange = createReadExchange({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: { ...fleet.door, exchange: () => Promise.resolve(ok(page)) } });
+
+    await expect(readExchange({ caller: CHARLOTTE_GRANT, otherShipId: TRACKER, start: { kind: 'before', cursor: 'dlv_01m3tbfspe96yf1rnr4ank0001' } })).resolves.toEqual({ isOk: true, value: page });
+  });
+
   it('shows the newest 20 messages, both ways, whole, newest first', async () => {
     const { readExchange } = reading(MANY);
 

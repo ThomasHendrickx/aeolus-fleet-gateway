@@ -422,7 +422,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       [{ kind: 'after' as const, cursor: 'dlv_01m3tbfspe96yf1rnr4ank0005' as const }, { otherShipId: OTHER, limit: 20, after: 'dlv_01m3tbfspe96yf1rnr4ank0005' }],
       [{ kind: 'around' as const, messageId: 'msg_01m3tbfspe96yf1rnr4ank0002' as const }, { otherShipId: OTHER, limit: 20, around: 'msg_01m3tbfspe96yf1rnr4ank0002' }],
     ])('asks for a page of an exchange starting %j with the ship id as the body', async (start, body) => {
-      answer = { status: 200, body: { items: [entry], olderCursor: 'dlv_01m3tbfspe96yf1rnr4ank0002', newerCursor: null } };
+      answer = { status: 200, body: { items: [entry], olderCursor: 'dlv_01m3tbfspe96yf1rnr4ank0002', newerCursor: null, prunedUpTo: null } };
 
       const page = await createRestFleetDoor(base).person.exchange('aeolus_ct_v1_charlotte', { otherShipId: OTHER, start, limit: 20 });
 
@@ -430,10 +430,29 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       expect(sent().map(({ url, authorization, body: sentBody }) => ({ url, authorization, body: sentBody }))).toEqual([{ url: '/api/v1/ship/exchange', authorization: 'Bearer aeolus_ct_v1_charlotte', body }]);
     });
 
+    it.each([
+      { kind: 'newest' as const },
+      { kind: 'before' as const, cursor: 'dlv_01m3tbfspe96yf1rnr4ank0001' as const },
+      { kind: 'after' as const, cursor: 'dlv_01m3tbfspe96yf1rnr4ank0001' as const },
+      { kind: 'around' as const, messageId: 'msg_01m3tbfspe96yf1rnr4ank0002' as const },
+    ])('carries the core pruned edge on every page, including an empty page past it: %j', async (start) => {
+      const prunedUpTo = '2026-10-08T12:00:00.000Z';
+      const items = start.kind === 'before' ? [] : [entry];
+      answer = { status: 200, body: { items, olderCursor: null, newerCursor: null, prunedUpTo } };
+
+      await expect(createRestFleetDoor(base).person.exchange('aeolus_ct_v1_charlotte', { otherShipId: OTHER, start, limit: 20 })).resolves.toEqual({ isOk: true, value: { items, olderCursor: null, newerCursor: null, prunedUpTo } });
+    });
+
+    it('omits the pruned edge when core reports none', async () => {
+      answer = { status: 200, body: { items: [entry], olderCursor: null, newerCursor: null, prunedUpTo: null } };
+
+      await expect(createRestFleetDoor(base).person.exchange('aeolus_ct_v1_charlotte', { otherShipId: OTHER, start: { kind: 'newest' }, limit: 20 })).resolves.toEqual({ isOk: true, value: { items: [entry], olderCursor: null, newerCursor: null } });
+    });
+
     it('carries the reader\'s own delivery of a message it received, and null on its own message', async () => {
       const received = { ...entry, senderShipId: OTHER, deliveryState: null, receivedDelivery: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003', state: 'handed' } };
       const own = { ...entry, receivedDelivery: null };
-      answer = { status: 200, body: { items: [received, own], olderCursor: null, newerCursor: null } };
+      answer = { status: 200, body: { items: [received, own], olderCursor: null, newerCursor: null, prunedUpTo: null } };
 
       const page = await createRestFleetDoor(base).person.exchange('aeolus_ct_v1_charlotte', { otherShipId: OTHER, start: { kind: 'newest' }, limit: 20 });
 
