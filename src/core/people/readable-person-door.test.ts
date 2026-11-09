@@ -1,13 +1,22 @@
 import { QUESTION_CONTENT_TYPE, STEP_CONTENT_TYPE } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
-import { aPersonDelivery, fakePersonShipDoor, memoryLetGoDeliveries, memoryOpenedDeliveries } from '../../../test/support/people-fakes.js';
+import { aPersonDelivery, fakePersonShipDoor, memoryLetGoDeliveries, memoryOpenedDeliveries, fakeCrewPersonShip, memoryPersonCrews, CHARLOTTE_GRANT, memoryBasketEntries, memoryItemOutcomes, memoryInboxChanges, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { createReadBridgeHome } from './read-bridge-home.js';
+import { createReadWaitingCount } from './read-waiting-count.js';
+import { createStaleSightings } from './stale-sightings.js';
+import { routingDefaultsOf } from './routing.js';
+import { memoryPartyStore } from '../../../test/support/party-fakes.js';
+import { memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
+import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
+import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
+import type { OpenedDelivery } from './ports.js';
 import { FIXED_CLOCK } from '../../../test/support/fixed-clock.js';
 import { createHeldDeliveries, holdingDoor } from './held-deliveries.js';
 import { createReadablePersonState } from './readable-person-state.js';
 import { createReadablePersonDoor } from './readable-person-door.js';
 
-const CREW = 'test-crew';
+const CREW = 'aeolus_ct_v1_charlotte';
 const ID = '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e';
 const QUESTION = JSON.stringify({ id: ID, title: 'Release?', context: 'Checks passed', options: [{ key: 1, label: 'Go' }], pick: { option: 1, why: 'Ready' } });
 const STEP = JSON.stringify({ id: ID, title: 'Sign in', why: 'Access is needed' });
@@ -54,13 +63,13 @@ describe('a person never reads a malformed question or step', () => {
     ship.refusals.handled.push(UNAVAILABLE);
     expect(await door.pushReceive(CREW, { max: 10 })).toEqual({ isOk: false, error: UNAVAILABLE });
     const restarted = createReadablePersonDoor(ship.door, { opened, clock: FIXED_CLOCK });
-    await restarted.pushReceive(CREW, { max: 10 });
-    expect(ship.replies.map(({ idempotencyKey }) => idempotencyKey)).toEqual([`unreadable-${delivery.deliveryId}`]);
+    await restarted.inbox(CREW);
+    expect(ship.replies.map(({ idempotencyKey }) => idempotencyKey)).toEqual([`unreadable-${delivery.deliveryId}`, `unreadable-${delivery.deliveryId}`]);
     expect(await ship.door.delivery(CREW, delivery.deliveryId)).toMatchObject({ isOk: false });
   });
 });
 
- describe('stored malformed deliveries', () => {
+describe('stored malformed deliveries', () => {
   it.each([QUESTION_CONTENT_TYPE, STEP_CONTENT_TYPE])('hides a stored %s from record, conversation, exchange list and direct reads', async (contentType) => {
     const { delivery } = setup(contentType, '{}');
     const message = { ...delivery, sentAt: delivery.sentAt.toISOString(), isPayloadUnreadable: false, deliveryState: 'handled' as const, receivedDelivery: { deliveryId: delivery.deliveryId, state: 'handled' as const }, otherShipId: delivery.senderShipId };
@@ -73,7 +82,7 @@ describe('a person never reads a malformed question or step', () => {
   });
 });
 
- it('receives a malformed delivery again even when the held cache already has it', () => {
+it('receives a malformed delivery again even when the held cache already has it', () => {
   const { held, delivery } = setup(QUESTION_CONTENT_TYPE, '{}');
   held.hold(CREW, [delivery]);
   expect(held.of(CREW)).toEqual([]);
@@ -81,7 +90,13 @@ describe('a person never reads a malformed question or step', () => {
 
 it('hides an already opened malformed question and step while keeping a valid opened question', async () => {
   const opened = memoryOpenedDeliveries();
-  const { aOpenedDelivery } = await import('../../../test/support/people-fakes.js');
+  const aOpenedDelivery = (changes: Partial<OpenedDelivery>): OpenedDelivery => ({
+    fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
+    messageId: 'msg_01m3tbfspe96yf1rnr4ank0001', senderShipId: PERSON_SHIP_ID,
+    from: 'worker', title: '{}', contentType: QUESTION_CONTENT_TYPE, askedQuestionId: null,
+    withdrawnQuestionId: null, stepId: null, withdrawnStepId: null, stepLink: null,
+    openedIn: null, sentAt: FIXED_CLOCK.now(), openedAt: FIXED_CLOCK.now(), ...changes,
+  });
   const question = aOpenedDelivery({ contentType: QUESTION_CONTENT_TYPE, askedQuestionId: null });
   const step = aOpenedDelivery({ contentType: STEP_CONTENT_TYPE, askedQuestionId: null, stepId: null, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002' });
   const valid = aOpenedDelivery({ contentType: QUESTION_CONTENT_TYPE, askedQuestionId: ID, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003' });
@@ -91,4 +106,20 @@ it('hides an already opened malformed question and step while keeping a valid op
   const readable = createReadablePersonState({ held: createHeldDeliveries(FIXED_CLOCK), opened });
   expect(await readable.opened.list(question.fleetId, question.shipId)).toEqual([valid]);
   expect(await readable.opened.find(question.fleetId, question)).toBeUndefined();
+});
+
+it.each([QUESTION_CONTENT_TYPE, STEP_CONTENT_TYPE])('leaves a malformed %s out of Home and the waiting count, including a held one', async (contentType) => {
+  const { door, held, opened: rawOpened, delivery } = setup(contentType, '{}');
+  held.hold(CREW, [delivery]);
+  const state = createReadablePersonState({ held, opened: rawOpened });
+  const crews = memoryPersonCrews();
+  const deps = {
+    door, ...state, crews, crewPersonShip: fakeCrewPersonShip(crews),
+    entries: memoryBasketEntries(), outcomes: memoryItemOutcomes(), changes: memoryInboxChanges(),
+    clock: FIXED_CLOCK, sightings: createStaleSightings(), connections: memoryConnectionStore(),
+    routes: memoryRoutes(), defaults: routingDefaultsOf([]), parties: memoryPartyStore(),
+    ownStepPartyOf: () => undefined, isEmailOffered: false, isWebPushOffered: false,
+  };
+  expect(await createReadBridgeHome(deps)(CHARLOTTE_GRANT)).toEqual({ isOk: true, value: { waiting: { count: 0, items: [] }, stayAware: [], messages: [] } });
+  expect(await createReadWaitingCount(deps)(CHARLOTTE_GRANT)).toEqual({ isOk: true, value: { count: 0 } });
 });
