@@ -152,3 +152,13 @@ it('hides the stored rejection reply from exchanges and summaries while preservi
   expect(await door.exchange(CREW, { otherShipId: original.senderShipId, start: { kind: 'newest' }, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
   expect(await door.exchanges(CREW, { cursor: null, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
 });
+
+it('hides a recorded rejection reply from record and direct item reads', async () => {
+  const reply = aPersonDelivery({ messageId: SENT_MESSAGE_ID, contentType: 'text/plain', payload: 'Could not be read' });
+  const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [], acknowledged: [reply], record: [{ ...reply, state: 'handled', isPayloadUnreadable: false }] });
+  const replies = memoryUnreadableReplies();
+  await replies.save(FLEET_ID, { shipId: PERSON_SHIP_ID, messageId: SENT_MESSAGE_ID });
+  const door = createReadablePersonDoor(ship.door, { opened: memoryOpenedDeliveries(), replies, clock: FIXED_CLOCK });
+  expect(await door.record(CREW, { cursor: null, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
+  expect(await door.delivery(CREW, reply.deliveryId)).toMatchObject({ isOk: false, error: { code: 'DELIVERY_NOT_FOUND' } });
+});

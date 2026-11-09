@@ -23,7 +23,7 @@ it('keeps sent rejection replies across restarts, scoped by fleet and person shi
   await replies.save(otherFleet, reply);
   const restarted = createPrismaUnreadableReplies(prisma);
   expect(await restarted.among(FLEET_ID, look)).toEqual(new Set([SENT_MESSAGE_ID]));
-  expect(await restarted.among(FLEET_ID, { ...look, shipId: 'shp_01m3tb1zgr5h2ffee12xnch8pp' })).toEqual(new Set());
+  expect(await restarted.among(FLEET_ID, { ...look, shipId: 'shp_01m3tb1zgr5h2ffee12xnch8qq' })).toEqual(new Set());
   expect(await restarted.among('flt_01m3tb1zgr5h2ffee12xnch8yy', look)).toEqual(new Set());
   await createPrismaFleetForgetter(prisma).forget(FLEET_ID);
   expect(await restarted.among(FLEET_ID, look)).toEqual(new Set());
