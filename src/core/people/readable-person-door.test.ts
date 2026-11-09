@@ -60,6 +60,16 @@ describe('a person never reads a malformed question or step', () => {
     expect(ship.ship.deliveries).toEqual([]);
   });
 
+  it.each(['NOT_FOUND', 'FORBIDDEN'])('handles a malformed delivery when its reply is refused with %s and delivers the next item', async (code) => {
+    const { door, ship, delivery } = setup(QUESTION_CONTENT_TYPE, '{');
+    const valid = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', payload: QUESTION });
+    ship.ship.deliveries.push(valid);
+    ship.refusals.reply.push({ code, message: 'Sender cannot be reached' });
+    expect(await door.pushReceive(CREW, { max: 10 })).toEqual({ isOk: true, value: [{ ...valid, handOverNumber: null }] });
+    expect(ship.ship.deliveries).not.toContainEqual(delivery);
+    expect(ship.calls).toContain(`handled(${delivery.deliveryId})`);
+  });
+
   it('uses the same reply key after a restart between reply and handling', async () => {
     const { door, ship, delivery, opened } = setup(STEP_CONTENT_TYPE, '{}');
     ship.refusals.handled.push(UNAVAILABLE);
