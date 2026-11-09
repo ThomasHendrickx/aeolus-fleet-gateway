@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { aPersonDelivery, fakePersonShipDoor, memoryLetGoDeliveries, memoryOpenedDeliveries } from '../../../test/support/people-fakes.js';
 import { FIXED_CLOCK } from '../../../test/support/fixed-clock.js';
 import { createHeldDeliveries, holdingDoor } from './held-deliveries.js';
+import { createReadablePersonState } from './readable-person-state.js';
 import { createReadablePersonDoor } from './readable-person-door.js';
 
 const CREW = 'test-crew';
@@ -15,8 +16,8 @@ const UNAVAILABLE = { code: 'UNAVAILABLE', message: 'Try again' };
 function setup(contentType: string, payload: string) {
   const delivery = aPersonDelivery({ contentType, payload });
   const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [delivery] });
-  const held = createHeldDeliveries(FIXED_CLOCK);
   const opened = memoryOpenedDeliveries();
+  const { held } = createReadablePersonState({ held: createHeldDeliveries(FIXED_CLOCK), opened });
   const door = createReadablePersonDoor(holdingDoor(ship.door, { held, letGo: memoryLetGoDeliveries() }), { opened, clock: FIXED_CLOCK });
   return { delivery, ship, door, held, opened };
 }
@@ -27,7 +28,7 @@ describe('a person never reads a malformed question or step', () => {
     expect(await door.pushReceive(CREW, { max: 10 })).toEqual({ isOk: true, value: [] });
     expect(ship.replies).toEqual([{ to: delivery.senderShipId, inReplyTo: delivery.messageId, contentType: 'text/plain', payload: expect.stringContaining('could not be read'), idempotencyKey: `unreadable-${delivery.deliveryId}` }]);
     expect(ship.replies[0]?.payload).toContain('title');
-    expect(ship.calls.slice(1)).toEqual([`reply(${delivery.messageId})`, `ack(${delivery.deliveryId})`, `handled(${delivery.deliveryId})`]);
+    expect(ship.calls.filter((call) => call !== 'whoami').slice(1)).toEqual([`reply(${delivery.messageId})`, `ack(${delivery.deliveryId})`, `handled(${delivery.deliveryId})`]);
     expect(ship.ship.deliveries).toEqual([]);
   });
 
@@ -76,4 +77,18 @@ describe('a person never reads a malformed question or step', () => {
   const { held, delivery } = setup(QUESTION_CONTENT_TYPE, '{}');
   held.hold(CREW, [delivery]);
   expect(held.of(CREW)).toEqual([]);
+});
+
+it('hides an already opened malformed question and step while keeping a valid opened question', async () => {
+  const opened = memoryOpenedDeliveries();
+  const { aOpenedDelivery } = await import('../../../test/support/people-fakes.js');
+  const question = aOpenedDelivery({ contentType: QUESTION_CONTENT_TYPE, askedQuestionId: null });
+  const step = aOpenedDelivery({ contentType: STEP_CONTENT_TYPE, askedQuestionId: null, stepId: null, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002' });
+  const valid = aOpenedDelivery({ contentType: QUESTION_CONTENT_TYPE, askedQuestionId: ID, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003' });
+  await opened.save(question);
+  await opened.save(step);
+  await opened.save(valid);
+  const readable = createReadablePersonState({ held: createHeldDeliveries(FIXED_CLOCK), opened });
+  expect(await readable.opened.list(question.fleetId, question.shipId)).toEqual([valid]);
+  expect(await readable.opened.find(question.fleetId, question)).toBeUndefined();
 });
