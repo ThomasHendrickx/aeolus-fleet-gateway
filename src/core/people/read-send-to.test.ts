@@ -36,7 +36,7 @@ describe('a person reads who they can send a message to in Bridge', () => {
   it('answers the ships the fleet says their person ship may send to, by name with its id, and the name it sends as', async () => {
     const { readSendTo } = reading();
 
-    await expect(readSendTo(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { sentAs: 'charlotte', ships: ['builder-core', 'tracker'], shipIds: { 'builder-core': 'shp_01m3tbfspe96yf1rnr4ank9trk', tracker: 'shp_01m3tbfspe96yf1rnr4ank9h1a' } } });
+    await expect(readSendTo(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { sentAs: 'charlotte', shipSummaries: {}, ships: ['builder-core', 'tracker'], shipIds: { 'builder-core': 'shp_01m3tbfspe96yf1rnr4ank9trk', tracker: 'shp_01m3tbfspe96yf1rnr4ank9h1a' } } });
   });
 
   it('passes each reachable ship summary through, omitting ships with no crew summary', async () => {
@@ -49,10 +49,7 @@ describe('a person reads who they can send a message to in Bridge', () => {
       ],
     };
 
-    await expect(reading(discovery).readSendTo(CHARLOTTE_GRANT)).resolves.toMatchObject({
-      isOk: true,
-      value: { shipSummaries: { 'builder-core': '  Builds the fleet.\nKeeps its promises.  ' } },
-    });
+    await expect(reading(discovery).readSendTo(CHARLOTTE_GRANT)).resolves.toHaveProperty('value.shipSummaries', { 'builder-core': '  Builds the fleet.\nKeeps its promises.  ' });
   });
 
   it("says why when the fleet refuses their person ship's discover", async () => {
