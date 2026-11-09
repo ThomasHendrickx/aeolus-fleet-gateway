@@ -57,3 +57,16 @@ describe('a person never reads a malformed question or step', () => {
     expect(await ship.door.delivery(CREW, delivery.deliveryId)).toMatchObject({ isOk: false });
   });
 });
+
+ describe('stored malformed deliveries', () => {
+  it.each([QUESTION_CONTENT_TYPE, STEP_CONTENT_TYPE])('hides a stored %s from record, conversation, exchange list and direct reads', async (contentType) => {
+    const { delivery } = setup(contentType, '{}');
+    const message = { ...delivery, sentAt: delivery.sentAt.toISOString(), isPayloadUnreadable: false, deliveryState: 'handled' as const, receivedDelivery: { deliveryId: delivery.deliveryId, state: 'handled' as const }, otherShipId: delivery.senderShipId };
+    const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [], acknowledged: [delivery], record: [{ ...delivery, state: 'handled', isPayloadUnreadable: false }], exchanges: { messages: [message], summaries: [{ otherShipId: delivery.senderShipId, otherShipName: delivery.senderName, otherShipType: 'worker', otherShipKind: 'agent', unacknowledged: 0, newestMessage: message }] } });
+    const door = createReadablePersonDoor(ship.door);
+    expect(await door.record(CREW, { cursor: null, limit: 20 })).toEqual({ isOk: true, value: { items: [], nextCursor: null } });
+    expect(await door.exchange(CREW, { otherShipId: delivery.senderShipId, start: { kind: 'newest' }, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
+    expect(await door.exchanges(CREW, { cursor: null, limit: 20 })).toEqual({ isOk: true, value: { items: [], nextCursor: null } });
+    expect(await door.delivery(CREW, delivery.deliveryId)).toMatchObject({ isOk: false, error: { code: 'DELIVERY_NOT_FOUND' } });
+  });
+});
