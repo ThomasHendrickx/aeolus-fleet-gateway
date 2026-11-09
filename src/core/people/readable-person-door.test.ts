@@ -162,3 +162,10 @@ it('hides a recorded rejection reply from record and direct item reads', async (
   expect(await door.record(CREW, { cursor: null, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
   expect(await door.delivery(CREW, reply.deliveryId)).toMatchObject({ isOk: false, error: { code: 'DELIVERY_NOT_FOUND' } });
 });
+
+it('receives past a page of malformed deliveries so a valid question still reaches the person', async () => {
+  const { ship, door } = setup(QUESTION_CONTENT_TYPE, '{}');
+  const valid = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', payload: QUESTION });
+  ship.ship.deliveries.push(valid);
+  expect(await door.pushReceive(CREW, { max: 1 })).toEqual({ isOk: true, value: [{ ...valid, handOverNumber: null }] });
+});
