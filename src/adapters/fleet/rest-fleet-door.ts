@@ -9,6 +9,9 @@ import { setTimeout as wait } from 'node:timers/promises';
 
 import {
   ACCOUNT_TOKEN_HEADER,
+  ackUpToOutputSchema,
+  exchangeOutputSchema,
+  exchangesOutputSchema,
   ON_BEHALF_OF_HEADER,
   shipOutputSchema,
   setVerifiedFactsOutputSchema,
@@ -51,7 +54,6 @@ import type { MeetingRead, MeetingShip, OwnMicChange, PersonMeetingDoor } from '
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
-import { ackUpToOutputSchema, exchangeOutputSchema, exchangesOutputSchema } from './exchange-schemas.js';
 import { jobOf } from '../../core/people/item-job.js';
 import type { AccountDoor, PersonDelivery, PersonShipDoor } from '../../core/people/ports.js';
 import type { Owners } from '../../core/requests/ports.js';
@@ -396,7 +398,7 @@ export function createRestFleetDoor(
       },
       exchange: (crewToken, { otherShipId, start, limit }) => {
         const from = start.kind === 'newest' ? {} : start.kind === 'around' ? { around: start.messageId } : { [start.kind]: start.cursor };
-        return call({ path: '/ship/exchange', method: 'POST', crewToken, body: { otherShipId, limit, ...from }, answers: exchangeOutputSchema });
+        return call({ path: '/ship/exchange', method: 'POST', crewToken, body: { otherShipId, limit, ...from }, answers: exchangeOutputSchema.transform(({ prunedUpTo, ...page }) => ({ ...page, ...(prunedUpTo === null ? {} : { prunedUpTo }) })) });
       },
       exchanges: (crewToken, { cursor, limit }) => call({ path: '/ship/exchanges', method: 'POST', crewToken, body: { ...(cursor === null ? {} : { cursor }), limit }, answers: exchangesOutputSchema }),
       ackUpTo: (crewToken, seen) => call({ path: '/ship/ackUpTo', method: 'POST', crewToken, body: seen, answers: ackUpToOutputSchema }),

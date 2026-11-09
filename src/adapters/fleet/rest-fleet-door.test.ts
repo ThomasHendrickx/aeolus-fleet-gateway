@@ -422,7 +422,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       [{ kind: 'after' as const, cursor: 'dlv_01m3tbfspe96yf1rnr4ank0005' as const }, { otherShipId: OTHER, limit: 20, after: 'dlv_01m3tbfspe96yf1rnr4ank0005' }],
       [{ kind: 'around' as const, messageId: 'msg_01m3tbfspe96yf1rnr4ank0002' as const }, { otherShipId: OTHER, limit: 20, around: 'msg_01m3tbfspe96yf1rnr4ank0002' }],
     ])('asks for a page of an exchange starting %j with the ship id as the body', async (start, body) => {
-      answer = { status: 200, body: { items: [entry], olderCursor: 'dlv_01m3tbfspe96yf1rnr4ank0002', newerCursor: null } };
+      answer = { status: 200, body: { items: [entry], olderCursor: 'dlv_01m3tbfspe96yf1rnr4ank0002', newerCursor: null, prunedUpTo: null } };
 
       const page = await createRestFleetDoor(base).person.exchange('aeolus_ct_v1_charlotte', { otherShipId: OTHER, start, limit: 20 });
 
@@ -452,7 +452,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     it('carries the reader\'s own delivery of a message it received, and null on its own message', async () => {
       const received = { ...entry, senderShipId: OTHER, deliveryState: null, receivedDelivery: { deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003', state: 'handed' } };
       const own = { ...entry, receivedDelivery: null };
-      answer = { status: 200, body: { items: [received, own], olderCursor: null, newerCursor: null } };
+      answer = { status: 200, body: { items: [received, own], olderCursor: null, newerCursor: null, prunedUpTo: null } };
 
       const page = await createRestFleetDoor(base).person.exchange('aeolus_ct_v1_charlotte', { otherShipId: OTHER, start: { kind: 'newest' }, limit: 20 });
 

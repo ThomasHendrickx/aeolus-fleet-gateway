@@ -157,6 +157,8 @@ export type ExchangeStart =
 
 /** A page of an exchange, newest first, with the cursors to the older and newer messages; null while none lie that way. */
 export interface ExchangePage {
+  /** Core's newest send time removed by pruning, absent when none was removed. */
+  readonly prunedUpTo?: string;
   readonly items: readonly ExchangeMessage[];
   readonly olderCursor: DeliveryId | null;
   readonly newerCursor: DeliveryId | null;
