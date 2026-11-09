@@ -14,6 +14,7 @@ const NO_ANSWER = 'UNAVAILABLE';
 export interface SendTo {
   readonly sentAs: string;
   readonly ships: readonly string[];
+  readonly shipSummaries: Readonly<Record<string, string>>;
   readonly shipIds: Readonly<Record<string, ShipId>>;
 }
 
@@ -36,7 +37,7 @@ export function createReadSendTo(deps: { crewPersonShip: CrewPersonShip; crews: 
           return withOwnRefusal(Promise.resolve(who));
         }
         const found = await deps.door.discover(crew.crewToken);
-        const sendTo: Result<SendTo, FleetRefusal> = found.isOk ? ok({ sentAs: who.value.name, ships: found.value.ships.map(({ name }) => name).toSorted((one, other) => one.localeCompare(other)), shipIds: Object.fromEntries(found.value.ships.map(({ id, name }) => [name, id])) }) : found;
+        const sendTo: Result<SendTo, FleetRefusal> = found.isOk ? ok({ sentAs: who.value.name, ships: found.value.ships.map(({ name }) => name).toSorted((one, other) => one.localeCompare(other)), shipIds: Object.fromEntries(found.value.ships.map(({ id, name }) => [name, id])), shipSummaries: Object.fromEntries(found.value.ships.flatMap(({ name, statement }) => statement?.by === 'crew' ? [[name, statement.summary]] : [])) }) : found;
         return withOwnRefusal(Promise.resolve(sendTo));
       },
     });
