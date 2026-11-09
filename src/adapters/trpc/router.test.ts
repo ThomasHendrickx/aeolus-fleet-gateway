@@ -1619,6 +1619,15 @@ describe("the web app's header asks which apps and fleets the account may open (
     return gatewayRouter.createCaller({ ...aContext(undefined).context, ...sent, ...apps }).account.apps();
   }
 
+  it.each([
+    ['with a first name', { ...CHARLOTTE, firstName: 'Élodie' }],
+    ['without a first name', CHARLOTTE],
+  ])('passes the account app first name through %s', async (_name, account) => {
+    const signIn = fakeSharedSignIn({ apps: { account, apps: [], fleets: [] } });
+
+    await expect(asked({ signIn: CHARLOTTE_SIGN_IN }, { accountApps: (shared) => signIn.apps(shared) })).resolves.toEqual({ account, apps: [], fleets: [] });
+  });
+
   it('answers the account, its apps, and each fleet with its name and apps', async () => {
     await expect(asked({ signIn: CHARLOTTE_SIGN_IN })).resolves.toEqual({
       account: { id: 'acc-charlotte', email: 'charlotte@example.com' },

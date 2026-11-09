@@ -25,7 +25,7 @@ const errorAnswerSchema = z.object({ error: z.string() });
 const exchangeAnswerSchema = z.object({ access_token: z.string() });
 const appSchema = z.object({ app: z.string(), url: z.string() });
 const appsAnswerSchema = z.object({
-  account: z.object({ id: z.string(), email: z.string() }),
+  account: z.object({ id: z.string(), email: z.string(), firstName: z.string().optional() }),
   apps: z.array(appSchema),
   fleets: z.array(z.object({ id: idSchema('fleet'), name: z.string(), apps: z.array(appSchema) })),
 });
