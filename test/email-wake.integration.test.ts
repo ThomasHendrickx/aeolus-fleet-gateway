@@ -342,7 +342,7 @@ describe("a person's quiet hours and quiet ships (preferences design)", () => {
       body: JSON.stringify({
         selector: { kind: 'ship', name: 'charlotte' },
         contentType: 'application/vnd.aeolus.question+json',
-        payload: JSON.stringify({ id: crypto.randomUUID(), title: 'Go for release 1.4?', context: '', options: [{ key: 1, label: 'Yes' }] }),
+        payload: JSON.stringify({ id: crypto.randomUUID(), title: 'Go for release 1.4?', context: '', options: [{ key: 1, label: 'Yes' }], pick: { option: 1, why: 'Ready' } }),
         idempotencyKey: crypto.randomUUID(),
       }),
     });

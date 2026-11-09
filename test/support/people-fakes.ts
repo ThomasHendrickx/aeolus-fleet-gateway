@@ -265,7 +265,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
       }
       return crewed(crewToken, () => {
         replies.push(reply);
-        return undefined;
+        return { messageId: SENT_MESSAGE_ID };
       });
     },
     handled: (crewToken, deliveryId) => {
