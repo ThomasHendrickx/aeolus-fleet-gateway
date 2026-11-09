@@ -177,3 +177,44 @@ it('returns a malformed question with many schema errors within the fleet payloa
   expect(Buffer.byteLength(ship.replies[0]?.payload ?? '', 'utf8')).toBeLessThanOrEqual(262_144);
   expect(ship.ship.deliveries).toEqual([]);
 });
+
+it('returns an old acknowledged question without option keys once after deployment, despite two unmatched withdrawals', async () => {
+  const old = aPersonDelivery({
+    payload: JSON.stringify({ id: ID, title: 'Which goes first?', context: 'Choose the next task', options: [{ label: 'Release' }], pick: { option: 1, why: 'Ready' } }),
+    headline: null,
+    askedQuestionId: null,
+    sentAt: new Date('2026-10-18T08:00:00.000Z'),
+  });
+  const withdrawals = [
+    aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', contentType: 'application/vnd.aeolus.question-withdrawal+json', payload: JSON.stringify({ questionId: ID }), askedQuestionId: null, withdrawnQuestionId: ID }),
+    aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0003', messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', contentType: 'application/vnd.aeolus.question-withdrawal+json', payload: JSON.stringify({ questionId: ID }), askedQuestionId: null, withdrawnQuestionId: ID }),
+  ];
+  const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: withdrawals, acknowledged: [old], record: [{ ...old, state: 'acknowledged', isPayloadUnreadable: false }] });
+  const opened = memoryOpenedDeliveries();
+  await opened.save({
+    fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, deliveryId: old.deliveryId,
+    messageId: old.messageId, senderShipId: old.senderShipId, from: old.senderName,
+    title: old.payload, contentType: QUESTION_CONTENT_TYPE, askedQuestionId: null,
+    withdrawnQuestionId: null, stepId: null, withdrawnStepId: null, stepLink: null,
+    openedIn: 'bridge', sentAt: old.sentAt, openedAt: old.sentAt,
+  });
+  // These stores predate this gateway instance: deploying starts recovery with no rejection sent yet.
+  const state = createReadablePersonState({ held: createHeldDeliveries(FIXED_CLOCK), opened });
+  const door = createReadablePersonDoor(holdingDoor(ship.door, { held: state.held, letGo: memoryLetGoDeliveries() }), { opened, replies: memoryUnreadableReplies(), clock: FIXED_CLOCK });
+  const crews = memoryPersonCrews();
+  const deps = {
+    door, ...state, crews, crewPersonShip: fakeCrewPersonShip(crews),
+    entries: memoryBasketEntries(), outcomes: memoryItemOutcomes(), changes: memoryInboxChanges(),
+    clock: FIXED_CLOCK, sightings: createStaleSightings(), connections: memoryConnectionStore(),
+    routes: memoryRoutes(), defaults: routingDefaultsOf([]), parties: memoryPartyStore(),
+    ownStepPartyOf: () => undefined, isEmailOffered: false, isWebPushOffered: false,
+  };
+  const readHome = createReadBridgeHome(deps);
+  expect(await readHome(CHARLOTTE_GRANT)).toEqual({ isOk: true, value: { waiting: { count: 0, items: [] }, stayAware: [], messages: [] } });
+  expect(await createReadWaitingCount(deps)(CHARLOTTE_GRANT)).toEqual({ isOk: true, value: { count: 0 } });
+  await readHome(CHARLOTTE_GRANT);
+  expect(ship.replies).toHaveLength(1);
+  expect(ship.replies[0]?.inReplyTo).toBe(old.messageId);
+  expect(ship.replies[0]?.payload).toContain('options.0.key');
+  expect(await ship.door.delivery(CREW, old.deliveryId)).toMatchObject({ isOk: false });
+});
