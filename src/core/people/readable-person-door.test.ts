@@ -39,7 +39,7 @@ describe('a person never reads a malformed question or step', () => {
     expect(ship.replies).toHaveLength(1);
     expect(ship.replies[0]?.payload).toContain('could not be read');
     expect(ship.replies[0]?.payload).toContain('title');
-    expect(ship.calls.filter((call) => call !== 'whoami').slice(1)).toEqual([`reply(${delivery.messageId})`, `ack(${delivery.deliveryId})`, `handled(${delivery.deliveryId})`]);
+    expect(ship.calls.filter((call) => call !== 'whoami' && !call.startsWith('pushReceive'))).toEqual([`reply(${delivery.messageId})`, `ack(${delivery.deliveryId})`, `handled(${delivery.deliveryId})`]);
     expect(ship.ship.deliveries).toEqual([]);
   });
 
@@ -168,4 +168,12 @@ it('receives past a page of malformed deliveries so a valid question still reach
   const valid = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', payload: QUESTION });
   ship.ship.deliveries.push(valid);
   expect(await door.pushReceive(CREW, { max: 1 })).toEqual({ isOk: true, value: [{ ...valid, handOverNumber: null }] });
+});
+
+it('returns a malformed question with many schema errors within the fleet payload limit', async () => {
+  const { door, ship } = setup(QUESTION_CONTENT_TYPE, JSON.stringify({ options: Array.from({ length: 5_000 }, () => ({})) }));
+  await door.pushReceive(CREW, { max: 10 });
+  expect(ship.replies).toHaveLength(1);
+  expect(Buffer.byteLength(ship.replies[0]?.payload ?? '', 'utf8')).toBeLessThanOrEqual(262_144);
+  expect(ship.ship.deliveries).toEqual([]);
 });
