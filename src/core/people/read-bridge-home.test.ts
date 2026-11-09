@@ -703,6 +703,24 @@ describe('Bridge home: plain messages to the person (#242)', () => {
     });
   });
 
+  it('reads an opened plain message only once, with no extra read for a reason', async () => {
+    await opened.save(anOpened({ deliveryId: SEEN.deliveryId, contentType: 'text/plain', askedQuestionId: null }));
+    const reading = readHome([], { acknowledged: [SEEN] });
+
+    await reading.readHome(CHARLOTTE_GRANT);
+
+    expect(reading.calls.filter((call) => call.startsWith('delivery('))).toEqual([`delivery(${SEEN.deliveryId})`]);
+  });
+
+  it.each(['application/vnd.aeolus.notice+json', 'application/json', null])('reads no reason payload for an opened item of content type %s', async (contentType) => {
+    await opened.save(anOpened({ contentType, askedQuestionId: null }));
+    const reading = readHome([]);
+
+    await reading.readHome(CHARLOTTE_GRANT);
+
+    expect(reading.calls.filter((call) => call.startsWith('delivery('))).toEqual([]);
+  });
+
   it('lists a message the person opened as seen, its text read again from the fleet', async () => {
     await opened.save(anOpened({ deliveryId: SEEN.deliveryId, from: 'design-bridge-201', title: 'PR #203 is in', contentType: 'text/plain', askedQuestionId: null, openedIn: 'bridge', sentAt: SEEN.sentAt }));
     const reading = readHome([], { acknowledged: [SEEN] });
