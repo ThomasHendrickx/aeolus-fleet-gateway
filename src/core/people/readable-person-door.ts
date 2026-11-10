@@ -8,7 +8,7 @@ import type { OpenedDeliveries, PersonDelivery, PersonShipDoor } from './ports.j
 import type { UnreadableReplies } from './unreadable-replies.js';
 import { unreadableItem } from './unreadable-item.js';
 
-export function createReadablePersonDoor(door: PersonShipDoor, deps: { opened: OpenedDeliveries; replies: UnreadableReplies; clock: Clock }): PersonShipDoor {
+export function createReadablePersonDoor(door: PersonShipDoor, deps: { opened: OpenedDeliveries; replies: UnreadableReplies; clock: Clock; refusedReply?: (refusal: { deliveryId: DeliveryId; code: string; message: string }) => void }): PersonShipDoor {
   const missing = (deliveryId: DeliveryId) => err({ code: 'DELIVERY_NOT_FOUND', message: `Delivery ${deliveryId} cannot be read` });
   const returnToSender = async (crewToken: string, { delivery, reason }: { delivery: PersonDelivery; reason: string }) => {
     const sent = await door.reply(crewToken, {
@@ -18,14 +18,17 @@ export function createReadablePersonDoor(door: PersonShipDoor, deps: { opened: O
       payload: `Your question or step could not be read. Please correct it and send it again.\n\n${reason}`,
       idempotencyKey: `unreadable-${delivery.deliveryId}`,
     });
-    if (!sent.isOk) {
-      return sent;
+    const shouldRetry = !sent.isOk && sent.error.code !== 'NOT_FOUND' && sent.error.code !== 'FORBIDDEN';
+    if (!sent.isOk && !shouldRetry) {
+      deps.refusedReply?.({ deliveryId: delivery.deliveryId, ...sent.error });
     }
     const who = await door.whoami(crewToken);
     if (!who.isOk) {
       return who;
     }
-    await deps.replies.save(who.value.fleetId, { shipId: who.value.shipId, messageId: sent.value.messageId });
+    if (sent.isOk) {
+      await deps.replies.save(who.value.fleetId, { shipId: who.value.shipId, messageId: sent.value.messageId });
+    }
     await deps.opened.save({
       fleetId: who.value.fleetId, shipId: who.value.shipId,
       deliveryId: delivery.deliveryId, messageId: delivery.messageId,
@@ -39,11 +42,14 @@ export function createReadablePersonDoor(door: PersonShipDoor, deps: { opened: O
     if (!acknowledged.isOk) {
       return acknowledged;
     }
+    if (shouldRetry) {
+      return ok(true);
+    }
     const handled = await door.handled(crewToken, delivery.deliveryId);
     if (handled.isOk) {
       await deps.opened.remove(who.value.fleetId, { shipId: who.value.shipId, deliveryId: delivery.deliveryId });
     }
-    return handled;
+    return handled.isOk ? ok(true) : handled;
   };
   const hiddenReplies = async (crewToken: string, messageIds: readonly MessageId[]) => {
     const who = await door.whoami(crewToken);

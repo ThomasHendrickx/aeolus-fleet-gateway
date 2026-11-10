@@ -27,8 +27,9 @@ function setup(contentType: string, payload: string) {
   const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [delivery] });
   const opened = memoryOpenedDeliveries();
   const { held } = createReadablePersonState({ held: createHeldDeliveries(FIXED_CLOCK), opened });
-  const door = createReadablePersonDoor(holdingDoor(ship.door, { held, letGo: memoryLetGoDeliveries() }), { opened, replies: memoryUnreadableReplies(), clock: FIXED_CLOCK });
-  return { delivery, ship, door, held, opened };
+  const refusals: { deliveryId: string; code: string; message: string }[] = [];
+  const door = createReadablePersonDoor(holdingDoor(ship.door, { held, letGo: memoryLetGoDeliveries() }), { opened, replies: memoryUnreadableReplies(), clock: FIXED_CLOCK, refusedReply: (refusal) => { refusals.push(refusal); } });
+  return { delivery, ship, door, held, opened, refusals };
 }
 
 describe('a person never reads a malformed question or step', () => {
@@ -52,22 +53,35 @@ describe('a person never reads a malformed question or step', () => {
   it('leaves an invalid JSON delivery retryable when the fleet refuses its reply', async () => {
     const { door, ship, delivery } = setup(QUESTION_CONTENT_TYPE, '{');
     ship.refusals.reply.push(UNAVAILABLE);
-    expect(await door.pushReceive(CREW, { max: 10 })).toEqual({ isOk: false, error: UNAVAILABLE });
-    expect(ship.ship.deliveries).toEqual([delivery]);
-    expect(ship.calls).not.toContain(`ack(${delivery.deliveryId})`);
-    await door.pushReceive(CREW, { max: 10 });
+    const valid = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', payload: QUESTION });
+    ship.ship.deliveries.push(valid);
+    expect(await door.pushReceive(CREW, { max: 1 })).toEqual({ isOk: true, value: [{ ...valid, handOverNumber: null }] });
+    expect(ship.calls).toContain(`ack(${delivery.deliveryId})`);
+    await door.inbox(CREW);
     expect(ship.replies[0]?.payload).toContain('Invalid JSON');
-    expect(ship.ship.deliveries).toEqual([]);
+    expect(ship.ship.deliveries).not.toContainEqual(delivery);
   });
 
   it.each(['NOT_FOUND', 'FORBIDDEN'])('handles a malformed delivery when its reply is refused with %s and delivers the next item', async (code) => {
-    const { door, ship, delivery } = setup(QUESTION_CONTENT_TYPE, '{');
+    const { door, ship, delivery, refusals } = setup(QUESTION_CONTENT_TYPE, '{');
     const valid = aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', payload: QUESTION });
     ship.ship.deliveries.push(valid);
     ship.refusals.reply.push({ code, message: 'Sender cannot be reached' });
     expect(await door.pushReceive(CREW, { max: 10 })).toEqual({ isOk: true, value: [{ ...valid, handOverNumber: null }] });
     expect(ship.ship.deliveries).not.toContainEqual(delivery);
     expect(ship.calls).toContain(`handled(${delivery.deliveryId})`);
+    expect(refusals).toEqual([{ deliveryId: delivery.deliveryId, code, message: 'Sender cannot be reached' }]);
+  });
+
+  it('recovers an acknowledged malformed delivery when its sender has retired', async () => {
+    const { door, ship, delivery, opened } = setup(STEP_CONTENT_TYPE, '{}');
+    ship.refusals.handled.push(UNAVAILABLE);
+    await door.pushReceive(CREW, { max: 10 });
+    ship.refusals.reply.push({ code: 'NOT_FOUND', message: 'Sender retired' });
+    const restarted = createReadablePersonDoor(ship.door, { opened, replies: memoryUnreadableReplies(), clock: FIXED_CLOCK });
+    expect(await restarted.inbox(CREW)).toMatchObject({ isOk: true });
+    expect(await opened.list(FLEET_ID, PERSON_SHIP_ID)).toEqual([]);
+    expect(await ship.door.delivery(CREW, delivery.deliveryId)).toMatchObject({ isOk: false });
   });
 
   it('uses the same reply key after a restart between reply and handling', async () => {

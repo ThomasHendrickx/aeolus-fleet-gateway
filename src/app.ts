@@ -473,7 +473,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const { held: heldDeliveries, opened: openedDeliveries } = createReadablePersonState({ held: createHeldDeliveries(clock), opened: storedOpenedDeliveries });
   // When the gateway first saw each stale question or step, so it leaves Bridge 5 s later (#240).
   const staleSightings = createStaleSightings();
-  const personDoor = createReadablePersonDoor(holdingDoor(door.person, { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) }), { opened: storedOpenedDeliveries, replies: createPrismaUnreadableReplies(prisma), clock });
+  const personDoor = createReadablePersonDoor(holdingDoor(door.person, { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) }), { opened: storedOpenedDeliveries, replies: createPrismaUnreadableReplies(prisma), clock, refusedReply: (refusal) => { server.log.warn(refusal, 'the fleet refused the reply to an unreadable delivery'); } });
   const readConnection = createReadConnection({ door, store: connections });
   // A fleet's connection as the gateway holds it, asking the fleet nothing: what a fleet that is off reads.
   const heldConnection: ReadConnection = async (fleetId) => {
