@@ -366,8 +366,8 @@ export function createRestFleetDoor(
     // A person ship's crew calls, as the gateway makes them for the person (decision 0057).
     person: {
       whoami: async (crewToken) => {
-        const who = await call({ path: '/ship/whoami', method: 'GET', crewToken, answers: z.object({ name: z.string() }) });
-        return who.isOk ? ok({ name: who.value.name }) : who;
+        const who = await call({ path: '/ship/whoami', method: 'GET', crewToken, answers: z.object({ name: z.string(), fleetId: idSchema('fleet'), shipId: idSchema('ship') }) });
+        return who.isOk ? ok(who.value) : who;
       },
       inbox: async (crewToken, wait) => {
         const counted = await call({
@@ -408,7 +408,7 @@ export function createRestFleetDoor(
         return reread.isOk ? ok(personDeliveryOf(reread.value)) : reread;
       },
       reply: (crewToken, { to, inReplyTo, contentType, payload, idempotencyKey }) =>
-        done(crewToken, { path: '/ship/send', body: { selector: { kind: 'ship', shipId: to }, inReplyTo, contentType, payload, idempotencyKey } }),
+        call({ crewToken, path: '/ship/send', method: 'POST', body: { selector: { kind: 'ship', shipId: to }, inReplyTo, contentType, payload, idempotencyKey }, answers: sendOutputSchema }),
       handled: (crewToken, deliveryId) => done(crewToken, { path: '/ship/handled', body: { deliveryId } }),
       handed: async (crewToken, handOver) => {
         const answered = await call({ path: '/ship/handed', method: 'POST', crewToken, body: handOver, answers: handedOutputSchema });

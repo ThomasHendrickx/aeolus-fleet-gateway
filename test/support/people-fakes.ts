@@ -265,7 +265,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
       }
       return crewed(crewToken, () => {
         replies.push(reply);
-        return undefined;
+        return { messageId: SENT_MESSAGE_ID };
       });
     },
     handled: (crewToken, deliveryId) => {
@@ -292,7 +292,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
     whoami: (crewToken) => {
       calls.push('whoami');
       const refused = refusals.whoami.shift();
-      return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => ({ name: ship.name ?? 'charlotte' }));
+      return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => ({ name: ship.name ?? 'charlotte', fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }));
     },
     discover: (crewToken) => {
       calls.push('discover');
@@ -606,5 +606,18 @@ export function memoryLetGoDeliveries(): LetGoDeliveries & { told: DeliveryId[] 
       told.push(deliveryId);
       return Promise.resolve();
     },
+  };
+}
+
+/** The rejection replies the gateway sent, keyed by fleet, person ship and message. */
+export function memoryUnreadableReplies() {
+  const held = new Set<string>();
+  return {
+    save: (fleetId: FleetId, reply: { shipId: ShipId; messageId: MessageId }) => {
+      held.add(`${fleetId}/${reply.shipId}/${reply.messageId}`);
+      return Promise.resolve();
+    },
+    among: (fleetId: FleetId, look: { shipId: ShipId; messageIds: readonly MessageId[] }) =>
+      Promise.resolve(new Set(look.messageIds.filter((messageId) => held.has(`${fleetId}/${look.shipId}/${messageId}`)))),
   };
 }

@@ -220,13 +220,13 @@ export interface PersonShipDoor {
   /** Reads a delivery the ship acknowledged again, whole, while it is not handled, recording nothing (decision 0040). */
   delivery(crewToken: string, deliveryId: DeliveryId): Promise<Result<PersonDelivery, FleetRefusal>>;
   /** Sends the person's answer to the sender, in reply to its message, once under its key. */
-  reply(crewToken: string, reply: { to: ShipId; inReplyTo: MessageId; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<undefined, FleetRefusal>>;
+  reply(crewToken: string, reply: { to: ShipId; inReplyTo: MessageId; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<{ messageId: MessageId }, FleetRefusal>>;
   /** Reports the person dealt with the delivery. */
   handled(crewToken: string, deliveryId: DeliveryId): Promise<Result<undefined, FleetRefusal>>;
   /** Hands the delivery over to the person with its number, naming the channel the wake went through (interop 5.1). */
   handed(crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: HandOverChannel }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>>;
   /** The ship's own name, as the fleet knows it. */
-  whoami(crewToken: string): Promise<Result<{ name: string }, FleetRefusal>>;
+  whoami(crewToken: string): Promise<Result<{ name: string; fleetId: FleetId; shipId: ShipId }, FleetRefusal>>;
   /** The ships and types the ship may send to now: the fleet checks its scopes and the network rules. */
   discover(crewToken: string): Promise<Result<PersonDiscovery, FleetRefusal>>;
   /** Sends the person's own message, once under its key. */

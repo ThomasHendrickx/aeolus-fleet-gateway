@@ -783,3 +783,13 @@ model ArgoWakeSent {
   @@id([fleetId, shipId, channel])
   @@map("argo_wakes_sent")
 }
+
+/// Rejection replies sent by the gateway, hidden from its person ship's reads.
+model UnreadableReply {
+  fleetId   String @map("fleet_id")
+  shipId    String @map("ship_id")
+  messageId String @map("message_id")
+
+  @@id([fleetId, shipId, messageId])
+  @@map("unreadable_replies")
+}

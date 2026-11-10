@@ -224,6 +224,9 @@ import { createReadRecord } from './core/people/read-record.js';
 import { createReadFleetRetention } from './core/people/read-fleet-retention.js';
 import { createReadFleetAlertCount } from './core/people/read-fleet-alert-count.js';
 import { createReadYourFleet } from './core/people/read-your-fleet.js';
+import { createPrismaUnreadableReplies } from './adapters/prisma/unreadable-replies.js';
+import { createReadablePersonDoor } from './core/people/readable-person-door.js';
+import { createReadablePersonState } from './core/people/readable-person-state.js';
 import { createHeldDeliveries, holdingDoor } from './core/people/held-deliveries.js';
 import { createStaleSightings } from './core/people/stale-sightings.js';
 import { createReadInbox } from './core/people/read-inbox.js';
@@ -466,10 +469,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const clock = options.clock ?? systemClock;
   const door = createRestFleetDoor(options.fleetUrl);
   // What the gateway holds of each person ship's waiting deliveries, so a look at them is a read (aeolus-fleet #1647).
-  const heldDeliveries = createHeldDeliveries(clock);
+  const storedOpenedDeliveries = createPrismaOpenedDeliveries(prisma);
+  const { held: heldDeliveries, opened: openedDeliveries } = createReadablePersonState({ held: createHeldDeliveries(clock), opened: storedOpenedDeliveries });
   // When the gateway first saw each stale question or step, so it leaves Bridge 5 s later (#240).
   const staleSightings = createStaleSightings();
-  const personDoor = holdingDoor(door.person, { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) });
+  const personDoor = createReadablePersonDoor(holdingDoor(door.person, { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) }), { opened: storedOpenedDeliveries, replies: createPrismaUnreadableReplies(prisma), clock, refusedReply: (refusal) => { server.log.warn(refusal, 'the fleet refused the reply to an unreadable delivery'); } });
   const readConnection = createReadConnection({ door, store: connections });
   // A fleet's connection as the gateway holds it, asking the fleet nothing: what a fleet that is off reads.
   const heldConnection: ReadConnection = async (fleetId) => {
@@ -753,7 +757,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
   // A signed-in person's account token, one refresh at a time per grant; where no pagasae is set no one signed in.
   const accountTokenOf: AccountTokenOf = pagasae === undefined ? () => Promise.resolve(err({ kind: 'signedOut' })) : createAccountTokenOf({ grants, tokens: issuedTokens, pagasae, argoAccounts, clock });
-  const openedDeliveries = createPrismaOpenedDeliveries(prisma);
   // pagasae sends the email, asked with the gateway's installation token (wake a person, W2); without either, email wakes no one.
   // The browsers people turned web push on in (wake a person, W8).
   const webPushSubscriptions = createPrismaWebPushSubscriptions(prisma);

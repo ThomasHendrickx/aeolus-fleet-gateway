@@ -1,8 +1,14 @@
 import { receiveOutputSchema } from '@aeolus-fleet/common';
-import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
-import { createPrismaClient } from '../src/adapters/prisma/client.js';
+import { createPrismaUnreadableReplies } from '../src/adapters/prisma/unreadable-replies.js';
+import { createPrismaOpenedDeliveries } from '../src/adapters/prisma/opened-deliveries.js';
+import { err } from '../src/core/shared/result.js';
+import { createReadablePersonDoor } from '../src/core/people/readable-person-door.js';
+import { FIXED_CLOCK } from './support/fixed-clock.js';
+import { migratedDatabase } from './support/database.js';
+import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { exchangeRefusalOf } from '../src/core/people/exchange.js';
 import type { PersonShipDoor } from '../src/core/people/ports.js';
 import { applyEmptyOwnRules, commission, register, signIn } from './support/argo.js';
@@ -320,4 +326,44 @@ describe('how big: a large inbox (chatgpt-plugin design, 9)', () => {
     },
     300_000,
   );
+});
+
+describe('a malformed question or step never reaches the person', () => {
+  let prisma: PrismaClient;
+  beforeAll(async () => {
+    prisma = createPrismaClient(await migratedDatabase(inject('postgresUrl')));
+  });
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+  it.each(['application/vnd.aeolus.question+json', 'application/vnd.aeolus.step+json'])('returns and handles %s once across concurrent reads and a gateway restart', async (contentType) => {
+    const opened = createPrismaOpenedDeliveries(prisma);
+    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
+      body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType, payload: '{}', idempotencyKey: 'malformed' }),
+    });
+    expect(sent.status).toBe(200);
+    const received = await door.pushReceive(charlotte, { max: 10 });
+    const delivery = received.isOk ? received.value[0] : undefined;
+    if (delivery === undefined) {
+      throw new Error('The malformed delivery did not arrive');
+    }
+    const unavailable = { code: 'UNAVAILABLE', message: 'The gateway stopped before handling' };
+    const interrupted = createReadablePersonDoor({ ...door, handled: () => Promise.resolve(err(unavailable)) }, { opened, replies: createPrismaUnreadableReplies(prisma), clock: FIXED_CLOCK });
+    expect(await interrupted.pushReceive(charlotte, { max: 10 })).toEqual({ isOk: false, error: unavailable });
+    expect(await door.inbox(charlotte)).toEqual({ isOk: true, value: { waiting: 0 } });
+    const restarted = createReadablePersonDoor(door, { opened: createPrismaOpenedDeliveries(prisma), replies: createPrismaUnreadableReplies(prisma), clock: FIXED_CLOCK });
+    const recovered = await Promise.all([restarted.pushReceive(charlotte, { max: 10 }), restarted.pushReceive(charlotte, { max: 10 })]);
+    expect(recovered).toEqual([{ isOk: true, value: [] }, { isOk: true, value: [] }]);
+    const replies = await trackerReceives();
+    expect(replies).toHaveLength(1);
+    expect(replies[0]).toMatchObject({ senderName: 'charlotte', contentType: 'text/plain' });
+    expect(replies[0]?.payload).toContain('title');
+    expect(await restarted.record(charlotte, { cursor: null, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
+    expect(await restarted.exchange(charlotte, { otherShipId: delivery.senderShipId, start: { kind: 'newest' }, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
+    expect(await door.record(charlotte, { cursor: null, limit: 20 })).toMatchObject({ isOk: true, value: { items: [{ state: 'handled' }] } });
+    const who = await door.whoami(charlotte);
+    expect(who.isOk && await opened.list(who.value.fleetId, who.value.shipId)).toEqual([]);
+  });
 });
