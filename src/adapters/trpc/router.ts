@@ -324,7 +324,7 @@ async function refuseUnlessServed(ctx: { fleetId: FleetId; isServed: IsServed })
   }
 }
 
-/** The operator's procedures that need the gateway to serve their fleet. */
+/** The procedures that need the gateway to serve the actor's fleet: the operator's, and an account's own requests. */
 const servedProcedure = actorProcedure.use(async ({ ctx, next }) => {
   await refuseUnlessServed(ctx);
   return next();
@@ -1499,8 +1499,8 @@ export const gatewayRouter = t.router({
       }),
   }),
   requests: t.router({
-    /** The requests the account asked, in any state, the newest first (decision 0056: Your requests). */
-    mine: actorProcedure.output(z.array(pendingRequestSchema)).query(async ({ ctx }) => {
+    /** The requests the account asked, in any state, the newest first (decision 0056: Your requests), only in a fleet the gateway serves. */
+    mine: servedProcedure.output(z.array(pendingRequestSchema)).query(async ({ ctx }) => {
       const listed = await ctx.listMine(ctx.actor);
       if (!listed.isOk) {
         throw new TRPCError({ code: 'FORBIDDEN', message: listed.error.message });
