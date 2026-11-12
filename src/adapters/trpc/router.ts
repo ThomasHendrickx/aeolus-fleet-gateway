@@ -718,9 +718,11 @@ function personCallerOf({ fleetId, personShipId }: AccountActor, accountToken: s
 /**
  * A person signed in to the pages, acting on their own person ship: only an
  * account has one, and only by its shared sign-in does the gateway hold the
- * account token that crews it.
+ * account token that crews it. Only in a fleet the gateway serves: off, it
+ * reads and crews nothing there.
  */
-const personProcedure = actorProcedure.use(({ ctx, next }) => {
+const personProcedure = actorProcedure.use(async ({ ctx, next }) => {
+  await refuseUnlessServed(ctx);
   if (ctx.actor.kind !== 'account' || ctx.person === undefined) {
     throw new TRPCError({ code: 'FORBIDDEN', message: "Only a person signed in to the gateway's pages has a person ship's deliveries here" });
   }
