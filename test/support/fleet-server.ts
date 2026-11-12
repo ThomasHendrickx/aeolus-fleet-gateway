@@ -11,6 +11,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import { idSchema, type FleetId } from '@aeolus-fleet/common';
+import { createApp } from '@aeolus-fleet/core/testing';
 import { z } from 'zod';
 
 const run = promisify(execFile);
@@ -180,4 +182,51 @@ export async function startFleetServer(adminUrl: string): Promise<FleetServer> {
       await exited;
     },
   };
+}
+
+/**
+ * A fleet server hosting many fleets, as an installation runs it: core's app
+ * in this process, with no fleet yet, its installation token, and the
+ * account token issuer whose keys it checks account tokens with (decisions
+ * 0021, 0058). In this process, since core's bin takes only an https issuer.
+ */
+export async function startInstallationServer(adminUrl: string, installation: { installationToken: string; accountTokenIssuer: string }): Promise<FleetServer> {
+  const databaseUrl = await aMigratedDatabase(adminUrl);
+  const port = await aFreePort();
+  const url = `http://127.0.0.1:${String(port)}`;
+  const server = createApp({ databaseUrl, publicUrl: url, logger: false, ...installation });
+  await server.listen({ host: '127.0.0.1', port });
+  return {
+    url,
+    databaseUrl,
+    stop: async () => {
+      await server.close();
+    },
+  };
+}
+
+const fleetCreatedSchema = z.object({ result: z.object({ data: z.object({ fleetId: idSchema('fleet') }) }) });
+const ticketSchema = z.object({ result: z.object({ data: z.object({ ticket: z.string() }) }) });
+
+/**
+ * A fleet the installation creates, as pagasae creates an organisation's
+ * fleet (decision 0020): its id, and argo's console session in it, signed
+ * in by a one-use ticket the installation issued.
+ */
+export async function aFleetOfTheInstallation(fleet: FleetServer, asked: { installationToken: string; name: string }): Promise<{ fleetId: FleetId; cookie: string }> {
+  const headers = { 'content-type': 'application/json', origin: fleet.url, 'x-aeolus-installation-token': asked.installationToken };
+  const created = await fetch(`${fleet.url}/trpc/installation.fleets.create`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ requestId: randomUUID(), name: asked.name, operatorEmail: `argo-${randomUUID()}@example.com` }),
+  });
+  const { fleetId } = fleetCreatedSchema.parse(await created.json()).result.data;
+  const issued = await fetch(`${fleet.url}/trpc/installation.operators.issueSignInTicket`, { method: 'POST', headers, body: JSON.stringify({ fleetId }) });
+  const { ticket } = ticketSchema.parse(await issued.json()).result.data;
+  const redeemed = await fetch(`${fleet.url}/trpc/console.redeemSignInTicket`, { method: 'POST', headers: { 'content-type': 'application/json', origin: fleet.url }, body: JSON.stringify({ ticket }) });
+  const cookie = redeemed.headers.getSetCookie().find((each) => each.startsWith('aeolus_session='))?.split(';')[0];
+  if (cookie === undefined) {
+    throw new Error(`argo of ${asked.name} could not sign in with the installation's ticket: ${await redeemed.text()}`);
+  }
+  return { fleetId, cookie };
 }
