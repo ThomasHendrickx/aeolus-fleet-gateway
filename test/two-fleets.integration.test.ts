@@ -129,6 +129,22 @@ async function switchOff(held: HeldFleet): Promise<void> {
   ]);
 }
 
+/** The gateway switched on again for a fleet by the hosting service; pagasae lists it there again. */
+async function switchOn(held: HeldFleet): Promise<void> {
+  expect((await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: `switch-on-again-${held.name}`, fleetId: held.fleetId, enabled: true } })).status).toBe(200);
+  pagasae.listFor(SIGN_IN, [
+    { id: acme.fleetId, name: 'Acme' },
+    { id: labs.fleetId, name: 'Labs' },
+  ]);
+}
+
+/** Charlotte turns email on for everything else in each fleet (Bridge, section 8). */
+async function emailOnInBoth(): Promise<void> {
+  for (const held of [acme, labs]) {
+    expect((await asCharlotte({ procedure: 'people.turnRoute', fleet: held, body: { job: 'everything-else', place: 'email', isOn: true } })).status).toBe(200);
+  }
+}
+
 /** A page's call to the gateway's API with Charlotte's shared sign-in, in the fleet the page's address names. */
 async function asCharlotte(call: { procedure: string; fleet?: HeldFleet; body?: unknown }): Promise<{ status: number; body: unknown }> {
   const headers = { 'content-type': 'application/json', cookie: `aeolus_account_session=${SIGN_IN}`, ...(call.fleet === undefined ? {} : { 'aeolus-fleet': call.fleet.fleetId }) };
@@ -177,11 +193,29 @@ async function signsInFromClaude(chosen: HeldFleet, stopAt = CALLBACK): Promise<
   return { landedAt: new URL(z.string().parse(landed.headers.get('location')), address), client };
 }
 
+/** The client takes its tokens for the code it was sent back with. */
+async function takesTokens(signedIn: { landedAt: URL; client: ReturnType<typeof aClientProvider> }): Promise<void> {
+  const iss = signedIn.landedAt.searchParams.get('iss');
+  await expect(auth(signedIn.client.provider, { serverUrl: `${address}/mcp`, authorizationCode: z.string().parse(signedIn.landedAt.searchParams.get('code')), ...(iss === null ? {} : { iss }) })).resolves.toBe('AUTHORIZED');
+}
+
+/** What /mcp answers the client's call of a tool with its access token: the HTTP status, and whether the tool answered (an error or not). */
+async function callsTool(client: ReturnType<typeof aClientProvider>, name: string): Promise<{ status: number; isError: boolean | undefined }> {
+  const tokens = await client.provider.tokens();
+  const response = await fetch(`${address}/mcp`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${z.string().parse(tokens?.access_token)}`, 'content-type': 'application/json', accept: 'application/json, text/event-stream', 'mcp-protocol-version': '2025-06-18' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name, arguments: {} } }),
+  });
+  const text = await response.text();
+  const isError = text.includes('"isError":true') ? true : text.includes('"result"') ? false : undefined;
+  return { status: response.status, isError };
+}
+
 /** The ships the client's MCP session lists, by aeolus_ships, once it took its tokens for the code. */
 async function shipsTheClientLists(signedIn: { landedAt: URL; client: ReturnType<typeof aClientProvider> }): Promise<string> {
   const serverUrl = `${address}/mcp`;
-  const iss = signedIn.landedAt.searchParams.get('iss');
-  await expect(auth(signedIn.client.provider, { serverUrl, authorizationCode: z.string().parse(signedIn.landedAt.searchParams.get('code')), ...(iss === null ? {} : { iss }) })).resolves.toBe('AUTHORIZED');
+  await takesTokens(signedIn);
   const mcp = new Client({ name: 'claude', version: '1' });
   await mcp.connect(new StreamableHTTPClientTransport(new URL(serverUrl), { authProvider: signedIn.client.provider }));
   try {
@@ -272,6 +306,52 @@ describe('one account in two fleets of one organisation: the gateway on in Acme 
     await switchOff(labs);
 
     await expect(asCharlotte({ procedure: 'account.inView', fleet: labs })).resolves.toEqual({ status: 200, body: { result: { data: { kind: 'off', fleetName: 'Labs', accountUrl: 'http://pagasae.test/account' } } } });
+  });
+
+  it("serves an account's MCP tools only where the gateway is on: Acme's session answered, Labs's refused, and answered again once Labs is on", async () => {
+    const inLabs = await signsInFromClaude(labs);
+    await takesTokens(inLabs);
+    const inAcme = await signsInFromClaude(acme);
+    await takesTokens(inAcme);
+
+    await switchOff(labs);
+    const whileOff = { acme: await callsTool(inAcme.client, 'aeolus_ships'), labs: await callsTool(inLabs.client, 'aeolus_ships') };
+    await switchOn(labs);
+
+    expect({ whileOff, labsOnAgain: await callsTool(inLabs.client, 'aeolus_ships') }).toEqual({
+      whileOff: { acme: { status: 200, isError: false }, labs: { status: 403, isError: undefined } },
+      labsOnAgain: { status: 200, isError: false },
+    });
+  });
+
+  it('wakes the person only where the gateway is on: a message in Acme wakes, one in Labs waits', async () => {
+    await emailOnInBoth();
+    await switchOff(labs);
+
+    await trackerSendsCharlotte(labs);
+    await trackerSendsCharlotte(acme);
+    await expect.poll(() => pagasae.wakes.some(({ fleetId }) => fleetId === acme.fleetId), { timeout: SEEN_WITHIN_MS }).toBe(true);
+
+    expect(pagasae.wakes).toEqual([{ fleetId: acme.fleetId, shipId: acme.charlotte }]);
+  });
+
+  it('wakes the person once for what waited in Labs when the gateway is on there again, and not again after', async () => {
+    await emailOnInBoth();
+    await switchOff(labs);
+    await trackerSendsCharlotte(labs);
+    // Acme's wake shows the waiters ran while Labs's message waited.
+    await trackerSendsCharlotte(acme);
+    await expect.poll(() => pagasae.wakes.length, { timeout: SEEN_WITHIN_MS }).toBe(1);
+
+    await switchOn(labs);
+    await expect.poll(() => pagasae.wakes.length, { timeout: SEEN_WITHIN_MS }).toBe(2);
+    // A round of the waiters and more, for a second wake to show if there were one.
+    await new Promise((resolve) => setTimeout(resolve, 12_000));
+
+    expect(pagasae.wakes).toEqual([
+      { fleetId: acme.fleetId, shipId: acme.charlotte },
+      { fleetId: labs.fleetId, shipId: labs.charlotte },
+    ]);
   });
 
   it('signs an MCP client in only to Acme: choosing Labs at pagasae lands on the failure page', async () => {

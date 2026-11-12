@@ -49,7 +49,11 @@ function scriptedInbox(answers: (InboxAnswer | (() => InboxAnswer))[]) {
 /** The time now, as the test moves it. */
 const clock = { at: new Date('2026-10-23T12:00:00.000Z'), now(): Date { return clock.at; } };
 
+/** Whether the gateway serves the ship's fleet, as the test switches it. */
+const fleetSwitch = { isOn: true };
+
 async function waiting(answers: (InboxAnswer | (() => InboxAnswer))[], options: { crews?: ReturnType<typeof memoryPersonCrews>; wakes?: Result<WakeOutcome, FleetRefusal>[] } = {}) {
+  fleetSwitch.isOn = true;
   const crews = options.crews ?? memoryPersonCrews();
   await crews.save({ ...SHIP, crewToken: CREW_TOKEN, crewedAt: new Date('2026-10-23T09:00:00.000Z') });
   const { inbox, asked } = scriptedInbox(answers);
@@ -67,6 +71,7 @@ async function waiting(answers: (InboxAnswer | (() => InboxAnswer))[], options: 
       return Promise.resolve(wakes.shift() ?? ok({ kind: 'settled' }));
     },
     clock,
+    isServed: () => Promise.resolve(fleetSwitch.isOn),
     wakeAgainWaitsMs: WAKE_AGAIN_WAITS_MS,
     changes: {
       tell: (change) => {
@@ -127,6 +132,29 @@ describe('the waiter of a person ship', () => {
     const ended = await waiter.waitOnPersonShip(SHIP, waiter.stop.signal);
 
     expect({ ended, held: waiter.crews.held }).toEqual({ ended: { reason: 'crewEnded' }, held: [] });
+  });
+
+  it('ends without waking the person once the gateway does not serve its fleet, though something new waits', async () => {
+    const waiter = await waiting([
+      ok({ waiting: 0 }),
+      () => {
+        fleetSwitch.isOn = false;
+        return ok({ waiting: 1 });
+      },
+    ]);
+
+    const ended = await waiter.waitOnPersonShip(SHIP, waiter.stop.signal);
+
+    expect({ ended, woken: waiter.woken }).toEqual({ ended: { reason: 'fleetOff' }, woken: [] });
+  });
+
+  it('asks the fleet nothing for a ship of a fleet the gateway does not serve', async () => {
+    const waiter = await waiting([ok({ waiting: 1 })]);
+    fleetSwitch.isOn = false;
+
+    const ended = await waiter.waitOnPersonShip(SHIP, waiter.stop.signal);
+
+    expect({ ended, asked: waiter.asked, woken: waiter.woken }).toEqual({ ended: { reason: 'fleetOff' }, asked: [], woken: [] });
   });
 
   it('goes on with the new crew when the ship was crewed again meanwhile, keeping it', async () => {

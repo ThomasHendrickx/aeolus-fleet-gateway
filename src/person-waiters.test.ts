@@ -30,6 +30,7 @@ describe("a person ship's waiter", () => {
     const lockGiven = Promise.withResolvers<undefined>();
     const waiters = createPersonWaiters({
       crews: noCrews,
+      isServed: () => Promise.resolve(true),
       locks: { ...freeLocks, give: () => { lockGiven.resolve(undefined); return Promise.resolve(); } },
       waitOnPersonShip: () => (ended === 'boom' ? Promise.reject(new Error('the fleet did not answer')) : Promise.resolve({ reason: 'crewEnded' as const })),
       sleep: () => Promise.resolve(),
@@ -45,5 +46,44 @@ describe("a person ship's waiter", () => {
 
     expect(lines.length).toBeGreaterThan(0);
     expect(lines.join('')).not.toContain(CREW_TOKEN);
+  });
+});
+
+describe('the waiters of the person ships the gateway crews', () => {
+  it('start no waiter for a ship of a fleet the gateway does not serve, and start it once the fleet is served again', async () => {
+    const fleetSwitch = { isOn: false };
+    const crew: PersonCrew = { fleetId: FLEET_ID, shipId: SHIP_ID, crewToken: CREW_TOKEN, crewedAt: new Date() };
+    const started: string[] = [];
+    let rounds = 0;
+    const roundDone = { next: Promise.withResolvers<undefined>() };
+    const waiters = createPersonWaiters({
+      crews: { ...noCrews, crewed: ({ after }) => Promise.resolve(after === null ? [crew] : []) },
+      isServed: () => Promise.resolve(fleetSwitch.isOn),
+      locks: freeLocks,
+      waitOnPersonShip: (ship, signal) => {
+        started.push(ship.shipId);
+        return new Promise((ended) => { signal.addEventListener('abort', () => { ended({ reason: 'stopped' }); }); });
+      },
+      sleep: () => {
+        rounds += 1;
+        roundDone.next.resolve(undefined);
+        roundDone.next = Promise.withResolvers<undefined>();
+        return new Promise((resolve) => setTimeout(resolve, 5));
+      },
+      roundMs: 5,
+      log: Fastify({ logger: false }).log,
+    });
+
+    waiters.start();
+    waiters.wake(crew);
+    await roundDone.next.promise;
+    await roundDone.next.promise;
+    const whileOff = [...started];
+    fleetSwitch.isOn = true;
+    await roundDone.next.promise;
+    await roundDone.next.promise;
+    await waiters.stop();
+
+    expect({ whileOff, once: started, roundsRan: rounds > 2 }).toEqual({ whileOff: [], once: [SHIP_ID], roundsRan: true });
   });
 });
