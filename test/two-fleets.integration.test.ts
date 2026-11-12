@@ -170,14 +170,23 @@ async function crewedAs(held: HeldFleet): Promise<{ fleetId: FleetId; shipId: Sh
   return who.isOk ? { fleetId: who.value.fleetId, shipId: who.value.shipId } : undefined;
 }
 
-/** The tracker of a fleet sends Charlotte a message there. */
-async function trackerSendsCharlotte(held: HeldFleet): Promise<void> {
+/** The tracker of a fleet sends Charlotte a message there: its id. */
+async function trackerSendsCharlotte(held: HeldFleet): Promise<string> {
   const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${held.tracker}` },
     body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType: 'text/plain', payload: `An issue in ${held.name} is closed`, idempotencyKey: crypto.randomUUID() }),
   });
   expect(sent.status).toBe(200);
+  return z.object({ messageId: z.string() }).parse(await sent.json()).messageId;
+}
+
+const historySchema = z.object({ result: z.object({ data: z.object({ delivery: z.object({ history: z.array(z.object({ type: z.string(), channel: z.string().nullable().optional() })) }) }) }) });
+
+/** Each hand-over of a message's delivery, by its channel, as argo of its fleet reads its way in the console. */
+async function handOversOf(held: HeldFleet, messageId: string): Promise<(string | null | undefined)[]> {
+  const read = await fetch(`${fleet.url}/trpc/fleet.message?input=${encodeURIComponent(JSON.stringify({ messageId }))}`, { headers: { cookie: held.argo, origin: fleet.url } });
+  return historySchema.parse(await read.json()).result.data.delivery.history.filter(({ type }) => type === 'DeliveryHanded').map(({ channel }) => channel);
 }
 
 /**
@@ -338,20 +347,25 @@ describe('one account in two fleets of one organisation: the gateway on in Acme 
   it('wakes the person once for what waited in Labs when the gateway is on there again, and not again after', async () => {
     await emailOnInBoth();
     await switchOff(labs);
-    await trackerSendsCharlotte(labs);
+    const waited = await trackerSendsCharlotte(labs);
     // Acme's wake shows the waiters ran while Labs's message waited.
     await trackerSendsCharlotte(acme);
     await expect.poll(() => pagasae.wakes.length, { timeout: SEEN_WITHIN_MS }).toBe(1);
+    const handedWhileOff = await handOversOf(labs, waited);
 
     await switchOn(labs);
     await expect.poll(() => pagasae.wakes.length, { timeout: SEEN_WITHIN_MS }).toBe(2);
     // A round of the waiters and more, for a second wake to show if there were one.
     await new Promise((resolve) => setTimeout(resolve, 12_000));
 
-    expect(pagasae.wakes).toEqual([
-      { fleetId: acme.fleetId, shipId: acme.charlotte },
-      { fleetId: labs.fleetId, shipId: labs.charlotte },
-    ]);
+    expect({ wakes: pagasae.wakes, handedWhileOff, handed: await handOversOf(labs, waited) }).toEqual({
+      wakes: [
+        { fleetId: acme.fleetId, shipId: acme.charlotte },
+        { fleetId: labs.fleetId, shipId: labs.charlotte },
+      ],
+      handedWhileOff: [],
+      handed: ['email'],
+    });
   });
 
   it('signs an MCP client in only to Acme: choosing Labs at pagasae lands on the failure page', async () => {

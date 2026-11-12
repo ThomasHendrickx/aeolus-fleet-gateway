@@ -32,6 +32,8 @@ export interface McpEndpointDeps {
   readClientCall: ReadClientCall;
   /** Whether the fleet's outside parties are on (interop I-3). */
   servesOutsideParties: (fleetId: FleetId) => Promise<boolean>;
+  /** Whether the gateway serves the fleet now (decision 0021): an account's tools answer only there. */
+  isServed: (fleetId: FleetId) => Promise<boolean>;
   /** A signed-in person's tools, where people sign in (decision 0054). */
   person?: PersonToolsDeps;
 }
@@ -187,6 +189,8 @@ export function registerMcpEndpoint(server: FastifyInstance, deps: McpEndpointDe
     } else if (person === undefined) {
       // An account's token is issued only where people sign in, so it finds their tools.
       return unauthorized(reply, 'invalid_token');
+    } else if (!(await deps.isServed(held.fleetId))) {
+      return reply.code(HTTP_FORBIDDEN).send({ error: 'gateway_off', error_description: 'The gateway is off for this fleet' });
     } else {
       serve = () => personServerFor({ caller: { fleetId: held.fleetId, grantId: held.grantId }, resourceMetadata }, person);
     }

@@ -70,11 +70,15 @@ afterEach(async () => {
 function anInstance(options: { roundMs?: number } = {}): PersonWaiters {
   const crews = createPrismaPersonCrews(prisma);
   const locks = createPostgresWaiterLocks(databaseUrl);
+  // The gateway serves the fleet, as an open installation does.
+  const isServed = () => Promise.resolve(true);
   const waiters = createPersonWaiters({
     crews,
+    isServed,
     locks,
     waitOnPersonShip: createWaitOnPersonShip({
       crews,
+      isServed,
       door: createRestFleetDoor(fleet.url).person,
       changes: {
         tell: (change) => {
