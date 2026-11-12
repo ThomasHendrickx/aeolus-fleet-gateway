@@ -242,6 +242,14 @@ describe("one account in two fleets of one organisation: switching fleets on the
 });
 
 describe('one account in two fleets of one organisation: the gateway on in Acme and off in Labs', () => {
+  it("is reached on the pages only in Acme: Labs's own reads are refused, Acme's answered", async () => {
+    await switchOff(labs);
+
+    const [inAcme, inLabs] = [await asCharlotte({ procedure: 'people.inbox', fleet: acme }), await asCharlotte({ procedure: 'people.inbox', fleet: labs })];
+
+    expect({ acme: inAcme.status, labs: inLabs.status }).toEqual({ acme: 200, labs: 403 });
+  });
+
   it('sends a page that names no fleet to Acme, where the account may open the gateway, though Labs is listed first', async () => {
     await switchOff(labs);
     pagasae.listFor(SIGN_IN, [
@@ -250,6 +258,14 @@ describe('one account in two fleets of one organisation: the gateway on in Acme 
     ]);
 
     await expect(asCharlotte({ procedure: 'account.inView' })).resolves.toEqual({ status: 200, body: { result: { data: { kind: 'goTo', fleetId: acme.fleetId } } } });
+  });
+
+  it('does not crew the person ship in Labs', async () => {
+    await switchOff(labs);
+
+    await asCharlotte({ procedure: 'people.inbox', fleet: labs });
+
+    await expect(crewedAs(labs)).resolves.toBeUndefined();
   });
 
   it('shows a page that names Labs the notice that the gateway is off there, and who turns it on', async () => {

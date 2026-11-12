@@ -960,6 +960,12 @@ describe("a person reads and deals with their person ship's deliveries through t
     });
   });
 
+  it('is refused FORBIDDEN in a fleet the gateway does not serve', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller({ ...context, isServed: () => Promise.resolve(false) }).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN', message: 'The gateway is off for this fleet' });
+  });
+
   it('reads the count of what waits on the person as their own account', async () => {
     const { context } = aContext(PERSON_COOKIE);
 
