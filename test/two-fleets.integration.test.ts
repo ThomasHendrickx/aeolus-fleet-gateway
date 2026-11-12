@@ -333,6 +333,17 @@ describe('one account in two fleets of one organisation: the gateway on in Acme 
     });
   });
 
+  it("lists the account's requests only where the gateway is on: Acme's answered, Labs's refused, and answered again once Labs is on", async () => {
+    await switchOff(labs);
+    const whileOff = { acme: await asCharlotte({ procedure: 'requests.mine', fleet: acme }), labs: await asCharlotte({ procedure: 'requests.mine', fleet: labs }) };
+    await switchOn(labs);
+
+    expect({ whileOff, labsOnAgain: await asCharlotte({ procedure: 'requests.mine', fleet: labs }) }).toMatchObject({
+      whileOff: { acme: { status: 200, body: { result: { data: [] } } }, labs: { status: 403, body: { error: { message: 'The gateway is off for this fleet' } } } },
+      labsOnAgain: { status: 200, body: { result: { data: [] } } },
+    });
+  });
+
   it('wakes the person only where the gateway is on: a message in Acme wakes, one in Labs waits', async () => {
     await emailOnInBoth();
     await switchOff(labs);

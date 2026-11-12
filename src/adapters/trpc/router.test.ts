@@ -1573,6 +1573,20 @@ describe("a person lists the requests they asked through the gateway's API (deci
 
     await expect(gatewayRouter.createCaller(context).requests.mine()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
+
+  it('is refused FORBIDDEN in a fleet the gateway does not serve, before any request is read', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+    const read = { count: 0 };
+    const listMine: Context['listMine'] = (actor) => {
+      read.count += 1;
+      return context.listMine(actor);
+    };
+
+    const refused = gatewayRouter.createCaller({ ...context, listMine, isServed: () => Promise.resolve(false) }).requests.mine();
+
+    await expect(refused).rejects.toMatchObject({ code: 'FORBIDDEN', message: 'The gateway is off for this fleet' });
+    expect(read.count).toBe(0);
+  });
 });
 
 describe("the web app's page asks which account it shows the fleet in its address as (H5)", () => {
