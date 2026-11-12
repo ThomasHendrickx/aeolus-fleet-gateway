@@ -252,6 +252,12 @@ describe('one account in two fleets of one organisation: the gateway on in Acme 
     await expect(asCharlotte({ procedure: 'account.inView' })).resolves.toEqual({ status: 200, body: { result: { data: { kind: 'goTo', fleetId: acme.fleetId } } } });
   });
 
+  it('shows a page that names Labs the notice that the gateway is off there, and who turns it on', async () => {
+    await switchOff(labs);
+
+    await expect(asCharlotte({ procedure: 'account.inView', fleet: labs })).resolves.toEqual({ status: 200, body: { result: { data: { kind: 'off', fleetName: 'Labs', accountUrl: `${pagasae.url}/account` } } } });
+  });
+
   it('signs an MCP client in only to Acme: choosing Labs at pagasae lands on the failure page', async () => {
     await switchOff(labs);
 
