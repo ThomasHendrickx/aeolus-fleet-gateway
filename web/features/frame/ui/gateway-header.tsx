@@ -3,9 +3,10 @@
 import type { Theme } from '@aeolus-fleet/common';
 import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
 import { AppHeader, AppSwitcher, AvatarMenuSheet } from '@aeolus-fleet/ui';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 import { useAccountMenu } from '../hooks/use-account-menu';
+import { switcherOnPage } from '../services/header-switchers';
 import { GatewayTabs } from './gateway-tabs';
 
 interface GatewayHeaderProps {
@@ -23,12 +24,15 @@ interface GatewayHeaderProps {
  * the title and the avatar menu; on phone a bar with the switcher compact
  * and the avatar's bottom Sheet (H6). After the title, the tabs to the
  * Bridge, the outside parties and the parties. The fleet in view is the one the
- * address names, else the account's first. Sign out ends the shared
+ * address names, else the account's first; choosing another fleet keeps
+ * the page (H9). Sign out ends the shared
  * sign-in in every app and shows "Signing out" until the page leaves.
  */
 export function GatewayHeader({ switchers, email, accountUrl, theme }: GatewayHeaderProps) {
   const requested = useSearchParams().get('fleet');
-  const switcher = switchers.find(({ fleet }) => fleet.id === requested) ?? switchers[0];
+  const pathname = usePathname();
+  const inView = switchers.find(({ fleet }) => fleet.id === requested) ?? switchers[0];
+  const switcher = inView === undefined ? undefined : switcherOnPage(inView, pathname);
   const { account, signOutForm } = useAccountMenu({ email, accountUrl, theme });
   return (
     <>

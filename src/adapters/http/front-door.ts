@@ -18,6 +18,9 @@ const HTTP_NOT_FOUND = 404;
 
 const BRIDGE = '/bridge';
 
+/** The parameter a page names its fleet by. */
+const FLEET_PARAMETER = 'fleet';
+
 /** Where the web app's built files are served from. */
 const WEB_APP_FILES = '/_next/*';
 
@@ -61,7 +64,12 @@ function isPageAsked(request: FastifyRequest): boolean {
 }
 
 export function registerFrontDoor(server: FastifyInstance, deps: { web?: WebApp }): void {
-  server.get('/', (_request, reply) => reply.code(HTTP_SEE_OTHER).header('location', BRIDGE).send());
+  // The header's switcher opens a fleet at this address (H9): Bridge opens in the fleet it names.
+  server.get('/', (request, reply) => {
+    const fleet = new URLSearchParams(request.url.split('?')[1] ?? '').get(FLEET_PARAMETER);
+    const location = fleet === null ? BRIDGE : `${BRIDGE}?${new URLSearchParams({ [FLEET_PARAMETER]: fleet }).toString()}`;
+    return reply.code(HTTP_SEE_OTHER).header('location', location).send();
+  });
 
   const { web } = deps;
   if (web !== undefined) {

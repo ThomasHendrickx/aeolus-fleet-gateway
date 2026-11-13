@@ -37,6 +37,15 @@ describe("the gateway's address as a person opens it (#1030)", () => {
     expect(page.headers.location).toBe('/bridge');
   });
 
+  it.each([
+    { from: 'the first fleet', fleet: 'flt_01a', location: '/bridge?fleet=flt_01a' },
+    { from: 'the second fleet', fleet: 'flt_01b', location: '/bridge?fleet=flt_01b' },
+  ])("sends a person who switches to $from in the header's switcher to Bridge in that fleet (H9)", async ({ fleet, location }) => {
+    const page = await server.inject({ url: `/?fleet=${fleet}`, headers: { accept: BROWSER_ACCEPT } });
+
+    expect({ status: page.statusCode, location: page.headers.location }).toEqual({ status: 303, location });
+  });
+
   it('hands an unknown page a person opens to the web app, which answers it', async () => {
     const page = await server.inject({ url: '/no-such-page', headers: { accept: BROWSER_ACCEPT } });
 

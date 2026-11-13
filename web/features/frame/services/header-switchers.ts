@@ -43,3 +43,33 @@ export function headerSwitchersOf(answer: AccountApps): AppSwitcherModel[] {
   };
   return list.fleets.map(({ id, name }) => appSwitcherOf({ list, fleet: { id, name }, app: 'gateway' }));
 }
+
+/** Where the gateway at this address opens a fleet. */
+function gatewayInFleet(gatewayUrl: string, fleetId: string): string {
+  const address = new URL(gatewayUrl);
+  address.searchParams.set('fleet', fleetId);
+  return address.toString();
+}
+
+/**
+ * The switcher on a page of the gateway (H9): choosing a fleet this gateway
+ * opens in opens the same page there; any other fleet is left as the switcher
+ * offers it.
+ */
+export function switcherOnPage(switcher: AppSwitcherModel, page: string): AppSwitcherModel {
+  const gateway = switcher.apps.find(({ app }) => app === 'gateway');
+  if (gateway === undefined) {
+    return switcher;
+  }
+  const fleets = switcher.fleets.map((fleet) => {
+    if (fleet.url !== gatewayInFleet(gateway.url, fleet.id)) {
+      return fleet;
+    }
+    // The page's path alone, at this gateway: what the page shows in the fleet in view stays behind.
+    const address = new URL(gateway.url);
+    address.pathname = page;
+    address.search = new URLSearchParams({ fleet: fleet.id }).toString();
+    return { ...fleet, url: address.toString() };
+  });
+  return { ...switcher, fleets };
+}

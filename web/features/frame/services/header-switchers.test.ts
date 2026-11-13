@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { headerSwitchersOf, type AccountApps } from './header-switchers';
+import { headerSwitchersOf, switcherOnPage, type AccountApps } from './header-switchers';
 
 const ACME = 'flt_01m5fcd917vwf30mx663fgc3z8';
 const LABS = 'flt_01m4ajt7abh4rypkmdnjene67g';
@@ -56,5 +56,57 @@ describe("the header's switcher on an answer it cannot read", () => {
 
   it('offers no switcher for a malformed account id, so the page shows the plain bar', () => {
     expect(headerSwitchersOf(aList({ account: { id: '', email: 'charlotte@acme.example' } }))).toEqual([]);
+  });
+});
+
+/** Charlotte's list with the gateway open in both fleets. */
+function aListInBoth(): AccountApps {
+  return aList({
+    fleets: [
+      { id: ACME, name: 'Acme', apps: [{ app: 'console', url: 'https://fleet.example' }, { app: 'gateway', url: 'https://gateway.example' }] },
+      { id: LABS, name: 'Labs', apps: [{ app: 'gateway', url: 'https://gateway.example' }] },
+    ],
+  });
+}
+
+describe("the header's switcher on a page of the gateway (header design H9)", () => {
+  it.each([
+    { page: '/bridge', from: 0, to: { name: 'Labs', url: `https://gateway.example/bridge?fleet=${LABS}` } },
+    { page: '/bridge', from: 1, to: { name: 'Acme', url: `https://gateway.example/bridge?fleet=${ACME}` } },
+    { page: '/bridge/settings', from: 0, to: { name: 'Labs', url: `https://gateway.example/bridge/settings?fleet=${LABS}` } },
+    { page: '/bridge/settings', from: 1, to: { name: 'Acme', url: `https://gateway.example/bridge/settings?fleet=${ACME}` } },
+  ])('switches fleet from $page to the same page in $to.name', ({ page, from, to }) => {
+    const switcher = headerSwitchersOf(aListInBoth())[from];
+    const onPage = switcher === undefined ? undefined : switcherOnPage(switcher, page);
+    expect(onPage?.fleets.find(({ name }) => name === to.name)?.url).toBe(to.url);
+  });
+
+  it('keeps the fleet in view on the page it shows', () => {
+    const [acme] = headerSwitchersOf(aListInBoth());
+    const onPage = acme === undefined ? undefined : switcherOnPage(acme, '/bridge/settings');
+    expect(onPage?.fleets.find(({ name }) => name === 'Acme')?.url).toBe(`https://gateway.example/bridge/settings?fleet=${ACME}`);
+  });
+
+  it('switches to a fleet the gateway does not open in as before: the first app the account may open there', () => {
+    const [acme] = headerSwitchersOf(aList());
+    const onPage = acme === undefined ? undefined : switcherOnPage(acme, '/bridge/settings');
+    expect(onPage?.fleets.find(({ name }) => name === 'Labs')?.url).toBe(`https://fleet.example/?fleet=${LABS}`);
+  });
+
+  it('switches to a fleet another gateway opens in at that gateway, as before', () => {
+    const [acme] = headerSwitchersOf(aList({
+      fleets: [
+        { id: ACME, name: 'Acme', apps: [{ app: 'gateway', url: 'https://gateway.example' }] },
+        { id: LABS, name: 'Labs', apps: [{ app: 'gateway', url: 'https://labs-gateway.example' }] },
+      ],
+    }));
+    const onPage = acme === undefined ? undefined : switcherOnPage(acme, '/bridge/settings');
+    expect(onPage?.fleets.find(({ name }) => name === 'Labs')?.url).toBe(`https://labs-gateway.example/?fleet=${LABS}`);
+  });
+
+  it("leaves the fleet in view's apps as they are", () => {
+    const [acme] = headerSwitchersOf(aListInBoth());
+    const onPage = acme === undefined ? undefined : switcherOnPage(acme, '/bridge/settings');
+    expect(onPage?.apps).toEqual(acme?.apps);
   });
 });
