@@ -810,11 +810,13 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const waiterLocks = createPostgresWaiterLocks(options.databaseUrl);
   const personWaiters = createPersonWaiters({
     crews: personCrews,
+    isServed,
     locks: waiterLocks,
     waitOnPersonShip: createWaitOnPersonShip({
       crews: personCrews,
       door: personDoor,
       changes: inboxChanges,
+      isServed,
       wakePerson: createWakePerson({ door: personDoor, connections, shownElsewhere: { show: showInSlack }, channels: wakeChannels, routes, defaults: routingDefaults, quietHours, quietShips, wakesSent: createPrismaWakesSent(prisma), focused: focusedPages, focusFreshMs: FOCUS_FRESH_MS, clock, attemptEnded: (ended) => { server.log.error(ended, 'wake refused for good: the attempt ended'); } }),
       clock,
       sleep,
@@ -963,6 +965,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       callTool,
       readClientCall,
       servesOutsideParties,
+      isServed,
       ...(person === undefined ? {} : { person }),
     });
   }

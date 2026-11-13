@@ -960,6 +960,12 @@ describe("a person reads and deals with their person ship's deliveries through t
     });
   });
 
+  it('is refused FORBIDDEN in a fleet the gateway does not serve', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+
+    await expect(gatewayRouter.createCaller({ ...context, isServed: () => Promise.resolve(false) }).people.inbox()).rejects.toMatchObject({ code: 'FORBIDDEN', message: 'The gateway is off for this fleet' });
+  });
+
   it('reads the count of what waits on the person as their own account', async () => {
     const { context } = aContext(PERSON_COOKIE);
 
@@ -1566,6 +1572,20 @@ describe("a person lists the requests they asked through the gateway's API (deci
     const { context } = aContext(ARGO_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).requests.mine()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('is refused FORBIDDEN in a fleet the gateway does not serve, before any request is read', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+    const read = { count: 0 };
+    const listMine: Context['listMine'] = (actor) => {
+      read.count += 1;
+      return context.listMine(actor);
+    };
+
+    const refused = gatewayRouter.createCaller({ ...context, listMine, isServed: () => Promise.resolve(false) }).requests.mine();
+
+    await expect(refused).rejects.toMatchObject({ code: 'FORBIDDEN', message: 'The gateway is off for this fleet' });
+    expect(read.count).toBe(0);
   });
 });
 

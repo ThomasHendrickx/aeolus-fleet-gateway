@@ -4,10 +4,12 @@
  * holds the ship's lock. Each round it looks for crews whose waiter no
  * instance runs, so the waiters of an instance that stopped, or lost its
  * locks, are taken over; a ship crewed meanwhile is woken at once. A waiter
- * that ends gives its lock back.
+ * that ends gives its lock back. A ship of a fleet the gateway does not
+ * serve gets no waiter until the fleet is on again.
  */
 import type { FastifyBaseLogger } from 'fastify';
 
+import type { IsServed } from './core/installation/served.js';
 import type { Sleep } from './core/mcp-out/run-party.js';
 import type { PersonCrews, PersonShip, WaiterLocks } from './core/people/ports.js';
 import type { WaitOnPersonShip } from './core/people/wait-on-person-ship.js';
@@ -26,7 +28,7 @@ export interface PersonWaiters {
   stop(): Promise<void>;
 }
 
-export function createPersonWaiters(deps: { crews: PersonCrews; locks: WaiterLocks; waitOnPersonShip: WaitOnPersonShip; sleep: Sleep; roundMs: number; log: FastifyBaseLogger }): PersonWaiters {
+export function createPersonWaiters(deps: { crews: PersonCrews; isServed: IsServed; locks: WaiterLocks; waitOnPersonShip: WaitOnPersonShip; sleep: Sleep; roundMs: number; log: FastifyBaseLogger }): PersonWaiters {
   const stopping = new AbortController();
   /** Each ship this instance waits on, or takes the lock of, with what stops its waiter. */
   const running = new Map<string, { ship: PersonShip; isWaiting: boolean; stop: AbortController; done: Promise<void> }>();
@@ -35,7 +37,7 @@ export function createPersonWaiters(deps: { crews: PersonCrews; locks: WaiterLoc
   const keyOf = ({ fleetId, shipId }: PersonShip): string => `${fleetId}/${shipId}`;
 
   const run = async (ship: PersonShip, stop: AbortController): Promise<void> => {
-    if (!(await deps.locks.take(ship))) {
+    if (!(await deps.isServed(ship.fleetId)) || !(await deps.locks.take(ship))) {
       return;
     }
     const held = running.get(keyOf(ship));

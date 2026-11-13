@@ -62,6 +62,26 @@ describe('the account a page shows the fleet in its address as', () => {
 
     expect(await inView(signIns)({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID })).toEqual({ isOk: true, value: { kind: 'elsewhere', url: ACCOUNT_URL } });
   });
+
+  it('says the gateway is off for the fleet in the address while the gateway does not serve it, and where its account is', async () => {
+    const answer = await inView(fakeSharedSignIn({ tokens: CHARLOTTE_IN_FLEET }), [OTHER_FLEET_ID])({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
+
+    expect(answer).toEqual({ isOk: true, value: { kind: 'off', fleetName: 'Acme', accountUrl: ACCOUNT_URL } });
+  });
+
+  it('asks pagasae for no account token in a fleet the gateway does not serve', async () => {
+    const signIns = fakeSharedSignIn({ tokens: CHARLOTTE_IN_FLEET });
+
+    await inView(signIns, [OTHER_FLEET_ID])({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID });
+
+    expect(signIns.exchanges).toBe(0);
+  });
+
+  it('sends an account that holds no right in a fleet the gateway does not serve to Account (H9)', async () => {
+    const signIns = fakeSharedSignIn({ tokens: new Map(), apps: { account: CHARLOTTE, apps: [{ app: 'account', url: ACCOUNT_URL }], fleets: [] } });
+
+    expect(await inView(signIns, [])({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET_ID })).toEqual({ isOk: true, value: { kind: 'elsewhere', url: ACCOUNT_URL } });
+  });
 });
 
 describe('a page asked for with no fleet in its address', () => {

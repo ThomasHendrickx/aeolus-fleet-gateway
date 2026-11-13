@@ -1,6 +1,7 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import type { Sleep } from '../mcp-out/run-party.js';
+import type { IsServed } from '../installation/served.js';
 import type { Clock } from '../shared/clock.js';
 import { isEndedCrew } from './person-crew.js';
 import type { InboxChanges, PersonCrews, PersonShipDoor } from './ports.js';
@@ -8,9 +9,10 @@ import type { WakePerson } from './wake-person.js';
 
 /**
  * Why a waiter ended: the ship's crew no longer works and was dropped, the
- * gateway holds no crew for the ship, or it was stopped.
+ * gateway holds no crew for the ship, the gateway does not serve its fleet,
+ * or it was stopped.
  */
-export type WaiterEnd = { readonly reason: 'crewEnded' } | { readonly reason: 'noCrew' } | { readonly reason: 'stopped' };
+export type WaiterEnd = { readonly reason: 'crewEnded' } | { readonly reason: 'noCrew' } | { readonly reason: 'fleetOff' } | { readonly reason: 'stopped' };
 
 export type WaitOnPersonShip = (ship: { fleetId: FleetId; shipId: ShipId }, signal: AbortSignal) => Promise<WaiterEnd>;
 
@@ -24,13 +26,17 @@ export type WaitOnPersonShip = (ship: { fleetId: FleetId; shipId: ShipId }, sign
  * that failed after a wait, longer each time. It reads the crew it holds anew for every call, so
  * a ship crewed again goes on with its new crew; a crew that no longer works
  * is dropped, so the next sign-in crews again, and the waiter ends. While
- * the fleet does not answer, it waits longer each time.
+ * the fleet does not answer, it waits longer each time. Only while the
+ * gateway serves the ship's fleet: off, it ends before it asks the fleet or
+ * wakes anyone, and what waits stays in the fleet for when it is on again.
  */
 export function createWaitOnPersonShip(deps: {
   crews: PersonCrews;
   door: Pick<PersonShipDoor, 'inbox'>;
   changes: InboxChanges;
   wakePerson: WakePerson;
+  /** Whether the gateway serves the fleet now (decision 0021). */
+  isServed: IsServed;
   clock: Clock;
   sleep: Sleep;
   /** How long to wait after each refusal in a row; the last repeats. */
@@ -58,6 +64,9 @@ export function createWaitOnPersonShip(deps: {
     };
     const waitOf = (waitsMs: readonly number[], inARow: number): number => waitsMs[Math.min(inARow, waitsMs.length - 1)] ?? 0;
     while (!isStopped()) {
+      if (!(await deps.isServed(fleetId))) {
+        return { reason: 'fleetOff' };
+      }
       const crew = await deps.crews.find(fleetId, shipId);
       if (crew === undefined) {
         return { reason: 'noCrew' };
@@ -67,6 +76,9 @@ export function createWaitOnPersonShip(deps: {
       const answered = await deps.door.inbox(crew.crewToken, knownWaiting === undefined ? undefined : { knownWaiting, signal, ...(atMostMs === undefined ? {} : { atMostMs }) });
       if (isStopped()) {
         break;
+      }
+      if (!(await deps.isServed(fleetId))) {
+        return { reason: 'fleetOff' };
       }
       if (!answered.isOk) {
         if (isEndedCrew(answered.error)) {

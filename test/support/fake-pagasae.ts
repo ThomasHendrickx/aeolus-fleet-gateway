@@ -1,14 +1,18 @@
 /**
  * pagasae in a test, as the gateway's OpenID Connect provider: its
  * authorize address sends the person straight back with a code, as for an
- * account with one fleet, and its token endpoint redeems that code once,
- * for the gateway's secret and the verifier of the challenge, with an
- * account token for the fleet the test names. The token is not signed: the
- * gateway reads it, and only core checks signatures. It takes the
+ * account with one fleet or one that chose its fleet, and its token
+ * endpoint redeems that code once, for the gateway's secret and the
+ * verifier of the challenge, with an account token for the fleet the test
+ * names. Its tokens are signed with a key it publishes at
+ * `/.well-known/jwks.json`, so a core given its URL as the account token
+ * issuer checks them as it checks pagasae's (decision 0058). It refuses
+ * every ID-JAG, as pagasae does for an account in several fleets (company
+ * sign-in design, D9). It takes the
  * gateway's wakes (wake a person, W2) with the installation token the test
  * names, recording each, or answers them as the test scripts.
  */
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomUUID, sign } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
 export const PAGASAE_CLIENT = { clientId: 'gateway', clientSecret: 'a-pagasae-client-secret-for-the-gateway' };
@@ -17,19 +21,31 @@ export const PAGASAE_CLIENT = { clientId: 'gateway', clientSecret: 'a-pagasae-cl
 export const PAGASAE_APP_CLIENT = { clientId: 'gateway-pages', clientSecret: 'a-pagasae-app-client-secret-for-the-pages' };
 
 const TOKEN_EXCHANGE = 'urn:ietf:params:oauth:grant-type:token-exchange';
+const ID_JAG_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:id-jag';
+
+/** A fleet a shared sign-in lists, and whether the account may open the gateway there (header design H1: where it is on). */
+export interface ListedFleet {
+  readonly id: string;
+  readonly name: string;
+  /** False where the gateway is off for the fleet: pagasae then lists the console there instead. */
+  readonly hasGateway?: boolean;
+}
 
 export interface FakePagasae {
   url: string;
-  /** The account token claims the next redeemed code answers. */
+  /** The account token claims the next redeemed code answers: the account's one fleet, or the one it chose. */
   answer(claims: Record<string, unknown>): void;
+  /** Each request to its authorize address, in order, as the browser was sent there. */
+  authorizeRequests: URL[];
   /**
    * A shared sign-in, as pagasae keeps it in its cookie on the shared
    * domain: it exchanges for these claims in the fleet they name, and lists
-   * that fleet as Acme with the gateway, until it is revoked.
+   * that fleet as Acme with the gateway, until it is revoked. Called again
+   * with another fleet's claims, the same sign-in exchanges for each.
    */
   sharedSignIn(signIn: string, claims: Record<string, unknown>): void;
-  /** Lists these fleets with the gateway for a shared sign-in instead, or answers its list with a server error. */
-  listFor(signIn: string, listed: readonly { id: string; name: string }[] | 'unavailable'): void;
+  /** Lists these fleets for a shared sign-in instead, with the gateway unless said otherwise, or answers its list with a server error. */
+  listFor(signIn: string, listed: readonly ListedFleet[] | 'unavailable'): void;
   /** Each wake pagasae mailed, by the person ship it named, in order. */
   wakes: { fleetId: string; shipId: string }[];
   /** How many wakes it refused as answerWakes scripted. */
@@ -58,18 +74,23 @@ async function formOf(request: IncomingMessage): Promise<URLSearchParams> {
   return new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
 }
 
-function anAccountToken(claims: Record<string, unknown>): string {
-  const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
-  return `${part({ alg: 'EdDSA', typ: 'at+jwt', kid: 'test' })}.${part(claims)}.dW5zaWduZWQ`;
-}
-
 export async function startFakePagasae(): Promise<FakePagasae> {
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const keyId = randomUUID();
+  const keySet = { keys: [{ ...publicKey.export({ format: 'jwk' }), kid: keyId, alg: 'EdDSA', use: 'sig' }] };
+  const anAccountToken = (claims: Record<string, unknown>): string => {
+    const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    const input = `${part({ alg: 'EdDSA', typ: 'at+jwt', kid: keyId })}.${part(claims)}`;
+    return `${input}.${sign(null, Buffer.from(input), privateKey).toString('base64url')}`;
+  };
+  const authorizeRequests: URL[] = [];
   const codes = new Map<string, { challenge: string; redirectUri: string }>();
   /** How many codes it issued: each code is numbered by it, as a redeemed code leaves the map. */
   let issued = 0;
   let claims: Record<string, unknown> = {};
-  const signIns = new Map<string, Record<string, unknown>>();
-  const listings = new Map<string, readonly { id: string; name: string }[] | 'unavailable'>();
+  /** Each shared sign-in's claims, by the fleet they name. */
+  const signIns = new Map<string, Map<string, Record<string, unknown>>>();
+  const listings = new Map<string, readonly ListedFleet[] | 'unavailable'>();
   const wakes: { fleetId: string; shipId: string }[] = [];
   let wakeStatus = 204;
   let refusedWakes = 0;
@@ -77,7 +98,12 @@ export async function startFakePagasae(): Promise<FakePagasae> {
   const isApp = (form: URLSearchParams) => form.get('client_id') === PAGASAE_APP_CLIENT.clientId && form.get('client_secret') === PAGASAE_APP_CLIENT.clientSecret;
   const server: Server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://pagasae.test');
+    if (request.method === 'GET' && url.pathname === '/.well-known/jwks.json') {
+      json(response, { status: 200, body: keySet });
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/oauth/authorize') {
+      authorizeRequests.push(url);
       issued += 1;
       const code = `code-${String(issued)}`;
       const redirectUri = url.searchParams.get('redirect_uri') ?? '';
@@ -92,7 +118,7 @@ export async function startFakePagasae(): Promise<FakePagasae> {
       const basic = `Basic ${Buffer.from(`${PAGASAE_APP_CLIENT.clientId}:${PAGASAE_APP_CLIENT.clientSecret}`).toString('base64')}`;
       const signIn = String(request.headers['aeolus-sign-in']);
       const held = signIns.get(signIn);
-      const listed = listings.get(signIn) ?? [{ id: String(held?.aud), name: 'Acme' }];
+      const listed: readonly ListedFleet[] | 'unavailable' = listings.get(signIn) ?? [...(held?.keys() ?? [])].map((id) => ({ id, name: 'Acme' }));
       if (request.headers.authorization !== basic) {
         json(response, { status: 401, body: { error: 'invalid_client' } });
       } else if (held === undefined) {
@@ -100,8 +126,9 @@ export async function startFakePagasae(): Promise<FakePagasae> {
       } else if (listed === 'unavailable') {
         json(response, { status: 503, body: { error: 'temporarily_unavailable' } });
       } else {
-        const fleets = listed.map(({ id, name }) => ({ id, name, argo: false, apps: [{ app: 'gateway', url: 'http://gateway.test' }] }));
-        json(response, { status: 200, body: { account: { id: held.sub, email: 'charlotte@example.com' }, apps: [{ app: 'account', url: `${url.origin}/account` }], fleets } });
+        const fleets = listed.map(({ id, name, hasGateway = true }) => ({ id, name, argo: false, apps: [hasGateway ? { app: 'gateway', url: 'http://gateway.test' } : { app: 'console', url: 'http://console.test' }] }));
+        const account = String([...held.values()][0]?.sub);
+        json(response, { status: 200, body: { account: { id: account, email: 'charlotte@example.com' }, apps: [{ app: 'account', url: `${url.origin}/account` }], fleets } });
       }
       return;
     }
@@ -133,11 +160,16 @@ export async function startFakePagasae(): Promise<FakePagasae> {
     }
     if (request.method === 'POST' && url.pathname === '/oauth/token') {
       void formOf(request).then((form) => {
+        if (form.get('grant_type') === TOKEN_EXCHANGE && form.get('subject_token_type') === ID_JAG_TOKEN_TYPE) {
+          json(response, { status: 400, body: { error: 'invalid_grant', error_description: 'The account is in several fleets: there is no browser to ask which' } });
+          return;
+        }
         if (isApp(form) && form.get('grant_type') === TOKEN_EXCHANGE) {
-          const held = signIns.get(form.get('subject_token') ?? '');
-          if (held === undefined) {
+          const inFleets = signIns.get(form.get('subject_token') ?? '');
+          const held = inFleets?.get(form.get('resource') ?? '');
+          if (inFleets === undefined) {
             json(response, { status: 400, body: { error: 'invalid_grant' } });
-          } else if (held.aud !== form.get('resource')) {
+          } else if (held === undefined) {
             json(response, { status: 400, body: { error: 'invalid_target' } });
           } else {
             json(response, { status: 200, body: { access_token: anAccountToken(held), issued_token_type: 'urn:ietf:params:oauth:token-type:jwt', token_type: 'Bearer', expires_in: 600 } });
@@ -179,8 +211,9 @@ export async function startFakePagasae(): Promise<FakePagasae> {
     answer: (next) => {
       claims = next;
     },
+    authorizeRequests,
     sharedSignIn: (signIn, held) => {
-      signIns.set(signIn, held);
+      signIns.set(signIn, new Map([...(signIns.get(signIn) ?? []), [String(held.aud), held]]));
     },
     listFor: (signIn, listed) => {
       listings.set(signIn, listed);
