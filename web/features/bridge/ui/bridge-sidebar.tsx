@@ -1,9 +1,9 @@
 import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
-import { AppSwitcher } from '@aeolus-fleet/ui';
 import { ArrowUpRight, Bell, CheckCheck, Globe, Inbox, MessageSquare, Route, Ship, ShoppingBasket, SlidersHorizontal, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
+import { PageSwitcher } from '../../frame/ui/page-switcher';
 import { OUTSIDE_PARTIES_PATH } from '../../outside-parties/paths';
 import { BRIDGE_FLEET_PATH } from '../fleet/paths';
 import { BRIDGE_BASKET_PATH, BRIDGE_DONE_PATH, BRIDGE_MESSAGES_PATH, BRIDGE_PATH, BRIDGE_ROUTING_PATH, BRIDGE_SETTINGS_PATH, BRIDGE_STAY_AWARE_PATH } from '../paths';
@@ -83,7 +83,7 @@ export function BridgeSidebar({ fleetId, screen, counts, accountUrl, foot, switc
             </span>
             Bridge
           </span>
-        ) : <AppSwitcher switcher={switcher} layout="full" className="min-w-0" />}
+        ) : <PageSwitcher switcher={switcher} className="min-w-0" />}
       </div>
       <nav aria-label="Bridge" className="flex flex-col gap-0.5">
         {pages.map((page) => (
