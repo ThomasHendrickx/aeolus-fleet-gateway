@@ -114,6 +114,8 @@ describe('the gateway takes the calls of a proxy ship, as its crew (interop 5.2)
   });
 
   it('hands a delivery answered again at once, though a look made while it was handed waits for a new delivery', async () => {
+    // Its own stop: a sleep this run leaves behind never stops the next test's run.
+    const ownStop = new AbortController();
     const waiting = [aPushedDelivery({ deliveryId: ONE })];
     let isHanding = false;
     const lookWaitsEnded: (() => void)[] = [];
@@ -149,15 +151,15 @@ describe('the gateway takes the calls of a proxy ship, as its crew (interop 5.2)
       sleeps.push(ms);
       await new Promise((resolve) => setImmediate(resolve));
       if (waiting.length === 0) {
-        stop.abort();
+        ownStop.abort();
       }
     };
-    const running = createRunParty({ crew: lockingCrew, handCall: lockingHandCall, sleep: stopWhenNothingWaits, pollMs: 2_000, againWaitsMs: [1_000] })({ party: CRM, signal: stop.signal });
+    const running = createRunParty({ crew: lockingCrew, handCall: lockingHandCall, sleep: stopWhenNothingWaits, pollMs: 2_000, againWaitsMs: [1_000] })({ party: CRM, signal: ownStop.signal });
     for (let tick = 0; tick < 1_000 && handed.length < 2; tick += 1) {
       await new Promise((resolve) => setImmediate(resolve));
     }
     const handedBeforeTheLookWaited = [...handed];
-    stop.abort();
+    ownStop.abort();
     lookWaitsEnded.forEach((end) => {
       end();
     });
