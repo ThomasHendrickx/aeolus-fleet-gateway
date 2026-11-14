@@ -262,3 +262,59 @@ describe('commission refusal after automatic registration', () => {
     expect(deletedClients).toEqual([]);
   });
 });
+
+
+describe('adding a supplied client (decision 0074)', () => {
+  it.each([
+    { tokenEndpointAuthMethod: 'none' as const, clientSecret: null },
+    { tokenEndpointAuthMethod: 'client_secret_post' as const, clientSecret: 'supplied-secret' },
+    { tokenEndpointAuthMethod: 'client_secret_basic' as const, clientSecret: 'supplied-secret' },
+  ])('binds a supplied $tokenEndpointAuthMethod client without dynamic registration', async (authentication) => {
+    const attio = fakeAuthorizationServers(ok({ ...ATTIO_SIGN_IN, registrationEndpoint: null }));
+    const client = { source: 'fixed' as const, clientId: 'dedicated-client', ...authentication };
+    await expect(adding(attio.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: true });
+    expect(attio.registered).toEqual([]);
+    await expect(parties.find(FLEET_ID, 'attio')).resolves.toMatchObject({ credential: { client: {
+      ...client, isGatewayOwned: false, issuer: ATTIO_SIGN_IN.issuer,
+      registrationClientUri: null, registrationAccessToken: null, resource: ATTIO_URL, scope: 'mcp offline_access openid',
+    } } });
+  });
+
+  it.each([
+    { clientId: '', tokenEndpointAuthMethod: 'none' as const, clientSecret: null },
+    { clientId: 'client', tokenEndpointAuthMethod: 'none' as const, clientSecret: 'unexpected' },
+    { clientId: 'client', tokenEndpointAuthMethod: 'client_secret_post' as const, clientSecret: null },
+    { clientId: 'client', tokenEndpointAuthMethod: 'client_secret_basic' as const, clientSecret: '' },
+  ])('refuses inconsistent supplied credentials: $tokenEndpointAuthMethod / $clientSecret', async (client) => {
+    const attio = fakeAuthorizationServers();
+    await expect(adding(attio.servers)(anAddition({ client: { source: 'fixed', ...client } }))).resolves.toMatchObject({ isOk: false, error: { kind: 'SIGN_IN_CHECK_FAILED' } });
+    expect(attio.registered).toEqual([]);
+    expect(parties.held.size).toBe(0);
+  });
+
+  it('refuses a supplied method discovery does not advertise without falling back', async () => {
+    const attio = fakeAuthorizationServers(ok({ ...ATTIO_SIGN_IN, tokenEndpointAuthMethods: ['client_secret_basic'] }));
+    await expect(adding(attio.servers)(anAddition({ client: { source: 'fixed', clientId: 'client', clientSecret: null, tokenEndpointAuthMethod: 'none' } }))).resolves.toMatchObject({ isOk: false, error: { kind: 'SIGN_IN_CHECK_FAILED' } });
+    expect(attio.registered).toEqual([]);
+    expect(parties.held.size).toBe(0);
+  });
+
+  it('still requires S256 for a supplied client', async () => {
+    const attio = fakeAuthorizationServers(ok({ ...ATTIO_SIGN_IN, codeChallengeMethods: [] }));
+    await expect(adding(attio.servers)(anAddition({ client: { source: 'fixed', clientId: 'client', clientSecret: null, tokenEndpointAuthMethod: 'none' } }))).resolves.toMatchObject({ isOk: false, error: { kind: 'SIGN_IN_CHECK_FAILED' } });
+    expect(parties.held.size).toBe(0);
+  });
+
+  it('keeps and reuses a supplied identity after an uncertain commission, never deleting it on refusal', async () => {
+    const attio = fakeAuthorizationServers();
+    const add = adding(attio.servers);
+    fleet.state.isAnswering = false;
+    await add(anAddition({ client: { source: 'fixed', clientId: 'client', clientSecret: null, tokenEndpointAuthMethod: 'none' } }));
+    await expect(parties.find(FLEET_ID, 'attio')).resolves.toMatchObject({ credential: { client: { source: 'fixed', clientId: 'client' } } });
+    fleet.state.isAnswering = true;
+    fleet.state.validOwners.clear();
+    await expect(add(anAddition())).resolves.toMatchObject({ isOk: false, error: { kind: 'COMMISSION_REFUSED' } });
+    expect(attio.registered).toEqual([]);
+    expect(deletedClients).toEqual([]);
+  });
+});

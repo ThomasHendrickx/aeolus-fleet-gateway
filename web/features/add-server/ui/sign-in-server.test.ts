@@ -88,3 +88,26 @@ describe('adding a server where each person signs in (M1)', () => {
     expect(markup).toContain('name="name" value="attio"');
   });
 });
+
+
+describe('the supplied sign-in client fields', () => {
+  it('offers automatic registration or a dedicated supplied client explicitly', () => {
+    expect(textOf(addressStep(SIGN_IN_FIELDS))).toContain('Automatic registration');
+    expect(textOf(addressStep(SIGN_IN_FIELDS))).toContain('Supplied client');
+  });
+
+  it.each(['none', 'client_secret_post', 'client_secret_basic'])('shows the callback and supplied %s fields', (method) => {
+    const markup = renderToStaticMarkup(createElement(AddressStep, { state: { fields: { ...SIGN_IN_FIELDS, signInClientSource: 'fixed', signInClientAuthMethod: method, signInClientId: 'dedicated' } }, action: ignored, fleetId: FLEET, redirectUri: 'https://public.gateway.example/outside-parties/sign-in/done' }));
+    expect(textOf(markup)).toContain('https://public.gateway.example/outside-parties/sign-in/done');
+    expect(textOf(markup)).toContain('dedicated to this server');
+    expect(markup).toContain('name="signInClientId"');
+    expect(markup.includes('name="signInClientSecret"')).toBe(method !== 'none');
+  });
+
+  it('carries the supplied identity through the owner step', () => {
+    const markup = renderToStaticMarkup(createElement(OwnerStep, { state: { ...OWNER, fields: { ...SIGN_IN_FIELDS, signInClientSource: 'fixed', signInClientId: 'dedicated', signInClientSecret: 'secret', signInClientAuthMethod: 'client_secret_basic' } }, refused: { kind: 'idle' }, action: ignored, onBack: ignored, fleetId: FLEET, canSwitchTools: true }));
+    expect(markup).toContain('name="signInClientSource" value="fixed"');
+    expect(markup).toContain('name="signInClientId" value="dedicated"');
+    expect(markup).toContain('name="signInClientAuthMethod" value="client_secret_basic"');
+  });
+});

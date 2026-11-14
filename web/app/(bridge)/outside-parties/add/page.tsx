@@ -12,7 +12,7 @@ export default async function AddServerPage({ searchParams }: { searchParams: Pr
   }
   return (
     <BridgeShell api={page.api} fleetId={page.fleetId} screen="outside-parties" below={{ name: 'Add MCP server', parentHref: inFleet(OUTSIDE_PARTIES_PATH, page.fleetId) }}>
-      <AddServer fleetId={page.fleetId} canSwitchTools={page.scopes.includes(APPROVING_SCOPE)} />
+      <AddServer fleetId={page.fleetId} canSwitchTools={page.scopes.includes(APPROVING_SCOPE)} redirectUri={(await page.api.parties.signInConfiguration.query()).redirectUri} />
     </BridgeShell>
   );
 }

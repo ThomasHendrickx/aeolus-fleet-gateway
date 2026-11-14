@@ -27,7 +27,10 @@ export const ADDED_CREDENTIAL_KINDS = [...CREDENTIAL_KINDS, SIGN_IN_CREDENTIAL] 
 
 export type AddedCredentialKind = (typeof ADDED_CREDENTIAL_KINDS)[number]['kind'];
 
-export type AddedServerCredential = ServerCredential | { kind: typeof SIGN_IN_CREDENTIAL.kind };
+export type AddedServerCredential = ServerCredential | { kind: typeof SIGN_IN_CREDENTIAL.kind; client?:
+  | { source: 'automatic' }
+  | { source: 'fixed'; clientId: string; clientSecret: string | null; tokenEndpointAuthMethod: 'none' | 'client_secret_post' | 'client_secret_basic' }
+};
 
 /** The kind a form sent, a bearer when it sent none it knows. */
 export function credentialKindOf(sent: string): CredentialKind {
@@ -53,6 +56,14 @@ export function addedCredentialKindOf(sent: string): AddedCredentialKind {
 }
 
 /** The credential the add page's fields name: each person signing in takes no field. */
-export function addedServerCredentialOf(fields: Parameters<typeof serverCredentialOf>[0]): AddedServerCredential {
-  return addedCredentialKindOf(fields.credentialKind) === SIGN_IN_CREDENTIAL.kind ? { kind: SIGN_IN_CREDENTIAL.kind } : serverCredentialOf(fields);
+export function addedServerCredentialOf(fields: Parameters<typeof serverCredentialOf>[0] & { signInClientSource?: string; signInClientId?: string; signInClientSecret?: string; signInClientAuthMethod?: string }): AddedServerCredential {
+  if (addedCredentialKindOf(fields.credentialKind) !== SIGN_IN_CREDENTIAL.kind) {
+    return serverCredentialOf(fields);
+  }
+  if (fields.signInClientSource !== 'fixed') {
+    return { kind: SIGN_IN_CREDENTIAL.kind };
+  }
+  const tokenEndpointAuthMethod = fields.signInClientAuthMethod === 'client_secret_basic' ? 'client_secret_basic' : fields.signInClientAuthMethod === 'client_secret_post' ? 'client_secret_post' : 'none';
+  return { kind: SIGN_IN_CREDENTIAL.kind, client: { source: 'fixed', clientId: fields.signInClientId ?? '', clientSecret: tokenEndpointAuthMethod === 'none' ? null : fields.signInClientSecret ?? '', tokenEndpointAuthMethod } };
 }
+

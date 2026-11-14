@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { ADDED_CREDENTIAL_KINDS, addedCredentialKindOf, CREDENTIAL_KINDS, credentialKindOf, SIGN_IN_CREDENTIAL, type AddedCredentialKind } from '../server-credential';
+import { SignInClientFields } from './sign-in-client-fields';
 import { INPUT, LABEL, SELECT } from './look';
 
 /**
@@ -12,7 +13,7 @@ import { INPUT, LABEL, SELECT } from './look';
  * it is typed again after a refusal. Only adding a server offers each person
  * signing in, which takes no field (decision 0067).
  */
-export function CredentialFields({ legend, fields, noneHelp, canEachPersonSignIn = false, onKindChange }: { legend: string; fields: Readonly<Record<string, string>>; noneHelp: string; canEachPersonSignIn?: boolean; onKindChange?: (kind: AddedCredentialKind) => void }) {
+export function CredentialFields({ legend, fields, noneHelp, canEachPersonSignIn = false, redirectUri, onKindChange }: { legend: string; fields: Readonly<Record<string, string>>; noneHelp: string; canEachPersonSignIn?: boolean; redirectUri?: string | undefined; onKindChange?: (kind: AddedCredentialKind) => void }) {
   const kindOf = canEachPersonSignIn ? addedCredentialKindOf : credentialKindOf;
   const [credentialKind, setCredentialKind] = useState<AddedCredentialKind>(kindOf(fields.credentialKind ?? ''));
   return (
@@ -53,7 +54,10 @@ export function CredentialFields({ legend, fields, noneHelp, canEachPersonSignIn
           <input className={INPUT} type="password" name="token" />
         </label>
       ) : credentialKind === SIGN_IN_CREDENTIAL.kind ? (
-        <p className="text-muted-foreground">Each person signs in for themselves. A ship calls under its owner&apos;s sign-in.</p>
+        <>
+          <p className="text-muted-foreground">Each person signs in for themselves. A ship calls under its owner&apos;s sign-in.</p>
+          <SignInClientFields fields={fields} redirectUri={redirectUri} />
+        </>
       ) : (
         <p className="text-muted-foreground">{noneHelp}</p>
       )}

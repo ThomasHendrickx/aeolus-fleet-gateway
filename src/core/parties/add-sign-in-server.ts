@@ -3,7 +3,7 @@ import type { FleetId } from '@aeolus-fleet/common';
 import type { PartySignIns } from '../party-grants/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import type { Result } from '../shared/result.js';
-import type { SignInClient } from '../vault/credential.js';
+import type { SignInClient, TokenEndpointAuthMethod } from '../vault/credential.js';
 import type { ApproveParty, ApprovePartyRefusal } from './approve-party.js';
 import type { AuthorizationServers, DiscoveredSignIn, PartyStore } from './ports.js';
 import type { ShownParty } from './shown-party.js';
@@ -18,7 +18,12 @@ export type AddSignInServerRefusal =
   | ApprovePartyRefusal
   | DomainError<'SERVER_UNREACHABLE' | 'NO_AUTHORIZATION_SERVER' | 'SIGN_IN_CHECK_FAILED' | 'NO_DYNAMIC_REGISTRATION' | 'REGISTRATION_REFUSED'>;
 
-export type AddSignInServer = (input: Omit<Parameters<ApproveParty>[0], 'credential'>) => Promise<Result<ShownParty, AddSignInServerRefusal>>;
+/** The explicitly selected identity, with automatic registration as the default. */
+export type SignInClientChoice =
+  | { readonly source: 'automatic' }
+  | { readonly source: 'fixed'; readonly clientId: string; readonly clientSecret: string | null; readonly tokenEndpointAuthMethod: TokenEndpointAuthMethod };
+
+export type AddSignInServer = (input: Omit<Parameters<ApproveParty>[0], 'credential'> & { readonly client?: SignInClientChoice }) => Promise<Result<ShownParty, AddSignInServerRefusal>>;
 
 /** The outside scopes each person's sign-in asks for (Q8): the 401's, else every scope the server lists, with offline_access and openid when the authorization server lists them. */
 function scopeOf(discovered: DiscoveredSignIn): string {
@@ -30,8 +35,8 @@ function scopeOf(discovered: DiscoveredSignIn): string {
 /**
  * Use case: an approver adds an outside MCP server that takes only an OAuth
  * sign-in (decision 0067). The gateway finds its authorization server,
- * checks it states PKCE S256 and offers dynamic registration, registers one
- * client for the party, bound to its issuer, then approves the party with
+ * checks it states PKCE S256, obtains the explicitly selected automatic or
+ * supplied client bound to its issuer, then approves the party with
  * that client as its credential: its proxy ship is commissioned and crewed,
  * unstated until a person signs in. A refused check keeps nothing. The same
  * addition again finds the party it kept, and registers no second client.
@@ -85,6 +90,31 @@ export function createAddSignInServer(deps: {
     const signIn = discovered.value;
     if (!signIn.codeChallengeMethods.includes(PKCE_METHOD)) {
       return refuse('SIGN_IN_CHECK_FAILED', `The authorization server ${signIn.issuer} does not state PKCE ${PKCE_METHOD}`);
+    }
+    const choice = input.client ?? { source: 'automatic' };
+    if (choice.source === 'fixed') {
+      const isPublic = choice.tokenEndpointAuthMethod === 'none';
+      if (choice.clientId.trim() === '' || (isPublic ? choice.clientSecret !== null : choice.clientSecret === null || choice.clientSecret === '')) {
+        return refuse('SIGN_IN_CHECK_FAILED', 'Supply a dedicated client id, with a secret only for form-secret or Basic authentication.');
+      }
+      if (!signIn.tokenEndpointAuthMethods.includes(choice.tokenEndpointAuthMethod)) {
+        return refuse('SIGN_IN_CHECK_FAILED', 'The authorization server does not support the selected client authentication method.');
+      }
+      const client: SignInClient = {
+        ...choice,
+        isGatewayOwned: false,
+        issuer: signIn.issuer,
+        authorizationEndpoint: signIn.authorizationEndpoint,
+        tokenEndpoint: signIn.tokenEndpoint,
+        revocationEndpoint: signIn.revocationEndpoint,
+        revocationEndpointAuthMethods: signIn.revocationEndpointAuthMethods,
+        isIssuerInResponse: signIn.isIssuerInResponse,
+        registrationClientUri: null,
+        registrationAccessToken: null,
+        resource: signIn.resource,
+        scope: scopeOf(signIn),
+      };
+      return approve({ ...input, credential: { kind: 'personSignIn', client } });
     }
     if (signIn.registrationEndpoint === null) {
       return refuse('NO_DYNAMIC_REGISTRATION', `The authorization server ${signIn.issuer} offers no dynamic registration`);

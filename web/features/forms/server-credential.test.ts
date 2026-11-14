@@ -35,3 +35,10 @@ describe("a new outside MCP server's credential, as the add page sends it (decis
     expect(serverCredentialOf({ ...TYPED, credentialKind: 'personSignIn' })).toEqual({ kind: 'bearer', token: 'crm-token' });
   });
 });
+
+
+describe('the supplied sign-in client form', () => {
+  it.each(['none', 'client_secret_post', 'client_secret_basic'])('carries the explicitly selected %s method', (tokenEndpointAuthMethod) => {
+    expect(addedServerCredentialOf({ ...TYPED, credentialKind: 'personSignIn', signInClientSource: 'fixed', signInClientId: 'dedicated', signInClientSecret: 'secret', signInClientAuthMethod: tokenEndpointAuthMethod })).toEqual({ kind: 'personSignIn', client: { source: 'fixed', clientId: 'dedicated', clientSecret: tokenEndpointAuthMethod === 'none' ? null : 'secret', tokenEndpointAuthMethod } });
+  });
+});

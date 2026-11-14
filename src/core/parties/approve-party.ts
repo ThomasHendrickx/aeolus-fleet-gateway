@@ -157,7 +157,7 @@ export const UNCOMMISSIONED = { state: 'commissioning', proxyShipId: null, secre
 export function createApproveParty(deps: ApprovalDeps): ApproveParty {
   return (input) => {
     const { operatorFleetId: fleetId, requestId, name, url, credential, ownerShipId, scopes, concurrencyLimit, toolSwitches } = input;
-    const requestHash = deps.hasher.hash(JSON.stringify([requestId, name, url, credential, ownerShipId, scopes, concurrencyLimit, toolSwitches === null ? null : [...toolSwitches]]));
+    const requestHash = deps.hasher.hash(JSON.stringify([requestId, name, url, credentialForHash(credential), ownerShipId, scopes, concurrencyLimit, toolSwitches === null ? null : [...toolSwitches]]));
     return approved<McpServerParty>(deps, {
       fleetId,
       type: MCP_SERVER_SHIP_TYPE,
@@ -193,4 +193,12 @@ export function createApproveClientParty(deps: ApprovalDeps): ApproveClientParty
       isOwn: (earlier): earlier is McpClientParty => earlier.kind === 'mcpClient',
     });
   };
+}
+
+
+/** JSON object field order can change when the vault reads a client back; it is not part of the approval's identity. */
+function credentialForHash(credential: McpServerPartyCredential) {
+  return credential.kind === 'personSignIn'
+    ? { kind: credential.kind, client: Object.entries(credential.client).sort(([left], [right]) => left.localeCompare(right)) }
+    : credential;
 }

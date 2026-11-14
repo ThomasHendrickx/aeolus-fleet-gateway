@@ -47,6 +47,10 @@ function credentialOf(form: FormData) {
     clientSecret: fieldOf(form, 'clientSecret'),
     issuer: fieldOf(form, 'issuer'),
     scope: fieldOf(form, 'scope'),
+    signInClientSource: fieldOf(form, 'signInClientSource'),
+    signInClientId: fieldOf(form, 'signInClientId'),
+    signInClientSecret: fieldOf(form, 'signInClientSecret'),
+    signInClientAuthMethod: fieldOf(form, 'signInClientAuthMethod'),
   });
 }
 

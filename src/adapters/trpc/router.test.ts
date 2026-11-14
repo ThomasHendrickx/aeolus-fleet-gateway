@@ -330,7 +330,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ name: input.name, kind: 'mcpServer' as const, url: input.url, credentialKind: input.credential.kind, ownerShipId: input.ownerShipId, concurrencyLimit: input.concurrencyLimit, state: 'crewed' as const, proxyShipId: null }));
     },
     addSignInServer: unused,
-    partySignIn: { start: unused, readOwn: unused, removeOwn: unused, list: unused, remove: unused },
+    partySignIn: { redirectUri: 'https://gateway.example/outside-parties/sign-in/done', start: unused, readOwn: unused, removeOwn: unused, list: unused, remove: unused },
     crewParty: ({ name }) =>
       Promise.resolve(
         name === 'agentcore'
@@ -1829,5 +1829,36 @@ describe("a person sends a ship a message from Bridge through the gateway's API 
 
     await expect(gatewayRouter.createCaller(context).people.send({ to: 'builder-gateway', payload, idempotencyKey: 'page-2' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(answers).toEqual([]);
+  });
+});
+
+
+describe('supplied outside OAuth clients through the API', () => {
+  const approval = { requestId: 'fixed-client', name: 'crm', url: 'https://crm.example/mcp', ownerShipId: OWNER };
+  it('passes an explicit supplied identity to addition without exposing it in output', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+    const additions: unknown[] = [];
+    context.addSignInServer = (input) => {
+      additions.push(input);
+      return Promise.resolve(ok({ name: input.name, kind: 'mcpServer', url: input.url, credentialKind: 'personSignIn', state: 'crewed', proxyShipId: null, ownerShipId: OWNER, concurrencyLimit: 4 }));
+    };
+    const client = { source: 'fixed' as const, clientId: 'dedicated', clientSecret: 'secret', tokenEndpointAuthMethod: 'client_secret_basic' as const };
+    const result = await gatewayRouter.createCaller(context).parties.approve({ ...approval, credential: { kind: 'personSignIn', client } });
+    expect(additions).toMatchObject([{ client, operatorFleetId: FLEET }]);
+    expect(JSON.stringify(result)).not.toContain('secret');
+  });
+
+  it.each([
+    { source: 'fixed', clientId: 'dedicated', clientSecret: null, tokenEndpointAuthMethod: 'private_key_jwt' },
+    { source: 'fixed', clientId: 'dedicated', clientSecret: null, tokenEndpointAuthMethod: 'none', registrationClientUri: 'https://evil.example/client' },
+    { source: 'fixed', clientId: 'dedicated', clientSecret: null, tokenEndpointAuthMethod: 'none', issuer: 'https://evil.example' },
+  ])('rejects unsupported or management fields on a supplied client', async (client) => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.approve(asSent({ ...approval, credential: { kind: 'personSignIn', client } }))).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('shows the configured callback to a person adding a server', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+    context.partySignIn.redirectUri = 'https://public.gateway.example/outside-parties/sign-in/done';
+    await expect(gatewayRouter.createCaller(context).parties.signInConfiguration()).resolves.toEqual({ redirectUri: 'https://public.gateway.example/outside-parties/sign-in/done' });
   });
 });

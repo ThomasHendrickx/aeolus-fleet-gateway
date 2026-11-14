@@ -158,7 +158,7 @@ export interface Context {
   approveParty: ApproveParty;
   addSignInServer: AddSignInServer;
   /** A person's own sign-in to an outside MCP server where each person signs in (decision 0067). */
-  partySignIn: { start: StartPartySignIn; readOwn: ReadOwnGrant; removeOwn: RemoveOwnGrant; list: ListGrants; remove: RemoveGrant };
+  partySignIn: { redirectUri: string; start: StartPartySignIn; readOwn: ReadOwnGrant; removeOwn: RemoveOwnGrant; list: ListGrants; remove: RemoveGrant };
   addClientParty: AddClientParty;
   crewParty: CrewParty;
   listParties: ListParties;
@@ -567,7 +567,16 @@ const credentialInputSchema = z.discriminatedUnion('kind', [
  * vault's, or each person signing in, for which the gateway registers the
  * party's client itself (decision 0067).
  */
-const serverCredentialInputSchema = z.discriminatedUnion('kind', [...credentialInputSchema.options, z.strictObject({ kind: z.literal('personSignIn') })]);
+const signInClientChoiceSchema = z.discriminatedUnion('source', [
+  z.strictObject({ source: z.literal('automatic') }),
+  z.strictObject({
+    source: z.literal('fixed'),
+    clientId: z.string().min(1),
+    clientSecret: z.string().nullable(),
+    tokenEndpointAuthMethod: z.enum(['none', 'client_secret_post', 'client_secret_basic']),
+  }),
+]);
+const serverCredentialInputSchema = z.discriminatedUnion('kind', [...credentialInputSchema.options, z.strictObject({ kind: z.literal('personSignIn'), client: signInClientChoiceSchema.optional() })]);
 
 /** A party as any actor reads it: never its credential or its crew token. */
 const shownPartyBase = { name: z.string(), state: z.enum(['commissioning', 'awaitingCrew', 'crewed']), proxyShipId: z.string().nullable() };
@@ -969,7 +978,7 @@ export const gatewayRouter = t.router({
         const toolSwitches = tools === undefined ? null : new Map(tools.map(({ name, isOn }) => [name, isOn]));
         const { credential, ...server } = approval;
         if (credential.kind === 'personSignIn') {
-          const added = await ctx.addSignInServer({ operatorFleetId: ctx.fleetId, ...server, scopes: [], toolSwitches });
+          const added = await ctx.addSignInServer({ operatorFleetId: ctx.fleetId, ...server, ...(credential.client === undefined ? {} : { client: credential.client }), scopes: [], toolSwitches });
           if (!added.isOk) {
             throw new TRPCError({ code: ADD_SIGN_IN_SERVER_CODES[added.error.kind], message: added.error.message });
           }
@@ -1124,6 +1133,9 @@ export const gatewayRouter = t.router({
      * server to send their browser to. Every account of the fleet with a
      * person ship may.
      */
+    signInConfiguration: managing(servedProcedure)
+      .output(z.object({ redirectUri: z.string() }))
+      .query(({ ctx }) => ({ redirectUri: ctx.partySignIn.redirectUri })),
     startSignIn: servedProcedure
       .input(z.strictObject({ name: shipHandleSchema }))
       .output(z.object({ url: z.string() }))
