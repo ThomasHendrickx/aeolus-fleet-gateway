@@ -17,6 +17,8 @@ export interface PartyStore {
   findByClient(fleetId: FleetId, clientId: string): Promise<Party | undefined>;
   /** The party whose bearer has this hash, in whichever fleet: the bearer alone names an A2A client (decision 0060), as a token hash is looked up unscoped (0007). */
   findByBearer(bearerHash: string): Promise<Party | undefined>;
+  /** The party whose gateway URL client id this is, in whichever fleet: the URL alone names it, as its client metadata document is read without sign-in (decision 0074). */
+  findByUrlClient(clientId: string): Promise<Party | undefined>;
   /** Keeps the party; a server's tool switches only when it is new, as only switchTools changes them after. */
   save(party: Party): Promise<void>;
   /**

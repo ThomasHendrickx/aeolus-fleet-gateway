@@ -21,6 +21,7 @@ export function memoryPartyStore(): PartyStore & { held: Map<string, Party> } {
     list: (fleetId) => Promise.resolve([...held.values()].filter((party) => party.fleetId === fleetId)),
     findByClient: (fleetId, clientId) => Promise.resolve([...held.values()].find((party) => party.fleetId === fleetId && party.kind === 'mcpClient' && party.clientId === clientId)),
     findByBearer: (bearerHash) => Promise.resolve([...held.values()].find((party) => party.kind === 'a2aClient' && party.bearerHash === bearerHash)),
+    findByUrlClient: (clientId) => Promise.resolve([...held.values()].find((party) => party.kind === 'mcpServer' && party.credential.kind === 'personSignIn' && party.credential.client.source === 'url' && party.credential.client.clientId === clientId)),
     // A server's tool switches change only by switchTools once it is kept, as the store keeps them.
     save: (party) => {
       const earlier = held.get(key(party.fleetId, party.name));

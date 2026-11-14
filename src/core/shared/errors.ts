@@ -3,6 +3,7 @@ import { err, type Err } from './result.js';
 /** Every reason the gateway's core refuses a request. */
 export type DomainErrorKind =
   | 'ALREADY_CONNECTED'
+  | 'NO_CLIENT_METADATA_DOCUMENT'
   | 'SECRET_REFUSED'
   | 'OTHER_FLEET'
   | 'MISSING_SCOPES'
