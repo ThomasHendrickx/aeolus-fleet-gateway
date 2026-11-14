@@ -1153,7 +1153,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     connect,
     approveParty,
     partySignIn,
-    addSignInServer: createAddSignInServer({ approveParty, parties, servers: createAuthorizationServers(), servesOutsideParties, redirectUri: partySignInRedirectUri }),
+    addSignInServer: createAddSignInServer({ approveParty, parties, servers: createAuthorizationServers(), signIns: partySignIns, servesOutsideParties, redirectUri: partySignInRedirectUri }),
     addClientParty: createAddClientParty({ parties, approveClientParty, clients: oauthClients, secrets: oauthSecrets }),
     addA2aClient,
     addA2aAgent,
