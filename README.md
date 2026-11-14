@@ -14,7 +14,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 | `DATABASE_URL` | required | The gateway's own Postgres 16 or newer database, with a direct connection |
 | `FLEET_URL` | required | The fleet's public URL (`http://` or `https://`) |
 | `HOST` | `127.0.0.1` | Interface to listen on |
-| `PORT` | `4200` | Port to listen on |
+| `PORT` | `4300` | Port to listen on |
 | `GATEWAY_PUBLIC_URL` | `http://127.0.0.1:<PORT>` | Where outside MCP clients reach the gateway: the OAuth issuer, with the MCP endpoint at `/mcp` |
 | `GATEWAY_SECRET` | required | At least 32 characters. Keys the ship aliases outside MCP clients see: the same secret keeps every alias across restarts, a new one renames every ship to them |
 | `MCP_WAIT_MAX_MS` | `10000` | How long an outside MCP client's tool call waits for its answer before it is answered its handle; `0` answers the handle at once |
@@ -31,7 +31,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 
 | Command | Does |
 | --- | --- |
-| `aeolus-gateway start` | Reads core's version and exits 1 when core is older than it needs (core 0.28.0 or later), saying both versions; migrates its database; serves |
+| `aeolus-gateway start` | Reads core's version and exits 1 when core is older than it needs (core 0.38.5 or later), saying both versions; migrates its database; serves |
 | `aeolus-gateway migrate` | Migrates its database, and nothing else. Needs `DATABASE_URL` alone |
 
 The gateway's pages are its web app's, a Next.js app in `web/` (aeolus-fleet's header design, H3), which the same server answers at the same address: `npm run build` builds it beside the server, and started from source (`npx tsx src/bin/aeolus-gateway.ts start`) it compiles as it is asked. It answers an address with no page of the server's own, its Not found among them, in its frame, whose header takes the shared header from `@aeolus-fleet/common/header` once common ships it.

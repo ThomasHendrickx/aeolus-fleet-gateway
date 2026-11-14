@@ -353,7 +353,7 @@ const ROUTING_ON_BY_DEFAULT = ITEM_JOBS.map((job) => ({ job, place: 'chat' as co
 const TOOL_CALL_TIMEOUT_MS = 5 * 60_000;
 
 /** Where the gateway is reached unless told: this machine, at its default port. */
-const DEFAULT_PUBLIC_URL = 'http://127.0.0.1:4200';
+const DEFAULT_PUBLIC_URL = 'http://127.0.0.1:4300';
 
 
 /** How long a client's metadata document may take to answer. */

@@ -28,7 +28,7 @@ const environmentSchema = z.object({
   FLEET_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }),
   GATEWAY_SECRET: z.string().min(GATEWAY_SECRET_MIN_LENGTH, { error: `must hold at least ${String(GATEWAY_SECRET_MIN_LENGTH)} characters` }),
   HOST: z.string().min(1).default('127.0.0.1'),
-  PORT: z.coerce.number().int().min(0).max(65_535).default(4200),
+  PORT: z.coerce.number().int().min(0).max(65_535).default(4300),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   GATEWAY_PUBLIC_URL: z.url({ protocol: /^https?$/, error: 'must be an http:// or https:// URL' }).optional(),
   MCP_WAIT_MAX_MS: z.coerce.number().int().min(0).default(MCP_WAIT_MAX_MS_DEFAULT),
