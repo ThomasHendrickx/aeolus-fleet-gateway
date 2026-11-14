@@ -33,6 +33,8 @@ const SCOPES = ['mcp', 'offline_access', 'openid'];
 const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
 
 export interface AttioDoubleOptions {
+  /** Accept public gateway URL identities with this exact callback, without registering them. */
+  urlClientRedirectUri?: string;
   tokenEndpointAuthMethods?: string[];
   /** The PKCE methods its authorization server states; S256 by default. */
   codeChallengeMethods?: string[];
@@ -102,10 +104,10 @@ const authorizeSchema = z.object({
   resource: z.string(),
   scope: z.string(),
 });
-const redeemSchema = z.object({ grant_type: z.literal('authorization_code'), code: z.string(), redirect_uri: z.string(), client_id: z.string(), client_secret: z.string(), code_verifier: z.string(), resource: z.string() });
-const refreshSchema = z.object({ grant_type: z.literal('refresh_token'), refresh_token: z.string(), client_id: z.string(), client_secret: z.string(), resource: z.string() });
+const redeemSchema = z.object({ grant_type: z.literal('authorization_code'), code: z.string(), redirect_uri: z.string(), client_id: z.string(), client_secret: z.string().optional(), code_verifier: z.string(), resource: z.string() });
+const refreshSchema = z.object({ grant_type: z.literal('refresh_token'), refresh_token: z.string(), client_id: z.string(), client_secret: z.string().optional(), resource: z.string() });
 const toolCallSchema = z.object({ method: z.literal('tools/call'), params: z.object({ name: z.string() }) });
-const revokeSchema = z.object({ token: z.string(), client_id: z.string(), client_secret: z.string() });
+const revokeSchema = z.object({ token: z.string(), client_id: z.string(), client_secret: z.string().optional() });
 
 interface IssuedCode {
   clientId: string;
@@ -181,6 +183,8 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     close: () => server.close(),
   };
   const secretOf = (clientId: string) => `${clientId}-secret`;
+  const isUrlClient = (clientId: string) => options.urlClientRedirectUri !== undefined && clientId.startsWith(`${new URL(options.urlClientRedirectUri).origin}/outside-oauth/clients/`);
+  const isClientAuthenticated = (clientId: string, secret: string | undefined) => isUrlClient(clientId) ? secret === undefined : secret === secretOf(clientId);
 
   server.all('/mcp', async (request, reply) => {
     const authorization = request.headers.authorization ?? '';
@@ -211,7 +215,7 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: options.codeChallengeMethods ?? ['S256'],
     token_endpoint_auth_methods_supported: options.tokenEndpointAuthMethods ?? ['none', 'client_secret_post'],
-    revocation_endpoint_auth_methods_supported: ['client_secret_post'],
+    revocation_endpoint_auth_methods_supported: options.urlClientRedirectUri === undefined ? ['client_secret_post'] : ['none', 'client_secret_post'],
     scopes_supported: SCOPES,
   }));
   server.post('/oauth/register', (request, reply) => {
@@ -234,7 +238,8 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
   });
   server.get('/oidc/authorize', (request, reply) => {
     const asked = authorizeSchema.safeParse(request.query);
-    const client = asked.success ? registered.find(({ clientId }) => clientId === asked.data.client_id) : undefined;
+    const client = asked.success ? registered.find(({ clientId }) => clientId === asked.data.client_id)
+      ?? (isUrlClient(asked.data.client_id) && options.urlClientRedirectUri !== undefined ? { clientId: asked.data.client_id, redirectUris: [options.urlClientRedirectUri] } : undefined) : undefined;
     if (!asked.success || client === undefined || !client.redirectUris.includes(asked.data.redirect_uri) || asked.data.resource !== double.url) {
       return reply.code(HTTP_BAD_REQUEST).send({ error: 'invalid_request' });
     }
@@ -270,7 +275,7 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     if (refreshing.success) {
       const { refresh_token: refreshToken, client_id: clientId, client_secret: clientSecret, resource } = refreshing.data;
       const grant = refreshTokens.get(refreshToken);
-      if (grant?.clientId !== clientId || clientSecret !== secretOf(clientId) || resource !== double.url || double.revoked.includes(refreshToken)) {
+      if (grant?.clientId !== clientId || !isClientAuthenticated(clientId, clientSecret) || resource !== double.url || double.revoked.includes(refreshToken)) {
         return reply.code(HTTP_BAD_REQUEST).send({ error: 'invalid_grant', error_description: 'The refresh token is unknown, used or not this client\'s' });
       }
       // Rotated: the refresh token used is never taken again.
@@ -285,14 +290,14 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     }
     codes.delete(asked.data.code);
     const { client_id: clientId, client_secret: clientSecret, code_verifier: verifier, redirect_uri: redirectUri, resource } = asked.data;
-    if (clientId !== code.clientId || clientSecret !== secretOf(clientId) || redirectUri !== code.redirectUri || createHash('sha256').update(verifier).digest('base64url') !== code.challenge || resource !== double.url) {
+    if (clientId !== code.clientId || !isClientAuthenticated(clientId, clientSecret) || redirectUri !== code.redirectUri || createHash('sha256').update(verifier).digest('base64url') !== code.challenge || resource !== double.url) {
       return reply.code(HTTP_BAD_REQUEST).send({ error: 'invalid_grant', error_description: 'The code was not issued for this client, verifier or resource' });
     }
     return reply.send({ ...issueTokens(clientId, code.account), id_token: unsignedJwt({ iss: origin, aud: clientId, sub: code.account.subject, email: code.account.email }) });
   });
   server.post('/oidc/revoke', (request, reply) => {
     const asked = revokeSchema.safeParse(request.body);
-    if (options.isRevoking !== true || !asked.success || asked.data.client_secret !== secretOf(asked.data.client_id)) {
+    if (options.isRevoking !== true || !asked.success || !isClientAuthenticated(asked.data.client_id, asked.data.client_secret)) {
       return reply.code(HTTP_BAD_REQUEST).send({ error: 'invalid_request' });
     }
     double.revoked.push(asked.data.token);

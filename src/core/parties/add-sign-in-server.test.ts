@@ -16,6 +16,7 @@ const ATTIO_URL = 'https://mcp.attio.com/mcp';
 const REDIRECT_URI = 'https://gateway.example.com/outside-parties/sign-in/done';
 const OTHER_FLEET_ID: FleetId = 'flt_01m3tbfspe96yf1rnr4ank9oth';
 
+let allocatedUrls = 0;
 const deletedClients: string[] = [];
 let deletion: Awaited<ReturnType<PartySignIns['deleteClient']>> = ok(undefined);
 const signIns: Pick<PartySignIns, 'deleteClient'> = { deleteClient: (client) => { deletedClients.push(client.clientId); return Promise.resolve(deletion); } };
@@ -25,6 +26,7 @@ let parties: ReturnType<typeof memoryPartyStore>;
 let connections: ReturnType<typeof memoryConnectionStore>;
 
 beforeEach(async () => {
+  allocatedUrls = 0;
   deletedClients.length = 0;
   deletion = ok(undefined);
   fleet = fakeProxyShipFleet();
@@ -36,7 +38,7 @@ beforeEach(async () => {
 function adding(servers: AuthorizationServers, isServing = true) {
   const servesOutsideParties = () => Promise.resolve(isServing);
   const approveParty = createApproveParty({ connections, parties, door: fleet.door, hasher: plainHasher, servesOutsideParties, clock: { now: () => AT } });
-  return createAddSignInServer({ approveParty, parties, servers, signIns, servesOutsideParties, redirectUri: REDIRECT_URI });
+  return createAddSignInServer({ approveParty, parties, servers, signIns, servesOutsideParties, redirectUri: REDIRECT_URI, newUrlClientId: () => `https://gateway.example.com/outside-oauth/clients/opaque-${String(++allocatedUrls)}` });
 }
 
 function anAddition(overrides: Partial<Parameters<ReturnType<typeof adding>>[0]> = {}): Parameters<ReturnType<typeof adding>>[0] {
@@ -316,5 +318,94 @@ describe('adding a supplied client (decision 0074)', () => {
     await expect(add(anAddition())).resolves.toMatchObject({ isOk: false, error: { kind: 'COMMISSION_REFUSED' } });
     expect(attio.registered).toEqual([]);
     expect(deletedClients).toEqual([]);
+  });
+});
+
+
+describe('adding a plain gateway URL client (decision 0074)', () => {
+  const client = { source: 'url', mode: 'plain' } as const;
+
+  it('keeps an issuer-bound public URL identity without dynamic registration', async () => {
+    const attio = fakeAuthorizationServers(ok({ ...ATTIO_SIGN_IN, registrationEndpoint: null }));
+    await expect(adding(attio.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: true });
+    await expect(parties.find(FLEET_ID, 'attio')).resolves.toMatchObject({ credential: { client: {
+      source: 'url', clientId: 'https://gateway.example.com/outside-oauth/clients/opaque-1',
+      clientSecret: null, tokenEndpointAuthMethod: 'none', isGatewayOwned: true,
+      issuer: ATTIO_SIGN_IN.issuer, authorizationEndpoint: ATTIO_SIGN_IN.authorizationEndpoint,
+      tokenEndpoint: ATTIO_SIGN_IN.tokenEndpoint, resource: ATTIO_URL, scope: 'mcp offline_access openid',
+      registrationClientUri: null, registrationAccessToken: null,
+    } } });
+    expect(attio.registered).toEqual([]);
+  });
+
+  it('allocates distinct URL identities for separate additions and fleets', async () => {
+    await connections.save({ fleetId: OTHER_FLEET_ID, shipId: SHIP_ID, name: 'gateway', crewToken: 'gateway', crewedAt: AT });
+    const attio = fakeAuthorizationServers();
+    const add = adding(attio.servers);
+    await add(anAddition({ client }));
+    await add(anAddition({ client, name: 'attio-sales', requestId: 'sales' }));
+    await add(anAddition({ client, operatorFleetId: OTHER_FLEET_ID }));
+    const kept = await Promise.all([parties.find(FLEET_ID, 'attio'), parties.find(FLEET_ID, 'attio-sales'), parties.find(OTHER_FLEET_ID, 'attio')]);
+    expect(kept.map((party) => party?.kind === 'mcpServer' && party.credential.kind === 'personSignIn' ? party.credential.client.clientId : null)).toEqual([
+      'https://gateway.example.com/outside-oauth/clients/opaque-1',
+      'https://gateway.example.com/outside-oauth/clients/opaque-2',
+      'https://gateway.example.com/outside-oauth/clients/opaque-3',
+    ]);
+    expect(attio.registered).toEqual([]);
+  });
+
+  it('reuses the kept URL after an uncertain commission, even when discovery is now unavailable', async () => {
+    const attio = fakeAuthorizationServers();
+    fleet.state.isAnswering = false;
+    await expect(adding(attio.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
+    fleet.state.isAnswering = true;
+    const unavailable = fakeAuthorizationServers(err({ kind: 'unreachable', reason: 'offline' }));
+    await expect(adding(unavailable.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: true });
+    await expect(parties.find(FLEET_ID, 'attio')).resolves.toMatchObject({ credential: { client: { clientId: 'https://gateway.example.com/outside-oauth/clients/opaque-1' } } });
+    expect(allocatedUrls).toBe(1);
+    expect(attio.registered).toEqual([]);
+  });
+
+  it('reuses a completed addition and refuses a conflicting request without allocating again', async () => {
+    const attio = fakeAuthorizationServers();
+    const add = adding(attio.servers);
+    await add(anAddition({ client }));
+    await expect(add(anAddition({ client }))).resolves.toMatchObject({ isOk: true });
+    await expect(add(anAddition({ client, requestId: 'different' }))).resolves.toMatchObject({ isOk: false, error: { kind: 'PARTY_EXISTS' } });
+    expect(allocatedUrls).toBe(1);
+    expect(fleet.state.commissioned).toHaveLength(1);
+  });
+
+  it('keeps no URL client after definite commission refusal and never deletes an outside client', async () => {
+    fleet.state.validOwners.clear();
+    const attio = fakeAuthorizationServers();
+    await expect(adding(attio.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: false, error: { kind: 'COMMISSION_REFUSED' } });
+    expect(parties.held.size).toBe(0);
+    expect(deletedClients).toEqual([]);
+    expect(attio.registered).toEqual([]);
+  });
+
+  it.each([
+    { ...ATTIO_SIGN_IN, codeChallengeMethods: [] },
+    { ...ATTIO_SIGN_IN, tokenEndpointAuthMethods: ['client_secret_basic'] },
+  ])('refuses unsupported discovery before allocating a URL identity', async (discovered) => {
+    const attio = fakeAuthorizationServers(ok(discovered));
+    await expect(adding(attio.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: false, error: { kind: 'SIGN_IN_CHECK_FAILED' } });
+    expect({ allocatedUrls, parties: parties.held.size, registered: attio.registered }).toEqual({ allocatedUrls: 0, parties: 0, registered: [] });
+  });
+
+  it.each([
+    { kind: 'unreachable', reason: 'timeout' } as const,
+    { kind: 'noAuthorizationServer', reason: 'missing protected resource metadata' } as const,
+    { kind: 'noServerMetadata', reason: 'issuer mismatch' } as const,
+  ])('keeps nothing and allocates no identity after a $kind discovery failure', async (failure) => {
+    const attio = fakeAuthorizationServers(err(failure));
+    await expect(adding(attio.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: false });
+    expect({ allocatedUrls, parties: parties.held.size, registered: attio.registered }).toEqual({ allocatedUrls: 0, parties: 0, registered: [] });
+  });
+
+  it('allocates nothing while outside parties are off', async () => {
+    await expect(adding(fakeAuthorizationServers().servers, false)(anAddition({ client }))).resolves.toMatchObject({ isOk: false, error: { kind: 'OUTSIDE_PARTIES_OFF' } });
+    expect(allocatedUrls).toBe(0);
   });
 });

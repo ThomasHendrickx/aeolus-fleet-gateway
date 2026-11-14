@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
 import { createPrismaClient } from '../src/adapters/prisma/client.js';
+import { createPartySignIns } from '../src/adapters/oauth/party-sign-ins.js';
+import { createPrismaPartyGrants } from '../src/adapters/prisma/party-grants.js';
+import { createRefreshGrant } from '../src/core/party-grants/refresh-grant.js';
 import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
+import type { SignInClientChoice } from '../src/core/parties/add-sign-in-server.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { startAttioDouble, type AttioDouble, type AttioDoubleOptions } from './fixtures/attio-double/attio-double.js';
 import { commission, register, signIn } from './support/argo.js';
@@ -37,7 +41,7 @@ let mathilde: ShipId;
 let address: string;
 let app: GatewayApp;
 
-async function started(options: AttioDoubleOptions = {}): Promise<void> {
+async function started(options: AttioDoubleOptions = {}, client?: SignInClientChoice): Promise<void> {
   attio = await startAttioDouble(options);
   app = createGatewayApp({
     gatewaySecret: TEST_GATEWAY_SECRET,
@@ -51,7 +55,7 @@ async function started(options: AttioDoubleOptions = {}): Promise<void> {
   address = await app.server.listen({ host: '127.0.0.1', port: 0 });
   const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: GATEWAY_SCOPES } });
   expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
-  const added = await mutate(address, { procedure: 'parties.approve', cookie, body: { requestId: 'add-attio', name: 'attio', url: attio.url, credential: { kind: 'personSignIn' }, ownerShipId: mathilde } });
+  const added = await mutate(address, { procedure: 'parties.approve', cookie, body: { requestId: 'add-attio', name: 'attio', url: attio.url, credential: { kind: 'personSignIn', ...(client === undefined ? {} : { client }) }, ownerShipId: mathilde } });
   expect(added.status, await added.clone().text()).toBe(200);
 }
 
@@ -214,5 +218,76 @@ describe('a person signs in to an outside MCP server for themselves', () => {
     expect(attio.revoked).toEqual(['attio-refresh-2', 'attio-access-2']);
     await expect(ownSignIn(MATHILDE_BROWSER)).resolves.toEqual({ state: 'notSignedIn' });
     expect(await keptGrants()).toEqual([]);
+  });
+});
+
+
+describe('sign-in with a plain gateway URL client', () => {
+  const client = { source: 'url', mode: 'plain' } as const;
+  const urlOptions = { isRegistering: false, urlClientRedirectUri: `${PUBLIC_URL}/outside-parties/sign-in/done`, isRevoking: true };
+
+  it('authorizes and redeems with its persisted URL identity, then retires its grant without deleting a client', async () => {
+    await started(urlOptions, client);
+    const response = await asPerson(MATHILDE_BROWSER, { procedure: 'parties.startSignIn', input: { name: 'attio' } });
+    const authorize = new URL(startedSchema.parse(await response.json()).result.data.url);
+    expect(authorize.searchParams.get('client_id')).toMatch(/^https:\/\/gateway\.example\.com\/outside-oauth\/clients\//);
+    expect(authorize.searchParams.get('redirect_uri')).toBe(`${PUBLIC_URL}/outside-parties/sign-in/done`);
+    expect(authorize.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(authorize.searchParams.get('resource')).toBe(attio.url);
+    const authorized = await fetch(authorize, { redirect: 'manual' });
+    expect(authorized.status, await authorized.clone().text()).toBe(302);
+    const next = await cameBack(new URL(authorized.headers.get('location') ?? ''), MATHILDE_BROWSER);
+    expect(next.searchParams.get('sign-in')).toBe('signed-in');
+    await expect(ownSignIn(MATHILDE_BROWSER)).resolves.toMatchObject({ state: 'signedIn' });
+    expect(z.object({ capabilities: z.array(z.object({ name: z.string() })) }).parse((await discoveredAttio())?.statement).capabilities.map(({ name }) => name)).toEqual(['search_records']);
+    expect(attio.registered).toEqual([]);
+    const prisma = createPrismaClient(databaseUrl);
+    try {
+      const party = await createPrismaPartyStore(prisma).find(fleetId, 'attio');
+      const grants = createPrismaPartyGrants(prisma);
+      const grant = await grants.ofPerson(fleetId, { party: 'attio', personShipId: mathilde });
+      if (party?.kind !== 'mcpServer' || party.credential.kind !== 'personSignIn' || grant === undefined) throw new Error('Expected a URL client and its grant');
+      const refresh = createRefreshGrant({ grants, signIns: createPartySignIns(), clock: { now: () => new Date('2026-11-14T20:00:00Z') }, tellSignInNeeded: () => Promise.resolve() });
+      await expect(refresh({ client: party.credential.client, grant })).resolves.toMatchObject({ isOk: true });
+      await expect(grants.ofPerson(fleetId, { party: 'attio', personShipId: mathilde })).resolves.toMatchObject({ accessToken: 'attio-access-3', refreshToken: 'attio-refresh-3' });
+      expect(attio.refreshed).toEqual(['attio-refresh-2']);
+    } finally { await prisma.$disconnect(); }
+    const manager = await commission(fleet, { cookie, ship: { name: 'manager', type: 'agent', scopes: ['fleet:manage'] } });
+    const retired = await mutate(address, { procedure: 'parties.retire', crewToken: await register(fleet, manager), body: { name: 'attio' } });
+    expect(retired.status, await retired.clone().text()).toBe(200);
+    expect(await keptGrants()).toEqual([]);
+    expect(attio.revoked).toEqual(['attio-refresh-3', 'attio-access-3']);
+    expect(attio.deletedClients).toEqual([]);
+  });
+
+  it('keeps no grant after a returned callback refusal and never switches identity', async () => {
+    await started(urlOptions, client);
+    const back = await signInStarted(MATHILDE_BROWSER);
+    back.searchParams.delete('code');
+    back.searchParams.set('error', 'invalid_redirect_uri');
+    const next = await cameBack(back, MATHILDE_BROWSER);
+    expect({ outcome: next.searchParams.get('sign-in'), error: next.searchParams.get('error') }).toEqual({ outcome: 'not-signed-in', error: 'invalid_redirect_uri' });
+    expect(await keptGrants()).toEqual([]);
+    expect(attio.registered).toEqual([]);
+    const response = await asPerson(MATHILDE_BROWSER, { procedure: 'parties.startSignIn', input: { name: 'attio' } });
+    const authorize = new URL(startedSchema.parse(await response.json()).result.data.url);
+    const prisma = createPrismaClient(databaseUrl);
+    try {
+      const party = await createPrismaPartyStore(prisma).find(fleetId, 'attio');
+      expect(party).toMatchObject({ credential: { client: { source: 'url', clientId: authorize.searchParams.get('client_id') } } });
+    } finally { await prisma.$disconnect(); }
+  });
+
+  it('cannot start or complete sign-in after the party is retired', async () => {
+    await started(urlOptions, client);
+    const back = await signInStarted(MATHILDE_BROWSER);
+    const manager = await commission(fleet, { cookie, ship: { name: 'manager', type: 'agent', scopes: ['fleet:manage'] } });
+    const retired = await mutate(address, { procedure: 'parties.retire', crewToken: await register(fleet, manager), body: { name: 'attio' } });
+    expect(retired.status, await retired.clone().text()).toBe(200);
+    const starting = await asPerson(MATHILDE_BROWSER, { procedure: 'parties.startSignIn', input: { name: 'attio' } });
+    expect(starting.status).toBe(404);
+    expect((await cameBack(back, MATHILDE_BROWSER)).searchParams.get('sign-in')).toBe('failed');
+    expect(await keptGrants()).toEqual([]);
+    expect(attio.deletedClients).toEqual([]);
   });
 });

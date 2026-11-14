@@ -21,6 +21,7 @@ export type AddSignInServerRefusal =
 /** The explicitly selected identity, with automatic registration as the default. */
 export type SignInClientChoice =
   | { readonly source: 'automatic' }
+  | { readonly source: 'url'; readonly mode: 'plain' }
   | { readonly source: 'fixed'; readonly clientId: string; readonly clientSecret: string | null; readonly tokenEndpointAuthMethod: TokenEndpointAuthMethod };
 
 export type AddSignInServer = (input: Omit<Parameters<ApproveParty>[0], 'credential'> & { readonly client?: SignInClientChoice }) => Promise<Result<ShownParty, AddSignInServerRefusal>>;
@@ -35,8 +36,8 @@ function scopeOf(discovered: DiscoveredSignIn): string {
 /**
  * Use case: an approver adds an outside MCP server that takes only an OAuth
  * sign-in (decision 0067). The gateway finds its authorization server,
- * checks it states PKCE S256, obtains the explicitly selected automatic or
- * supplied client bound to its issuer, then approves the party with
+ * checks it states PKCE S256, obtains the explicitly selected automatic,
+ * supplied or gateway URL client bound to its issuer, then approves the party with
  * that client as its credential: its proxy ship is commissioned and crewed,
  * unstated until a person signs in. A refused check keeps nothing. The same
  * addition again finds the party it kept, and registers no second client.
@@ -49,6 +50,8 @@ export function createAddSignInServer(deps: {
   servesOutsideParties: (fleetId: FleetId) => Promise<boolean>;
   /** Where the outside authorization server sends each person back after their sign-in. */
   redirectUri: string;
+  /** Allocate a distinct public URL under the configured gateway address. */
+  newUrlClientId: () => string;
 }): AddSignInServer {
   const approve: ApproveParty = async (input) => {
     const result = await deps.approveParty(input);
@@ -92,6 +95,29 @@ export function createAddSignInServer(deps: {
       return refuse('SIGN_IN_CHECK_FAILED', `The authorization server ${signIn.issuer} does not state PKCE ${PKCE_METHOD}`);
     }
     const choice = input.client ?? { source: 'automatic' };
+    if (choice.source === 'url') {
+      if (!signIn.tokenEndpointAuthMethods.includes('none')) {
+        return refuse('SIGN_IN_CHECK_FAILED', 'The authorization server does not support the selected client authentication method.');
+      }
+      const client: SignInClient = {
+        source: 'url',
+        isGatewayOwned: true,
+        clientId: deps.newUrlClientId(),
+        clientSecret: null,
+        tokenEndpointAuthMethod: 'none',
+        issuer: signIn.issuer,
+        authorizationEndpoint: signIn.authorizationEndpoint,
+        tokenEndpoint: signIn.tokenEndpoint,
+        revocationEndpoint: signIn.revocationEndpoint,
+        revocationEndpointAuthMethods: signIn.revocationEndpointAuthMethods,
+        isIssuerInResponse: signIn.isIssuerInResponse,
+        registrationClientUri: null,
+        registrationAccessToken: null,
+        resource: signIn.resource,
+        scope: scopeOf(signIn),
+      };
+      return approve({ ...input, credential: { kind: 'personSignIn', client } });
+    }
     if (choice.source === 'fixed') {
       const isPublic = choice.tokenEndpointAuthMethod === 'none';
       if (choice.clientId.trim() === '' || (isPublic ? choice.clientSecret !== null : choice.clientSecret === null || choice.clientSecret === '')) {

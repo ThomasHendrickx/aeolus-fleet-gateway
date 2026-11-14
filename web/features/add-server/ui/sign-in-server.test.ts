@@ -111,3 +111,27 @@ describe('the supplied sign-in client fields', () => {
     expect(markup).toContain('name="signInClientAuthMethod" value="client_secret_basic"');
   });
 });
+
+
+describe('the approved plain gateway URL form', () => {
+  it('offers the explicit URL choice with the approved guidance, exact callback and public fields only', () => {
+    const markup = renderToStaticMarkup(createElement(AddressStep, { state: { fields: { ...SIGN_IN_FIELDS, signInClientSource: 'url' } }, action: ignored, fleetId: FLEET, redirectUri: 'https://public.gateway.example/outside-parties/sign-in/done' }));
+    const text = textOf(markup);
+    expect(text).toContain('Gateway URL');
+    expect(text).toContain('URL mode');
+    expect(text).toContain('Plain URL');
+    expect(text).toContain('The gateway creates a distinct public client URL for this server. No client secret is needed.');
+    expect(text).toContain('Choose this only if the service accepts a URL as its client id and allows this exact callback:');
+    expect(text).toContain('https://public.gateway.example/outside-parties/sign-in/done');
+    expect(text).toContain('Adding checks discovery and client settings. Sign in afterwards to check that the service accepts the client and callback.');
+    expect(text).not.toContain('Metadata document');
+    expect(markup).not.toContain('name="signInClientId"');
+    expect(markup).not.toContain('name="signInClientSecret"');
+    expect(markup).not.toContain('name="signInClientAuthMethod"');
+  });
+
+  it('carries the URL choice to addition through the owner step', () => {
+    const markup = renderToStaticMarkup(createElement(OwnerStep, { state: { ...OWNER, fields: { ...SIGN_IN_FIELDS, signInClientSource: 'url' } }, refused: { kind: 'idle' }, action: ignored, onBack: ignored, fleetId: FLEET, canSwitchTools: true }));
+    expect(markup).toContain('name="signInClientSource" value="url"');
+  });
+});
