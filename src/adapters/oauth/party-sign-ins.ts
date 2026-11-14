@@ -1,11 +1,8 @@
 /**
- * A party's outside authorization server, as the gateway, a confidential
- * OAuth client, reaches it for each person's sign-in (MCP authorization
- * 2026-07-28, decision 0067): the authorize address of the code flow with
- * PKCE S256 and the resource (RFC 8707), the code redeemed at the token
- * endpoint with the client's secret (client_secret_post, as the client was
- * registered), a grant refreshed (RFC 6749 6) with the same client and
- * resource, a token revoked (RFC 7009), and the client deleted (RFC 7592).
+ * A party's issuer-bound outside OAuth client (decision 0074): code
+ * redemption with PKCE S256, refresh with the resource (RFC 8707), and
+ * revocation use the stored public, form-secret or Basic authentication
+ * method. Registration-management credentials delete only owned clients.
  * The ID token's claims are
  * read, not checked: the core checks they name the party's issuer and
  * client.
@@ -68,8 +65,19 @@ function idTokenClaimsOf(idToken: string): IdTokenClaims | undefined {
 }
 
 /** The client's own credentials, as it authenticates at the token and revocation endpoints. */
-function clientAuthenticationOf(client: SignInClient): Record<string, string> {
-  return client.clientSecret === null ? { client_id: client.clientId } : { client_id: client.clientId, client_secret: client.clientSecret };
+function clientAuthenticationOf(client: SignInClient): { form: Record<string, string>; headers: Record<string, string> } {
+  switch (client.tokenEndpointAuthMethod) {
+    case 'none':
+      return { form: { client_id: client.clientId }, headers: {} };
+    case 'client_secret_post':
+      return { form: { client_id: client.clientId, client_secret: client.clientSecret ?? '' }, headers: {} };
+    case 'client_secret_basic': {
+      // RFC 6749 2.3.1 requires form encoding each credential before Base64.
+      const encoded = (value: string) => new URLSearchParams({ value }).toString().slice('value='.length);
+      const credentials = `${encoded(client.clientId)}:${encoded(client.clientSecret ?? '')}`;
+      return { form: {}, headers: { authorization: `Basic ${Buffer.from(credentials).toString('base64')}` } };
+    }
+  }
 }
 
 /** The token endpoint's answer to a token request: the tokens it issued, its OAuth error, or no answer. */
@@ -85,9 +93,10 @@ async function tokensOf(response: Response): Promise<Result<z.infer<typeof token
   return tokens.success ? ok(tokens.data) : err({ kind: 'refused', error: 'invalid_response', reason: 'the token endpoint answered no bearer access token' });
 }
 
-async function posted(url: string, form: Record<string, string>): Promise<Result<Response, TokenRequestFailure>> {
+async function posted(client: SignInClient, { url, form }: { url: string; form: Record<string, string> }): Promise<Result<Response, TokenRequestFailure>> {
+  const authentication = clientAuthenticationOf(client);
   try {
-    return ok(await fetch(url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body: new URLSearchParams(form), signal: AbortSignal.timeout(ANSWER_WAIT_MS) }));
+    return ok(await fetch(url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json', ...authentication.headers }, body: new URLSearchParams({ ...form, ...authentication.form }), signal: AbortSignal.timeout(ANSWER_WAIT_MS) }));
   } catch (error) {
     return err({ kind: 'unreachable', reason: reasonOf(error) });
   }
@@ -113,7 +122,7 @@ export function createPartySignIns(): PartySignIns {
     },
 
     async redeemCode(client, { code, verifier, redirectUri }) {
-      const answered = await posted(client.tokenEndpoint, { grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: verifier, resource: client.resource, ...clientAuthenticationOf(client) });
+      const answered = await posted(client, { url: client.tokenEndpoint, form: { grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: verifier, resource: client.resource } });
       if (!answered.isOk) {
         return answered;
       }
@@ -130,7 +139,7 @@ export function createPartySignIns(): PartySignIns {
     },
 
     async refresh(client, refreshToken) {
-      const answered = await posted(client.tokenEndpoint, { grant_type: 'refresh_token', refresh_token: refreshToken, resource: client.resource, ...clientAuthenticationOf(client) });
+      const answered = await posted(client, { url: client.tokenEndpoint, form: { grant_type: 'refresh_token', refresh_token: refreshToken, resource: client.resource } });
       if (!answered.isOk) {
         return answered;
       }
@@ -143,7 +152,10 @@ export function createPartySignIns(): PartySignIns {
     },
 
     async revoke(client, token) {
-      const answered = await posted(client.revocationEndpoint, { token, ...clientAuthenticationOf(client) });
+      if (!client.revocationEndpointAuthMethods.includes(client.tokenEndpointAuthMethod)) {
+        return err({ reason: 'the revocation endpoint does not support the stored client authentication method' });
+      }
+      const answered = await posted(client, { url: client.revocationEndpoint, form: { token } });
       if (!answered.isOk) {
         return err({ reason: answered.error.reason });
       }

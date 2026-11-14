@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ATTIO_CLIENT } from '../../../test/support/party-grant-fakes.js';
@@ -9,19 +9,20 @@ let endpoint: string;
 let requests: { authorization: string | undefined; form: Record<string, string> }[];
 beforeEach(async () => {
   requests = [];
-  server = createServer(async (request, response) => {
+  async function respond(request: IncomingMessage, response: ServerResponse): Promise<void> {
     let body = '';
     for await (const chunk of request) body += String(chunk);
     requests.push({ authorization: request.headers.authorization, form: Object.fromEntries(new URLSearchParams(body)) });
     response.setHeader('content-type', 'application/json');
     response.end(JSON.stringify({ access_token: 'access', token_type: 'Bearer' }));
-  });
+  }
+  server = createServer((request, response) => { void respond(request, response); });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   if (address === null || typeof address === 'string') throw new Error('No listening port');
   endpoint = `http://127.0.0.1:${String(address.port)}`;
 });
-afterEach(() => new Promise<void>((resolve, reject) => server.close((error) => error === undefined ? resolve() : reject(error))));
+afterEach(() => new Promise<void>((resolve, reject) => server.close((error) => { if (error === undefined) { resolve(); } else { reject(error); } })));
 
 describe('stored outside client authentication', () => {
   it.each(['none', 'client_secret_post', 'client_secret_basic'] as const)('uses %s for code redemption, refresh and revocation', async (tokenEndpointAuthMethod) => {

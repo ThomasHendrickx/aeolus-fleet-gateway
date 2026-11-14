@@ -31,7 +31,7 @@ export function createEndPartyGrants(deps: { grants: Pick<PartyGrants, 'ofParty'
       after = last.personShipId;
     }
     const { registrationClientUri, registrationAccessToken } = client;
-    if (registrationClientUri !== null && registrationAccessToken !== null) {
+    if (client.source === 'automatic' && client.isGatewayOwned && registrationClientUri !== null && registrationAccessToken !== null) {
       await deps.signIns.deleteClient({ ...client, registrationClientUri, registrationAccessToken });
     }
   };

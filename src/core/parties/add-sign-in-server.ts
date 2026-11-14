@@ -74,12 +74,21 @@ export function createAddSignInServer(deps: {
     if (signIn.registrationEndpoint === null) {
       return refuse('NO_DYNAMIC_REGISTRATION', `The authorization server ${signIn.issuer} offers no dynamic registration`);
     }
+    if (!signIn.tokenEndpointAuthMethods.includes('client_secret_post')) {
+      return refuse('SIGN_IN_CHECK_FAILED', 'The authorization server does not support client_secret_post registration.');
+    }
     const scope = scopeOf(signIn);
     const registered = await deps.servers.register(signIn.registrationEndpoint, { clientName: `Aeolus: ${name}`, redirectUri: deps.redirectUri, scope });
     if (!registered.isOk) {
       return refuse('REGISTRATION_REFUSED', `The authorization server ${signIn.issuer} refused the registration: ${registered.error.reason}`);
     }
+    if (!signIn.tokenEndpointAuthMethods.includes(registered.value.tokenEndpointAuthMethod)) {
+      return refuse('REGISTRATION_REFUSED', 'The registered authentication method is not supported by the discovered authorization server.');
+    }
     const client: SignInClient = {
+      source: 'automatic',
+      isGatewayOwned: true,
+      revocationEndpointAuthMethods: signIn.revocationEndpointAuthMethods,
       issuer: signIn.issuer,
       authorizationEndpoint: signIn.authorizationEndpoint,
       tokenEndpoint: signIn.tokenEndpoint,

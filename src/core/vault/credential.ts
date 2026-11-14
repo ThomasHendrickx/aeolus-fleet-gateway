@@ -18,13 +18,15 @@ export type McpServerCredential =
       readonly scope?: string;
     };
 
-/**
- * The OAuth client the gateway registered for one party with the outside
- * authorization server, by dynamic registration (decision 0067): every
- * person's grant for the party is under it, and it goes to no issuer but its
- * own.
- */
+/** The supported OAuth client authentication methods (decision 0074). */
+export type TokenEndpointAuthMethod = 'none' | 'client_secret_post' | 'client_secret_basic';
+
+/** One party's issuer-bound client, shared by its per-person grants (decision 0074). */
 export interface SignInClient {
+  readonly source: 'automatic' | 'fixed' | 'url';
+  readonly isGatewayOwned: boolean;
+  readonly tokenEndpointAuthMethod: TokenEndpointAuthMethod;
+  readonly revocationEndpointAuthMethods: readonly string[];
   readonly issuer: string;
   readonly authorizationEndpoint: string;
   readonly tokenEndpoint: string;

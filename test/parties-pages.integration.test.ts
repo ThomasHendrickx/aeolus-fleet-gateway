@@ -287,6 +287,10 @@ describe('the parties pages, as the account signed in', () => {
       credential: {
         kind: 'personSignIn',
         client: {
+          source: 'automatic',
+          isGatewayOwned: true,
+          tokenEndpointAuthMethod: 'none',
+          revocationEndpointAuthMethods: ['client_secret_post'],
           issuer: 'https://app.attio.com',
           authorizationEndpoint: 'https://app.attio.com/oidc/authorize',
           tokenEndpoint: 'https://app.attio.com/oidc/token',

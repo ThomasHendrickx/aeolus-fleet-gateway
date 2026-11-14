@@ -3,6 +3,7 @@ import type { FleetId, ShipId, VerifiedFact } from '@aeolus-fleet/common';
 import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
+import type { TokenEndpointAuthMethod } from '../vault/credential.js';
 import type { Party } from './party.js';
 import type { ScopeRequirements, ScopeRequirementsChange } from './scope-requirements.js';
 import type { FromFleet } from './shown-party.js';
@@ -105,6 +106,9 @@ export interface DiscoveredSignIn {
   readonly revocationEndpoint: string | null;
   /** Whether it states its issuer in each authorization response (RFC 9207). */
   readonly isIssuerInResponse: boolean;
+  readonly tokenEndpointAuthMethods: readonly string[];
+  readonly revocationEndpointAuthMethods: readonly string[];
+  readonly isClientIdMetadataDocumentSupported: boolean;
   readonly codeChallengeMethods: readonly string[];
   /** The scopes the authorization server lists. */
   readonly serverScopes: readonly string[];
@@ -123,6 +127,7 @@ export interface DiscoveryFailure {
 
 /** What dynamic registration answered (RFC 7591, 7592). */
 export interface RegisteredClient {
+  readonly tokenEndpointAuthMethod: TokenEndpointAuthMethod;
   readonly clientId: string;
   readonly clientSecret: string | null;
   readonly registrationClientUri: string | null;

@@ -22,11 +22,13 @@ const INITIALIZE = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { prot
 
 /** RFC 7591's answer, by its own field names. */
 const registeredSchema = z.object({
+  token_endpoint_auth_method: z.enum(['none', 'client_secret_post', 'client_secret_basic']).default('client_secret_basic'),
   client_id: z.string().min(1),
   client_secret: z.string().min(1).optional(),
   registration_client_uri: z.string().optional(),
   registration_access_token: z.string().optional(),
 });
+const revocationMetadata = z.object({ revocation_endpoint_auth_methods_supported: z.array(z.string()).optional() });
 const registrationErrorSchema = z.object({ error: z.string(), error_description: z.string().optional() });
 
 const timedFetch: FetchLike = (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(ANSWER_WAIT_MS) });
@@ -91,6 +93,9 @@ export function createAuthorizationServers(): AuthorizationServers {
         registrationEndpoint: serverMetadata.registration_endpoint ?? null,
         revocationEndpoint: 'revocation_endpoint' in serverMetadata ? (serverMetadata.revocation_endpoint ?? null) : null,
         isIssuerInResponse: serverMetadata.authorization_response_iss_parameter_supported === true,
+        tokenEndpointAuthMethods: serverMetadata.token_endpoint_auth_methods_supported ?? ['client_secret_basic'],
+        revocationEndpointAuthMethods: revocationMetadata.parse(serverMetadata).revocation_endpoint_auth_methods_supported ?? ['client_secret_basic'],
+        isClientIdMetadataDocumentSupported: serverMetadata.client_id_metadata_document_supported === true,
         codeChallengeMethods: serverMetadata.code_challenge_methods_supported ?? [],
         serverScopes: serverMetadata.scopes_supported ?? [],
       };
@@ -123,10 +128,13 @@ export function createAuthorizationServers(): AuthorizationServers {
       }
       const registered = registeredSchema.safeParse(body);
       if (!registered.success) {
-        return err({ reason: 'the registration answered no client id' });
+        return err({ reason: 'the registration answered an invalid client identity or authentication method' });
       }
-      const { client_id: clientId, client_secret: clientSecret, registration_client_uri: registrationClientUri, registration_access_token: registrationAccessToken } = registered.data;
-      return ok({ clientId, clientSecret: clientSecret ?? null, registrationClientUri: registrationClientUri ?? null, registrationAccessToken: registrationAccessToken ?? null });
+      const { token_endpoint_auth_method: tokenEndpointAuthMethod, client_id: clientId, client_secret: clientSecret, registration_client_uri: registrationClientUri, registration_access_token: registrationAccessToken } = registered.data;
+      if ((tokenEndpointAuthMethod === 'none') !== (clientSecret === undefined)) {
+        return err({ reason: 'the registration secret does not agree with its authentication method' });
+      }
+      return ok({ tokenEndpointAuthMethod, clientId, clientSecret: clientSecret ?? null, registrationClientUri: registrationClientUri ?? null, registrationAccessToken: registrationAccessToken ?? null });
     },
   };
 }

@@ -28,7 +28,7 @@ beforeEach(async () => {
   if (address === null || typeof address === 'string') throw new Error('No listening port');
   origin = `http://127.0.0.1:${String(address.port)}`;
 });
-afterEach(() => new Promise<void>((resolve, reject) => server.close((error) => error === undefined ? resolve() : reject(error))));
+afterEach(() => new Promise<void>((resolve, reject) => server.close((error) => { if (error === undefined) { resolve(); } else { reject(error); } })));
 
 describe('outside authorization server capabilities', () => {
   it('applies Basic metadata defaults and carries CIMD and revocation capabilities', async () => {
