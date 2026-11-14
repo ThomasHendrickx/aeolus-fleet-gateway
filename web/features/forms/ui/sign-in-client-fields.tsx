@@ -8,6 +8,7 @@ import { INPUT, LABEL, SELECT } from './look';
 export function SignInClientFields({ fields, redirectUri }: { fields: Readonly<Record<string, string>>; redirectUri?: string | undefined }) {
   const [source, setSource] = useState(fields.signInClientSource === 'url' ? 'url' : fields.signInClientSource === 'fixed' ? 'fixed' : 'automatic');
   const [method, setMethod] = useState(fields.signInClientAuthMethod ?? 'none');
+  const [urlMode, setUrlMode] = useState(fields.signInClientUrlMode === 'document' ? 'document' : 'plain');
   return (
     <div className="grid min-w-0 gap-3" data-testid="sign-in-client-fields">
       <label className={LABEL}>
@@ -22,11 +23,14 @@ export function SignInClientFields({ fields, redirectUri }: { fields: Readonly<R
         <p className="text-muted-foreground">The gateway creates a distinct public client URL for this server. No client secret is needed.</p>
         <label className={LABEL}>
           <span>URL mode</span>
-          <select className={SELECT} name="signInClientUrlMode" defaultValue="plain">
+          <select className={SELECT} name="signInClientUrlMode" value={urlMode} onChange={(event) => { setUrlMode(event.target.value); }} data-testid="sign-in-client-url-mode">
             <option value="plain">Plain URL</option>
+            <option value="document">Metadata document</option>
           </select>
         </label>
-        <p className="text-muted-foreground">Choose this only if the service accepts a URL as its client id and allows this exact callback:</p>
+        <p className="text-muted-foreground">{urlMode === 'document'
+          ? 'The service must advertise client metadata document support. The gateway publishes the client URL with this exact callback:'
+          : 'Choose this only if the service accepts a URL as its client id and allows this exact callback:'}</p>
         <p className="break-all font-mono" data-testid="sign-in-client-callback">{redirectUri}</p>
         <p className="text-muted-foreground">Adding checks discovery and client settings. Sign in afterwards to check that the service accepts the client and callback.</p>
       </> : null}

@@ -16,7 +16,7 @@ import { ToolsSection } from './tools-section';
 const CONCURRENCY_LIMIT_DEFAULT = '4';
 
 /** The credential fields, carried on from the address step to the owner step. */
-const CARRIED_FIELDS = ['url', 'credentialKind', 'token', 'clientId', 'clientSecret', 'issuer', 'scope', 'signInClientSource', 'signInClientId', 'signInClientSecret', 'signInClientAuthMethod'] as const;
+const CARRIED_FIELDS = ['url', 'credentialKind', 'token', 'clientId', 'clientSecret', 'issuer', 'scope', 'signInClientSource', 'signInClientId', 'signInClientSecret', 'signInClientAuthMethod', 'signInClientUrlMode'] as const;
 
 /**
  * The step that names the server's proxy ship and its owner, below the tools
