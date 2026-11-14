@@ -47,3 +47,11 @@ describe('the supplied sign-in client form', () => {
 it('carries a plain gateway URL choice without supplied identity or secret fields', () => {
   expect(addedServerCredentialOf({ ...TYPED, credentialKind: 'personSignIn', signInClientSource: 'url', signInClientId: 'ignored', signInClientSecret: 'ignored', signInClientAuthMethod: 'client_secret_basic' })).toEqual({ kind: 'personSignIn', client: { source: 'url', mode: 'plain' } });
 });
+
+it.each([
+  ['plain', 'plain'],
+  ['document', 'document'],
+  [undefined, 'plain'],
+] as const)('carries the gateway URL mode %s as %s', (signInClientUrlMode, mode) => {
+  expect(addedServerCredentialOf({ ...TYPED, credentialKind: 'personSignIn', signInClientSource: 'url', ...(signInClientUrlMode === undefined ? {} : { signInClientUrlMode }) })).toEqual({ kind: 'personSignIn', client: { source: 'url', mode } });
+});

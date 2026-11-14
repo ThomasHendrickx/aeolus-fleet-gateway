@@ -124,7 +124,7 @@ describe('the approved plain gateway URL form', () => {
     expect(text).toContain('Choose this only if the service accepts a URL as its client id and allows this exact callback:');
     expect(text).toContain('https://public.gateway.example/outside-parties/sign-in/done');
     expect(text).toContain('Adding checks discovery and client settings. Sign in afterwards to check that the service accepts the client and callback.');
-    expect(text).not.toContain('Metadata document');
+    expect(text).not.toContain('The service must advertise client metadata document support.');
     expect(markup).not.toContain('name="signInClientId"');
     expect(markup).not.toContain('name="signInClientSecret"');
     expect(markup).not.toContain('name="signInClientAuthMethod"');
@@ -133,5 +133,32 @@ describe('the approved plain gateway URL form', () => {
   it('carries the URL choice to addition through the owner step', () => {
     const markup = renderToStaticMarkup(createElement(OwnerStep, { state: { ...OWNER, fields: { ...SIGN_IN_FIELDS, signInClientSource: 'url' } }, refused: { kind: 'idle' }, action: ignored, onBack: ignored, fleetId: FLEET, canSwitchTools: true }));
     expect(markup).toContain('name="signInClientSource" value="url"');
+  });
+});
+
+
+describe('the approved metadata document form (after-document-idle)', () => {
+  const documentFields = { ...SIGN_IN_FIELDS, signInClientSource: 'url', signInClientUrlMode: 'document' };
+
+  it('offers Metadata document with the approved guidance, exact callback and public fields only', () => {
+    const markup = renderToStaticMarkup(createElement(AddressStep, { state: { fields: documentFields }, action: ignored, fleetId: FLEET, redirectUri: 'https://public.gateway.example/outside-parties/sign-in/done' }));
+    const text = textOf(markup);
+    expect(text).toContain('The gateway creates a distinct public client URL for this server. No client secret is needed.');
+    expect(markup).toContain('<option value="document" selected="">Metadata document</option>');
+    expect(text).toContain('The service must advertise client metadata document support. The gateway publishes the client URL with this exact callback:');
+    expect(text).not.toContain('Choose this only if the service accepts a URL as its client id');
+    expect(text).toContain('https://public.gateway.example/outside-parties/sign-in/done');
+    expect(text).toContain('Adding checks discovery and client settings. Sign in afterwards to check that the service accepts the client and callback.');
+    expect(markup).not.toContain('name="signInClientSecret"');
+  });
+
+  it('carries the document mode to addition through the owner step', () => {
+    const markup = renderToStaticMarkup(createElement(OwnerStep, { state: { ...OWNER, fields: documentFields }, refused: { kind: 'idle' }, action: ignored, onBack: ignored, fleetId: FLEET, canSwitchTools: true }));
+    expect(markup).toContain('name="signInClientUrlMode" value="document"');
+  });
+
+  it('shows the unadvertised document refusal on the owner step (after-document-document-unsupported)', () => {
+    const message = 'The authorization server does not advertise client metadata document support. Choose another client option or check the service configuration.';
+    expect(textOf(ownerStep(message))).toContain(message);
   });
 });
