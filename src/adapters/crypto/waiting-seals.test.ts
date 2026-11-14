@@ -30,7 +30,10 @@ describe("a browser's wait for an outside MCP client, sealed into the waiting pa
     const sealed = seals.seal(WAITING);
     const signIn = createSignInSeals(SECRET).seal({ verifier: 'v', browserSecret: 'b', request: {}, holder: 'party', expiresAt: new Date('2026-10-19T09:10:00.000Z') });
 
-    expect([createWaitingSeals('another-gateway-secret-of-32-characters!').seal(WAITING), `${sealed.slice(0, -2)}${sealed.endsWith('AA') ? 'BB' : 'AA'}`, signIn, 'not-a-seal'].map((each) => seals.open(each))).toEqual([
+    const bytes = Buffer.from(sealed, 'base64url');
+    bytes.writeUInt8(bytes.readUInt8(bytes.length - 1) ^ 1, bytes.length - 1);
+
+    expect([createWaitingSeals('another-gateway-secret-of-32-characters!').seal(WAITING), bytes.toString('base64url'), signIn, 'not-a-seal'].map((each) => seals.open(each))).toEqual([
       undefined,
       undefined,
       undefined,
