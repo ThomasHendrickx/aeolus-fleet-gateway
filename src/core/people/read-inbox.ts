@@ -34,29 +34,8 @@ export async function waitingFor(
   deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; held: HeldDeliveries },
   caller: PersonCaller,
 ): Promise<Result<{ crew: PersonCrewToken; waiting: number; deliveries: PersonDelivery[] }, PersonCrewError>> {
-  const counted = await asPersonCrew(deps, { caller, run: (crew) => deps.door.inbox(crew.crewToken) });
-  if (!counted.isOk) {
-    return counted;
-  }
-  const { waiting } = counted.value.value;
-  let crew = counted.value.crew;
-  let deliveries = stillHeld(deps.held, { crewToken: crew.crewToken, waiting });
-  while (deliveries.length < waiting) {
-    const excluding = deliveries.map(({ deliveryId }) => deliveryId);
-    const taken = await asPersonCrew(deps, { caller, run: (held) => deps.door.pushReceive(held.crewToken, { max: RECEIVE_MAX_UPPER_BOUND, ...(excluding.length === 0 ? {} : { excluding }) }) });
-    if (!taken.isOk) {
-      return taken;
-    }
-    crew = taken.value.crew;
-    const isTaken = new Set<string>(excluding);
-    const fresh = taken.value.value.filter(({ deliveryId }) => !isTaken.has(deliveryId));
-    if (fresh.length === 0) {
-      break;
-    }
-    deliveries = [...deliveries, ...fresh];
-  }
-  deps.held.hold(crew.crewToken, deliveries);
-  return ok({ crew, waiting, deliveries });
+  const read = await asPersonCrew(deps, { caller, run: (crew) => sharedWaiting(deps, crew.crewToken) });
+  return read.isOk ? ok({ crew: read.value.crew, ...read.value.value }) : read;
 }
 
 /** What the crew holds while it is no more than wait, so a receive reaches past it; else nothing, to receive every one again. */
@@ -72,6 +51,36 @@ function stillHeld(held: HeldDeliveries, look: { crewToken: string; waiting: num
  * it, and refused as the fleet refuses, a crew that no longer works included.
  */
 export async function waitingOn(deps: { door: Pick<PersonShipDoor, 'inbox' | 'pushReceive'>; held: HeldDeliveries }, crewToken: string): Promise<Result<PersonDelivery[], FleetRefusal>> {
+  const read = await sharedWaiting(deps, crewToken);
+  return read.isOk ? ok(read.value.deliveries) : read;
+}
+
+interface Waiting { readonly waiting: number; readonly deliveries: PersonDelivery[] }
+interface WaitingDeps { readonly door: Pick<PersonShipDoor, 'inbox' | 'pushReceive'>; readonly held: HeldDeliveries }
+
+/** Only overlapping reads share a result; every later look counts again. Stores isolate gateway instances. */
+const receiving = new WeakMap<HeldDeliveries, Map<string, Promise<Result<Waiting, FleetRefusal>>>>();
+
+async function sharedWaiting(deps: WaitingDeps, crewToken: string): Promise<Result<Waiting, FleetRefusal>> {
+  let byCrew = receiving.get(deps.held);
+  if (byCrew === undefined) {
+    byCrew = new Map();
+    receiving.set(deps.held, byCrew);
+  }
+  const running = byCrew.get(crewToken);
+  if (running !== undefined) {
+    return running;
+  }
+  const read = receiveWaiting(deps, crewToken);
+  byCrew.set(crewToken, read);
+  try {
+    return await read;
+  } finally {
+    byCrew.delete(crewToken);
+  }
+}
+
+async function receiveWaiting(deps: WaitingDeps, crewToken: string): Promise<Result<Waiting, FleetRefusal>> {
   const { door, held } = deps;
   const counted = await door.inbox(crewToken);
   if (!counted.isOk) {
@@ -92,7 +101,7 @@ export async function waitingOn(deps: { door: Pick<PersonShipDoor, 'inbox' | 'pu
     deliveries = [...deliveries, ...fresh];
   }
   held.hold(crewToken, deliveries);
-  return ok(deliveries);
+  return ok({ waiting: counted.value.waiting, deliveries });
 }
 
 /**

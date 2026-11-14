@@ -173,16 +173,15 @@ describe('concurrent person inbox reads (#370)', () => {
       try {
         await core.$executeRawUnsafe(`CREATE FUNCTION slow_delivery_claim() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.05); RETURN NEW; END $$`);
         await core.$executeRawUnsafe(`CREATE TRIGGER slow_delivery_claim BEFORE UPDATE ON deliveries FOR EACH ROW EXECUTE FUNCTION slow_delivery_claim()`);
-        const originalInbox = waitingDeps.door.inbox;
-        let releaseCounts = (): void => {};
-        const countsReady = new Promise<void>((resolve) => { releaseCounts = resolve; });
+        const originalDoor = waitingDeps.door;
+        const countsReady = Promise.withResolvers<undefined>();
         let countedReads = 0;
-        const timeout = setTimeout(() => releaseCounts(), 100);
+        const timeout = setTimeout(() => { countsReady.resolve(undefined); }, 100);
         waitingDeps.door = { ...waitingDeps.door, inbox: async (token, wait) => {
-          const answer = await originalInbox(token, wait);
+          const answer = await originalDoor.inbox(token, wait);
           countedReads += 1;
-          if (countedReads === 2) { clearTimeout(timeout); releaseCounts(); }
-          await countsReady;
+          if (countedReads === 2) { clearTimeout(timeout); countsReady.resolve(undefined); }
+          await countsReady.promise;
           return answer;
         } };
         const [first, second] = await Promise.all([
