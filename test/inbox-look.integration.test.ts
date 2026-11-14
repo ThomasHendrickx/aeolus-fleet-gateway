@@ -1,11 +1,12 @@
+import { createApp } from '@aeolus-fleet/core/testing';
 import type { ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaClient } from '../src/adapters/prisma/client.js';
-import { createHeldDeliveries, holdingDoor } from '../src/core/people/held-deliveries.js';
+import { createHeldDeliveries, holdingDoor, type HeldDeliveries } from '../src/core/people/held-deliveries.js';
 import type { PersonShipDoor } from '../src/core/people/ports.js';
-import { createReadInbox, type ReadInbox } from '../src/core/people/read-inbox.js';
+import { createReadInbox, waitingFor, waitingOn, type ReadInbox } from '../src/core/people/read-inbox.js';
 import { ITEM_JOBS, routingDefaultsOf } from '../src/core/people/routing.js';
 import { commission, register, signIn } from './support/argo.js';
 import { FLEET_ID, memoryConnectionStore } from './support/fleet-fakes.js';
@@ -30,20 +31,30 @@ let tracker: string;
 /** The person ship's calls the look made, by name. */
 let calls: string[];
 let readInbox: ReadInbox;
+let held: HeldDeliveries;
+let crewToken: string;
+let waitingDeps: Parameters<typeof waitingFor>[0];
 
 beforeEach(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
+  // No long poll: a skipped claim answers empty while the competing transaction holds it.
+  await fleet.stop();
+  const server = createApp({ databaseUrl: fleet.databaseUrl, publicUrl: fleet.url, logger: false, receiveWaitMs: 0 });
+  await server.listen({ host: '127.0.0.1', port: new URL(fleet.url).port === '' ? 80 : Number(new URL(fleet.url).port) });
+  fleet = { ...fleet, stop: () => server.close() };
   const cookie = await signIn(fleet);
   const charlotte = await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } });
   charlotteShipId = charlotte.shipId;
   const charlotteCrew = await register(fleet, charlotte);
+  crewToken = charlotteCrew;
   tracker = await register(fleet, await commission(fleet, { cookie, ship: { name: 'tracker', type: 'issue-tracker', kind: 'app' } }));
   const crews = memoryPersonCrews();
   // The gateway crews Charlotte's person ship: the fakes know it by the tests' ids, the fleet by its own.
   await crews.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, crewToken: charlotteCrew, crewedAt: new Date() });
   calls = [];
-  const held = createHeldDeliveries(FIXED_CLOCK);
+  held = createHeldDeliveries(FIXED_CLOCK);
   const door = holdingDoor(counted(createRestFleetDoor(fleet.url).person, calls), { held, letGo: memoryLetGoDeliveries() });
+  waitingDeps = { crewPersonShip: fakeCrewPersonShip(crews), crews, door, held };
   readInbox = createReadInbox({
     crewPersonShip: fakeCrewPersonShip(crews),
     crews,
@@ -143,4 +154,46 @@ describe('a look at more than 10 waiting is a read (aeolus-fleet #1647)', () => 
     },
     LOOK_TIMEOUT_MS,
   );
+});
+
+// Keep core's claims overlapping so the competing receive encounters SKIP LOCKED.
+describe('concurrent person inbox reads (#370)', () => {
+  for (const otherRead of ['waitingFor', 'waitingOn'] as const) {
+    it(`shares all 14 deliveries between waitingFor and ${otherRead}`, async () => {
+      // Start with seven held deliveries and seven pending, as a busy person receives more.
+      const initial = await waitingDeps.door.pushReceive(crewToken, { max: 7 });
+      expect(initial.isOk).toBe(true);
+      if (initial.isOk) held.hold(crewToken, initial.value);
+      const pending = await waitingDeps.door.pushReceive(crewToken, { max: 1, excluding: (held.of(crewToken) ?? []).map(({ deliveryId }) => deliveryId) });
+      const removed = pending.isOk ? pending.value[0] : undefined;
+      if (removed === undefined) throw new Error('Expected the initial deliveries');
+      expect(await waitingDeps.door.ack(crewToken, removed.deliveryId)).toEqual({ isOk: true, value: undefined });
+      held.hold(crewToken, (held.of(crewToken) ?? []).slice(0, 7));
+      const core = createPrismaClient(fleet.databaseUrl);
+      try {
+        await core.$executeRawUnsafe(`CREATE FUNCTION slow_delivery_claim() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.05); RETURN NEW; END $$`);
+        await core.$executeRawUnsafe(`CREATE TRIGGER slow_delivery_claim BEFORE UPDATE ON deliveries FOR EACH ROW EXECUTE FUNCTION slow_delivery_claim()`);
+        const originalDoor = waitingDeps.door;
+        const countsReady = Promise.withResolvers<undefined>();
+        let countedReads = 0;
+        const timeout = setTimeout(() => { countsReady.resolve(undefined); }, 100);
+        waitingDeps.door = { ...waitingDeps.door, inbox: async (token, wait) => {
+          const answer = await originalDoor.inbox(token, wait);
+          countedReads += 1;
+          if (countedReads === 2) { clearTimeout(timeout); countsReady.resolve(undefined); }
+          await countsReady.promise;
+          return answer;
+        } };
+        const [first, second] = await Promise.all([
+          waitingFor(waitingDeps, CHARLOTTE_GRANT),
+          otherRead === 'waitingFor' ? waitingFor(waitingDeps, CHARLOTTE_GRANT) : waitingOn(waitingDeps, crewToken),
+        ]);
+        expect(first.isOk ? first.value.deliveries.length : first.error).toBe(14);
+        expect(second.isOk ? (Array.isArray(second.value) ? second.value.length : second.value.deliveries.length) : second.error).toBe(14);
+        expect(held.of(crewToken)).toHaveLength(14);
+      } finally {
+        await core.$disconnect();
+      }
+    });
+  }
 });
