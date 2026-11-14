@@ -6,7 +6,6 @@ import { createPrismaClient } from '../src/adapters/prisma/client.js';
 import { createPartySignIns } from '../src/adapters/oauth/party-sign-ins.js';
 import { createPrismaPartyGrants } from '../src/adapters/prisma/party-grants.js';
 import { createRefreshGrant } from '../src/core/party-grants/refresh-grant.js';
-import { ok } from '../src/core/shared/result.js';
 import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
 import type { SignInClientChoice } from '../src/core/parties/add-sign-in-server.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
@@ -248,7 +247,7 @@ describe('sign-in with a plain gateway URL client', () => {
       const grants = createPrismaPartyGrants(prisma);
       const grant = await grants.ofPerson(fleetId, { party: 'attio', personShipId: mathilde });
       if (party?.kind !== 'mcpServer' || party.credential.kind !== 'personSignIn' || grant === undefined) throw new Error('Expected a URL client and its grant');
-      const refresh = createRefreshGrant({ grants, signIns: createPartySignIns(), clock: { now: () => new Date('2026-11-14T20:00:00Z') }, tellSignInNeeded: async () => ok(undefined) });
+      const refresh = createRefreshGrant({ grants, signIns: createPartySignIns(), clock: { now: () => new Date('2026-11-14T20:00:00Z') }, tellSignInNeeded: () => Promise.resolve() });
       await expect(refresh({ client: party.credential.client, grant })).resolves.toMatchObject({ isOk: true });
       await expect(grants.ofPerson(fleetId, { party: 'attio', personShipId: mathilde })).resolves.toMatchObject({ accessToken: 'attio-access-3', refreshToken: 'attio-refresh-3' });
       expect(attio.refreshed).toEqual(['attio-refresh-2']);
