@@ -109,7 +109,7 @@ For a server where each person signs in, a ship's call goes out under the sign-i
 
 ```mermaid
 flowchart TD
-    call["An agent's ship calls a tool"] --> reach{"May it reach<br/>the proxy ship?"}
+    asks["An agent's ship calls a tool"] --> reach{"May it reach<br/>the proxy ship?"}
     reach -->|no| refused["The fleet refuses the send"]
     reach -->|yes| tool{"Tool switched on,<br/>scopes held?"}
     tool -->|no| toolerr["An error result says why"]
@@ -123,7 +123,7 @@ flowchart TD
     missing --> step["The person gets a step:<br/>Sign in to the server"]
     step --> signin["They sign in on the server's page"]
     signin --> again["The agent calls again"]
-    again --> call
+    again --> asks
 ```
 
 ### The missing sign-in message
