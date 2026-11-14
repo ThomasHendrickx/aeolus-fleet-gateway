@@ -86,7 +86,11 @@ Some servers take only an OAuth sign-in. Choose **Each person signs in**: each p
 
 The steps are **Address**, **Owner** and **Sign in**. There are no tools to check before someone signs in, so the gateway checks the server's sign-in when you press Add, and says a refusal in place. Then sign in to the server for yourself with **Sign in to** the server, or press **Later** and sign in from its page. Its tools show after the first sign-in.
 
-**Not supported yet:** the gateway adds such a server only when its sign-in offers automatic client registration. A server whose sign-in does not, such as one that expects a fixed client id or a URL as its client id, is refused when you add it. That is [issue #348](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/348).
+Choose **Automatic registration** (the default), or **Supplied client** when you already have a client dedicated to this server. For a supplied client, register the exact callback URL shown on the page with the service, enter its client id, and choose **Public (no secret)**, **Form secret**, or **Basic**. The latter two require its secret. A supplied client is never dynamically registered or deleted by the gateway, including when addition fails or the party is retired.
+
+![Supplied OAuth client fields with Basic authentication](images/supplied-oauth-client.png)
+
+The gateway still checks discovery, the issuer and PKCE S256. Adding checks those settings; the subsequent sign-in proves whether the service accepts the client and callback. A refusal never switches to another client method. A URL-shaped client id supplied by you is still a supplied client. Gateway-generated URL client ids are not supported yet ([issue #348](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/348)).
 
 ## Who may call it
 
