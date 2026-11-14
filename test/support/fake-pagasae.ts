@@ -52,6 +52,8 @@ export interface FakePagasae {
   readonly refusedWakes: number;
   /** Answers each wake to come with this status, mailing nothing, until answered again with 204. */
   answerWakes(status: number): void;
+  /** Simulates a service outage without changing its issuer address or durable sign-ins. */
+  setAvailable(isAvailable: boolean): void;
   stop(): Promise<void>;
 }
 
@@ -74,7 +76,7 @@ async function formOf(request: IncomingMessage): Promise<URLSearchParams> {
   return new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
 }
 
-export async function startFakePagasae(): Promise<FakePagasae> {
+export async function startFakePagasae(accountDisplay: { email: string; firstName?: string } = { email: 'charlotte@example.com' }): Promise<FakePagasae> {
   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
   const keyId = randomUUID();
   const keySet = { keys: [{ ...publicKey.export({ format: 'jwk' }), kid: keyId, alg: 'EdDSA', use: 'sig' }] };
@@ -94,10 +96,15 @@ export async function startFakePagasae(): Promise<FakePagasae> {
   const wakes: { fleetId: string; shipId: string }[] = [];
   let wakeStatus = 204;
   let refusedWakes = 0;
+  let isAvailable = true;
   const json = (response: ServerResponse, answer: { status: number; body: unknown }) => response.writeHead(answer.status, { 'content-type': 'application/json' }).end(JSON.stringify(answer.body));
   const isApp = (form: URLSearchParams) => form.get('client_id') === PAGASAE_APP_CLIENT.clientId && form.get('client_secret') === PAGASAE_APP_CLIENT.clientSecret;
   const server: Server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://pagasae.test');
+    if (!isAvailable) {
+      json(response, { status: 503, body: { error: 'temporarily_unavailable' } });
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/.well-known/jwks.json') {
       json(response, { status: 200, body: keySet });
       return;
@@ -128,7 +135,7 @@ export async function startFakePagasae(): Promise<FakePagasae> {
       } else {
         const fleets = listed.map(({ id, name, hasGateway = true }) => ({ id, name, argo: false, apps: [hasGateway ? { app: 'gateway', url: 'http://gateway.test' } : { app: 'console', url: 'http://console.test' }] }));
         const account = String([...held.values()][0]?.sub);
-        json(response, { status: 200, body: { account: { id: account, email: 'charlotte@example.com' }, apps: [{ app: 'account', url: `${url.origin}/account` }], fleets } });
+        json(response, { status: 200, body: { account: { id: account, ...accountDisplay }, apps: [{ app: 'account', url: `${url.origin}/account` }], fleets } });
       }
       return;
     }
@@ -224,6 +231,9 @@ export async function startFakePagasae(): Promise<FakePagasae> {
     },
     answerWakes: (status) => {
       wakeStatus = status;
+    },
+    setAvailable: (isNextAvailable) => {
+      isAvailable = isNextAvailable;
     },
     stop: async () => {
       server.closeAllConnections();
