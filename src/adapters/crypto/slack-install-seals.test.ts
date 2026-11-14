@@ -19,6 +19,9 @@ describe("a Slack install's state, sealed into Slack's install address", () => {
     const sealed = seals.seal(STATE);
     const waiting = createWaitingSeals(SECRET).seal({ fleetId: STATE.fleetId, requestId: 'r', accountId: 'a', browserSecret: 'b', request: {} });
 
-    expect([createSlackInstallSeals('another-gateway-secret-of-32-characters').open(sealed), seals.open(`${sealed.slice(0, -2)}xx`), seals.open(waiting)]).toEqual([undefined, undefined, undefined]);
+    const bytes = Buffer.from(sealed, 'base64url');
+    bytes.writeUInt8(bytes.readUInt8(bytes.length - 1) ^ 1, bytes.length - 1);
+
+    expect([createSlackInstallSeals('another-gateway-secret-of-32-characters').open(sealed), seals.open(bytes.toString('base64url')), seals.open(waiting)]).toEqual([undefined, undefined, undefined]);
   });
 });

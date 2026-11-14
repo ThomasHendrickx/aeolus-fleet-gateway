@@ -44,7 +44,9 @@ describe("a sign-in sealed into pagasae's state", () => {
   it('opens none for a state changed on the way', () => {
     const seals = createSignInSeals(SECRET);
     const state = seals.seal(SIGN_IN);
-    const changed = `${state.slice(0, -2)}${state.endsWith('AA') ? 'BB' : 'AA'}`;
+    const bytes = Buffer.from(state, 'base64url');
+    bytes.writeUInt8(bytes.readUInt8(bytes.length - 1) ^ 1, bytes.length - 1);
+    const changed = bytes.toString('base64url');
 
     expect(seals.open(changed)).toBeUndefined();
   });
