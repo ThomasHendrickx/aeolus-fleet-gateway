@@ -6,7 +6,7 @@ import { INPUT, LABEL, SELECT } from './look';
 
 /** Explicit identity selection for each person's issuer-bound outside sign-in. */
 export function SignInClientFields({ fields, redirectUri }: { fields: Readonly<Record<string, string>>; redirectUri?: string | undefined }) {
-  const [source, setSource] = useState(fields.signInClientSource === 'fixed' ? 'fixed' : 'automatic');
+  const [source, setSource] = useState(fields.signInClientSource === 'url' ? 'url' : fields.signInClientSource === 'fixed' ? 'fixed' : 'automatic');
   const [method, setMethod] = useState(fields.signInClientAuthMethod ?? 'none');
   return (
     <div className="grid min-w-0 gap-3" data-testid="sign-in-client-fields">
@@ -15,8 +15,21 @@ export function SignInClientFields({ fields, redirectUri }: { fields: Readonly<R
         <select className={SELECT} name="signInClientSource" value={source} onChange={(event) => { setSource(event.target.value); }}>
           <option value="automatic">Automatic registration</option>
           <option value="fixed">Supplied client</option>
+          <option value="url">Gateway URL</option>
         </select>
       </label>
+      {source === 'url' ? <>
+        <p className="text-muted-foreground">The gateway creates a distinct public client URL for this server. No client secret is needed.</p>
+        <label className={LABEL}>
+          <span>URL mode</span>
+          <select className={SELECT} name="signInClientUrlMode" defaultValue="plain">
+            <option value="plain">Plain URL</option>
+          </select>
+        </label>
+        <p className="text-muted-foreground">Choose this only if the service accepts a URL as its client id and allows this exact callback:</p>
+        <p className="break-all font-mono" data-testid="sign-in-client-callback">{redirectUri}</p>
+        <p className="text-muted-foreground">Adding checks discovery and client settings. Sign in afterwards to check that the service accepts the client and callback.</p>
+      </> : null}
       {source === 'fixed' ? <>
         <p className="text-muted-foreground">Use a client dedicated to this server. Register this exact callback URL with the service:</p>
         <p className="break-all font-mono" data-testid="sign-in-client-callback">{redirectUri}</p>

@@ -569,6 +569,7 @@ const credentialInputSchema = z.discriminatedUnion('kind', [
  */
 const signInClientChoiceSchema = z.discriminatedUnion('source', [
   z.strictObject({ source: z.literal('automatic') }),
+  z.strictObject({ source: z.literal('url'), mode: z.literal('plain') }),
   z.strictObject({
     source: z.literal('fixed'),
     clientId: z.string().min(1),

@@ -19,7 +19,7 @@ export type ServerCredential =
   | { kind: 'bearer'; token: string }
   | { kind: 'clientCredentials'; clientId: string; clientSecret: string; issuer: string; scope?: string };
 
-/** The kind only adding a server offers: the gateway registers the party's client, and each person signs in (decision 0067). */
+/** The kind only adding a server offers: each person signs in with the party's chosen client (decision 0074). */
 export const SIGN_IN_CREDENTIAL = { kind: 'personSignIn', label: 'Each person signs in' } as const;
 
 /** The credential kinds the add page offers, with the words it shows. */
@@ -29,6 +29,7 @@ export type AddedCredentialKind = (typeof ADDED_CREDENTIAL_KINDS)[number]['kind'
 
 export type AddedServerCredential = ServerCredential | { kind: typeof SIGN_IN_CREDENTIAL.kind; client?:
   | { source: 'automatic' }
+  | { source: 'url'; mode: 'plain' }
   | { source: 'fixed'; clientId: string; clientSecret: string | null; tokenEndpointAuthMethod: 'none' | 'client_secret_post' | 'client_secret_basic' }
 };
 
@@ -59,6 +60,9 @@ export function addedCredentialKindOf(sent: string): AddedCredentialKind {
 export function addedServerCredentialOf(fields: Parameters<typeof serverCredentialOf>[0] & { signInClientSource?: string; signInClientId?: string; signInClientSecret?: string; signInClientAuthMethod?: string }): AddedServerCredential {
   if (addedCredentialKindOf(fields.credentialKind) !== SIGN_IN_CREDENTIAL.kind) {
     return serverCredentialOf(fields);
+  }
+  if (fields.signInClientSource === 'url') {
+    return { kind: SIGN_IN_CREDENTIAL.kind, client: { source: 'url', mode: 'plain' } };
   }
   if (fields.signInClientSource !== 'fixed') {
     return { kind: SIGN_IN_CREDENTIAL.kind };
