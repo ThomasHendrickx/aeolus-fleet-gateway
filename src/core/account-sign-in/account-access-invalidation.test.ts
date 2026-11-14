@@ -44,18 +44,31 @@ describe('a disabled account has no cached browser access', () => {
     for (const request of unaffected) expect((await cache.accountOf(request)).isOk).toBe(true);
   });
 
+  it.each([600_000, 630_000])('refuses cached access after %i ms without renewal when the disable notification was lost', async (elapsedMs) => {
+    let now = clock.now();
+    const held = new Map<FleetId, SharedAccountToken>([[FLEET_ID, CHARLOTTE_ACCOUNT_TOKEN]]);
+    const accountOf = createAccountOfSignIn({ clock: { now: () => now }, argoAccounts: memoryArgoAccounts(), signIns: {
+      accountToken: ({ fleetId }) => Promise.resolve(held.has(fleetId) ? ok(CHARLOTTE_ACCOUNT_TOKEN) : err({ kind: 'signedOut' as const })),
+    } });
+    expect((await accountOf(asked)).isOk).toBe(true);
+    held.clear();
+    now = new Date(clock.now().getTime() + elapsedMs);
+
+    expect(await accountOf(asked)).toEqual({ isOk: false, error: { kind: 'signedOut' } });
+  });
+
   it('does not admit or cache a token returned by an exchange started before the account was disabled', async () => {
-    let finish: (answer: Result<SharedAccountToken, SharedSignInRefusal>) => void = () => { throw new Error('Exchange has not started'); };
+    const exchange = Promise.withResolvers<Result<SharedAccountToken, SharedSignInRefusal>>();
     let exchanges = 0;
     const accountOf = createAccountOfSignIn({ clock, argoAccounts: memoryArgoAccounts(), signIns: {
       accountToken: () => {
         exchanges += 1;
-        return exchanges === 1 ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve(err({ kind: 'signedOut' }));
+        return exchanges === 1 ? exchange.promise : Promise.resolve(err({ kind: 'signedOut' }));
       },
     } });
     const pending = accountOf(asked);
     await createEndSignIns({ grants: memoryAccountGrants(), tokens: memoryIssuedTokens(), accountOf })({ fleetId: FLEET_ID, accountId: 'acc-charlotte' });
-    finish(ok(CHARLOTTE_ACCOUNT_TOKEN));
+    exchange.resolve(ok(CHARLOTTE_ACCOUNT_TOKEN));
 
     expect(await pending).toEqual({ isOk: false, error: { kind: 'signedOut' } });
     expect(await accountOf(asked)).toEqual({ isOk: false, error: { kind: 'signedOut' } });

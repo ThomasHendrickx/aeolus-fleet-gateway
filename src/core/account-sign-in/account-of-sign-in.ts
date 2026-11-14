@@ -3,13 +3,15 @@ import type { FleetId } from '@aeolus-fleet/common';
 import { createNoteArgoAccount } from '../argo-inbox/note-argo-account.js';
 import type { ArgoAccounts } from '../argo-inbox/ports.js';
 import type { Clock } from '../shared/clock.js';
-import { ok, type Result } from '../shared/result.js';
+import { err, ok, type Result } from '../shared/result.js';
 import { ACCOUNT_TOKEN_MARGIN_MS } from '../sign-in/account-token.js';
 import type { SharedAccountToken, SharedSignIn, SharedSignInRefusal } from './ports.js';
 
 export type AccountOfSignIn = ((asked: { signIn: string; fleetId: FleetId }) => Promise<Result<SharedAccountToken, SharedSignInRefusal>>) & {
   /** Drops every token kept for the sign-in, as when it is signed out here. */
   forget(signIn: string): void;
+  /** Drops every browser token of a disabled account in the notified fleet, including exchanges under way. */
+  forgetAccount(account: { fleetId: FleetId; accountId: string }): void;
 };
 
 /**
@@ -20,32 +22,46 @@ export type AccountOfSignIn = ((asked: { signIn: string; fleetId: FleetId }) => 
  * rights lands at the next. A refusal is never kept, nor a token naming no
  * person ship, as core commissions one with the account's first ship and
  * pagasae within a minute (aeolus-fleet#1583); a sign-out here drops what
- * was kept at once. Each token exchanged is the account's latest word on
+ * was kept at once. Account disabling also drops cached tokens and refuses
+ * exchanges already under way. Each token exchanged is the account's latest word on
  * being allowed as argo (argo's inbox, AI9).
  */
 export function createAccountOfSignIn(deps: { signIns: Pick<SharedSignIn, 'accountToken'>; argoAccounts: ArgoAccounts; clock: Clock }): AccountOfSignIn {
   const noteArgoAccount = createNoteArgoAccount({ accounts: deps.argoAccounts });
   const kept = new Map<string, SharedAccountToken>();
+  const pending = new Set<{ fleetId: FleetId; invalidatedAccounts: Set<string> }>();
   const isFresh = (token: SharedAccountToken) => token.endsAt.getTime() - ACCOUNT_TOKEN_MARGIN_MS > deps.clock.now().getTime();
 
-  const accountOf = async ({ signIn, fleetId }: { signIn: string; fleetId: FleetId }) => {
+  const accountOf = async ({ signIn, fleetId }: { signIn: string; fleetId: FleetId }): Promise<Result<SharedAccountToken, SharedSignInRefusal>> => {
     const key = `${fleetId} ${signIn}`;
     const held = kept.get(key);
     if (held !== undefined && isFresh(held)) {
       return ok(held);
     }
     kept.delete(key);
-    const exchanged = await deps.signIns.accountToken({ signIn, fleetId });
-    if (exchanged.isOk && exchanged.value.personShipId !== null) {
-      for (const [other, token] of kept) {
-        if (!isFresh(token)) {
-          kept.delete(other);
+    const exchange = { fleetId, invalidatedAccounts: new Set<string>() };
+    pending.add(exchange);
+    try {
+      const exchanged = await deps.signIns.accountToken({ signIn, fleetId });
+      if (exchanged.isOk && exchange.invalidatedAccounts.has(exchanged.value.accountId)) {
+        return err({ kind: 'signedOut' });
+      }
+      if (exchanged.isOk && exchanged.value.personShipId !== null) {
+        for (const [other, token] of kept) {
+          if (!isFresh(token)) {
+            kept.delete(other);
+          }
+        }
+        kept.set(key, exchanged.value);
+        await noteArgoAccount(fleetId, exchanged.value);
+        if (exchange.invalidatedAccounts.has(exchanged.value.accountId)) {
+          return err({ kind: 'signedOut' });
         }
       }
-      kept.set(key, exchanged.value);
-      await noteArgoAccount(fleetId, exchanged.value);
+      return exchanged;
+    } finally {
+      pending.delete(exchange);
     }
-    return exchanged;
   };
   const forget = (signIn: string) => {
     for (const key of kept.keys()) {
@@ -54,5 +70,17 @@ export function createAccountOfSignIn(deps: { signIns: Pick<SharedSignIn, 'accou
       }
     }
   };
-  return Object.assign(accountOf, { forget });
+  const forgetAccount = ({ fleetId, accountId }: { fleetId: FleetId; accountId: string }) => {
+    for (const [key, token] of kept) {
+      if (key.startsWith(`${fleetId} `) && token.accountId === accountId) {
+        kept.delete(key);
+      }
+    }
+    for (const exchange of pending) {
+      if (exchange.fleetId === fleetId) {
+        exchange.invalidatedAccounts.add(accountId);
+      }
+    }
+  };
+  return Object.assign(accountOf, { forget, forgetAccount });
 }
