@@ -7,6 +7,7 @@ import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgett
 import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
 import { createPrismaScopeRequirements } from '../src/adapters/prisma/scope-requirements.js';
 import type { McpServerParty } from '../src/core/parties/party.js';
+import type { SignInClient } from '../src/core/vault/credential.js';
 import { createPrismaSignInNotices } from '../src/adapters/prisma/sign-in-notices.js';
 import { migratedDatabase } from './support/database.js';
 import { ATTIO_CLIENT, MATHILDE_SHIP_ID } from './support/party-grant-fakes.js';
@@ -55,7 +56,7 @@ function aParty(overrides: Partial<McpServerParty> = {}): McpServerParty {
 describe("the gateway's parties and their vault in Postgres", () => {
   it.each(['automatic', 'fixed', 'url'] as const)('keeps the issuer-bound %s identity and authentication method in its own fleet', async (source) => {
     const store = createPrismaPartyStore(prisma);
-    const client = { ...ATTIO_CLIENT, source, isGatewayOwned: source === 'automatic', tokenEndpointAuthMethod: 'client_secret_basic' as const, revocationEndpointAuthMethods: ['client_secret_basic'] };
+    const client: SignInClient = { ...ATTIO_CLIENT, source, isGatewayOwned: source === 'automatic', tokenEndpointAuthMethod: source === 'url' ? 'none' : 'client_secret_basic', clientSecret: source === 'url' ? null : ATTIO_CLIENT.clientSecret, revocationEndpointAuthMethods: ['none', 'client_secret_basic'] };
     const party = aParty({ fleetId: SWITCHED_FLEET, name: `identity-${source}`, credential: { kind: 'personSignIn', client } });
     await store.save(party);
     await expect(createPrismaPartyStore(prisma).find(SWITCHED_FLEET, party.name)).resolves.toEqual(party);

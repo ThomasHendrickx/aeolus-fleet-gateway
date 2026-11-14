@@ -28,7 +28,6 @@ const registeredSchema = z.object({
   registration_client_uri: z.string().optional(),
   registration_access_token: z.string().optional(),
 });
-const revocationMetadata = z.object({ revocation_endpoint_auth_methods_supported: z.array(z.string()).optional() });
 const registrationErrorSchema = z.object({ error: z.string(), error_description: z.string().optional() });
 
 const timedFetch: FetchLike = (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(ANSWER_WAIT_MS) });
@@ -78,7 +77,7 @@ export function createAuthorizationServers(): AuthorizationServers {
       try {
         serverMetadata = await discoverAuthorizationServerMetadata(named, { fetchFn: timedFetch });
       } catch (error) {
-        return error instanceof IssuerMismatchError ? err({ kind: 'noServerMetadata', reason: reasonOf(error) }) : err({ kind: 'unreachable', reason: reasonOf(error) });
+        return error instanceof IssuerMismatchError || error instanceof z.ZodError || error instanceof SyntaxError ? err({ kind: 'noServerMetadata', reason: reasonOf(error) }) : err({ kind: 'unreachable', reason: reasonOf(error) });
       }
       if (serverMetadata === undefined) {
         return err({ kind: 'noServerMetadata', reason: `${named} has no authorization server metadata` });
@@ -94,7 +93,7 @@ export function createAuthorizationServers(): AuthorizationServers {
         revocationEndpoint: 'revocation_endpoint' in serverMetadata ? (serverMetadata.revocation_endpoint ?? null) : null,
         isIssuerInResponse: serverMetadata.authorization_response_iss_parameter_supported === true,
         tokenEndpointAuthMethods: serverMetadata.token_endpoint_auth_methods_supported ?? ['client_secret_basic'],
-        revocationEndpointAuthMethods: revocationMetadata.parse(serverMetadata).revocation_endpoint_auth_methods_supported ?? ['client_secret_basic'],
+        revocationEndpointAuthMethods: 'revocation_endpoint_auth_methods_supported' in serverMetadata ? (serverMetadata.revocation_endpoint_auth_methods_supported ?? ['client_secret_basic']) : ['client_secret_basic'],
         isClientIdMetadataDocumentSupported: serverMetadata.client_id_metadata_document_supported === true,
         codeChallengeMethods: serverMetadata.code_challenge_methods_supported ?? [],
         serverScopes: serverMetadata.scopes_supported ?? [],
