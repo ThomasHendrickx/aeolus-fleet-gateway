@@ -125,3 +125,27 @@ describe('an approver adds an outside MCP server where each person signs in', ()
     expect(z.object({ result: z.object({ data: z.array(z.object({ name: z.string(), credentialKind: z.string() })) }) }).parse(await listed.json()).result.data).toMatchObject([{ name: 'attio', credentialKind: 'personSignIn' }]);
   });
 });
+
+
+describe('supplied outside OAuth clients (decision 0074)', () => {
+  it.each([
+    { tokenEndpointAuthMethod: 'none', clientSecret: null },
+    { tokenEndpointAuthMethod: 'client_secret_post', clientSecret: 'dedicated-secret' },
+    { tokenEndpointAuthMethod: 'client_secret_basic', clientSecret: 'dedicated-secret' },
+  ])('persists and retires a supplied $tokenEndpointAuthMethod identity without registering or deleting it', async (authentication) => {
+    await started({ isRegistering: false, isManagingClients: true, tokenEndpointAuthMethods: ['none', 'client_secret_post', 'client_secret_basic'] });
+    const client = { source: 'fixed', clientId: 'dedicated-client', ...authentication };
+    const body = { requestId: 'supplied-client', name: 'attio', url: attio.url, credential: { kind: 'personSignIn', client }, ownerShipId: owner };
+    const response = await mutate(address, { procedure: 'parties.approve', cookie, body });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await response.text()).not.toContain('dedicated-secret');
+    expect(await keptParties()).toMatchObject([{ credential: { client: { ...client, issuer: attio.issuer, isGatewayOwned: false, registrationClientUri: null, registrationAccessToken: null } } }]);
+    expect((await mutate(address, { procedure: 'parties.approve', cookie, body })).status).toBe(200);
+    expect(attio.registered).toEqual([]);
+    const manager = await commission(fleet, { cookie, ship: { name: 'manager', type: 'agent', scopes: ['fleet:manage'] } });
+    const retired = await mutate(address, { procedure: 'parties.retire', crewToken: await register(fleet, manager), body: { name: 'attio' } });
+    expect(retired.status, await retired.clone().text()).toBe(200);
+    expect(attio.deletedClients).toEqual([]);
+    expect(await keptParties()).toEqual([]);
+  });
+});

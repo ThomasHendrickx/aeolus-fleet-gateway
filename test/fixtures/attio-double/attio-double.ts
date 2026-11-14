@@ -33,6 +33,7 @@ const SCOPES = ['mcp', 'offline_access', 'openid'];
 const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
 
 export interface AttioDoubleOptions {
+  tokenEndpointAuthMethods?: string[];
   /** The PKCE methods its authorization server states; S256 by default. */
   codeChallengeMethods?: string[];
   /** Whether its authorization server offers dynamic registration; it does by default. */
@@ -209,7 +210,7 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: options.codeChallengeMethods ?? ['S256'],
-    token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
+    token_endpoint_auth_methods_supported: options.tokenEndpointAuthMethods ?? ['none', 'client_secret_post'],
     revocation_endpoint_auth_methods_supported: ['client_secret_post'],
     scopes_supported: SCOPES,
   }));
