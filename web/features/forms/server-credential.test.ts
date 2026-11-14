@@ -42,3 +42,8 @@ describe('the supplied sign-in client form', () => {
     expect(addedServerCredentialOf({ ...TYPED, credentialKind: 'personSignIn', signInClientSource: 'fixed', signInClientId: 'dedicated', signInClientSecret: 'secret', signInClientAuthMethod: tokenEndpointAuthMethod })).toEqual({ kind: 'personSignIn', client: { source: 'fixed', clientId: 'dedicated', clientSecret: tokenEndpointAuthMethod === 'none' ? null : 'secret', tokenEndpointAuthMethod } });
   });
 });
+
+
+it('carries a plain gateway URL choice without supplied identity or secret fields', () => {
+  expect(addedServerCredentialOf({ ...TYPED, credentialKind: 'personSignIn', signInClientSource: 'url', signInClientId: 'ignored', signInClientSecret: 'ignored', signInClientAuthMethod: 'client_secret_basic' })).toEqual({ kind: 'personSignIn', client: { source: 'url', mode: 'plain' } });
+});

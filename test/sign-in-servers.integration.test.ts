@@ -149,3 +149,36 @@ describe('supplied outside OAuth clients (decision 0074)', () => {
     expect(await keptParties()).toEqual([]);
   });
 });
+
+
+describe('plain gateway URL identities (decision 0074)', () => {
+  it('persists distinct opaque URL identities, reuses one after restart and changes it after retirement', async () => {
+    await started({ isRegistering: false });
+    const client = { source: 'url', mode: 'plain' };
+    const body = { requestId: 'url-client', name: 'attio', url: attio.url, credential: { kind: 'personSignIn', client }, ownerShipId: owner };
+    const first = await mutate(address, { procedure: 'parties.approve', cookie, body });
+    expect(first.status, await first.clone().text()).toBe(200);
+    const stored = await keptParties();
+    const party = stored[0];
+    expect(party).toMatchObject({ credential: { client: { source: 'url', tokenEndpointAuthMethod: 'none', isGatewayOwned: true, clientSecret: null, registrationClientUri: null, registrationAccessToken: null } } });
+    if (party?.kind !== 'mcpServer' || party.credential.kind !== 'personSignIn') throw new Error('Expected a sign-in server');
+    const originalId = party.credential.client.clientId;
+    expect(originalId).toMatch(/^https:\/\/gateway\.example\.com\/outside-oauth\/clients\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    await app.close();
+    app = createGatewayApp({ gatewaySecret: TEST_GATEWAY_SECRET, databaseUrl, fleetUrl: fleet.url, logger: false, publicUrl: PUBLIC_URL });
+    address = await app.server.listen({ host: '127.0.0.1', port: 0 });
+    expect((await mutate(address, { procedure: 'parties.approve', cookie, body })).status).toBe(200);
+    expect(await keptParties()).toMatchObject([{ credential: { client: { clientId: originalId } } }]);
+    const second = await mutate(address, { procedure: 'parties.approve', cookie, body: { ...body, name: 'attio-sales', requestId: 'url-sales' } });
+    expect(second.status, await second.clone().text()).toBe(200);
+    const manager = await commission(fleet, { cookie, ship: { name: 'manager', type: 'agent', scopes: ['fleet:manage'] } });
+    const retired = await mutate(address, { procedure: 'parties.retire', crewToken: await register(fleet, manager), body: { name: 'attio' } });
+    expect(retired.status, await retired.clone().text()).toBe(200);
+    const readded = await mutate(address, { procedure: 'parties.approve', cookie, body: { ...body, requestId: 'url-readded' } });
+    expect(readded.status, await readded.clone().text()).toBe(200);
+    const ids = (await keptParties()).map((held) => held.kind === 'mcpServer' && held.credential.kind === 'personSignIn' ? held.credential.client.clientId : null);
+    expect(new Set([originalId, ...ids]).size).toBe(3);
+    expect(attio.registered).toEqual([]);
+    expect(attio.deletedClients).toEqual([]);
+  });
+});

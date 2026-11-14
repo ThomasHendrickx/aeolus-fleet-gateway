@@ -1862,3 +1862,28 @@ describe('supplied outside OAuth clients through the API', () => {
     await expect(gatewayRouter.createCaller(context).parties.signInConfiguration()).resolves.toEqual({ redirectUri: 'https://public.gateway.example/outside-parties/sign-in/done' });
   });
 });
+
+
+describe('plain gateway URL clients through the API', () => {
+  const approval = { requestId: 'url-client', name: 'crm', url: 'https://crm.example/mcp', ownerShipId: OWNER };
+
+  it('passes the explicit plain URL choice to addition', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+    const additions: unknown[] = [];
+    context.addSignInServer = (input) => {
+      additions.push(input);
+      return Promise.resolve(ok({ name: input.name, kind: 'mcpServer', url: input.url, credentialKind: 'personSignIn', state: 'crewed', proxyShipId: null, ownerShipId: OWNER, concurrencyLimit: 4 }));
+    };
+    await gatewayRouter.createCaller(context).parties.approve({ ...approval, credential: { kind: 'personSignIn', client: { source: 'url', mode: 'plain' } } });
+    expect(additions).toMatchObject([{ client: { source: 'url', mode: 'plain' }, operatorFleetId: FLEET }]);
+  });
+
+  it.each([
+    { source: 'url', mode: 'document' },
+    { source: 'url', mode: 'plain', clientId: 'https://uncontrolled.example/client' },
+    { source: 'url', mode: 'plain', clientSecret: 'secret' },
+    { source: 'url', mode: 'plain', registrationAccessToken: 'management' },
+  ])('rejects unavailable document mode and caller-supplied URL identity fields', async (client) => {
+    await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.approve(asSent({ ...approval, credential: { kind: 'personSignIn', client } }))).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+});
