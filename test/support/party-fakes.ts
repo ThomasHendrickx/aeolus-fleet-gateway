@@ -212,6 +212,9 @@ export function fakeProxyShipReads(
 
 /** A sign-in shaped as Attio's metadata (oauth-servers L10): its issuer and scopes, dynamic registration, PKCE S256, no revocation. */
 export const ATTIO_SIGN_IN: DiscoveredSignIn = {
+  tokenEndpointAuthMethods: ['none', 'client_secret_post', 'client_secret_basic'],
+  revocationEndpointAuthMethods: ['client_secret_post'],
+  isClientIdMetadataDocumentSupported: false,
   resource: 'https://mcp.attio.com/mcp',
   challengeScope: null,
   resourceScopes: ['mcp', 'offline_access', 'openid'],
@@ -235,7 +238,7 @@ export function fakeAuthorizationServers(discovered: Result<DiscoveredSignIn, Di
         return Promise.resolve(err(registration.error));
       }
       registered.push({ registrationEndpoint, ...client });
-      return Promise.resolve(ok({ clientId: `client-${String(registered.length)}`, clientSecret: `secret-${String(registered.length)}`, registrationClientUri: null, registrationAccessToken: null }));
+      return Promise.resolve(ok({ tokenEndpointAuthMethod: 'client_secret_post', clientId: `client-${String(registered.length)}`, clientSecret: `secret-${String(registered.length)}`, registrationClientUri: null, registrationAccessToken: null }));
     },
   };
   return { servers, registered };

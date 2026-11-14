@@ -16,6 +16,10 @@ const credentialSchema: z.ZodType<McpServerCredential> = z.discriminatedUnion('k
 ]);
 
 const signInClientSchema: z.ZodType<SignInClient> = z.object({
+  source: z.enum(['automatic', 'fixed', 'url']),
+  isGatewayOwned: z.boolean(),
+  tokenEndpointAuthMethod: z.enum(['none', 'client_secret_post', 'client_secret_basic']),
+  revocationEndpointAuthMethods: z.array(z.string()),
   issuer: z.string(),
   authorizationEndpoint: z.string(),
   tokenEndpoint: z.string(),

@@ -210,6 +210,7 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: options.codeChallengeMethods ?? ['S256'],
     token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
+    revocation_endpoint_auth_methods_supported: ['client_secret_post'],
     scopes_supported: SCOPES,
   }));
   server.post('/oauth/register', (request, reply) => {

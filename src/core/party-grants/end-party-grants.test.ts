@@ -63,6 +63,17 @@ describe("a retired party's grants and client (scenario 31)", () => {
     expect(attio.state.deletedClients).toEqual([{ registrationClientUri: 'https://app.attio.com/oauth/register/client-1', registrationAccessToken: 'registration-token-1' }]);
   });
 
+  it.each(['fixed', 'url'] as const)('never deletes a %s client even with management credentials', async (source) => {
+    await endPartyGrants({ fleetId: FLEET_ID, name: 'attio', client: { ...MANAGED_CLIENT, source, isGatewayOwned: true } });
+    expect(attio.state.deletedClients).toEqual([]);
+    expect(heldParties()).toEqual(['linear']);
+  });
+
+  it('never deletes an automatic client the gateway does not own', async () => {
+    await endPartyGrants({ fleetId: FLEET_ID, name: 'attio', client: { ...MANAGED_CLIENT, isGatewayOwned: false } });
+    expect(attio.state.deletedClients).toEqual([]);
+  });
+
   it('deletes no client where the server offers no client management', async () => {
     await endPartyGrants({ fleetId: FLEET_ID, name: 'attio', client: ATTIO_CLIENT });
 

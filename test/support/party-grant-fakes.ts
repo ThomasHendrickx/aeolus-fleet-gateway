@@ -30,6 +30,10 @@ export function fakeShipNames(answer: ReadonlyMap<ShipId, string> | Result<never
 
 /** A party's sign-in client, shaped as Attio's (oauth-servers L10): no revocation, no issuer in its authorization response. */
 export const ATTIO_CLIENT: SignInClient = {
+  source: 'automatic',
+  isGatewayOwned: true,
+  tokenEndpointAuthMethod: 'client_secret_post',
+  revocationEndpointAuthMethods: ['client_secret_post'],
   issuer: 'https://app.attio.com',
   authorizationEndpoint: 'https://app.attio.com/oidc/authorize',
   tokenEndpoint: 'https://app.attio.com/oidc/token',

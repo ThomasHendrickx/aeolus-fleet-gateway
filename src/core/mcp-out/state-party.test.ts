@@ -14,6 +14,10 @@ const AT = new Date('2026-10-18T14:00:00.000Z');
 
 /** A party's sign-in client, shaped as Attio's (oauth-servers L10). */
 const ATTIO_CLIENT: SignInClient = {
+  source: 'automatic',
+  isGatewayOwned: true,
+  tokenEndpointAuthMethod: 'client_secret_post',
+  revocationEndpointAuthMethods: ['client_secret_post'],
   issuer: 'https://app.attio.com',
   authorizationEndpoint: 'https://app.attio.com/oidc/authorize',
   tokenEndpoint: 'https://app.attio.com/oidc/token',

@@ -47,6 +47,9 @@ describe('an approver adds an outside MCP server where each person signs in (dec
       credential: {
         kind: 'personSignIn',
         client: {
+          source: 'automatic',
+          isGatewayOwned: true,
+          tokenEndpointAuthMethod: 'client_secret_post',
           issuer: 'https://app.attio.com',
           clientId: 'client-1',
           clientSecret: 'secret-1',
@@ -187,3 +190,10 @@ describe("the outside scopes a person's sign-in asks for (Q8)", () => {
     expect(attio.registered[0]?.scope).toBe('mcp records');
   });
 });
+
+ it('refuses the registration method when discovery does not support it, keeping nothing', async () => {
+   const attio = fakeAuthorizationServers(ok({ ...ATTIO_SIGN_IN, tokenEndpointAuthMethods: ['client_secret_basic'] }));
+   await expect(adding(attio.servers)(anAddition())).resolves.toMatchObject({ isOk: false, error: { kind: 'SIGN_IN_CHECK_FAILED' } });
+   expect(attio.registered).toEqual([]);
+   expect(parties.held.size).toBe(0);
+ });

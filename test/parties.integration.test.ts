@@ -1,14 +1,16 @@
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
+import { migrateDatabase } from '../src/adapters/prisma/migrate.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgetter.js';
 import { createPrismaPartyStore } from '../src/adapters/prisma/party-store.js';
 import { createPrismaScopeRequirements } from '../src/adapters/prisma/scope-requirements.js';
 import type { McpServerParty } from '../src/core/parties/party.js';
+import type { SignInClient } from '../src/core/vault/credential.js';
 import { createPrismaSignInNotices } from '../src/adapters/prisma/sign-in-notices.js';
 import { migratedDatabase } from './support/database.js';
-import { MATHILDE_SHIP_ID } from './support/party-grant-fakes.js';
+import { ATTIO_CLIENT, MATHILDE_SHIP_ID } from './support/party-grant-fakes.js';
 
 const FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8sv';
 const OTHER_FLEET: FleetId = 'flt_01m3tb1zgr5h2ffee12xnch8zz';
@@ -20,9 +22,11 @@ const PROXY: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9crm';
 const AT = new Date('2026-10-18T13:00:00.000Z');
 
 let prisma: PrismaClient;
+let databaseUrl: string;
 
 beforeAll(async () => {
-  prisma = createPrismaClient(await migratedDatabase(inject('postgresUrl')));
+  databaseUrl = await migratedDatabase(inject('postgresUrl'));
+  prisma = createPrismaClient(databaseUrl);
 });
 
 afterAll(async () => {
@@ -50,6 +54,15 @@ function aParty(overrides: Partial<McpServerParty> = {}): McpServerParty {
 }
 
 describe("the gateway's parties and their vault in Postgres", () => {
+  it.each(['automatic', 'fixed', 'url'] as const)('keeps the issuer-bound %s identity and authentication method in its own fleet', async (source) => {
+    const store = createPrismaPartyStore(prisma);
+    const client: SignInClient = { ...ATTIO_CLIENT, source, isGatewayOwned: source === 'automatic', tokenEndpointAuthMethod: source === 'url' ? 'none' : 'client_secret_basic', clientSecret: source === 'url' ? null : ATTIO_CLIENT.clientSecret, revocationEndpointAuthMethods: ['none', 'client_secret_basic'] };
+    const party = aParty({ fleetId: SWITCHED_FLEET, name: `identity-${source}`, credential: { kind: 'personSignIn', client } });
+    await store.save(party);
+    await expect(createPrismaPartyStore(prisma).find(SWITCHED_FLEET, party.name)).resolves.toEqual(party);
+    await expect(store.find(OTHER_FLEET, party.name)).resolves.toBeUndefined();
+  });
+
   it('keeps a party with its credential, and each step after it', async () => {
     const store = createPrismaPartyStore(prisma);
     await store.save(aParty());
@@ -238,5 +251,34 @@ describe("each party's required scopes in Postgres (design gateway-scopes, 4.2)"
     await parties.save(aParty({ fleetId: REQUIRING_FLEET, name: 'retired' }));
 
     await expect(store.find(REQUIRING_FLEET, 'retired')).resolves.toEqual({ version: 0, party: [], tools: new Map() });
+  });
+});
+
+
+describe('the client identity data migration', () => {
+  it('records automatic ownership and the authentication used by pre-migration public and secret clients', async () => {
+    const store = createPrismaPartyStore(prisma);
+    for (const clientSecret of [null, 'existing-secret']) {
+      const name = clientSecret === null ? 'legacy-public' : 'legacy-secret';
+      await store.save(aParty({ fleetId: SWITCHED_FLEET, name }));
+      await prisma.party.update({ where: { fleetId_name: { fleetId: SWITCHED_FLEET, name } }, data: { credential: {
+        kind: 'personSignIn', client: {
+          issuer: ATTIO_CLIENT.issuer, authorizationEndpoint: ATTIO_CLIENT.authorizationEndpoint,
+          tokenEndpoint: ATTIO_CLIENT.tokenEndpoint, revocationEndpoint: ATTIO_CLIENT.revocationEndpoint,
+          isIssuerInResponse: false, clientId: 'existing-client', clientSecret,
+          registrationClientUri: null, registrationAccessToken: null,
+          resource: ATTIO_CLIENT.resource, scope: ATTIO_CLIENT.scope,
+        },
+      } } });
+    }
+    await prisma.$executeRaw`DELETE FROM "_prisma_migrations" WHERE migration_name = '20261114170000_outside_client_identities'`;
+    await migrateDatabase(databaseUrl);
+
+    for (const [name, method] of [['legacy-public', 'none'], ['legacy-secret', 'client_secret_post']]) {
+      await expect(store.find(SWITCHED_FLEET, name ?? '')).resolves.toMatchObject({ credential: { client: {
+        source: 'automatic', isGatewayOwned: true, tokenEndpointAuthMethod: method,
+        revocationEndpointAuthMethods: [method], issuer: ATTIO_CLIENT.issuer, clientId: 'existing-client',
+      } } });
+    }
   });
 });

@@ -22,6 +22,7 @@ const INITIALIZE = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { prot
 
 /** RFC 7591's answer, by its own field names. */
 const registeredSchema = z.object({
+  token_endpoint_auth_method: z.enum(['none', 'client_secret_post', 'client_secret_basic']).default('client_secret_basic'),
   client_id: z.string().min(1),
   client_secret: z.string().min(1).optional(),
   registration_client_uri: z.string().optional(),
@@ -76,7 +77,7 @@ export function createAuthorizationServers(): AuthorizationServers {
       try {
         serverMetadata = await discoverAuthorizationServerMetadata(named, { fetchFn: timedFetch });
       } catch (error) {
-        return error instanceof IssuerMismatchError ? err({ kind: 'noServerMetadata', reason: reasonOf(error) }) : err({ kind: 'unreachable', reason: reasonOf(error) });
+        return error instanceof IssuerMismatchError || error instanceof z.ZodError || error instanceof SyntaxError ? err({ kind: 'noServerMetadata', reason: reasonOf(error) }) : err({ kind: 'unreachable', reason: reasonOf(error) });
       }
       if (serverMetadata === undefined) {
         return err({ kind: 'noServerMetadata', reason: `${named} has no authorization server metadata` });
@@ -91,6 +92,9 @@ export function createAuthorizationServers(): AuthorizationServers {
         registrationEndpoint: serverMetadata.registration_endpoint ?? null,
         revocationEndpoint: 'revocation_endpoint' in serverMetadata ? (serverMetadata.revocation_endpoint ?? null) : null,
         isIssuerInResponse: serverMetadata.authorization_response_iss_parameter_supported === true,
+        tokenEndpointAuthMethods: serverMetadata.token_endpoint_auth_methods_supported ?? ['client_secret_basic'],
+        revocationEndpointAuthMethods: 'revocation_endpoint_auth_methods_supported' in serverMetadata ? (serverMetadata.revocation_endpoint_auth_methods_supported ?? ['client_secret_basic']) : ['client_secret_basic'],
+        isClientIdMetadataDocumentSupported: serverMetadata.client_id_metadata_document_supported === true,
         codeChallengeMethods: serverMetadata.code_challenge_methods_supported ?? [],
         serverScopes: serverMetadata.scopes_supported ?? [],
       };
@@ -123,10 +127,13 @@ export function createAuthorizationServers(): AuthorizationServers {
       }
       const registered = registeredSchema.safeParse(body);
       if (!registered.success) {
-        return err({ reason: 'the registration answered no client id' });
+        return err({ reason: 'the registration answered an invalid client identity or authentication method' });
       }
-      const { client_id: clientId, client_secret: clientSecret, registration_client_uri: registrationClientUri, registration_access_token: registrationAccessToken } = registered.data;
-      return ok({ clientId, clientSecret: clientSecret ?? null, registrationClientUri: registrationClientUri ?? null, registrationAccessToken: registrationAccessToken ?? null });
+      const { token_endpoint_auth_method: tokenEndpointAuthMethod, client_id: clientId, client_secret: clientSecret, registration_client_uri: registrationClientUri, registration_access_token: registrationAccessToken } = registered.data;
+      if ((tokenEndpointAuthMethod === 'none') !== (clientSecret === undefined)) {
+        return err({ reason: 'the registration secret does not agree with its authentication method' });
+      }
+      return ok({ tokenEndpointAuthMethod, clientId, clientSecret: clientSecret ?? null, registrationClientUri: registrationClientUri ?? null, registrationAccessToken: registrationAccessToken ?? null });
     },
   };
 }
