@@ -16,7 +16,7 @@ import { Steps } from './steps';
  * refusal where it was refused. A server where each person signs in goes on
  * to its owner with Next, unchecked; any other is checked first.
  */
-export function AddressStep({ state, action, fleetId }: { state: { fields: Readonly<Record<string, string>>; refusal?: string | undefined }; action: (form: FormData) => void; fleetId: string }) {
+export function AddressStep({ state, action, fleetId, redirectUri }: { state: { fields: Readonly<Record<string, string>>; refusal?: string | undefined }; action: (form: FormData) => void; fleetId: string; redirectUri?: string | undefined }) {
   const [kind, setKind] = useState(addedCredentialKindOf(state.fields.credentialKind ?? ''));
   const isSignIn = kind === SIGN_IN_CREDENTIAL.kind;
   return (
@@ -29,7 +29,7 @@ export function AddressStep({ state, action, fleetId }: { state: { fields: Reado
           <span>Streamable HTTP address</span>
           <input className={INPUT} type="url" name="url" defaultValue={state.fields.url ?? ''} placeholder="https://mcp.example.com/mcp" required />
         </label>
-        <CredentialFields legend="The server's credential" fields={state.fields} noneHelp="The gateway sends no credential: for a server reached only on a private network." canEachPersonSignIn onKindChange={setKind} />
+        <CredentialFields legend="The server's credential" fields={state.fields} noneHelp="The gateway sends no credential: for a server reached only on a private network." canEachPersonSignIn redirectUri={redirectUri} onKindChange={setKind} />
         <div>
           <SubmitButton pending={isSignIn ? 'Next…' : 'Checking the server…'} testId="add-server-check">
             {isSignIn ? 'Next' : 'Check the server'}

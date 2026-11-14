@@ -1838,9 +1838,9 @@ describe('supplied outside OAuth clients through the API', () => {
   it('passes an explicit supplied identity to addition without exposing it in output', async () => {
     const { context } = aContext(ARGO_COOKIE);
     const additions: unknown[] = [];
-    context.addSignInServer = async (input) => {
+    context.addSignInServer = (input) => {
       additions.push(input);
-      return ok({ name: input.name, kind: 'mcpServer', url: input.url, credentialKind: 'personSignIn', state: 'crewed', proxyShipId: null, ownerShipId: OWNER, concurrencyLimit: 4 });
+      return Promise.resolve(ok({ name: input.name, kind: 'mcpServer', url: input.url, credentialKind: 'personSignIn', state: 'crewed', proxyShipId: null, ownerShipId: OWNER, concurrencyLimit: 4 }));
     };
     const client = { source: 'fixed' as const, clientId: 'dedicated', clientSecret: 'secret', tokenEndpointAuthMethod: 'client_secret_basic' as const };
     const result = await gatewayRouter.createCaller(context).parties.approve({ ...approval, credential: { kind: 'personSignIn', client } });

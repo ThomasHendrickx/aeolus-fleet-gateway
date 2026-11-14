@@ -14,7 +14,7 @@ import { SignInStep } from './sign-in-step';
  * to it for themselves (M1, decision 0067). Each button says at once that its
  * step is on its way.
  */
-export function AddServer({ fleetId, canSwitchTools }: { fleetId: string; canSwitchTools: boolean }) {
+export function AddServer({ fleetId, canSwitchTools, redirectUri }: { fleetId: string; canSwitchTools: boolean; redirectUri: string }) {
   const [checked, check] = useActionState(checkServer, { step: 'address', fields: {} });
   const [approved, approve] = useActionState(approveServer, { kind: 'idle' });
   // Going back shows the address step again, with what was sent, until the next check answers.
@@ -26,7 +26,7 @@ export function AddServer({ fleetId, canSwitchTools }: { fleetId: string; canSwi
       {approved.kind === 'added' ? (
         <SignInStep fleetId={fleetId} name={approved.name} />
       ) : owner === undefined ? (
-        <AddressStep state={checked} action={check} fleetId={fleetId} />
+        <AddressStep state={checked} action={check} fleetId={fleetId} redirectUri={redirectUri} />
       ) : (
         <OwnerStep state={owner} refused={approved} action={approve} onBack={() => { setBackFrom(owner.requestId); }} fleetId={fleetId} canSwitchTools={canSwitchTools} />
       )}
