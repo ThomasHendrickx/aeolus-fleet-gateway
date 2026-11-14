@@ -41,6 +41,11 @@ describe('outside authorization server capabilities', () => {
     expect(await createAuthorizationServers().discover(`${origin}/mcp`)).toMatchObject({ isOk: true, value: { tokenEndpointAuthMethods: [method], revocationEndpointAuthMethods: ['client_secret_basic'], isClientIdMetadataDocumentSupported: false } });
   });
 
+  it('refuses malformed revocation capabilities as invalid metadata', async () => {
+    metadata = { revocation_endpoint_auth_methods_supported: 'client_secret_post' };
+    await expect(createAuthorizationServers().discover(`${origin}/mcp`)).resolves.toMatchObject({ isOk: false, error: { kind: 'noServerMetadata' } });
+  });
+
   it('applies the registration Basic default when the response omits the method', async () => {
     expect(await createAuthorizationServers().register(`${origin}/register`, { clientName: 'client', redirectUri: 'https://gateway.test/done', scope: 'mcp' })).toMatchObject({ isOk: true, value: { tokenEndpointAuthMethod: 'client_secret_basic' } });
   });
