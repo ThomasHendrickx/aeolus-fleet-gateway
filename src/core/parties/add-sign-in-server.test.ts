@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { plainHasher } from '../../../test/support/memory-installation.js';
 import { ATTIO_SIGN_IN, OWNER_SHIP_ID, PROXY_SHIP_ID, fakeAuthorizationServers, fakeProxyShipFleet, memoryPartyStore } from '../../../test/support/party-fakes.js';
+import type { PartySignIns } from '../party-grants/ports.js';
 import { err, ok } from '../shared/result.js';
 import { createAddSignInServer } from './add-sign-in-server.js';
 import { createApproveParty } from './approve-party.js';
@@ -15,11 +16,17 @@ const ATTIO_URL = 'https://mcp.attio.com/mcp';
 const REDIRECT_URI = 'https://gateway.example.com/outside-parties/sign-in/done';
 const OTHER_FLEET_ID: FleetId = 'flt_01m3tbfspe96yf1rnr4ank9oth';
 
+const deletedClients: string[] = [];
+let deletion: Awaited<ReturnType<PartySignIns['deleteClient']>> = ok(undefined);
+const signIns: Pick<PartySignIns, 'deleteClient'> = { deleteClient: (client) => { deletedClients.push(client.clientId); return Promise.resolve(deletion); } };
+
 let fleet: ReturnType<typeof fakeProxyShipFleet>;
 let parties: ReturnType<typeof memoryPartyStore>;
 let connections: ReturnType<typeof memoryConnectionStore>;
 
 beforeEach(async () => {
+  deletedClients.length = 0;
+  deletion = ok(undefined);
   fleet = fakeProxyShipFleet();
   parties = memoryPartyStore();
   connections = memoryConnectionStore();
@@ -29,7 +36,7 @@ beforeEach(async () => {
 function adding(servers: AuthorizationServers, isServing = true) {
   const servesOutsideParties = () => Promise.resolve(isServing);
   const approveParty = createApproveParty({ connections, parties, door: fleet.door, hasher: plainHasher, servesOutsideParties, clock: { now: () => AT } });
-  return createAddSignInServer({ approveParty, parties, servers, servesOutsideParties, redirectUri: REDIRECT_URI });
+  return createAddSignInServer({ approveParty, parties, servers, signIns, servesOutsideParties, redirectUri: REDIRECT_URI });
 }
 
 function anAddition(overrides: Partial<Parameters<ReturnType<typeof adding>>[0]> = {}): Parameters<ReturnType<typeof adding>>[0] {
@@ -197,3 +204,60 @@ describe("the outside scopes a person's sign-in asks for (Q8)", () => {
    expect(attio.registered).toEqual([]);
    expect(parties.held.size).toBe(0);
  });
+
+function managedServers(): AuthorizationServers {
+  const { servers } = fakeAuthorizationServers();
+  return { ...servers, register: async (endpoint, input) => {
+    const result = await servers.register(endpoint, input);
+    return result.isOk ? ok({ ...result.value, registrationClientUri: 'https://app.attio.com/client/1', registrationAccessToken: 'management-token' }) : result;
+  } };
+}
+
+describe('commission refusal after automatic registration', () => {
+  it('deletes only the registered client after definite refusal and keeps no party', async () => {
+    fleet.state.validOwners.clear();
+    await expect(adding(managedServers())(anAddition())).resolves.toMatchObject({ isOk: false, error: { kind: 'COMMISSION_REFUSED' } });
+    expect(deletedClients).toEqual(['client-1']);
+    expect(parties.held.size).toBe(0);
+  });
+
+  it('reports a failed delete while preserving the commission refusal', async () => {
+    fleet.state.validOwners.clear();
+    deletion = err({ reason: 'HTTP 503' });
+    const result = await adding(managedServers())(anAddition());
+    expect(result).toMatchObject({ isOk: false, error: { kind: 'COMMISSION_REFUSED' } });
+    expect(!result.isOk && result.error.message).toContain('client deletion failed');
+    expect(deletedClients).toEqual(['client-1']);
+  });
+
+  it('keeps the client on an uncertain outcome and deletes it if the resumed commission is refused', async () => {
+    fleet.state.isAnswering = false;
+    const add = adding(managedServers());
+    await expect(add(anAddition())).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
+    expect(deletedClients).toEqual([]);
+    expect(parties.held.size).toBe(1);
+    fleet.state.isAnswering = true;
+    fleet.state.validOwners.clear();
+    await add(anAddition());
+    expect(deletedClients).toEqual(['client-1']);
+  });
+
+  it.each(['fixed', 'url'] as const)('never deletes a supplied %s client on resumed refusal', async (source) => {
+    fleet.state.isAnswering = false;
+    const add = adding(managedServers());
+    await add(anAddition());
+    const party = await parties.find(FLEET_ID, 'attio');
+    if (party?.kind !== 'mcpServer' || party.credential.kind !== 'personSignIn') { throw new Error('Expected sign-in party'); }
+    await parties.save({ ...party, credential: { kind: 'personSignIn', client: { ...party.credential.client, source, isGatewayOwned: false } } });
+    fleet.state.isAnswering = true;
+    fleet.state.validOwners.clear();
+    await add(anAddition());
+    expect(deletedClients).toEqual([]);
+  });
+
+  it('does not delete a client without registration management credentials', async () => {
+    fleet.state.validOwners.clear();
+    await adding(fakeAuthorizationServers().servers)(anAddition());
+    expect(deletedClients).toEqual([]);
+  });
+});
