@@ -1,5 +1,6 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
+import type { PartySignIns } from '../party-grants/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import type { Result } from '../shared/result.js';
 import type { SignInClient } from '../vault/credential.js';
@@ -39,10 +40,24 @@ export function createAddSignInServer(deps: {
   approveParty: ApproveParty;
   parties: PartyStore;
   servers: AuthorizationServers;
+  signIns: Pick<PartySignIns, 'deleteClient'>;
   servesOutsideParties: (fleetId: FleetId) => Promise<boolean>;
   /** Where the outside authorization server sends each person back after their sign-in. */
   redirectUri: string;
 }): AddSignInServer {
+  const approve: ApproveParty = async (input) => {
+    const result = await deps.approveParty(input);
+    if (result.isOk || result.error.kind !== 'COMMISSION_REFUSED' || input.credential.kind !== 'personSignIn') {
+      return result;
+    }
+    const { client } = input.credential;
+    const { registrationClientUri, registrationAccessToken } = client;
+    if (client.source !== 'automatic' || !client.isGatewayOwned || registrationClientUri === null || registrationAccessToken === null) {
+      return result;
+    }
+    const deleted = await deps.signIns.deleteClient({ ...client, registrationClientUri, registrationAccessToken });
+    return deleted.isOk ? result : refuse('COMMISSION_REFUSED', `${result.error.message}. The automatically registered client deletion failed; remote cleanup is incomplete.`);
+  };
   return async (input) => {
     const { operatorFleetId: fleetId, name, url, requestId } = input;
     if (!(await deps.servesOutsideParties(fleetId))) {
@@ -51,7 +66,7 @@ export function createAddSignInServer(deps: {
     const earlier = await deps.parties.find(fleetId, name);
     if (earlier) {
       if (earlier.kind === 'mcpServer' && earlier.credential.kind === 'personSignIn' && earlier.requestId === requestId) {
-        return deps.approveParty({ ...input, credential: earlier.credential });
+        return approve({ ...input, credential: earlier.credential });
       }
       return refuse('PARTY_EXISTS', `A party named ${name} was approved already`);
     }
@@ -98,6 +113,6 @@ export function createAddSignInServer(deps: {
       resource: signIn.resource,
       scope,
     };
-    return deps.approveParty({ ...input, credential: { kind: 'personSignIn', client } });
+    return approve({ ...input, credential: { kind: 'personSignIn', client } });
   };
 }

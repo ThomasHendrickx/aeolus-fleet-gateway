@@ -247,7 +247,8 @@ describe('commission refusal after automatic registration', () => {
     const add = adding(managedServers());
     await add(anAddition());
     const party = await parties.find(FLEET_ID, 'attio');
-    if (party?.kind !== 'mcpServer' || party.credential.kind !== 'personSignIn') { throw new Error('Expected sign-in party'); }
+    expect(party).toMatchObject({ kind: 'mcpServer', credential: { kind: 'personSignIn' } });
+    if (party?.kind !== 'mcpServer' || party.credential.kind !== 'personSignIn') { return; }
     await parties.save({ ...party, credential: { kind: 'personSignIn', client: { ...party.credential.client, source, isGatewayOwned: false } } });
     fleet.state.isAnswering = true;
     fleet.state.validOwners.clear();
