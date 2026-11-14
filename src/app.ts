@@ -31,6 +31,7 @@ import { createReadListedScopes } from './core/parties/read-listed-scopes.js';
 import { createCheckRequiredScopes } from './core/parties/check-required-scopes.js';
 import { createReadScopeRequirements } from './core/parties/read-scope-requirements.js';
 import { createSetScopeRequirements } from './core/parties/set-scope-requirements.js';
+import { createReadClientMetadataDocument } from './core/parties/read-client-metadata-document.js';
 import { createStateParty } from './core/mcp-out/state-party.js';
 import { createListingConnectionOf } from './core/party-grants/listing-connection.js';
 import { createCompletePartySignIn } from './core/party-grants/complete-party-sign-in.js';
@@ -46,6 +47,7 @@ import { createStartPartySignIn } from './core/party-grants/start-party-sign-in.
 import { signInServersOf } from './core/parties/sign-in-servers.js';
 import { createPartySignIns } from './adapters/oauth/party-sign-ins.js';
 import { createPartySignInSeals } from './adapters/crypto/party-sign-in-seals.js';
+import { registerClientMetadataDocumentRoutes, urlClientIdOf } from './adapters/http/client-metadata-document-routes.js';
 import { ownStepPartyOf, PARTY_SIGN_IN_DONE_PATH, partyPageUrlOf, registerPartySignInRoutes } from './adapters/http/party-sign-in-routes.js';
 import { createStateA2aAgent } from './core/a2a-out/state-a2a-agent.js';
 import { createFollowAgentTask } from './core/a2a-out/follow-agent-task.js';
@@ -1130,6 +1132,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     list: createListGrants({ ...approvingDeps, grants: partyGrants, ships: createShipNames(options.fleetUrl) }),
     remove: createRemoveGrant({ ...approvingDeps, grants: partyGrants, signIns: partySignIns }),
   };
+  registerClientMetadataDocumentRoutes(server, { read: createReadClientMetadataDocument({ parties, redirectUri: partySignInRedirectUri }), publicUrl: issuer });
   registerPartySignInRoutes(server, {
     complete: createCompletePartySignIn({ servers: signInServersOf(parties), grants: partyGrants, seals: partySignInSeals, signIns: partySignIns, notices: signInNotices, accountOf, stateParty, finishStep: finishOwnStep, clock, redirectUri: partySignInRedirectUri }),
     log: server.log,
@@ -1154,7 +1157,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     connect,
     approveParty,
     partySignIn,
-    addSignInServer: createAddSignInServer({ approveParty, parties, servers: createAuthorizationServers(), signIns: partySignIns, servesOutsideParties, redirectUri: partySignInRedirectUri, newUrlClientId: () => `${issuer}/outside-oauth/clients/${randomUUID()}` }),
+    addSignInServer: createAddSignInServer({ approveParty, parties, servers: createAuthorizationServers(), signIns: partySignIns, servesOutsideParties, redirectUri: partySignInRedirectUri, newUrlClientId: urlClientIdOf(issuer) }),
     addClientParty: createAddClientParty({ parties, approveClientParty, clients: oauthClients, secrets: oauthSecrets }),
     addA2aClient,
     addA2aAgent,

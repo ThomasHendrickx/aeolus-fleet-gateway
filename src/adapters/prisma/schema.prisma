@@ -90,6 +90,8 @@ model Party {
   clientId                 String?  @map("client_id")
   /// An A2A client's: the hash of the bearer it was shown once, which names it on every call; unique across fleets, as the bearer alone names the party (decision 0060).
   bearerHash               String?  @unique @map("bearer_hash")
+  /// An MCP server's gateway URL client id, written from its sign-in client: unique across fleets, as the URL alone names the party whose client metadata document it is (decision 0074).
+  urlClientId              String?  @unique @map("url_client_id")
   /// An A2A agent's: whether a message that died unconfirmed may be handed again, until an approver marks it not (A9).
   isRepeatable             Boolean? @map("is_repeatable")
   state                    String

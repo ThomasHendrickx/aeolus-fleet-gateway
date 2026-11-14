@@ -1878,8 +1878,27 @@ describe('plain gateway URL clients through the API', () => {
     expect(additions).toMatchObject([{ client: { source: 'url', mode: 'plain' }, operatorFleetId: FLEET }]);
   });
 
+  it('passes the explicit metadata document choice to addition', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+    const additions: unknown[] = [];
+    context.addSignInServer = (input) => {
+      additions.push(input);
+      return Promise.resolve(ok({ name: input.name, kind: 'mcpServer', url: input.url, credentialKind: 'personSignIn', state: 'crewed', proxyShipId: null, ownerShipId: OWNER, concurrencyLimit: 4 }));
+    };
+    await gatewayRouter.createCaller(context).parties.approve({ ...approval, credential: { kind: 'personSignIn', client: { source: 'url', mode: 'document' } } });
+    expect(additions).toMatchObject([{ client: { source: 'url', mode: 'document' }, operatorFleetId: FLEET }]);
+  });
+
+  it('answers an unadvertised metadata document refusal with its reason', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+    const message = 'The authorization server does not advertise client metadata document support. Choose another client option or check the service configuration.';
+    context.addSignInServer = () => Promise.resolve(err({ kind: 'SIGN_IN_CHECK_FAILED', message }));
+    await expect(gatewayRouter.createCaller(context).parties.approve({ ...approval, credential: { kind: 'personSignIn', client: { source: 'url', mode: 'document' } } })).rejects.toMatchObject({ message });
+  });
+
   it.each([
-    { source: 'url', mode: 'document' },
+    { source: 'url', mode: 'unknown' },
+    { source: 'url', mode: 'document', clientId: 'https://uncontrolled.example/client' },
     { source: 'url', mode: 'plain', clientId: 'https://uncontrolled.example/client' },
     { source: 'url', mode: 'plain', clientSecret: 'secret' },
     { source: 'url', mode: 'plain', registrationAccessToken: 'management' },

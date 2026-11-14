@@ -21,9 +21,18 @@ export type McpServerCredential =
 /** The supported OAuth client authentication methods (decision 0074). */
 export type TokenEndpointAuthMethod = 'none' | 'client_secret_post' | 'client_secret_basic';
 
+/**
+ * How a gateway URL client id is presented (decision 0074): plain, as the
+ * service's own URL convention takes it, or as a client metadata document
+ * the gateway publishes at that URL.
+ */
+export type UrlClientMode = 'plain' | 'document';
+
 /** One party's issuer-bound client, shared by its per-person grants (decision 0074). */
 export interface SignInClient {
   readonly source: 'automatic' | 'fixed' | 'url';
+  /** A gateway URL client's mode; none for any other source. */
+  readonly urlMode: UrlClientMode | null;
   readonly isGatewayOwned: boolean;
   readonly tokenEndpointAuthMethod: TokenEndpointAuthMethod;
   readonly revocationEndpointAuthMethods: readonly string[];

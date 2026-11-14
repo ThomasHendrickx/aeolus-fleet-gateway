@@ -29,7 +29,7 @@ export type AddedCredentialKind = (typeof ADDED_CREDENTIAL_KINDS)[number]['kind'
 
 export type AddedServerCredential = ServerCredential | { kind: typeof SIGN_IN_CREDENTIAL.kind; client?:
   | { source: 'automatic' }
-  | { source: 'url'; mode: 'plain' }
+  | { source: 'url'; mode: 'plain' | 'document' }
   | { source: 'fixed'; clientId: string; clientSecret: string | null; tokenEndpointAuthMethod: 'none' | 'client_secret_post' | 'client_secret_basic' }
 };
 
@@ -57,12 +57,12 @@ export function addedCredentialKindOf(sent: string): AddedCredentialKind {
 }
 
 /** The credential the add page's fields name: each person signing in takes no field. */
-export function addedServerCredentialOf(fields: Parameters<typeof serverCredentialOf>[0] & { signInClientSource?: string; signInClientId?: string; signInClientSecret?: string; signInClientAuthMethod?: string }): AddedServerCredential {
+export function addedServerCredentialOf(fields: Parameters<typeof serverCredentialOf>[0] & { signInClientSource?: string; signInClientId?: string; signInClientSecret?: string; signInClientAuthMethod?: string; signInClientUrlMode?: string }): AddedServerCredential {
   if (addedCredentialKindOf(fields.credentialKind) !== SIGN_IN_CREDENTIAL.kind) {
     return serverCredentialOf(fields);
   }
   if (fields.signInClientSource === 'url') {
-    return { kind: SIGN_IN_CREDENTIAL.kind, client: { source: 'url', mode: 'plain' } };
+    return { kind: SIGN_IN_CREDENTIAL.kind, client: { source: 'url', mode: fields.signInClientUrlMode === 'document' ? 'document' : 'plain' } };
   }
   if (fields.signInClientSource !== 'fixed') {
     return { kind: SIGN_IN_CREDENTIAL.kind };

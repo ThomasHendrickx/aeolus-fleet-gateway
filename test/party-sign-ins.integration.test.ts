@@ -291,3 +291,60 @@ describe('sign-in with a plain gateway URL client', () => {
     expect(attio.deletedClients).toEqual([]);
   });
 });
+
+
+describe('sign-in with a gateway client metadata document (decision 0074)', () => {
+  const client = { source: 'url', mode: 'document' } as const;
+  /** The authorization server reads the document at the gateway, where this test serves its public address. */
+  const documentOptions = { isRegistering: false, isRevoking: true, clientMetadataDocuments: { read: (clientId: string) => fetch(clientId.replace(PUBLIC_URL, address)) } };
+
+  it('signs in once the authorization server read the live document, and withdraws the document on retirement', async () => {
+    await started(documentOptions, client);
+    const response = await asPerson(MATHILDE_BROWSER, { procedure: 'parties.startSignIn', input: { name: 'attio' } });
+    const authorize = new URL(startedSchema.parse(await response.json()).result.data.url);
+    const clientId = authorize.searchParams.get('client_id') ?? '';
+    expect(clientId).toMatch(/^https:\/\/gateway\.example\.com\/outside-oauth\/clients\/[0-9a-f-]{36}$/);
+    const authorized = await fetch(authorize, { redirect: 'manual' });
+    expect(authorized.status, await authorized.clone().text()).toBe(302);
+    expect(attio.documentsRead).toEqual([clientId]);
+    const next = await cameBack(new URL(authorized.headers.get('location') ?? ''), MATHILDE_BROWSER);
+    expect(next.searchParams.get('sign-in')).toBe('signed-in');
+    await expect(ownSignIn(MATHILDE_BROWSER)).resolves.toMatchObject({ state: 'signedIn' });
+    expect(attio.registered).toEqual([]);
+
+    const published = await fetch(clientId.replace(PUBLIC_URL, address));
+    expect(await published.json()).toEqual({
+      client_id: clientId,
+      client_name: 'Aeolus: attio',
+      redirect_uris: [`${PUBLIC_URL}/outside-parties/sign-in/done`],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+    });
+
+    const manager = await commission(fleet, { cookie, ship: { name: 'manager', type: 'agent', scopes: ['fleet:manage'] } });
+    const retired = await mutate(address, { procedure: 'parties.retire', crewToken: await register(fleet, manager), body: { name: 'attio' } });
+    expect(retired.status, await retired.clone().text()).toBe(200);
+    expect((await fetch(clientId.replace(PUBLIC_URL, address))).status).toBe(404);
+    expect(await keptGrants()).toEqual([]);
+    expect(attio.revoked).toEqual(['attio-refresh-2', 'attio-access-2']);
+    expect(attio.deletedClients).toEqual([]);
+  });
+
+  it('cannot finish a sign-in whose document is no longer published, keeping no grant and never switching identity', async () => {
+    await started(documentOptions, client);
+    const response = await asPerson(MATHILDE_BROWSER, { procedure: 'parties.startSignIn', input: { name: 'attio' } });
+    const authorize = new URL(startedSchema.parse(await response.json()).result.data.url);
+    const manager = await commission(fleet, { cookie, ship: { name: 'manager', type: 'agent', scopes: ['fleet:manage'] } });
+    const retired = await mutate(address, { procedure: 'parties.retire', crewToken: await register(fleet, manager), body: { name: 'attio' } });
+    expect(retired.status, await retired.clone().text()).toBe(200);
+
+    const authorized = await fetch(authorize, { redirect: 'manual' });
+
+    expect(authorized.status).toBe(400);
+    expect(attio.documentsRead).toEqual([authorize.searchParams.get('client_id')]);
+    expect(await keptGrants()).toEqual([]);
+    expect(attio.registered).toEqual([]);
+  });
+});
+

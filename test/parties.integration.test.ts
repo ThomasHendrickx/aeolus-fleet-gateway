@@ -56,7 +56,7 @@ function aParty(overrides: Partial<McpServerParty> = {}): McpServerParty {
 describe("the gateway's parties and their vault in Postgres", () => {
   it.each(['automatic', 'fixed', 'url'] as const)('keeps the issuer-bound %s identity and authentication method in its own fleet', async (source) => {
     const store = createPrismaPartyStore(prisma);
-    const client: SignInClient = { ...ATTIO_CLIENT, source, isGatewayOwned: source === 'automatic', tokenEndpointAuthMethod: source === 'url' ? 'none' : 'client_secret_basic', clientSecret: source === 'url' ? null : ATTIO_CLIENT.clientSecret, revocationEndpointAuthMethods: ['none', 'client_secret_basic'] };
+    const client: SignInClient = { ...ATTIO_CLIENT, source, urlMode: source === 'url' ? 'plain' : null, isGatewayOwned: source === 'automatic', tokenEndpointAuthMethod: source === 'url' ? 'none' : 'client_secret_basic', clientSecret: source === 'url' ? null : ATTIO_CLIENT.clientSecret, revocationEndpointAuthMethods: ['none', 'client_secret_basic'] };
     const party = aParty({ fleetId: SWITCHED_FLEET, name: `identity-${source}`, credential: { kind: 'personSignIn', client } });
     await store.save(party);
     await expect(createPrismaPartyStore(prisma).find(SWITCHED_FLEET, party.name)).resolves.toEqual(party);
@@ -150,6 +150,20 @@ describe("the gateway's parties and their vault in Postgres", () => {
     await store.save(party);
 
     await expect(Promise.all([store.findByClient(FLEET, 'https://claude.example.com/client.json'), store.findByClient(OTHER_FLEET, 'https://claude.example.com/client.json')])).resolves.toEqual([party, undefined]);
+  });
+
+  it('finds a server from any fleet by its gateway URL client id alone, and no longer once it is removed (decision 0074)', async () => {
+    const store = createPrismaPartyStore(prisma);
+    const urlClientId = 'https://gateway.example.com/outside-oauth/clients/2b8f0c4e-1d2a-4e5f-9a7b-3c6d8e0f1a2b';
+    const client: SignInClient = { ...ATTIO_CLIENT, source: 'url', urlMode: 'document', clientId: urlClientId, clientSecret: null, tokenEndpointAuthMethod: 'none' };
+    const party = aParty({ fleetId: OTHER_FLEET, name: 'documented', credential: { kind: 'personSignIn', client } });
+    await store.save(party);
+    await store.save(aParty({ fleetId: OTHER_FLEET, name: 'registered', credential: { kind: 'personSignIn', client: { ...ATTIO_CLIENT, clientId: 'registered-client' } } }));
+
+    await expect(store.findByUrlClient(urlClientId)).resolves.toEqual(party);
+    await expect(store.findByUrlClient('registered-client')).resolves.toBeUndefined();
+    await store.remove(OTHER_FLEET, 'documented');
+    await expect(store.findByUrlClient(urlClientId)).resolves.toBeUndefined();
   });
 
   it("keeps an A2A client party, found from any fleet by its bearer's hash alone (decision 0060)", async () => {
@@ -271,14 +285,29 @@ describe('the client identity data migration', () => {
         },
       } } });
     }
-    await prisma.$executeRaw`DELETE FROM "_prisma_migrations" WHERE migration_name = '20261114170000_outside_client_identities'`;
+    await prisma.$executeRaw`DELETE FROM "_prisma_migrations" WHERE migration_name IN ('20261114170000_outside_client_identities', '20261114200000_client_metadata_documents')`;
     await migrateDatabase(databaseUrl);
 
     for (const [name, method] of [['legacy-public', 'none'], ['legacy-secret', 'client_secret_post']]) {
       await expect(store.find(SWITCHED_FLEET, name ?? '')).resolves.toMatchObject({ credential: { client: {
-        source: 'automatic', isGatewayOwned: true, tokenEndpointAuthMethod: method,
+        source: 'automatic', urlMode: null, isGatewayOwned: true, tokenEndpointAuthMethod: method,
         revocationEndpointAuthMethods: [method], issuer: ATTIO_CLIENT.issuer, clientId: 'existing-client',
       } } });
     }
+  });
+});
+
+describe('the client metadata document data migration', () => {
+  it('marks a pre-migration gateway URL client plain and finds it by its URL client id', async () => {
+    const store = createPrismaPartyStore(prisma);
+    const urlClientId = 'https://gateway.example.com/outside-oauth/clients/7c1e2d3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f';
+    // As the gateway kept a URL client before it had a mode.
+    const preMigration = Object.fromEntries(Object.entries({ ...ATTIO_CLIENT, source: 'url', clientId: urlClientId, clientSecret: null, tokenEndpointAuthMethod: 'none' }).filter(([field]) => field !== 'urlMode'));
+    await store.save(aParty({ fleetId: SWITCHED_FLEET, name: 'legacy-url' }));
+    await prisma.party.update({ where: { fleetId_name: { fleetId: SWITCHED_FLEET, name: 'legacy-url' } }, data: { credential: { kind: 'personSignIn', client: preMigration } } });
+    await prisma.$executeRaw`DELETE FROM "_prisma_migrations" WHERE migration_name = '20261114200000_client_metadata_documents'`;
+    await migrateDatabase(databaseUrl);
+
+    await expect(store.findByUrlClient(urlClientId)).resolves.toMatchObject({ name: 'legacy-url', credential: { client: { source: 'url', urlMode: 'plain', clientId: urlClientId } } });
   });
 });

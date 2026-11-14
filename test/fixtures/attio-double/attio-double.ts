@@ -35,6 +35,12 @@ const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
 export interface AttioDoubleOptions {
   /** Accept public gateway URL identities with this exact callback, without registering them. */
   urlClientRedirectUri?: string;
+  /**
+   * Advertise client metadata document support, and take a gateway URL
+   * identity only as the document its URL answers (read here, so a test can
+   * reach the gateway where its public address is not served).
+   */
+  clientMetadataDocuments?: { read: (clientId: string) => Promise<Response> };
   tokenEndpointAuthMethods?: string[];
   /** The PKCE methods its authorization server states; S256 by default. */
   codeChallengeMethods?: string[];
@@ -70,6 +76,8 @@ export interface AttioDouble {
   revoked: string[];
   /** Every client deleted, by its id, in order. */
   deletedClients: string[];
+  /** Every client metadata document read, by its client id, in order. */
+  documentsRead: string[];
   /** The Authorization header of each request to its MCP endpoint that it served. */
   authorizations: string[];
   /** The outside account, by subject, each tool call ran as, in order. */
@@ -104,6 +112,7 @@ const authorizeSchema = z.object({
   resource: z.string(),
   scope: z.string(),
 });
+const clientMetadataDocumentSchema = z.object({ client_id: z.string(), redirect_uris: z.array(z.string()), token_endpoint_auth_method: z.literal('none') });
 const redeemSchema = z.object({ grant_type: z.literal('authorization_code'), code: z.string(), redirect_uri: z.string(), client_id: z.string(), client_secret: z.string().optional(), code_verifier: z.string(), resource: z.string() });
 const refreshSchema = z.object({ grant_type: z.literal('refresh_token'), refresh_token: z.string(), client_id: z.string(), client_secret: z.string().optional(), resource: z.string() });
 const toolCallSchema = z.object({ method: z.literal('tools/call'), params: z.object({ name: z.string() }) });
@@ -166,6 +175,7 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     signIn: { subject: 'attio-member-mathilde', email: 'mathilde@acme.example' },
     revoked: [],
     deletedClients: [],
+    documentsRead: [],
     authorizations: [],
     calledAs: [],
     refreshed: [],
@@ -183,7 +193,18 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     close: () => server.close(),
   };
   const secretOf = (clientId: string) => `${clientId}-secret`;
-  const isUrlClient = (clientId: string) => options.urlClientRedirectUri !== undefined && clientId.startsWith(`${new URL(options.urlClientRedirectUri).origin}/outside-oauth/clients/`);
+  const isUrlClient = (clientId: string) => (options.urlClientRedirectUri !== undefined && clientId.startsWith(`${new URL(options.urlClientRedirectUri).origin}/outside-oauth/clients/`))
+    || (options.clientMetadataDocuments !== undefined && clientId.includes('/outside-oauth/clients/'));
+  /** The client a metadata document names, when its URL answers one for exactly that client id, for public clients only. */
+  const documentedClientOf = async (clientId: string): Promise<{ clientId: string; redirectUris: string[] } | undefined> => {
+    if (options.clientMetadataDocuments === undefined || !clientId.includes('/outside-oauth/clients/')) {
+      return undefined;
+    }
+    double.documentsRead.push(clientId);
+    const answer = await options.clientMetadataDocuments.read(clientId);
+    const document = clientMetadataDocumentSchema.safeParse(answer.ok ? await answer.json() : undefined);
+    return document.success && document.data.client_id === clientId ? { clientId, redirectUris: document.data.redirect_uris } : undefined;
+  };
   const isClientAuthenticated = (clientId: string, secret: string | undefined) => isUrlClient(clientId) ? secret === undefined : secret === secretOf(clientId);
 
   server.all('/mcp', async (request, reply) => {
@@ -215,7 +236,8 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     grant_types_supported: ['authorization_code', 'refresh_token'],
     code_challenge_methods_supported: options.codeChallengeMethods ?? ['S256'],
     token_endpoint_auth_methods_supported: options.tokenEndpointAuthMethods ?? ['none', 'client_secret_post'],
-    revocation_endpoint_auth_methods_supported: options.urlClientRedirectUri === undefined ? ['client_secret_post'] : ['none', 'client_secret_post'],
+    revocation_endpoint_auth_methods_supported: options.urlClientRedirectUri === undefined && options.clientMetadataDocuments === undefined ? ['client_secret_post'] : ['none', 'client_secret_post'],
+    ...(options.clientMetadataDocuments === undefined ? {} : { client_id_metadata_document_supported: true }),
     scopes_supported: SCOPES,
   }));
   server.post('/oauth/register', (request, reply) => {
@@ -236,10 +258,11 @@ export async function startAttioDouble(options: AttioDoubleOptions = {}): Promis
     double.deletedClients.push(clientId);
     return reply.code(HTTP_NO_CONTENT).send();
   });
-  server.get('/oidc/authorize', (request, reply) => {
+  server.get('/oidc/authorize', async (request, reply) => {
     const asked = authorizeSchema.safeParse(request.query);
     const client = asked.success ? registered.find(({ clientId }) => clientId === asked.data.client_id)
-      ?? (isUrlClient(asked.data.client_id) && options.urlClientRedirectUri !== undefined ? { clientId: asked.data.client_id, redirectUris: [options.urlClientRedirectUri] } : undefined) : undefined;
+      ?? (isUrlClient(asked.data.client_id) && options.urlClientRedirectUri !== undefined ? { clientId: asked.data.client_id, redirectUris: [options.urlClientRedirectUri] } : undefined)
+      ?? await documentedClientOf(asked.data.client_id) : undefined;
     if (!asked.success || client === undefined || !client.redirectUris.includes(asked.data.redirect_uri) || asked.data.resource !== double.url) {
       return reply.code(HTTP_BAD_REQUEST).send({ error: 'invalid_request' });
     }

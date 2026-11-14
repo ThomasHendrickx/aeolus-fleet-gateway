@@ -329,7 +329,7 @@ describe('adding a plain gateway URL client (decision 0074)', () => {
     const attio = fakeAuthorizationServers(ok({ ...ATTIO_SIGN_IN, registrationEndpoint: null }));
     await expect(adding(attio.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: true });
     await expect(parties.find(FLEET_ID, 'attio')).resolves.toMatchObject({ credential: { client: {
-      source: 'url', clientId: 'https://gateway.example.com/outside-oauth/clients/opaque-1',
+      source: 'url', urlMode: 'plain', clientId: 'https://gateway.example.com/outside-oauth/clients/opaque-1',
       clientSecret: null, tokenEndpointAuthMethod: 'none', isGatewayOwned: true,
       issuer: ATTIO_SIGN_IN.issuer, authorizationEndpoint: ATTIO_SIGN_IN.authorizationEndpoint,
       tokenEndpoint: ATTIO_SIGN_IN.tokenEndpoint, resource: ATTIO_URL, scope: 'mcp offline_access openid',
@@ -407,5 +407,43 @@ describe('adding a plain gateway URL client (decision 0074)', () => {
   it('allocates nothing while outside parties are off', async () => {
     await expect(adding(fakeAuthorizationServers().servers, false)(anAddition({ client }))).resolves.toMatchObject({ isOk: false, error: { kind: 'OUTSIDE_PARTIES_OFF' } });
     expect(allocatedUrls).toBe(0);
+  });
+});
+
+describe('adding a gateway URL client with a client metadata document (decision 0074)', () => {
+  const client = { source: 'url', mode: 'document' } as const;
+  const advertised = { ...ATTIO_SIGN_IN, registrationEndpoint: null, isClientIdMetadataDocumentSupported: true };
+
+  it('keeps a public document URL identity when the authorization server advertises client metadata documents', async () => {
+    const attio = fakeAuthorizationServers(ok(advertised));
+    await expect(adding(attio.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: true });
+    await expect(parties.find(FLEET_ID, 'attio')).resolves.toMatchObject({ credential: { client: {
+      source: 'url', urlMode: 'document', clientId: 'https://gateway.example.com/outside-oauth/clients/opaque-1',
+      clientSecret: null, tokenEndpointAuthMethod: 'none', isGatewayOwned: true, issuer: ATTIO_SIGN_IN.issuer,
+      registrationClientUri: null, registrationAccessToken: null,
+    } } });
+    expect(attio.registered).toEqual([]);
+  });
+
+  it('refuses document mode the authorization server does not advertise, keeping nothing and allocating no identity', async () => {
+    const attio = fakeAuthorizationServers(ok({ ...advertised, isClientIdMetadataDocumentSupported: false }));
+    await expect(adding(attio.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: false, error: {
+      kind: 'SIGN_IN_CHECK_FAILED',
+      message: 'The authorization server does not advertise client metadata document support. Choose another client option or check the service configuration.',
+    } });
+    expect({ allocatedUrls, parties: parties.held.size, registered: attio.registered, commissioned: fleet.state.commissioned }).toEqual({ allocatedUrls: 0, parties: 0, registered: [], commissioned: [] });
+  });
+
+  it('refuses document mode without public-client support', async () => {
+    const attio = fakeAuthorizationServers(ok({ ...advertised, tokenEndpointAuthMethods: ['client_secret_basic'] }));
+    await expect(adding(attio.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: false, error: { kind: 'SIGN_IN_CHECK_FAILED' } });
+    expect({ allocatedUrls, parties: parties.held.size }).toEqual({ allocatedUrls: 0, parties: 0 });
+  });
+
+  it('keeps no document identity after definite commission refusal', async () => {
+    fleet.state.validOwners.clear();
+    const attio = fakeAuthorizationServers(ok(advertised));
+    await expect(adding(attio.servers)(anAddition({ client }))).resolves.toMatchObject({ isOk: false, error: { kind: 'COMMISSION_REFUSED' } });
+    expect({ parties: parties.held.size, deleted: deletedClients }).toEqual({ parties: 0, deleted: [] });
   });
 });

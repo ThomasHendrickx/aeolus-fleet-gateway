@@ -51,6 +51,7 @@ function credentialOf(form: FormData) {
     signInClientId: fieldOf(form, 'signInClientId'),
     signInClientSecret: fieldOf(form, 'signInClientSecret'),
     signInClientAuthMethod: fieldOf(form, 'signInClientAuthMethod'),
+    signInClientUrlMode: fieldOf(form, 'signInClientUrlMode'),
   });
 }
 

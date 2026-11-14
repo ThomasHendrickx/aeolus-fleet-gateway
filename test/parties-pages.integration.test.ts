@@ -288,6 +288,7 @@ describe('the parties pages, as the account signed in', () => {
         kind: 'personSignIn',
         client: {
           source: 'automatic',
+          urlMode: null,
           isGatewayOwned: true,
           tokenEndpointAuthMethod: 'none',
           revocationEndpointAuthMethods: ['client_secret_post'],

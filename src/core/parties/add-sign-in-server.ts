@@ -3,7 +3,7 @@ import type { FleetId } from '@aeolus-fleet/common';
 import type { PartySignIns } from '../party-grants/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import type { Result } from '../shared/result.js';
-import type { SignInClient, TokenEndpointAuthMethod } from '../vault/credential.js';
+import type { SignInClient, TokenEndpointAuthMethod, UrlClientMode } from '../vault/credential.js';
 import type { ApproveParty, ApprovePartyRefusal } from './approve-party.js';
 import type { AuthorizationServers, DiscoveredSignIn, PartyStore } from './ports.js';
 import type { ShownParty } from './shown-party.js';
@@ -21,7 +21,7 @@ export type AddSignInServerRefusal =
 /** The explicitly selected identity, with automatic registration as the default. */
 export type SignInClientChoice =
   | { readonly source: 'automatic' }
-  | { readonly source: 'url'; readonly mode: 'plain' }
+  | { readonly source: 'url'; readonly mode: UrlClientMode }
   | { readonly source: 'fixed'; readonly clientId: string; readonly clientSecret: string | null; readonly tokenEndpointAuthMethod: TokenEndpointAuthMethod };
 
 export type AddSignInServer = (input: Omit<Parameters<ApproveParty>[0], 'credential'> & { readonly client?: SignInClientChoice }) => Promise<Result<ShownParty, AddSignInServerRefusal>>;
@@ -96,11 +96,15 @@ export function createAddSignInServer(deps: {
     }
     const choice = input.client ?? { source: 'automatic' };
     if (choice.source === 'url') {
+      if (choice.mode === 'document' && !signIn.isClientIdMetadataDocumentSupported) {
+        return refuse('SIGN_IN_CHECK_FAILED', 'The authorization server does not advertise client metadata document support. Choose another client option or check the service configuration.');
+      }
       if (!signIn.tokenEndpointAuthMethods.includes('none')) {
         return refuse('SIGN_IN_CHECK_FAILED', 'The authorization server does not support the selected client authentication method.');
       }
       const client: SignInClient = {
         source: 'url',
+        urlMode: choice.mode,
         isGatewayOwned: true,
         clientId: deps.newUrlClientId(),
         clientSecret: null,
@@ -128,6 +132,7 @@ export function createAddSignInServer(deps: {
       }
       const client: SignInClient = {
         ...choice,
+        urlMode: null,
         isGatewayOwned: false,
         issuer: signIn.issuer,
         authorizationEndpoint: signIn.authorizationEndpoint,
@@ -158,6 +163,7 @@ export function createAddSignInServer(deps: {
     }
     const client: SignInClient = {
       source: 'automatic',
+      urlMode: null,
       isGatewayOwned: true,
       revocationEndpointAuthMethods: signIn.revocationEndpointAuthMethods,
       issuer: signIn.issuer,

@@ -17,6 +17,7 @@ const credentialSchema: z.ZodType<McpServerCredential> = z.discriminatedUnion('k
 
 const signInClientSchema: z.ZodType<SignInClient> = z.object({
   source: z.enum(['automatic', 'fixed', 'url']),
+  urlMode: z.enum(['plain', 'document']).nullable(),
   isGatewayOwned: z.boolean(),
   tokenEndpointAuthMethod: z.enum(['none', 'client_secret_post', 'client_secret_basic']),
   revocationEndpointAuthMethods: z.array(z.string()),
@@ -39,6 +40,11 @@ const serverCredentialSchema: z.ZodType<McpServerPartyCredential> = z.union([cre
 /** A server's credential as JSON: a sign-in client's fields are all JSON values. */
 function credentialAsJson(credential: McpServerPartyCredential): Prisma.InputJsonObject {
   return credential.kind === 'personSignIn' ? { kind: credential.kind, client: { ...credential.client } } : { ...credential };
+}
+
+/** A server's gateway URL client id, kept beside its credential so the client is found by it in one indexed read. */
+function urlClientIdOf(credential: McpServerPartyCredential): string | null {
+  return credential.kind === 'personSignIn' && credential.client.source === 'url' ? credential.client.clientId : null;
 }
 
 /** A server's tool switches as the vault keeps them: a JSON object of each tool's switch, or none kept yet. */
@@ -105,13 +111,13 @@ function partyOf(row: Row): Party {
 function outsideColumnsOf(party: Party) {
   switch (party.kind) {
     case 'mcpServer':
-      return { url: party.url, credential: credentialAsJson(party.credential), concurrencyLimit: party.concurrencyLimit, clientId: null, bearerHash: null, isRepeatable: null };
+      return { url: party.url, credential: credentialAsJson(party.credential), concurrencyLimit: party.concurrencyLimit, clientId: null, bearerHash: null, isRepeatable: null, urlClientId: urlClientIdOf(party.credential) };
     case 'mcpClient':
-      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: party.clientId, bearerHash: null, isRepeatable: null };
+      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: party.clientId, bearerHash: null, isRepeatable: null, urlClientId: null };
     case 'a2aClient':
-      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: null, bearerHash: party.bearerHash, isRepeatable: null };
+      return { url: null, credential: Prisma.DbNull, concurrencyLimit: null, clientId: null, bearerHash: party.bearerHash, isRepeatable: null, urlClientId: null };
     case 'a2aAgent':
-      return { url: party.cardUrl, credential: { ...party.credential }, concurrencyLimit: party.concurrencyLimit, clientId: null, bearerHash: null, isRepeatable: party.isRepeatable };
+      return { url: party.cardUrl, credential: { ...party.credential }, concurrencyLimit: party.concurrencyLimit, clientId: null, bearerHash: null, isRepeatable: party.isRepeatable, urlClientId: null };
   }
 }
 
@@ -129,6 +135,10 @@ export function createPrismaPartyStore(db: Db): PartyStore & { crewed(): Promise
     },
     findByBearer: async (bearerHash) => {
       const row = await db.party.findUnique({ where: { bearerHash } });
+      return row ? partyOf(row) : undefined;
+    },
+    findByUrlClient: async (urlClientId) => {
+      const row = await db.party.findUnique({ where: { urlClientId } });
       return row ? partyOf(row) : undefined;
     },
     list: async (fleetId) => (await db.party.findMany({ where: { fleetId }, orderBy: { name: 'asc' } })).map(partyOf),
