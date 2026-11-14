@@ -1,5 +1,6 @@
 import type { FleetId } from '@aeolus-fleet/common';
 
+import type { AccountOfSignIn } from '../account-sign-in/account-of-sign-in.js';
 import type { IssuedTokens } from '../oauth/ports.js';
 import type { AccountGrants } from './ports.js';
 
@@ -13,8 +14,9 @@ export type EndSignIns = (account: { fleetId: FleetId; accountId: string }) => P
  * grant is ended before its tokens are revoked, as when pagasae refuses a
  * refresh: a call with a token whose grant is gone is signed out already.
  */
-export function createEndSignIns(deps: { grants: AccountGrants; tokens: IssuedTokens }): EndSignIns {
+export function createEndSignIns(deps: { grants: AccountGrants; tokens: IssuedTokens; accountOf: Pick<AccountOfSignIn, 'forgetAccount'> }): EndSignIns {
   return async ({ fleetId, accountId }) => {
+    deps.accountOf.forgetAccount({ fleetId, accountId });
     for (const { grantId } of await deps.grants.ofAccount(fleetId, accountId)) {
       await deps.grants.end(fleetId, grantId);
       await deps.tokens.revokeGrant(fleetId, grantId);

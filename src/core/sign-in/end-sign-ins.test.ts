@@ -25,7 +25,7 @@ async function signedIn(grant: AccountGrant, accessHash: string): Promise<void> 
 }
 
 function endSignIns() {
-  return createEndSignIns({ grants, tokens });
+  return createEndSignIns({ grants, tokens, accountOf: { forgetAccount: () => undefined } });
 }
 
 function tokenStates(): Record<string, string> {

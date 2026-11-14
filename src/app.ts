@@ -996,7 +996,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       ? undefined
       : createSharedSignIn({ url: options.pagasae.url, ...options.pagasaeApp, redirectUri: `${issuer}/sign-in/done`, timeoutMs: PAGASAE_TIMEOUT_MS });
   const accountOf: AccountOfSignIn =
-    signIns === undefined ? Object.assign(() => Promise.resolve(err({ kind: 'signedOut' as const })), { forget: () => undefined }) : createAccountOfSignIn({ signIns, argoAccounts, clock });
+    signIns === undefined ? Object.assign(() => Promise.resolve(err({ kind: 'signedOut' as const })), { forget: () => undefined, forgetAccount: () => undefined }) : createAccountOfSignIn({ signIns, argoAccounts, clock });
   const accountInView = signIns === undefined ? undefined : createAccountInView({ signIns, accountOf, isServed });
   if (signIns !== undefined) {
     const accountSeals = createAccountSignInSeals(options.gatewaySecret);
@@ -1147,7 +1147,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     setFleetEnabled,
     readFleet,
     deleteFleet,
-    endSignIns: createEndSignIns({ grants, tokens: issuedTokens }),
+    endSignIns: createEndSignIns({ grants, tokens: issuedTokens, accountOf }),
     stopSlackLink: createStopSlackLink({ links: slackLinks, clock }),
     endAccountGrants: createEndAccountGrants({ servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns }),
     readConnection,
