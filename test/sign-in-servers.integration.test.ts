@@ -182,3 +182,19 @@ describe('plain gateway URL identities (decision 0074)', () => {
     expect(attio.deletedClients).toEqual([]);
   });
 });
+
+
+describe('gateway client metadata document identities (decision 0074)', () => {
+  it('refuses document mode an authorization server does not advertise, keeping nothing', async () => {
+    await started({ isRegistering: false });
+    const body = { requestId: 'document-client', name: 'attio', url: attio.url, credential: { kind: 'personSignIn', client: { source: 'url', mode: 'document' } }, ownerShipId: owner };
+
+    const refused = await mutate(address, { procedure: 'parties.approve', cookie, body });
+
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toContain('The authorization server does not advertise client metadata document support. Choose another client option or check the service configuration.');
+    expect(await keptParties()).toEqual([]);
+    expect(attio.registered).toEqual([]);
+  });
+});
+
