@@ -1123,6 +1123,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const partySignInRedirectUri = `${issuer}${PARTY_SIGN_IN_DONE_PATH}`;
   const partySignInSeals = createPartySignInSeals(options.gatewaySecret);
   const partySignIn: Context['partySignIn'] = {
+    redirectUri: partySignInRedirectUri,
     start: createStartPartySignIn({ servers: signInServersOf(parties), seals: partySignInSeals, signIns: partySignIns, secrets: oauthSecrets, clock, redirectUri: partySignInRedirectUri }),
     readOwn: createReadOwnGrant({ servers: signInServersOf(parties), grants: partyGrants }),
     removeOwn: createRemoveOwnGrant({ servers: signInServersOf(parties), grants: partyGrants, signIns: partySignIns }),

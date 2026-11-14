@@ -330,7 +330,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
       return Promise.resolve(ok({ name: input.name, kind: 'mcpServer' as const, url: input.url, credentialKind: input.credential.kind, ownerShipId: input.ownerShipId, concurrencyLimit: input.concurrencyLimit, state: 'crewed' as const, proxyShipId: null }));
     },
     addSignInServer: unused,
-    partySignIn: { start: unused, readOwn: unused, removeOwn: unused, list: unused, remove: unused },
+    partySignIn: { redirectUri: 'https://gateway.example/outside-parties/sign-in/done', start: unused, readOwn: unused, removeOwn: unused, list: unused, remove: unused },
     crewParty: ({ name }) =>
       Promise.resolve(
         name === 'agentcore'
