@@ -5,7 +5,9 @@ import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { BUTTONS, COMPACT_CARD, SMALL_BUTTON } from '../../forms/ui/look';
 import { countsOf, inListOrder, outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty, type Side } from '../party-kinds';
 import { ADD_A2A_AGENT_PATH, ADD_A2A_CLIENT_PATH, ADD_SERVER_PATH, OUTSIDE_PARTIES_PATH, partyPath } from '../paths';
-import { StatusBadge, Tag } from './status-badge';
+import { StatusBadge } from '@aeolus-fleet/ui';
+import { toneIcon } from '../../../lib/tone-icons';
+import { Tag } from './tag';
 import { SwitchCard } from './switch-card';
 
 /** The scopes that turn outside parties on or off, that add an outside MCP server (0056), and that add an outside A2A client (0060). */
@@ -31,7 +33,7 @@ function PartyCard({ party, fleetId }: { party: ListedParty; fleetId: string }) 
         </span>
       )}
       <span className="flex flex-wrap items-center gap-2">
-        <StatusBadge tone={state.tone} label={state.label} look="flat" />
+        <StatusBadge tone={state.tone} icon={toneIcon(state.tone)} label={state.label} look="flat" />
         {party.ownerName === null ? null : <Tag>{party.ownerName}</Tag>}
       </span>
     </a>

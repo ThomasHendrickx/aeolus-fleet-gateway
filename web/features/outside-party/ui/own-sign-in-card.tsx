@@ -5,7 +5,9 @@ import type { GatewayRouter } from '../../../../src/adapters/trpc/router.js';
 import { Outcome } from '../../forms/ui/outcome';
 import { CARD } from '../../forms/ui/look';
 import type { Tone } from '../../outside-parties/party-kinds';
-import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
+import { StatusBadge } from '@aeolus-fleet/ui';
+import { toneIcon } from '../../../lib/tone-icons';
+import { Tag } from '../../outside-parties/ui/tag';
 import { dayAndTimeOf, whenWordsOf, type SignInOutcome, type SignInOutcomeKind } from '../own-sign-in';
 import { Fact } from './fact';
 import { RemoveSignInForm, SignInForm } from './own-sign-in-forms';
@@ -119,7 +121,7 @@ export function OwnSignInCard({ fleetId, party, read, outcome, now }: { fleetId:
     <section className={`${CARD} grid gap-3`} data-testid="outside-party-sign-in">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-section font-semibold">Your sign-in</h2>
-        {badge === null ? null : <StatusBadge tone={badge.tone} label={badge.label} />}
+        {badge === null ? null : <StatusBadge tone={badge.tone} icon={toneIcon(badge.tone)} label={badge.label} look="pill" />}
       </div>
       {read.kind === 'read' && outcome !== null ? <Said outcome={outcome} party={party} /> : null}
       {read.kind === 'read' ? (

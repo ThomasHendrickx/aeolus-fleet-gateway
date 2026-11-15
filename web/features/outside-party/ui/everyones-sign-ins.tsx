@@ -7,7 +7,8 @@ import type { FormState } from '../../forms/form-state';
 import { BUTTONS, CARD } from '../../forms/ui/look';
 import { Outcome } from '../../forms/ui/outcome';
 import type { Tone } from '../../outside-parties/party-kinds';
-import { StatusBadge } from '../../outside-parties/ui/status-badge';
+import { StatusBadge } from '@aeolus-fleet/ui';
+import { toneIcon } from '../../../lib/tone-icons';
 import { whenWordsOf } from '../own-sign-in';
 
 /** A person's sign-in as the API answers it to an approver: never a token. */
@@ -162,7 +163,7 @@ export function SignInsCard(props: SignInsCardProps) {
                     <span className="sm:hidden"> · last used {signIn.lastUsedAt === null ? 'not yet' : lastUsed}</span>
                   </td>
                   <td className="h-12 px-2 max-sm:col-start-2 max-sm:row-start-1 max-sm:h-auto max-sm:px-0">
-                    <StatusBadge tone={badge.tone} label={badge.label} />
+                    <StatusBadge tone={badge.tone} icon={toneIcon(badge.tone)} label={badge.label} look="pill" />
                   </td>
                   <td className="h-12 px-2 text-muted-foreground max-sm:hidden">{lastUsed}</td>
                   <td className="h-12 px-2 text-right max-sm:col-span-2 max-sm:row-start-3 max-sm:h-auto max-sm:px-0 max-sm:text-left">

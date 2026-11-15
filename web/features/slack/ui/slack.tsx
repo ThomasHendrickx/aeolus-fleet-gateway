@@ -4,7 +4,8 @@ import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { ActionForm } from '../../forms/ui/action-form';
 import { BUTTONS, CARD, INPUT, LABEL } from '../../forms/ui/look';
-import { StatusBadge } from '../../outside-parties/ui/status-badge';
+import { StatusBadge } from '@aeolus-fleet/ui';
+import { toneIcon } from '../../../lib/tone-icons';
 import { connectSlack, installBot } from '../actions';
 import { BOT_STATES } from '../bot-states';
 import { installOutcomeOf } from '../install-outcomes';
@@ -60,7 +61,7 @@ function ShipsInSlack({ fleetId, bots, canChange, isTokenFresh }: { fleetId: str
               <span className="flex flex-wrap items-center gap-2">
                 <strong>{bot.shipName}</strong>
                 {bot.botName === bot.shipName ? null : <span className="text-muted-foreground">In Slack as {bot.botName} until Slack is told the new name</span>}
-                <StatusBadge tone={BOT_STATES[bot.state].tone} label={BOT_STATES[bot.state].label} />
+                <StatusBadge tone={BOT_STATES[bot.state].tone} icon={toneIcon(BOT_STATES[bot.state].tone)} label={BOT_STATES[bot.state].label} look="pill" />
               </span>
               {canChange ? (
                 <div className="flex flex-wrap items-start gap-2">
@@ -121,7 +122,7 @@ export async function Slack({ page, install }: { page: SignedInPage; install: st
             </p>
             {read.value.tokenState === 'fresh' ? (
               <span>
-                <StatusBadge tone="ok" label="Configuration token fresh" />
+                <StatusBadge tone="ok" icon={toneIcon('ok')} label="Configuration token fresh" look="pill" />
               </span>
             ) : (
               <>
@@ -141,7 +142,7 @@ export async function Slack({ page, install }: { page: SignedInPage; install: st
             <h2 className="text-heading font-semibold">The gateway&apos;s bot</h2>
             <p className="text-muted-foreground">It shows a person what waits for their person ship, in a direct message.</p>
             <span>
-              <StatusBadge tone={GATEWAY_BOT_STATES[read.value.gatewayBot].tone} label={GATEWAY_BOT_STATES[read.value.gatewayBot].label} />
+              <StatusBadge tone={GATEWAY_BOT_STATES[read.value.gatewayBot].tone} icon={toneIcon(GATEWAY_BOT_STATES[read.value.gatewayBot].tone)} label={GATEWAY_BOT_STATES[read.value.gatewayBot].label} look="pill" />
             </span>
             {read.value.canChange && read.value.gatewayBot !== 'installed' && read.value.tokenState === 'fresh' ? (
               <ActionForm action={installBot} fleetId={fleetId} submit={{ label: 'Install', pending: 'Opening Slack…' }} testId="slack-install-form" />

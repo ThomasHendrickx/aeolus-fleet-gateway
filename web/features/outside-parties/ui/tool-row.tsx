@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 
 import { firstLineOf } from '../../add-server/tool-choice';
-import { StatusBadge, Tag } from './status-badge';
+import { StatusBadge } from '@aeolus-fleet/ui';
+import { toneIcon } from '../../../lib/tone-icons';
+import { Tag } from './tag';
 
 /** A tool of an outside MCP server, as its row shows it. */
 export interface ShownTool {
@@ -26,7 +28,7 @@ export function ToolRow({ tool, control, testId }: { tool: ShownTool; control: R
         {control}
         <span className="font-mono">{name}</span>
         {isReadOnly ? <Tag>reads only</Tag> : null}
-        {isNew ? <StatusBadge tone="attention" label="New" /> : null}
+        {isNew ? <StatusBadge tone="attention" icon={toneIcon('attention')} label="New" look="pill" /> : null}
       </div>
       {firstLine === '' ? null : isFolded ? (
         <details className="text-muted-foreground">
