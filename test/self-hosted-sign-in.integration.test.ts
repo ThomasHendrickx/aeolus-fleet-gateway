@@ -192,28 +192,53 @@ describe('self-hosted sign-in through the existing service contract', () => {
     expect(await prisma.personCrew.count({ where: { fleetId, shipId: personShipId } })).toBe(1);
   });
 
-  it('invalidates browser authorisation immediately when the authenticated account-disabled notification arrives, despite a retained person crew', async () => {
-    await askMaya();
-    const deliveryId = await openQuestion();
-    expect((await pageCall('people.putInBasket', { deliveryId, option: 2, optionLabel: 'Wait', note: 'Keep this draft' })).status).toBe(200);
-    expect(await prisma.personCrew.count({ where: { fleetId, shipId: personShipId } })).toBe(1);
-    // The service removes access first, then retries its authenticated gateway cleanup until acknowledged.
+  async function disableAccount() {
     const revoked = await fetch(`${service.url}/oauth/revoke`, { method: 'POST', body: new URLSearchParams({ token: SHARED_SESSION, client_id: PAGASAE_APP_CLIENT.clientId, client_secret: PAGASAE_APP_CLIENT.clientSecret }) });
     expect(revoked.status).toBe(200);
-    const unauthenticated = await mutate(address, { procedure: 'installation.accountDisabled', body: { fleetId, accountId: ACCOUNT_ID } });
-    expect(unauthenticated.status).toBe(401);
+    return mutate(address, { procedure: 'installation.accountDisabled', installationToken: WAKE_INSTALLATION_TOKEN, body: { fleetId, accountId: ACCOUNT_ID } });
+  }
+
+  it('invalidates browser authorisation immediately on authenticated account disabling despite a retained person crew', async () => {
     expect((await pageCall('people.inbox')).status).toBe(200);
-    const disabled = await mutate(address, { procedure: 'installation.accountDisabled', installationToken: WAKE_INSTALLATION_TOKEN, body: { fleetId, accountId: ACCOUNT_ID } });
+    const disabled = await disableAccount();
     expect(disabled.status).toBe(200);
+    expect(await prisma.personCrew.count({ where: { fleetId, shipId: personShipId } })).toBe(1);
     expect((await pageCall('people.inbox')).status).toBe(401);
+  });
+
+  it('refuses an unauthenticated account-disabled notification', async () => {
+    const response = await mutate(address, { procedure: 'installation.accountDisabled', body: { fleetId, accountId: ACCOUNT_ID } });
+    expect(response.status).toBe(401);
+  });
+
+  it('acknowledges a retry of authenticated account disabling', async () => {
+    await pageCall('people.inbox');
+    expect((await disableAccount()).status).toBe(200);
     const retried = await mutate(address, { procedure: 'installation.accountDisabled', installationToken: WAKE_INSTALLATION_TOKEN, body: { fleetId, accountId: ACCOUNT_ID } });
     expect(retried.status).toBe(200);
+  });
+
+  it('refuses basket sending after account disabling despite a retained person crew', async () => {
+    await pageCall('people.inbox');
+    await disableAccount();
     expect((await pageCall('people.sendBasket', {})).status).toBe(401);
-    expect(await prisma.personCrew.count({ where: { fleetId, shipId: personShipId } })).toBe(1);
-    // Recovery restores the same account and person. Cleanup must leave its opened work and draft intact.
+  });
+
+  it('preserves opened work after account disabling and recovery', async () => {
+    await askMaya();
+    const deliveryId = await openQuestion();
+    await disableAccount();
     service.sharedSignIn(SHARED_SESSION, claims());
     const restored = inboxSchema.parse(await (await pageCall('people.inbox')).json()).result.data;
     expect(restored).toMatchObject({ waiting: 0, opened: [{ deliveryId }] });
+  });
+
+  it('preserves a draft basket answer after account disabling and recovery', async () => {
+    await askMaya();
+    const deliveryId = await openQuestion();
+    expect((await pageCall('people.putInBasket', { deliveryId, option: 2, optionLabel: 'Wait', note: 'Keep this draft' })).status).toBe(200);
+    await disableAccount();
+    service.sharedSignIn(SHARED_SESSION, claims());
     expect(basketSchema.parse(await (await pageCall('people.basket')).json()).result.data.entries).toMatchObject([{ questionId: QUESTION_ID, standing: { kind: 'waiting' } }]);
   });
 
