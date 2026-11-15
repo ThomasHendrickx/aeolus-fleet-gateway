@@ -286,8 +286,7 @@ describe('self-hosted sign-in through the existing service contract', () => {
     await round();
     expect((await setup.links.ofAccount(fleetId, ACCOUNT_ID))?.stoppedAt).toEqual(setup.clock.now());
     expect(events.held[0]?.takenAt).toEqual(setup.clock.now());
-    const received = await fetch(`${fleet.url}/api/v1/ship/receive`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${researcher}` }, body: '{}' });
-    expect(receiveOutputSchema.parse(await received.json()).deliveries).toEqual([]);
+    expect(await setup.door.person.inbox(researcher)).toEqual({ isOk: true, value: { waiting: 0 } });
   });
 
   it('refuses human access after token expiry and allowance without notification or renewal despite a retained person crew', async () => {

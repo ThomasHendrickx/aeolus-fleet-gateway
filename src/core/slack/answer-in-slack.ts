@@ -50,7 +50,7 @@ function questionOf(payload: string): z.infer<typeof questionSchema> | undefined
  */
 export function createAnswerInSlack(deps: {
   apps: Pick<SlackApps, 'findByAppId'>;
-  links: Pick<SlackLinks, 'find'>;
+  links: Pick<SlackLinks, 'find' | 'stop'>;
   posts: Pick<SlackPosts, 'ofMessage'>;
   crews: Pick<PersonCrews, 'find'>;
   door: Pick<PersonShipDoor, 'ack' | 'delivery' | 'reply' | 'handled'>;
@@ -77,8 +77,7 @@ export function createAnswerInSlack(deps: {
       await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: alreadyTextOf(earlier) });
       return ok({ kind: 'answeredElsewhere' });
     }
-    // The press, the person's own act, acknowledges it (Bridge, CC6); core reads a delivery again only once acknowledged.
-    await deps.door.ack(crew.crewToken, post.deliveryId);
+    // The press acknowledged the delivery (Bridge, CC6), so core can read it again.
     const delivery = await deps.door.delivery(crew.crewToken, post.deliveryId);
     if (!delivery.isOk && delivery.error.code === KEY_UNAVAILABLE) {
       await deps.slack.postInThread(app.bot.token, { channel, threadTs: messageTs, text: SEALED_MESSAGE });

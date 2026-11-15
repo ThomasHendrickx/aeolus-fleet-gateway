@@ -73,6 +73,7 @@ beforeEach(async () => {
 function sendRound(now = NOW) {
   return createSendSlackEvents({
     events,
+    links,
     apps,
     crews: { find: (_fleetId, shipId) => Promise.resolve(crews.get(shipId)) },
     sender: fleet.sender,

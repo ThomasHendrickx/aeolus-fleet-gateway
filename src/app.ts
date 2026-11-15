@@ -1079,7 +1079,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   };
   const slackEvents = createPrismaSlackEvents(prisma);
   const slackSends = createSlackEventWorker({
-    send: createSendSlackEvents({ events: slackEvents, apps: slackApps, crews: personCrews, sender: door, door: personDoor, posts: slackPosts, slack: slackMessages, clock }),
+    send: createSendSlackEvents({ links: slackLinks, events: slackEvents, apps: slackApps, crews: personCrews, sender: door, door: personDoor, posts: slackPosts, slack: slackMessages, clock }),
     sleep,
     intervalMs: SLACK_EVENT_ROUND_MS,
     log: server.log,
