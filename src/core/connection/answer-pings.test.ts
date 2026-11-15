@@ -82,3 +82,14 @@ it('forgets an ended gateway lease without dropping a replacement', async () => 
   await createAnswerPings({ connections, inbox })(new AbortController().signal, FLEET_ID);
   expect(await connections.find(FLEET_ID)).toBeUndefined();
 });
+
+it('a receive refused for an old lease never drops its replacement', async () => {
+  const connections = await connected();
+  const original = await connections.find(FLEET_ID);
+  const inbox = { ...anInbox([]), receive: async () => {
+    if (original !== undefined) { await connections.save({ ...original, crewToken: 'replacement' }); }
+    return err({ code: 'LEASE_ENDED', message: 'old lease ended' });
+  } };
+  await createAnswerPings({ connections, inbox })(new AbortController().signal, FLEET_ID);
+  expect((await connections.find(FLEET_ID))?.crewToken).toBe('replacement');
+});

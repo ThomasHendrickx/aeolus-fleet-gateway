@@ -294,3 +294,21 @@ it('opens one stream and waits for its wake before reading the person inbox', as
   stop.abort();
   expect(await done).toEqual({ reason: 'stopped' });
 });
+
+it('one slow person inbox does not block another ship in the same fleet', async () => {
+  const other: typeof SHIP = { ...SHIP, shipId: 'shp_01m3tb1zgr5h2ffee12xnch9a0' };
+  const streams = memoryShipWakeups();
+  const crews = memoryPersonCrews();
+  await crews.save({ ...SHIP, crewToken: 'slow', crewedAt: clock.now() });
+  await crews.save({ ...other, crewToken: 'fast', crewedAt: clock.now() });
+  const stop = new AbortController();
+  const told: InboxChange[] = [];
+  const wait = createWaitOnPersonShip({ crews, wakeups: streams.open, door: { inbox: (token) => token === 'slow' ? new Promise((resolve) => { stop.signal.addEventListener('abort', () => { resolve(ok({ waiting: 0 })); }); }) : Promise.resolve(ok({ waiting: 0 })) }, changes: { tell: (ship) => { told.push(ship); return Promise.resolve(); } }, wakePerson: () => Promise.resolve(ok({ kind: 'settled' })), isServed: () => Promise.resolve(true), clock, sleep: () => new Promise(() => undefined), againWaitsMs: [100], wakeAgainWaitsMs: [100] });
+  const done = Promise.all([wait(SHIP, stop.signal), wait(other, stop.signal)]);
+  await new Promise((resolve) => setImmediate(resolve));
+  streams.wake();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(told).toEqual([other]);
+  stop.abort();
+  await done;
+});

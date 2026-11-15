@@ -204,3 +204,25 @@ it('a late stream opening after shutdown is cancelled without looking or reopeni
   await vi.advanceTimersByTimeAsync(600_000);
   expect(opens).toBe(1);
 });
+
+it('an open wake restores the initial reconnect spread after consecutive failures', async () => {
+  vi.useFakeTimers();
+  const body = stream();
+  const responses = [new Response(null, { status: 503 }), new Response(null, { status: 503 }), body.response];
+  let opens = 0;
+  const open = createShipWakeups({ fleetUrl: 'https://fleet.test', random: () => 0, fetch: () => { opens += 1; return Promise.resolve(responses.shift() ?? new Response(null, { status: 503 })); } });
+  const stop = new AbortController();
+  const hints = open('crew', stop.signal);
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(opens).toBe(3);
+  body.write(WAKE);
+  await flush();
+  expect(await hints.wait()).toBe(true);
+  body.end();
+  await flush();
+  await vi.advanceTimersByTimeAsync(999);
+  expect(opens).toBe(3);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(opens).toBe(4);
+  stop.abort();
+});

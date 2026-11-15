@@ -98,3 +98,15 @@ describe('the gateway own leases', () => {
     expect(test.looked).toEqual([]);
   });
 });
+
+it('an old stream ending never forgets a newly stored lease', async () => {
+  const test = await setup();
+  await test.watcher.reconcile();
+  await test.connections.save({ ...FIRST, crewToken: 'replacement' });
+  test.streams.leases[0]?.end();
+  await tick();
+  expect((await test.connections.find(FLEET_ID))?.crewToken).toBe('replacement');
+  await test.watcher.reconcile();
+  expect(test.streams.leases.map(({ token }) => token)).toEqual(['first', 'replacement']);
+  await test.watcher.stop();
+});
