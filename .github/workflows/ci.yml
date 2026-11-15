@@ -44,6 +44,11 @@ jobs:
       # The images Testcontainers starts, from the Actions cache.
       - uses: ./.github/actions/test-images
       - run: npm run test:integration
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: true
+      - name: Check for test container and volume leftovers
+        if: ${{ !cancelled() }}
+        run: node scripts/check-test-run-leftovers.ts
 
   publish-dry-run:
     name: Publish dry run

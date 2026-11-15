@@ -27,6 +27,8 @@ import { createShipAliases } from '../../src/adapters/crypto/ship-aliases.js';
 import { createGatewayApp } from '../../src/app.js';
 import { commission, register, signIn } from '../support/argo.js';
 import { POSTGRES_IMAGE, REAPER_IMAGE } from '../support/container-images.js';
+import { startContainerSweeper } from '../support/container-sweeper.js';
+import { stopContainer } from '../support/stop-container.js';
 import { migratedDatabase } from '../support/database.js';
 import { aFreePort, startFleetServer, type FleetServer } from '../support/fleet-server.js';
 import { connectGateway, mutate } from '../support/gateway-api.js';
@@ -225,7 +227,9 @@ function runKit(folder: string, kitArguments: string[]): Promise<number> {
 }
 
 process.env.RYUK_CONTAINER_IMAGE ??= REAPER_IMAGE;
-const postgres = await new TestPostgres(POSTGRES_IMAGE).start();
+const run = crypto.randomUUID();
+startContainerSweeper(run);
+const postgres = await new TestPostgres(POSTGRES_IMAGE, run).start();
 const fleet = await startFleetServer(postgres.getConnectionUri());
 const port = await aFreePort();
 const address = `http://127.0.0.1:${String(port)}`;
@@ -261,5 +265,5 @@ await stopProxy();
 await app.close();
 await fleet.stop();
 await ship.catch(() => undefined);
-await postgres.stop();
+await stopContainer({ name: 'Postgres', stop: () => postgres.stop() });
 process.exit(code);
