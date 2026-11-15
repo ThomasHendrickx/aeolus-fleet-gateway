@@ -14,5 +14,10 @@ export function createRefreshingPersonDoor(door: PersonShipDoor, request: (crewT
       if (acked.isOk) { await request(crewToken); }
       return acked;
     },
+    ackUpTo: async (crewToken, seen) => {
+      const acked = await door.ackUpTo(crewToken, seen);
+      if (acked.isOk) { await request(crewToken); }
+      return acked;
+    },
   };
 }
