@@ -24,6 +24,7 @@ const dataOf = <T extends z.ZodType>(schema: T) => z.object({ result: z.object({
 const inboxSchema = dataOf(z.object({ waiting: z.number(), deliveries: z.array(z.object({ deliveryId: idSchema('delivery'), title: z.string() })), opened: z.array(z.object({ deliveryId: idSchema('delivery') })) }));
 const basketSchema = dataOf(z.object({ entries: z.array(z.object({ questionId: z.string(), standing: z.object({ kind: z.string() }) })) }));
 
+let gatewayNow: Date | undefined;
 let service: FakePagasae;
 let fleet: FleetServer;
 let app: GatewayApp;
@@ -42,12 +43,13 @@ function claims(overrides: Record<string, unknown> = {}): Record<string, unknown
 async function startGateway(): Promise<void> {
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
-  app = createGatewayApp({ databaseUrl, fleetUrl: fleetBoundary.url, publicUrl: address, logger: false, gatewaySecret: TEST_GATEWAY_SECRET, installationToken: WAKE_INSTALLATION_TOKEN, pagasae: { url: service.url, ...PAGASAE_CLIENT }, pagasaeApp: PAGASAE_APP_CLIENT });
+  app = createGatewayApp({ databaseUrl, fleetUrl: fleetBoundary.url, publicUrl: address, logger: false, clock: { now: () => gatewayNow ?? new Date() }, gatewaySecret: TEST_GATEWAY_SECRET, installationToken: WAKE_INSTALLATION_TOKEN, pagasae: { url: service.url, ...PAGASAE_CLIENT }, pagasaeApp: PAGASAE_APP_CLIENT });
   await app.server.listen({ host: '127.0.0.1', port });
   await app.restoreConnections();
 }
 
 beforeEach(async () => {
+  gatewayNow = undefined;
   service = await startFakePagasae({ email: 'maya@example.test', firstName: 'Maya' });
   fleet = await startInstallationServer(inject('postgresUrl'), { installationToken: WAKE_INSTALLATION_TOKEN, accountTokenIssuer: service.url });
   fleetBoundary = await startLostAnswerFleet(fleet.url);
@@ -191,7 +193,9 @@ describe('self-hosted sign-in through the existing service contract', () => {
   });
 
   it('invalidates browser authorisation immediately when the authenticated account-disabled notification arrives, despite a retained person crew', async () => {
-    expect((await pageCall('people.inbox')).status).toBe(200);
+    await askMaya();
+    const deliveryId = await openQuestion();
+    expect((await pageCall('people.putInBasket', { deliveryId, option: 2, optionLabel: 'Wait', note: 'Keep this draft' })).status).toBe(200);
     expect(await prisma.personCrew.count({ where: { fleetId, shipId: personShipId } })).toBe(1);
     // The service removes access first, then retries its authenticated gateway cleanup until acknowledged.
     const revoked = await fetch(`${service.url}/oauth/revoke`, { method: 'POST', body: new URLSearchParams({ token: SHARED_SESSION, client_id: PAGASAE_APP_CLIENT.clientId, client_secret: PAGASAE_APP_CLIENT.clientSecret }) });
@@ -202,6 +206,25 @@ describe('self-hosted sign-in through the existing service contract', () => {
     const disabled = await mutate(address, { procedure: 'installation.accountDisabled', installationToken: WAKE_INSTALLATION_TOKEN, body: { fleetId, accountId: ACCOUNT_ID } });
     expect(disabled.status).toBe(200);
     expect((await pageCall('people.inbox')).status).toBe(401);
+    const retried = await mutate(address, { procedure: 'installation.accountDisabled', installationToken: WAKE_INSTALLATION_TOKEN, body: { fleetId, accountId: ACCOUNT_ID } });
+    expect(retried.status).toBe(200);
+    expect((await pageCall('people.sendBasket', {})).status).toBe(401);
+    expect(await prisma.personCrew.count({ where: { fleetId, shipId: personShipId } })).toBe(1);
+    // Recovery restores the same account and person. Cleanup must leave its opened work and draft intact.
+    service.sharedSignIn(SHARED_SESSION, claims());
+    const restored = inboxSchema.parse(await (await pageCall('people.inbox')).json()).result.data;
+    expect(restored).toMatchObject({ waiting: 0, opened: [{ deliveryId }] });
+    expect(basketSchema.parse(await (await pageCall('people.basket')).json()).result.data.entries).toMatchObject([{ questionId: QUESTION_ID, standing: { kind: 'waiting' } }]);
+  });
+
+  it('refuses human access after token expiry and allowance without notification or renewal despite a retained person crew', async () => {
+    expect((await pageCall('people.inbox')).status).toBe(200);
+    service.setAvailable(false);
+    gatewayNow = new Date(Date.now() + 630_001);
+
+    expect((await pageCall('people.inbox')).status).toBe(401);
+    expect((await pageCall('people.sendBasket', {})).status).toBe(401);
+    expect(await prisma.personCrew.count({ where: { fleetId, shipId: personShipId } })).toBe(1);
   });
 
   it('keeps an unconfirmed answer visibly unsent and retries the same send key after restarting, storing only one answer in core', async () => {

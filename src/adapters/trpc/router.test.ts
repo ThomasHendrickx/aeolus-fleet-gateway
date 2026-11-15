@@ -1906,3 +1906,31 @@ describe('plain gateway URL clients through the API', () => {
     await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.approve(asSent({ ...approval, credential: { kind: 'personSignIn', client } }))).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
+
+describe('account removal cleanup acknowledgment', () => {
+  it('answers OK only after all cleanup succeeds and accepts a retry after partial cleanup', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+    const account = { fleetId: FLEET, accountId: 'acc-charlotte' };
+    const remaining = new Set(['signIns', 'slackLink', 'accountGrants']);
+    let isUnavailable = true;
+    const caller = gatewayRouter.createCaller({
+      ...context,
+      installation: { mode: 'enabled', token: 'installation-test' },
+      installationTokenSent: 'installation-test',
+      endSignIns: () => { remaining.delete('signIns'); return Promise.resolve(); },
+      stopSlackLink: () => {
+        if (isUnavailable) return Promise.reject(new Error('Slack link storage unavailable'));
+        remaining.delete('slackLink');
+        return Promise.resolve();
+      },
+      endAccountGrants: () => { remaining.delete('accountGrants'); return Promise.resolve(); },
+    });
+
+    await expect(caller.installation.accountDisabled(account)).rejects.toThrow('Slack link storage unavailable');
+    expect([...remaining]).toEqual(['slackLink', 'accountGrants']);
+    isUnavailable = false;
+    await expect(caller.installation.accountDisabled(account)).resolves.toEqual({});
+    expect([...remaining]).toEqual([]);
+    await expect(caller.installation.accountDisabled(account)).resolves.toEqual({});
+  });
+});
