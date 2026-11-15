@@ -140,3 +140,21 @@ describe('lease wake streams', () => {
     expect(await open('stopped', test.stop.signal).wait()).toBe(false);
   });
 });
+
+it('routes a local claim to only its held lease without opening another stream', async () => {
+  const first = stream();
+  const second = stream();
+  const responses = [first.response, second.response];
+  const open = createShipWakeups({ fleetUrl: 'https://fleet.test', fetch: () => Promise.resolve(responses.shift() ?? new Response(null, { status: 503 })) });
+  const stop = new AbortController();
+  const one = open('one', stop.signal);
+  const two = open('two', stop.signal);
+  open.request('one');
+  expect(await one.wait()).toBe(true);
+  let isOther = false;
+  const next = two.wait().then((isReady) => { isOther = isReady; });
+  await Promise.resolve();
+  expect(isOther).toBe(false);
+  stop.abort();
+  await next;
+});
