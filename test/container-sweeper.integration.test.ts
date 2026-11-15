@@ -72,7 +72,7 @@ async function startTestProcess(run: string): Promise<{ testPid: number | undefi
 
 // Rootless Podman often runs no reaper, so a run's own teardown and its sweeper are all that remove its containers (#1581).
 describe('the containers of a test run', () => {
-  it('removes a late container and volume of a dead run at the next run, leaving a live run alone', async () => {
+  it.skipIf(process.platform !== 'linux')('removes a late container and volume of a dead run at the next run, leaving a live run alone', async () => {
     const deadRun = `test-${randomUUID()}`;
     const liveRun = `test-${randomUUID()}`;
     const deadProcess = await startRunProcess(deadRun);
