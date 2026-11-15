@@ -13,3 +13,13 @@ it('requests an inbox look after its own claims and acknowledgements', async () 
   await door.ack(token, delivery.deliveryId);
   expect(requested).toEqual([token, token]);
 });
+
+it('requests no count look for a refused claim, empty claim or refused acknowledgement', async () => {
+  const ship = fakePersonShipDoor({ crewToken: 'person', deliveries: [] });
+  const requested: string[] = [];
+  const door = createRefreshingPersonDoor(ship.door, (token) => { requested.push(token); });
+  await door.pushReceive('ended', { max: 1 });
+  await door.pushReceive('person', { max: 1 });
+  await door.ack('ended', aPersonDelivery().deliveryId);
+  expect(requested).toEqual([]);
+});
