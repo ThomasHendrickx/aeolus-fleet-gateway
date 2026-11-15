@@ -32,9 +32,10 @@ export function memoryShipWakeups() {
 export function scriptedShipWakeups(sleep: Sleep, intervalMs: number): ShipWakeups {
   return (_token, signal) => {
     let isFirst = true;
+    let isRequested = false;
     return {
-      wait: async () => { if (!isFirst) { await sleep(intervalMs, signal); } isFirst = false; return !signal.aborted; },
-      request: () => undefined,
+      wait: async () => { if (!isFirst && !isRequested) { await sleep(intervalMs, signal); } isFirst = false; isRequested = false; return !signal.aborted; },
+      request: () => { isRequested = true; },
       isEnded: () => false,
       close: () => undefined,
     };
