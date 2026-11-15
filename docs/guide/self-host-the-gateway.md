@@ -167,6 +167,7 @@ People sign in to Bridge, from a chat and to link Slack with their Aeolus accoun
 | `PAGASAE_URL`, `PAGASAE_CLIENT_ID`, `PAGASAE_CLIENT_SECRET` | The sign-in service, and the gateway's chats client there, with the redirect address `<GATEWAY_PUBLIC_URL>/pagasae/callback`. All three or none. The gateway refuses to start with the sign-in URL unless it has this chats client, even though no chat connects yet. |
 | `PAGASAE_APP_CLIENT_ID`, `PAGASAE_APP_CLIENT_SECRET` | The gateway's pages as an app at the sign-in service, with the redirect address `<GATEWAY_PUBLIC_URL>/sign-in/done`. Both or neither, beside the three above. |
 | `INSTALLATION_TOKEN` | The installation token the fleet server and the sign-in service share. |
+| `AEOLUS_THEME_COOKIE_DOMAIN` | The domain the console, the sign-in service and the gateway share, such as `example.com`, as the console has it: the theme a person picks shows in every app. Left out, the gateway keeps its own. |
 
 So the sign-in service has three clients for your installation: the console, the gateway's pages and the gateway's chats client.
 

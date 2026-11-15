@@ -1,6 +1,5 @@
 'use client';
 
-import type { Theme } from '@aeolus-fleet/common';
 import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
 import { AvatarMenu, AvatarMenuSheet } from '@aeolus-fleet/ui';
 import { Globe, Route, SlidersHorizontal } from 'lucide-react';
@@ -8,6 +7,7 @@ import type { ReactNode } from 'react';
 
 import { sendsFromPhoneTopBar } from '../../../../bridge/send-message/services/phone-send';
 import { inFleet } from '../../../lib/gateway-api/page-account';
+import type { BrowserTheme } from '../../frame/browser-theme';
 import { useAccountMenu } from '../../frame/hooks/use-account-menu';
 import { OUTSIDE_PARTIES_PATH } from '../../outside-parties/paths';
 import { useFocusReport } from '../hooks/use-focus-report';
@@ -20,11 +20,11 @@ import { OpenedItemProvider } from './opened-item';
 import { SendMessageProvider } from './send-message';
 import { SendMessageButton } from './send-message-button';
 
-/** The account signed in, as the shell shows it: its email, the account app's address, the theme it chose. */
+/** The account signed in, as the shell shows it: its email, the account app's address, the browser's one theme. */
 export interface ShellAccount {
   readonly email: string;
   readonly accountUrl: string | undefined;
-  readonly theme: Theme;
+  readonly theme: BrowserTheme;
 }
 
 /**
