@@ -6,6 +6,7 @@ import { AvatarMenu, AvatarMenuSheet } from '@aeolus-fleet/ui';
 import { Globe, Route, SlidersHorizontal } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { sendsFromPhoneTopBar } from '../../../../bridge/send-message/services/phone-send';
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { useAccountMenu } from '../../frame/hooks/use-account-menu';
 import { OUTSIDE_PARTIES_PATH } from '../../outside-parties/paths';
@@ -72,8 +73,8 @@ function PhoneAvatar({ fleetId, switcher, account: { email, accountUrl, theme } 
  * the page, Live while the page follows its changes, the phone's title
  * naming an item open in place of its list, and the page beside it, taking
  * the window (design/bridge-fleet-width). It offers every page under it the
- * form to send a ship a message, which the phone's home opens from its top
- * bar. It keeps the page live, and tells the gateway while it is in focus
+ * form to send a ship a message, which the phone's home and Messages open
+ * from its top bar. It keeps the page live, and tells the gateway while it is in focus
  * (wake a person, W6).
  */
 export function ShellFrame({ fleetId, fleetName, screen, below, account, switcher, children }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; below?: PageBelow; account: ShellAccount | undefined; switcher?: AppSwitcherModel; children: ReactNode }) {
@@ -92,7 +93,7 @@ export function ShellFrame({ fleetId, fleetName, screen, below, account, switche
               opened={opened}
               phoneCount={phoneCount}
               below={below}
-              phoneAction={screen === 'home' && opened === undefined ? <SendMessageButton look="icon" /> : null}
+              phoneAction={sendsFromPhoneTopBar(screen) && opened === undefined ? <SendMessageButton look="icon" /> : null}
               avatar={account === undefined ? null : <PhoneAvatar fleetId={fleetId} switcher={switcher} account={account} />}
             />
             <main className="w-full min-w-0 flex-1 px-4 py-5 sm:px-6">{children}</main>

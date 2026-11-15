@@ -3,6 +3,7 @@
 import { Check, CheckCheck } from 'lucide-react';
 import { useState, useTransition } from 'react';
 
+import { HeadingSendMessage } from '../../../../bridge/send-message/state/heading-send-message';
 import { markMessagesDone } from '../hooks/bridge-actions';
 import type { BridgeHome } from '../services/items';
 import { markedDoneSaidOf, markSeenDoneOf, messagesPageSaidOf } from '../services/messages';
@@ -53,7 +54,8 @@ function MarkSeenDoneQuestion({ question, confirm, pending, isPending, onConfirm
  * The Messages page (#242, design/bridge-messages): every plain message to
  * the person, newest on top, a dot on the new ones, outside the count, Done
  * and Open on each, in a reading column; the seen ones marked done in one go
- * from the heading row, asking first and never the new ones. Opening one
+ * from the heading row, asking first and never the new ones, beside sending
+ * any ship a message as home does (#284). Opening one
  * shows it beside the list, its whole text, Your answer, Answer and Done. On a
  * phone the top bar names the page with its count.
  */
@@ -86,7 +88,12 @@ export function MessagesPanel({ fleetId, messages, now }: { fleetId: string; mes
               </h1>
               {messages.length === 0 || opening.opened !== undefined ? null : <p className="text-caption text-muted-foreground max-sm:hidden">{messagesPageSaidOf({ newCount, seenCount: seen.length })}</p>}
             </div>
-            {opening.opened === undefined && seen.length > 0 && marking.kind !== 'asking' ? <MarkSeenDoneButton said={said.button} onAsk={() => { setMarking({ kind: 'asking' }); }} /> : null}
+            {opening.opened === undefined ? (
+              <div className="flex shrink-0 items-start gap-2">
+                {seen.length > 0 && marking.kind !== 'asking' ? <MarkSeenDoneButton said={said.button} onAsk={() => { setMarking({ kind: 'asking' }); }} /> : null}
+                <HeadingSendMessage />
+              </div>
+            ) : null}
           </div>
           {opening.opened === undefined && marking.kind === 'asking' ? <MarkSeenDoneQuestion question={said.question} confirm={said.confirm} pending={said.pending} isPending={isPending} onConfirm={markDone} onCancel={() => { setMarking({ kind: 'idle' }); }} /> : null}
           {marking.kind !== 'marked' ? null : marking.isFailure ? (
