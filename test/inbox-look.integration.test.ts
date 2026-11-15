@@ -90,7 +90,7 @@ function counted(door: PersonShipDoor, told: string[]): PersonShipDoor {
 }
 
 async function trackerAsks(number: number): Promise<void> {
-  const question = JSON.stringify({ id: crypto.randomUUID(), title: `Question ${String(number)}`, context: '', options: [{ key: 1, label: 'Yes' }] });
+  const question = JSON.stringify({ id: crypto.randomUUID(), title: `Question ${String(number)}`, context: '', options: [{ key: 1, label: 'Yes' }], pick: { option: 1, why: 'It is ready.' } });
   const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
