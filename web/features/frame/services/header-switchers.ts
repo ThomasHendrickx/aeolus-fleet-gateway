@@ -25,14 +25,14 @@ function headerAppsOf(apps: AccountApps['apps']): AppLink[] {
   });
 }
 
-/** The switchers for the gateway, one per listed fleet with it in view; none for an answer with a malformed id. */
-export function headerSwitchersOf(answer: AccountApps): AppSwitcherModel[] {
+/** The apps list the header's read answers, as common's rules read it; none for an answer with a malformed id. */
+export function appsListOf(answer: AccountApps): AppsList | undefined {
   const accountId = accountIdSchema.safeParse(answer.account.id);
   const fleetIds = answer.fleets.map((fleet) => fleetIdSchema.safeParse(fleet.id));
   if (!accountId.success || fleetIds.some((fleetId) => !fleetId.success)) {
-    return [];
+    return undefined;
   }
-  const list: AppsList = {
+  return {
     account: { id: accountId.data, email: answer.account.email },
     apps: headerAppsOf(answer.apps),
     // Whether the account may sign in as argo is the console's alone: the gateway's header never shows it.
@@ -41,7 +41,12 @@ export function headerSwitchersOf(answer: AccountApps): AppSwitcherModel[] {
       return fleetId?.success === true ? [{ id: fleetId.data, name: fleet.name, argo: false, apps: headerAppsOf(fleet.apps) }] : [];
     }),
   };
-  return list.fleets.map(({ id, name }) => appSwitcherOf({ list, fleet: { id, name }, app: 'gateway' }));
+}
+
+/** The switchers for the gateway, one per listed fleet with it in view; none for an answer with a malformed id. */
+export function headerSwitchersOf(answer: AccountApps): AppSwitcherModel[] {
+  const list = appsListOf(answer);
+  return list === undefined ? [] : list.fleets.map(({ id, name }) => appSwitcherOf({ list, fleet: { id, name }, app: 'gateway' }));
 }
 
 /** Where the gateway at this address opens a fleet. */

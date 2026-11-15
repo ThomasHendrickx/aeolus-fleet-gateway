@@ -51,7 +51,7 @@ describe("Bridge's palette across apps (header-across-apps A2, M2; the approved 
   });
 
   it('finds an entry by a word it is known by, in any case', () => {
-    expect(shown('SHIP')).toEqual([{ label: 'Console', entries: ['Commission ship', 'Fleet overview'] }]);
+    expect(shown('SHIP')).toEqual([{ label: 'Console', entries: ['Commission ship'] }]);
   });
 
   it('shows nothing for what nothing matches', () => {

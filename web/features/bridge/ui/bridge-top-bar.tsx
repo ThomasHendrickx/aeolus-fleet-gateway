@@ -1,4 +1,5 @@
-import { ChevronLeft } from 'lucide-react';
+import { Button, Kbd } from '@aeolus-fleet/ui';
+import { ChevronLeft, Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
@@ -21,6 +22,9 @@ export interface OpenedItem {
   readonly title: string;
   readonly onBack: () => void;
 }
+
+/** The search's words, as every Aeolus app's header says them. */
+const SEARCH_LABEL = 'Search or jump to';
 
 const BACK = 'inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-accent sm:hidden';
 
@@ -57,9 +61,11 @@ function Back({ fleetId, hasBack, opened, below }: { fleetId: string; hasBack: b
  * screen title, an item open in place of its list named by it, with a back
  * chevron where it leads back, the page's action (home: send a ship a
  * message, as the #1560 sheet draws it), then Live and the avatar. Live shows while the
- * page follows its changes.
+ * page follows its changes. With onSearch, the search that opens the
+ * command palette across apps (header-across-apps, the approved sheets):
+ * on desktop a field with its ⌘K hint, on the phone a search button.
  */
-export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, phoneCount, phoneAction, below, avatar }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; isLive: boolean; opened: OpenedItem | undefined; /** The count the page names itself with on a phone, as Messages 20. */ phoneCount?: number | undefined; phoneAction: ReactNode; below?: PageBelow; avatar: ReactNode }) {
+export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, phoneCount, phoneAction, below, avatar, onSearch }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; isLive: boolean; opened: OpenedItem | undefined; /** The count the page names itself with on a phone, as Messages 20. */ phoneCount?: number | undefined; phoneAction: ReactNode; below?: PageBelow; avatar: ReactNode; onSearch?: () => void }) {
   const { name, phoneTitle, hasBack } = screenOf(screen);
   const crumb = opened !== undefined && screen === 'home' ? OPENED_FROM_HOME : name;
   return (
@@ -91,6 +97,16 @@ export function BridgeTopBar({ fleetId, fleetName, screen, isLive, opened, phone
         {opened?.title ?? below?.name ?? phoneTitle}
         {opened === undefined && below === undefined && phoneCount !== undefined ? <span className="ml-1.5 font-normal text-muted-foreground">{phoneCount}</span> : null}
       </span>
+      {onSearch === undefined ? null : (
+        <>
+          <span aria-hidden className="grow max-sm:hidden" />
+          <Button size="sm" icon={<Search aria-hidden />} data-testid="bridge-search" className="w-60 justify-start font-normal text-muted-foreground max-sm:hidden" onClick={onSearch}>
+            <span className="grow text-left">{SEARCH_LABEL}</span>
+            <Kbd>⌘K</Kbd>
+          </Button>
+          {opened === undefined ? <Button variant="ghost" size="sm" isIconOnly aria-label={SEARCH_LABEL} icon={<Search aria-hidden />} data-testid="bridge-search-phone" className="sm:hidden" onClick={onSearch} /> : null}
+        </>
+      )}
       {phoneAction === null ? null : <span className="sm:hidden">{phoneAction}</span>}
       {isLive ? (
         <span data-testid="bridge-live" className={`inline-flex items-center gap-1.5 text-meta text-muted-foreground ${opened === undefined ? '' : 'max-sm:hidden'}`}>
