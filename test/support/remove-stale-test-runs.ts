@@ -5,8 +5,10 @@ import { getContainerRuntimeClient } from 'testcontainers';
 import { testRunLabels } from './test-run-labels.ts';
 
 /** Removes only resources whose checkout and dead process can be identified. */
-export async function removeStaleTestRuns(): Promise<void> {
-  const { dockerode } = (await getContainerRuntimeClient()).container;
+export async function removeStaleTestRuns(platform: NodeJS.Platform = process.platform, getClient: typeof getContainerRuntimeClient = getContainerRuntimeClient): Promise<void> {
+  // Process identities from /proc cannot be verified on other platforms.
+  if (platform !== 'linux') return;
+  const { dockerode } = (await getClient()).container;
   const checkout = testRunLabels('current')['aeolus-fleet.test-checkout'];
   const filters = { label: [`aeolus-fleet.test-checkout=${checkout}`, 'aeolus-fleet.test-run'] };
   const isStale = (labels: Record<string, string> | undefined): boolean => {
