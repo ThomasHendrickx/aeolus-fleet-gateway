@@ -1,12 +1,17 @@
+import { randomUUID } from 'node:crypto';
+
 import type { TestProject } from 'vitest/node';
 
 import { POSTGRES_IMAGE, REAPER_IMAGE } from './support/container-images.js';
+import { startContainerSweeper } from './support/container-sweeper.js';
+import { stopContainer } from './support/stop-container.js';
 import { TestPostgres } from './support/postgres-container.js';
 
 declare module 'vitest' {
   export interface ProvidedContext {
     /** Admin URL of the Postgres container shared by the integration tests. */
     postgresUrl: string;
+    testRun: string;
   }
 }
 
@@ -18,10 +23,13 @@ declare module 'vitest' {
  */
 export async function setup(project: TestProject): Promise<() => Promise<void>> {
   process.env.RYUK_CONTAINER_IMAGE ??= REAPER_IMAGE;
-  const container = await new TestPostgres(POSTGRES_IMAGE).start();
+  const run = randomUUID();
+  startContainerSweeper(run);
+  project.provide('testRun', run);
+  const container = await new TestPostgres(POSTGRES_IMAGE, run).start();
   project.provide('postgresUrl', container.getConnectionUri());
 
   return async () => {
-    await container.stop();
+    await stopContainer({ name: 'Postgres', stop: () => container.stop() });
   };
 }

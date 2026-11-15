@@ -1,6 +1,8 @@
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { Wait } from 'testcontainers';
 
+import { TEST_RUN_LABEL } from './container-sweeper.js';
+
 /**
  * Postgres says it is ready twice: once for the server the image's entrypoint
  * starts to initialise the database, once for the server that stays.
@@ -18,8 +20,9 @@ const READY_LOG = /database system is ready to accept connections/;
  * that anyway.
  */
 export class TestPostgres extends PostgreSqlContainer {
-  constructor(image: string) {
+  constructor(image: string, run: string) {
     super(image);
+    this.withLabels({ [TEST_RUN_LABEL]: run });
     this.withCommand(['postgres', '-c', 'fsync=off']);
     this.withWaitStrategy(Wait.forAll([Wait.forLogMessage(READY_LOG, 2), Wait.forListeningPorts()]));
   }
