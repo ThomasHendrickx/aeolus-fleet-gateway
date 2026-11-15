@@ -48,7 +48,10 @@ describe("Bridge's routing page", () => {
     const markup = render();
 
     expect({
-      locked: (markup.match(/role="switch"[^>]*aria-checked="true"[^>]*disabled=""[^>]*data-testid="bridge-routing-[a-z-]+-bridge"/g) ?? []).length,
+      locked: ['decide', 'do', 'stay-aware', 'everything-else'].filter((job) => {
+        const tag = tagOf(markup, `bridge-routing-${job}-bridge`);
+        return ['role="switch"', 'aria-checked="true"', 'aria-disabled="true"'].every((attribute) => tag.includes(attribute));
+      }).length,
       always: (markup.match(/data-testid="bridge-routing-job"/g) ?? []).length <= (markup.match(/>Always</g) ?? []).length,
     }).toEqual({ locked: 4, always: true });
   });
