@@ -681,7 +681,7 @@ describe('the scopes the fleet lists, read as the gateway\'s ship (fleet.scopes,
   });
 });
 
-describe('where the delivery of a message a proxy ship sent stands, as sentMessage answers (common 0.32.0)', () => {
+describe('where the delivery of a message a proxy ship sent stands, as sentMessage answers its first page (common 0.40.0)', () => {
   it("reads the id, state and since of the message's one delivery to the ship it went to", async () => {
     answer = {
       status: 200,
@@ -689,7 +689,8 @@ describe('where the delivery of a message a proxy ship sent stands, as sentMessa
         messageId: 'msg_01m3tb1zgr5h2ffee12xnch8pp',
         sentAt: '2026-10-26T07:00:00.000Z',
         recipient: { kind: 'ship', ship: { id: PERSON_SHIP, name: 'supplier' } },
-        deliveries: [{ deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch8pp', ship: { id: PERSON_SHIP, name: 'supplier' }, state: 'handed', since: '2026-10-26T07:00:05.000Z' }],
+        items: [{ id: 'dlv_01m3tb1zgr5h2ffee12xnch8pp', ship: { id: PERSON_SHIP, name: 'supplier' }, state: 'handed', since: '2026-10-26T07:00:05.000Z' }],
+        nextCursor: null,
       },
     };
 
