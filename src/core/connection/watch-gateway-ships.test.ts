@@ -62,7 +62,7 @@ describe('the gateway own leases', () => {
     release?.();
     await watcher.stop();
   });
-  it('closes disconnected, replaced and disabled leases without forgetting a replacement', async () => {
+  it('closes a replaced lease without forgetting its replacement', async () => {
     const test = await setup();
     await test.watcher.reconcile();
     await test.connections.save({ ...FIRST, crewToken: 'replacement' });
@@ -71,26 +71,39 @@ describe('the gateway own leases', () => {
     test.streams.leases[0]?.end();
     await tick();
     expect((await test.connections.find(FLEET_ID))?.crewToken).toBe('replacement');
+    await test.watcher.stop();
+  });
+  it('closes a disabled lease', async () => {
+    const test = await setup();
+    await test.watcher.reconcile();
     test.state.isOn = false;
     await test.watcher.reconcile();
-    expect(test.streams.leases[1]?.signal.aborted).toBe(true);
-    test.state.isOn = true;
+    expect(test.streams.leases[0]?.signal.aborted).toBe(true);
+    await test.watcher.stop();
+  });
+  it('closes a disconnected lease', async () => {
+    const test = await setup();
     await test.watcher.reconcile();
     await test.connections.drop(FLEET_ID);
     await test.watcher.reconcile();
-    expect(test.streams.leases[2]?.signal.aborted).toBe(true);
+    expect(test.streams.leases[0]?.signal.aborted).toBe(true);
     await test.watcher.stop();
   });
-  it('drops only the ended lease and shutdown aborts streams with no reopening', async () => {
+  it('drops only the ended lease', async () => {
     const test = await setup();
+    await test.connections.save(SECOND);
     await test.watcher.reconcile();
     test.streams.leases[0]?.end();
     await tick();
-    expect(await test.connections.find(FLEET_ID)).toBeUndefined();
+    expect(await test.connections.connected()).toEqual([SECOND]);
+    await test.watcher.stop();
+  });
+  it('shutdown aborts streams with no reopening', async () => {
+    const test = await setup();
     await test.connections.save(SECOND);
     await test.watcher.reconcile();
     await test.watcher.stop();
-    expect(test.streams.leases[1]?.signal.aborted).toBe(true);
+    expect(test.streams.leases.map(({ signal }) => signal.aborted)).toEqual([true, true]);
     await test.watcher.reconcile();
     test.streams.wake();
     await tick();
