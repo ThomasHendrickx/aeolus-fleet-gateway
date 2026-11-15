@@ -265,7 +265,7 @@ describe('self-hosted sign-in through the existing service contract', () => {
     await apps.save(aSlackApp({ fleetId, appId: 'A01', shipId: researcherShipId, bot: { token: 'slack-bot', userId: 'U01' } }));
     await links.add(aSlackLink({ fleetId, accountId: ACCOUNT_ID, personShipId }));
     await posts.save({ fleetId, personShipId, messageId, deliveryId, senderShipId: researcherShipId, appId: 'A01', channel: 'D0MATHILDE', ts: '1730020000.000001', threadTs: null });
-    const crews = { find: () => Promise.resolve(crew) };
+    const crews = { find: () => Promise.resolve({ ...crew, fleetId, shipId: personShipId }) };
     return { apps, links, posts, slack, crews, messageId, deliveryId, clock: { now: () => now }, door: createRestFleetDoor(fleet.url) };
   }
 
@@ -281,7 +281,7 @@ describe('self-hosted sign-in through the existing service contract', () => {
   it('ends queued Slack message retries after person-crew release without a gateway disable notification', async () => {
     const setup = await releasedSlack();
     const events = memorySlackEvents();
-    await events.keep(aKeptSlackEvent({ fleetId, personShipId, shipId: researcherShipId, receivedAt: setup.clock.now() }));
+    await events.keep(aKeptSlackEvent({ fleetId, appId: 'A01', personShipId, shipId: researcherShipId, receivedAt: setup.clock.now() }));
     const round = createSendSlackEvents({ ...setup, events, sender: setup.door, door: setup.door.person, slack: setup.slack.messages });
     await round();
     expect((await setup.links.ofAccount(fleetId, ACCOUNT_ID))?.stoppedAt).toEqual(setup.clock.now());
