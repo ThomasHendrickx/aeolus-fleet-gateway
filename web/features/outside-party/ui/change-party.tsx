@@ -1,8 +1,9 @@
-import { Checkbox, Label } from '@aeolus-fleet/ui';
+import { Label } from '@aeolus-fleet/ui';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { ActionForm } from '../../forms/ui/action-form';
+import { FormCheckbox } from '../../forms/ui/form-checkbox';
 import { BUTTONS, CARD } from '../../forms/ui/look';
 import { OwnerField } from '../../forms/ui/owner-field';
 import { partyPath } from '../../outside-parties/paths';
@@ -22,7 +23,7 @@ function ScopeRow({ scope, isLocked = false, isChecked = false }: { scope: strin
   const fieldId = 'party-scope-' + scope;
   return (
     <Label htmlFor={fieldId + '-0'} className="flex items-center gap-2">
-      <Checkbox id={fieldId + '-0'} defaultChecked={isLocked ? true : isChecked} disabled={isLocked} {...(isLocked ? {} : { name: `${SCOPE_FIELD_PREFIX}${scope}` })} />
+      <FormCheckbox id={fieldId + '-0'} defaultChecked={isLocked ? true : isChecked} disabled={isLocked} {...(isLocked ? {} : { name: `${SCOPE_FIELD_PREFIX}${scope}` })} />
       <span>{SCOPE_LABELS[scope] ?? scope}</span>
       <span className="font-mono text-code text-muted-foreground">{scope}</span>
       {isLocked ? <span className="text-muted-foreground">(locked)</span> : null}

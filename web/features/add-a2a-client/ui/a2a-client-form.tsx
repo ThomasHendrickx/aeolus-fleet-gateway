@@ -2,10 +2,11 @@
 
 import { useId, useActionState } from 'react';
 
-import { Checkbox, Input, Label } from '@aeolus-fleet/ui';
+import { Input, Label } from '@aeolus-fleet/ui';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { FLEET_FIELD } from '../../forms/form-state';
+import { FormCheckbox } from '../../forms/ui/form-checkbox';
 import { CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { Outcome } from '../../forms/ui/outcome';
 import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
@@ -56,7 +57,7 @@ export function A2aClientForm({ fleetId, requestId, owners, scopes }: { fleetId:
           <legend className="font-medium">Scopes, beside sending and receiving</legend>
           {scopes.map((scope) => (
             <Label htmlFor={fieldId + '-1' + "-" + (scope)} key={scope} className="flex items-center gap-2">
-              <Checkbox id={fieldId + '-1' + "-" + (scope)} name={`${SCOPE_FIELD_PREFIX}${scope}`} />
+              <FormCheckbox id={fieldId + '-1' + "-" + (scope)} name={`${SCOPE_FIELD_PREFIX}${scope}`} />
               <span className="font-mono text-code">{scope}</span>
             </Label>
           ))}

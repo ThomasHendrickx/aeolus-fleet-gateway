@@ -1,4 +1,3 @@
-import { Checkbox } from '@aeolus-fleet/ui';
 import { useActionState } from 'react';
 import { describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
@@ -7,6 +6,7 @@ import { render } from 'vitest-browser-react';
 import '../../../app/globals.css';
 import { fieldOf, fieldsOf, type FormState } from '../form-state';
 import { ActionForm } from './action-form';
+import { FormCheckbox } from './form-checkbox';
 
 // React 19 resets a form once its action ends, refused or not. A tick box
 // must then show what the form sends: what is shown is what goes.
@@ -36,7 +36,7 @@ function RefillingForm({ sent }: { sent: string[] }) {
   const fields = state.kind === 'refused' ? state.fields : {};
   return (
     <form action={action}>
-      <Checkbox name={TICK} aria-label="Repeatable" defaultChecked={fields[TICK] !== undefined} data-testid="forms-tick" />
+      <FormCheckbox name={TICK} aria-label="Repeatable" defaultChecked={fields[TICK] !== undefined} data-testid="forms-tick" />
       <button type="submit">Add</button>
       {state.kind === 'idle' ? null : <p>{state.kind}</p>}
     </form>
@@ -53,7 +53,7 @@ describe('a tick box in a form', () => {
     const { sent, action } = refusingTheFirstSend();
     await render(
       <ActionForm action={action} fleetId="flt_01" submit={{ label: 'Mark', pending: 'Marking…' }}>
-        <Checkbox name={TICK} aria-label="Repeatable" data-testid="forms-tick" />
+        <FormCheckbox name={TICK} aria-label="Repeatable" data-testid="forms-tick" />
       </ActionForm>,
     );
 

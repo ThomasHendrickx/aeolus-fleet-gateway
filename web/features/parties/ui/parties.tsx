@@ -1,10 +1,11 @@
-import { InlineError, EmptyState, Checkbox, Input, Label } from '@aeolus-fleet/ui';
+import { InlineError, EmptyState, Input, Label } from '@aeolus-fleet/ui';
 
 import { randomUUID } from 'node:crypto';
 
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { CREDENTIAL_KINDS } from '../../forms/server-credential';
 import { ActionForm } from '../../forms/ui/action-form';
+import { FormCheckbox } from '../../forms/ui/form-checkbox';
 import { CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
 import { outsideAddressOf, PARTY_STATES, type ListedParty } from '../../outside-parties/party-kinds';
@@ -33,7 +34,7 @@ function PartyForms({ party, fleetId }: { party: ListedParty; fleetId: string })
             <input type="hidden" name="name" value={party.name} />
             <Input className={INPUT} name="tool" placeholder="tool" required maxLength={128} />
             <Label htmlFor={fieldId + '-0'} className="flex items-center gap-1">
-              <Checkbox id={fieldId + '-0'} name="isRepeatable" /> repeatable
+              <FormCheckbox id={fieldId + '-0'} name="isRepeatable" /> repeatable
             </Label>
           </ActionForm>
         </>

@@ -2,10 +2,11 @@
 
 import { useId, useActionState } from 'react';
 
-import { Input, Label, Checkbox, InlineError, type ListedScope } from '@aeolus-fleet/ui';
+import { Input, Label, InlineError, type ListedScope } from '@aeolus-fleet/ui';
 
 import { FLEET_FIELD } from '../../forms/form-state';
 import { CredentialFields } from '../../forms/ui/credential-fields';
+import { FormCheckbox } from '../../forms/ui/form-checkbox';
 import { CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { Outcome } from '../../forms/ui/outcome';
 import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
@@ -49,7 +50,7 @@ export function A2aAgentForm({ fleetId, requestId, owners, scopes, listed, scope
           <legend className="font-medium">Scopes, beside sending and receiving</legend>
           {scopes.map((scope) => (
             <Label htmlFor={fieldId + '-3' + "-" + (scope)} key={scope} className="flex items-center gap-2">
-              <Checkbox id={fieldId + '-3' + "-" + (scope)} name={`${SCOPE_FIELD_PREFIX}${scope}`} defaultChecked={fields[`${SCOPE_FIELD_PREFIX}${scope}`] !== undefined} />
+              <FormCheckbox id={fieldId + '-3' + "-" + (scope)} name={`${SCOPE_FIELD_PREFIX}${scope}`} defaultChecked={fields[`${SCOPE_FIELD_PREFIX}${scope}`] !== undefined} />
               <span className="grid gap-0.5"><span className="font-mono text-code">{scope}</span><span className="text-caption text-muted-foreground">{listed.find((item) => item.scope === scope)?.description ?? "Description unavailable"}</span></span>
             </Label>
           ))}
