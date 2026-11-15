@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { sweep, type SweepRuntime } from './support/container-sweeper.js';
+import { sweep, type SweepRuntime } from './support/sweep.js';
 
 const TIMING = { delayMs: 1, maxLists: 5 };
 

@@ -7,7 +7,7 @@ import { getContainerRuntimeClient } from 'testcontainers';
 import { describe, expect, inject, it, onTestFinished } from 'vitest';
 
 import { POSTGRES_IMAGE } from './support/container-images.js';
-import { TEST_RUN_LABEL } from './support/container-sweeper.js';
+import { TEST_RUN_LABEL } from './support/test-run-label.js';
 import { TestPostgres } from './support/postgres-container.js';
 import { startRunProcess } from './support/test-run-process.js';
 
@@ -87,38 +87,48 @@ describe('the containers of a test run', () => {
     };
     const deadStart = startTime(deadPid);
     const liveStart = startTime(livePid);
-    const labels = (run: string, pid: number, start: string, checkout = process.cwd()) => ({ [TEST_RUN_LABEL]: run, 'aeolus-fleet.test-run-pid': String(pid), 'aeolus-fleet.test-run-start': start, 'aeolus-fleet.test-checkout': checkout });
-    const volume = await docker.createVolume({ Labels: labels(deadRun, deadPid, deadStart) });
-    let deadId: string | undefined;
-    let liveId: string | undefined;
-    let otherId: string | undefined;
+    const labels = (run: string, identity: { pid: number; start: string; checkout?: string }) => ({ [TEST_RUN_LABEL]: run, 'aeolus-fleet.test-run-pid': String(identity.pid), 'aeolus-fleet.test-run-start': identity.start, 'aeolus-fleet.test-checkout': identity.checkout ?? process.cwd() });
+    const deadIdentity = { pid: deadPid, start: deadStart };
+    const liveIdentity = { pid: livePid, start: liveStart };
+    const created: string[] = [];
+    const volumeNames: string[] = [];
     onTestFinished(async () => {
-      killIfRunning(deadPid);
-      killIfRunning(livePid);
-      if (deadId) await docker.getContainer(deadId).remove({ force: true, v: true }).catch(() => {});
-      if (liveId) await docker.getContainer(liveId).remove({ force: true, v: true }).catch(() => {});
-      if (otherId) await docker.getContainer(otherId).remove({ force: true, v: true }).catch(() => {});
-      await docker.getVolume(volume.Name).remove().catch(() => {});
+      if (deadProcess.exitCode === null && deadProcess.signalCode === null) deadProcess.kill('SIGKILL');
+      if (liveProcess.exitCode === null && liveProcess.signalCode === null) liveProcess.kill('SIGKILL');
+      await Promise.allSettled(created.map((id) => docker.getContainer(id).remove({ force: true, v: true })));
+      await Promise.allSettled(volumeNames.map((name) => docker.getVolume(name).remove()));
     });
     deadProcess.kill('SIGKILL');
-    await new Promise<void>((resolve) => deadProcess.once('exit', () => resolve()));
+    await new Promise<void>((resolve) => { deadProcess.once('exit', () => { resolve(); }); });
     // The existing bounded sweep ends after two empty lists, one second apart.
     await new Promise((resolve) => setTimeout(resolve, 3_000));
-    const dead = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(deadRun, deadPid, deadStart), HostConfig: { Binds: [`${volume.Name}:/var/lib/postgresql/data`] } });
-    deadId = dead.id;
-    const live = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(liveRun, livePid, liveStart) });
-    liveId = live.id;
+    const volume = await docker.createVolume({ Labels: labels(deadRun, deadIdentity) });
+    volumeNames.push(volume.name);
+    const dead = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(deadRun, deadIdentity), HostConfig: { Binds: [`${volume.name}:/var/lib/postgresql/data`] } });
+    created.push(dead.id);
+    const liveVolume = await docker.createVolume({ Labels: labels(liveRun, liveIdentity) });
+    volumeNames.push(liveVolume.name);
+    const live = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(liveRun, liveIdentity), HostConfig: { Binds: [`${liveVolume.name}:/var/lib/postgresql/data`] } });
+    created.push(live.id);
+    const reusedRun = `test-${randomUUID()}`;
+    const reused = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(reusedRun, { pid: livePid, start: liveStart === '1' ? '2' : '1' }) });
+    created.push(reused.id);
     const otherRun = `test-${randomUUID()}`;
-    const other = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(otherRun, deadPid, deadStart, '/other-checkout') });
-    otherId = other.id;
+    const otherLabels = labels(otherRun, { ...deadIdentity, checkout: '/other-checkout' });
+    const otherVolume = await docker.createVolume({ Labels: otherLabels });
+    volumeNames.push(otherVolume.name);
+    const other = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: otherLabels, HostConfig: { Binds: [`${otherVolume.name}:/var/lib/postgresql/data`] } });
+    created.push(other.id);
 
     const nextProcess = await startRunProcess(`test-${randomUUID()}`);
-    onTestFinished(() => { killIfRunning(nextProcess.pid); });
+    onTestFinished(() => { if (nextProcess.exitCode === null && nextProcess.signalCode === null) nextProcess.kill('SIGKILL'); });
 
     await expect.poll(() => containersOf(deadRun), { timeout: 15_000, interval: 250 }).toEqual([]);
-    await expect.poll(() => existingVolumes([volume.Name]), { timeout: 15_000, interval: 250 }).toEqual([]);
+    await expect.poll(() => existingVolumes([volume.name]), { timeout: 15_000, interval: 250 }).toEqual([]);
+    expect(await containersOf(reusedRun)).toEqual([]);
     expect(await containersOf(liveRun)).toEqual([live.id]);
     expect(await containersOf(otherRun)).toEqual([other.id]);
+    expect(await existingVolumes([liveVolume.name, otherVolume.name])).toEqual([liveVolume.name, otherVolume.name]);
   }, CONTAINER_TIMEOUT);
 
   it(

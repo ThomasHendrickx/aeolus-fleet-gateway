@@ -228,7 +228,7 @@ function runKit(folder: string, kitArguments: string[]): Promise<number> {
 
 process.env.RYUK_CONTAINER_IMAGE ??= REAPER_IMAGE;
 const run = crypto.randomUUID();
-startContainerSweeper(run);
+await startContainerSweeper(run);
 const postgres = await new TestPostgres(POSTGRES_IMAGE, run).start();
 const fleet = await startFleetServer(postgres.getConnectionUri());
 const port = await aFreePort();

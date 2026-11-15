@@ -11,7 +11,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { getContainerRuntimeClient } from 'testcontainers';
 
-import { TEST_RUN_LABEL } from '../test/support/container-sweeper.ts';
+import { TEST_RUN_LABEL } from '../test/support/test-run-label.ts';
 
 /** How long the check waits for a sweeper to finish. */
 const SWEEP_WAIT_MS = 30_000;
