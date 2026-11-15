@@ -132,4 +132,10 @@ describe('the basket open', () => {
 
     expect({ empty: countOf(markup, 'bridge-basket-empty'), words: markup.includes('The basket is empty'), send: countOf(markup, 'bridge-basket-send') }).toEqual({ empty: 1, words: true, send: 0 });
   });
+
+  it("shows the empty basket as the fleet's shared empty state", () => {
+    const markup = render({ count: 0, toSend: 0, entries: [] });
+
+    expect(/data-testid="bridge-basket-empty"[^>]*>\s*<div data-slot="empty-state"/.test(markup)).toBe(true);
+  });
 });
