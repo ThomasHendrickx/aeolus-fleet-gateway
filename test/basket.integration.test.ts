@@ -187,19 +187,20 @@ describe('the basket sent through a real core', () => {
     await expect(createPrismaItemOutcomes(prisma).findMany(fleetId, { shipId: charlotte.shipId, deliveryIds: [harbour.deliveryId] })).resolves.toMatchObject([{ place: 'bridge', kind: 'answered', option: 1 }]);
   });
 
-  it('keeps an answer to a retired asker in the basket, refused and saying why in words, and sends the others', async () => {
+  it('puts an answer to a retired asker back to wait, its question withdrawn with the retirement, and sends the others', async () => {
     await crewCharlotte();
     const harbour = await answeredIntoTheBasket(askers.orchestrator, { id: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e', title: 'Which goes first: the Compact look (U4) or Harbour?', addedAt: new Date('2026-10-31T19:53:00.000Z') });
     const pricing = await answeredIntoTheBasket(askers.commercial, { id: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', title: 'Pricing page: a price per ship, or plans only?', addedAt: new Date('2026-10-31T19:55:00.000Z') });
+    // Retiring a ship withdraws its open questions (core 0.40.0, aeolus-fleet#1825).
     await retire(fleet, { cookie, shipId: askers.commercial.shipId });
 
-    await expect(aSender()()).resolves.toEqual({ sent: 1, kept: 0, refused: 1 });
+    await expect(aSender()()).resolves.toEqual({ sent: 1, kept: 0, refused: 0 });
 
     await expect(received(askers.orchestrator)).resolves.toHaveLength(1);
     const left = await createPrismaBasketEntries(prisma).list(fleetId, charlotte.shipId);
     expect(left.map(({ questionId, state, refusal }) => ({ questionId, state, refusal }))).toEqual([
       { questionId: harbour.questionId, state: 'sent', refusal: null },
-      { questionId: pricing.questionId, state: 'refused', refusal: 'commercial was retired, so it cannot receive an answer' },
+      { questionId: pricing.questionId, state: 'waiting', refusal: null },
     ]);
   });
 });
