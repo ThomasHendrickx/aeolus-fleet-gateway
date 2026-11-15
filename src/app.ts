@@ -1306,6 +1306,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       return restored;
     },
     close: async () => {
+      wakeups.close();
       await outcomes.stop();
       await gatewayStreams.stop();
       await pings.stop();

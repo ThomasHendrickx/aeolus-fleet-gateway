@@ -17,9 +17,11 @@ function isLeaseEnded(body: unknown): boolean {
   return typeof body === 'object' && body !== null && 'code' in body && body.code === 'LEASE_ENDED';
 }
 
-export function createShipWakeups(options: WakeupsOptions): ShipWakeups & { request: (crewToken: string) => void } {
+export function createShipWakeups(options: WakeupsOptions): ShipWakeups & { request: (crewToken: string) => void; close: () => void } {
   const leases = new Map<string, ShipLooks>();
-  const watch: ShipWakeups = (crewToken, signal) => {
+  const stopping = new AbortController();
+  const watch: ShipWakeups = (crewToken, parentSignal) => {
+    const signal = AbortSignal.any([parentSignal, stopping.signal]);
     const state = { isStopped: signal.aborted, isPending: false, isEnded: false };
     let waiting: ((look: boolean) => void) | undefined;
     let safety: ReturnType<typeof setTimeout> | undefined;
@@ -142,5 +144,8 @@ export function createShipWakeups(options: WakeupsOptions): ShipWakeups & { requ
     if (isActive()) { leases.set(crewToken, hints); }
     return hints;
   };
-  return Object.assign(watch, { request: (crewToken: string) => { leases.get(crewToken)?.request(); } });
+  return Object.assign(watch, {
+    request: (crewToken: string) => { leases.get(crewToken)?.request(); },
+    close: () => { stopping.abort(); },
+  });
 }
