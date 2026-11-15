@@ -27,6 +27,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      # The browser the web parts' browser tests run in.
+      - run: npx playwright install --with-deps chromium
       - run: npm run test:unit
 
   integration:

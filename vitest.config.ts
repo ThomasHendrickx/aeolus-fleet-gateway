@@ -1,3 +1,4 @@
+import { playwright } from '@vitest/browser-playwright';
 import { configDefaults, defineConfig } from 'vitest/config';
 
 /** The integration files that start the gateway's bin, and with it its web app's development server. */
@@ -22,6 +23,17 @@ export default defineConfig({
           name: 'gateway:unit',
           include: ['bridge/**/*.test.ts', 'src/**/*.test.ts', 'test/**/*.test.ts', 'web/**/*.test.ts'],
           exclude: [...configDefaults.exclude, '**/*.integration.test.ts'],
+        },
+      },
+      {
+        extends: true,
+        // The web app's own Tailwind, so a part has the size and place a person sees.
+        css: { postcss: 'web' },
+        test: {
+          // Web parts as a browser runs them: forms, their resets and what they send.
+          name: 'web-browser:unit',
+          include: ['web/**/*.browser.test.tsx'],
+          browser: { enabled: true, headless: true, provider: playwright(), instances: [{ browser: 'chromium' }] },
         },
       },
       {
