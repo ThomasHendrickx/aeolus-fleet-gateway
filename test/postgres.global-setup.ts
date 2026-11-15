@@ -24,7 +24,7 @@ declare module 'vitest' {
 export async function setup(project: TestProject): Promise<() => Promise<void>> {
   process.env.RYUK_CONTAINER_IMAGE ??= REAPER_IMAGE;
   const run = randomUUID();
-  startContainerSweeper(run);
+  await startContainerSweeper(run);
   project.provide('testRun', run);
   const container = await new TestPostgres(POSTGRES_IMAGE, run).start();
   project.provide('postgresUrl', container.getConnectionUri());

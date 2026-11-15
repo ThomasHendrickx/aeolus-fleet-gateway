@@ -10,7 +10,7 @@ const SWEEPER = new URL('./container-sweeper.ts', import.meta.url).href;
  * interrupted takes the run, and with it the run's containers, along.
  */
 export async function startRunProcess(run: string): Promise<ChildProcess> {
-  const script = `import { startContainerSweeper } from ${JSON.stringify(SWEEPER)}; startContainerSweeper(process.argv[1]); console.log('sweeping'); process.stdin.on('end', () => process.exit()); process.stdin.resume();`;
+  const script = `import { startContainerSweeper } from ${JSON.stringify(SWEEPER)}; await startContainerSweeper(process.argv[1]); console.log('sweeping'); process.stdin.on('end', () => process.exit()); process.stdin.resume();`;
   const child = spawn(process.execPath, ['--input-type=module', '--eval', script, run], { stdio: ['pipe', 'pipe', 'inherit'] });
   try {
     for await (const line of createInterface({ input: child.stdout })) {

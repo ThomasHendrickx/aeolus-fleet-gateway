@@ -1,7 +1,7 @@
-import { PostgreSqlContainer } from '@testcontainers/postgresql';
-import { Wait } from 'testcontainers';
+import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { getContainerRuntimeClient, Wait } from 'testcontainers';
 
-import { TEST_RUN_LABEL } from './container-sweeper.js';
+import { testRunLabels } from './test-run-labels.js';
 
 /**
  * Postgres says it is ready twice: once for the server the image's entrypoint
@@ -20,15 +20,36 @@ const READY_LOG = /database system is ready to accept connections/;
  * that anyway.
  */
 export class TestPostgres extends PostgreSqlContainer {
+  private readonly labels: Record<string, string>;
+  private volumeName: string | undefined;
   constructor(image: string, run: string) {
     super(image);
-    this.withLabels({ [TEST_RUN_LABEL]: run });
+    this.labels = testRunLabels(run);
+    this.withLabels(this.labels);
     this.withCommand(['postgres', '-c', 'fsync=off']);
     this.withWaitStrategy(Wait.forAll([Wait.forLogMessage(READY_LOG, 2), Wait.forListeningPorts()]));
   }
 
+  override async start(): Promise<StartedPostgreSqlContainer> {
+    const container = await super.start();
+    const stop = container.stop.bind(container);
+    container.stop = async (options) => {
+      const stopped = await stop(options);
+      if (this.volumeName) {
+        const { dockerode } = (await getContainerRuntimeClient()).container;
+        await dockerode.getVolume(this.volumeName).remove();
+      }
+      return stopped;
+    };
+    return container;
+  }
+
   /** Drops the check the module sets on start; the image defines none of its own. */
   protected override async beforeContainerCreated(): Promise<void> {
+    const { dockerode } = (await getContainerRuntimeClient()).container;
+    const volume = await dockerode.createVolume({ Labels: this.labels });
+    this.volumeName = volume.name;
+    this.hostConfig.Mounts = [{ Type: 'volume', Source: volume.name, Target: '/var/lib/postgresql/data' }];
     delete this.createOpts.Healthcheck;
     await super.beforeContainerCreated?.();
   }
