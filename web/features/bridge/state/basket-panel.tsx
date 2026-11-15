@@ -1,5 +1,6 @@
 'use client';
 
+import { EmptyState } from '@aeolus-fleet/ui';
 import { ArrowRight, Ban, Check, CircleAlert, CircleCheck, CircleQuestionMark, Clock, LoaderCircle, Pencil, Replace, Send, ShoppingBasket, X } from 'lucide-react';
 import { useState, useTransition } from 'react';
 
@@ -166,12 +167,8 @@ function SentSummary({ summary }: { summary: { title: string; description: strin
 /** The empty basket, with what goes into it. */
 function EmptyBasket() {
   return (
-    <div data-testid="bridge-basket-empty" className="grid max-w-[820px] justify-items-center gap-3 rounded-lg border border-dashed border-border bg-card px-6 py-10 text-center">
-      <span className="inline-flex size-11 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
-        <ShoppingBasket aria-hidden className="size-5" />
-      </span>
-      <span className="text-heading font-semibold">The basket is empty</span>
-      <span className="max-w-[360px] text-muted-foreground">Pick an option on a question and put it in the basket; it waits here until you send it.</span>
+    <div data-testid="bridge-basket-empty" className="max-w-[820px]">
+      <EmptyState icon={<ShoppingBasket />} title="The basket is empty" description="Pick an option on a question and put it in the basket; it waits here until you send it." />
     </div>
   );
 }
