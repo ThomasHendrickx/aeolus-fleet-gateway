@@ -451,7 +451,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     });
 
     it('lists the exchanges after a cursor, each with its other ship and newest message', async () => {
-      const exchange = { otherShipId: OTHER, otherShipName: 'tracker', otherShipType: 'tracker', otherShipKind: 'agent', unacknowledged: 2, newestMessage: { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', senderShipId: OTHER, payload: 'Build is red', isPayloadUnreadable: false, contentType: 'text/plain', sentAt: '2026-11-06T10:00:00.000Z' } };
+      const exchange = { otherShipId: OTHER, otherShipName: 'tracker', otherShipType: 'tracker', otherShipKind: 'agent', unacknowledged: 2, unseenPlainMessages: 0, newestMessage: { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', senderShipId: OTHER, payload: 'Build is red', isPayloadUnreadable: false, contentType: 'text/plain', sentAt: '2026-11-06T10:00:00.000Z' } };
       answer = { status: 200, body: { items: [exchange], nextCursor: 'msg_01m3tbfspe96yf1rnr4ank0003' } };
 
       const page = await createRestFleetDoor(base).person.exchanges('aeolus_ct_v1_charlotte', { cursor: 'msg_01m3tbfspe96yf1rnr4ank0009', limit: 20 });

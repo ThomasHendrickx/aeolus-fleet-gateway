@@ -65,7 +65,7 @@ Without the sign-in service, the gateway still starts, migrates its database and
 
 ## What you need
 
-- **A self-hosted fleet**, running as [Self-host](https://aeolus-fleet.dev/docs/self-host/) sets it up, with a fleet server at 0.38.5 or later.
+- **A self-hosted fleet**, running as [Self-host](https://aeolus-fleet.dev/docs/self-host/) sets it up, with a fleet server at 0.40.0 or later.
 - **Node 26** on the server.
 - **An empty Postgres database** for the gateway, on the fleet's Postgres server or another, reached with a direct or session connection.
 - **An https address of its own** for the gateway, such as `gateway.example.com`, once anyone or anything beyond the server reaches it. Chats and Slack need it.

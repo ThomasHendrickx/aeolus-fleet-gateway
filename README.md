@@ -33,7 +33,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 
 | Command | Does |
 | --- | --- |
-| `aeolus-gateway start` | Reads core's version and exits 1 when core is older than it needs (core 0.38.5 or later), saying both versions; migrates its database; serves |
+| `aeolus-gateway start` | Reads core's version and exits 1 when core is older than it needs (core 0.40.0 or later), saying both versions; migrates its database; serves |
 | `aeolus-gateway migrate` | Migrates its database, and nothing else. Needs `DATABASE_URL` alone |
 
 The gateway's pages are its web app's, a Next.js app in `web/` (aeolus-fleet's header design, H3), which the same server answers at the same address: `npm run build` builds it beside the server, and started from source (`npx tsx src/bin/aeolus-gateway.ts start`) it compiles as it is asked. It answers an address with no page of the server's own, its Not found among them, in its frame, whose header takes the shared header from `@aeolus-fleet/common/header` once common ships it.

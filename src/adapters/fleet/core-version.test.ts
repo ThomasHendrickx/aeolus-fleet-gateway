@@ -56,7 +56,7 @@ describe('the gateway starts only against a core it runs with (decision 0049)', 
   });
 
   it('asks the fleet at /api/version, keeping its path, whether or not it ends in a slash', async () => {
-    const core = aCore({ server: '0.38.5', common: '0.38.0' });
+    const core = aCore({ server: '0.40.0', common: '0.40.0' });
     await requireCoreVersion('https://example.com/fleet/', core);
     expect(core.asked).toEqual(['https://example.com/fleet/api/version']);
   });
