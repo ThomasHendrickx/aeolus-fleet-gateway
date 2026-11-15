@@ -29,10 +29,12 @@ export default defineConfig({
         extends: true,
         // The web app's own Tailwind, so a part has the size and place a person sees.
         css: { postcss: 'web' },
+        // Next.js's navigation reads process.env, which no browser has.
+        define: { 'process.env': '{}' },
         test: {
           // Web parts as a browser runs them: forms, their resets and what they send.
           name: 'web-browser:unit',
-          include: ['web/**/*.browser.test.tsx'],
+          include: ['bridge/**/*.browser.test.tsx', 'web/**/*.browser.test.tsx'],
           browser: { enabled: true, headless: true, provider: playwright(), instances: [{ browser: 'chromium' }] },
         },
       },
