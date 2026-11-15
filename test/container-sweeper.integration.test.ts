@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 
@@ -6,7 +7,7 @@ import { getContainerRuntimeClient } from 'testcontainers';
 import { describe, expect, inject, it, onTestFinished } from 'vitest';
 
 import { POSTGRES_IMAGE } from './support/container-images.js';
-import { TEST_RUN_LABEL } from './support/container-sweeper.js';
+import { TEST_RUN_LABEL } from './support/test-run-label.js';
 import { TestPostgres } from './support/postgres-container.js';
 import { startRunProcess } from './support/test-run-process.js';
 
@@ -71,6 +72,65 @@ async function startTestProcess(run: string): Promise<{ testPid: number | undefi
 
 // Rootless Podman often runs no reaper, so a run's own teardown and its sweeper are all that remove its containers (#1581).
 describe('the containers of a test run', () => {
+  it('removes a late container and volume of a dead run at the next run, leaving a live run alone', async () => {
+    const deadRun = `test-${randomUUID()}`;
+    const liveRun = `test-${randomUUID()}`;
+    const deadProcess = await startRunProcess(deadRun);
+    const liveProcess = await startRunProcess(liveRun);
+    if (deadProcess.pid === undefined || liveProcess.pid === undefined) throw new Error('Run process has no pid');
+    const deadPid = deadProcess.pid;
+    const livePid = liveProcess.pid;
+    const docker = await dockerode();
+    const startTime = (pid: number) => {
+      const stat = readFileSync(`/proc/${String(pid)}/stat`, 'utf8');
+      return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? '';
+    };
+    const deadStart = startTime(deadPid);
+    const liveStart = startTime(livePid);
+    const labels = (run: string, identity: { pid: number; start: string; checkout?: string }) => ({ [TEST_RUN_LABEL]: run, 'aeolus-fleet.test-run-pid': String(identity.pid), 'aeolus-fleet.test-run-start': identity.start, 'aeolus-fleet.test-checkout': identity.checkout ?? process.cwd() });
+    const deadIdentity = { pid: deadPid, start: deadStart };
+    const liveIdentity = { pid: livePid, start: liveStart };
+    const created: string[] = [];
+    const volumeNames: string[] = [];
+    onTestFinished(async () => {
+      if (deadProcess.exitCode === null && deadProcess.signalCode === null) deadProcess.kill('SIGKILL');
+      if (liveProcess.exitCode === null && liveProcess.signalCode === null) liveProcess.kill('SIGKILL');
+      await Promise.allSettled(created.map((id) => docker.getContainer(id).remove({ force: true, v: true })));
+      await Promise.allSettled(volumeNames.map((name) => docker.getVolume(name).remove()));
+    });
+    deadProcess.kill('SIGKILL');
+    await new Promise<void>((resolve) => { deadProcess.once('exit', () => { resolve(); }); });
+    // The existing bounded sweep ends after two empty lists, one second apart.
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    const volume = await docker.createVolume({ Labels: labels(deadRun, deadIdentity) });
+    volumeNames.push(volume.name);
+    const dead = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(deadRun, deadIdentity), HostConfig: { Binds: [`${volume.name}:/var/lib/postgresql/data`] } });
+    created.push(dead.id);
+    const liveVolume = await docker.createVolume({ Labels: labels(liveRun, liveIdentity) });
+    volumeNames.push(liveVolume.name);
+    const live = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(liveRun, liveIdentity), HostConfig: { Binds: [`${liveVolume.name}:/var/lib/postgresql/data`] } });
+    created.push(live.id);
+    const reusedRun = `test-${randomUUID()}`;
+    const reused = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(reusedRun, { pid: livePid, start: liveStart === '1' ? '2' : '1' }) });
+    created.push(reused.id);
+    const otherRun = `test-${randomUUID()}`;
+    const otherLabels = labels(otherRun, { ...deadIdentity, checkout: '/other-checkout' });
+    const otherVolume = await docker.createVolume({ Labels: otherLabels });
+    volumeNames.push(otherVolume.name);
+    const other = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: otherLabels, HostConfig: { Binds: [`${otherVolume.name}:/var/lib/postgresql/data`] } });
+    created.push(other.id);
+
+    const nextProcess = await startRunProcess(`test-${randomUUID()}`);
+    onTestFinished(() => { if (nextProcess.exitCode === null && nextProcess.signalCode === null) nextProcess.kill('SIGKILL'); });
+
+    await expect.poll(() => containersOf(deadRun), { timeout: 15_000, interval: 250 }).toEqual([]);
+    await expect.poll(() => existingVolumes([volume.name]), { timeout: 15_000, interval: 250 }).toEqual([]);
+    expect(await containersOf(reusedRun)).toEqual([]);
+    expect(await containersOf(liveRun)).toEqual([live.id]);
+    expect(await containersOf(otherRun)).toEqual([other.id]);
+    expect(await existingVolumes([liveVolume.name, otherVolume.name])).toEqual([liveVolume.name, otherVolume.name]);
+  }, CONTAINER_TIMEOUT);
+
   it(
     'are removed with their volumes when the run is killed before its teardown',
     async () => {

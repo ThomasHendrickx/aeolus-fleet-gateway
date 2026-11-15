@@ -4,12 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 import { getContainerRuntimeClient } from 'testcontainers';
 
-/**
- * The label every container a test run starts carries, its value the run. The
- * sweeper removes a run's containers by it, and CI checks by it that a run left
- * none behind.
- */
-export const TEST_RUN_LABEL = 'aeolus-fleet.test-run';
+import { sweep, type SweepRuntime } from './sweep.ts';
+import { removeStaleTestRuns } from './remove-stale-test-runs.ts';
+import { TEST_RUN_LABEL } from './test-run-label.ts';
 
 /**
  * Starts the sweeper of a test run: a process of its own that removes the
@@ -22,7 +19,8 @@ export const TEST_RUN_LABEL = 'aeolus-fleet.test-run';
  * does not stop it, and it keeps the run's process from exiting by nothing.
  * The file is the sweeper: this function starts it again as a program.
  */
-export function startContainerSweeper(run: string): void {
+export async function startContainerSweeper(run: string): Promise<void> {
+  await removeStaleTestRuns();
   const sweeper = spawn(process.execPath, [fileURLToPath(import.meta.url), run], {
     detached: true,
     stdio: ['pipe', 'ignore', 'inherit'],
@@ -34,12 +32,20 @@ export function startContainerSweeper(run: string): void {
   }
 }
 
-/** Removes every container of the run, running or not, with its anonymous volumes. */
-async function sweep(run: string): Promise<void> {
+async function dockerRuntime(): Promise<SweepRuntime> {
   const { dockerode } = (await getContainerRuntimeClient()).container;
-  const containers = await dockerode.listContainers({ all: true, filters: { label: [`${TEST_RUN_LABEL}=${run}`] } });
-  // A container the run's teardown removes meanwhile answers not found: it is gone either way.
-  await Promise.allSettled(containers.map((container) => dockerode.getContainer(container.Id).remove({ force: true, v: true })));
+  return {
+    async listContainerIds(run) {
+      const containers = await dockerode.listContainers({
+        all: true,
+        filters: { label: [`${TEST_RUN_LABEL}=${run}`] },
+      });
+      return containers.map((container) => container.Id);
+    },
+    async removeContainer(id) {
+      await dockerode.getContainer(id).remove({ force: true, v: true });
+    },
+  };
 }
 
 if (import.meta.main) {
@@ -49,10 +55,17 @@ if (import.meta.main) {
     process.exit(2);
   }
   process.stdin.on('end', () => {
-    sweep(run).catch((error: unknown) => {
-      console.error(`The sweeper of test run ${run} could not remove its containers:`, error);
-      process.exitCode = 1;
-    });
+    dockerRuntime()
+      .then(async (runtime) => {
+        await sweep(runtime, { run });
+        const { dockerode } = (await getContainerRuntimeClient()).container;
+        const volumes = await dockerode.listVolumes({ filters: { label: [`${TEST_RUN_LABEL}=${run}`] } });
+        await Promise.allSettled(volumes.Volumes.map((volume) => dockerode.getVolume(volume.Name).remove()));
+      })
+      .catch((error: unknown) => {
+        console.error(`The sweeper of test run ${run} could not remove its containers:`, error);
+        process.exitCode = 1;
+      });
   });
   process.stdin.resume();
 }
