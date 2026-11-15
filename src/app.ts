@@ -1,3 +1,4 @@
+import { createWatchGatewayShips } from './core/connection/watch-gateway-ships.js';
 import { createShipWakeups } from './adapters/fleet/ship-wakeups.js';
 import { createRefreshingPersonDoor } from './core/people/refreshing-person-door.js';
 /**
@@ -130,7 +131,6 @@ import type { DecideRequest } from './core/requests/decide-request.js';
 import { createPrismaOutcomeNotices } from './adapters/prisma/outcome-notices.js';
 import { createOutcomeWorker } from './outcome-worker.js';
 import { createPersonWaiters } from './person-waiters.js';
-import { createPingWorker } from './ping-worker.js';
 import { createSlackTokenWorker } from './slack-token-worker.js';
 import { createGrantWorker } from './grant-worker.js';
 import { createSlackEventWorker } from './slack-event-worker.js';
@@ -1116,7 +1116,19 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     intervalMs: options.grantRoundMs ?? GRANT_ROUND_MS,
     log: server.log,
   });
-  const pings = createPingWorker({ answerPings: createAnswerPings({ connections, inbox: door.gatewayInbox }), sleep, intervalMs: POLL_MS, log: server.log });
+  const answerPings = createAnswerPings({ connections, inbox: door.gatewayInbox });
+  const gatewayStreams = createWatchGatewayShips({
+    connections, wakeups, isServed,
+    look: async (crew, signal) => {
+      const { acked, refused } = await answerPings(signal, crew.fleetId);
+      for (const { contentType, senderShipId } of acked) {
+        server.log.info({ contentType, senderShipId }, "the gateway's ship acked a message it does not handle");
+      }
+      if (refused > 0) { server.log.debug({ refused }, "the fleet refused the gateway's inbox call"); }
+    },
+    failed: (error) => { server.log.error({ err: error }, 'gateway wake look failed'); },
+  });
+  const pings = createRoundWorker({ name: 'gateway leases', round: gatewayStreams.reconcile, sleep, intervalMs: POLL_MS, log: server.log });
   const decideRequestOnly = createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock });
   // A decided request's outcomes are told at once, not at the next round.
   const decideRequest: DecideRequest = async (input) => {
@@ -1288,6 +1300,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     },
     close: async () => {
       await outcomes.stop();
+      await gatewayStreams.stop();
       await pings.stop();
       await personWaiters.stop();
       await slackTokens.stop();
