@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-react';
 
-import '../../../web/app/globals.css';
 import { ownPaletteOf } from '../services/palette-groups';
 import { BridgePalette, type BridgePaletteEntries } from './bridge-palette';
 
@@ -24,6 +23,7 @@ const ROUTER: AppRouterInstance = {
   push: () => undefined,
   replace: () => undefined,
   prefetch: () => undefined,
+  bfcacheId: 'bridge-palette-test',
 };
 
 /** Bridge's palette entries, the other apps' as the server's read answers them. */
