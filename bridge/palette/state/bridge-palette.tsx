@@ -3,7 +3,7 @@
 import type { AppPaletteGroup } from '@aeolus-fleet/common/rules';
 import { appPaletteGroupOf, CommandPalette, type CommandGroup } from '@aeolus-fleet/ui';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, use, useEffect } from 'react';
 
 import { bridgePaletteGroupsOf, type OwnPaletteGroup } from '../services/palette-groups';
 
@@ -20,30 +20,22 @@ function ownGroupOf(group: OwnPaletteGroup): CommandGroup {
   return { key: group.key, label: group.label, entries: shown.entries.map(({ key, content, copyText }) => ({ key, content, ...(copyText === undefined ? {} : { copyText }) })) };
 }
 
+interface BridgePaletteProps {
+  entries: BridgePaletteEntries;
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
+}
+
 /**
  * The command palette in Bridge (aeolus-fleet, header-across-apps A2, M2;
  * the approved sheets): Bridge's own actions and pages first, then each
  * other app the account may open, under its name, each entry naming the app
  * it opens. ⌘K (Ctrl+K) or the top bar's search opens it. A page of Bridge
  * opens here; Copy MCP address copies and says Copied; another app's entry
- * says it is opening until it does.
+ * says it is opening until it does. Until the server read the other apps,
+ * it offers Bridge's own entries alone.
  */
-export function BridgePalette({ entries, isOpen, onOpenChange }: { entries: BridgePaletteEntries; isOpen: boolean; onOpenChange: (isOpen: boolean) => void }) {
-  const router = useRouter();
-  const [otherApps, setOtherApps] = useState<readonly AppPaletteGroup[]>([]);
-
-  useEffect(() => {
-    let isCurrent = true;
-    void entries.otherApps.then((read) => {
-      if (isCurrent) {
-        setOtherApps(read);
-      }
-    });
-    return () => {
-      isCurrent = false;
-    };
-  }, [entries.otherApps]);
-
+export function BridgePalette({ entries, isOpen, onOpenChange }: BridgePaletteProps) {
   useEffect(() => {
     const openOnShortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
@@ -57,6 +49,22 @@ export function BridgePalette({ entries, isOpen, onOpenChange }: { entries: Brid
     };
   }, [onOpenChange]);
 
+  return (
+    <Suspense fallback={<PaletteOf entries={entries} otherApps={[]} isOpen={isOpen} onOpenChange={onOpenChange} />}>
+      <PaletteAcrossApps entries={entries} isOpen={isOpen} onOpenChange={onOpenChange} />
+    </Suspense>
+  );
+}
+
+/** The palette with the other apps' entries, once the server's read of them answered. */
+function PaletteAcrossApps({ entries, isOpen, onOpenChange }: BridgePaletteProps) {
+  const otherApps = use(entries.otherApps);
+  return <PaletteOf entries={entries} otherApps={otherApps} isOpen={isOpen} onOpenChange={onOpenChange} />;
+}
+
+/** The palette offering Bridge's own entries, then these other apps'. */
+function PaletteOf({ entries, otherApps, isOpen, onOpenChange }: BridgePaletteProps & { otherApps: readonly AppPaletteGroup[] }) {
+  const router = useRouter();
   return (
     <CommandPalette
       isOpen={isOpen}
