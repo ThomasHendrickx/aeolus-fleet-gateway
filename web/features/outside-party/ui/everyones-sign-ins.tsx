@@ -1,3 +1,5 @@
+import { Skeleton } from '@aeolus-fleet/ui';
+
 import type { inferRouterOutputs } from '@trpc/server';
 
 import type { GatewayRouter } from '../../../../src/adapters/trpc/router.js';
@@ -64,16 +66,16 @@ export function EveryonesSignInsSkeleton({ party }: { party: string }) {
           {Array.from({ length: SKELETON_ROWS }, (_, row) => (
             <tr key={row} className="border-b border-border last:border-b-0 max-sm:grid max-sm:gap-1 max-sm:py-3">
               <td className="h-12 px-2 max-sm:h-auto max-sm:px-0">
-                <span className="block h-3.5 w-20 animate-pulse rounded-md bg-muted max-sm:w-2/5" />
+                <Skeleton className="block h-3.5 w-20 animate-pulse rounded-md bg-muted max-sm:w-2/5" />
               </td>
               <td className="h-12 px-2 max-sm:h-auto max-sm:px-0">
-                <span className="block h-3.5 w-36 animate-pulse rounded-md bg-muted max-sm:w-3/4" />
+                <Skeleton className="block h-3.5 w-36 animate-pulse rounded-md bg-muted max-sm:w-3/4" />
               </td>
               <td className="h-12 px-2 max-sm:hidden">
-                <span className="block h-3.5 w-16 animate-pulse rounded-md bg-muted" />
+                <Skeleton className="block h-3.5 w-16 animate-pulse rounded-md bg-muted" />
               </td>
               <td className="h-12 px-2 max-sm:hidden">
-                <span className="block h-3.5 w-20 animate-pulse rounded-md bg-muted" />
+                <Skeleton className="block h-3.5 w-20 animate-pulse rounded-md bg-muted" />
               </td>
               <td className="max-sm:hidden" />
             </tr>

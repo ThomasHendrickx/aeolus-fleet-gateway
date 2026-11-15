@@ -1,3 +1,5 @@
+import { LoadingSkeleton } from '@aeolus-fleet/ui';
+
 import { Suspense } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
@@ -13,7 +15,6 @@ import { HOME_MESSAGES } from '../services/messages';
 import { ArgoInboxNotice } from '../ui/argo-inbox-notice';
 import { ArgoSectionPanel } from './argo-section-panel';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
-import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { HomeColumns } from '../ui/home-columns';
 import { NewMessagesLine } from '../ui/new-messages-line';
 import { SlackDroppedOut } from '../ui/slack-dropped-out';
@@ -92,7 +93,7 @@ export async function BridgeHomePage({ searchParams }: { searchParams: SearchPar
   return (
     <BridgeShell api={page.api} fleetId={page.fleetId} screen="home">
       <div className="grid gap-6">
-        <Suspense fallback={<BridgeSkeleton />}>
+        <Suspense fallback={<LoadingSkeleton variant="list" label="Loading Bridge" />}>
           <HomeParts api={page.api} fleetId={page.fleetId} fleet={readYourFleet(page.api)} />
         </Suspense>
       </div>

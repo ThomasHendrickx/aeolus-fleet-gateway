@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { putToastOf } from './basket-toast';
+import { putToastOf } from '../services/basket-toast';
 
 // What the toast says once an answer is in the basket (basket.html, In the
 // basket): what went in, and that it is not sent and still waits.

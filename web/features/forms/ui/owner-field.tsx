@@ -1,3 +1,8 @@
+'use client';
+
+import { useId } from 'react';
+import { Label } from '@aeolus-fleet/ui';
+
 import { INPUT, LABEL } from './look';
 
 /** A ship a party's owner may be picked from, by its name. */
@@ -16,11 +21,12 @@ export type OwnerChoices = { isOk: true; value: OwnerChoice[] } | { isOk: false;
  * read, it says why, with nothing to pick.
  */
 export function OwnerField({ choices, current, help, refusal }: { choices: readonly OwnerChoice[]; current: OwnerChoice | null; help: string; refusal?: string | undefined }) {
+  const fieldId = useId();
   const shown = current === null || choices.some((choice) => choice.shipId === current.shipId) ? choices : [current, ...choices];
   return (
-    <label className={LABEL}>
+    <Label htmlFor={fieldId + '-0'} className={LABEL}>
       <span>Owner</span>
-      <select className={INPUT} name="ownerShipId" defaultValue={current?.shipId ?? ''} required data-testid="owner-field">
+      <select id={fieldId + '-0'} className={INPUT} name="ownerShipId" defaultValue={current?.shipId ?? ''} required data-testid="owner-field">
         {current === null ? (
           <option value="" disabled>
             Pick its owner
@@ -33,6 +39,6 @@ export function OwnerField({ choices, current, help, refusal }: { choices: reado
         ))}
       </select>
       <span className="text-muted-foreground">{refusal ?? help}</span>
-    </label>
+    </Label>
   );
 }

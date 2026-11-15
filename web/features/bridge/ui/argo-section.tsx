@@ -1,3 +1,5 @@
+import { EmptyState } from '@aeolus-fleet/ui';
+
 import { Ban, ExternalLink, Replace, UserRound } from 'lucide-react';
 
 import { ARGO_SECTION_ANCHOR, argoActionOf, doneLineOf, type ArgoSection } from '../services/argo-section';
@@ -101,7 +103,7 @@ export function ArgoSectionList({ section, now, leaving = new Set() }: { section
         </p>
       )}
       {section.items.length === 0 ? (
-        <p className="rounded-md border border-border bg-card p-3 text-muted-foreground">Nothing waits at argo.</p>
+        <EmptyState title="Nothing waits at argo." variant="section" />
       ) : (
         <ul className="overflow-hidden rounded-lg border border-primary bg-card shadow-[inset_3px_0_0_var(--primary)]">
           {section.items.map((item) => (

@@ -1,5 +1,7 @@
 'use client';
 
+import { EmptyState } from '@aeolus-fleet/ui';
+
 import { Bell, ChevronRight, MessageSquare, ShoppingBasket } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -174,10 +176,7 @@ export function HomeLists({ fleetId, home, now, opening, argo, leaving = new Set
     <div className="grid gap-8">
       <section className="grid gap-3" aria-labelledby="bridge-waiting-heading">
         {waiting.items.length === 0 ? (
-          <div data-testid="bridge-nothing-waits" className="grid justify-items-center gap-1 rounded-lg border border-border bg-card p-6 text-center">
-            <span className="font-semibold">Nothing waits on you</span>
-            <span className="text-muted-foreground">Your ships have what they need from you. A question or a step shows here the moment one arrives.</span>
-          </div>
+          <div data-testid="bridge-nothing-waits"><EmptyState title="Nothing waits on you" description="Your ships have what they need from you. A question or a step shows here the moment one arrives." variant="page" /></div>
         ) : (
           <WaitingRows items={waiting.items} readAt={readAt} opening={opening} leaving={leaving} />
         )}
@@ -210,9 +209,7 @@ export function HomeLists({ fleetId, home, now, opening, argo, leaving = new Set
           <span className="text-caption text-muted-foreground">{stayAware.filter(({ state }) => state === 'new').length} unseen, outside the count</span>
         </div>
         {stayAware.length === 0 ? (
-          <p data-testid="bridge-nothing-new" className="rounded-md border border-border bg-card p-3 text-muted-foreground">
-            Nothing new. What you saw is in Done.
-          </p>
+          <div data-testid="bridge-nothing-new"><EmptyState title="Nothing new. What you saw is in Done." variant="section" /></div>
         ) : (
           <StayAwareRows items={stayAware} readAt={readAt} opening={opening} />
         )}

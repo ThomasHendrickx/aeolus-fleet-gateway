@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest';
 
 import type { TableTool } from '../table-tools';
 import { NeedsChips } from './needs-chips';
-import { ToolsSkeleton } from './tools-skeleton';
 import { ToolsTable, type ToolsTableProps } from './tools-table';
 
 /** The router a page's table sits under; a static render never navigates. */
@@ -94,11 +93,3 @@ describe('what a call needs, as chips', () => {
   });
 });
 
-describe("the tools table while the server's tools/list is read", () => {
-  it('shows skeleton rows, said busy', () => {
-    const markup = renderToStaticMarkup(createElement(ToolsSkeleton, { party: 'crm' }));
-
-    expect(markup).toContain('aria-busy="true"');
-    expect(markup).toContain('aria-label="Reading the tools crm lists"');
-  });
-});

@@ -1,5 +1,7 @@
 'use client';
 
+import { Label } from '@aeolus-fleet/ui';
+
 import { Combobox } from '@base-ui/react/combobox';
 import { CircleAlert, Info, LoaderCircle, RotateCw, Search, Send, Ship, X } from 'lucide-react';
 import { useState } from 'react';
@@ -193,9 +195,9 @@ export function SendMessageForm({
       </div>
       <div className="grid flex-1 content-start gap-4 overflow-auto px-4 py-4 sm:px-5">
         <div className="grid gap-1.5">
-          <label htmlFor="bridge-send-to" className="font-semibold">
+          <Label htmlFor="bridge-send-to" className="font-semibold">
             To
-          </label>
+          </Label>
           {to === null ? (
             <ShipSearch sendTo={sendTo} onPick={onPick} />
           ) : (
@@ -210,9 +212,9 @@ export function SendMessageForm({
           ) : null}
         </div>
         <div className="grid gap-1.5">
-          <label htmlFor="bridge-send-message" className="font-semibold">
+          <Label htmlFor="bridge-send-message" className="font-semibold">
             Message
-          </label>
+          </Label>
           <textarea
             id="bridge-send-message"
             data-testid="bridge-send-message"

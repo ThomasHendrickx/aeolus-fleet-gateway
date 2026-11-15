@@ -1,3 +1,5 @@
+import { LoadingSkeleton } from '@aeolus-fleet/ui';
+
 import { Suspense } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
@@ -6,7 +8,6 @@ import { readBridgeSettings } from '../hooks/read-bridge';
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { BRIDGE_ROUTING_PATH, BRIDGE_SETTINGS_PATH } from '../paths';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
-import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { Notice } from '../ui/notice';
 import { RequestsList } from '../ui/requests-list';
 
@@ -54,7 +55,7 @@ export async function BridgeSettingsPage({ searchParams }: { searchParams: Searc
           <span className="text-caption text-muted-foreground">Per job, Slack, a chat, web push and email besides Bridge.</span>
         </a>
         {said === undefined ? null : <Notice message={said} isFailure={false} />}
-        <Suspense fallback={<BridgeSkeleton />}>
+        <Suspense fallback={<LoadingSkeleton variant="list" label="Loading Bridge" />}>
           <SettingsParts api={page.api} fleetId={page.fleetId} />
         </Suspense>
       </div>

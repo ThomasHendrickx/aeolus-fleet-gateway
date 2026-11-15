@@ -1,5 +1,7 @@
 'use client';
 
+import { EmptyState } from '@aeolus-fleet/ui';
+
 import type { HomeItem } from '../services/items';
 import { unseenSaidOf } from '../services/stay-aware';
 import { StayAwareRows } from './home-panel';
@@ -28,9 +30,7 @@ export function StayAwarePanel({ fleetId, consoleUrl, stayAware, now }: { fleetI
           </div>
           <p className="text-caption text-muted-foreground sm:hidden">Not in the count. Seeing one is all it asks.</p>
           {stayAware.length === 0 ? (
-            <p data-testid="bridge-nothing-new" className="rounded-md border border-border bg-card p-3 text-muted-foreground">
-              Nothing new. What you saw is in Done.
-            </p>
+            <div data-testid="bridge-nothing-new"><EmptyState title="Nothing new. What you saw is in Done." variant="section" /></div>
           ) : (
             <StayAwareRows items={stayAware} readAt={new Date(now)} opening={opening} />
           )}

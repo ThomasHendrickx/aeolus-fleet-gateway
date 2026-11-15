@@ -1,3 +1,5 @@
+import { LoadingSkeleton } from '@aeolus-fleet/ui';
+
 import { Suspense, type ReactNode } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
@@ -6,7 +8,6 @@ import { readRecordPage, type BridgeRead } from '../hooks/read-bridge';
 import type { RecordPage } from '../services/items';
 import { BRIDGE_DONE_PATH } from '../paths';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
-import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { PageAsLastRead } from './page-as-last-read';
 import { DonePanel } from './done-panel';
 
@@ -36,7 +37,7 @@ export async function BridgeDonePage({ searchParams }: { searchParams: SearchPar
   return (
     <BridgeShell api={page.api} fleetId={page.fleetId} screen="done">
       <div className="grid gap-6">
-        <Suspense fallback={<BridgeSkeleton />}>
+        <Suspense fallback={<LoadingSkeleton variant="list" label="Loading Bridge" />}>
           <DoneParts api={page.api} fleetId={page.fleetId} />
         </Suspense>
       </div>

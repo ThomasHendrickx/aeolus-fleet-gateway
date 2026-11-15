@@ -1,12 +1,13 @@
 'use client';
 
+import { EmptyState, InlineError, Checkbox, Input, Label, ScopePicker, Switch, showToast } from '@aeolus-fleet/ui';
+
+import { useId, useState, useTransition } from 'react';
+
 import { Drawer } from '@base-ui/react/drawer';
-import { Toast } from '@base-ui/react/toast';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
 
 import { BUTTONS, INPUT } from '../../../forms/ui/look';
-import { Switch } from '../../../forms/ui/switch';
 import { ActionButton } from '../../../bridge/ui/action-button';
 import { StatusBadge, Tag } from '../../../outside-parties/ui/status-badge';
 import { setPartyScopes, switchPartyTools, type TableOutcome } from '../../actions';
@@ -16,9 +17,7 @@ import { changedScopesOf, SCOPE_CHANGES, type ScopeChange } from '../scope-chang
 import { partyScopesSetMessage, scopesSetMessage, statedMessage, suggestionsSetMessage, toolsSwitchedMessage } from '../table-messages';
 import { keptToolsOf, shownTools, STATE_FILTERS, type KeptChanges, type StateFilter, type TableTool } from '../table-tools';
 import { NeedsChips, type ListedScope } from './needs-chips';
-import { ScopePicker } from './scope-picker';
 import { standingRefusal, TableDialog, type DialogRefusal } from './table-dialog';
-import { TableToasts } from './table-toasts';
 
 /** What the table shows of one outside MCP server, as its page read it. */
 export interface ToolsTableProps {
@@ -34,6 +33,12 @@ export interface ToolsTableProps {
   canChange: boolean;
   /** Why the server's tools could not be read: the table then shows the requirements kept per tool name. */
   serverRefusal: string | null;
+}
+
+/** What was kept since the page read the rows it was kept on; a fresh read replaces it. */
+interface Kept extends KeptChanges {
+  basis: readonly TableTool[];
+  party: readonly string[] | null;
 }
 
 type OpenDialog = 'scopes' | 'party' | 'suggest' | null;
@@ -53,24 +58,9 @@ function firstLineOf(description: string | undefined): string {
  * a Toast says what was kept; a refusal stays inline. Only an approver within
  * manage reach sees the controls; anyone else, the same table read-only.
  */
-export function ToolsTable(props: ToolsTableProps) {
-  return (
-    <Toast.Provider>
-      <TableBody {...props} />
-      <TableToasts />
-    </Toast.Provider>
-  );
-}
-
-/** What was kept since the page read the rows it was kept on; a fresh read replaces it. */
-interface Kept extends KeptChanges {
-  basis: readonly TableTool[];
-  party: readonly string[] | null;
-}
-
-function TableBody({ fleetId, party, tools: readTools, version, partyScopes: readPartyScopes, listed, canChange, serverRefusal }: ToolsTableProps) {
+export function ToolsTable({ fleetId, party, tools: readTools, version, partyScopes: readPartyScopes, listed, canChange, serverRefusal }: ToolsTableProps) {
+  const fieldId = useId();
   const router = useRouter();
-  const toasts = Toast.useToastManager();
   const [, startTransition] = useTransition();
   const [isReloading, startReload] = useTransition();
   const [nameFilter, setNameFilter] = useState('');
@@ -115,7 +105,7 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
       setKeptVersion(outcome.version);
     }
     setHighlighted((previous) => ({ names: new Set(changed), round: previous.round + 1 }));
-    toasts.add({ title: statedMessage(message, outcome.statementRefusal) });
+    showToast({ title: statedMessage(message, outcome.statementRefusal) });
     router.refresh();
   };
 
@@ -201,10 +191,10 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
   const isBusy = switching !== null || isSaving;
   const toolbar = (
     <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center" data-testid="tools-table-toolbar">
-      <label className="grid gap-1 sm:w-56">
+      <Label htmlFor={fieldId + '-0'} className="grid gap-1 sm:w-56">
         <span className="sr-only">Filter by name</span>
-        <input className={INPUT} type="search" placeholder="Filter by name" value={nameFilter} onChange={(event) => { setNameFilter(event.target.value); }} data-testid="tools-table-name-filter" />
-      </label>
+        <Input id={fieldId + '-0'} className={INPUT} type="search" placeholder="Filter by name" value={nameFilter} onChange={(event) => { setNameFilter(event.target.value); }} data-testid="tools-table-name-filter" />
+      </Label>
       <div role="group" aria-label="Filter by state" className="flex flex-wrap gap-1">
         {STATE_FILTERS.map(({ state, label }) => (
           <button
@@ -221,10 +211,10 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
       </div>
       {canChange ? (
         <>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={isEveryShownSelected} onChange={toggleShown} disabled={shown.length === 0} data-testid="tools-table-select-shown" />
+          <Label htmlFor={fieldId + '-1'} className="flex items-center gap-2">
+            <Checkbox id={fieldId + '-1'} checked={isEveryShownSelected} onCheckedChange={toggleShown} disabled={shown.length === 0} data-testid="tools-table-select-shown" />
             {ALL_SELECTED}
-          </label>
+          </Label>
           <span className="text-muted-foreground" data-testid="tools-table-selected">
             {selected.size} selected
           </span>
@@ -284,9 +274,7 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
         </Drawer.Root>
       </div>
       {switchRefusal === null ? null : (
-        <p role="alert" className="rounded-md border border-tone-attention-border bg-tone-attention-bg px-3 py-2 text-tone-attention-fg" data-testid="tools-table-switch-refusal">
-          {switchRefusal}
-        </p>
+        <div data-testid="tools-table-switch-refusal"><InlineError title={switchRefusal} variant="section" /></div>
       )}
       <table className="w-full border-collapse max-sm:block" data-testid="tools-table">
         <thead className="max-sm:hidden">
@@ -310,7 +298,7 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
               >
                 {canChange ? (
                   <td className="py-2 pr-2 max-sm:row-span-4">
-                    <input type="checkbox" aria-label={`Select ${tool.name}`} checked={selected.has(tool.name)} onChange={() => { toggle(tool.name); }} data-testid="tools-table-select" />
+                    <Checkbox aria-label={`Select ${tool.name}`} checked={selected.has(tool.name)} onCheckedChange={() => { toggle(tool.name); }} data-testid="tools-table-select" />
                   </td>
                 ) : null}
                 <td className="py-2 pr-3 max-sm:col-start-2">
@@ -330,7 +318,7 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
                   {tool.isOn === null ? (
                     <span className="text-muted-foreground">Not known</span>
                   ) : canChange ? (
-                    <Switch isOn={tool.isOn} label={tool.name} isPending={switching === tool.name} onClick={() => { switchTools({ names: [tool.name], isOn: tool.isOn !== true, working: tool.name }); }} testId="tools-table-switch" />
+                    <Switch checked={tool.isOn} aria-label={tool.name} disabled={switching === tool.name} aria-busy={switching === tool.name} onClick={() => { switchTools({ names: [tool.name], isOn: tool.isOn !== true, working: tool.name }); }} data-testid="tools-table-switch" />
                   ) : (
                     <Tag>{tool.isOn ? 'On' : 'Off'}</Tag>
                   )}
@@ -344,9 +332,7 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
         </tbody>
       </table>
       {shown.length === 0 ? (
-        <p className="text-muted-foreground" data-testid="tools-table-empty">
-          {tools.length === 0 ? (isServerAnswering ? `${party} lists no tools.` : 'No tool needs a scope of its own yet.') : 'No tool matches the filters.'}
-        </p>
+        <div data-testid="tools-table-empty"><EmptyState title={tools.length === 0 ? (isServerAnswering ? `${party} lists no tools.` : 'No tool needs a scope of its own yet.') : 'No tool matches the filters.'} variant="section" /></div>
       ) : null}
       {listed === null ? null : (
         <>
@@ -370,14 +356,14 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
             onReload={reload}
             testId="tools-table-scopes-dialog"
           >
-            <ScopePicker label="Scopes" listed={listed} picked={picked} onPick={setPicked} isDisabled={isSaving} testId="tools-table-scopes-picker" />
+            <div data-testid="tools-table-scopes-picker"><ScopePicker label="Scopes" listed={listed} picked={picked} onPick={setPicked} isDisabled={isSaving} /></div>
             <fieldset className="grid gap-1">
               <legend className="font-medium">On each selected tool</legend>
               {SCOPE_CHANGES.map((change) => (
-                <label key={change.how} className="flex items-center gap-2">
-                  <input type="radio" name="how" value={change.how} checked={how === change.how} onChange={() => { setHow(change.how); }} data-testid={`tools-table-how-${change.how}`} />
+                <Label htmlFor={fieldId + '-2' + "-" + (change.how)} key={change.how} className="flex items-center gap-2">
+                  <input id={fieldId + '-2' + "-" + (change.how)} type="radio" name="how" value={change.how} checked={how === change.how} onChange={() => { setHow(change.how); }} data-testid={`tools-table-how-${change.how}`} />
                   {change.label}
-                </label>
+                </Label>
               ))}
             </fieldset>
           </TableDialog>
@@ -401,7 +387,7 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
             onReload={reload}
             testId="tools-table-party-dialog"
           >
-            <ScopePicker label="Scopes" listed={listed} picked={picked} onPick={setPicked} isDisabled={isSaving} testId="tools-table-party-picker" />
+            <div data-testid="tools-table-party-picker"><ScopePicker label="Scopes" listed={listed} picked={picked} onPick={setPicked} isDisabled={isSaving} /></div>
           </TableDialog>
           <TableDialog
             isOpen={dialog === 'suggest'}
@@ -427,8 +413,8 @@ function TableBody({ fleetId, party, tools: readTools, version, partyScopes: rea
             onReload={reload}
             testId="tools-table-suggest-dialog"
           >
-            <ScopePicker label="Scopes for read-only tools" listed={listed} picked={suggestPicks.readOnly} onPick={(readOnly) => { setSuggestPicks((previous) => ({ ...previous, readOnly })); }} isDisabled={isSaving} testId="tools-table-suggest-read-only" />
-            <ScopePicker label="Scopes for the other tools" listed={listed} picked={suggestPicks.other} onPick={(other) => { setSuggestPicks((previous) => ({ ...previous, other })); }} isDisabled={isSaving} testId="tools-table-suggest-other" />
+            <div data-testid="tools-table-suggest-read-only"><ScopePicker label="Scopes for read-only tools" listed={listed} picked={suggestPicks.readOnly} onPick={(readOnly) => { setSuggestPicks((previous) => ({ ...previous, readOnly })); }} isDisabled={isSaving} /></div>
+            <div data-testid="tools-table-suggest-other"><ScopePicker label="Scopes for the other tools" listed={listed} picked={suggestPicks.other} onPick={(other) => { setSuggestPicks((previous) => ({ ...previous, other })); }} isDisabled={isSaving} /></div>
             <SuggestedList title="Read-only tools" names={suggestions.readOnly} testId="tools-table-suggest-read-only-tools" />
             <SuggestedList title="Other tools" names={suggestions.other} testId="tools-table-suggest-other-tools" />
             <SuggestedList title="Without hints, left as they are" names={suggestions.withoutHints} testId="tools-table-suggest-without-hints" />

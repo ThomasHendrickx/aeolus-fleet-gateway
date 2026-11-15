@@ -1,3 +1,5 @@
+import { LoadingSkeleton } from '@aeolus-fleet/ui';
+
 import { Suspense } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
@@ -6,7 +8,6 @@ import { readBridgeRouting } from '../hooks/read-bridge';
 import { BRIDGE_ROUTING_PATH } from '../paths';
 import { slackLinkOutcomeOf } from '../services/slack-link-outcomes';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
-import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { Notice } from '../ui/notice';
 import { PlacesPanel } from './places-panel';
 import { RoutingPanel } from './routing-panel';
@@ -46,7 +47,7 @@ export async function BridgeRoutingPage({ searchParams }: { searchParams: Search
           <p className="text-caption text-muted-foreground sm:hidden">Bridge always keeps every item.</p>
         </div>
         {linked === undefined ? null : <Notice message={linked.message} isFailure={linked.isFailure} />}
-        <Suspense fallback={<BridgeSkeleton />}>
+        <Suspense fallback={<LoadingSkeleton variant="list" label="Loading Bridge" />}>
           <RoutingParts api={page.api} fleetId={page.fleetId} />
         </Suspense>
       </div>

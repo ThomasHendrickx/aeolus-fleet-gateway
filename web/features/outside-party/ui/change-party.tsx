@@ -1,3 +1,5 @@
+import { Checkbox, Label } from '@aeolus-fleet/ui';
+
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { ActionForm } from '../../forms/ui/action-form';
@@ -17,13 +19,14 @@ const SCOPE_LABELS: Record<string, string> = {
 
 /** One scope row: a locked row shows the scope ticked or not and sends nothing. */
 function ScopeRow({ scope, isLocked = false, isChecked = false }: { scope: string; isLocked?: boolean; isChecked?: boolean }) {
+  const fieldId = 'party-scope-' + scope;
   return (
-    <label className="flex items-center gap-2">
-      <input type="checkbox" defaultChecked={isLocked ? true : isChecked} disabled={isLocked} {...(isLocked ? {} : { name: `${SCOPE_FIELD_PREFIX}${scope}` })} />
+    <Label htmlFor={fieldId + '-0'} className="flex items-center gap-2">
+      <Checkbox id={fieldId + '-0'} defaultChecked={isLocked ? true : isChecked} disabled={isLocked} {...(isLocked ? {} : { name: `${SCOPE_FIELD_PREFIX}${scope}` })} />
       <span>{SCOPE_LABELS[scope] ?? scope}</span>
       <span className="font-mono text-code text-muted-foreground">{scope}</span>
       {isLocked ? <span className="text-muted-foreground">(locked)</span> : null}
-    </label>
+    </Label>
   );
 }
 

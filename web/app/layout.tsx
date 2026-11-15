@@ -1,3 +1,4 @@
+import { Toaster } from '@aeolus-fleet/ui';
 import type { Theme } from '@aeolus-fleet/common';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
@@ -34,7 +35,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript(theme) }} />
       </head>
-      <body>{children}</body>
+      <body>{children}<Toaster /></body>
     </html>
   );
 }

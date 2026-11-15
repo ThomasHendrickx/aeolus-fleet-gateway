@@ -1,3 +1,5 @@
+import { InlineError, EmptyState, Input, Label } from '@aeolus-fleet/ui';
+
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { ActionForm } from '../../forms/ui/action-form';
@@ -17,23 +19,22 @@ const GATEWAY_BOT_STATES = {
   installed: { tone: 'ok', label: 'In Slack' },
 } as const;
 
-function Alert({ children }: { children: React.ReactNode }) {
+function Alert({ children }: { children: string }) {
   return (
-    <p role="alert" className="rounded-md border border-tone-attention-border bg-tone-attention-bg px-3 py-2 text-tone-attention-fg">
-      {children}
-    </p>
+    <div><InlineError title={children} variant="section" /></div>
   );
 }
 
 /** The configuration token's field and Connect, or Connect again once Slack refused the kept one. */
 function ConnectForm({ fleetId, label }: { fleetId: string; label: string }) {
+  const fieldId = 'slack-connect';
   return (
     <ActionForm action={connectSlack} fleetId={fleetId} submit={{ label, pending: 'Connecting…' }} testId="slack-connect-form">
-      <label className={LABEL}>
+      <Label htmlFor={fieldId + '-0'} className={LABEL}>
         <span>App configuration refresh token</span>
-        <input className={INPUT} type="password" name="refreshToken" required autoComplete="off" data-testid="slack-refresh-token" />
+        <Input id={fieldId + '-0'} className={INPUT} type="password" name="refreshToken" required autoComplete="off" data-testid="slack-refresh-token" />
         <span className="text-caption text-muted-foreground">Slack issues it for you and this workspace on its app management page, under Your App Configuration Tokens.</span>
-      </label>
+      </Label>
     </ActionForm>
   );
 }
@@ -51,7 +52,7 @@ function ShipsInSlack({ fleetId, bots, canChange, isTokenFresh }: { fleetId: str
         ) : null}
       </div>
       {bots.length === 0 ? (
-        <p className="text-muted-foreground">No ship is a Slack bot yet.</p>
+        <EmptyState title="No ship is a Slack bot yet." variant="section" />
       ) : (
         <ul className="grid gap-3">
           {bots.map((bot) => (

@@ -1,8 +1,9 @@
 'use client';
 
+import { Switch } from '@aeolus-fleet/ui';
+
 import { useState } from 'react';
 
-import { Switch } from '../../forms/ui/switch';
 import { ToolRow } from '../../outside-parties/ui/tool-row';
 import type { CheckedTool } from '../actions';
 import { TOOL_ON_FIELD, TOOL_SHOWN_FIELD } from '../tool-choice';
@@ -50,7 +51,7 @@ export function ToolsSection({ tools, canSwitch }: { tools: CheckedTool[]; canSw
                   <>
                     <input type="hidden" name={TOOL_SHOWN_FIELD} value={tool.name} />
                     {isOn ? <input type="hidden" name={TOOL_ON_FIELD} value={tool.name} /> : null}
-                    <Switch isOn={isOn} label={tool.name} onClick={() => { flip(tool.name); }} />
+                    <Switch checked={isOn} aria-label={tool.name} onClick={() => { flip(tool.name); }} />
                   </>
                 ) : null
               }
