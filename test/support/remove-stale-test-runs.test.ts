@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { removeStaleTestRuns } from './remove-stale-test-runs.js';
+import { testRunLabels } from './test-run-labels.ts';
 
 function fakeClient(labels: Record<string, string>) {
   const removedContainers: string[] = [];
@@ -91,4 +92,27 @@ it('removes this repository containers and volumes older than 24 hours on any pl
   expect(client.listFilters).toContainEqual({ label: ['aeolus-fleet.test-repository=aeolus-fleet-gateway'] });
   expect(client.removedContainers).toEqual(['old']);
   expect(client.removedVolumes).toEqual(['old-volume']);
+});
+
+it('keeps an old container and volume whose run process is alive, on any platform', async () => {
+  vi.useFakeTimers({ now: NOW });
+  const labels = testRunLabels('live');
+  const removedContainers: string[] = [];
+  const removedVolumes: string[] = [];
+  const getClient = () => Promise.resolve({
+    container: {
+      dockerode: {
+        listContainers: () => Promise.resolve([{ Id: 'live-old', Created: Math.floor((NOW - 25 * HOUR_MS) / 1000), Labels: labels }]),
+        listVolumes: () => Promise.resolve({ Volumes: [{ Name: 'live-old-volume', CreatedAt: new Date(NOW - 25 * HOUR_MS).toISOString(), Labels: labels }] }),
+        getContainer: (id: string) => ({ remove: () => { removedContainers.push(id); return Promise.resolve(); } }),
+        getVolume: (name: string) => ({ remove: () => { removedVolumes.push(name); return Promise.resolve(); } }),
+      },
+    },
+  });
+
+  // @ts-expect-error The fake implements only the Docker operations used by the sweeper.
+  await removeStaleTestRuns('darwin', getClient);
+
+  expect(removedContainers).toEqual([]);
+  expect(removedVolumes).toEqual([]);
 });
