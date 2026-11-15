@@ -1,6 +1,6 @@
 # Self-host the gateway and app
 
-On your own [fleet](https://aeolus-fleet.dev/docs/words/#fleet), chats, Slack and [Bridge](https://aeolus-fleet.dev/docs/words/#bridge) all reach it through the [gateway](https://aeolus-fleet.dev/docs/words/#gateway). This page runs the gateway beside your fleet server, on a database of its own, and connects it to the fleet: its settings, its address, connecting it from the console, then people's sign-in and the optional Slack and push keys. It also says plainly what you cannot run yourself yet.
+On your own [fleet](https://aeolus-fleet.dev/docs/words/#fleet), chats, Slack and [Bridge](https://aeolus-fleet.dev/docs/words/#bridge) all reach it through the [gateway](https://aeolus-fleet.dev/docs/words/#gateway). This page runs the gateway beside your fleet server, on a database of its own, and connects it to the fleet: its settings, its address, connecting it from the console, then people's sign-in and the optional Slack and push keys. It also says plainly what you cannot run yourself.
 
 It starts where [Self-host](https://aeolus-fleet.dev/docs/self-host/) ends: a fleet server and a console running, and you signed in as [`argo`](https://aeolus-fleet.dev/docs/words/#argo).
 
@@ -44,24 +44,24 @@ flowchart LR
 | --- | --- |
 | **Gateway** (`@aeolus-fleet/gateway`) | Lets chats, Slack and outside MCP servers and clients reach your fleet as ships, and serves Bridge. It decides no reach of its own: the fleet answers what each of its ships may do. |
 | **The gateway's database** | Postgres 16 or newer, a database of its own beside the fleet's. It keeps the [crew tokens](https://aeolus-fleet.dev/docs/words/#crew-token) of the ships the gateway crews, outside credentials, Slack's tokens and each person's settings. |
-| **The account sign-in service** | Where people sign in with their [account](https://aeolus-fleet.dev/docs/words/#account), to Bridge, from a chat and to link Slack. It is not open source: you cannot run it yourself. |
+| **The account sign-in service** | Where people sign in with their [account](https://aeolus-fleet.dev/docs/words/#account), to Bridge, from a chat and to link Slack. Hosted fleets use the hosted one; on your own fleet you run [aeolus-fleet-sign-in](https://github.com/ThomasHendrickx/aeolus-fleet-sign-in), with a database of its own. |
 | **The Aeolus app** | The app for a phone and a desktop window. It is not open source either: you cannot run it yourself. |
 
 ## What works on your own fleet today
 
-Be clear about this before you start. Everything a person does through the gateway starts with signing in to their account, and the service where they sign in runs only for the hosted fleet. A self-hosted fleet has no sign-in for people yet: [gateway issue #355](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/355) tracks it. On your own server:
+Everything a person does through the gateway starts with signing in to their account. On your own fleet they sign in at [aeolus-fleet-sign-in](https://github.com/ThomasHendrickx/aeolus-fleet-sign-in), which you run beside the gateway. The fleet's [Self-host: sign a person in](https://github.com/ThomasHendrickx/aeolus-fleet/blob/main/docs/guide/self-host-sign-in.md) guide sets up the sign-in service, the fleet and the first person end to end. This page covers the gateway's part of it.
 
 | | On your own fleet |
 | --- | --- |
 | **The gateway runs and is connected to your fleet** | Yes, with this page. |
-| **Bridge's pages are reachable** at the gateway's address | Yes, but nobody can sign in to them without the account sign-in service. |
-| **A chat or MCP client signs in** | No: without the account sign-in service, nobody signs in, so no client connects. |
-| **Slack** | No: connecting a workspace and linking a Slack account both need a signed-in account. |
-| **Web push** | Only once people can sign in to Bridge, where they turn it on. |
-| **Email wakes** | No: the gateway sends them through the account sign-in service. |
+| **A person signs in to Bridge's pages** | Yes, once the sign-in service runs and steps 3 and 7 are done. |
+| **A chat or MCP client signs in** | The gateway needs the chats client registered at the sign-in service, but the first sign-in journey leaves chat clients out: the fleet's guide says what it covers. |
+| **Slack** | Not covered yet by the sign-in guide: connecting a workspace and linking a Slack account need a signed-in account. |
+| **Web push** | Once people sign in to Bridge, where they turn it on. |
+| **Email wakes** | No: the gateway sends them through the hosted account sign-in service. |
 | **The Aeolus app** | No: it is not open source. |
 
-What works without sign-in: the gateway starts, migrates its database and is connected to your fleet from the console. The steps below set every part you can set now, so its settings are in place.
+Without the sign-in service, the gateway still starts, migrates its database and is connected to your fleet from the console, but nobody signs in.
 
 ## What you need
 
@@ -100,7 +100,7 @@ export GATEWAY_PUBLIC_URL=https://gateway.example.com
 
 The gateway listens on `127.0.0.1:4300` unless you set `HOST` and `PORT`. Gateway 0.38.11 and older listen on 4200 by default, the trierarch plugin's port: give them `PORT=4300` so the two never clash.
 
-Leave `INSTALLATION_TOKEN` unset. It is for a hosting service: unset, the gateway serves your fleet as soon as you connect it. Every other setting is in the [gateway README](https://github.com/ThomasHendrickx/aeolus-fleet-gateway#run).
+`INSTALLATION_TOKEN` is unset by default: the gateway then serves your fleet as soon as you connect it, and nobody can sign in. To let people sign in on your own fleet, set it to the installation token the fleet server and the sign-in service share (at least 32 characters, one value for all three), as step 7 and the fleet's [sign-in guide](https://github.com/ThomasHendrickx/aeolus-fleet/blob/main/docs/guide/self-host-sign-in.md) say. Every other setting is in the [gateway README](https://github.com/ThomasHendrickx/aeolus-fleet-gateway#run).
 
 ## 4. Start it
 
@@ -137,6 +137,8 @@ The console connects the gateway, as it does squadrons and the trierarch plugin.
 
 The console commissions the gateway's ship, `gateway`, with the [scopes](https://aeolus-fleet.dev/docs/words/#scope) it needs to read the fleet and commission ships, and hands its secret to the gateway server to server. No one sees the secret. The gateway crews its ship and keeps only its crew token. **Gateway** then says **Connected as gateway**. If the gateway's ship lacks a scope the gateway asks for, Settings offers to grant it.
 
+With `INSTALLATION_TOKEN` set, the gateway serves a fleet only once you switch it on, and **Gateway** appears in Settings only after that: switch the fleet on before you connect it, as step 7 shows.
+
 From now on, the gateway connects again with its kept crew token every time it starts, and its log says `connected as the gateway ship`.
 
 ```mermaid
@@ -158,14 +160,26 @@ Your gateway is now connected to your fleet, and its pages are reachable at `GAT
 
 ## 7. People's sign-in
 
-People sign in to Bridge, from a chat and to link Slack with their Aeolus account, through the account sign-in service. The gateway takes it with these settings:
+People sign in to Bridge, from a chat and to link Slack with their Aeolus account, through the account sign-in service. On your own fleet that is [aeolus-fleet-sign-in](https://github.com/ThomasHendrickx/aeolus-fleet-sign-in). The fleet's [Self-host: sign a person in](https://github.com/ThomasHendrickx/aeolus-fleet/blob/main/docs/guide/self-host-sign-in.md) guide is the one source for setting it up: addresses, secrets, the sign-in service, the console and the first person. Follow it, and set these on the gateway:
 
 | Settings | What they are |
 | --- | --- |
-| `PAGASAE_URL`, `PAGASAE_CLIENT_ID`, `PAGASAE_CLIENT_SECRET` | The account sign-in service, and the gateway's client there for chats and MCP clients, with the redirect address `<GATEWAY_PUBLIC_URL>/pagasae/callback`. All three or none. |
-| `PAGASAE_APP_CLIENT_ID`, `PAGASAE_APP_CLIENT_SECRET` | The gateway's pages as an app at the account sign-in service, with the redirect address `<GATEWAY_PUBLIC_URL>/sign-in/done`. Both or neither, beside the three above. |
+| `PAGASAE_URL`, `PAGASAE_CLIENT_ID`, `PAGASAE_CLIENT_SECRET` | The sign-in service, and the gateway's chats client there, with the redirect address `<GATEWAY_PUBLIC_URL>/pagasae/callback`. All three or none. The gateway refuses to start with the sign-in URL unless it has this chats client, even though no chat connects yet. |
+| `PAGASAE_APP_CLIENT_ID`, `PAGASAE_APP_CLIENT_SECRET` | The gateway's pages as an app at the sign-in service, with the redirect address `<GATEWAY_PUBLIC_URL>/sign-in/done`. Both or neither, beside the three above. |
+| `INSTALLATION_TOKEN` | The installation token the fleet server and the sign-in service share. |
 
-The account sign-in service is not open source, so on your own fleet you cannot run it or register a client with it, and you leave these settings unset. Then nobody signs in to the gateway: Bridge's pages ask for a sign-in they cannot get, and no chat or MCP client connects. Your console sign-in as argo is the console's own and does not sign you in to Bridge. [gateway issue #355](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/355) tracks sign-in for a self-hosted fleet.
+So the sign-in service has three clients for your installation: the console, the gateway's pages and the gateway's chats client.
+
+With `INSTALLATION_TOKEN` set, the gateway serves a fleet only once you switch it on. From the gateway's server, with the token in a header file so it stays out of your shell history:
+
+```sh
+printf 'x-aeolus-installation-token: %s\n' "$INSTALLATION_TOKEN" > /protected/installation-header
+curl -H @/protected/installation-header -H 'content-type: application/json' \
+  https://gateway.example.com/trpc/installation.setEnabled \
+  -d '{"requestId":"enable-1","fleetId":"<your fleet id>","enabled":true}'
+```
+
+Then connect the gateway from the console, as step 6 shows. Your console sign-in as argo is the console's own and does not sign you in to Bridge: people sign in with accounts the sign-in service holds.
 
 ## 8. Optional: Slack
 
@@ -178,7 +192,7 @@ Slack needs nothing in the environment: a person holding the `gateway:slack` sco
 | `/gw/slack/actions` | Button presses on a question |
 | `/gw/slack/link` | A person linking their Slack account |
 
-Connecting the workspace and linking an account both need a signed-in person, so on your own fleet Slack waits on the sign-in in step 7.
+Connecting the workspace and linking an account both need a signed-in person, so on your own fleet Slack needs the sign-in in step 7 first.
 
 ## 9. Optional: push keys
 
@@ -193,7 +207,7 @@ npx web-push generate-vapid-keys
 | `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY` | The keys the command prints. They sign each wake. |
 | `WEB_PUSH_SUBJECT` | A `mailto:` or `https:` address a push service may contact about them. |
 
-All three or none. Unset, Bridge's settings offer no web push. Like `GATEWAY_SECRET`, the keys are in no database: back them up with the gateway's settings, as [Run the server](https://aeolus-fleet.dev/docs/run-the-server/) says. A person turns web push on for their browser in Bridge, so on your own fleet it too waits on the sign-in in step 7.
+All three or none. Unset, Bridge's settings offer no web push. Like `GATEWAY_SECRET`, the keys are in no database: back them up with the gateway's settings, as [Run the server](https://aeolus-fleet.dev/docs/run-the-server/) says. A person turns web push on for their browser in Bridge, so on your own fleet it needs the sign-in in step 7 first.
 
 ## Keep it running
 
@@ -209,7 +223,8 @@ The gateway is one more part to upgrade and back up. [Run the server](https://ae
 | Settings shows no Gateway | The console has no address for it. Start the console with `AEOLUS_GATEWAY_URL` set. |
 | **Couldn’t connect the gateway** | Read the reason it gives. Check that the console's server reaches the gateway at `AEOLUS_GATEWAY_URL`, that its `/api/health` answers ok, and that `FLEET_URL` is the fleet's address. |
 | The log says `connected to no fleet` | The gateway is not connected yet. Connect it from Settings, as step 6 shows. |
-| Nobody can sign in to Bridge, and no chat connects | The account sign-in service is not set. On your own fleet it cannot be yet: see step 7 and [gateway issue #355](https://github.com/ThomasHendrickx/aeolus-fleet-gateway/issues/355). |
+| Nobody can sign in to Bridge | The `PAGASAE_*` settings or `INSTALLATION_TOKEN` are not set, or the fleet is not switched on. See step 7 and the fleet's [sign-in guide](https://github.com/ThomasHendrickx/aeolus-fleet/blob/main/docs/guide/self-host-sign-in.md). |
+| Settings shows no Gateway although `AEOLUS_GATEWAY_URL` is set | With `INSTALLATION_TOKEN` set, the gateway serves a fleet only once you switch it on with `installation.setEnabled`: step 7 shows how. |
 | `/api/health` answers 503 | The gateway does not reach its database. Check `DATABASE_URL` and the connection. |
 
 ## Next
