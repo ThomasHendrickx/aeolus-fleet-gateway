@@ -52,8 +52,23 @@ async function lossyFleetIn(target: string): Promise<LossyFleet> {
       });
       forwarded
         .then(async (answered) => {
+          // Every other answer streams through as it comes, so the lease's wake stream reaches the gateway.
+          if (request.url !== '/api/v1/ship/pushReceive') {
+            response.writeHead(answered.status, { 'content-type': answered.headers.get('content-type') ?? 'application/json' });
+            if (answered.body === null) {
+              response.end();
+              return;
+            }
+            const reader = answered.body.getReader();
+            response.on('close', () => void reader.cancel().catch(() => undefined));
+            for (let read = await reader.read(); !read.done; read = await reader.read()) {
+              response.write(read.value);
+            }
+            response.end();
+            return;
+          }
           const body = Buffer.from(await answered.arrayBuffer());
-          if (isLosing && request.url === '/api/v1/ship/pushReceive' && (z.object({ deliveries: z.array(z.unknown()) }).safeParse(JSON.parse(body.toString())).data?.deliveries.length ?? 0) > 0) {
+          if (isLosing && (z.object({ deliveries: z.array(z.unknown()) }).safeParse(JSON.parse(body.toString())).data?.deliveries.length ?? 0) > 0) {
             isLosing = false;
             lost += 1;
             request.socket.destroy();

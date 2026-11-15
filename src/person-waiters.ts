@@ -7,6 +7,7 @@
  * that ends gives its lock back. A ship of a fleet the gateway does not
  * serve gets no waiter until the fleet is on again.
  */
+import type { FleetId } from '@aeolus-fleet/common';
 import type { FastifyBaseLogger } from 'fastify';
 
 import type { IsServed } from './core/installation/served.js';
@@ -75,6 +76,15 @@ export function createPersonWaiters(deps: { crews: PersonCrews; isServed: IsServ
 
   const round = async (): Promise<void> => {
     try {
+      const served = new Map<FleetId, Promise<boolean>>();
+      const isServed = (fleetId: FleetId) => {
+        const known = served.get(fleetId) ?? deps.isServed(fleetId);
+        served.set(fleetId, known);
+        return known;
+      };
+      for (const entry of running.values()) {
+        if (!(await isServed(entry.ship.fleetId))) { entry.stop.abort(); }
+      }
       let after: PersonShip | null = null;
       for (;;) {
         const page = await deps.crews.crewed({ after, limit: ROUND_PAGE });

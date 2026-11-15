@@ -1,3 +1,4 @@
+import { scriptedShipWakeups } from '../../../test/support/ship-wakeups.js';
 import type { DeliveryId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -76,7 +77,7 @@ function runWith({ cards, agents, waiting = [aPushedDelivery({ contentType: 'tex
   // No scope is required of the agent, so the check reads nothing.
   const checkScopes = createCheckRequiredScopes({ connections: memoryConnectionStore(), door: fakeShipReads().door });
   const hand = createHandA2aMessage({ crew, agents, calls, keys: plainAgentKeys, statuses: plainGatewayStatuses, parties, requirements: memoryScopeRequirements(), checkScopes, follow, clock, deadlineMs: 60_000 });
-  const run = createRunA2aAgent({ cards, crew, hand, follow, calls, sleep, pollMs: POLL_MS, againWaitsMs: [1_000], cardWaitMs: CARD_WAIT_MS });
+  const run = createRunA2aAgent({ wakeups: scriptedShipWakeups(sleep, POLL_MS), cards, crew, hand, follow, calls, sleep, pollMs: POLL_MS, againWaitsMs: [1_000], cardWaitMs: CARD_WAIT_MS });
   return run({ party: anAgentParty(), signal: stop.signal });
 }
 

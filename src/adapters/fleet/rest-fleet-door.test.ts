@@ -71,7 +71,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     answer = { status: 200, body: { waiting: 2, forced: 0 } };
 
     await expect(createRestFleetDoor(base).person.inbox('aeolus_ct_v1_charlotte')).resolves.toMatchObject({ isOk: true, value: { waiting: 2 } });
-    expect(sent()).toEqual([{ url: '/api/v1/ship/inbox', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { waitSeconds: 0 } }]);
+    expect(sent()).toEqual([{ url: '/api/v1/ship/inbox', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: {} }]);
   });
 
   it("reads the person ship's own name, fleet and ship id, as whoami answers them", async () => {
@@ -81,21 +81,6 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     expect(received.map(({ url, headers }) => ({ url, authorization: headers.authorization }))).toEqual([{ url: '/api/v1/ship/whoami', authorization: 'Bearer aeolus_ct_v1_charlotte' }]);
   });
 
-  it('waits while the count is the one the crew knows, up to the fleet\'s longest wait, or less when told, in whole seconds', async () => {
-    answer = { status: 200, body: { waiting: 3, forced: 0 } };
-    const door = createRestFleetDoor(base).person;
-    const signal = new AbortController().signal;
-
-    await door.inbox('aeolus_ct_v1_charlotte', { knownWaiting: 2, signal });
-    await door.inbox('aeolus_ct_v1_charlotte', { knownWaiting: 2, signal, atMostMs: 4_200 });
-    await door.inbox('aeolus_ct_v1_charlotte', { knownWaiting: 2, signal, atMostMs: 600_000 });
-
-    expect(sent().map(({ body }) => body)).toEqual([
-      { waitSeconds: 25, knownWaiting: 2 },
-      { waitSeconds: 5, knownWaiting: 2 },
-      { waitSeconds: 25, knownWaiting: 2 },
-    ]);
-  });
 
   it("takes the waiting deliveries, reading a question's title from its payload", async () => {
     const delivery = {

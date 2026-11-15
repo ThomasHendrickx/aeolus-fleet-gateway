@@ -248,35 +248,16 @@ describe("a person ship's inbox, as the gateway's waiter asks it (wake a person,
     expect(sent.status).toBe(200);
   }
 
-  it('waits while the count is the one the crew knows, and answers the new count once a delivery comes', async () => {
-    const stop = new AbortController();
-    const progress = { isAnswered: false };
-    const asked = door.inbox(charlotte, { knownWaiting: 0, signal: stop.signal }).then((answered) => {
-      progress.isAnswered = true;
-      return answered;
-    });
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const isAnsweredBeforeTheSend = progress.isAnswered;
-
+  it('reads the current count without waiting before and after a delivery', async () => {
+    await expect(door.inbox(charlotte)).resolves.toEqual({ isOk: true, value: { waiting: 0 } });
     await trackerSendsCharlotte('tracker-wait-1');
-
-    await expect(asked).resolves.toEqual({ isOk: true, value: { waiting: 1 } });
-    expect(isAnsweredBeforeTheSend).toBe(false);
+    await expect(door.inbox(charlotte)).resolves.toEqual({ isOk: true, value: { waiting: 1 } });
   });
 
-  it('answers at once when the count already differs from the one the crew knows', async () => {
-    await trackerSendsCharlotte('tracker-wait-2');
-
-    await expect(door.inbox(charlotte, { knownWaiting: 0, signal: new AbortController().signal })).resolves.toEqual({ isOk: true, value: { waiting: 1 } });
-  });
-
-  it('ends the wait once stopped', async () => {
+  it('does not make an inbox call once stopped', async () => {
     const stop = new AbortController();
-    const asked = door.inbox(charlotte, { knownWaiting: 0, signal: stop.signal });
-
     stop.abort();
-
-    await expect(asked).resolves.toMatchObject({ isOk: false });
+    await expect(door.inbox(charlotte, { signal: stop.signal })).resolves.toMatchObject({ isOk: false });
   });
 
   it("states the gateway as the waker of the person ship's lease at its push receive", async () => {

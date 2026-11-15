@@ -1,3 +1,4 @@
+import { memoryShipWakeups, scriptedShipWakeups } from '../../../test/support/ship-wakeups.js';
 import type { DeliveryId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -71,7 +72,7 @@ beforeEach(() => {
 });
 
 function run(party: McpServerParty = CRM) {
-  return createRunParty({ crew, handCall, sleep, pollMs: 2_000, againWaitsMs: [1_000, 5_000, 30_000] })({ party, signal: stop.signal });
+  return createRunParty({ wakeups: scriptedShipWakeups(sleep, 2_000), crew, handCall, sleep, pollMs: 2_000, againWaitsMs: [1_000, 5_000, 30_000] })({ party, signal: stop.signal });
 }
 
 describe('the gateway takes the calls of a proxy ship, as its crew (interop 5.2)', () => {
@@ -154,7 +155,7 @@ describe('the gateway takes the calls of a proxy ship, as its crew (interop 5.2)
         ownStop.abort();
       }
     };
-    const running = createRunParty({ crew: lockingCrew, handCall: lockingHandCall, sleep: stopWhenNothingWaits, pollMs: 2_000, againWaitsMs: [1_000] })({ party: CRM, signal: ownStop.signal });
+    const running = createRunParty({ wakeups: scriptedShipWakeups(stopWhenNothingWaits, 2_000), crew: lockingCrew, handCall: lockingHandCall, sleep: stopWhenNothingWaits, pollMs: 2_000, againWaitsMs: [1_000] })({ party: CRM, signal: ownStop.signal });
     for (let tick = 0; tick < 1_000 && handed.length < 2; tick += 1) {
       await new Promise((resolve) => setImmediate(resolve));
     }
@@ -219,6 +220,7 @@ describe('the gateway takes the calls of a proxy ship, as its crew (interop 5.2)
     const resumed: DeliveryId[] = [];
     crew.state.waiting = [aPushedDelivery({ deliveryId: ONE }), aPushedDelivery({ deliveryId: TWO })];
     const resuming = createRunParty({
+      wakeups: scriptedShipWakeups(sleep, 2_000),
       crew,
       handCall,
       resume: () =>
@@ -241,4 +243,32 @@ describe('the gateway takes the calls of a proxy ship, as its crew (interop 5.2)
 
     expect({ resumed, handed }).toEqual({ resumed: [ONE], handed: [TWO] });
   });
+});
+
+
+it('takes calls only on the party lease wake and stops its stream at shutdown', async () => {
+  const streams = memoryShipWakeups();
+  const ownStop = new AbortController();
+  const running = createRunParty({ wakeups: streams.open, crew, handCall, sleep, pollMs: 2000, againWaitsMs: [1000] })({ party: CRM, signal: ownStop.signal });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(streams.leases.map(({ token }) => token)).toEqual([CRM.crewToken]);
+  expect(crew.received).toEqual([]);
+  streams.wake();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(crew.received).toEqual([2]);
+  streams.wake();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(crew.received).toEqual([2, 2]);
+  ownStop.abort();
+  expect(await running).toEqual({ ended: 'stopped' });
+  expect(await streams.leases[0]?.hints.wait()).toBe(false);
+});
+
+it('stops taking calls when the stream reports the lease ended', async () => {
+  const streams = memoryShipWakeups();
+  const running = createRunParty({ wakeups: streams.open, crew, handCall, sleep, pollMs: 2000, againWaitsMs: [1000] })({ party: CRM, signal: stop.signal });
+  await new Promise((resolve) => setImmediate(resolve));
+  streams.leases[0]?.end();
+  expect(await running).toEqual({ ended: 'crewRefused' });
+  expect(crew.received).toEqual([]);
 });
