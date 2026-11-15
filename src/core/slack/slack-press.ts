@@ -1,6 +1,6 @@
 import type { DeliveryId, MessageId, ShipId } from '@aeolus-fleet/common';
 
-import type { PersonCrew, PersonCrews } from '../people/ports.js';
+import type { PersonCrew, PersonCrews, PersonShipDoor } from '../people/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { SlackApps, SlackLinks, SlackPosts, SlackSignatures } from './ports.js';
@@ -33,7 +33,7 @@ export interface Pressed {
  * gateway kept the post's Slack message is found too.
  */
 export async function pressedOf(
-  deps: { apps: Pick<SlackApps, 'findByAppId'>; links: Pick<SlackLinks, 'find'>; posts: Pick<SlackPosts, 'ofMessage'>; crews: Pick<PersonCrews, 'find'>; signatures: SlackSignatures; clock: Clock },
+  deps: { apps: Pick<SlackApps, 'findByAppId'>; links: Pick<SlackLinks, 'find' | 'stop'>; posts: Pick<SlackPosts, 'ofMessage'>; crews: Pick<PersonCrews, 'find'>; door: Pick<PersonShipDoor, 'ack'>; signatures: SlackSignatures; clock: Clock },
   press: SlackPress,
 ): Promise<Result<Pressed | undefined, { kind: 'notSigned' }>> {
   const { appId, teamId, userId, channel, messageId, body, timestamp, signature } = press;
@@ -42,11 +42,22 @@ export async function pressedOf(
     return err({ kind: 'notSigned' });
   }
   const link = await deps.links.find(app.fleetId, { teamId, userId });
-  const kept = link?.stoppedAt === null ? await deps.posts.ofMessage(app.fleetId, { personShipId: link.personShipId, messageId }) : undefined;
+  if (link?.stoppedAt !== null) {
+    return ok(undefined);
+  }
+  const kept = await deps.posts.ofMessage(app.fleetId, { personShipId: link.personShipId, messageId });
   const post = kept !== undefined && isPostIn(kept, { appId, channel }) ? kept : undefined;
   const crew = post === undefined ? undefined : await deps.crews.find(app.fleetId, post.personShipId);
   const { bot } = app;
   if (post === undefined || post.deliveryId === null || post.senderShipId === null || crew === undefined || bot === null) {
+    return ok(undefined);
+  }
+  // The press acknowledges the delivery as the current crew. A released crew grants no Slack access.
+  const acknowledged = await deps.door.ack(crew.crewToken, post.deliveryId);
+  if (!acknowledged.isOk) {
+    if (acknowledged.error.code === 'LEASE_ENDED' || acknowledged.error.code === 'UNAUTHORIZED') {
+      await deps.links.stop(app.fleetId, { accountId: link.accountId, at: deps.clock.now() });
+    }
     return ok(undefined);
   }
   return ok({ app: { ...app, bot }, post: { ...post, deliveryId: post.deliveryId, senderShipId: post.senderShipId }, crew });

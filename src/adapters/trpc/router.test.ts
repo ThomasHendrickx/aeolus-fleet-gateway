@@ -4,6 +4,10 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { createEndSignIns } from '../../core/sign-in/end-sign-ins.js';
+import { createStopSlackLink } from '../../core/slack/stop-slack-link.js';
+import { memoryAccountGrants } from '../../../test/support/sign-in-fakes.js';
+import { memoryIssuedTokens } from '../../../test/support/oauth-fakes.js';
 import { memoryArgoAccounts } from '../../../test/support/argo-inbox-fakes.js';
 import { ACCOUNT_URL, CHARLOTTE, CHARLOTTE_ACCOUNT_TOKEN, CHARLOTTE_SIGN_IN, CONSOLE_URL, fakeSharedSignIn, GATEWAY_URL } from '../../../test/support/account-sign-in-fakes.js';
 import { FLEET_ID, memoryConnectionStore, OTHER_FLEET_ID } from '../../../test/support/fleet-fakes.js';
@@ -1904,5 +1908,65 @@ describe('plain gateway URL clients through the API', () => {
     { source: 'url', mode: 'plain', registrationAccessToken: 'management' },
   ])('rejects unavailable document mode and caller-supplied URL identity fields', async (client) => {
     await expect(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context).parties.approve(asSent({ ...approval, credential: { kind: 'personSignIn', client } }))).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+});
+
+describe('account removal cleanup acknowledgment', () => {
+  function cleanup() {
+    const { context } = aContext(ARGO_COOKIE);
+    const remaining = new Set(['signIns', 'slackLink', 'accountGrants']);
+    const storage = { isUnavailable: true };
+    const caller = gatewayRouter.createCaller({
+      ...context,
+      installation: { mode: 'enabled', token: 'installation-test' },
+      installationTokenSent: 'installation-test',
+      endSignIns: () => { remaining.delete('signIns'); return Promise.resolve(); },
+      stopSlackLink: () => {
+        if (storage.isUnavailable) return Promise.reject(new Error('Slack link storage unavailable'));
+        remaining.delete('slackLink');
+        return Promise.resolve();
+      },
+      endAccountGrants: () => { remaining.delete('accountGrants'); return Promise.resolve(); },
+    });
+    return { caller, remaining, storage };
+  }
+  const account = { fleetId: FLEET, accountId: 'acc-charlotte' };
+
+  it('refuses acknowledgment when Slack link cleanup fails', async () => {
+    const { caller } = cleanup();
+    await expect(caller.installation.accountDisabled(account)).rejects.toThrow('Slack link storage unavailable');
+  });
+
+  it('completes remaining cleanup on retry after a partial failure', async () => {
+    const { caller, remaining, storage } = cleanup();
+    await expect(caller.installation.accountDisabled(account)).rejects.toThrow();
+    storage.isUnavailable = false;
+    await caller.installation.accountDisabled(account);
+    expect([...remaining]).toEqual([]);
+  });
+
+  it('acknowledges a repeated notification after successful cleanup', async () => {
+    const { caller, storage } = cleanup();
+    storage.isUnavailable = false;
+    await caller.installation.accountDisabled(account);
+    await expect(caller.installation.accountDisabled(account)).resolves.toEqual({});
+  });
+
+  it('refuses browser authorization when the issuer returns a token already past its allowance after cleanup', async () => {
+    const clock = { now: () => new Date('2026-10-21T09:00:00.000Z') };
+    const signIns = fakeSharedSignIn({ tokens: new Map([[FLEET, CHARLOTTE_ACCOUNT_TOKEN]]) });
+    const accountOf = createAccountOfSignIn({ signIns, argoAccounts: memoryArgoAccounts(), clock });
+    const accountInView = createAccountInView({ signIns, accountOf, isServed: () => Promise.resolve(true) });
+    await accountOf({ signIn: CHARLOTTE_SIGN_IN, fleetId: FLEET });
+    const caller = gatewayRouter.createCaller({
+      ...aContext(undefined).context, signIn: CHARLOTTE_SIGN_IN, fleetInView: FLEET, accountInView,
+      installation: { mode: 'enabled', token: 'installation-test' }, installationTokenSent: 'installation-test',
+      endSignIns: createEndSignIns({ grants: memoryAccountGrants(), tokens: memoryIssuedTokens(), accountOf }),
+      stopSlackLink: createStopSlackLink({ links: memorySlackLinks(), clock }),
+      endAccountGrants: () => Promise.resolve(),
+    });
+    await caller.installation.accountDisabled(account);
+    clock.now = () => new Date('2026-10-21T09:10:30.001Z');
+    await expect(caller.account.inView()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 });

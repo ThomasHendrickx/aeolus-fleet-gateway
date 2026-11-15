@@ -7,6 +7,9 @@ import { err, ok, type Result } from '../shared/result.js';
 import { ACCOUNT_TOKEN_MARGIN_MS } from '../sign-in/account-token.js';
 import type { SharedAccountToken, SharedSignIn, SharedSignInRefusal } from './ports.js';
 
+/** Core permits account tokens for 30 seconds after expiry (self-hosted sign-in, section 5). */
+const ACCOUNT_TOKEN_ALLOWANCE_MS = 30_000;
+
 export type AccountOfSignIn = ((asked: { signIn: string; fleetId: FleetId }) => Promise<Result<SharedAccountToken, SharedSignInRefusal>>) & {
   /** Drops every token kept for the sign-in, as when it is signed out here. */
   forget(signIn: string): void;
@@ -30,6 +33,7 @@ export function createAccountOfSignIn(deps: { signIns: Pick<SharedSignIn, 'accou
   const noteArgoAccount = createNoteArgoAccount({ accounts: deps.argoAccounts });
   const kept = new Map<string, SharedAccountToken>();
   const pending = new Set<{ fleetId: FleetId; invalidatedAccounts: Set<string> }>();
+  const hasExpired = (token: SharedAccountToken) => token.endsAt.getTime() + ACCOUNT_TOKEN_ALLOWANCE_MS < deps.clock.now().getTime();
   const isFresh = (token: SharedAccountToken) => token.endsAt.getTime() - ACCOUNT_TOKEN_MARGIN_MS > deps.clock.now().getTime();
 
   const accountOf = async ({ signIn, fleetId }: { signIn: string; fleetId: FleetId }): Promise<Result<SharedAccountToken, SharedSignInRefusal>> => {
@@ -43,7 +47,7 @@ export function createAccountOfSignIn(deps: { signIns: Pick<SharedSignIn, 'accou
     pending.add(exchange);
     try {
       const exchanged = await deps.signIns.accountToken({ signIn, fleetId });
-      if (exchanged.isOk && exchange.invalidatedAccounts.has(exchanged.value.accountId)) {
+      if (exchanged.isOk && (hasExpired(exchanged.value) || exchange.invalidatedAccounts.has(exchanged.value.accountId))) {
         return err({ kind: 'signedOut' });
       }
       if (exchanged.isOk && exchanged.value.personShipId !== null) {
@@ -54,7 +58,8 @@ export function createAccountOfSignIn(deps: { signIns: Pick<SharedSignIn, 'accou
         }
         kept.set(key, exchanged.value);
         await noteArgoAccount(fleetId, exchanged.value);
-        if (exchange.invalidatedAccounts.has(exchanged.value.accountId)) {
+        if (hasExpired(exchanged.value) || exchange.invalidatedAccounts.has(exchanged.value.accountId)) {
+          kept.delete(key);
           return err({ kind: 'signedOut' });
         }
       }

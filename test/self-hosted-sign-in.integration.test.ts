@@ -3,6 +3,11 @@ import { idSchema, receiveOutputSchema, type FleetId, type ShipId } from '@aeolu
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
+import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
+import { createSeeInSlack } from '../src/core/slack/see-in-slack.js';
+import { createSendSlackEvents } from '../src/core/slack/send-slack-events.js';
+import { memoryInboxChanges, memoryItemOutcomes, memoryOpenedDeliveries } from './support/people-fakes.js';
+import { aKeptSlackEvent, aSlackApp, aSlackLink, fakeSlackMessages, memorySlackApps, memorySlackEvents, memorySlackLinks, memorySlackPosts } from './support/slack-fakes.js';
 import { createAccountSignInSeals } from '../src/adapters/crypto/account-sign-in-seals.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
@@ -24,6 +29,7 @@ const dataOf = <T extends z.ZodType>(schema: T) => z.object({ result: z.object({
 const inboxSchema = dataOf(z.object({ waiting: z.number(), deliveries: z.array(z.object({ deliveryId: idSchema('delivery'), title: z.string() })), opened: z.array(z.object({ deliveryId: idSchema('delivery') })) }));
 const basketSchema = dataOf(z.object({ entries: z.array(z.object({ questionId: z.string(), standing: z.object({ kind: z.string() }) })) }));
 
+let gatewayNow: Date | undefined;
 let service: FakePagasae;
 let fleet: FleetServer;
 let app: GatewayApp;
@@ -31,6 +37,8 @@ let prisma: PrismaClient;
 let fleetId: FleetId;
 let personShipId: ShipId;
 let researcher: string;
+let researcherShipId: ShipId;
+let fleetCookie: string;
 let address: string;
 let databaseUrl: string;
 let fleetBoundary: Awaited<ReturnType<typeof startLostAnswerFleet>>;
@@ -42,12 +50,13 @@ function claims(overrides: Record<string, unknown> = {}): Record<string, unknown
 async function startGateway(): Promise<void> {
   const port = await aFreePort();
   address = `http://127.0.0.1:${String(port)}`;
-  app = createGatewayApp({ databaseUrl, fleetUrl: fleetBoundary.url, publicUrl: address, logger: false, gatewaySecret: TEST_GATEWAY_SECRET, installationToken: WAKE_INSTALLATION_TOKEN, pagasae: { url: service.url, ...PAGASAE_CLIENT }, pagasaeApp: PAGASAE_APP_CLIENT });
+  app = createGatewayApp({ databaseUrl, fleetUrl: fleetBoundary.url, publicUrl: address, logger: false, clock: { now: () => gatewayNow ?? new Date() }, gatewaySecret: TEST_GATEWAY_SECRET, installationToken: WAKE_INSTALLATION_TOKEN, pagasae: { url: service.url, ...PAGASAE_CLIENT }, pagasaeApp: PAGASAE_APP_CLIENT });
   await app.server.listen({ host: '127.0.0.1', port });
   await app.restoreConnections();
 }
 
 beforeEach(async () => {
+  gatewayNow = undefined;
   service = await startFakePagasae({ email: 'maya@example.test', firstName: 'Maya' });
   fleet = await startInstallationServer(inject('postgresUrl'), { installationToken: WAKE_INSTALLATION_TOKEN, accountTokenIssuer: service.url });
   fleetBoundary = await startLostAnswerFleet(fleet.url);
@@ -56,8 +65,10 @@ beforeEach(async () => {
   // Setup has already reconciled the service's stable mapping. Gateway must use this id, never guess a name.
   const person = await commission(fleet, { cookie: made.cookie, ship: { name: 'person-maya-opaque-', type: 'person', kind: 'person' } });
   personShipId = person.shipId;
+  fleetCookie = made.cookie;
   const agent = await commission(fleet, { cookie: made.cookie, ship: { name: 'researcher', type: 'researcher', kind: 'agent' } });
   await setOwner(fleet, { cookie: made.cookie, shipId: agent.shipId, ownerShipId: personShipId });
+  researcherShipId = agent.shipId;
   researcher = await register(fleet, agent);
   const gateway = await commission(fleet, { cookie: made.cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: GATEWAY_SCOPES } });
   databaseUrl = await migratedDatabase(inject('postgresUrl'));
@@ -190,18 +201,102 @@ describe('self-hosted sign-in through the existing service contract', () => {
     expect(await prisma.personCrew.count({ where: { fleetId, shipId: personShipId } })).toBe(1);
   });
 
-  it('invalidates browser authorisation immediately when the authenticated account-disabled notification arrives, despite a retained person crew', async () => {
-    expect((await pageCall('people.inbox')).status).toBe(200);
-    expect(await prisma.personCrew.count({ where: { fleetId, shipId: personShipId } })).toBe(1);
-    // The service removes access first, then retries its authenticated gateway cleanup until acknowledged.
+  async function disableAccount() {
     const revoked = await fetch(`${service.url}/oauth/revoke`, { method: 'POST', body: new URLSearchParams({ token: SHARED_SESSION, client_id: PAGASAE_APP_CLIENT.clientId, client_secret: PAGASAE_APP_CLIENT.clientSecret }) });
     expect(revoked.status).toBe(200);
-    const unauthenticated = await mutate(address, { procedure: 'installation.accountDisabled', body: { fleetId, accountId: ACCOUNT_ID } });
-    expect(unauthenticated.status).toBe(401);
+    return mutate(address, { procedure: 'installation.accountDisabled', installationToken: WAKE_INSTALLATION_TOKEN, body: { fleetId, accountId: ACCOUNT_ID } });
+  }
+
+  it('invalidates browser authorisation immediately on authenticated account disabling despite a retained person crew', async () => {
     expect((await pageCall('people.inbox')).status).toBe(200);
-    const disabled = await mutate(address, { procedure: 'installation.accountDisabled', installationToken: WAKE_INSTALLATION_TOKEN, body: { fleetId, accountId: ACCOUNT_ID } });
+    const disabled = await disableAccount();
     expect(disabled.status).toBe(200);
+    expect(await prisma.personCrew.count({ where: { fleetId, shipId: personShipId } })).toBe(1);
     expect((await pageCall('people.inbox')).status).toBe(401);
+  });
+
+  it('refuses an unauthenticated account-disabled notification', async () => {
+    const response = await mutate(address, { procedure: 'installation.accountDisabled', body: { fleetId, accountId: ACCOUNT_ID } });
+    expect(response.status).toBe(401);
+  });
+
+  it('acknowledges a retry of authenticated account disabling', async () => {
+    await pageCall('people.inbox');
+    expect((await disableAccount()).status).toBe(200);
+    const retried = await mutate(address, { procedure: 'installation.accountDisabled', installationToken: WAKE_INSTALLATION_TOKEN, body: { fleetId, accountId: ACCOUNT_ID } });
+    expect(retried.status).toBe(200);
+  });
+
+  it('refuses basket sending after account disabling despite a retained person crew', async () => {
+    await pageCall('people.inbox');
+    await disableAccount();
+    expect((await pageCall('people.sendBasket', {})).status).toBe(401);
+  });
+
+  it('preserves opened work after account disabling and recovery', async () => {
+    await askMaya();
+    const deliveryId = await openQuestion();
+    await disableAccount();
+    service.sharedSignIn(SHARED_SESSION, claims());
+    const restored = inboxSchema.parse(await (await pageCall('people.inbox')).json()).result.data;
+    expect(restored).toMatchObject({ waiting: 0, opened: [{ deliveryId }] });
+  });
+
+  it('preserves a draft basket answer after account disabling and recovery', async () => {
+    await askMaya();
+    const deliveryId = await openQuestion();
+    expect((await pageCall('people.putInBasket', { deliveryId, option: 2, optionLabel: 'Wait', note: 'Keep this draft' })).status).toBe(200);
+    await disableAccount();
+    service.sharedSignIn(SHARED_SESSION, claims());
+    expect(basketSchema.parse(await (await pageCall('people.basket')).json()).result.data.entries).toMatchObject([{ questionId: QUESTION_ID, standing: { kind: 'waiting' } }]);
+  });
+
+  async function releasedSlack() {
+    const messageId = idSchema('message').parse(await askMaya());
+    const deliveryId = idSchema('delivery').parse(await openQuestion());
+    const crew = await prisma.personCrew.findFirstOrThrow({ where: { fleetId, shipId: personShipId } });
+    const released = await fetch(`${fleet.url}/trpc/fleet.release`, { method: 'POST', headers: { 'content-type': 'application/json', origin: fleet.url, cookie: fleetCookie }, body: JSON.stringify({ shipId: personShipId }) });
+    expect(released.status, await released.clone().text()).toBe(200);
+    const now = new Date();
+    const apps = memorySlackApps();
+    const links = memorySlackLinks();
+    const posts = memorySlackPosts();
+    const slack = fakeSlackMessages();
+    await apps.save(aSlackApp({ fleetId, appId: 'A01', shipId: researcherShipId, bot: { token: 'slack-bot', userId: 'U01' } }));
+    await links.add(aSlackLink({ fleetId, accountId: ACCOUNT_ID, personShipId }));
+    await posts.save({ fleetId, personShipId, messageId, deliveryId, senderShipId: researcherShipId, appId: 'A01', channel: 'D0MATHILDE', ts: '1730020000.000001', threadTs: null });
+    const crews = { find: () => Promise.resolve({ ...crew, fleetId, shipId: personShipId }) };
+    return { apps, links, posts, slack, crews, messageId, deliveryId, clock: { now: () => now }, door: createRestFleetDoor(fleet.url) };
+  }
+
+  it('stops Slack button access after person-crew release without a gateway disable notification', async () => {
+    const setup = await releasedSlack();
+    const outcomes = memoryItemOutcomes();
+    const see = createSeeInSlack({ ...setup, door: setup.door.person, outcomes, opened: memoryOpenedDeliveries(), changes: memoryInboxChanges(), slack: setup.slack.messages, signatures: { isSigned: () => true } });
+    await see({ appId: 'A01', teamId: 'T0ACME', userId: 'U0MATHILDE', channel: 'D0MATHILDE', messageTs: '1730020000.000001', messageId: setup.messageId, body: 'press', timestamp: String(setup.clock.now().getTime() / 1000), signature: 'signed' });
+    expect(outcomes.held).toEqual([]);
+    expect((await setup.links.ofAccount(fleetId, ACCOUNT_ID))?.stoppedAt).toEqual(setup.clock.now());
+  });
+
+  it('ends queued Slack message retries after person-crew release without a gateway disable notification', async () => {
+    const setup = await releasedSlack();
+    const events = memorySlackEvents();
+    await events.keep(aKeptSlackEvent({ fleetId, appId: 'A01', personShipId, shipId: researcherShipId, receivedAt: setup.clock.now() }));
+    const round = createSendSlackEvents({ ...setup, events, sender: setup.door, door: setup.door.person, slack: setup.slack.messages });
+    await round();
+    expect((await setup.links.ofAccount(fleetId, ACCOUNT_ID))?.stoppedAt).toEqual(setup.clock.now());
+    expect(events.held[0]?.takenAt).toEqual(setup.clock.now());
+    expect(await setup.door.person.inbox(researcher)).toEqual({ isOk: true, value: { waiting: 0 } });
+  });
+
+  it('refuses human access after token expiry and allowance without notification or renewal despite a retained person crew', async () => {
+    expect((await pageCall('people.inbox')).status).toBe(200);
+    service.setAvailable(false);
+    gatewayNow = new Date(Date.now() + 630_001);
+
+    expect((await pageCall('people.inbox')).status).toBe(401);
+    expect((await pageCall('people.sendBasket', {})).status).toBe(401);
+    expect(await prisma.personCrew.count({ where: { fleetId, shipId: personShipId } })).toBe(1);
   });
 
   it('keeps an unconfirmed answer visibly unsent and retries the same send key after restarting, storing only one answer in core', async () => {

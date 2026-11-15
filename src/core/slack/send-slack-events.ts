@@ -2,7 +2,7 @@ import type { CallSender } from '../mcp-in/ports.js';
 import type { PersonCrews, PersonShipDoor } from '../people/ports.js';
 import type { Clock } from '../shared/clock.js';
 import { TAKEN_KEPT_MS, UNTAKEN_KEPT_MS, type KeptSlackEvent } from './kept-slack-event.js';
-import type { SlackApps, SlackEvents, SlackMessages, SlackPosts } from './ports.js';
+import type { SlackApps, SlackEvents, SlackLinks, SlackMessages, SlackPosts } from './ports.js';
 import { isAwaitingSlackIn } from './slack-post.js';
 
 /** How many kept events a round sends at most. */
@@ -14,7 +14,7 @@ export const STORED_REACTION = 'white_check_mark';
 /** The fleet's codes for a send it did not answer, or could not start: nothing was stored, so the same send goes again. */
 const NOT_ANSWERED = new Set(['UNAVAILABLE', 'SERVICE_UNAVAILABLE', 'INTERNAL_SERVER_ERROR', 'TIMEOUT']);
 
-/** The fleet's codes for a crew token that no longer works: the person ship is crewed again at their next visit, and the send goes then. */
+/** A released person crew ends Slack access, even when the gateway disable notification was lost. */
 const ENDED_CREW = new Set(['LEASE_ENDED', 'UNAUTHORIZED']);
 
 export const NOT_REACHED_TEXT = 'This message did not reach the fleet; send it again';
@@ -49,6 +49,7 @@ function refusalText(ship: string, refusal: { code: string; message: string }): 
  */
 export function createSendSlackEvents(deps: {
   events: SlackEvents;
+  links: Pick<SlackLinks, 'ofPersonShip' | 'stop'>;
   apps: Pick<SlackApps, 'findByAppId'>;
   crews: Pick<PersonCrews, 'find'>;
   sender: Pick<CallSender, 'send'>;
@@ -73,6 +74,10 @@ export function createSendSlackEvents(deps: {
   };
 
   const send = async (kept: KeptSlackEvent): Promise<'taken' | 'later'> => {
+    const link = await deps.links.ofPersonShip(kept.fleetId, kept.personShipId);
+    if (link?.stoppedAt !== null) {
+      return 'taken';
+    }
     const app = await deps.apps.findByAppId(kept.appId);
     const crew = await deps.crews.find(kept.fleetId, kept.personShipId);
     if (app === undefined || app.bot === null || crew === undefined) {
@@ -103,7 +108,11 @@ export function createSendSlackEvents(deps: {
       const reacted = await deps.slack.react(app.bot.token, { channel, ts, name: STORED_REACTION });
       return reacted.isOk ? 'taken' : 'later';
     }
-    if (NOT_ANSWERED.has(sent.error.code) || ENDED_CREW.has(sent.error.code)) {
+    if (ENDED_CREW.has(sent.error.code)) {
+      await deps.links.stop(kept.fleetId, { accountId: link.accountId, at: deps.clock.now() });
+      return 'taken';
+    }
+    if (NOT_ANSWERED.has(sent.error.code)) {
       return 'later';
     }
     // A refusal is dropped only once the person was told it.

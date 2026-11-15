@@ -73,6 +73,7 @@ beforeEach(async () => {
 function sendRound(now = NOW) {
   return createSendSlackEvents({
     events,
+    links,
     apps,
     crews: { find: (_fleetId, shipId) => Promise.resolve(crews.get(shipId)) },
     sender: fleet.sender,
@@ -84,6 +85,20 @@ function sendRound(now = NOW) {
 }
 
 describe("a linked person's message from Slack into the fleet", () => {
+  it.each(['LEASE_ENDED', 'UNAUTHORIZED'])('stops the Slack link when core refuses the crew with %s', async (code) => {
+    fleet.state.refusal = { code, message: 'The person crew ended' };
+    await sendRound();
+    expect(links.held[0]?.stoppedAt).toEqual(NOW);
+  });
+
+  it('does not retry a queued message after core ends its person crew', async () => {
+    fleet.state.refusal = { code: 'LEASE_ENDED', message: 'The person crew ended' };
+    await sendRound();
+    fleet.state.refusal = undefined;
+    await sendRound(new Date('2026-10-27T09:00:05.000Z'));
+    expect([...fleet.state.messages.values()]).toEqual([]);
+  });
+
   it('is sent as the person ship to the bot\'s ship, as Markdown, keyed by the event id, and its Slack message reacted to', async () => {
     await sendRound();
 

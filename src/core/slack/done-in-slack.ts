@@ -27,7 +27,7 @@ export type DoneInSlack = (press: SlackPress) => Promise<Result<{ kind: 'done' |
  */
 export function createDoneInSlack(deps: {
   apps: Pick<SlackApps, 'findByAppId'>;
-  links: Pick<SlackLinks, 'find'>;
+  links: Pick<SlackLinks, 'find' | 'stop'>;
   posts: Pick<SlackPosts, 'ofMessage'>;
   crews: Pick<PersonCrews, 'find'>;
   door: Pick<PersonShipDoor, 'ack' | 'delivery' | 'reply' | 'handled'>;
@@ -56,7 +56,6 @@ export function createDoneInSlack(deps: {
       return ok({ kind: 'doneElsewhere' });
     }
     // Core reads a delivery again only once acknowledged: the read names the step.
-    await deps.door.ack(crew.crewToken, deliveryId);
     const delivery = await deps.door.delivery(crew.crewToken, deliveryId);
     if (!delivery.isOk && delivery.error.code === KEY_UNAVAILABLE) {
       await inThread(SEALED_MESSAGE);

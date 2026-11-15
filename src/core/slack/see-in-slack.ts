@@ -21,7 +21,7 @@ export type SeeInSlack = (press: SlackPress) => Promise<Result<{ kind: 'seen' | 
  */
 export function createSeeInSlack(deps: {
   apps: Pick<SlackApps, 'findByAppId'>;
-  links: Pick<SlackLinks, 'find'>;
+  links: Pick<SlackLinks, 'find' | 'stop'>;
   posts: Pick<SlackPosts, 'ofMessage'>;
   crews: Pick<PersonCrews, 'find'>;
   door: Pick<PersonShipDoor, 'ack' | 'delivery' | 'handled'>;
@@ -42,8 +42,7 @@ export function createSeeInSlack(deps: {
     }
     const { app, post, crew } = pressed.value;
     const { fleetId, personShipId: shipId, deliveryId } = post;
-    // Core reads a delivery again only once acknowledged: the read names its job.
-    await deps.door.ack(crew.crewToken, deliveryId);
+    // The press acknowledged the delivery: the read names its job.
     const delivery = await deps.door.delivery(crew.crewToken, deliveryId);
     if (!delivery.isOk) {
       if (delivery.error.code === KEY_UNAVAILABLE) {
