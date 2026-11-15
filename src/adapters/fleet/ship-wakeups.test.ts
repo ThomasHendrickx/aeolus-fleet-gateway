@@ -158,3 +158,49 @@ it('routes a local claim to only its held lease without opening another stream',
   stop.abort();
   await next;
 });
+
+it('uses the full random one to five second reconnect spread', async () => {
+  vi.useFakeTimers();
+  let opens = 0;
+  const open = createShipWakeups({ fleetUrl: 'https://fleet.test', random: () => 1, fetch: () => { opens += 1; return Promise.resolve(new Response(null, { status: 503 })); } });
+  const stop = new AbortController();
+  open('crew', stop.signal);
+  await flush();
+  await vi.advanceTimersByTimeAsync(4_999);
+  expect(opens).toBe(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(opens).toBe(2);
+  stop.abort();
+});
+
+it('ignores an unrelated end event and never consumes a delivery from the stream', async () => {
+  const test = setup();
+  test.streams[0]?.write('event: end\ndata: {"code":"NOT_LEASE_ENDED"}\n\nevent: message\ndata: {"delivery":"not a hint"}\n\n');
+  await flush();
+  expect(test.hints.isEnded()).toBe(false);
+  let isReady = false;
+  const next = test.hints.wait().then((isLook) => { isReady = isLook; });
+  await flush();
+  expect(isReady).toBe(false);
+  test.streams[0]?.write(WAKE);
+  await flush();
+  await next;
+  expect(isReady).toBe(true);
+  test.stop.abort();
+});
+
+it('a late stream opening after shutdown is cancelled without looking or reopening', async () => {
+  vi.useFakeTimers();
+  const response = Promise.withResolvers<Response>();
+  const body = stream();
+  let opens = 0;
+  const open = createShipWakeups({ fleetUrl: 'https://fleet.test', fetch: () => { opens += 1; return response.promise; } });
+  const stop = new AbortController();
+  const hints = open('crew', stop.signal);
+  stop.abort();
+  response.resolve(body.response);
+  await flush();
+  expect(await hints.wait()).toBe(false);
+  await vi.advanceTimersByTimeAsync(600_000);
+  expect(opens).toBe(1);
+});
