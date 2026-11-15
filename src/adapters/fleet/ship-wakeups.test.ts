@@ -13,12 +13,12 @@ function setup(responses: (Response | Error)[] = []) {
   const requests: RequestInit[] = [];
   const urls: string[] = [];
   const streams = [stream(), stream()];
-  const open = createShipWakeups({ fleetUrl: 'https://fleet.test', random: () => 0, fetch: async (url, init) => {
-    urls.push(String(url));
+  const open = createShipWakeups({ fleetUrl: 'https://fleet.test', random: () => 0, fetch: (url, init) => {
+    urls.push(typeof url === 'string' ? url : url instanceof URL ? url.href : url.url);
     requests.push(init ?? {});
     const response = responses.shift() ?? streams[requests.length - 1]?.response;
-    if (response instanceof Error) { throw response; }
-    return response ?? new Response(null, { status: 503 });
+    if (response instanceof Error) { return Promise.reject(response); }
+    return Promise.resolve(response ?? new Response(null, { status: 503 }));
   } });
   const stop = new AbortController();
   const hints = open('test-crew', stop.signal);
@@ -48,7 +48,7 @@ describe('lease wake streams', () => {
     await flush();
     expect(await test.hints.wait()).toBe(true);
     let isAnother = false;
-    const next = test.hints.wait().then((look) => { isAnother = look; });
+    const next = test.hints.wait().then((isLook) => { isAnother = isLook; });
     await flush();
     expect(isAnother).toBe(false);
     test.stop.abort();
@@ -101,7 +101,7 @@ describe('lease wake streams', () => {
   it('looks after five minutes without a wake while comments keep the stream open', async () => {
     const test = setup();
     let isReady = false;
-    const next = test.hints.wait().then((value) => { isReady = value; });
+    const next = test.hints.wait().then((isLook) => { isReady = isLook; });
     for (let count = 0; count < 11; count += 1) {
       await vi.advanceTimersByTimeAsync(25_000);
       test.streams[0]?.write(': keepalive\n\n');
@@ -136,7 +136,7 @@ describe('lease wake streams', () => {
   it('does not open for an already stopped lease', async () => {
     const test = setup();
     test.stop.abort();
-    const open = createShipWakeups({ fleetUrl: 'https://fleet.test', fetch: async () => { throw new Error('must not fetch'); } });
+    const open = createShipWakeups({ fleetUrl: 'https://fleet.test', fetch: () => Promise.reject(new Error('must not fetch')) });
     expect(await open('stopped', test.stop.signal).wait()).toBe(false);
   });
 });
