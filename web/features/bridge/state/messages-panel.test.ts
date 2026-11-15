@@ -4,7 +4,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { BridgeHome } from '../services/items';
+import { HomeHeading } from './home-heading';
 import { MessagesPanel } from './messages-panel';
+import { SendMessageProvider } from './send-message';
 
 // The Messages page (#242, design/bridge-messages): every plain message,
 // newest on top, Done and Open on each, and the seen ones marked done in one go.
@@ -20,6 +22,16 @@ function aMessage(index: number, state: 'new' | 'seen'): BridgeHome['messages'][
 
 function pageOf(messages: BridgeHome['messages']): string {
   return renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: ROUTER }, createElement(MessagesPanel, { fleetId: 'flt_01', messages, now: NOW })));
+}
+
+/** The page under Bridge's shell, which offers every page the form to send a ship a message. */
+function pageInShellOf(messages: BridgeHome['messages']): string {
+  return renderToStaticMarkup(createElement(SendMessageProvider, { fleetId: 'flt_01', children: createElement(AppRouterContext.Provider, { value: ROUTER }, createElement(MessagesPanel, { fleetId: 'flt_01', messages, now: NOW })) }));
+}
+
+/** Where a page shows Send a ship a message: the button and the part that holds it. */
+function sendMessageOf(markup: string): string | undefined {
+  return /<span[^>]*><button[^>]*data-testid="bridge-send-message".*?<\/button><\/span>/.exec(markup)?.[0];
 }
 
 const TWENTY = Array.from({ length: 20 }, (_, index) => aMessage(index + 1, index < 8 ? 'new' : 'seen'));
@@ -59,5 +71,21 @@ describe('the Messages page, as drawn (#242 review)', () => {
 
   it('keeps the sentence under its heading to a desktop', () => {
     expect(/<p class="[^"]*max-sm:hidden[^"]*">8 new, 12 seen/.test(pageOf(TWENTY))).toBe(true);
+  });
+});
+
+describe('the Messages page, sending a ship a message as home does (#284)', () => {
+  it('offers Send a ship a message in its heading row', () => {
+    expect(/data-testid="bridge-messages-head".*<button[^>]*aria-label="Send a ship a message"/.test(pageInShellOf(TWENTY))).toBe(true);
+  });
+
+  it('offers it while no message waits too', () => {
+    expect(pageInShellOf([]).includes('data-testid="bridge-send-message"')).toBe(true);
+  });
+
+  it("shows the same button as home's Waiting on you, kept off the phone as home keeps it", () => {
+    const home = renderToStaticMarkup(createElement(SendMessageProvider, { fleetId: 'flt_01', children: createElement(HomeHeading, { waiting: { count: 0, items: [] } }) }));
+
+    expect({ messages: sendMessageOf(pageInShellOf(TWENTY)), isOffThePhone: sendMessageOf(home)?.startsWith('<span class="max-sm:hidden">') }).toEqual({ messages: sendMessageOf(home), isOffThePhone: true });
   });
 });
