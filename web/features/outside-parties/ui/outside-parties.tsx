@@ -1,3 +1,5 @@
+import { InlineError, EmptyState } from '@aeolus-fleet/ui';
+
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { BUTTONS, COMPACT_CARD, SMALL_BUTTON } from '../../forms/ui/look';
@@ -86,9 +88,7 @@ export async function OutsideParties({ page, side }: { page: SignedInPage; side:
       {status.isOk ? (
         <SwitchCard isOn={status.value.isOn} canSwitch={scopes.includes(SWITCHING_SCOPE)} fleetId={fleetId} />
       ) : (
-        <p role="alert" className="rounded-md border border-tone-attention-border bg-tone-attention-bg px-3 py-2 text-tone-attention-fg">
-          {status.refusal}
-        </p>
+        <div><InlineError title={status.refusal} variant="section" /></div>
       )}
       <nav aria-label="Show" className="flex w-fit gap-0.5 rounded-md border border-border bg-muted p-0.75 max-sm:w-full max-sm:rounded-lg max-sm:p-1">
         {filters.map((filter) => (
@@ -103,11 +103,9 @@ export async function OutsideParties({ page, side }: { page: SignedInPage; side:
         ))}
       </nav>
       {!parties.isOk ? (
-        <p role="alert" className="text-tone-attention-fg">
-          {parties.refusal}
-        </p>
+        <div><InlineError title={parties.refusal} variant="section" /></div>
       ) : shown.length === 0 ? (
-        <p className="text-muted-foreground">No outside party yet.</p>
+        <EmptyState title="No outside party yet." variant="section" />
       ) : (
         <div className="grid gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(22rem,1fr))] sm:gap-3">
           {shown.map((party) => (

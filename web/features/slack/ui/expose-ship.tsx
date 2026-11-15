@@ -1,3 +1,5 @@
+import { InlineError } from '@aeolus-fleet/ui';
+
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { ActionForm } from '../../forms/ui/action-form';
@@ -29,9 +31,7 @@ export async function ExposeShip({ page }: { page: SignedInPage }) {
         <h2 className="text-heading font-semibold">Expose a ship as a Slack bot</h2>
         <p className="text-muted-foreground">Its bot takes its name and its statement&apos;s summary. People who linked their Slack account message it directly, or mention it in a channel it was added to.</p>
         {!offered.isOk ? (
-          <p role="alert" className="rounded-md border border-tone-attention-border bg-tone-attention-bg px-3 py-2 text-tone-attention-fg">
-            {offered.refusal}
-          </p>
+          <div><InlineError title={offered.refusal} variant="section" /></div>
         ) : offered.value.length === 0 ? (
           <p className="text-muted-foreground">No agent ship or A2A agent is left to expose.</p>
         ) : (

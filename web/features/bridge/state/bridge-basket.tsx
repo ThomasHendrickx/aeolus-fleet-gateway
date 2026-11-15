@@ -1,3 +1,5 @@
+import { LoadingSkeleton } from '@aeolus-fleet/ui';
+
 import { Suspense } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
@@ -5,7 +7,6 @@ import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-a
 import { readBasket } from '../hooks/read-bridge';
 import { BRIDGE_BASKET_PATH } from '../paths';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
-import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { PageAsLastRead } from './page-as-last-read';
 import { BasketPanel } from './basket-panel';
 
@@ -32,7 +33,7 @@ export async function BridgeBasketPage({ searchParams }: { searchParams: SearchP
   return (
     <BridgeShell api={page.api} fleetId={page.fleetId} screen="basket">
       <div className="grid gap-6">
-        <Suspense fallback={<BridgeSkeleton />}>
+        <Suspense fallback={<LoadingSkeleton variant="list" label="Loading Bridge" />}>
           <BasketParts api={page.api} fleetId={page.fleetId} />
         </Suspense>
       </div>

@@ -1,7 +1,10 @@
 'use client';
 
+import { useId, useState, useTransition } from 'react';
+
+import { Label } from '@aeolus-fleet/ui';
+
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
 
 import { ActionButton } from '../../bridge/ui/action-button';
 import { Notice } from '../../bridge/ui/notice';
@@ -23,6 +26,7 @@ const MIC_CONTROLS: Record<OwnMicChange, { label: string; pending: string }> = {
  * itself again after each call.
  */
 export function MeetingControls({ fleetId, meetingId, controls }: { fleetId: string; meetingId: string; controls: readonly MeetingControl[] }) {
+  const fieldId = useId();
   const router = useRouter();
   const [text, setText] = useState('');
   const [draftKey, setDraftKey] = useState(() => crypto.randomUUID());
@@ -51,16 +55,16 @@ export function MeetingControls({ fleetId, meetingId, controls }: { fleetId: str
     <div className="grid gap-3">
       {controls.includes('contribute') ? (
         <div className="grid gap-2">
-          <label className="grid gap-1">
+          <Label htmlFor={fieldId + '-0'} className="grid gap-1">
             <span>Your contribution</span>
-            <textarea
+            <textarea id={fieldId + '-0'}
               data-testid="meeting-text"
               rows={4}
               value={text}
               onChange={(event) => { setText(event.target.value); }}
               className="rounded-md border border-input bg-background p-2"
             />
-          </label>
+          </Label>
           <ActionButton
             data-testid="meeting-contribute"
             variant="primary"

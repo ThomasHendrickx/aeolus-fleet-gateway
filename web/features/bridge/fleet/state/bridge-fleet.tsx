@@ -1,9 +1,10 @@
+import { LoadingSkeleton } from '@aeolus-fleet/ui';
+
 import { Suspense } from 'react';
 
 import type { GatewayApi } from '../../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../../lib/gateway-api/page-api';
 import { BridgeNoSignIn, BridgeShell } from '../../state/bridge-shell';
-import { BridgeSkeleton } from '../../ui/bridge-skeleton';
 import { readConsoleUrl } from '../../hooks/read-console-url';
 import { readYourFleet } from '../hooks/read-your-fleet';
 import { BRIDGE_FLEET_PATH } from '../paths';
@@ -22,7 +23,7 @@ export async function BridgeFleetPage({ searchParams }: { searchParams: SearchPa
   }
   return (
     <BridgeShell api={page.api} fleetId={page.fleetId} screen="fleet">
-      <Suspense fallback={<BridgeSkeleton />}>
+      <Suspense fallback={<LoadingSkeleton variant="list" label="Loading Bridge" />}>
         <FleetParts api={page.api} fleetId={page.fleetId} />
       </Suspense>
     </BridgeShell>

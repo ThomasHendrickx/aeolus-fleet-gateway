@@ -1,7 +1,7 @@
 'use client';
 
-import { BridgeFailed } from '../../../features/bridge/ui/bridge-failed';
+import { InlineError } from '@aeolus-fleet/ui';
 
 export default function BridgeError({ error, reset }: { error: Error; reset: () => void }) {
-  return <BridgeFailed message={error.message} onTryAgain={reset} />;
+  return <InlineError title="Bridge could not be read" description={`${error.message || "The gateway did not answer."} Try again in a moment.`} onRetry={reset} variant="page" />;
 }

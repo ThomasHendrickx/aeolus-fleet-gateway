@@ -23,6 +23,11 @@ const ROUTING: RoutingView = {
 
 const WAITING = { decide: 2, do: 1, 'stay-aware': 0, 'everything-else': undefined };
 
+/** The opening tag of the element with this test id, its attributes in any order. */
+function tagOf(markup: string, testId: string): string {
+  return new RegExp(`<[^>]*data-testid="${testId}"[^>]*>`).exec(markup)?.[0] ?? '';
+}
+
 function render(isSlackLinked = true): string {
   return renderToStaticMarkup(createElement(RoutingPanel, { fleetId: 'flt_01', routing: ROUTING, isSlackLinked, waitingByJob: WAITING }));
 }
@@ -43,9 +48,18 @@ describe("Bridge's routing page", () => {
     const markup = render();
 
     expect({
-      locked: (markup.match(/role="switch"[^>]*aria-checked="true"[^>]*disabled=""[^>]*data-testid="bridge-routing-[a-z-]+-bridge"/g) ?? []).length,
+      locked: ['decide', 'do', 'stay-aware', 'everything-else'].filter((job) => {
+        const tag = tagOf(markup, `bridge-routing-${job}-bridge`);
+        return ['role="switch"', 'aria-checked="true"', 'aria-disabled="true"'].every((attribute) => tag.includes(attribute));
+      }).length,
       always: (markup.match(/data-testid="bridge-routing-job"/g) ?? []).length <= (markup.match(/>Always</g) ?? []).length,
     }).toEqual({ locked: 4, always: true });
+  });
+
+  it("turns each place with the fleet's shared switch", () => {
+    const markup = render();
+
+    expect(['bridge-routing-decide-bridge', 'bridge-routing-decide-slack', 'bridge-routing-do-email'].map((testId) => tagOf(markup, testId).includes('data-slot="switch"'))).toEqual([true, true, true]);
   });
 
   it("says Bots only beside Slack's switch for everything else while it is off", () => {

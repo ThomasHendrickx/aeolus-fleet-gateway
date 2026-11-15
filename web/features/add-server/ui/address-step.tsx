@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
+
+import { Input, Label } from '@aeolus-fleet/ui';
 
 import { FLEET_FIELD } from '../../forms/form-state';
 import { addedCredentialKindOf, SIGN_IN_CREDENTIAL } from '../../forms/server-credential';
@@ -17,6 +19,7 @@ import { Steps } from './steps';
  * to its owner with Next, unchecked; any other is checked first.
  */
 export function AddressStep({ state, action, fleetId, redirectUri }: { state: { fields: Readonly<Record<string, string>>; refusal?: string | undefined }; action: (form: FormData) => void; fleetId: string; redirectUri?: string | undefined }) {
+  const fieldId = useId();
   const [kind, setKind] = useState(addedCredentialKindOf(state.fields.credentialKind ?? ''));
   const isSignIn = kind === SIGN_IN_CREDENTIAL.kind;
   return (
@@ -25,10 +28,10 @@ export function AddressStep({ state, action, fleetId, redirectUri }: { state: { 
       <form action={action} className={`${COMPACT_CARD} grid gap-3.5`} data-testid="add-server-address">
         <input type="hidden" name={FLEET_FIELD} value={fleetId} />
         <Refused refusal={state.refusal} />
-        <label className={LABEL}>
+        <Label htmlFor={fieldId + '-0'} className={LABEL}>
           <span>Streamable HTTP address</span>
-          <input className={INPUT} type="url" name="url" defaultValue={state.fields.url ?? ''} placeholder="https://mcp.example.com/mcp" required />
-        </label>
+          <Input id={fieldId + '-0'} className={INPUT} type="url" name="url" defaultValue={state.fields.url ?? ''} placeholder="https://mcp.example.com/mcp" required />
+        </Label>
         <CredentialFields legend="The server's credential" fields={state.fields} noneHelp="The gateway sends no credential: for a server reached only on a private network." canEachPersonSignIn redirectUri={redirectUri} onKindChange={setKind} />
         <div>
           <SubmitButton pending={isSignIn ? 'Next…' : 'Checking the server…'} testId="add-server-check">

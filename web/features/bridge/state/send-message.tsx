@@ -1,13 +1,12 @@
 'use client';
 
 import { Dialog } from '@base-ui/react/dialog';
-import { Toast } from '@base-ui/react/toast';
+import { showToast } from '@aeolus-fleet/ui';
 import { createContext, useContext, useRef, useState, useTransition, type ReactNode } from 'react';
 
 import { readSendTo, sendShipMessage } from '../hooks/bridge-actions';
 import { keyToSend, sendFailureOf, sentNoticeOf, type LastSend } from '../services/send-message';
 import { SendMessageForm, type SendPhase, type SendToRead } from '../ui/send-message-form';
-import { SentToasts } from '../ui/sent-toasts';
 
 /** Opens the form to send a ship a message, with the ship filled in when it opens from an alert. */
 type OpenSendMessage = (from?: { alertShip: string }) => void;
@@ -46,7 +45,6 @@ function SendMessageDialog({ fleetId, children }: { fleetId: string; children: R
   /** How many times the form opened: a send answered after the person opened it anew leaves the new form alone. */
   const openings = useRef(0);
   const [, startTransition] = useTransition();
-  const toasts = Toast.useToastManager();
 
   const open: OpenSendMessage = (from) => {
     openings.current += 1;
@@ -76,7 +74,7 @@ function SendMessageDialog({ fleetId, children }: { fleetId: string; children: R
           setDraft(undefined);
         }
         const sentAs = sendTo.kind === 'read' ? sendTo.value.sentAs : 'your person ship';
-        toasts.add({ ...sentNoticeOf({ to: sending.to, sentAs, storedAt: sent.value.storedAt }), timeout: 0 });
+        showToast({ ...sentNoticeOf({ to: sending.to, sentAs, storedAt: sent.value.storedAt }), tone: 'success' });
       } else if (!isOpenedAnew) {
         setDraft({ ...sending, phase: { kind: 'failed', failure: sendFailureOf(sent) } });
       }
@@ -122,16 +120,11 @@ function SendMessageDialog({ fleetId, children }: { fleetId: string; children: R
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
-      <SentToasts />
     </SendMessageContext>
   );
 }
 
 /** Offers the pages under it the form to send a ship a message, and the toasts it raises once a message is stored. */
 export function SendMessageProvider({ fleetId, children }: { fleetId: string; children: ReactNode }) {
-  return (
-    <Toast.Provider>
-      <SendMessageDialog fleetId={fleetId}>{children}</SendMessageDialog>
-    </Toast.Provider>
-  );
+  return <SendMessageDialog fleetId={fleetId}>{children}</SendMessageDialog>;
 }

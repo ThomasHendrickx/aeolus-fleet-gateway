@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
+
+import { Input, Label } from '@aeolus-fleet/ui';
 
 import { FLEET_FIELD } from '../../forms/form-state';
 import { BUTTONS, COMPACT_CARD, INPUT, LABEL } from '../../forms/ui/look';
@@ -24,6 +26,7 @@ const CARRIED_FIELDS = ['url', 'credentialKind', 'token', 'clientId', 'clientSec
  * show yet: Add checks its sign-in, and says a refusal in place.
  */
 export function OwnerStep({ state, refused, action, onBack, fleetId, canSwitchTools }: { state: Extract<AddServerState, { step: 'owner' }>; refused: ApproveState; action: (form: FormData) => void; onBack: () => void; fleetId: string; canSwitchTools: boolean }) {
+  const fieldId = useId();
   // A refused approval of this check shows what the browser sent, and why.
   const isRefused = refused.kind === 'refused' && refused.requestId === state.requestId;
   const fields = isRefused ? refused.fields : state.fields;
@@ -43,15 +46,15 @@ export function OwnerStep({ state, refused, action, onBack, fleetId, canSwitchTo
           <input key={field} type="hidden" name={field} value={fields[field] ?? ''} />
         ))}
         <p className="font-mono text-muted-foreground">{url}</p>
-        <label className={LABEL}>
+        <Label htmlFor={fieldId + '-0'} className={LABEL}>
           <span>Proxy ship&apos;s name</span>
-          <input className={INPUT} type="text" name="name" value={name} onChange={(event) => { setName(event.target.value); }} required />
-        </label>
+          <Input id={fieldId + '-0'} className={INPUT} type="text" name="name" value={name} onChange={(event) => { setName(event.target.value); }} required />
+        </Label>
         <OwnerField choices={state.owners} current={state.owners.find((owner) => owner.shipId === fields.ownerShipId) ?? null} help="A person ship or argo. It answers for this server." />
-        <label className={LABEL}>
+        <Label htmlFor={fieldId + '-1'} className={LABEL}>
           <span>Calls at once</span>
-          <input className={INPUT} type="number" name="concurrencyLimit" min={1} max={10} defaultValue={fields.concurrencyLimit ?? CONCURRENCY_LIMIT_DEFAULT} />
-        </label>
+          <Input id={fieldId + '-1'} className={INPUT} type="number" name="concurrencyLimit" min={1} max={10} defaultValue={fields.concurrencyLimit ?? CONCURRENCY_LIMIT_DEFAULT} />
+        </Label>
         {tools === null ? <p className="text-muted-foreground">Its tools show once someone signs in.</p> : null}
         <div className="flex gap-2">
           <SubmitButton pending={tools === null ? 'Checking the sign-in…' : 'Adding…'} testId="add-server-approve">

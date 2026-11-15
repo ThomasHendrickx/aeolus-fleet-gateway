@@ -1,33 +1,22 @@
 'use client';
 
-import { Toast } from '@base-ui/react/toast';
+import { ScopePicker, showToast } from '@aeolus-fleet/ui';
+
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { setPartyScopes } from '../../actions';
 import { agentScopesSetMessage, statedMessage } from '../table-messages';
 import { NeedsChips, type ListedScope } from './needs-chips';
-import { ScopePicker } from './scope-picker';
 import { standingRefusal, TableDialog, type DialogRefusal } from './table-dialog';
-import { TableToasts } from './table-toasts';
 
 /**
  * An outside A2A agent's one Needs line (gateway scopes 4.3): its messages
  * name no skill, so one set of scopes guards the agent as a whole, changed
  * in a dialog on the version the page read.
  */
-export function AgentNeeds(props: { fleetId: string; party: string; version: number; scopes: readonly string[]; listed: readonly ListedScope[] | null; canChange: boolean }) {
-  return (
-    <Toast.Provider>
-      <AgentNeedsLine {...props} />
-      <TableToasts />
-    </Toast.Provider>
-  );
-}
-
-function AgentNeedsLine({ fleetId, party, version, scopes, listed, canChange }: { fleetId: string; party: string; version: number; scopes: readonly string[]; listed: readonly ListedScope[] | null; canChange: boolean }) {
+export function AgentNeeds({ fleetId, party, version, scopes, listed, canChange }: { fleetId: string; party: string; version: number; scopes: readonly string[]; listed: readonly ListedScope[] | null; canChange: boolean }) {
   const router = useRouter();
-  const toasts = Toast.useToastManager();
   const [, startTransition] = useTransition();
   const [isReloading, startReload] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
@@ -55,7 +44,7 @@ function AgentNeedsLine({ fleetId, party, version, scopes, listed, canChange }: 
       setKept({ basis: scopes, scopes: picked });
       setIsOpen(false);
       setRound((previous) => previous + 1);
-      toasts.add({ title: statedMessage(agentScopesSetMessage({ party, scopes: picked }), outcome.statementRefusal) });
+      showToast({ title: statedMessage(agentScopesSetMessage({ party, scopes: picked }), outcome.statementRefusal) });
       router.refresh();
     });
   };
@@ -94,7 +83,7 @@ function AgentNeedsLine({ fleetId, party, version, scopes, listed, canChange }: 
             }}
             testId="agent-needs-dialog"
           >
-            <ScopePicker label="Scopes" listed={listed} picked={picked} onPick={setPicked} isDisabled={isSaving} testId="agent-needs-picker" />
+            <div data-testid="agent-needs-picker"><ScopePicker label="Scopes" listed={listed} picked={picked} onPick={setPicked} isDisabled={isSaving} /></div>
           </TableDialog>
         </>
       ) : null}

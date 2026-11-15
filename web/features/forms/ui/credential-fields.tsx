@@ -1,7 +1,10 @@
 'use client';
 
+import { useId, useState } from 'react';
+
+import { Input, Label } from '@aeolus-fleet/ui';
+
 import { ChevronDown } from 'lucide-react';
-import { useState } from 'react';
 
 import { ADDED_CREDENTIAL_KINDS, addedCredentialKindOf, CREDENTIAL_KINDS, credentialKindOf, SIGN_IN_CREDENTIAL, type AddedCredentialKind } from '../server-credential';
 import { SignInClientFields } from './sign-in-client-fields';
@@ -14,6 +17,7 @@ import { INPUT, LABEL, SELECT } from './look';
  * signing in, which takes no field (decision 0067).
  */
 export function CredentialFields({ legend, fields, noneHelp, canEachPersonSignIn = false, redirectUri, onKindChange }: { legend: string; fields: Readonly<Record<string, string>>; noneHelp: string; canEachPersonSignIn?: boolean; redirectUri?: string | undefined; onKindChange?: (kind: AddedCredentialKind) => void }) {
+  const fieldId = useId();
   const kindOf = canEachPersonSignIn ? addedCredentialKindOf : credentialKindOf;
   const [credentialKind, setCredentialKind] = useState<AddedCredentialKind>(kindOf(fields.credentialKind ?? ''));
   return (
@@ -31,28 +35,28 @@ export function CredentialFields({ legend, fields, noneHelp, canEachPersonSignIn
       </span>
       {credentialKind === 'clientCredentials' ? (
         <>
-          <label className={LABEL}>
+          <Label htmlFor={fieldId + '-0'} className={LABEL}>
             <span>Client id</span>
-            <input className={INPUT} type="text" name="clientId" defaultValue={fields.clientId ?? ''} />
-          </label>
-          <label className={LABEL}>
+            <Input id={fieldId + '-0'} className={INPUT} type="text" name="clientId" defaultValue={fields.clientId ?? ''} />
+          </Label>
+          <Label htmlFor={fieldId + '-1'} className={LABEL}>
             <span>Client secret</span>
-            <input className={INPUT} type="password" name="clientSecret" />
-          </label>
-          <label className={LABEL}>
+            <Input id={fieldId + '-1'} className={INPUT} type="password" name="clientSecret" />
+          </Label>
+          <Label htmlFor={fieldId + '-2'} className={LABEL}>
             <span>Issuer</span>
-            <input className={INPUT} type="url" name="issuer" defaultValue={fields.issuer ?? ''} />
-          </label>
-          <label className={LABEL}>
+            <Input id={fieldId + '-2'} className={INPUT} type="url" name="issuer" defaultValue={fields.issuer ?? ''} />
+          </Label>
+          <Label htmlFor={fieldId + '-3'} className={LABEL}>
             <span>Scope</span>
-            <input className={INPUT} type="text" name="scope" defaultValue={fields.scope ?? ''} />
-          </label>
+            <Input id={fieldId + '-3'} className={INPUT} type="text" name="scope" defaultValue={fields.scope ?? ''} />
+          </Label>
         </>
       ) : credentialKind === 'bearer' ? (
-        <label className={LABEL}>
+        <Label htmlFor={fieldId + '-4'} className={LABEL}>
           <span>Bearer token</span>
-          <input className={INPUT} type="password" name="token" />
-        </label>
+          <Input id={fieldId + '-4'} className={INPUT} type="password" name="token" />
+        </Label>
       ) : credentialKind === SIGN_IN_CREDENTIAL.kind ? (
         <>
           <p className="text-muted-foreground">Each person signs in for themselves. A ship calls under its owner&apos;s sign-in.</p>

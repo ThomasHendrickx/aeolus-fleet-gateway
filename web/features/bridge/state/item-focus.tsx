@@ -1,6 +1,6 @@
 'use client';
 
-import { Toast } from '@base-ui/react/toast';
+import { showToast } from '@aeolus-fleet/ui';
 import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 
 import { replaceAddress } from '../../../../bridge/item-address/hooks/replace-address';
@@ -13,7 +13,7 @@ import { addressWithItem, itemOfAddress, type KnownItem } from '../services/item
 import { openedScreenOf } from '../services/shell';
 import type { HomeItem } from '../services/items';
 import type { RoutedPlace } from '../services/routing';
-import { BasketToasts, putToastOf } from '../ui/basket-toast';
+import { putToastOf } from '../services/basket-toast';
 import { DeliveryCard, type DeliveryControl, type InBasket, type Opened, type StepFinished } from '../ui/delivery-card';
 import { ItemSplit } from '../ui/item-split';
 import { Notice } from '../ui/notice';
@@ -61,17 +61,7 @@ export interface ItemOpening {
  * any ship one (aeolus-fleet #1547). The open item shows beside its list on
  * a desktop, and on its own screen on a phone (aeolus-fleet#1538).
  */
-export function ItemFocus({ fleetId, decidePlaces, consoleUrl, known, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; /** The fleet's console, where an opened alert's ship shows its Health. */ consoleUrl?: string; /** The items the page lists, where the address finds the one to open again. */ known: readonly KnownItem[]; children: (opening: ItemOpening) => ReactNode }) {
-  return (
-    <Toast.Provider>
-      <FocusedItems fleetId={fleetId} decidePlaces={decidePlaces} consoleUrl={consoleUrl} known={known}>{children}</FocusedItems>
-      <BasketToasts />
-    </Toast.Provider>
-  );
-}
-
-function FocusedItems({ fleetId, decidePlaces, consoleUrl, known, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; consoleUrl?: string; known: readonly KnownItem[]; children: (opening: ItemOpening) => ReactNode }) {
-  const toasts = Toast.useToastManager();
+export function ItemFocus({ fleetId, decidePlaces, consoleUrl, known, children }: { fleetId: string; decidePlaces?: readonly RoutedPlace[]; consoleUrl?: string; known: readonly KnownItem[]; children: (opening: ItemOpening) => ReactNode }) {
   const sendMessage = useSendMessage();
   const [focus, setFocus] = useState<{ delivery: FocusedDelivery; opened: Opened; inBasket: InBasket | null; finished: StepFinished | null } | undefined>();
   const [note, setNote] = useState('');
@@ -197,7 +187,7 @@ function FocusedItems({ fleetId, decidePlaces, consoleUrl, known, children }: { 
         }
         onPut={(option) => { settle({ control: option === null ? { kind: 'note' } : { kind: 'option', option }, action: () => putInBasket({ fleet: fleetId, deliveryId: delivery.deliveryId, option, optionLabel: delivery.question?.options.find(({ key }) => key === option)?.label ?? null, note }), onSettled: (put) => {
               setFocus({ delivery, opened, finished, inBasket: put });
-              toasts.add(putToastOf(put.option));
+              showToast(putToastOf(put.option));
             } }); }}
         onSend={(option) => { settle({ control: { kind: 'send' }, action: () => answerDelivery({ fleet: fleetId, deliveryId: delivery.deliveryId, input: { questionId, option: option ?? undefined, note } }), onSettled: leave(`Your answer went to ${delivery.from}.`) }); }}
         onRemove={() => {

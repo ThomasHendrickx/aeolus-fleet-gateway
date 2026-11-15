@@ -547,7 +547,7 @@ describe('an opened plain message (#242 review)', () => {
   it('says under its answer field that it is optional and goes to the sender as the person, the field at a reading width', () => {
     const markup = render(MESSAGE, { opened: { job: 'everything-else', isAlert: false, wasNew: true } });
 
-    expect({ hint: markup.includes('Optional. Sent to orchestrator-1 as you.'), width: /<label class="[^"]*max-w-\[620px\]/.test(markup) }).toEqual({ hint: true, width: true });
+    expect({ hint: markup.includes('Optional. Sent to orchestrator-1 as you.'), width: /<label[^>]*class="[^"]*max-w-\[620px\]/.test(markup) }).toEqual({ hint: true, width: true });
   });
 
   it('draws a check before Done', () => {

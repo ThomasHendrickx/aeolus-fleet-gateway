@@ -1,5 +1,7 @@
+import { useId, useState, type ReactNode } from 'react';
+import { Label } from '@aeolus-fleet/ui';
+
 import { Check, ChevronLeft, CircleCheck, CircleX, ExternalLink, Eye, Info, Send, ShoppingBasket } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
 
 import type { Question } from '@aeolus-fleet/common';
 
@@ -105,12 +107,13 @@ function InfoLine({ children }: { children: ReactNode }) {
 
 /** The options of a question, one to choose, the asker's pick marked, and No option, only the note, for a note alone; none to choose once it is stale. */
 function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Question; chosen: number | null | undefined; isStale: boolean; onChoose: (option: number | null) => void }) {
+  const fieldId = useId();
   return (
     <fieldset className={`grid gap-2 ${isStale ? 'opacity-60' : ''}`} disabled={isStale}>
       <legend className="sr-only">Options</legend>
       {question.options.map((option) => (
-        <label key={option.key} className={`flex items-start gap-3 rounded-md border p-3 ${option.key === chosen && !isStale ? 'border-ring bg-accent' : 'border-border'}`}>
-          <input type="radio" name="option" value={option.key} checked={option.key === chosen && !isStale} onChange={() => { onChoose(option.key); }} className="mt-1" />
+        <Label htmlFor={fieldId + '-0' + "-" + String(option.key)} key={option.key} className={`flex items-start gap-3 rounded-md border p-3 ${option.key === chosen && !isStale ? 'border-ring bg-accent' : 'border-border'}`}>
+          <input id={fieldId + '-0' + "-" + String(option.key)} type="radio" name="option" value={option.key} checked={option.key === chosen && !isStale} onChange={() => { onChoose(option.key); }} className="mt-1" />
           <span className="grid flex-1 gap-0.5">
             <span className="font-medium">
               {option.key}. {option.label}
@@ -118,15 +121,15 @@ function QuestionOptions({ question, chosen, isStale, onChoose }: { question: Qu
             {option.detail === '' ? null : <span className="text-caption text-muted-foreground max-md:hidden">{option.detail}</span>}
           </span>
           {option.key === question.pick.option ? <span className="rounded-sm border border-border px-1.5 text-caption">Their pick</span> : null}
-        </label>
+        </Label>
       ))}
-      <label className={`flex items-start gap-3 rounded-md border p-3 ${chosen === null && !isStale ? 'border-ring bg-accent' : 'border-border'}`}>
-        <input type="radio" name="option" value="" checked={chosen === null && !isStale} onChange={() => { onChoose(null); }} className="mt-1" />
+      <Label htmlFor={fieldId + '-1'} className={`flex items-start gap-3 rounded-md border p-3 ${chosen === null && !isStale ? 'border-ring bg-accent' : 'border-border'}`}>
+        <input id={fieldId + '-1'} type="radio" name="option" value="" checked={chosen === null && !isStale} onChange={() => { onChoose(null); }} className="mt-1" />
         <span className="grid flex-1 gap-0.5">
           <span className="font-medium">No option, only the note</span>
           <span className="text-caption text-muted-foreground max-md:hidden">Answer with your note alone.</span>
         </span>
-      </label>
+      </Label>
     </fieldset>
   );
 }
@@ -201,12 +204,13 @@ function StepOutcomeNotice({ from, finished, timeZone }: { from: string; finishe
 
 /** A step's note field, shown before Done or Cannot is pressed, and the two: the outcome goes to the asker at once, with the note (CC14, CC23). */
 function StepControls({ from, note, working, failure, onNoteChange, onFinish }: { from: string; note: string; working: DeliveryControl | undefined; failure: string | undefined; onNoteChange: (note: string) => void; onFinish: (outcome: StepOutcome) => void }) {
+  const fieldId = useId();
   const isWorking = working !== undefined;
   return (
     <>
-      <label className="grid max-w-2xl gap-1">
+      <Label htmlFor={fieldId + '-2'} className="grid max-w-2xl gap-1">
         <span>Note (optional)</span>
-        <textarea
+        <textarea id={fieldId + '-2'}
           data-testid="bridge-note"
           rows={2}
           value={note}
@@ -215,7 +219,7 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
           className="field-sizing-content min-h-16 rounded-md border border-input bg-background p-2"
         />
         <span className="text-caption text-muted-foreground">Sent with Done or Cannot, whichever you press.</span>
-      </label>
+      </Label>
       {failure === undefined ? null : <Notice message={failure} isFailure />}
       <div className="flex flex-wrap gap-2">
         <ActionButton data-testid="bridge-step-done" variant="primary" isPending={working?.kind === 'done'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onFinish('done'); }}>
@@ -235,17 +239,18 @@ function StepControls({ from, note, working, failure, onNoteChange, onFinish }: 
 
 /** A question's note field, always open (BH1), and the button putting the answer in the basket, sending nothing (CC24); neither while the choice is what the basket holds. */
 function QuestionControls({ from, put, sendLabel, isNothingSentSaid, note, working, failure, onNoteChange, onPut, onSend }: { from: string; put: Put | null; sendLabel: string; isNothingSentSaid: boolean; note: string; working: DeliveryControl | undefined; failure: string | undefined; onNoteChange: (note: string) => void; onPut: () => void; onSend: () => void }) {
+  const fieldId = useId();
   if (put === null) {
     return null;
   }
   const isWorking = working !== undefined;
   return (
     <>
-      <label className="grid gap-1">
+      <Label htmlFor={fieldId + '-3'} className="grid gap-1">
         <span>Note (optional)</span>
-        <textarea data-testid="bridge-note" rows={2} value={note} onChange={(event) => { onNoteChange(event.target.value); }} className="field-sizing-content min-h-16 resize-none rounded-md border border-input bg-background p-2" />
+        <textarea id={fieldId + '-3'} data-testid="bridge-note" rows={2} value={note} onChange={(event) => { onNoteChange(event.target.value); }} className="field-sizing-content min-h-16 resize-none rounded-md border border-input bg-background p-2" />
         <span className="text-caption text-muted-foreground">Goes with the answer.</span>
-      </label>
+      </Label>
       {failure === undefined ? null : <Notice message={failure} isFailure />}
       <div className="flex flex-wrap gap-2">
         <ActionButton data-testid="bridge-put-in-basket" variant="primary" className="w-full justify-center sm:w-auto sm:justify-self-start" isPending={working?.kind === 'option' || working?.kind === 'note'} pendingLabel="Putting in the basket..." disabled={isWorking || !put.isReady} onClick={onPut}>
@@ -396,6 +401,7 @@ export function DeliveryCard({
   onSendMessage?: ((alertShip: string) => void) | undefined;
   onBack: () => void;
 }) {
+  const fieldId = useId();
   const { question, step, stale } = delivery;
   const [chosen, setChosen] = useState<number | null | undefined>(inBasket === null ? question?.pick.option : inBasket.option);
   const isWorking = working !== undefined;
@@ -441,11 +447,11 @@ export function DeliveryCard({
         finished === null ? <StepControls from={delivery.from} note={note} working={working} failure={failure} onNoteChange={onNoteChange} onFinish={onFinishStep} /> : <StepOutcomeNotice from={delivery.from} finished={finished} timeZone={timeZone} />
       ) : question === undefined ? (
         <>
-          <label className="grid max-w-[620px] gap-1">
+          <Label htmlFor={fieldId + '-4'} className="grid max-w-[620px] gap-1">
             <span>Your answer</span>
-            <textarea data-testid="bridge-note" rows={2} value={note} onChange={(event) => { onNoteChange(event.target.value); }} className="rounded-md border border-input bg-background p-2" />
+            <textarea id={fieldId + '-4'} data-testid="bridge-note" rows={2} value={note} onChange={(event) => { onNoteChange(event.target.value); }} className="rounded-md border border-input bg-background p-2" />
             <span className="text-caption text-muted-foreground">{`Optional. Sent to ${delivery.from} as you.`}</span>
-          </label>
+          </Label>
           {failure === undefined ? null : <Notice message={failure} isFailure />}
           <div className="flex flex-wrap gap-2">
             <ActionButton data-testid="bridge-answer" variant="primary" isPending={working?.kind === 'note'} pendingLabel="Sending..." disabled={isWorking} onClick={() => { onAnswer(undefined); }}>

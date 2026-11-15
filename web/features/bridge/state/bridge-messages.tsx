@@ -1,10 +1,11 @@
+import { LoadingSkeleton } from '@aeolus-fleet/ui';
+
 import { Suspense } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-api';
 import { readBridgeHome } from '../hooks/read-bridge';
 import { BRIDGE_MESSAGES_PATH } from '../paths';
-import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { MessagesPanel } from './messages-panel';
 import { PageAsLastRead } from './page-as-last-read';
@@ -30,7 +31,7 @@ export async function BridgeMessagesPage({ searchParams }: { searchParams: Searc
   }
   return (
     <BridgeShell api={page.api} fleetId={page.fleetId} screen="messages">
-      <Suspense fallback={<BridgeSkeleton />}>
+      <Suspense fallback={<LoadingSkeleton variant="list" label="Loading Bridge" />}>
         <MessagesParts api={page.api} fleetId={page.fleetId} />
       </Suspense>
     </BridgeShell>

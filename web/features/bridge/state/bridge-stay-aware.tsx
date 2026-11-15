@@ -1,3 +1,5 @@
+import { LoadingSkeleton } from '@aeolus-fleet/ui';
+
 import { Suspense } from 'react';
 
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
@@ -5,7 +7,6 @@ import { signedInPage, type SearchParams } from '../../../lib/gateway-api/page-a
 import { readBridgeHome } from '../hooks/read-bridge';
 import { readConsoleUrl } from '../hooks/read-console-url';
 import { BRIDGE_STAY_AWARE_PATH } from '../paths';
-import { BridgeSkeleton } from '../ui/bridge-skeleton';
 import { PageAsLastRead } from './page-as-last-read';
 import { BridgeNoSignIn, BridgeShell } from './bridge-shell';
 import { StayAwarePanel } from './stay-aware-panel';
@@ -32,7 +33,7 @@ export async function BridgeStayAwarePage({ searchParams }: { searchParams: Sear
   }
   return (
     <BridgeShell api={page.api} fleetId={page.fleetId} screen="stay-aware">
-      <Suspense fallback={<BridgeSkeleton />}>
+      <Suspense fallback={<LoadingSkeleton variant="list" label="Loading Bridge" />}>
         <StayAwareParts api={page.api} fleetId={page.fleetId} />
       </Suspense>
     </BridgeShell>

@@ -1,5 +1,7 @@
 'use client';
 
+import { EmptyState } from '@aeolus-fleet/ui';
+
 import { CircleCheck, CircleX } from 'lucide-react';
 import { useState, useSyncExternalStore, useTransition } from 'react';
 
@@ -96,9 +98,7 @@ export function DonePanel({ fleetId, first, now }: { fleetId: string; first: Rec
             <p className="text-muted-foreground">Everything that reached you, with what came of it and where. Opening one reads it back whole.</p>
           </div>
           {items.length === 0 ? (
-            <p data-testid="bridge-record-empty" className="rounded-md border border-border bg-card p-3 text-muted-foreground">
-              Nothing is done yet.
-            </p>
+            <div data-testid="bridge-record-empty"><EmptyState title="Nothing is done yet." variant="section" /></div>
           ) : (
             byDay(items, { now: readAt, timeZone }).map(({ day, items: ofDay }) => (
               <div key={day} className="grid gap-1.5">

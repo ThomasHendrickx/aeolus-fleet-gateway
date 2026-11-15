@@ -1,8 +1,11 @@
+import { InlineError, EmptyState, Input, Label } from '@aeolus-fleet/ui';
+
 import { randomUUID } from 'node:crypto';
 
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
 import { CREDENTIAL_KINDS } from '../../forms/server-credential';
 import { ActionForm } from '../../forms/ui/action-form';
+import { FormCheckbox } from '../../forms/ui/form-checkbox';
 import { CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
 import { outsideAddressOf, PARTY_STATES, type ListedParty } from '../../outside-parties/party-kinds';
@@ -13,12 +16,13 @@ import { approveParty, crewParty, markTool, stateParty } from '../actions';
 const MANAGING_SCOPE = 'fleet:manage';
 
 function PartyForms({ party, fleetId }: { party: ListedParty; fleetId: string }) {
+  const fieldId = 'party-' + party.name;
   return (
     <div className="grid gap-2">
       {party.state === 'awaitingCrew' ? (
         <ActionForm action={crewParty} fleetId={fleetId} submit={{ label: 'Crew', pending: 'Crewing…' }} className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="name" value={party.name} />
-          <input className={INPUT} name="secret" placeholder="secret from a new starting prompt" required />
+          <Input className={INPUT} name="secret" placeholder="secret from a new starting prompt" required />
         </ActionForm>
       ) : null}
       {party.kind === 'mcpServer' && party.state === 'crewed' ? (
@@ -28,10 +32,10 @@ function PartyForms({ party, fleetId }: { party: ListedParty; fleetId: string })
           </ActionForm>
           <ActionForm action={markTool} fleetId={fleetId} submit={{ label: 'Mark', pending: 'Marking…', kind: 'secondary' }} className="flex flex-wrap items-center gap-2">
             <input type="hidden" name="name" value={party.name} />
-            <input className={INPUT} name="tool" placeholder="tool" required maxLength={128} />
-            <label className="flex items-center gap-1">
-              <input type="checkbox" name="isRepeatable" /> repeatable
-            </label>
+            <Input className={INPUT} name="tool" placeholder="tool" required maxLength={128} />
+            <Label htmlFor={fieldId + '-0'} className="flex items-center gap-1">
+              <FormCheckbox id={fieldId + '-0'} name="isRepeatable" /> repeatable
+            </Label>
           </ActionForm>
         </>
       ) : null}
@@ -40,54 +44,55 @@ function PartyForms({ party, fleetId }: { party: ListedParty; fleetId: string })
 }
 
 function ApproveForm({ fleetId, owners }: { fleetId: string; owners: OwnerChoices }) {
+  const fieldId = 'approve-party';
   return (
     <section className={`${CARD} grid gap-3`}>
       <h2 className="text-section font-semibold">Approve an MCP server</h2>
       <ActionForm action={approveParty} fleetId={fleetId} submit={{ label: 'Approve', pending: 'Approving…' }} testId="parties-approve">
         <input type="hidden" name="requestId" value={randomUUID()} />
-        <label className={LABEL}>
+        <Label htmlFor={fieldId + '-1'} className={LABEL}>
           <span>Name, the proxy ship&apos;s</span>
-          <input className={INPUT} name="name" required />
-        </label>
-        <label className={LABEL}>
+          <Input id={fieldId + '-1'} className={INPUT} name="name" required />
+        </Label>
+        <Label htmlFor={fieldId + '-2'} className={LABEL}>
           <span>Streamable HTTP URL</span>
-          <input className={INPUT} name="url" type="url" required />
-        </label>
-        <label className={LABEL}>
+          <Input id={fieldId + '-2'} className={INPUT} name="url" type="url" required />
+        </Label>
+        <Label htmlFor={fieldId + '-3'} className={LABEL}>
           <span>Credential</span>
-          <select className={INPUT} name="credentialKind" defaultValue="bearer">
+          <select id={fieldId + '-3'} className={INPUT} name="credentialKind" defaultValue="bearer">
             {CREDENTIAL_KINDS.map(({ kind, label }) => (
               <option key={kind} value={kind}>
                 {label}
               </option>
             ))}
           </select>
-        </label>
-        <label className={LABEL}>
+        </Label>
+        <Label htmlFor={fieldId + '-4'} className={LABEL}>
           <span>Bearer token</span>
-          <input className={INPUT} name="token" type="password" />
-        </label>
-        <label className={LABEL}>
+          <Input id={fieldId + '-4'} className={INPUT} name="token" type="password" />
+        </Label>
+        <Label htmlFor={fieldId + '-5'} className={LABEL}>
           <span>Client id</span>
-          <input className={INPUT} name="clientId" />
-        </label>
-        <label className={LABEL}>
+          <Input id={fieldId + '-5'} className={INPUT} name="clientId" />
+        </Label>
+        <Label htmlFor={fieldId + '-6'} className={LABEL}>
           <span>Client secret</span>
-          <input className={INPUT} name="clientSecret" type="password" />
-        </label>
-        <label className={LABEL}>
+          <Input id={fieldId + '-6'} className={INPUT} name="clientSecret" type="password" />
+        </Label>
+        <Label htmlFor={fieldId + '-7'} className={LABEL}>
           <span>Issuer</span>
-          <input className={INPUT} name="issuer" type="url" />
-        </label>
-        <label className={LABEL}>
+          <Input id={fieldId + '-7'} className={INPUT} name="issuer" type="url" />
+        </Label>
+        <Label htmlFor={fieldId + '-8'} className={LABEL}>
           <span>Scope</span>
-          <input className={INPUT} name="scope" />
-        </label>
+          <Input id={fieldId + '-8'} className={INPUT} name="scope" />
+        </Label>
         <OwnerField choices={owners.isOk ? owners.value : []} current={null} help="A person ship or argo. It answers for this server." refusal={owners.isOk ? undefined : owners.refusal} />
-        <label className={LABEL}>
+        <Label htmlFor={fieldId + '-9'} className={LABEL}>
           <span>Calls at once</span>
-          <input className={INPUT} name="concurrencyLimit" type="number" min={1} max={10} defaultValue={4} />
-        </label>
+          <Input id={fieldId + '-9'} className={INPUT} name="concurrencyLimit" type="number" min={1} max={10} defaultValue={4} />
+        </Label>
       </ActionForm>
     </section>
   );
@@ -109,13 +114,11 @@ export async function Parties({ page }: { page: SignedInPage }) {
       <h1 className="text-title font-semibold">Parties</h1>
       <p className="text-muted-foreground">Outside MCP servers approved for this fleet, each behind its proxy ship.</p>
       {!parties.isOk ? (
-        <p role="alert" className="text-tone-attention-fg">
-          {parties.refusal}
-        </p>
+        <div><InlineError title={parties.refusal} variant="section" /></div>
       ) : parties.value.length === 0 ? (
-        <p className="text-muted-foreground">No party yet.</p>
+        <EmptyState title="No party yet." variant="section" />
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full text-left" data-testid="parties-table">
             <thead>
               <tr className="border-b border-border">

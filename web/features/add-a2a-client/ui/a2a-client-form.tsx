@@ -1,9 +1,12 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useId, useActionState } from 'react';
+
+import { Input, Label } from '@aeolus-fleet/ui';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { FLEET_FIELD } from '../../forms/form-state';
+import { FormCheckbox } from '../../forms/ui/form-checkbox';
 import { CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { Outcome } from '../../forms/ui/outcome';
 import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
@@ -34,6 +37,7 @@ function Added({ name, bearer, fleetId }: { name: string; bearer: string; fleetI
 
 /** The form that adds an A2A client: its name, owner and the approver's own scopes to tick; then its bearer. */
 export function A2aClientForm({ fleetId, requestId, owners, scopes }: { fleetId: string; requestId: string; owners: OwnerChoices; scopes: readonly string[] }) {
+  const fieldId = useId();
   const [state, action] = useActionState(addA2aClient, IDLE);
   if (state.kind === 'added') {
     return <Added name={state.name} bearer={state.bearer} fleetId={fleetId} />;
@@ -43,19 +47,19 @@ export function A2aClientForm({ fleetId, requestId, owners, scopes }: { fleetId:
       <input type="hidden" name={FLEET_FIELD} value={fleetId} />
       <input type="hidden" name="requestId" value={requestId} />
       <h1 className="text-heading-touch font-semibold max-sm:sr-only">Add an A2A client</h1>
-      <label className={LABEL}>
+      <Label htmlFor={fieldId + '-0'} className={LABEL}>
         <span>Name, the proxy ship&apos;s</span>
-        <input className={INPUT} name="name" required />
-      </label>
+        <Input id={fieldId + '-0'} className={INPUT} name="name" required />
+      </Label>
       <OwnerField choices={owners.isOk ? owners.value : []} current={null} help="A person ship or argo. It answers for this client." refusal={owners.isOk ? undefined : owners.refusal} />
       {scopes.length === 0 ? null : (
         <fieldset className="grid gap-2">
           <legend className="font-medium">Scopes, beside sending and receiving</legend>
           {scopes.map((scope) => (
-            <label key={scope} className="flex items-center gap-2">
-              <input type="checkbox" name={`${SCOPE_FIELD_PREFIX}${scope}`} />
+            <Label htmlFor={fieldId + '-1' + "-" + (scope)} key={scope} className="flex items-center gap-2">
+              <FormCheckbox id={fieldId + '-1' + "-" + (scope)} name={`${SCOPE_FIELD_PREFIX}${scope}`} />
               <span className="font-mono text-code">{scope}</span>
-            </label>
+            </Label>
           ))}
         </fieldset>
       )}

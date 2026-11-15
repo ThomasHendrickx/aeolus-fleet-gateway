@@ -1,4 +1,8 @@
-import { Suspense, type ReactNode } from 'react';
+import { InlineError, LoadingSkeleton } from '@aeolus-fleet/ui';
+
+import { CORE_SCOPE_DESCRIPTIONS } from '@aeolus-fleet/common';
+
+import { Suspense } from 'react';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
@@ -6,11 +10,9 @@ import { ADDED_CREDENTIAL_KINDS, SIGN_IN_CREDENTIAL } from '../../forms/server-c
 import { BUTTONS, CARD } from '../../forms/ui/look';
 import { outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } from '../../outside-parties/party-kinds';
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
-import { scopeWords } from '../../outside-parties/scope-words';
 import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
 import { AgentNeeds } from '../tools-table/ui/agent-needs';
 import { approvalOf, ToolsSection } from '../tools-table/ui/tools-section';
-import { ToolsSkeleton } from '../tools-table/ui/tools-skeleton';
 import { readOwnSignIn } from '../hooks/read-own-sign-in';
 import type { SignInOutcome } from '../own-sign-in';
 import { EveryonesSignInsSkeleton } from './everyones-sign-ins';
@@ -37,11 +39,9 @@ export function Back({ fleetId }: { fleetId: string }) {
 }
 
 /** Why the API refused: said in place of the page. */
-export function Refusal({ children }: { children: ReactNode }) {
+export function Refusal({ children }: { children: string }) {
   return (
-    <p role="alert" className="rounded-md border border-tone-attention-border bg-tone-attention-bg px-3 py-2 text-tone-attention-fg">
-      {children}
-    </p>
+    <div><InlineError title={children} variant="section" /></div>
   );
 }
 
@@ -89,11 +89,13 @@ export async function OutsideParty({ page, name, outcome }: { page: SignedInPage
   const address = outsideAddressOf(party);
   const isApprover = scopes.includes(APPROVING_SCOPE);
   const isSignIn = party.kind === 'mcpServer' && party.credentialKind === SIGN_IN_CREDENTIAL.kind;
-  const [cards, agentNeeds, ownSignIn] = await Promise.all([
+  const [cards, agentNeeds, ownSignIn, listedScopes] = await Promise.all([
     party.kind === 'a2aClient' ? readOf(api.parties.cardAddresses.query({ name })) : undefined,
     party.kind === 'a2aAgent' ? Promise.all([readOf(api.parties.scopeRequirements.query({ name })), isApprover ? approvalOf({ api, name }) : { canChange: false, listed: null, reason: null }]) : undefined,
     isSignIn ? readOwnSignIn({ api, fleetId, name }) : undefined,
+    isApprover ? readOf(api.parties.listedScopes.query()) : undefined,
   ]);
+  const descriptions = new Map<string, string>([...Object.entries(CORE_SCOPE_DESCRIPTIONS), ...(listedScopes?.isOk === true ? listedScopes.value.scopes.map(({ scope, description }): [string, string] => [scope, description]) : [])]);
   const change = (
     <a href={inFleet(partyPath(party.name, 'change'), fleetId)} className="text-primary hover:underline" data-testid="outside-party-change">
       Change
@@ -111,7 +113,7 @@ export async function OutsideParty({ page, name, outcome }: { page: SignedInPage
         <Fact label="Scopes">
           {party.scopes === null
             ? UNKNOWN
-            : party.scopes.map((scope) => <Tag key={scope}>{scopeWords(scope)}</Tag>)}
+            : party.scopes.map((scope) => <Tag key={scope}>{descriptions.get(scope) ?? scope}</Tag>)}
           {scopes.includes(GRANTING_SCOPE) ? change : null}
         </Fact>
         {party.kind === 'mcpServer' || party.kind === 'a2aAgent' ? <Fact label="Credential">{ADDED_CREDENTIAL_KINDS.find(({ kind }) => kind === party.credentialKind)?.label}</Fact> : null}
@@ -148,7 +150,7 @@ export async function OutsideParty({ page, name, outcome }: { page: SignedInPage
           <p className="text-muted-foreground">
             The fleet may call only the tools switched on, and a calling ship must hold every scope a tool needs; every ship that may reach {party.name} reaches the same tools. {isApprover ? null : 'Changing them needs gateway:approve.'}
           </p>
-          <Suspense fallback={<ToolsSkeleton party={party.name} />}>
+          <Suspense fallback={<div data-testid="tools-table-skeleton"><LoadingSkeleton variant="table" rows={8} label={`Reading the tools ${party.name} lists`} /></div>}>
             <ToolsSection api={api} fleetId={fleetId} name={party.name} isApprover={isApprover} isSignIn={isSignIn} />
           </Suspense>
         </section>

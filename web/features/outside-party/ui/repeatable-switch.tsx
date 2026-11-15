@@ -1,17 +1,18 @@
 'use client';
 
+import { Switch } from '@aeolus-fleet/ui';
+
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 
 import { FLEET_FIELD } from '../../forms/form-state';
-import { Switch } from '../../forms/ui/switch';
 import { markA2aAgent, type MarkState } from '../actions';
 
 const IDLE: MarkState = { kind: 'idle' };
 
 function SubmitSwitch({ isRepeatable }: { isRepeatable: boolean }) {
   const status = useFormStatus();
-  return <Switch type="submit" isOn={isRepeatable} label="Repeatable" isPending={status.pending} testId="outside-party-repeatable-switch" />;
+  return <Switch onClick={(event) => { event.currentTarget.closest('form')?.requestSubmit(); }} checked={isRepeatable} aria-label="Repeatable" disabled={status.pending} aria-busy={status.pending} data-testid="outside-party-repeatable-switch" />;
 }
 
 /**

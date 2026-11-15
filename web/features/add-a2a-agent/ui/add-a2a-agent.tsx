@@ -12,7 +12,7 @@ import { A2aAgentForm } from './a2a-agent-form';
  */
 export async function AddA2aAgent({ page }: { page: SignedInPage }) {
   const { api, fleetId, scopes } = page;
-  const owners = await readOf(api.parties.ownerChoices.query());
+  const [owners, listed] = await Promise.all([readOf(api.parties.ownerChoices.query()), readOf(api.parties.listedScopes.query())]);
   const grantable = scopes.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope));
-  return <A2aAgentForm fleetId={fleetId} requestId={randomUUID()} owners={owners} scopes={grantable} />;
+  return <A2aAgentForm fleetId={fleetId} requestId={randomUUID()} owners={owners} scopes={grantable} listed={listed.isOk ? listed.value.scopes : []} scopeRefusal={listed.isOk ? undefined : listed.refusal} />;
 }

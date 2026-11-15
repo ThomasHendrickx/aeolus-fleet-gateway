@@ -2,7 +2,6 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { Switch } from '../../forms/ui/switch';
 import { ToolRow } from './tool-row';
 
 function textOf(markup: string): string {
@@ -29,17 +28,3 @@ describe("a tool's row, as an approver scans it (aeolus-fleet#1151)", () => {
   });
 });
 
-describe('a switch', () => {
-  it('says to a screen reader whether it is on, and names what it switches', () => {
-    const on = renderToStaticMarkup(createElement(Switch, { isOn: true, label: 'search_notes' }));
-    const off = renderToStaticMarkup(createElement(Switch, { isOn: false, label: 'delete_project' }));
-
-    expect([on.includes('role="switch" aria-checked="true" aria-label="search_notes"'), off.includes('aria-checked="false" aria-label="delete_project"')]).toEqual([true, true]);
-  });
-
-  it('is busy and takes no second press while its change is on its way', () => {
-    const markup = renderToStaticMarkup(createElement(Switch, { isOn: true, label: 'search_notes', isPending: true }));
-
-    expect([markup.includes('aria-busy="true"'), markup.includes('disabled=""')]).toEqual([true, true]);
-  });
-});
