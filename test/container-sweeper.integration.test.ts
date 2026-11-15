@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 
@@ -71,6 +72,55 @@ async function startTestProcess(run: string): Promise<{ testPid: number | undefi
 
 // Rootless Podman often runs no reaper, so a run's own teardown and its sweeper are all that remove its containers (#1581).
 describe('the containers of a test run', () => {
+  it('removes a late container and volume of a dead run at the next run, leaving a live run alone', async () => {
+    const deadRun = `test-${randomUUID()}`;
+    const liveRun = `test-${randomUUID()}`;
+    const deadProcess = await startRunProcess(deadRun);
+    const liveProcess = await startRunProcess(liveRun);
+    if (deadProcess.pid === undefined || liveProcess.pid === undefined) throw new Error('Run process has no pid');
+    const deadPid = deadProcess.pid;
+    const livePid = liveProcess.pid;
+    const docker = await dockerode();
+    const startTime = (pid: number) => {
+      const stat = readFileSync(`/proc/${String(pid)}/stat`, 'utf8');
+      return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? '';
+    };
+    const deadStart = startTime(deadPid);
+    const liveStart = startTime(livePid);
+    const labels = (run: string, pid: number, start: string, checkout = process.cwd()) => ({ [TEST_RUN_LABEL]: run, 'aeolus-fleet.test-run-pid': String(pid), 'aeolus-fleet.test-run-start': start, 'aeolus-fleet.test-checkout': checkout });
+    const volume = await docker.createVolume({ Labels: labels(deadRun, deadPid, deadStart) });
+    let deadId: string | undefined;
+    let liveId: string | undefined;
+    let otherId: string | undefined;
+    onTestFinished(async () => {
+      killIfRunning(deadPid);
+      killIfRunning(livePid);
+      if (deadId) await docker.getContainer(deadId).remove({ force: true, v: true }).catch(() => {});
+      if (liveId) await docker.getContainer(liveId).remove({ force: true, v: true }).catch(() => {});
+      if (otherId) await docker.getContainer(otherId).remove({ force: true, v: true }).catch(() => {});
+      await docker.getVolume(volume.Name).remove().catch(() => {});
+    });
+    deadProcess.kill('SIGKILL');
+    await new Promise<void>((resolve) => deadProcess.once('exit', () => resolve()));
+    // The existing bounded sweep ends after two empty lists, one second apart.
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    const dead = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(deadRun, deadPid, deadStart), HostConfig: { Binds: [`${volume.Name}:/var/lib/postgresql/data`] } });
+    deadId = dead.id;
+    const live = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(liveRun, livePid, liveStart) });
+    liveId = live.id;
+    const otherRun = `test-${randomUUID()}`;
+    const other = await docker.createContainer({ Image: POSTGRES_IMAGE, Labels: labels(otherRun, deadPid, deadStart, '/other-checkout') });
+    otherId = other.id;
+
+    const nextProcess = await startRunProcess(`test-${randomUUID()}`);
+    onTestFinished(() => { killIfRunning(nextProcess.pid); });
+
+    await expect.poll(() => containersOf(deadRun), { timeout: 15_000, interval: 250 }).toEqual([]);
+    await expect.poll(() => existingVolumes([volume.Name]), { timeout: 15_000, interval: 250 }).toEqual([]);
+    expect(await containersOf(liveRun)).toEqual([live.id]);
+    expect(await containersOf(otherRun)).toEqual([other.id]);
+  }, CONTAINER_TIMEOUT);
+
   it(
     'are removed with their volumes when the run is killed before its teardown',
     async () => {
