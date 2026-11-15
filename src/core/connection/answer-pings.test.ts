@@ -1,7 +1,7 @@
 import type { DeliveryId } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
-import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
+import { FLEET_ID, OTHER_FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
 import { err, ok } from '../shared/result.js';
 import { createAnswerPings } from './answer-pings.js';
 import type { GatewayDelivery, GatewayInbox } from './ports.js';
@@ -64,4 +64,21 @@ describe("the gateway's ship takes what waits for it", () => {
     await expect(createAnswerPings({ connections: memoryConnectionStore(), inbox })(new AbortController().signal)).resolves.toEqual({ ponged: 0, acked: [], refused: 0 });
     expect(inbox.ponged).toEqual([]);
   });
+});
+
+
+it('receives only for the gateway lease whose fleet woke', async () => {
+  const connections = await connected();
+  await connections.save({ fleetId: OTHER_FLEET_ID, shipId: 'shp_01m3tbfspe96yf1rnr4ank9gtw', name: 'other', crewToken: 'other-crew', crewedAt: new Date('2026-11-01') });
+  const received: string[] = [];
+  const inbox = { ...anInbox([]), receive: (token: string) => { received.push(token); return Promise.resolve(ok([])); } };
+  await createAnswerPings({ connections, inbox })(new AbortController().signal, FLEET_ID);
+  expect(received).toEqual(['aeolus_ct_v1_gateway']);
+});
+
+it('forgets an ended gateway lease without dropping a replacement', async () => {
+  const connections = await connected();
+  const inbox = { ...anInbox([]), receive: () => Promise.resolve(err({ code: 'LEASE_ENDED', message: 'ended' })) };
+  await createAnswerPings({ connections, inbox })(new AbortController().signal, FLEET_ID);
+  expect(await connections.find(FLEET_ID)).toBeUndefined();
 });
