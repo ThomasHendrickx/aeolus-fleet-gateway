@@ -117,7 +117,7 @@ export async function Parties({ page }: { page: SignedInPage }) {
       ) : parties.value.length === 0 ? (
         <EmptyState title="No party yet." variant="section" />
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full text-left" data-testid="parties-table">
             <thead>
               <tr className="border-b border-border">
