@@ -1,3 +1,4 @@
+import type { ShipWakeups } from '../connection/ship-wakeups.js';
 import type { DeliveryId } from '@aeolus-fleet/common';
 
 import type { McpServerParty } from '../parties/party.js';
@@ -38,6 +39,7 @@ export type RunParty = RunPartyOf<McpServerParty>;
  */
 export function createRunParty<P extends TakingParty = McpServerParty>(deps: {
   crew: Pick<ProxyShipCrew, 'pushReceive'>;
+  wakeups: ShipWakeups;
   handCall: (input: { party: P; delivery: PushedDelivery; signal: AbortSignal }) => Promise<HandOutcome>;
   /** What the party took up before it stopped and takes up first now, by delivery, as an outside agent's task it followed. */
   resume?: (input: { party: P; signal: AbortSignal }) => Promise<{ deliveryId: DeliveryId; hand: () => Promise<HandOutcome> }[]>;
@@ -50,6 +52,9 @@ export function createRunParty<P extends TakingParty = McpServerParty>(deps: {
     if (crewToken === null) {
       return { ended: 'crewRefused' };
     }
+    const stopping = new AbortController();
+    const runSignal = AbortSignal.any([signal, stopping.signal]);
+    const looks = deps.wakeups(crewToken, runSignal);
     const max = party.concurrencyLimit;
     const inFlight = new Map<DeliveryId, Promise<void>>();
     const agains = new Map<DeliveryId, number>();
@@ -58,64 +63,74 @@ export function createRunParty<P extends TakingParty = McpServerParty>(deps: {
     const hand = async (deliveryId: DeliveryId, handOnce: () => Promise<HandOutcome>): Promise<void> => {
       let outcome: HandOutcome;
       try {
-        outcome = await handOnce();
-      } catch {
-        // A failure of the gateway's own (its database): nothing was decided, so the delivery comes again.
-        outcome = { kind: 'again' };
-      }
-      if (outcome.kind === 'again') {
-        const count = (agains.get(deliveryId) ?? 0) + 1;
-        agains.set(deliveryId, count);
-        await deps.sleep(deps.againWaitsMs[Math.min(count, deps.againWaitsMs.length) - 1] ?? deps.pollMs, signal);
-      } else {
-        agains.delete(deliveryId);
-      }
-    };
-    const startOne = (deliveryId: DeliveryId, handOnce: () => Promise<HandOutcome>) => {
-      inFlight.set(
-        deliveryId,
-        hand(deliveryId, handOnce).finally(() => inFlight.delete(deliveryId)),
-      );
-    };
-    const start = (delivery: PushedDelivery) => {
-      startOne(delivery.deliveryId, () => deps.handCall({ party, delivery, signal }));
-    };
+          outcome = await handOnce();
+        } catch {
+          // A failure of the gateway's own (its database): nothing was decided, so the delivery comes again.
+          outcome = { kind: 'again' };
+        }
+        if (outcome.kind === 'again') {
+          const count = (agains.get(deliveryId) ?? 0) + 1;
+          agains.set(deliveryId, count);
+          await deps.sleep(deps.againWaitsMs[Math.min(count, deps.againWaitsMs.length) - 1] ?? deps.pollMs, signal);
+        } else {
+          agains.delete(deliveryId);
+        }
+      };
+      const startOne = (deliveryId: DeliveryId, handOnce: () => Promise<HandOutcome>) => {
+        inFlight.set(
+          deliveryId,
+          hand(deliveryId, handOnce).finally(() => { inFlight.delete(deliveryId); looks.request(); }),
+        );
+      };
+      const start = (delivery: PushedDelivery) => {
+        startOne(delivery.deliveryId, () => deps.handCall({ party, delivery, signal }));
+      };
 
-    for (const resumed of (await deps.resume?.({ party, signal })) ?? []) {
-      startOne(resumed.deliveryId, resumed.hand);
-    }
+      try {
+      for (const resumed of (await deps.resume?.({ party, signal })) ?? []) {
+        startOne(resumed.deliveryId, resumed.hand);
+      }
 
-    while (!signal.aborted) {
-      if (inFlight.size >= max) {
-        await Promise.race(inFlight.values());
-        continue;
+      while (!signal.aborted) {
+        if (!(await looks.wait())) { break; }
+        if (inFlight.size >= max) {
+          await Promise.race(inFlight.values());
+          looks.request();
+          continue;
+        }
+        // A look that ran while a delivery in flight was locked by its hand skipped it and waits for a new one, so
+        // it ends once one in flight ends: a delivery answered again is taken again at once. A look cut this way
+        // loses nothing: what it took is in flight with the crew and comes back first.
+        const looking = new AbortController();
+        if (inFlight.size > 0) {
+          void Promise.race(inFlight.values()).then(() => {
+            looking.abort();
+          });
+        }
+        const received = await deps.crew.pushReceive(crewToken, { max, signal: AbortSignal.any([runSignal, looking.signal]) });
+        if (!received.isOk && CREW_REFUSED.has(received.error.code)) {
+          await Promise.all(inFlight.values());
+          return { ended: 'crewRefused' };
+        }
+        if (!received.isOk && looking.signal.aborted) {
+          looks.request();
+          continue;
+        }
+        keyUnavailableInARow = !received.isOk && received.error.code === KEY_UNAVAILABLE ? keyUnavailableInARow + 1 : 0;
+        const fresh = received.isOk ? received.value.filter((delivery) => !inFlight.has(delivery.deliveryId)).slice(0, max - inFlight.size) : [];
+        fresh.forEach(start);
+        if (!received.isOk) {
+          const waitMs = keyUnavailableInARow === 0 ? deps.pollMs : (deps.againWaitsMs[Math.min(keyUnavailableInARow, deps.againWaitsMs.length) - 1] ?? deps.pollMs);
+          await deps.sleep(waitMs, runSignal);
+          looks.request();
+        }
+
       }
-      // A look that ran while a delivery in flight was locked by its hand skipped it and waits for a new one, so
-      // it ends once one in flight ends: a delivery answered again is taken again at once. A look cut this way
-      // loses nothing: what it took is in flight with the crew and comes back first.
-      const looking = new AbortController();
-      if (inFlight.size > 0) {
-        void Promise.race(inFlight.values()).then(() => {
-          looking.abort();
-        });
-      }
-      const received = await deps.crew.pushReceive(crewToken, { max, signal: AbortSignal.any([signal, looking.signal]) });
-      if (!received.isOk && CREW_REFUSED.has(received.error.code)) {
-        await Promise.all(inFlight.values());
-        return { ended: 'crewRefused' };
-      }
-      if (!received.isOk && looking.signal.aborted) {
-        continue;
-      }
-      keyUnavailableInARow = !received.isOk && received.error.code === KEY_UNAVAILABLE ? keyUnavailableInARow + 1 : 0;
-      const fresh = received.isOk ? received.value.filter((delivery) => !inFlight.has(delivery.deliveryId)).slice(0, max - inFlight.size) : [];
-      fresh.forEach(start);
-      if (fresh.length === 0) {
-        const waitMs = keyUnavailableInARow === 0 ? deps.pollMs : (deps.againWaitsMs[Math.min(keyUnavailableInARow, deps.againWaitsMs.length) - 1] ?? deps.pollMs);
-        await Promise.race([deps.sleep(waitMs, signal), ...inFlight.values()]);
-      }
+      await Promise.all(inFlight.values());
+      return { ended: looks.isEnded() ? 'crewRefused' : 'stopped' };
+    } finally {
+      stopping.abort();
+      looks.close();
     }
-    await Promise.all(inFlight.values());
-    return { ended: 'stopped' };
   };
 }

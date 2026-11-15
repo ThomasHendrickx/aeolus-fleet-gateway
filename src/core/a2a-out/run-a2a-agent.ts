@@ -1,3 +1,4 @@
+import type { ShipWakeups } from '../connection/ship-wakeups.js';
 import { createRunParty, type RunPartyOf, type Sleep } from '../mcp-out/run-party.js';
 import type { A2aAgentParty } from '../parties/party.js';
 import { agentEndpointOf, type AgentEndpoint } from './agent-endpoint.js';
@@ -17,6 +18,7 @@ export type RunA2aAgent = RunPartyOf<A2aAgentParty>;
  * the gateway stopped are followed first, each in flight as its delivery.
  */
 export function createRunA2aAgent(deps: {
+  wakeups: ShipWakeups;
   cards: AgentCards;
   crew: Pick<AgentShipCrew, 'pushReceive'>;
   hand: HandA2aMessage;
@@ -49,6 +51,7 @@ export function createRunA2aAgent(deps: {
     }
     const run = createRunParty<A2aAgentParty>({
       crew: deps.crew,
+      wakeups: deps.wakeups,
       handCall: ({ delivery }) => deps.hand({ party, endpoint, delivery, signal }),
       resume: async () =>
         (await deps.calls.following({ fleetId: party.fleetId, party: party.name })).map((call) => ({
