@@ -199,7 +199,7 @@ export interface PersonShipDoor {
    * count is still the one the crew knows, up to the fleet's longest wait
    * (wake a person, W5), or less when told. Stopping the signal ends the wait.
    */
-  inbox(crewToken: string, wait?: { knownWaiting: number; signal: AbortSignal; atMostMs?: number }): Promise<Result<{ waiting: number }, FleetRefusal>>;
+  inbox(crewToken: string, options?: { signal: AbortSignal }): Promise<Result<{ waiting: number }, FleetRefusal>>;
   /**
    * The ship's deliveries, up to max, its own held ones again first;
    * shouldSkipHanded leaves the handed ones out before the limit, so a new

@@ -30,7 +30,7 @@ type InboxAnswer = Result<{ waiting: number }, FleetRefusal>;
 function scriptedInbox(answers: (InboxAnswer | (() => InboxAnswer))[]) {
   const asked: { crewToken: string; knownWaiting: number | null; atMostMs?: number }[] = [];
   const inbox: PersonShipDoor['inbox'] = (crewToken, wait) => {
-    asked.push({ crewToken, knownWaiting: wait?.knownWaiting ?? null, ...(wait?.atMostMs === undefined ? {} : { atMostMs: wait.atMostMs }) });
+    asked.push({ crewToken, knownWaiting: null });
     const answer = answers.shift();
     if (answer !== undefined) {
       return Promise.resolve(typeof answer === 'function' ? answer() : answer);

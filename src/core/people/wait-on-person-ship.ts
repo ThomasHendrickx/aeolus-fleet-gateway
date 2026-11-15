@@ -1,3 +1,4 @@
+import type { ShipLooks, ShipWakeups } from '../connection/ship-wakeups.js';
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
 
 import type { Sleep } from '../mcp-out/run-party.js';
@@ -18,8 +19,8 @@ export type WaitOnPersonShip = (ship: { fleetId: FleetId; shipId: ShipId }, sign
 
 /**
  * Use case: the waiter of a person ship the gateway crews (wake a person,
- * W5, W7). It looks once at the ship's inbox, then asks the fleet to wait
- * while the count is the one it knows, and tells the person's pages at its
+ * W5, W7). One wake stream per lease asks for an inbox read on each wake
+ * and safety look. It tells the person's pages at its
  * first look and each time the count changed. When something waits at its
  * first look, and each time the count rose, it wakes the person (W3); a
  * wake a window held back is asked for again once the window ends, and one
@@ -32,6 +33,7 @@ export type WaitOnPersonShip = (ship: { fleetId: FleetId; shipId: ShipId }, sign
  */
 export function createWaitOnPersonShip(deps: {
   crews: PersonCrews;
+  wakeups: ShipWakeups;
   door: Pick<PersonShipDoor, 'inbox'>;
   changes: InboxChanges;
   wakePerson: WakePerson;
@@ -46,6 +48,8 @@ export function createWaitOnPersonShip(deps: {
 }): WaitOnPersonShip {
   return async (ship, signal) => {
     const { fleetId, shipId } = ship;
+    let looks: ShipLooks | undefined;
+    let watchedToken: string | undefined;
     let knownWaiting: number | undefined;
     let refusedInARow = 0;
     /** When to ask for a wake again though the count did not rise: a window ended, or a failed wake waited out. */
@@ -63,67 +67,88 @@ export function createWaitOnPersonShip(deps: {
       return true;
     };
     const waitOf = (waitsMs: readonly number[], inARow: number): number => waitsMs[Math.min(inARow, waitsMs.length - 1)] ?? 0;
-    while (!isStopped()) {
-      if (!(await deps.isServed(fleetId))) {
-        return { reason: 'fleetOff' };
-      }
-      const crew = await deps.crews.find(fleetId, shipId);
-      if (crew === undefined) {
-        return { reason: 'noCrew' };
-      }
-      // A wake held back is asked for again once due, so the wait ends by then.
-      const atMostMs = wakeAgainAt === undefined ? undefined : Math.max(0, wakeAgainAt.getTime() - deps.clock.now().getTime());
-      const answered = await deps.door.inbox(crew.crewToken, knownWaiting === undefined ? undefined : { knownWaiting, signal, ...(atMostMs === undefined ? {} : { atMostMs }) });
-      if (isStopped()) {
-        break;
-      }
-      if (!(await deps.isServed(fleetId))) {
-        return { reason: 'fleetOff' };
-      }
-      if (!answered.isOk) {
-        if (isEndedCrew(answered.error)) {
-          if (await isDropped(crew.crewToken)) {
-            return { reason: 'crewEnded' };
+    try {
+      while (!isStopped()) {
+        if (!(await deps.isServed(fleetId))) {
+          return { reason: 'fleetOff' };
+        }
+        const crew = await deps.crews.find(fleetId, shipId);
+        if (crew === undefined) {
+          return { reason: 'noCrew' };
+        }
+        if (watchedToken !== crew.crewToken || looks === undefined) {
+          looks?.close();
+          looks = deps.wakeups(crew.crewToken, signal);
+          watchedToken = crew.crewToken;
+        }
+        const timer = new AbortController();
+        const timerSignal = AbortSignal.any([signal, timer.signal]);
+        if (wakeAgainAt !== undefined) {
+          const hints = looks;
+          void deps.sleep(Math.max(0, wakeAgainAt.getTime() - deps.clock.now().getTime()), timerSignal).then(() => {
+            if (!timerSignal.aborted) { hints.request(); }
+          });
+        }
+        const shouldLook = await looks.wait();
+        timer.abort();
+        if (!shouldLook) {
+          if (looks.isEnded() && await isDropped(crew.crewToken)) { return { reason: 'crewEnded' }; }
+          if (looks.isEnded()) { continue; }
+          break;
+        }
+        const answered = await deps.door.inbox(crew.crewToken, { signal });
+        if (isStopped()) {
+          break;
+        }
+        if (!(await deps.isServed(fleetId))) {
+          return { reason: 'fleetOff' };
+        }
+        if (!answered.isOk) {
+          if (isEndedCrew(answered.error)) {
+            if (await isDropped(crew.crewToken)) {
+              return { reason: 'crewEnded' };
+            }
+            continue;
           }
+          await deps.sleep(waitOf(deps.againWaitsMs, refusedInARow), signal);
+          looks.request();
+          refusedInARow += 1;
           continue;
         }
-        await deps.sleep(waitOf(deps.againWaitsMs, refusedInARow), signal);
-        refusedInARow += 1;
-        continue;
+        refusedInARow = 0;
+        const { waiting } = answered.value;
+        // The first look tells too: a page may have read the inbox before the waiter started.
+        if (waiting !== knownWaiting) {
+          await deps.changes.tell(ship);
+        }
+        const hasRisen = waiting > (knownWaiting ?? 0);
+        knownWaiting = waiting;
+        const isWakeDue = wakeAgainAt !== undefined && wakeAgainAt.getTime() <= deps.clock.now().getTime();
+        if (!hasRisen && !isWakeDue) {
+          continue;
+        }
+        const woken = await deps.wakePerson(ship, crew.crewToken);
+        if (!woken.isOk && isEndedCrew(woken.error) && (await isDropped(crew.crewToken))) {
+          return { reason: 'crewEnded' };
+        }
+        // A wake the fleet refused counts as one that failed: tried again after a wait.
+        const outcome = woken.isOk ? woken.value : ({ kind: 'failed' } as const);
+        switch (outcome.kind) {
+          case 'settled':
+            wakeAgainAt = undefined;
+            failedWakesInARow = 0;
+            break;
+          case 'inWindow':
+            wakeAgainAt = outcome.until;
+            failedWakesInARow = 0;
+            break;
+          case 'failed':
+            wakeAgainAt = new Date(deps.clock.now().getTime() + waitOf(deps.wakeAgainWaitsMs, failedWakesInARow));
+            failedWakesInARow += 1;
+            break;
+        }
       }
-      refusedInARow = 0;
-      const { waiting } = answered.value;
-      // The first look tells too: a page may have read the inbox before the waiter started.
-      if (waiting !== knownWaiting) {
-        await deps.changes.tell(ship);
-      }
-      const hasRisen = waiting > (knownWaiting ?? 0);
-      knownWaiting = waiting;
-      const isWakeDue = wakeAgainAt !== undefined && wakeAgainAt.getTime() <= deps.clock.now().getTime();
-      if (!hasRisen && !isWakeDue) {
-        continue;
-      }
-      const woken = await deps.wakePerson(ship, crew.crewToken);
-      if (!woken.isOk && isEndedCrew(woken.error) && (await isDropped(crew.crewToken))) {
-        return { reason: 'crewEnded' };
-      }
-      // A wake the fleet refused counts as one that failed: tried again after a wait.
-      const outcome = woken.isOk ? woken.value : ({ kind: 'failed' } as const);
-      switch (outcome.kind) {
-        case 'settled':
-          wakeAgainAt = undefined;
-          failedWakesInARow = 0;
-          break;
-        case 'inWindow':
-          wakeAgainAt = outcome.until;
-          failedWakesInARow = 0;
-          break;
-        case 'failed':
-          wakeAgainAt = new Date(deps.clock.now().getTime() + waitOf(deps.wakeAgainWaitsMs, failedWakesInARow));
-          failedWakesInARow += 1;
-          break;
-      }
-    }
-    return { reason: 'stopped' };
+      return { reason: 'stopped' };
+    } finally { looks?.close(); }
   };
 }

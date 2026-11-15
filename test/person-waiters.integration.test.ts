@@ -1,3 +1,4 @@
+import { createShipWakeups } from '../src/adapters/fleet/ship-wakeups.js';
 import Fastify from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 
@@ -77,6 +78,7 @@ function anInstance(options: { roundMs?: number } = {}): PersonWaiters {
     isServed,
     locks,
     waitOnPersonShip: createWaitOnPersonShip({
+      wakeups: createShipWakeups({ fleetUrl: fleet.url }),
       crews,
       isServed,
       door: createRestFleetDoor(fleet.url).person,

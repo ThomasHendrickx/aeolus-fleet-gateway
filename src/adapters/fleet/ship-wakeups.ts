@@ -1,5 +1,5 @@
 /** REST SSE hints are coalesced while a look runs; every byte keeps the stream alive. */
-import type { ShipWakeups } from '../../core/connection/ship-wakeups.js';
+import type { ShipLooks, ShipWakeups } from '../../core/connection/ship-wakeups.js';
 
 const SILENCE_MS = 60_000;
 const SAFETY_MS = 300_000;
@@ -17,8 +17,9 @@ function isLeaseEnded(body: unknown): boolean {
   return typeof body === 'object' && body !== null && 'code' in body && body.code === 'LEASE_ENDED';
 }
 
-export function createShipWakeups(options: WakeupsOptions): ShipWakeups {
-  return (crewToken, signal) => {
+export function createShipWakeups(options: WakeupsOptions): ShipWakeups & { request: (crewToken: string) => void } {
+  const leases = new Map<string, ShipLooks>();
+  const watch: ShipWakeups = (crewToken, signal) => {
     const state = { isStopped: signal.aborted, isPending: false, isEnded: false };
     let waiting: ((look: boolean) => void) | undefined;
     let safety: ReturnType<typeof setTimeout> | undefined;
@@ -36,6 +37,7 @@ export function createShipWakeups(options: WakeupsOptions): ShipWakeups {
       waiting?.(false);
       waiting = undefined;
       signal.removeEventListener('abort', close);
+      if (leases.get(crewToken) === hints) { leases.delete(crewToken); }
     };
     const ended = () => {
       state.isEnded = true;
@@ -124,7 +126,7 @@ export function createShipWakeups(options: WakeupsOptions): ShipWakeups {
       safety = setTimeout(request, SAFETY_MS);
       void open();
     }
-    return {
+    const hints: ShipLooks = {
       wait: () => {
         if (state.isStopped) { return Promise.resolve(false); }
         if (state.isPending) {
@@ -137,5 +139,8 @@ export function createShipWakeups(options: WakeupsOptions): ShipWakeups {
       isEnded: () => state.isEnded,
       close,
     };
+    if (isActive()) { leases.set(crewToken, hints); }
+    return hints;
   };
+  return Object.assign(watch, { request: (crewToken: string) => { leases.get(crewToken)?.request(); } });
 }
