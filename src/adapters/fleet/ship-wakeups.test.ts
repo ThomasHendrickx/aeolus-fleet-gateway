@@ -226,3 +226,19 @@ it('an open wake restores the initial reconnect spread after consecutive failure
   expect(opens).toBe(4);
   stop.abort();
 });
+
+it('gateway shutdown aborts all lease streams immediately and refuses later openings', async () => {
+  vi.useFakeTimers();
+  const requests: RequestInit[] = [];
+  const open = createShipWakeups({ fleetUrl: 'https://fleet.test', fetch: (_url, init) => { requests.push(init ?? {}); return Promise.resolve(stream().response); } });
+  const one = open('one', new AbortController().signal);
+  const two = open('two', new AbortController().signal);
+  await flush();
+  open.close();
+  expect(requests.map(({ signal }) => signal?.aborted)).toEqual([true, true]);
+  expect(await one.wait()).toBe(false);
+  expect(await two.wait()).toBe(false);
+  expect(await open('late', new AbortController().signal).wait()).toBe(false);
+  await vi.advanceTimersByTimeAsync(600_000);
+  expect(requests).toHaveLength(2);
+});
