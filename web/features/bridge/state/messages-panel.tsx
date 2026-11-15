@@ -89,7 +89,7 @@ export function MessagesPanel({ fleetId, messages, now }: { fleetId: string; mes
               {messages.length === 0 || opening.opened !== undefined ? null : <p className="text-caption text-muted-foreground max-sm:hidden">{messagesPageSaidOf({ newCount, seenCount: seen.length })}</p>}
             </div>
             {opening.opened === undefined ? (
-              <div className="flex shrink-0 items-start gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 {seen.length > 0 && marking.kind !== 'asking' ? <MarkSeenDoneButton said={said.button} onAsk={() => { setMarking({ kind: 'asking' }); }} /> : null}
                 <HeadingSendMessage />
               </div>
