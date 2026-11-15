@@ -1,3 +1,4 @@
+import { createPersonInboxWakes } from './core/people/person-inbox-wakes.js';
 import { createWakingClientCalls } from './core/mcp-in/waking-client-calls.js';
 import { createWatchGatewayShips } from './core/connection/watch-gateway-ships.js';
 import { createShipWakeups } from './adapters/fleet/ship-wakeups.js';
@@ -479,7 +480,10 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // When the gateway first saw each stale question or step, so it leaves Bridge 5 s later (#240).
   const staleSightings = createStaleSightings();
   const wakeups = createShipWakeups({ fleetUrl: options.fleetUrl });
-  const personDoor = createReadablePersonDoor(holdingDoor(createRefreshingPersonDoor(door.person, wakeups.request), { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) }), { opened: storedOpenedDeliveries, replies: createPrismaUnreadableReplies(prisma), clock, refusedReply: (refusal) => { server.log.warn(refusal, 'the fleet refused the reply to an unreadable delivery'); } });
+  const personCrews = createPrismaPersonCrews(prisma);
+  const inboxChanges = createPrismaInboxChanges(prisma);
+  const personInboxWakes = createPersonInboxWakes({ crews: personCrews, changes: inboxChanges, whoami: (token) => door.person.whoami(token), request: wakeups.request });
+  const personDoor = createReadablePersonDoor(holdingDoor(createRefreshingPersonDoor(door.person, personInboxWakes.changed), { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) }), { opened: storedOpenedDeliveries, replies: createPrismaUnreadableReplies(prisma), clock, refusedReply: (refusal) => { server.log.warn(refusal, 'the fleet refused the reply to an unreadable delivery'); } });
   const readConnection = createReadConnection({ door, store: connections });
   // A fleet's connection as the gateway holds it, asking the fleet nothing: what a fleet that is off reads.
   const heldConnection: ReadConnection = async (fleetId) => {
@@ -813,10 +817,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const bridgeUrlOf = (fleetId: FleetId): string => `${issuer}/bridge?fleet=${encodeURIComponent(fleetId)}`;
   const showInSlack = createShowInSlack({ links: slackLinks, apps: slackApps, posts: slackPosts, slack: slackMessages, door: personDoor, sleep, clock, bridgeUrlOf });
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
-  const personCrews = createPrismaPersonCrews(prisma);
   // A person's pages in focus, on every instance: while one is, what arrives is handed through it (wake a person, W6).
   const focusedPages = createPrismaFocusedPages(prisma);
-  const inboxChanges = createPrismaInboxChanges(prisma);
   const waiterLocks = createPostgresWaiterLocks(options.databaseUrl);
   const personWaiters = createPersonWaiters({
     crews: personCrews,
@@ -1246,6 +1248,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       onChange: (change) => {
         hub.publish(change);
         if (change.topic === 'inbox') {
+          void personInboxWakes.told(change).catch((error: unknown) => { server.log.error({ err: error }, 'person inbox hint failed'); });
           slackEdits.wake();
         }
       },

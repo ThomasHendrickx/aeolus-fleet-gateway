@@ -11,7 +11,7 @@ The gateway holds one REST server-sent event stream at `GET /api/v1/ship/wakeups
 
 Client replies stay on their client's proxy ship (Q9 a). No additional gateway ship is created for A2A. A blocking A2A call still uses its own timer, bounded by the capability's `waitMs` and the gateway's maximum. It reads the stored task while waiting and returns the same task state at the deadline, even while a stream or fleet call is slow or unavailable.
 
-A successful local person claim or acknowledgement requests another inbox look through that lease's queue. Inbox reads send neither `waitSeconds` nor `knownWaiting`. Saving a new client call requests a reply look after the save, so a reply whose wake arrived before the call was stored is still found.
+A successful local person claim or acknowledgement requests another inbox look through that lease's queue and publishes an inbox hint through the gateway's existing database change channel. The instance holding the person's waiter lock reads that hint too, so a request handled by another instance refreshes the count. Inbox reads send neither `waitSeconds` nor `knownWaiting`. Saving a new client call requests a reply look after the save, so a reply whose wake arrived before the call was stored is still found.
 
 Looks for one lease run serially. Wakes received during a look coalesce into one more look; another fleet or ship has its own stream and queue. A safety hint requests a look after five minutes without a wake or local hint. Retried party handovers and person wake windows keep their own timers.
 
