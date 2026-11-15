@@ -1,9 +1,9 @@
-import type { ShipWakeups } from '../connection/ship-wakeups.js';
 /**
  * Use case: the gateway takes the replies to an outside client's calls, as
  * the crew of the client's proxy ship (Q9 a), until it is stopped. It asks
  * the fleet for the reply to each call it waits on with receiveReply
- * (aeolus-fleet#953): a call neither completed nor past its deadline. Only
+ * on its lease stream wakes and safety looks (aeolus-fleet#953): a call
+ * neither completed nor past its deadline. Only
  * replies are taken, so a message to the proxy ship that replies to no call
  * waits in the fleet and keeps no reply out. The lease stays plain: the
  * fleet hands nothing to receiveReply on a pushed lease, so this never
@@ -18,6 +18,8 @@ import type { ShipWakeups } from '../connection/ship-wakeups.js';
  * after a longer wait each time, and keeps the crew.
  */
 import type { MessageId } from '@aeolus-fleet/common';
+
+import type { ShipWakeups } from '../connection/ship-wakeups.js';
 
 import type { ProxyShipCrew } from '../mcp-out/hand-call.js';
 import type { Sleep } from '../mcp-out/run-party.js';
@@ -112,18 +114,18 @@ export function createCollectReplies(deps: CollectRepliesDeps): CollectReplies {
           .filter((call) => isWaiting(call, now) && !waiting.has(call.messageId))
           .sort((left, right) => (askedAt.get(left.messageId) ?? 0) - (askedAt.get(right.messageId) ?? 0));
         for (let offset = 0; offset < open.length && canLook(); offset += WAITING_MAX) {
-        for (const call of open.slice(offset, offset + WAITING_MAX)) {
-          const waited = waitOn(call);
-          waiting.set(
-            call.messageId,
-            waited
-              .catch(() => {
-                failed.push(waited);
-              })
-              .finally(() => waiting.delete(call.messageId)),
-          );
-        }
-        await Promise.all(waiting.values());
+          for (const call of open.slice(offset, offset + WAITING_MAX)) {
+            const waited = waitOn(call);
+            waiting.set(
+              call.messageId,
+              waited
+                .catch(() => {
+                  failed.push(waited);
+                })
+                .finally(() => waiting.delete(call.messageId)),
+            );
+          }
+          await Promise.all(waiting.values());
         }
         keyUnavailableInARow = run.isKeyUnavailable ? keyUnavailableInARow + 1 : 0;
 

@@ -2,6 +2,8 @@
 
 `@aeolus-fleet/gateway`: outside MCP servers and clients join an [Aeolus](https://github.com/ThomasHendrickx/aeolus-fleet) fleet as ships, through one gateway beside core. Its design is aeolus-fleet's docs/design/interop/interop.md.
 
+The gateway learns when to read each crewed ship through [lease wake streams](docs/wake-streams.md).
+
 ## Run
 
 ```sh

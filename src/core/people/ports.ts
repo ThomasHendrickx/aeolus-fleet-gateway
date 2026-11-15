@@ -195,9 +195,8 @@ export type PersonSelector =
 /** Outbound port: the fleet's calls the gateway makes as the crew of a person ship. */
 export interface PersonShipDoor {
   /**
-   * How many deliveries wait for the ship: at once, or with a wait while the
-   * count is still the one the crew knows, up to the fleet's longest wait
-   * (wake a person, W5), or less when told. Stopping the signal ends the wait.
+   * The current waiting count, without a waiting input. The lease stream
+   * requests reads; the optional signal cancels an in-flight HTTP read.
    */
   inbox(crewToken: string, options?: { signal: AbortSignal }): Promise<Result<{ waiting: number }, FleetRefusal>>;
   /**

@@ -11,7 +11,7 @@ import type { WakeOutcome } from './wake-person.js';
 import { createWaitOnPersonShip } from './wait-on-person-ship.js';
 
 // The gateway waits on every person ship it crews (wake a person, W5, W7):
-// it asks the fleet's inbox to wait while the count is the one it knows,
+// its stream requests reads of the fleet's current inbox count,
 // and tells the person's pages each time the count changed.
 
 const SHIP = { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID };
@@ -120,7 +120,7 @@ describe('the waiter of a person ship', () => {
     expect(waiter.told).toEqual([SHIP]);
   });
 
-  it("then tells the person's pages each time the count changed, up or down, and not when a wait ran out unchanged", async () => {
+  it("then tells the person's pages each time the count changed, up or down, and not when a wake finds it unchanged", async () => {
     const waiter = await waiting([ok({ waiting: 0 }), ok({ waiting: 2 }), ok({ waiting: 2 }), ok({ waiting: 1 })]);
 
     await runUntilIdle(waiter);

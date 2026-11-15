@@ -1,3 +1,4 @@
+import { createWakingClientCalls } from './core/mcp-in/waking-client-calls.js';
 import { createWatchGatewayShips } from './core/connection/watch-gateway-ships.js';
 import { createShipWakeups } from './adapters/fleet/ship-wakeups.js';
 import { createRefreshingPersonDoor } from './core/people/refreshing-person-door.js';
@@ -543,7 +544,10 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     pageUrlOf: partyPageUrl,
   });
   const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, requirements, checkScopes, grantCalls, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
-  const clientCalls = createPrismaClientCalls(prisma);
+  const clientCalls = createWakingClientCalls(createPrismaClientCalls(prisma), async (call) => {
+    const party = await parties.find(call.fleetId, call.party);
+    if (party?.crewToken !== null && party?.crewToken !== undefined) { wakeups.request(party.crewToken); }
+  });
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
   const checkServer = createCheckServer({ servers, servesOutsideParties });

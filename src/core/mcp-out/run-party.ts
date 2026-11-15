@@ -1,5 +1,6 @@
-import type { ShipWakeups } from '../connection/ship-wakeups.js';
 import type { DeliveryId } from '@aeolus-fleet/common';
+
+import type { ShipWakeups } from '../connection/ship-wakeups.js';
 
 import type { McpServerParty } from '../parties/party.js';
 import type { HandOutcome, ProxyShipCrew, PushedDelivery } from './hand-call.js';
@@ -25,14 +26,15 @@ export type RunParty = RunPartyOf<McpServerParty>;
 
 /**
  * Use case: the gateway takes the calls of a party's proxy ship, as its
- * crew, until it is stopped (interop 5.2). Each delivery pushReceive takes
+ * crew, on lease stream wakes and safety looks until stopped (interop 5.2).
+ * Each delivery pushReceive takes
  * is handed to the server once while in flight, with no more calls at once
  * than the party takes. A delivery answered again waits, longer each time,
  * before it is handed with the next number, a look still waiting then cut
  * short so it is taken again at once; the fleet counts each an
  * attempt and stops at the fifth. While the fleet answers only what the
  * gateway already holds, or does not answer, it looks again after a while.
- * What the party took up before it stopped is taken up first, in flight as
+ * Local hand completions request another look. What the party took up before it stopped is taken up first, in flight as
  * any delivery. While core cannot reach the fleet's company key
  * (KEY_UNAVAILABLE), nothing was claimed: it waits longer each time and goes
  * on once the key is back, never taking the proxy ship's crew as ended.
