@@ -1,9 +1,9 @@
 'use client';
 
+import { HeadingSendMessage } from '../../../../bridge/send-message/state/heading-send-message';
 import type { BridgeHome, HomeItem } from '../services/items';
 import { lastReadTimeOf } from '../services/last-read';
 import { useLastReadAt } from './kept-read';
-import { SendMessageButton } from './send-message-button';
 
 function countsOf(items: readonly HomeItem[]): string {
   const counted = items.filter(({ stale }) => stale === null);
@@ -40,9 +40,7 @@ export function HomeHeading({ waiting }: { waiting: BridgeHome['waiting'] }) {
         </h1>
         <p className="text-muted-foreground max-sm:hidden">{waiting.count === 0 ? 'Nothing waits on you.' : countsOf(waiting.items)}</p>
       </div>
-      <span className="max-sm:hidden">
-        <SendMessageButton look="words" />
-      </span>
+      <HeadingSendMessage />
     </div>
   );
 }
