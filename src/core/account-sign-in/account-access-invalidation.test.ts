@@ -57,6 +57,27 @@ describe('a disabled account has no cached browser access', () => {
     expect(await accountOf(asked)).toEqual({ isOk: false, error: { kind: 'signedOut' } });
   });
 
+  it.each([630_000, 630_001])('refuses a token whose exchange finishes after %i ms without successful renewal', async (elapsedMs) => {
+    let now = clock.now();
+    const exchange = Promise.withResolvers<Result<SharedAccountToken, SharedSignInRefusal>>();
+    const accountOf = createAccountOfSignIn({ clock: { now: () => now }, argoAccounts: memoryArgoAccounts(), signIns: {
+      accountToken: () => exchange.promise,
+    } });
+    const pending = accountOf(asked);
+    now = new Date(clock.now().getTime() + elapsedMs);
+    exchange.resolve(ok(CHARLOTTE_ACCOUNT_TOKEN));
+
+    expect(await pending).toEqual({ isOk: false, error: { kind: 'signedOut' } });
+  });
+
+  it('accepts an exchanged token inside the existing 30-second allowance', async () => {
+    const accountOf = createAccountOfSignIn({ clock: { now: () => new Date('2026-10-21T09:10:29.999Z') }, argoAccounts: memoryArgoAccounts(), signIns: {
+      accountToken: () => Promise.resolve(ok(CHARLOTTE_ACCOUNT_TOKEN)),
+    } });
+
+    expect(await accountOf(asked)).toEqual(ok(CHARLOTTE_ACCOUNT_TOKEN));
+  });
+
   it('does not admit or cache a token returned by an exchange started before the account was disabled', async () => {
     const exchange = Promise.withResolvers<Result<SharedAccountToken, SharedSignInRefusal>>();
     let exchanges = 0;
