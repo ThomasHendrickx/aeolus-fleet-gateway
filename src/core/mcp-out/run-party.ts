@@ -27,7 +27,8 @@ export type RunParty = RunPartyOf<McpServerParty>;
  * crew, until it is stopped (interop 5.2). Each delivery pushReceive takes
  * is handed to the server once while in flight, with no more calls at once
  * than the party takes. A delivery answered again waits, longer each time,
- * before it is handed with the next number; the fleet counts each an
+ * before it is handed with the next number, a look still waiting then cut
+ * short so it is taken again at once; the fleet counts each an
  * attempt and stops at the fifth. While the fleet answers only what the
  * gateway already holds, or does not answer, it looks again after a while.
  * What the party took up before it stopped is taken up first, in flight as
@@ -89,10 +90,22 @@ export function createRunParty<P extends TakingParty = McpServerParty>(deps: {
         await Promise.race(inFlight.values());
         continue;
       }
-      const received = await deps.crew.pushReceive(crewToken, { max, signal });
+      // A look that ran while a delivery in flight was locked by its hand skipped it and waits for a new one, so
+      // it ends once one in flight ends: a delivery answered again is taken again at once. A look cut this way
+      // loses nothing: what it took is in flight with the crew and comes back first.
+      const looking = new AbortController();
+      if (inFlight.size > 0) {
+        void Promise.race(inFlight.values()).then(() => {
+          looking.abort();
+        });
+      }
+      const received = await deps.crew.pushReceive(crewToken, { max, signal: AbortSignal.any([signal, looking.signal]) });
       if (!received.isOk && CREW_REFUSED.has(received.error.code)) {
         await Promise.all(inFlight.values());
         return { ended: 'crewRefused' };
+      }
+      if (!received.isOk && looking.signal.aborted) {
+        continue;
       }
       keyUnavailableInARow = !received.isOk && received.error.code === KEY_UNAVAILABLE ? keyUnavailableInARow + 1 : 0;
       const fresh = received.isOk ? received.value.filter((delivery) => !inFlight.has(delivery.deliveryId)).slice(0, max - inFlight.size) : [];

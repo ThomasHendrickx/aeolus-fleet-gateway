@@ -5,6 +5,7 @@ import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { aPushedDelivery, fakeProxyShipCrew } from '../../../test/support/mcp-out-fakes.js';
 import { PROXY_SHIP_ID } from '../../../test/support/party-fakes.js';
 import type { McpServerParty } from '../parties/party.js';
+import { ok } from '../shared/result.js';
 import type { HandCall, HandOutcome } from './hand-call.js';
 import { createRunParty, type Sleep } from './run-party.js';
 
@@ -110,6 +111,61 @@ describe('the gateway takes the calls of a proxy ship, as its crew (interop 5.2)
     await run();
 
     expect({ handed, waits: sleeps.filter((ms) => ms !== 2_000) }).toEqual({ handed: [ONE, ONE, ONE], waits: [1_000, 5_000] });
+  });
+
+  it('hands a delivery answered again at once, though a look made while it was handed waits for a new delivery', async () => {
+    // Its own stop: a sleep this run leaves behind never stops the next test's run.
+    const ownStop = new AbortController();
+    const waiting = [aPushedDelivery({ deliveryId: ONE })];
+    let isHanding = false;
+    const lookWaitsEnded: (() => void)[] = [];
+    // As core's: a look skips the delivery a hand holds locked, finds nothing, and waits for a new delivery or its signal.
+    const lockingCrew = {
+      pushReceive: async (_crewToken: string, { max, signal }: { max: number; signal: AbortSignal }) => {
+        if (isHanding) {
+          await new Promise<void>((resolve) => {
+            lookWaitsEnded.push(resolve);
+            signal.addEventListener('abort', () => {
+              resolve();
+            });
+          });
+          return ok([]);
+        }
+        return ok(waiting.slice(0, max));
+      },
+    };
+    const outcomesOfOne: HandOutcome[] = [{ kind: 'again' }, { kind: 'handled' }];
+    const lockingHandCall: HandCall = async ({ delivery }) => {
+      handed.push(delivery.deliveryId);
+      isHanding = true;
+      // The fleet's handed call holds the delivery while it runs.
+      await new Promise((resolve) => setImmediate(resolve));
+      isHanding = false;
+      const outcome = outcomesOfOne.shift() ?? { kind: 'handled' };
+      if (outcome.kind !== 'again') {
+        waiting.length = 0;
+      }
+      return outcome;
+    };
+    const stopWhenNothingWaits: Sleep = async (ms) => {
+      sleeps.push(ms);
+      await new Promise((resolve) => setImmediate(resolve));
+      if (waiting.length === 0) {
+        ownStop.abort();
+      }
+    };
+    const running = createRunParty({ crew: lockingCrew, handCall: lockingHandCall, sleep: stopWhenNothingWaits, pollMs: 2_000, againWaitsMs: [1_000] })({ party: CRM, signal: ownStop.signal });
+    for (let tick = 0; tick < 1_000 && handed.length < 2; tick += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    const handedBeforeTheLookWaited = [...handed];
+    ownStop.abort();
+    lookWaitsEnded.forEach((end) => {
+      end();
+    });
+    await running;
+
+    expect(handedBeforeTheLookWaited).toEqual([ONE, ONE]);
   });
 
   it('polls again after a while when the fleet hands only what it already holds', async () => {
