@@ -77,7 +77,7 @@ export interface ArgoInboxDoor {
   entry(crewToken: string, read: { argo: ShipId; messageId: MessageId }): Promise<Result<ArgoInboxEntry | null, FleetRefusal>>;
   /** A ship's type, as the fleet answers it even of a ship outside the read reach. */
   shipType(crewToken: string, shipId: ShipId): Promise<Result<string, FleetRefusal>>;
-  /** Each change to a delivery to argo after the position, oldest first, waiting while none came until the signal aborts, and the position to follow from next. */
+  /** Each change to a delivery to argo after the position, oldest first, answered at once, none when none came, and the position to follow from next. */
   changes(crewToken: string, follow: { argo: ShipId; afterSeq: number; signal: AbortSignal }): Promise<Result<{ changes: readonly ArgoInboxChange[]; lastSeq: number }, FleetRefusal>>;
 }
 

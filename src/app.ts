@@ -871,6 +871,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     intervalMs: ARGO_WAKES_ROUND_MS,
     log: server.log,
   });
+  // Each round follows argo's inbox from its position, at once: no follow waits (long-poll W8).
   const argoInboxFollower = createRoundWorker({
     name: "argo's inbox",
     round: async () => {
@@ -1126,6 +1127,8 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const gatewayStreams = createWatchGatewayShips({
     connections, wakeups, isServed,
     look: async (crew, signal) => {
+      // argo's inbox is read at once on each look of the gateway's own ship, besides its own round: follow answers at once (long-poll W5, W8).
+      argoInboxFollower.wake();
       const { acked, refused } = await answerPings(signal, crew.fleetId);
       for (const { contentType, senderShipId } of acked) {
         server.log.info({ contentType, senderShipId }, "the gateway's ship acked a message it does not handle");

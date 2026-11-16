@@ -7,7 +7,7 @@
  * their payloads, fleet.message, which have no REST door, so they go over
  * tRPC with the crew token.
  */
-import { FOLLOW_MAX_LIMIT, FOLLOW_WAIT_MAX_SECONDS, followFleetOutputSchema, messageOutputSchema, shipMessagesOutputSchema, shipOutputSchema, type MessageId, type ShipId } from '@aeolus-fleet/common';
+import { FOLLOW_MAX_LIMIT, followFleetOutputSchema, messageOutputSchema, shipMessagesOutputSchema, shipOutputSchema, type MessageId, type ShipId } from '@aeolus-fleet/common';
 import { PAGE_SIZE_MAX } from '@aeolus-fleet/common/rules';
 import type { z } from 'zod';
 
@@ -83,7 +83,8 @@ export function createArgoInboxDoor(options: { fleetUrl: string }): ArgoInboxDoo
       return read.isOk ? ok(read.value.type) : read;
     },
     changes: async (crewToken, { argo, afterSeq, signal }) => {
-      const input = { afterSeq, max: FOLLOW_MAX_LIMIT, waitSeconds: FOLLOW_WAIT_MAX_SECONDS };
+      // No wait: core 0.41.0 answers follow at once and refuses a waitSeconds (long-poll W8).
+      const input = { afterSeq, max: FOLLOW_MAX_LIMIT };
       const followed = parsedAs(followFleetOutputSchema, await readAs(fleetUrl, { as: { crewToken }, procedure: 'follow', input, signal }));
       if (!followed.isOk) {
         return followed;
