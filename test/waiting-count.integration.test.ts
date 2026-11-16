@@ -90,7 +90,7 @@ async function wakeCounted(): Promise<number> {
 }
 
 const plain = (payload: string) => ({ contentType: 'text/plain', payload });
-const question = (title: string) => ({ contentType: QUESTION, payload: JSON.stringify({ id: crypto.randomUUID(), title, context: '', options: [{ key: 1, label: 'Yes' }] }) });
+const question = (title: string) => ({ contentType: QUESTION, payload: JSON.stringify({ id: crypto.randomUUID(), title, context: '', options: [{ key: 1, label: 'Yes' }], pick: { option: 1, why: 'It is ready.' } }) });
 
 describe('the count of what waits on a person leaves out the plain messages of a meeting (Refs #322)', () => {
   it('counts the question and the plain message of a live ship', async () => {

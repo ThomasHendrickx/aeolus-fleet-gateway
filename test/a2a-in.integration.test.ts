@@ -273,7 +273,7 @@ describe("an outside A2A client's message is a message its proxy ship sends (dec
     await aSupplierReaching();
     const task = await sent({ messageId: 'm-1', text: 'Quote 40 chairs.' });
     const delivery = await receiveOne(setting.fleet, procurement.crewToken);
-    await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify({ id: crypto.randomUUID(), title: 'Which colour?', context: 'The chairs come in two colours.', options: [{ key: 1, label: 'Red' }, { key: 2, label: 'Blue' }] }) });
+    await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify({ id: crypto.randomUUID(), title: 'Which colour?', context: 'The chairs come in two colours.', options: [{ key: 1, label: 'Red' }, { key: 2, label: 'Blue' }], pick: { option: 1, why: 'Red is in stock.' } }) });
     await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_INPUT_REQUIRED');
 
     const continued = await sent({ messageId: 'm-2', text: 'Blue.', taskId: task.id });
@@ -340,7 +340,7 @@ describe("an outside A2A client's message is a message its proxy ship sends (dec
     dropped.abort();
 
     const delivery = await receiveOne(setting.fleet, procurement.crewToken);
-    await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify({ id: crypto.randomUUID(), title: 'Which colour?', context: 'The chairs come in two colours.', options: [{ key: 1, label: 'Red' }, { key: 2, label: 'Blue' }] }) });
+    await replyTo(procurement.crewToken, { to: supplierShipId, inReplyTo: delivery?.messageId ?? '', contentType: 'application/vnd.aeolus.question+json', payload: JSON.stringify({ id: crypto.randomUUID(), title: 'Which colour?', context: 'The chairs come in two colours.', options: [{ key: 1, label: 'Red' }, { key: 2, label: 'Blue' }], pick: { option: 1, why: 'Red is in stock.' } }) });
     await expect.poll(async () => (await taskNow(task.id)).status.state).toBe('TASK_STATE_INPUT_REQUIRED');
     const dropping = new AbortController();
     const resubscribed = await streamed({ method: 'SubscribeToTask', params: { id: task.id }, signal: dropping.signal }).next();

@@ -1,9 +1,10 @@
-import type { Theme } from '@aeolus-fleet/common';
-import { cookies } from 'next/headers';
+import { themeOfCookies } from '@aeolus-fleet/common/rules';
+import { headers } from 'next/headers';
 
-import { THEME_COOKIE, themeFrom } from '../theme';
+import type { BrowserTheme } from '../browser-theme';
+import { themeCookieDomainFrom } from '../theme-cookie-domain';
 
-/** The theme this browser chose, from its cookie. */
-export async function readTheme(): Promise<Theme> {
-  return themeFrom((await cookies()).get(THEME_COOKIE)?.value);
+/** The theme this browser chose in any Aeolus app, from the cookie they share, and where a new choice is kept. */
+export async function readTheme(): Promise<BrowserTheme> {
+  return { theme: themeOfCookies((await headers()).get('cookie') ?? undefined), cookieDomain: themeCookieDomainFrom(process.env) };
 }

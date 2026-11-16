@@ -9,6 +9,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { PALETTE_LIST_PATH } from '@aeolus-fleet/common';
 
 import { isSameOrigin } from './forms.js';
 
@@ -73,8 +74,9 @@ export function registerFrontDoor(server: FastifyInstance, deps: { web?: WebApp 
 
   const { web } = deps;
   if (web !== undefined) {
-    // The web app writes the answer itself: Fastify, hijacked, sends nothing more.
-    for (const path of [WEB_APP_FILES, WAKE_WORKER, ARGO_WAKE_ICON, ...APP_MARK_FILES]) {
+    // The web app writes the answer itself: Fastify, hijacked, sends nothing more. The palette list is
+    // read by the other Aeolus apps' servers, whatever they accept (header design H4).
+    for (const path of [WEB_APP_FILES, WAKE_WORKER, ARGO_WAKE_ICON, ...APP_MARK_FILES, PALETTE_LIST_PATH]) {
       server.get(path, async (request, reply) => {
         reply.hijack();
         await web(request.raw, reply.raw);

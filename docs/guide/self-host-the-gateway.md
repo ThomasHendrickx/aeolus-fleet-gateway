@@ -65,7 +65,7 @@ Without the sign-in service, the gateway still starts, migrates its database and
 
 ## What you need
 
-- **A self-hosted fleet**, running as [Self-host](https://aeolus-fleet.dev/docs/self-host/) sets it up, with a fleet server at 0.38.5 or later.
+- **A self-hosted fleet**, running as [Self-host](https://aeolus-fleet.dev/docs/self-host/) sets it up, with a fleet server at 0.40.0 or later.
 - **Node 26** on the server.
 - **An empty Postgres database** for the gateway, on the fleet's Postgres server or another, reached with a direct or session connection.
 - **An https address of its own** for the gateway, such as `gateway.example.com`, once anyone or anything beyond the server reaches it. Chats and Slack need it.
@@ -167,6 +167,7 @@ People sign in to Bridge, from a chat and to link Slack with their Aeolus accoun
 | `PAGASAE_URL`, `PAGASAE_CLIENT_ID`, `PAGASAE_CLIENT_SECRET` | The sign-in service, and the gateway's chats client there, with the redirect address `<GATEWAY_PUBLIC_URL>/pagasae/callback`. All three or none. The gateway refuses to start with the sign-in URL unless it has this chats client, even though no chat connects yet. |
 | `PAGASAE_APP_CLIENT_ID`, `PAGASAE_APP_CLIENT_SECRET` | The gateway's pages as an app at the sign-in service, with the redirect address `<GATEWAY_PUBLIC_URL>/sign-in/done`. Both or neither, beside the three above. |
 | `INSTALLATION_TOKEN` | The installation token the fleet server and the sign-in service share. |
+| `AEOLUS_THEME_COOKIE_DOMAIN` | The domain the console, the sign-in service and the gateway share, such as `example.com`, as the console has it: the theme a person picks shows in every app. Left out, the gateway keeps its own. |
 
 So the sign-in service has three clients for your installation: the console, the gateway's pages and the gateway's chats client.
 

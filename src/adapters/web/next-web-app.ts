@@ -18,14 +18,18 @@ const createServer: typeof next.default = typeof next === 'function' ? next : ne
 /** Where the web app's server reads the gateway's API address from (web/lib/gateway-api/page-api.ts reads the same name). */
 const API_URL_VARIABLE = 'AEOLUS_GATEWAY_API_URL';
 
+/** Where the web app's server reads the gateway's MCP address from, for Copy MCP address (bridge/palette/hooks/mcp-address.ts reads the same name). */
+const MCP_URL_VARIABLE = 'AEOLUS_GATEWAY_MCP_URL';
+
 export interface NextWebApp {
   handle: WebApp;
   close(): Promise<void>;
 }
 
-export async function startNextWebApp(options: { dir: string; isDevelopment: boolean; apiUrl: string }): Promise<NextWebApp> {
-  // The web app runs in this process: its server reads where the API is when a page asks.
+export async function startNextWebApp(options: { dir: string; isDevelopment: boolean; apiUrl: string; mcpUrl: string }): Promise<NextWebApp> {
+  // The web app runs in this process: its server reads where the API and the MCP endpoint are when a page asks.
   process.env[API_URL_VARIABLE] = options.apiUrl;
+  process.env[MCP_URL_VARIABLE] = options.mcpUrl;
   const app = createServer({ dir: options.dir, dev: options.isDevelopment });
   await app.prepare();
   const handle = app.getRequestHandler();

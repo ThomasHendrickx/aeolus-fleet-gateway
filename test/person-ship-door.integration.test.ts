@@ -1,4 +1,5 @@
 import { receiveOutputSchema } from '@aeolus-fleet/common';
+import { z } from 'zod';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
@@ -79,7 +80,7 @@ describe('a person ship discovers what it may send to', () => {
 
 describe("a person ship sends the person's own message", () => {
   it('reaches a ship by its name, a question with numbered options as its content type says', async () => {
-    const question = JSON.stringify({ id: '0b6f2a52-6a43-4a43-9a43-3f3c3b9b1a10', title: 'Which release?', context: '', options: [{ key: 1, label: '1.4' }, { key: 2, label: '1.5' }] });
+    const question = JSON.stringify({ id: '0b6f2a52-6a43-4a43-9a43-3f3c3b9b1a10', title: 'Which release?', context: '', options: [{ key: 1, label: '1.4' }, { key: 2, label: '1.5' }], pick: { option: 2, why: 'It holds the fix.' } });
 
     const sent = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: QUESTION, payload: question, idempotencyKey: 'charlotte-1' });
 
@@ -309,6 +310,12 @@ describe('how big: a large inbox (chatgpt-plugin design, 9)', () => {
   );
 });
 
+/** A question and a step of the shape core accepts, as the tracker sends them. */
+const WELL_FORMED = {
+  'application/vnd.aeolus.question+json': { id: '5d0c8f8e-2f4b-4f7e-9d3a-1c2b3a4d5e6f', title: 'Ship it?', context: '', options: [{ key: 1, label: 'Yes' }], pick: { option: 1, why: 'It is ready.' } },
+  'application/vnd.aeolus.step+json': { id: '7a1e9c3b-4d5f-4a6b-8c7d-9e0f1a2b3c4d', title: 'Sign in to Attio', why: 'The tracker reads its leads.' },
+} as const;
+
 describe('a malformed question or step never reaches the person', () => {
   let prisma: PrismaClient;
   beforeAll(async () => {
@@ -317,14 +324,22 @@ describe('a malformed question or step never reaches the person', () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });
-  it.each(['application/vnd.aeolus.question+json', 'application/vnd.aeolus.step+json'])('returns and handles %s once across concurrent reads and a gateway restart', async (contentType) => {
+  it.each(['application/vnd.aeolus.question+json', 'application/vnd.aeolus.step+json'] as const)('returns and handles %s once across concurrent reads and a gateway restart', async (contentType) => {
     const opened = createPrismaOpenedDeliveries(prisma);
     const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
-      body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType, payload: '{}', idempotencyKey: 'malformed' }),
+      body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType, payload: JSON.stringify(WELL_FORMED[contentType]), idempotencyKey: 'malformed' }),
     });
     expect(sent.status).toBe(200);
+    // Core refuses a malformed one at send since 0.40.0, but one it accepted before stays in the fleet: its stored payload is made one here.
+    const { messageId } = z.object({ messageId: z.string() }).parse(await sent.json());
+    const core = createPrismaClient(fleet.databaseUrl);
+    try {
+      await core.$executeRaw`UPDATE messages SET payload = '{}' WHERE id = ${messageId}`;
+    } finally {
+      await core.$disconnect();
+    }
     const received = await door.pushReceive(charlotte, { max: 10 });
     const delivery = received.isOk ? received.value[0] : undefined;
     if (delivery === undefined) {
