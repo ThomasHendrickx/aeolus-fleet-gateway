@@ -205,6 +205,21 @@ describe("a person ship reads its exchange with one ship (aeolus-fleet exchange-
   });
 });
 
+describe('a person ship lists its exchanges', () => {
+  it('carries core\'s unseen plain message count for each exchange', async () => {
+    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
+      body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType: 'text/plain', payload: 'Issue 7 is closed', idempotencyKey: 'tracker-list-1' }),
+    });
+    expect(sent.status).toBe(200);
+
+    const page = await door.exchanges(charlotte, { cursor: null, limit: 20 });
+
+    expect(page).toMatchObject({ isOk: true, value: { items: [{ otherShipName: 'tracker', unseenPlainMessages: 1 }] } });
+  });
+});
+
 describe('a person ship reads an exchange that is not there (aeolus-fleet exchange-read, section 7)', () => {
   async function trackerShipId() {
     const found = await door.discover(charlotte);
