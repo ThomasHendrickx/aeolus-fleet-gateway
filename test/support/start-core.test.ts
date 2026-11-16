@@ -36,6 +36,6 @@ describe('startCore', () => {
     await aStrangerOn(port);
 
     // Core cannot reach this database, so it never listens: only the stranger answers.
-    await expect(startCore(coreBin(), { databaseUrl: 'postgresql://nobody@127.0.0.1:1/none', port })).rejects.toThrow('exited before');
+    await expect(startCore(coreBin(), { databaseUrl: 'postgresql://nobody@127.0.0.1:1/none', port })).rejects.toThrow('exited before it listened');
   }, 90_000);
 });

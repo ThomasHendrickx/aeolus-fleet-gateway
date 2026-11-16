@@ -17,9 +17,11 @@ import { z } from 'zod';
 
 const run = promisify(execFile);
 
-/** How long a starting fleet server gets to answer its version. */
+/** How long a starting fleet server gets to listen. */
 const START_TIMEOUT_MS = 60_000;
 const START_POLL_MS = 200;
+/** The end of core's log kept to find its listening line in. */
+const LOG_TAIL = 4096;
 
 /** argo's console sign-in on every test fleet. */
 export const OPERATOR = { email: 'argo@example.com', password: 'correct horse battery staple' };
@@ -88,24 +90,25 @@ function isFree(port: number): Promise<boolean> {
   });
 }
 
-async function waitForVersion(url: string, exited: () => string | undefined): Promise<void> {
+/**
+ * Waits until this child itself listens: its own log line says so. Another
+ * process can take the port between choosing it and core binding it, and
+ * would answer a version request in core's place.
+ */
+async function waitForListening(child: { port: number; isListening(): boolean; exited(): string | undefined }): Promise<void> {
+  const { port } = child;
   const deadline = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const exit = exited();
+    const exit = child.exited();
     if (exit !== undefined) {
-      throw new Error(`the fleet server exited before it answered: ${exit}`);
+      throw new Error(`the fleet server exited before it listened on port ${String(port)}: ${exit}`);
     }
-    try {
-      const response = await fetch(`${url}/api/version`);
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // Not listening yet.
+    if (child.isListening()) {
+      return;
     }
     await new Promise((resolve) => setTimeout(resolve, START_POLL_MS));
   }
-  throw new Error(`the fleet server at ${url} did not answer within ${String(START_TIMEOUT_MS)} ms`);
+  throw new Error(`the fleet server did not listen on port ${String(port)} within ${String(START_TIMEOUT_MS)} ms`);
 }
 
 /** Creates the fleet and argo as an operator does once: the one-use sign-in ticket its printed link carries. */
@@ -148,7 +151,7 @@ export async function aMigratedDatabase(adminUrl: string): Promise<string> {
   return databaseUrl;
 }
 
-/** Migrates a new database, creates its fleet and argo, and starts core on a free port, answering once it serves its version. */
+/** Migrates a new database, creates its fleet and argo, and starts core on a free port, answering once it listens. */
 export async function startFleetServer(adminUrl: string): Promise<FleetServer> {
   const databaseUrl = aNewDatabaseUrl(adminUrl, 'fleet');
   const bin = coreBin();
@@ -166,15 +169,19 @@ export async function startFleetServer(adminUrl: string): Promise<FleetServer> {
   return { url, databaseUrl, stop: () => core.stop() };
 }
 
-/** Starts core's `start` on a port, answering once it serves its version. */
+/** Starts core's `start` on a port, answering once it listens. */
 export async function startCore(bin: string, options: { databaseUrl: string; port: number }): Promise<{ stop(): Promise<void> }> {
   const url = `http://127.0.0.1:${String(options.port)}`;
   const child = spawn(process.execPath, [bin, 'start'], {
-    env: { ...process.env, DATABASE_URL: options.databaseUrl, PUBLIC_URL: url, HOST: '127.0.0.1', PORT: String(options.port), LOG_LEVEL: 'warn' },
-    stdio: ['ignore', 'ignore', 'pipe'],
+    env: { ...process.env, DATABASE_URL: options.databaseUrl, PUBLIC_URL: url, HOST: '127.0.0.1', PORT: String(options.port), LOG_LEVEL: 'info' },
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
+  let stdout = '';
   let stderr = '';
   let exit: string | undefined;
+  child.stdout.on('data', (chunk: Buffer) => {
+    stdout = (stdout + chunk.toString()).slice(-LOG_TAIL);
+  });
   child.stderr.on('data', (chunk: Buffer) => {
     stderr += chunk.toString();
   });
@@ -190,7 +197,7 @@ export async function startCore(bin: string, options: { databaseUrl: string; por
     await exited;
   };
   try {
-    await waitForVersion(url, () => exit);
+    await waitForListening({ port: options.port, isListening: () => stdout.includes(`Server listening at ${url}`), exited: () => exit });
   } catch (error) {
     await stop();
     throw error;
