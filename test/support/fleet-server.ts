@@ -151,22 +151,40 @@ export async function aMigratedDatabase(adminUrl: string): Promise<string> {
   return databaseUrl;
 }
 
-/** Migrates a new database, creates its fleet and argo, and starts core on a free port, answering once it listens. */
-export async function startFleetServer(adminUrl: string): Promise<FleetServer> {
-  const databaseUrl = aNewDatabaseUrl(adminUrl, 'fleet');
+/** How many ports a start tries: another process can take a chosen port before core binds it. */
+const START_ATTEMPTS = 3;
+const PORT_TAKEN = 'exited before it listened';
+
+/**
+ * Migrates a new database, creates its fleet and argo, and starts core on a free port, answering once it listens.
+ * When another process took the port first, it starts again on a new port with a new fleet:init, whose PUBLIC_URL holds the port.
+ */
+export async function startFleetServer(adminUrl: string, options: { aPort?: () => Promise<number> } = {}): Promise<FleetServer> {
+  const aPort = options.aPort ?? aFreePort;
   const bin = coreBin();
-  await run(process.execPath, [bin, 'migrate'], { env: { ...process.env, DATABASE_URL: databaseUrl } });
-  const port = await aFreePort();
-  const url = `http://127.0.0.1:${String(port)}`;
-  const ticket = await initialiseFleet(bin, { DATABASE_URL: databaseUrl, PUBLIC_URL: url });
-  const core = await startCore(bin, { databaseUrl, port });
-  try {
-    await setOperatorLogin(url, ticket);
-  } catch (error) {
-    await core.stop();
-    throw error;
+  for (let attempt = 1; ; attempt += 1) {
+    const databaseUrl = aNewDatabaseUrl(adminUrl, 'fleet');
+    await run(process.execPath, [bin, 'migrate'], { env: { ...process.env, DATABASE_URL: databaseUrl } });
+    const port = await aPort();
+    const url = `http://127.0.0.1:${String(port)}`;
+    const ticket = await initialiseFleet(bin, { DATABASE_URL: databaseUrl, PUBLIC_URL: url });
+    let core: { stop(): Promise<void> };
+    try {
+      core = await startCore(bin, { databaseUrl, port });
+    } catch (error) {
+      if (attempt < START_ATTEMPTS && error instanceof Error && error.message.includes(PORT_TAKEN)) {
+        continue;
+      }
+      throw error;
+    }
+    try {
+      await setOperatorLogin(url, ticket);
+    } catch (error) {
+      await core.stop();
+      throw error;
+    }
+    return { url, databaseUrl, stop: () => core.stop() };
   }
-  return { url, databaseUrl, stop: () => core.stop() };
 }
 
 /** Starts core's `start` on a port, answering once it listens. */
