@@ -37,7 +37,7 @@ const corePackage = z.object({ bin: z.object({ 'aeolus-core': z.string() }) });
 const CORE_PACKAGE = fileURLToPath(new URL('../../node_modules/@aeolus-fleet/core/', import.meta.url));
 
 /** The path of core's `aeolus-core` bin in node_modules. */
-function coreBin(): string {
+export function coreBin(): string {
   const bin = corePackage.parse(JSON.parse(readFileSync(join(CORE_PACKAGE, 'package.json'), 'utf8'))).bin['aeolus-core'];
   return join(CORE_PACKAGE, bin);
 }
@@ -156,8 +156,21 @@ export async function startFleetServer(adminUrl: string): Promise<FleetServer> {
   const port = await aFreePort();
   const url = `http://127.0.0.1:${String(port)}`;
   const ticket = await initialiseFleet(bin, { DATABASE_URL: databaseUrl, PUBLIC_URL: url });
+  const core = await startCore(bin, { databaseUrl, port });
+  try {
+    await setOperatorLogin(url, ticket);
+  } catch (error) {
+    await core.stop();
+    throw error;
+  }
+  return { url, databaseUrl, stop: () => core.stop() };
+}
+
+/** Starts core's `start` on a port, answering once it serves its version. */
+export async function startCore(bin: string, options: { databaseUrl: string; port: number }): Promise<{ stop(): Promise<void> }> {
+  const url = `http://127.0.0.1:${String(options.port)}`;
   const child = spawn(process.execPath, [bin, 'start'], {
-    env: { ...process.env, DATABASE_URL: databaseUrl, PUBLIC_URL: url, HOST: '127.0.0.1', PORT: String(port), LOG_LEVEL: 'warn' },
+    env: { ...process.env, DATABASE_URL: options.databaseUrl, PUBLIC_URL: url, HOST: '127.0.0.1', PORT: String(options.port), LOG_LEVEL: 'warn' },
     stdio: ['ignore', 'ignore', 'pipe'],
   });
   let stderr = '';
@@ -168,20 +181,21 @@ export async function startFleetServer(adminUrl: string): Promise<FleetServer> {
   child.once('exit', (code) => {
     exit = `exit ${String(code)}: ${stderr}`;
   });
-  await waitForVersion(url, () => exit);
-  await setOperatorLogin(url, ticket);
-  return {
-    url,
-    databaseUrl,
-    stop: async () => {
-      if (exit !== undefined) {
-        return;
-      }
-      const exited = new Promise((resolve) => child.once('exit', resolve));
-      child.kill('SIGTERM');
-      await exited;
-    },
+  const stop = async (): Promise<void> => {
+    if (exit !== undefined) {
+      return;
+    }
+    const exited = new Promise((resolve) => child.once('exit', resolve));
+    child.kill('SIGTERM');
+    await exited;
   };
+  try {
+    await waitForVersion(url, () => exit);
+  } catch (error) {
+    await stop();
+    throw error;
+  }
+  return { stop };
 }
 
 /**
