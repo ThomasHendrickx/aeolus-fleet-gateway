@@ -10,7 +10,9 @@ import { ADDED_CREDENTIAL_KINDS, SIGN_IN_CREDENTIAL } from '../../forms/server-c
 import { BUTTONS, CARD } from '../../forms/ui/look';
 import { outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } from '../../outside-parties/party-kinds';
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
-import { StatusBadge, Tag } from '../../outside-parties/ui/status-badge';
+import { StatusBadge } from '@aeolus-fleet/ui';
+import { toneIcon } from '../../../lib/tone-icons';
+import { Tag } from '../../outside-parties/ui/tag';
 import { AgentNeeds } from '../tools-table/ui/agent-needs';
 import { approvalOf, ToolsSection } from '../tools-table/ui/tools-section';
 import { readOwnSignIn } from '../hooks/read-own-sign-in';
@@ -59,7 +61,7 @@ export function PartyHead({ party }: { party: ListedParty }) {
       <h1 className="text-heading-touch font-semibold max-sm:sr-only">{party.name}</h1>
       <Tag>{protocol}</Tag>
       <Tag>{SIDES[side].one}</Tag>
-      <StatusBadge tone={state.tone} label={state.label} />
+      <StatusBadge tone={state.tone} icon={toneIcon(state.tone)} label={state.label} look="pill" />
     </div>
   );
 }

@@ -9,7 +9,9 @@ import { useRouter } from 'next/navigation';
 
 import { BUTTONS, INPUT } from '../../../forms/ui/look';
 import { ActionButton } from '../../../bridge/ui/action-button';
-import { StatusBadge, Tag } from '../../../outside-parties/ui/status-badge';
+import { StatusBadge } from '@aeolus-fleet/ui';
+import { toneIcon } from '../../../../lib/tone-icons';
+import { Tag } from '../../../outside-parties/ui/tag';
 import { setPartyScopes, switchPartyTools, type TableOutcome } from '../../actions';
 import { switchedMessageOf } from '../../switched-message';
 import { hintSuggestionsOf, suggestedScopesOf } from '../hint-suggestions';
@@ -304,7 +306,7 @@ export function ToolsTable({ fleetId, party, tools: readTools, version, partySco
                 <td className="py-2 pr-3 max-sm:col-start-2">
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="font-mono">{tool.name}</span>
-                    {tool.isNew ? <StatusBadge tone="attention" label="New" /> : null}
+                    {tool.isNew ? <StatusBadge tone="attention" icon={toneIcon('attention')} label="New" look="pill" /> : null}
                   </span>
                   {firstLineOf(tool.description) === '' ? null : <span className="block text-muted-foreground">{firstLineOf(tool.description)}</span>}
                 </td>

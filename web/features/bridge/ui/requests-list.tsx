@@ -1,5 +1,7 @@
+import { StatusBadge } from '@aeolus-fleet/ui';
+
+import { toneIcon } from '../../../lib/tone-icons';
 import { requestStatus, subjectKind, subjectName, type ShownRequest } from '../services/requests';
-import { StatusBadge } from './status-badge';
 
 function PartyMark({ name }: { name: string }) {
   return (
@@ -11,6 +13,7 @@ function PartyMark({ name }: { name: string }) {
 
 function RequestRow({ request, now }: { request: ShownRequest; now: Date }) {
   const name = subjectName(request);
+  const status = requestStatus(request, now);
   return (
     <>
       <PartyMark name={name} />
@@ -18,7 +21,7 @@ function RequestRow({ request, now }: { request: ShownRequest; now: Date }) {
         <span className="truncate">{name}</span>
         <span className="text-caption text-muted-foreground">{subjectKind(request)}</span>
       </span>
-      <StatusBadge status={requestStatus(request, now)} />
+      <StatusBadge tone={status.tone} icon={toneIcon(status.tone)} label={status.label} look="pill" />
     </>
   );
 }
