@@ -164,13 +164,14 @@ export interface ExchangePage {
   readonly newerCursor: DeliveryId | null;
 }
 
-/** One exchange of the person ship's list: the other ship, how many of its messages are not yet acknowledged, and the newest message between them. */
+/** One exchange: the other ship, its unacknowledged and unseen plain message counts, and the newest message between them. */
 export interface ExchangeSummary {
   readonly otherShipId: ShipId;
   readonly otherShipName: string;
   readonly otherShipType: string;
   readonly otherShipKind: ShipKind;
   readonly unacknowledged: number;
+  readonly unseenPlainMessages: number;
   readonly newestMessage: Omit<ExchangeMessage, 'inReplyTo' | 'deliveryState' | 'receivedDelivery'>;
 }
 

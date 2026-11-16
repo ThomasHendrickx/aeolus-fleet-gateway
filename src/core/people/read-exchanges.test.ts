@@ -16,6 +16,7 @@ function anExchange(n: number, overrides: Partial<ExchangeSummary> = {}): Exchan
     otherShipType: 'tracker',
     otherShipKind: 'agent',
     unacknowledged: n % 3,
+    unseenPlainMessages: n % 3,
     newestMessage: { messageId: `msg_01m3tbfspe96yf1rnr4ank${suffix}`, senderShipId: `shp_01m3tbfspe96yf1rnr4ank${suffix}`, payload: `Latest of ${String(n)}`, isPayloadUnreadable: false, contentType: 'text/plain', sentAt: '2026-11-06T10:00:00.000Z' },
     ...overrides,
   };
