@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, signIn } from './support/argo.js';
+import { readUntilAnswered } from './support/call-result.js';
 import { receiveOne } from './support/ship.js';
 import { setTimeout as wait } from 'node:timers/promises';
 import { migratedDatabase } from './support/database.js';
@@ -155,14 +156,18 @@ describe("an outside MCP client's tool call is a message its proxy ship sends", 
     const delivery = await receiveOne(setting.fleet, crm);
     await replyTo(crm, { to: z.string().parse(delivery?.senderShipId), inReplyTo: z.string().parse(delivery?.messageId), payload: 'Two deals: Analytical engine, Difference engine.' });
 
-    let read = await mcp.callTool({ name: 'aeolus_result', arguments: { handle } });
-    for (let attempt = 0; attempt < REPLY_ATTEMPTS && read.content.length > 0 && textOf(read).includes('"state":"submitted"'); attempt += 1) {
-      await wait(REPLY_POLL_MS);
-      read = await mcp.callTool({ name: 'aeolus_result', arguments: { handle } });
-    }
+    let isError: boolean | undefined;
+    const text = await readUntilAnswered(
+      async () => {
+        const read = await mcp.callTool({ name: 'aeolus_result', arguments: { handle } });
+        isError = read.isError;
+        return textOf(read);
+      },
+      { attempts: REPLY_ATTEMPTS, pollMs: REPLY_POLL_MS },
+    );
     await mcp.close();
 
-    expect({ text: textOf(read), isError: read.isError }).toEqual({ text: 'Two deals: Analytical engine, Difference engine.', isError: undefined });
+    expect({ text, isError }).toEqual({ text: 'Two deals: Analytical engine, Difference engine.', isError: undefined });
   });
 
   it("answers the ship's reply itself when it comes within the wait its capability states", async () => {
