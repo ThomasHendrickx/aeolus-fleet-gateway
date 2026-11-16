@@ -15,4 +15,11 @@ describe('test run labels', () => {
     expect(labels['aeolus-fleet.test-checkout']).toBe(process.cwd());
     expect(labels['aeolus-fleet.test-run-start']).toBe('unavailable');
   });
+
+  it('names the repository and the run, whichever the platform', () => {
+    const labels = testRunLabels('a-run');
+
+    expect(labels['aeolus-fleet.test-repository']).toBe('aeolus-fleet-gateway');
+    expect(labels['aeolus-fleet.test-run']).toBe('a-run');
+  });
 });
