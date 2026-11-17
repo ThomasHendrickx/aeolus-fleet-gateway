@@ -24,11 +24,38 @@ export async function send(fleet: FleetServer, request: { crewToken: string; to:
   return sendOutputSchema.parse(await call(fleet, { crewToken: request.crewToken, path: '/ship/send', body })).messageId;
 }
 
-/** Receives the ship's next delivery and acknowledges it, waiting as a receive does: none when none came. */
-export async function receiveOne(fleet: FleetServer, crewToken: string) {
-  const [delivery] = receiveOutputSchema.parse(await call(fleet, { crewToken, path: '/ship/receive', body: {} })).deliveries;
-  if (delivery) {
-    await call(fleet, { crewToken, path: '/ship/ack', body: { deliveryId: delivery.deliveryId } });
+/** How long a test ship waits for its next delivery, and how often it looks meanwhile. */
+const RECEIVE_WAIT_MS = 10_000;
+const RECEIVE_POLL_MS = 100;
+/** How long a test ship waits to see that nothing more comes. */
+const NOTHING_MORE_MS = 2_000;
+
+/**
+ * Receives the ship's next delivery and acknowledges it. Core's receive answers
+ * at once (long-poll W8), so the ship looks again every RECEIVE_POLL_MS until a
+ * delivery comes or `waitMs` passes: none when none came.
+ */
+async function receiveWithin(fleet: FleetServer, { crewToken, waitMs }: { crewToken: string; waitMs: number }) {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const [delivery] = receiveOutputSchema.parse(await call(fleet, { crewToken, path: '/ship/receive', body: {} })).deliveries;
+    if (delivery) {
+      await call(fleet, { crewToken, path: '/ship/ack', body: { deliveryId: delivery.deliveryId } });
+      return delivery;
+    }
+    if (Date.now() >= deadline) {
+      return undefined;
+    }
+    await new Promise((resolve) => setTimeout(resolve, RECEIVE_POLL_MS));
   }
-  return delivery;
+}
+
+/** Receives the ship's next delivery and acknowledges it, waiting up to RECEIVE_WAIT_MS: none when none came. */
+export function receiveOne(fleet: FleetServer, crewToken: string) {
+  return receiveWithin(fleet, { crewToken, waitMs: RECEIVE_WAIT_MS });
+}
+
+/** What else comes for the ship within NOTHING_MORE_MS, received and acknowledged: none when nothing more came. */
+export function receiveAnyMore(fleet: FleetServer, crewToken: string) {
+  return receiveWithin(fleet, { crewToken, waitMs: NOTHING_MORE_MS });
 }

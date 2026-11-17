@@ -18,7 +18,7 @@ import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate } from './support/gateway-api.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 import { outsidePartiesOn } from './support/outside-parties.js';
-import { receiveOne, send } from './support/ship.js';
+import { receiveAnyMore, receiveOne, send } from './support/ship.js';
 
 // A ship calls an outside MCP server where each person signs in, under its
 // owner's grant (decision 0067, oauth-servers S4): the owner read from core
@@ -191,7 +191,7 @@ describe("a ship calls an outside MCP server under its owner's grant", () => {
     await expect(replyTo(otherScout)).resolves.toMatchObject({ text: noSignIn('joris') });
     const told = await receiveOne(fleet, joris.crewToken);
     expect({ contentType: told?.contentType, isLinked: told?.payload.includes(PAGE()) }).toEqual({ contentType: 'application/vnd.aeolus.step+json', isLinked: true });
-    await expect(receiveOne(fleet, joris.crewToken)).resolves.toBeUndefined();
+    await expect(receiveAnyMore(fleet, joris.crewToken)).resolves.toBeUndefined();
   });
 
   it('answers a ship argo owns an error result saying no person can sign in for it, messaging nobody (scenario 14)', async () => {
@@ -203,7 +203,7 @@ describe("a ship calls an outside MCP server under its owner's grant", () => {
 
     await expect(replyTo(argoScout)).resolves.toMatchObject({ text: 'No person can sign in to attio for argo-scout, which argo owns: it calls attio once a person owns it.', isError: true });
     expect(attio.calledAs).toEqual([]);
-    await expect(Promise.all([receiveOne(fleet, mathilde.crewToken), receiveOne(fleet, joris.crewToken)])).resolves.toEqual([undefined, undefined]);
+    await expect(Promise.all([receiveAnyMore(fleet, mathilde.crewToken), receiveAnyMore(fleet, joris.crewToken)])).resolves.toEqual([undefined, undefined]);
   });
 
   it('lets a call that waited while its owner signed in go out under the new grant (scenario 15)', async () => {
@@ -385,7 +385,7 @@ describe('keeping grants alive (Q7)', () => {
     const told = await receiveOne(fleet, mathilde.crewToken);
     expect(told?.payload).toContain('Your sign-in to attio ended');
     expect(told?.payload).toContain(PAGE());
-    await expect(receiveOne(fleet, mathilde.crewToken)).resolves.toBeUndefined();
+    await expect(receiveAnyMore(fleet, mathilde.crewToken)).resolves.toBeUndefined();
     await expect(ownSignIn(MATHILDE_BROWSER)).resolves.toMatchObject({ state: 'lost', outsideAccount: { subject: 'attio-member-mathilde' }, lost: { why: "invalid_grant: The refresh token is unknown, used or not this client's" } });
   });
 
@@ -434,7 +434,7 @@ describe('keeping grants alive (Q7)', () => {
     await expect(replyTo(leadScout)).resolves.toEqual({ inReplyTo: request, text: noSignIn('mathilde'), isError: true });
     expect((await keptGrants()).map(({ lostAt }) => lostAt !== null)).toEqual([true]);
     await expect(receiveOne(fleet, mathilde.crewToken).then((told) => told?.payload)).resolves.toContain('Your sign-in to attio ended');
-    await expect(receiveOne(fleet, mathilde.crewToken)).resolves.toBeUndefined();
+    await expect(receiveAnyMore(fleet, mathilde.crewToken)).resolves.toBeUndefined();
     expect(attio.calledAs).toEqual([]);
   });
 });
