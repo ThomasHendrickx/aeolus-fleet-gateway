@@ -21,7 +21,7 @@ import { SlackDroppedOut } from '../ui/slack-dropped-out';
 import { HomePanel } from './home-panel';
 import { KeptRead } from './kept-read';
 import { HomeHeading } from './home-heading';
-import { RecordUnreadable } from './record-unreadable';
+import { HomeRecovery } from '../../../../bridge/recovery/state/home-recovery';
 
 /** For an account with no person ship nothing waits, and nothing reaches it unasked. */
 const NOTHING = { waiting: { count: 0, items: [] }, stayAware: [], messages: [] };
@@ -54,7 +54,7 @@ async function HomeParts({ api, fleetId, fleet }: { api: GatewayApi; fleetId: st
       }
       banner={
         <>
-          {read.kind === 'unreadable' ? <RecordUnreadable whoDidNotAnswer={read.whoDidNotAnswer} /> : null}
+          {read.kind === 'unreadable' ? <HomeRecovery api={api} whoDidNotAnswer={read.whoDidNotAnswer} /> : null}
           {argoInboxNotice === null ? null : <ArgoInboxNotice notice={argoInboxNotice} />}
           <KeptRead readAt={slackDroppedOut === undefined ? undefined : new Date().toISOString()}>{slackDroppedOut === undefined || slackDroppedOut === null ? null : <SlackDroppedOut fleetId={fleetId} botName={slackDroppedOut.botName} />}</KeptRead>
         </>

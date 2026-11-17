@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { readTimeOf, type BridgeRead } from '../hooks/read-bridge';
 import { FadedAsLastRead } from './faded-as-last-read';
 import { KeptRead } from './kept-read';
-import { RecordUnreadable } from './record-unreadable';
+import { RecordUnreadable } from '../../../../bridge/recovery/state/record-unreadable';
 
 /**
  * A Bridge page's list from the record (states.html): as read now; while
