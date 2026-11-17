@@ -1,3 +1,4 @@
+import { memoryShipWakeups, scriptedShipWakeups } from '../../../test/support/ship-wakeups.js';
 import { describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
@@ -10,7 +11,7 @@ import type { WakeOutcome } from './wake-person.js';
 import { createWaitOnPersonShip } from './wait-on-person-ship.js';
 
 // The gateway waits on every person ship it crews (wake a person, W5, W7):
-// it asks the fleet's inbox to wait while the count is the one it knows,
+// its stream requests reads of the fleet's current inbox count,
 // and tells the person's pages each time the count changed.
 
 const SHIP = { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID };
@@ -29,7 +30,7 @@ type InboxAnswer = Result<{ waiting: number }, FleetRefusal>;
 function scriptedInbox(answers: (InboxAnswer | (() => InboxAnswer))[]) {
   const asked: { crewToken: string; knownWaiting: number | null; atMostMs?: number }[] = [];
   const inbox: PersonShipDoor['inbox'] = (crewToken, wait) => {
-    asked.push({ crewToken, knownWaiting: wait?.knownWaiting ?? null, ...(wait?.atMostMs === undefined ? {} : { atMostMs: wait.atMostMs }) });
+    asked.push({ crewToken, knownWaiting: null });
     const answer = answers.shift();
     if (answer !== undefined) {
       return Promise.resolve(typeof answer === 'function' ? answer() : answer);
@@ -65,6 +66,7 @@ async function waiting(answers: (InboxAnswer | (() => InboxAnswer))[], options: 
   const stop = new AbortController();
   const waitOnPersonShip = createWaitOnPersonShip({
     crews,
+    wakeups: scriptedShipWakeups(() => Promise.resolve(), 0),
     door: { inbox },
     wakePerson: (ship, crewToken) => {
       woken.push({ at: clock.now(), crewToken });
@@ -97,16 +99,16 @@ async function runUntilIdle(waiter: Awaited<ReturnType<typeof waiting>>) {
 }
 
 describe('the waiter of a person ship', () => {
-  it('looks once without a count, then waits while the count is the one it knows', async () => {
+  it('reads inbox on wakes without sending a waiting count', async () => {
     const waiter = await waiting([ok({ waiting: 0 }), ok({ waiting: 1 }), ok({ waiting: 1 })]);
 
     await runUntilIdle(waiter);
 
     expect(waiter.asked).toEqual([
       { crewToken: CREW_TOKEN, knownWaiting: null },
-      { crewToken: CREW_TOKEN, knownWaiting: 0 },
-      { crewToken: CREW_TOKEN, knownWaiting: 1 },
-      { crewToken: CREW_TOKEN, knownWaiting: 1 },
+      { crewToken: CREW_TOKEN, knownWaiting: null },
+      { crewToken: CREW_TOKEN, knownWaiting: null },
+      { crewToken: CREW_TOKEN, knownWaiting: null },
     ]);
   });
 
@@ -118,7 +120,7 @@ describe('the waiter of a person ship', () => {
     expect(waiter.told).toEqual([SHIP]);
   });
 
-  it("then tells the person's pages each time the count changed, up or down, and not when a wait ran out unchanged", async () => {
+  it("then tells the person's pages each time the count changed, up or down, and not when a wake finds it unchanged", async () => {
     const waiter = await waiting([ok({ waiting: 0 }), ok({ waiting: 2 }), ok({ waiting: 2 }), ok({ waiting: 1 })]);
 
     await runUntilIdle(waiter);
@@ -214,14 +216,6 @@ describe('the waiter of a person ship', () => {
     expect(waiter.woken.map(({ at: wokenAt }) => wokenAt.toISOString())).toEqual(['2026-10-23T12:00:00.000Z', '2026-10-23T12:30:00.000Z']);
   });
 
-  it('waits on the fleet no longer than until a wake held back is due', async () => {
-    clock.at = new Date('2026-10-23T12:00:00.000Z');
-    const waiter = await waiting([ok({ waiting: 1 })], { wakes: [ok({ kind: 'inWindow', until: new Date('2026-10-23T12:00:30.000Z') })] });
-
-    await runUntilIdle(waiter);
-
-    expect(waiter.asked.at(-1)).toEqual({ crewToken: CREW_TOKEN, knownWaiting: 1, atMostMs: 30_000 });
-  });
 
   it('tries a wake that failed again, waiting longer each time, up to its longest wait', async () => {
     const at = (time: string) => (): InboxAnswer => {
@@ -276,4 +270,45 @@ describe('the waiter of a person ship', () => {
 
     expect({ ended, held: waiter.crews.held.length }).toEqual({ ended: { reason: 'stopped' }, held: 1 });
   });
+});
+
+
+it('opens one stream and waits for its wake before reading the person inbox', async () => {
+  const streams = memoryShipWakeups();
+  const crews = memoryPersonCrews();
+  await crews.save({ ...SHIP, crewToken: CREW_TOKEN, crewedAt: clock.now() });
+  const stop = new AbortController();
+  const reads: unknown[] = [];
+  const wait = createWaitOnPersonShip({ crews, wakeups: streams.open, door: { inbox: (...args) => { reads.push(args); return Promise.resolve(ok({ waiting: 0 })); } }, changes: { tell: () => Promise.resolve() }, wakePerson: () => Promise.resolve(ok({ kind: 'settled' })), isServed: () => Promise.resolve(true), clock, sleep: () => new Promise(() => undefined), againWaitsMs: [100], wakeAgainWaitsMs: [100] });
+  const done = wait(SHIP, stop.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(streams.leases.map(({ token }) => token)).toEqual([CREW_TOKEN]);
+  expect(reads).toEqual([]);
+  streams.wake();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(reads).toHaveLength(1);
+  streams.wake();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(reads).toHaveLength(2);
+  expect(reads).toEqual([[CREW_TOKEN, { signal: stop.signal }], [CREW_TOKEN, { signal: stop.signal }]]);
+  stop.abort();
+  expect(await done).toEqual({ reason: 'stopped' });
+});
+
+it('one slow person inbox does not block another ship in the same fleet', async () => {
+  const other: typeof SHIP = { ...SHIP, shipId: 'shp_01m3tb1zgr5h2ffee12xnch9a0' };
+  const streams = memoryShipWakeups();
+  const crews = memoryPersonCrews();
+  await crews.save({ ...SHIP, crewToken: 'slow', crewedAt: clock.now() });
+  await crews.save({ ...other, crewToken: 'fast', crewedAt: clock.now() });
+  const stop = new AbortController();
+  const told: InboxChange[] = [];
+  const wait = createWaitOnPersonShip({ crews, wakeups: streams.open, door: { inbox: (token) => token === 'slow' ? new Promise((resolve) => { stop.signal.addEventListener('abort', () => { resolve(ok({ waiting: 0 })); }); }) : Promise.resolve(ok({ waiting: 0 })) }, changes: { tell: (ship) => { told.push(ship); return Promise.resolve(); } }, wakePerson: () => Promise.resolve(ok({ kind: 'settled' })), isServed: () => Promise.resolve(true), clock, sleep: () => new Promise(() => undefined), againWaitsMs: [100], wakeAgainWaitsMs: [100] });
+  const done = Promise.all([wait(SHIP, stop.signal), wait(other, stop.signal)]);
+  await new Promise((resolve) => setImmediate(resolve));
+  streams.wake();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(told).toEqual([other]);
+  stop.abort();
+  await done;
 });

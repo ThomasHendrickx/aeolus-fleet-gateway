@@ -164,13 +164,14 @@ export interface ExchangePage {
   readonly newerCursor: DeliveryId | null;
 }
 
-/** One exchange of the person ship's list: the other ship, how many of its messages are not yet acknowledged, and the newest message between them. */
+/** One exchange: the other ship, its unacknowledged and unseen plain message counts, and the newest message between them. */
 export interface ExchangeSummary {
   readonly otherShipId: ShipId;
   readonly otherShipName: string;
   readonly otherShipType: string;
   readonly otherShipKind: ShipKind;
   readonly unacknowledged: number;
+  readonly unseenPlainMessages: number;
   readonly newestMessage: Omit<ExchangeMessage, 'inReplyTo' | 'deliveryState' | 'receivedDelivery'>;
 }
 
@@ -195,11 +196,10 @@ export type PersonSelector =
 /** Outbound port: the fleet's calls the gateway makes as the crew of a person ship. */
 export interface PersonShipDoor {
   /**
-   * How many deliveries wait for the ship: at once, or with a wait while the
-   * count is still the one the crew knows, up to the fleet's longest wait
-   * (wake a person, W5), or less when told. Stopping the signal ends the wait.
+   * The current waiting count, without a waiting input. The lease stream
+   * requests reads; the optional signal cancels an in-flight HTTP read.
    */
-  inbox(crewToken: string, wait?: { knownWaiting: number; signal: AbortSignal; atMostMs?: number }): Promise<Result<{ waiting: number }, FleetRefusal>>;
+  inbox(crewToken: string, options?: { signal: AbortSignal }): Promise<Result<{ waiting: number }, FleetRefusal>>;
   /**
    * The ship's deliveries, up to max, its own held ones again first;
    * shouldSkipHanded leaves the handed ones out before the limit, so a new

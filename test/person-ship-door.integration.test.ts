@@ -1,4 +1,5 @@
 import { receiveOutputSchema } from '@aeolus-fleet/common';
+import { z } from 'zod';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
@@ -79,7 +80,7 @@ describe('a person ship discovers what it may send to', () => {
 
 describe("a person ship sends the person's own message", () => {
   it('reaches a ship by its name, a question with numbered options as its content type says', async () => {
-    const question = JSON.stringify({ id: '0b6f2a52-6a43-4a43-9a43-3f3c3b9b1a10', title: 'Which release?', context: '', options: [{ key: 1, label: '1.4' }, { key: 2, label: '1.5' }] });
+    const question = JSON.stringify({ id: '0b6f2a52-6a43-4a43-9a43-3f3c3b9b1a10', title: 'Which release?', context: '', options: [{ key: 1, label: '1.4' }, { key: 2, label: '1.5' }], pick: { option: 2, why: 'It holds the fix.' } });
 
     const sent = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: QUESTION, payload: question, idempotencyKey: 'charlotte-1' });
 
@@ -204,6 +205,21 @@ describe("a person ship reads its exchange with one ship (aeolus-fleet exchange-
   });
 });
 
+describe('a person ship lists its exchanges', () => {
+  it('carries core\'s unseen plain message count for each exchange', async () => {
+    const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
+      body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType: 'text/plain', payload: 'Issue 7 is closed', idempotencyKey: 'tracker-list-1' }),
+    });
+    expect(sent.status).toBe(200);
+
+    const page = await door.exchanges(charlotte, { cursor: null, limit: 20 });
+
+    expect(page).toMatchObject({ isOk: true, value: { items: [{ otherShipName: 'tracker', unseenPlainMessages: 1 }] } });
+  });
+});
+
 describe('a person ship reads an exchange that is not there (aeolus-fleet exchange-read, section 7)', () => {
   async function trackerShipId() {
     const found = await door.discover(charlotte);
@@ -248,35 +264,16 @@ describe("a person ship's inbox, as the gateway's waiter asks it (wake a person,
     expect(sent.status).toBe(200);
   }
 
-  it('waits while the count is the one the crew knows, and answers the new count once a delivery comes', async () => {
-    const stop = new AbortController();
-    const progress = { isAnswered: false };
-    const asked = door.inbox(charlotte, { knownWaiting: 0, signal: stop.signal }).then((answered) => {
-      progress.isAnswered = true;
-      return answered;
-    });
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const isAnsweredBeforeTheSend = progress.isAnswered;
-
+  it('reads the current count without waiting before and after a delivery', async () => {
+    await expect(door.inbox(charlotte)).resolves.toEqual({ isOk: true, value: { waiting: 0 } });
     await trackerSendsCharlotte('tracker-wait-1');
-
-    await expect(asked).resolves.toEqual({ isOk: true, value: { waiting: 1 } });
-    expect(isAnsweredBeforeTheSend).toBe(false);
+    await expect(door.inbox(charlotte)).resolves.toEqual({ isOk: true, value: { waiting: 1 } });
   });
 
-  it('answers at once when the count already differs from the one the crew knows', async () => {
-    await trackerSendsCharlotte('tracker-wait-2');
-
-    await expect(door.inbox(charlotte, { knownWaiting: 0, signal: new AbortController().signal })).resolves.toEqual({ isOk: true, value: { waiting: 1 } });
-  });
-
-  it('ends the wait once stopped', async () => {
+  it('does not make an inbox call once stopped', async () => {
     const stop = new AbortController();
-    const asked = door.inbox(charlotte, { knownWaiting: 0, signal: stop.signal });
-
     stop.abort();
-
-    await expect(asked).resolves.toMatchObject({ isOk: false });
+    await expect(door.inbox(charlotte, { signal: stop.signal })).resolves.toMatchObject({ isOk: false });
   });
 
   it("states the gateway as the waker of the person ship's lease at its push receive", async () => {
@@ -328,6 +325,12 @@ describe('how big: a large inbox (chatgpt-plugin design, 9)', () => {
   );
 });
 
+/** A question and a step of the shape core accepts, as the tracker sends them. */
+const WELL_FORMED = {
+  'application/vnd.aeolus.question+json': { id: '5d0c8f8e-2f4b-4f7e-9d3a-1c2b3a4d5e6f', title: 'Ship it?', context: '', options: [{ key: 1, label: 'Yes' }], pick: { option: 1, why: 'It is ready.' } },
+  'application/vnd.aeolus.step+json': { id: '7a1e9c3b-4d5f-4a6b-8c7d-9e0f1a2b3c4d', title: 'Sign in to Attio', why: 'The tracker reads its leads.' },
+} as const;
+
 describe('a malformed question or step never reaches the person', () => {
   let prisma: PrismaClient;
   beforeAll(async () => {
@@ -336,14 +339,22 @@ describe('a malformed question or step never reaches the person', () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });
-  it.each(['application/vnd.aeolus.question+json', 'application/vnd.aeolus.step+json'])('returns and handles %s once across concurrent reads and a gateway restart', async (contentType) => {
+  it.each(['application/vnd.aeolus.question+json', 'application/vnd.aeolus.step+json'] as const)('returns and handles %s once across concurrent reads and a gateway restart', async (contentType) => {
     const opened = createPrismaOpenedDeliveries(prisma);
     const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${tracker}` },
-      body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType, payload: '{}', idempotencyKey: 'malformed' }),
+      body: JSON.stringify({ selector: { kind: 'ship', name: 'charlotte' }, contentType, payload: JSON.stringify(WELL_FORMED[contentType]), idempotencyKey: 'malformed' }),
     });
     expect(sent.status).toBe(200);
+    // Core refuses a malformed one at send since 0.40.0, but one it accepted before stays in the fleet: its stored payload is made one here.
+    const { messageId } = z.object({ messageId: z.string() }).parse(await sent.json());
+    const core = createPrismaClient(fleet.databaseUrl);
+    try {
+      await core.$executeRaw`UPDATE messages SET payload = '{}' WHERE id = ${messageId}`;
+    } finally {
+      await core.$disconnect();
+    }
     const received = await door.pushReceive(charlotte, { max: 10 });
     const delivery = received.isOk ? received.value[0] : undefined;
     if (delivery === undefined) {

@@ -1383,7 +1383,7 @@ export const gatewayRouter = t.router({
         const start = before !== undefined ? ({ kind: 'before', cursor: before } as const) : after !== undefined ? ({ kind: 'after', cursor: after } as const) : around !== undefined ? ({ kind: 'around', messageId: around } as const) : ({ kind: 'newest' } as const);
         return personAnswerOf(await ctx.person.readExchange({ caller: ctx.caller, otherShipId, start }));
       }),
-    /** The latest exchange per other ship, 20 a page, newest first, with how many of its messages are not yet seen, from core's rollup. */
+    /** The latest exchange per other ship, 20 a page, newest first, with its unseen plain message count, from core's rollup. */
     exchanges: personProcedure
       .input(z.strictObject({ cursor: idSchema('message').optional() }))
       .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readExchanges({ caller: ctx.caller, cursor: input.cursor ?? null }))),

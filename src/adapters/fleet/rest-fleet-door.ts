@@ -21,7 +21,6 @@ import {
   FLEET_BUSY_WAITS_MS,
   handedOutputSchema,
   idSchema,
-  INBOX_WAIT_MAX_SECONDS,
   inboxOutputSchema,
   meetingOutputSchema,
   pushReceiveOutputSchema,
@@ -157,13 +156,6 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
     meetingId,
     senderStatus,
   };
-}
-
-const MS_PER_SECOND = 1_000;
-
-/** The whole seconds an inbox call waits: the fleet's longest wait, or the time told, rounded up, when that is shorter. */
-function waitSecondsOf(atMostMs: number | undefined): number {
-  return atMostMs === undefined ? INBOX_WAIT_MAX_SECONDS : Math.min(INBOX_WAIT_MAX_SECONDS, Math.ceil(atMostMs / MS_PER_SECOND));
 }
 
 /** The fleet's call for each of a participant's own mic changes (decision 0061). */
@@ -333,9 +325,9 @@ export function createRestFleetDoor(
       if (!sent.isOk) {
         return sent;
       }
-      // A message to one ship has the one delivery.
-      const [delivery] = sent.value.deliveries;
-      return delivery === undefined ? err({ code: 'UNAVAILABLE', message: 'The fleet named no delivery for the message' }) : ok({ deliveryId: delivery.deliveryId, state: delivery.state, since: new Date(delivery.since) });
+      // A message to one ship has the one delivery, on the first page.
+      const [delivery] = sent.value.items;
+      return delivery === undefined ? err({ code: 'UNAVAILABLE', message: 'The fleet named no delivery for the message' }) : ok({ deliveryId: delivery.id, state: delivery.state, since: new Date(delivery.since) });
     },
     pushReceive: async (crewToken, { max, signal }) => {
       const taken = await call({ path: '/ship/pushReceive', method: 'POST', crewToken, body: { max }, answers: pushReceiveOutputSchema, signal });
@@ -369,14 +361,14 @@ export function createRestFleetDoor(
         const who = await call({ path: '/ship/whoami', method: 'GET', crewToken, answers: z.object({ name: z.string(), fleetId: idSchema('fleet'), shipId: idSchema('ship') }) });
         return who.isOk ? ok(who.value) : who;
       },
-      inbox: async (crewToken, wait) => {
+      inbox: async (crewToken, options) => {
         const counted = await call({
           path: '/ship/inbox',
           method: 'POST',
           crewToken,
-          body: wait === undefined ? { waitSeconds: 0 } : { waitSeconds: waitSecondsOf(wait.atMostMs), knownWaiting: wait.knownWaiting },
+          body: {},
           answers: inboxOutputSchema,
-          ...(wait === undefined ? {} : { signal: wait.signal }),
+          ...(options === undefined ? {} : { signal: options.signal }),
         });
         return counted.isOk ? ok({ waiting: counted.value.waiting }) : counted;
       },

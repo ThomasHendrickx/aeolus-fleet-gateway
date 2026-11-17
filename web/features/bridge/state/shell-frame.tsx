@@ -1,13 +1,14 @@
 'use client';
 
-import type { Theme } from '@aeolus-fleet/common';
 import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
 import { AvatarMenu, AvatarMenuSheet } from '@aeolus-fleet/ui';
 import { Globe, Route, SlidersHorizontal } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
+import { BridgePalette, type BridgePaletteEntries } from '../../../../bridge/palette/state/bridge-palette';
 import { sendsFromPhoneTopBar } from '../../../../bridge/send-message/services/phone-send';
 import { inFleet } from '../../../lib/gateway-api/page-account';
+import type { BrowserTheme } from '../../frame/browser-theme';
 import { useAccountMenu } from '../../frame/hooks/use-account-menu';
 import { OUTSIDE_PARTIES_PATH } from '../../outside-parties/paths';
 import { useFocusReport } from '../hooks/use-focus-report';
@@ -20,11 +21,11 @@ import { OpenedItemProvider } from './opened-item';
 import { SendMessageProvider } from './send-message';
 import { SendMessageButton } from './send-message-button';
 
-/** The account signed in, as the shell shows it: its email, the account app's address, the theme it chose. */
+/** The account signed in, as the shell shows it: its email, the account app's address, the browser's one theme. */
 export interface ShellAccount {
   readonly email: string;
   readonly accountUrl: string | undefined;
-  readonly theme: Theme;
+  readonly theme: BrowserTheme;
 }
 
 /**
@@ -75,10 +76,12 @@ function PhoneAvatar({ fleetId, switcher, account: { email, accountUrl, theme } 
  * the window (design/bridge-fleet-width). It offers every page under it the
  * form to send a ship a message, which the phone's home and Messages open
  * from its top bar. It keeps the page live, and tells the gateway while it is in focus
- * (wake a person, W6).
+ * (wake a person, W6). For the account signed in, the top bar's search and
+ * ⌘K open the command palette across apps.
  */
-export function ShellFrame({ fleetId, fleetName, screen, below, account, switcher, children }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; below?: PageBelow; account: ShellAccount | undefined; switcher?: AppSwitcherModel; children: ReactNode }) {
+export function ShellFrame({ fleetId, fleetName, screen, below, account, switcher, palette, children }: { fleetId: string; fleetName: string | undefined; screen: BridgeScreen; below?: PageBelow; account: ShellAccount | undefined; switcher?: AppSwitcherModel; palette?: BridgePaletteEntries; children: ReactNode }) {
   const isLive = useLiveRefresh(fleetId);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   useFocusReport(fleetId);
   return (
     <SendMessageProvider fleetId={fleetId}>
@@ -95,7 +98,9 @@ export function ShellFrame({ fleetId, fleetName, screen, below, account, switche
               below={below}
               phoneAction={sendsFromPhoneTopBar(screen) && opened === undefined ? <SendMessageButton look="icon" /> : null}
               avatar={account === undefined ? null : <PhoneAvatar fleetId={fleetId} switcher={switcher} account={account} />}
+              {...(palette === undefined ? {} : { onSearch: () => { setIsPaletteOpen(true); } })}
             />
+            {palette === undefined ? null : <BridgePalette entries={palette} isOpen={isPaletteOpen} onOpenChange={setIsPaletteOpen} />}
             <main className="w-full min-w-0 flex-1 px-4 py-5 sm:px-6">{children}</main>
           </>
         )}

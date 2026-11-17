@@ -1,7 +1,7 @@
 import { PAYLOAD_MAX_BYTES, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { TRPCError } from '@trpc/server';
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 
 import { createEndSignIns } from '../../core/sign-in/end-sign-ins.js';
@@ -1113,6 +1113,11 @@ describe("a person reads and deals with their person ship's deliveries through t
     const { context } = aContext(PERSON_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.exchange({ otherShipId: 'shp_01m3tbfspe96yf1rnr4ank0zzz' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('types the unseen plain message count in every exchange', () => {
+    type Exchanges = Awaited<ReturnType<ReturnType<typeof gatewayRouter.createCaller>['people']['exchanges']>>;
+    expectTypeOf<Exchanges['items'][number]>().toHaveProperty('unseenPlainMessages').toEqualTypeOf<number>();
   });
 
   it('lists the exchanges after a cursor', async () => {

@@ -1,4 +1,4 @@
-import { isPingContentType, RECEIVE_MAX_UPPER_BOUND } from '@aeolus-fleet/common';
+import { isPingContentType, RECEIVE_MAX_UPPER_BOUND, type FleetId } from '@aeolus-fleet/common';
 
 import type { ConnectionStore, GatewayDelivery, GatewayInbox } from './ports.js';
 
@@ -10,7 +10,7 @@ export interface PingRound {
 }
 
 /** A round, ended early once the signal aborts. */
-export type AnswerPings = (signal: AbortSignal) => Promise<PingRound>;
+export type AnswerPings = (signal: AbortSignal, fleetId?: FleetId) => Promise<PingRound>;
 
 /**
  * Use case: the gateway's own ship takes what waits for it in each fleet it
@@ -19,12 +19,16 @@ export type AnswerPings = (signal: AbortSignal) => Promise<PingRound>;
  * handles no messages of its own, and the fleet keeps it in its history.
  */
 export function createAnswerPings(deps: { connections: ConnectionStore; inbox: GatewayInbox }): AnswerPings {
-  return async (signal) => {
+  return async (signal, fleetId) => {
     const round: PingRound = { ponged: 0, acked: [], refused: 0 };
     for (const crew of await deps.connections.connected()) {
+      if (fleetId !== undefined && crew.fleetId !== fleetId) { continue; }
       const taken = await deps.inbox.receive(crew.crewToken, { max: RECEIVE_MAX_UPPER_BOUND, signal });
       if (!taken.isOk) {
         round.refused += 1;
+        if (taken.error.code === 'LEASE_ENDED' && (await deps.connections.find(crew.fleetId))?.crewToken === crew.crewToken) {
+          await deps.connections.drop(crew.fleetId);
+        }
         continue;
       }
       for (const delivery of taken.value) {

@@ -2,7 +2,8 @@
  * Use case: the gateway takes the replies to an outside client's calls, as
  * the crew of the client's proxy ship (Q9 a), until it is stopped. It asks
  * the fleet for the reply to each call it waits on with receiveReply
- * (aeolus-fleet#953): a call neither completed nor past its deadline. Only
+ * on its lease stream wakes and safety looks (aeolus-fleet#953): a call
+ * neither completed nor past its deadline. Only
  * replies are taken, so a message to the proxy ship that replies to no call
  * waits in the fleet and keeps no reply out. The lease stays plain: the
  * fleet hands nothing to receiveReply on a pushed lease, so this never
@@ -17,6 +18,8 @@
  * after a longer wait each time, and keeps the crew.
  */
 import type { MessageId } from '@aeolus-fleet/common';
+
+import type { ShipWakeups } from '../connection/ship-wakeups.js';
 
 import type { ProxyShipCrew } from '../mcp-out/hand-call.js';
 import type { Sleep } from '../mcp-out/run-party.js';
@@ -37,6 +40,7 @@ const WAITING_MAX = 10;
 export type CollectReplies = (input: { party: McpClientParty | A2aClientParty; signal: AbortSignal }) => Promise<{ ended: 'stopped' | 'crewRefused' }>;
 
 interface CollectRepliesDeps {
+  wakeups: ShipWakeups;
   crew: Pick<ProxyShipCrew, 'ack' | 'handled'>;
   replies: ReplyReceiver;
   sent: SentMessages;
@@ -61,67 +65,79 @@ export function createCollectReplies(deps: CollectRepliesDeps): CollectReplies {
     if (crewToken === null) {
       return { ended: 'crewRefused' };
     }
-    const caller = { fleetId: party.fleetId, party: party.name };
-    const waiting = new Map<MessageId, Promise<void>>();
-    /** When each call was last asked for, so every call waited on gets its turn. */
-    const askedAt = new Map<MessageId, number>();
-    let asks = 0;
-    /** Whether the fleet refused the crew token: set by a wait, read by the run. */
-    const run = { isCrewRefused: false, isKeyUnavailable: false };
-    let keyUnavailableInARow = 0;
+    const looks = deps.wakeups(crewToken, signal);
+    try {
+      const caller = { fleetId: party.fleetId, party: party.name };
+      const waiting = new Map<MessageId, Promise<void>>();
+      /** When each call was last asked for, so every call waited on gets its turn. */
+      const askedAt = new Map<MessageId, number>();
+      let asks = 0;
+      /** Whether the fleet refused the crew token: set by a wait, read by the run. */
+      const run = { isCrewRefused: false, isKeyUnavailable: false };
+      let keyUnavailableInARow = 0;
 
-    /** Asks the fleet once for the call's reply, and keeps it, then confirms it. */
-    const waitOn = async (call: ClientCall): Promise<void> => {
-      asks += 1;
-      askedAt.set(call.messageId, asks);
-      const received = await deps.replies.receiveReply(crewToken, { messageId: call.messageId, signal });
-      const delivery = await deps.sent.sentMessage(crewToken, call.messageId);
-      if (delivery.isOk) {
-        const { state, since } = delivery.value;
-        await deps.calls.setDelivery({ fleetId: call.fleetId, messageId: call.messageId }, { state, since });
-      }
-      if (!received.isOk) {
-        if (CREW_REFUSED.has(received.error.code)) {
-          run.isCrewRefused = true;
+      /** Asks the fleet once for the call's reply, and keeps it, then confirms it. */
+      const waitOn = async (call: ClientCall): Promise<void> => {
+        asks += 1;
+        askedAt.set(call.messageId, asks);
+        const received = await deps.replies.receiveReply(crewToken, { messageId: call.messageId, signal });
+        const delivery = await deps.sent.sentMessage(crewToken, call.messageId);
+        if (delivery.isOk) {
+          const { state, since } = delivery.value;
+          await deps.calls.setDelivery({ fleetId: call.fleetId, messageId: call.messageId }, { state, since });
         }
-        run.isKeyUnavailable ||= received.error.code === KEY_UNAVAILABLE;
-        return;
-      }
-      const reply = received.value;
-      if (reply === undefined) {
-        return;
-      }
-      await deps.calls.addReply({ fleetId: call.fleetId, messageId: call.messageId }, { ...reply, receivedAt: deps.clock.now() });
-      // Kept already: an acknowledgement the fleet did not take hands the reply again, and keeping it again changes nothing.
-      if ((await deps.crew.ack(crewToken, reply.deliveryId)).isOk) {
-        await deps.crew.handled(crewToken, reply.deliveryId);
-      }
-    };
+        if (!received.isOk) {
+          if (CREW_REFUSED.has(received.error.code)) {
+            run.isCrewRefused = true;
+          }
+          run.isKeyUnavailable ||= received.error.code === KEY_UNAVAILABLE;
+          return;
+        }
+        const reply = received.value;
+        if (reply === undefined) {
+          return;
+        }
+        await deps.calls.addReply({ fleetId: call.fleetId, messageId: call.messageId }, { ...reply, receivedAt: deps.clock.now() });
+        // Kept already: an acknowledgement the fleet did not take hands the reply again, and keeping it again changes nothing.
+        if ((await deps.crew.ack(crewToken, reply.deliveryId)).isOk) {
+          await deps.crew.handled(crewToken, reply.deliveryId);
+        }
+      };
 
-    /** A wait whose reply could not be kept: the run ends, and answers its failure. */
-    const failed: Promise<void>[] = [];
-    while (!signal.aborted && !run.isCrewRefused && failed.length === 0) {
-      const now = deps.clock.now();
-      const open = (await deps.calls.waitedOn(caller, now))
-        .filter((call) => isWaiting(call, now) && !waiting.has(call.messageId))
-        .sort((left, right) => (askedAt.get(left.messageId) ?? 0) - (askedAt.get(right.messageId) ?? 0));
-      for (const call of open.slice(0, WAITING_MAX - waiting.size)) {
-        const waited = waitOn(call);
-        waiting.set(
-          call.messageId,
-          waited
-            .catch(() => {
-              failed.push(waited);
-            })
-            .finally(() => waiting.delete(call.messageId)),
-        );
+      /** A wait whose reply could not be kept: the run ends, and answers its failure. */
+      const failed: Promise<void>[] = [];
+      const canLook = () => !signal.aborted && !run.isCrewRefused;
+      while (!signal.aborted && !run.isCrewRefused && failed.length === 0) {
+        if (!(await looks.wait())) { break; }
+        const now = deps.clock.now();
+        const open = (await deps.calls.waitedOn(caller, now))
+          .filter((call) => isWaiting(call, now) && !waiting.has(call.messageId))
+          .sort((left, right) => (askedAt.get(left.messageId) ?? 0) - (askedAt.get(right.messageId) ?? 0));
+        for (let offset = 0; offset < open.length && canLook(); offset += WAITING_MAX) {
+          for (const call of open.slice(offset, offset + WAITING_MAX)) {
+            const waited = waitOn(call);
+            waiting.set(
+              call.messageId,
+              waited
+                .catch(() => {
+                  failed.push(waited);
+                })
+                .finally(() => waiting.delete(call.messageId)),
+            );
+          }
+          await Promise.all(waiting.values());
+        }
+        keyUnavailableInARow = run.isKeyUnavailable ? keyUnavailableInARow + 1 : 0;
+
+        const waitMs = keyUnavailableInARow === 0 ? deps.pollMs : (deps.againWaitsMs[Math.min(keyUnavailableInARow, deps.againWaitsMs.length) - 1] ?? deps.pollMs);
+        if (run.isKeyUnavailable) {
+          await deps.sleep(waitMs, signal);
+          looks.request();
+        }
+        run.isKeyUnavailable = false;
       }
-      keyUnavailableInARow = run.isKeyUnavailable ? keyUnavailableInARow + 1 : 0;
-      run.isKeyUnavailable = false;
-      const waitMs = keyUnavailableInARow === 0 ? deps.pollMs : (deps.againWaitsMs[Math.min(keyUnavailableInARow, deps.againWaitsMs.length) - 1] ?? deps.pollMs);
-      await deps.sleep(waitMs, signal);
-    }
-    await Promise.all([...waiting.values(), ...failed]);
-    return { ended: run.isCrewRefused ? 'crewRefused' : 'stopped' };
+      await Promise.all([...waiting.values(), ...failed]);
+      return { ended: run.isCrewRefused || looks.isEnded() ? 'crewRefused' : 'stopped' };
+    } finally { looks.close(); }
   };
 }

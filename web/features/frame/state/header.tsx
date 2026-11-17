@@ -1,13 +1,13 @@
-import type { Theme } from '@aeolus-fleet/common';
 import { Suspense } from 'react';
 
 import { readHeader } from '../hooks/read-header';
+import type { BrowserTheme } from '../browser-theme';
 import { headerSwitchersOf } from '../services/header-switchers';
 import { GatewayHeader } from '../ui/gateway-header';
 import { PlainHeader } from '../ui/plain-header';
 
 /** The header for the account signed in, or the plain bar for no account (or one that may open no fleet here, or an answer it cannot read). */
-export async function Header({ theme }: { theme: Theme }) {
+export async function Header({ theme }: { theme: BrowserTheme }) {
   const answer = await readHeader();
   const switchers = answer === undefined ? [] : headerSwitchersOf(answer);
   if (answer === undefined || switchers.length === 0) {

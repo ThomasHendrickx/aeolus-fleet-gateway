@@ -21,11 +21,13 @@ export async function signIn(fleet: FleetServer): Promise<string> {
 
 const trpcAnswer = <T extends z.ZodType>(data: T) => z.object({ result: z.object({ data }) });
 
-/** argo commissions a ship with its console session: its id and secret. */
-export async function commission(
-  fleet: FleetServer,
-  argo: { cookie: string; ship: { name: string; type: string; scopes?: string[]; kind?: 'agent' | 'person' | 'app' } },
-): Promise<{ shipId: ShipId; secret: string }> {
+interface ArgoCommission {
+  cookie: string;
+  ship: { name: string; type: string; scopes?: string[]; kind?: 'agent' | 'person' | 'app'; owner?: ShipId };
+}
+
+/** argo commissions a ship with its console session, as the console's server does: its id and secret. */
+async function commissioned(fleet: FleetServer, argo: ArgoCommission): Promise<{ shipId: ShipId; secret: string }> {
   const response = await fetch(`${fleet.url}/trpc/fleet.commission`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin: fleet.url, cookie: argo.cookie },
@@ -33,6 +35,25 @@ export async function commission(
   });
   const { shipId, secret } = trpcAnswer(commissionShipOutputSchema).parse(await response.json()).result.data;
   return { shipId, secret: z.string().parse(secret) };
+}
+
+/**
+ * argo commissions a ship with its console session: its id and secret. An
+ * agent ship argo names no owner for is argo's: the console has argo name a
+ * person ship as the owner of every agent ship (decision 0045), so argo names
+ * one it commissions for this alone, then owns the ship and retires that
+ * person ship.
+ */
+export async function commission(fleet: FleetServer, argo: ArgoCommission): Promise<{ shipId: ShipId; secret: string }> {
+  if ((argo.ship.kind ?? 'agent') !== 'agent' || argo.ship.owner !== undefined) {
+    return commissioned(fleet, argo);
+  }
+  const { cookie } = argo;
+  const namedOwner = await commissioned(fleet, { cookie, ship: { name: `owner-${crypto.randomUUID().slice(0, 8)}`, type: 'person', kind: 'person' } });
+  const ship = await commissioned(fleet, { cookie, ship: { ...argo.ship, owner: namedOwner.shipId } });
+  await setOwner(fleet, { cookie, shipId: ship.shipId, ownerShipId: await argoShipId(fleet, cookie) });
+  await retire(fleet, { cookie, shipId: namedOwner.shipId });
+  return ship;
 }
 
 /** A ship of the fleet registers with its secret, as a server: its crew token. */

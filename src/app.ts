@@ -1,3 +1,8 @@
+import { createPersonInboxWakes } from './core/people/person-inbox-wakes.js';
+import { createWakingClientCalls } from './core/mcp-in/waking-client-calls.js';
+import { createWatchGatewayShips } from './core/connection/watch-gateway-ships.js';
+import { createShipWakeups } from './adapters/fleet/ship-wakeups.js';
+import { createRefreshingPersonDoor } from './core/people/refreshing-person-door.js';
 /**
  * The gateway wired to its own database and to the fleet's public API. Its
  * API is the console's server's and its page's, with the console's session
@@ -128,7 +133,6 @@ import type { DecideRequest } from './core/requests/decide-request.js';
 import { createPrismaOutcomeNotices } from './adapters/prisma/outcome-notices.js';
 import { createOutcomeWorker } from './outcome-worker.js';
 import { createPersonWaiters } from './person-waiters.js';
-import { createPingWorker } from './ping-worker.js';
 import { createSlackTokenWorker } from './slack-token-worker.js';
 import { createGrantWorker } from './grant-worker.js';
 import { createSlackEventWorker } from './slack-event-worker.js';
@@ -475,7 +479,11 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const { held: heldDeliveries, opened: openedDeliveries } = createReadablePersonState({ held: createHeldDeliveries(clock), opened: storedOpenedDeliveries });
   // When the gateway first saw each stale question or step, so it leaves Bridge 5 s later (#240).
   const staleSightings = createStaleSightings();
-  const personDoor = createReadablePersonDoor(holdingDoor(door.person, { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) }), { opened: storedOpenedDeliveries, replies: createPrismaUnreadableReplies(prisma), clock, refusedReply: (refusal) => { server.log.warn(refusal, 'the fleet refused the reply to an unreadable delivery'); } });
+  const wakeups = createShipWakeups({ fleetUrl: options.fleetUrl });
+  const personCrews = createPrismaPersonCrews(prisma);
+  const inboxChanges = createPrismaInboxChanges(prisma);
+  const personInboxWakes = createPersonInboxWakes({ crews: personCrews, changes: inboxChanges, whoami: (token) => door.person.whoami(token), request: wakeups.request });
+  const personDoor = createReadablePersonDoor(holdingDoor(createRefreshingPersonDoor(door.person, personInboxWakes.changed), { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) }), { opened: storedOpenedDeliveries, replies: createPrismaUnreadableReplies(prisma), clock, refusedReply: (refusal) => { server.log.warn(refusal, 'the fleet refused the reply to an unreadable delivery'); } });
   const readConnection = createReadConnection({ door, store: connections });
   // A fleet's connection as the gateway holds it, asking the fleet nothing: what a fleet that is off reads.
   const heldConnection: ReadConnection = async (fleetId) => {
@@ -540,7 +548,10 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     pageUrlOf: partyPageUrl,
   });
   const handCall = createHandCall({ crew: door, servers, calls: createPrismaCalls(prisma), marks, parties, requirements, checkScopes, grantCalls, timeoutMs: options.toolCallTimeoutMs ?? TOOL_CALL_TIMEOUT_MS });
-  const clientCalls = createPrismaClientCalls(prisma);
+  const clientCalls = createWakingClientCalls(createPrismaClientCalls(prisma), async (call) => {
+    const party = await parties.find(call.fleetId, call.party);
+    if (party?.crewToken !== null && party?.crewToken !== undefined) { wakeups.request(party.crewToken); }
+  });
   const outsidePartySwitches = createPrismaOutsidePartySwitches(prisma);
   const servesOutsideParties = (fleetId: FleetId) => outsidePartySwitches.isOn(fleetId);
   const checkServer = createCheckServer({ servers, servesOutsideParties });
@@ -572,8 +583,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     parties,
     stateParty,
     stateA2aAgent,
-    runParty: createRunParty({ crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
+    runParty: createRunParty({ wakeups, crew: door, handCall, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
     runA2aAgent: createRunA2aAgent({
+      wakeups,
       cards: agentCards,
       crew: door,
       hand: createHandA2aMessage({ ...agentCallDeps, parties, requirements, checkScopes, follow: followAgentTask }),
@@ -584,7 +596,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       againWaitsMs: AGAIN_WAITS_MS,
       cardWaitMs: AGENT_CARD_WAIT_MS,
     }),
-    collectReplies: createCollectReplies({ crew: door, replies: door, sent: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
+    collectReplies: createCollectReplies({ wakeups, crew: door, replies: door, sent: door, calls: clientCalls, clock, sleep, pollMs: POLL_MS, againWaitsMs: AGAIN_WAITS_MS }),
     pushToWebhooks,
     servesOutsideParties,
     log: server.log,
@@ -805,16 +817,15 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const bridgeUrlOf = (fleetId: FleetId): string => `${issuer}/bridge?fleet=${encodeURIComponent(fleetId)}`;
   const showInSlack = createShowInSlack({ links: slackLinks, apps: slackApps, posts: slackPosts, slack: slackMessages, door: personDoor, sleep, clock, bridgeUrlOf });
   // The gateway waits on every person ship it crews, one waiter per ship across its instances (wake a person, W7, W9).
-  const personCrews = createPrismaPersonCrews(prisma);
   // A person's pages in focus, on every instance: while one is, what arrives is handed through it (wake a person, W6).
   const focusedPages = createPrismaFocusedPages(prisma);
-  const inboxChanges = createPrismaInboxChanges(prisma);
   const waiterLocks = createPostgresWaiterLocks(options.databaseUrl);
   const personWaiters = createPersonWaiters({
     crews: personCrews,
     isServed,
     locks: waiterLocks,
     waitOnPersonShip: createWaitOnPersonShip({
+      wakeups,
       crews: personCrews,
       door: personDoor,
       changes: inboxChanges,
@@ -860,6 +871,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     intervalMs: ARGO_WAKES_ROUND_MS,
     log: server.log,
   });
+  // Each round follows argo's inbox from its position, at once: no follow waits (long-poll W8).
   const argoInboxFollower = createRoundWorker({
     name: "argo's inbox",
     round: async () => {
@@ -1111,7 +1123,21 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     intervalMs: options.grantRoundMs ?? GRANT_ROUND_MS,
     log: server.log,
   });
-  const pings = createPingWorker({ answerPings: createAnswerPings({ connections, inbox: door.gatewayInbox }), sleep, intervalMs: POLL_MS, log: server.log });
+  const answerPings = createAnswerPings({ connections, inbox: door.gatewayInbox });
+  const gatewayStreams = createWatchGatewayShips({
+    connections, wakeups, isServed,
+    look: async (crew, signal) => {
+      // argo's inbox is read at once on each look of the gateway's own ship, besides its own round: follow answers at once (long-poll W5, W8).
+      argoInboxFollower.wake();
+      const { acked, refused } = await answerPings(signal, crew.fleetId);
+      for (const { contentType, senderShipId } of acked) {
+        server.log.info({ contentType, senderShipId }, "the gateway's ship acked a message it does not handle");
+      }
+      if (refused > 0) { server.log.debug({ refused }, "the fleet refused the gateway's inbox call"); }
+    },
+    failed: (error) => { server.log.error({ err: error }, 'gateway wake look failed'); },
+  });
+  const pings = createRoundWorker({ name: 'gateway leases', round: gatewayStreams.reconcile, sleep, intervalMs: POLL_MS, log: server.log });
   const decideRequestOnly = createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock });
   // A decided request's outcomes are told at once, not at the next round.
   const decideRequest: DecideRequest = async (input) => {
@@ -1225,6 +1251,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       onChange: (change) => {
         hub.publish(change);
         if (change.topic === 'inbox') {
+          void personInboxWakes.told(change).catch((error: unknown) => { server.log.error({ err: error }, 'person inbox hint failed'); });
           slackEdits.wake();
         }
       },
@@ -1282,7 +1309,9 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       return restored;
     },
     close: async () => {
+      wakeups.close();
       await outcomes.stop();
+      await gatewayStreams.stop();
       await pings.stop();
       await personWaiters.stop();
       await slackTokens.stop();

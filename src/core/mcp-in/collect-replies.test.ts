@@ -1,3 +1,4 @@
+import { memoryShipWakeups, scriptedShipWakeups } from '../../../test/support/ship-wakeups.js';
 import type { MessageId } from '@aeolus-fleet/common';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -69,7 +70,7 @@ beforeEach(async () => {
   };
 });
 
-const collect = (party: McpClientParty | A2aClientParty = CLAUDE) => createCollectReplies({ crew, replies: fleet.receiver, sent: fleet.sent, calls, clock, sleep, pollMs: 2000, againWaitsMs: [1000, 5000, 30000] })({ party, signal: stop.signal });
+const collect = (party: McpClientParty | A2aClientParty = CLAUDE) => createCollectReplies({ wakeups: scriptedShipWakeups(sleep, 2_000), crew, replies: fleet.receiver, sent: fleet.sent, calls, clock, sleep, pollMs: 2000, againWaitsMs: [1000, 5000, 30000] })({ party, signal: stop.signal });
 
 /** A call of the party's, sent under its own message. */
 const aCallOf = (messageId: MessageId, overrides: Parameters<typeof aClientCall>[0] = {}) => aClientCall({ messageId, handle: `handle-${messageId}`, ...overrides });
@@ -156,7 +157,7 @@ describe("the gateway waits while a sealed fleet's company key is not reachable 
     fleet.state.refusal = { code: 'KEY_UNAVAILABLE', message: "The fleet's company key is not reachable: access denied" };
 
     await expect(collect()).resolves.toEqual({ ended: 'stopped' });
-    expect({ waits: slept, reply: (await calls.findByMessage(FLEET_ID, MESSAGE_ID))?.replies }).toEqual({ waits: [2000, 1000, 5000, 30000, 30000, 30000], reply: [] });
+    expect({ waits: slept, reply: (await calls.findByMessage(FLEET_ID, MESSAGE_ID))?.replies }).toEqual({ waits: [1000, 5000, 30000, 30000, 30000, 30000], reply: [] });
   });
 });
 
@@ -188,4 +189,19 @@ describe("the gateway reads where each waited call's delivery stands with sentMe
 
     expect((await calls.findByMessage(FLEET_ID, 'msg_01m3tbfspe96yf1rnr4ank9s01'))?.replies).toEqual([{ ...REPLY, receivedAt: NOW }]);
   });
+});
+
+
+it('collects an A2A client reply on its proxy lease wake and leaves the response timer independent', async () => {
+  const streams = memoryShipWakeups();
+  const running = createCollectReplies({ wakeups: streams.open, crew, replies: fleet.receiver, sent: fleet.sent, calls, clock, sleep, pollMs: 2000, againWaitsMs: [1000] })({ party: { fleetId: CLAUDE.fleetId, name: CLAUDE.name, kind: 'a2aClient', bearerHash: null, state: 'crewed', proxyShipId: CLAUDE.proxyShipId, secret: null, crewToken: CLAUDE.crewToken, requestId: CLAUDE.requestId, requestHash: CLAUDE.requestHash, approvedAt: CLAUDE.approvedAt }, signal: stop.signal });
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(streams.leases.map(({ token }) => token)).toEqual([CLAUDE.crewToken]);
+  expect((await calls.findByMessage(FLEET_ID, MESSAGE_ID))?.replies).toEqual([]);
+  fleet.state.replies.set(MESSAGE_ID, [REPLY]);
+  streams.wake();
+  for (let tick = 0; tick < 3; tick += 1) { await new Promise((resolve) => setImmediate(resolve)); }
+  expect((await calls.findByMessage(FLEET_ID, MESSAGE_ID))?.replies).toHaveLength(1);
+  stop.abort();
+  expect(await running).toEqual({ ended: 'stopped' });
 });

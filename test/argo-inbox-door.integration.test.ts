@@ -12,6 +12,9 @@ import { send } from './support/ship.js';
 // delivery's state, one such message, and the fleet's events about argo
 // after a position. Against a real core.
 
+/** Well under the 25 s a follow waited while nothing changed, well over one call to a local core. */
+const AT_ONCE_MS = 5_000;
+
 const GATEWAY_SCOPES = ['fleet:read', 'fleet:commission', 'fleet:on-behalf', 'scopes:declare', 'fleet:verify'];
 
 let fleet: FleetServer;
@@ -69,6 +72,15 @@ describe("argo's inbox as the gateway's ship reads it from core", () => {
     const changes = await door().changes(gateway.crewToken, { argo, afterSeq, signal: AbortSignal.timeout(30_000) });
 
     expect(changes).toMatchObject({ isOk: true, value: { changes: [{ messageId, signedInAccountId: null, actorAccountId: null }] } });
+  });
+
+  it('answers at once that nothing changed after the position, waiting for no change (long-poll W8)', async () => {
+    const position = await door().position(gateway.crewToken);
+    const startedAt = Date.now();
+
+    const changes = await door().changes(gateway.crewToken, { argo, afterSeq: position.isOk ? position.value : -1, signal: AbortSignal.timeout(30_000) });
+
+    expect({ changes, isAtOnce: Date.now() - startedAt < AT_ONCE_MS }).toMatchObject({ changes: { isOk: true, value: { changes: [] } }, isAtOnce: true });
   });
 
   it('reads a message to argo whole with its headline: none for a plain report, the title of a question', async () => {

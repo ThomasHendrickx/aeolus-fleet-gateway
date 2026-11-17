@@ -87,3 +87,22 @@ describe('the waiters of the person ships the gateway crews', () => {
     expect({ whileOff, once: started, roundsRan: rounds > 2 }).toEqual({ whileOff: [], once: [SHIP_ID], roundsRan: true });
   });
 });
+
+it('stops an idle person stream when its fleet is disabled and never restarts after shutdown', async () => {
+  const crew: PersonCrew = { fleetId: FLEET_ID, shipId: SHIP_ID, crewToken: CREW_TOKEN, crewedAt: new Date('2026-11-01') };
+  const state = { isOn: true };
+  const signals: AbortSignal[] = [];
+  let releaseRound: (() => void) | undefined;
+  const waiters = createPersonWaiters({ crews: { ...noCrews, crewed: () => Promise.resolve([crew]) }, isServed: () => Promise.resolve(state.isOn), locks: freeLocks, waitOnPersonShip: (_ship, signal) => { signals.push(signal); return new Promise((resolve) => { signal.addEventListener('abort', () => { resolve({ reason: 'stopped' }); }); }); }, sleep: (_ms, signal) => new Promise((resolve) => { releaseRound = resolve; signal.addEventListener('abort', () => { resolve(); }); }), roundMs: 100, log: Fastify({ logger: false }).log });
+  waiters.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(signals).toHaveLength(1);
+  state.isOn = false;
+  releaseRound?.();
+  await new Promise((resolve) => setImmediate(resolve));
+  const wasAborted = signals[0]?.aborted;
+  await waiters.stop();
+  waiters.wake(crew);
+  expect(wasAborted).toBe(true);
+  expect(signals).toHaveLength(1);
+});

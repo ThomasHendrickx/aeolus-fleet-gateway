@@ -9,7 +9,8 @@ import { FormCheckbox } from '../../forms/ui/form-checkbox';
 import { CARD, INPUT, LABEL } from '../../forms/ui/look';
 import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
 import { outsideAddressOf, PARTY_STATES, type ListedParty } from '../../outside-parties/party-kinds';
-import { StatusBadge } from '../../outside-parties/ui/status-badge';
+import { StatusBadge } from '@aeolus-fleet/ui';
+import { toneIcon } from '../../../lib/tone-icons';
 import { approveParty, crewParty, markTool, stateParty } from '../actions';
 
 /** The scope that approves, crews and states parties (0056). */
@@ -139,7 +140,7 @@ export async function Parties({ page }: { page: SignedInPage }) {
                     <td className="p-2 font-mono">{outsideAddressOf(party) ?? ''}</td>
                     <td className="p-2">{party.kind === 'mcpServer' || party.kind === 'a2aAgent' ? party.credentialKind : party.kind === 'mcpClient' ? 'MCP client' : 'A2A client'}</td>
                     <td className="p-2">
-                      <StatusBadge tone={state.tone} label={state.label} />
+                      <StatusBadge tone={state.tone} icon={toneIcon(state.tone)} label={state.label} look="pill" />
                     </td>
                     <td className="p-2">{party.proxyShipName ?? ''}</td>
                     <td className="p-2">{canManage ? <PartyForms party={party} fleetId={fleetId} /> : null}</td>

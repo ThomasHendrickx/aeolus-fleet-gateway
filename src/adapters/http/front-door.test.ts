@@ -70,6 +70,12 @@ describe("the gateway's address as a person opens it (#1030)", () => {
     expect(icon.body).toBe('<p>the web app answered /argo-wake-icon.svg</p>');
   });
 
+  it("hands the palette list to the web app, as another Aeolus app's server asks for it (header-across-apps A1, header design H4)", async () => {
+    const list = await server.inject({ url: '/.well-known/aeolus-palette.json', headers: { accept: '*/*' } });
+
+    expect(list.body).toBe('<p>the web app answered /.well-known/aeolus-palette.json</p>');
+  });
+
   it("hands the app mark's icon files to the web app, as the browser asks for them", async () => {
     const icons = await Promise.all(['/icon.svg', '/apple-icon.png'].map((url) => server.inject({ url, headers: { accept: 'image/avif,image/webp,*/*' } })));
 

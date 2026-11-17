@@ -17,7 +17,7 @@ type Held =
 type Following = Extract<Held, { kind: 'following' }>;
 
 export interface FollowArgoInbox {
-  /** One round over every fleet the gateway is connected to, each waiting while argo's inbox did not change, until the signal aborts. */
+  /** One round over every fleet the gateway is connected to, each answered at once, until the signal aborts. */
   readonly round: (signal: AbortSignal) => Promise<void>;
   /** argo's inbox in the fleet as last read; none before the first round, or for a fleet the gateway is not connected to. */
   readonly inboxOf: (fleetId: FleetId) => ArgoInbox | undefined;

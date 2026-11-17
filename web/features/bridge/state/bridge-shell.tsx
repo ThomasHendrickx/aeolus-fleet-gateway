@@ -1,6 +1,10 @@
 import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
 import { Suspense, type ReactNode } from 'react';
 
+import { mcpAddress } from '../../../../bridge/palette/hooks/mcp-address';
+import { readPaletteAcrossApps } from '../../../../bridge/palette/hooks/read-palette-across-apps';
+import type { BridgePaletteEntries } from '../../../../bridge/palette/state/bridge-palette';
+import { ownPaletteOf } from '../../../../bridge/palette/services/palette-groups';
 import type { GatewayApi } from '../../../lib/gateway-api/gateway-api';
 import { readHeader } from '../../frame/hooks/read-header';
 import { headerSwitchersOf } from '../../frame/services/header-switchers';
@@ -25,14 +29,16 @@ async function Counted({ counts, children }: { counts: Promise<ShellCounts>; chi
   return <KeptRead readAt={read.waiting === undefined ? undefined : new Date().toISOString()}>{children(read)}</KeptRead>;
 }
 
-/** The account signed in and the fleet in view by name, as the header's read answers them; none while it cannot be read. */
-async function readShellPerson(fleetId: string): Promise<{ account: ShellAccount | undefined; fleetName: string | undefined; switcher?: AppSwitcherModel }> {
+/** The account signed in, the fleet in view by name and the palette across apps, as the header's read answers them; none while it cannot be read. */
+async function readShellPerson(fleetId: string): Promise<{ account: ShellAccount | undefined; fleetName: string | undefined; switcher?: AppSwitcherModel; palette?: BridgePaletteEntries }> {
   const [answer, theme] = await Promise.all([readHeader(), readTheme()]);
   if (answer === undefined) {
     return { account: undefined, fleetName: undefined };
   }
   return {
     account: { email: answer.account.email, accountUrl: answer.apps.find(({ app }) => app === 'account')?.url, theme },
+    // The other apps' lists are read beside the page, which shows while they come (header-across-apps A2).
+    palette: { own: ownPaletteOf({ fleetId, mcpAddress: mcpAddress() }), otherApps: readPaletteAcrossApps({ answer, fleetId }).catch(() => []) },
     switcher: headerSwitchersOf(answer).find(({ fleet }) => fleet.id === fleetId),
     fleetName: answer.fleets.find(({ id }) => id === fleetId)?.name,
   };
@@ -50,7 +56,7 @@ export async function BridgeShell({ api, fleetId, screen, below, children }: { a
   const counts = readShellCounts(api);
   // The counts are awaited where they show, after the person is read: a refusal meanwhile is not left unhandled.
   counts.catch(() => undefined);
-  const { account, fleetName, switcher } = await readShellPerson(fleetId);
+  const { account, fleetName, switcher, palette } = await readShellPerson(fleetId);
   const sidebar = (shown: ShellCounts) => (
     <BridgeSidebar switcher={switcher} fleetId={fleetId} screen={screen} counts={shown} accountUrl={account?.accountUrl} foot={account === undefined ? null : <SidebarPerson account={account} fleetName={fleetName} isAllowedAsArgo={shown.argo !== undefined} />} />
   );
@@ -61,7 +67,7 @@ export async function BridgeShell({ api, fleetId, screen, below, children }: { a
         <Counted counts={counts}>{sidebar}</Counted>
       </Suspense>
       <div className="flex min-w-0 flex-1 flex-col">
-        <ShellFrame fleetId={fleetId} fleetName={fleetName} screen={screen} below={below} account={account} switcher={switcher}>
+        <ShellFrame fleetId={fleetId} fleetName={fleetName} screen={screen} below={below} account={account} switcher={switcher} {...(palette === undefined ? {} : { palette })}>
           {children}
         </ShellFrame>
         <Suspense fallback={tabs(NO_COUNTS)}>

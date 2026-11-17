@@ -12,6 +12,7 @@ import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 import { outsidePartiesOn } from './support/outside-parties.js';
+import { settleAll, stopAll } from './support/teardown.js';
 
 // Grants ending (decision 0067, oauth-servers S6), against an authorization
 // server double shaped as Attio's that offers revocation and client
@@ -41,9 +42,28 @@ let approver: string;
 let proxyShipId: ShipId;
 let address: string;
 let app: GatewayApp;
+/** What setup has started so far, so a setup that fails part way still stops it. */
+let started: (() => Promise<unknown> | undefined)[] = [];
 
 beforeEach(async () => {
-  [fleet, databaseUrl, pagasae, attio] = await Promise.all([startFleetServer(inject('postgresUrl')), migratedDatabase(inject('postgresUrl')), startFakePagasae(), startAttioDouble({ isRevoking: true, isManagingClients: true })]);
+  started = [];
+  await settleAll([
+    startFleetServer(inject('postgresUrl')).then((each) => {
+      fleet = each;
+      started.push(() => each.stop());
+    }),
+    migratedDatabase(inject('postgresUrl')).then((each) => {
+      databaseUrl = each;
+    }),
+    startFakePagasae().then((each) => {
+      pagasae = each;
+      started.push(() => each.stop());
+    }),
+    startAttioDouble({ isRevoking: true, isManagingClients: true }).then((each) => {
+      attio = each;
+      started.push(() => each.close());
+    }),
+  ]);
   cookie = await signIn(fleet);
   mathilde = (await commission(fleet, { cookie, ship: { name: 'mathilde', type: 'person', kind: 'person' } })).shipId;
   joris = (await commission(fleet, { cookie, ship: { name: 'joris', type: 'person', kind: 'person' } })).shipId;
@@ -64,6 +84,7 @@ beforeEach(async () => {
     installationToken: INSTALLATION_TOKEN,
     grantRoundMs: GRANT_ROUND_MS,
   });
+  started.unshift(() => app.close());
   address = await app.server.listen({ host: '127.0.0.1', port: 0 });
   expect((await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'switch-on', fleetId, enabled: true } })).status).toBe(200);
   const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: GATEWAY_SCOPES } });
@@ -80,8 +101,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await app.close();
-  await Promise.all([attio.close(), fleet.stop(), pagasae.stop()]);
+  await stopAll(started);
 });
 
 /** A call of the gateway's API as a person's page makes it: their browser's shared sign-in, the fleet in view. */

@@ -2,7 +2,7 @@ import { playwright } from '@vitest/browser-playwright';
 import { configDefaults, defineConfig } from 'vitest/config';
 
 /** The integration files that start the gateway's bin, and with it its web app's development server. */
-const GATEWAY_BIN_FILES = ['test/start.integration.test.ts', 'test/parties-pages.integration.test.ts', 'test/slack-pages.integration.test.ts'];
+const GATEWAY_BIN_FILES = ['test/start.integration.test.ts', 'test/common-0.41.0.integration.test.ts', 'test/parties-pages.integration.test.ts', 'test/slack-pages.integration.test.ts'];
 
 export default defineConfig({
   test: {
@@ -29,10 +29,12 @@ export default defineConfig({
         extends: true,
         // The web app's own Tailwind, so a part has the size and place a person sees.
         css: { postcss: 'web' },
+        // Next.js's navigation reads process.env, which no browser has.
+        define: { 'process.env': '{}' },
         test: {
           // Web parts as a browser runs them: forms, their resets and what they send.
           name: 'web-browser:unit',
-          include: ['web/**/*.browser.test.tsx'],
+          include: ['bridge/**/*.browser.test.tsx', 'web/**/*.browser.test.tsx'],
           browser: { enabled: true, headless: true, provider: playwright(), instances: [{ browser: 'chromium' }] },
         },
       },

@@ -99,7 +99,7 @@ describe('stored malformed deliveries', () => {
   it.each([QUESTION_CONTENT_TYPE, STEP_CONTENT_TYPE])('hides a stored %s from record, conversation, exchange list and direct reads', async (contentType) => {
     const { delivery } = setup(contentType, '{}');
     const message = { ...delivery, sentAt: delivery.sentAt.toISOString(), isPayloadUnreadable: false, deliveryState: 'handled' as const, receivedDelivery: { deliveryId: delivery.deliveryId, state: 'handled' as const }, otherShipId: delivery.senderShipId };
-    const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [], acknowledged: [delivery], record: [{ ...delivery, state: 'handled', isPayloadUnreadable: false }], exchanges: { messages: [message], summaries: [{ otherShipId: delivery.senderShipId, otherShipName: delivery.senderName, otherShipType: 'worker', otherShipKind: 'agent', unacknowledged: 0, newestMessage: message }] } });
+    const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [], acknowledged: [delivery], record: [{ ...delivery, state: 'handled', isPayloadUnreadable: false }], exchanges: { messages: [message], summaries: [{ otherShipId: delivery.senderShipId, otherShipName: delivery.senderName, otherShipType: 'worker', otherShipKind: 'agent', unacknowledged: 0, unseenPlainMessages: 0, newestMessage: message }] } });
     const door = createReadablePersonDoor(ship.door, { opened: memoryOpenedDeliveries(), replies: memoryUnreadableReplies(), clock: FIXED_CLOCK });
     expect(await door.record(CREW, { cursor: null, limit: 20 })).toEqual({ isOk: true, value: { items: [], nextCursor: null } });
     expect(await door.exchange(CREW, { otherShipId: delivery.senderShipId, start: { kind: 'newest' }, limit: 20 })).toMatchObject({ isOk: true, value: { items: [] } });
@@ -168,7 +168,7 @@ it('preserves the unreadable flag for a sealed question whose key is unavailable
 it('hides the stored rejection reply from exchanges and summaries while preserving an ordinary reply', async () => {
   const original = aPersonDelivery();
   const reply = { messageId: SENT_MESSAGE_ID, senderShipId: PERSON_SHIP_ID, payload: 'Could not be read', contentType: 'text/plain', inReplyTo: original.messageId, sentAt: original.sentAt.toISOString(), deliveryState: null, receivedDelivery: null, isPayloadUnreadable: false, deliveryId: original.deliveryId, otherShipId: original.senderShipId };
-  const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [], exchanges: { messages: [reply], summaries: [{ otherShipId: original.senderShipId, otherShipName: 'worker', otherShipType: 'worker', otherShipKind: 'agent', unacknowledged: 0, newestMessage: reply }] } });
+  const ship = fakePersonShipDoor({ crewToken: CREW, deliveries: [], exchanges: { messages: [reply], summaries: [{ otherShipId: original.senderShipId, otherShipName: 'worker', otherShipType: 'worker', otherShipKind: 'agent', unacknowledged: 0, unseenPlainMessages: 0, newestMessage: reply }] } });
   const replies = memoryUnreadableReplies();
   const door = createReadablePersonDoor(ship.door, { opened: memoryOpenedDeliveries(), replies, clock: FIXED_CLOCK });
   expect(await door.exchange(CREW, { otherShipId: original.senderShipId, start: { kind: 'newest' }, limit: 20 })).toMatchObject({ isOk: true, value: { items: [{ messageId: SENT_MESSAGE_ID }] } });

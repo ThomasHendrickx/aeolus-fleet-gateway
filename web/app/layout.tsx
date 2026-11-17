@@ -1,5 +1,4 @@
-import { Toaster } from '@aeolus-fleet/ui';
-import type { Theme } from '@aeolus-fleet/common';
+import { themeScript, Toaster } from '@aeolus-fleet/ui';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
@@ -13,23 +12,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/**
- * Sets the theme this browser chose before the first paint: System follows
- * the browser's setting and keeps in step while <html> says system.
- */
-function themeScript(theme: Theme): string {
-  return `(() => {
-  const root = document.documentElement;
-  const query = window.matchMedia('(prefers-color-scheme: dark)');
-  const apply = () => root.classList.toggle('dark', root.dataset.theme === 'dark' || (root.dataset.theme === 'system' && query.matches));
-  root.dataset.theme = ${JSON.stringify(theme)};
-  apply();
-  query.addEventListener('change', apply);
-})();`;
-}
-
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const theme = await readTheme();
+  // The browser's one theme from the first paint, in every Aeolus app (header-across-apps T1).
+  const { theme } = await readTheme();
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <head>

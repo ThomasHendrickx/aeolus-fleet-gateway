@@ -17,9 +17,11 @@ import { z } from 'zod';
 
 const run = promisify(execFile);
 
-/** How long a starting fleet server gets to answer its version. */
+/** How long a starting fleet server gets to listen. */
 const START_TIMEOUT_MS = 60_000;
 const START_POLL_MS = 200;
+/** The end of core's log kept to find its listening line in. */
+const LOG_TAIL = 4096;
 
 /** argo's console sign-in on every test fleet. */
 export const OPERATOR = { email: 'argo@example.com', password: 'correct horse battery staple' };
@@ -37,7 +39,7 @@ const corePackage = z.object({ bin: z.object({ 'aeolus-core': z.string() }) });
 const CORE_PACKAGE = fileURLToPath(new URL('../../node_modules/@aeolus-fleet/core/', import.meta.url));
 
 /** The path of core's `aeolus-core` bin in node_modules. */
-function coreBin(): string {
+export function coreBin(): string {
   const bin = corePackage.parse(JSON.parse(readFileSync(join(CORE_PACKAGE, 'package.json'), 'utf8'))).bin['aeolus-core'];
   return join(CORE_PACKAGE, bin);
 }
@@ -88,24 +90,25 @@ function isFree(port: number): Promise<boolean> {
   });
 }
 
-async function waitForVersion(url: string, exited: () => string | undefined): Promise<void> {
+/**
+ * Waits until this child itself listens: its own log line says so. Another
+ * process can take the port between choosing it and core binding it, and
+ * would answer a version request in core's place.
+ */
+async function waitForListening(child: { port: number; isListening(): boolean; exited(): string | undefined }): Promise<void> {
+  const { port } = child;
   const deadline = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const exit = exited();
+    const exit = child.exited();
     if (exit !== undefined) {
-      throw new Error(`the fleet server exited before it answered: ${exit}`);
+      throw new Error(`the fleet server exited before it listened on port ${String(port)}: ${exit}`);
     }
-    try {
-      const response = await fetch(`${url}/api/version`);
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // Not listening yet.
+    if (child.isListening()) {
+      return;
     }
     await new Promise((resolve) => setTimeout(resolve, START_POLL_MS));
   }
-  throw new Error(`the fleet server at ${url} did not answer within ${String(START_TIMEOUT_MS)} ms`);
+  throw new Error(`the fleet server did not listen on port ${String(port)} within ${String(START_TIMEOUT_MS)} ms`);
 }
 
 /** Creates the fleet and argo as an operator does once: the one-use sign-in ticket its printed link carries. */
@@ -148,40 +151,76 @@ export async function aMigratedDatabase(adminUrl: string): Promise<string> {
   return databaseUrl;
 }
 
-/** Migrates a new database, creates its fleet and argo, and starts core on a free port, answering once it serves its version. */
-export async function startFleetServer(adminUrl: string): Promise<FleetServer> {
-  const databaseUrl = aNewDatabaseUrl(adminUrl, 'fleet');
+/** How many ports a start tries: another process can take a chosen port before core binds it. */
+const START_ATTEMPTS = 3;
+const PORT_TAKEN = 'exited before it listened';
+
+/**
+ * Migrates a new database, creates its fleet and argo, and starts core on a free port, answering once it listens.
+ * When another process took the port first, it starts again on a new port with a new fleet:init, whose PUBLIC_URL holds the port.
+ */
+export async function startFleetServer(adminUrl: string, options: { aPort?: () => Promise<number> } = {}): Promise<FleetServer> {
+  const aPort = options.aPort ?? aFreePort;
   const bin = coreBin();
-  await run(process.execPath, [bin, 'migrate'], { env: { ...process.env, DATABASE_URL: databaseUrl } });
-  const port = await aFreePort();
-  const url = `http://127.0.0.1:${String(port)}`;
-  const ticket = await initialiseFleet(bin, { DATABASE_URL: databaseUrl, PUBLIC_URL: url });
+  for (let attempt = 1; ; attempt += 1) {
+    const databaseUrl = aNewDatabaseUrl(adminUrl, 'fleet');
+    await run(process.execPath, [bin, 'migrate'], { env: { ...process.env, DATABASE_URL: databaseUrl } });
+    const port = await aPort();
+    const url = `http://127.0.0.1:${String(port)}`;
+    const ticket = await initialiseFleet(bin, { DATABASE_URL: databaseUrl, PUBLIC_URL: url });
+    let core: { stop(): Promise<void> };
+    try {
+      core = await startCore(bin, { databaseUrl, port });
+    } catch (error) {
+      if (attempt < START_ATTEMPTS && error instanceof Error && error.message.includes(PORT_TAKEN)) {
+        continue;
+      }
+      throw error;
+    }
+    try {
+      await setOperatorLogin(url, ticket);
+    } catch (error) {
+      await core.stop();
+      throw error;
+    }
+    return { url, databaseUrl, stop: () => core.stop() };
+  }
+}
+
+/** Starts core's `start` on a port, answering once it listens. */
+export async function startCore(bin: string, options: { databaseUrl: string; port: number }): Promise<{ stop(): Promise<void> }> {
+  const url = `http://127.0.0.1:${String(options.port)}`;
   const child = spawn(process.execPath, [bin, 'start'], {
-    env: { ...process.env, DATABASE_URL: databaseUrl, PUBLIC_URL: url, HOST: '127.0.0.1', PORT: String(port), LOG_LEVEL: 'warn' },
-    stdio: ['ignore', 'ignore', 'pipe'],
+    env: { ...process.env, DATABASE_URL: options.databaseUrl, PUBLIC_URL: url, HOST: '127.0.0.1', PORT: String(options.port), LOG_LEVEL: 'info' },
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
+  let stdout = '';
   let stderr = '';
   let exit: string | undefined;
+  child.stdout.on('data', (chunk: Buffer) => {
+    stdout = (stdout + chunk.toString()).slice(-LOG_TAIL);
+  });
   child.stderr.on('data', (chunk: Buffer) => {
     stderr += chunk.toString();
   });
   child.once('exit', (code) => {
     exit = `exit ${String(code)}: ${stderr}`;
   });
-  await waitForVersion(url, () => exit);
-  await setOperatorLogin(url, ticket);
-  return {
-    url,
-    databaseUrl,
-    stop: async () => {
-      if (exit !== undefined) {
-        return;
-      }
-      const exited = new Promise((resolve) => child.once('exit', resolve));
-      child.kill('SIGTERM');
-      await exited;
-    },
+  const stop = async (): Promise<void> => {
+    if (exit !== undefined) {
+      return;
+    }
+    const exited = new Promise((resolve) => child.once('exit', resolve));
+    child.kill('SIGTERM');
+    await exited;
   };
+  try {
+    await waitForListening({ port: options.port, isListening: () => stdout.includes(`Server listening at ${url}`), exited: () => exit });
+  } catch (error) {
+    await stop();
+    throw error;
+  }
+  return { stop };
 }
 
 /**

@@ -1,10 +1,10 @@
 'use client';
 
-import type { Theme } from '@aeolus-fleet/common';
 import type { AppSwitcherModel } from '@aeolus-fleet/common/rules';
 import { AppHeader, AppSwitcher, AvatarMenuSheet } from '@aeolus-fleet/ui';
 import { usePathname, useSearchParams } from 'next/navigation';
 
+import type { BrowserTheme } from '../browser-theme';
 import { useAccountMenu } from '../hooks/use-account-menu';
 import { switcherOnPage } from '../services/header-switchers';
 import { GatewayTabs } from './gateway-tabs';
@@ -15,7 +15,7 @@ interface GatewayHeaderProps {
   email: string;
   /** Account's address, for the avatar menu's Your account, Your rights and Email updates. */
   accountUrl: string | undefined;
-  theme: Theme;
+  theme: BrowserTheme;
 }
 
 /**

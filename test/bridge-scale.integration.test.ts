@@ -159,7 +159,7 @@ async function trackerSends(contentType: string, payload: object): Promise<void>
 }
 
 function question(id: string, title: string): object {
-  return { id, title, context: '', options: [{ key: 1, label: 'Yes' }] };
+  return { id, title, context: '', options: [{ key: 1, label: 'Yes' }], pick: { option: 1, why: 'It is ready.' } };
 }
 
 async function inBatches(count: number, each: (number: number) => Promise<void>): Promise<void> {
