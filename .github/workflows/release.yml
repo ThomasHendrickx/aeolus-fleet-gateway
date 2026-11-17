@@ -104,14 +104,16 @@ jobs:
           gh run list --workflow ci.yml --commit "$GITHUB_SHA" --branch "$GITHUB_REF_NAME" --event push --json status,conclusion,url \
             | node scripts/release-gate.ts "$GITHUB_REF" "$GITHUB_SHA"
 
-      # The walker's staging-walk status on this commit, or Thomas's reason to release without it.
+      # The walker's staging-walk status of this candidate run at this version, or Thomas's reason to release without it.
       - name: Check the staging walk passed on the commit
         env:
           GH_TOKEN: ${{ github.token }}
           OVERRIDE_REASON: ${{ inputs.override_reason }}
+          VERSION: ${{ inputs.version }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/statuses" \
-            | node scripts/staging-walk-gate.ts "$GITHUB_SHA" "$GITHUB_REPOSITORY_OWNER" "$GITHUB_ACTOR" "$OVERRIDE_REASON"
+            | node scripts/staging-walk-gate.ts "$GITHUB_SHA" "$VERSION" "$RUN_ID" "$GITHUB_REPOSITORY_OWNER" "$GITHUB_ACTOR" "$OVERRIDE_REASON"
 
       - name: Download the candidate's tarball
         env:
