@@ -1,5 +1,7 @@
 # Publishes @aeolus-fleet/gateway to npm and tags v<version> the
-# released commit, so a version on npm always matches a tag in git. Then
+# released commit, so a version on npm always matches a tag in git. It
+# publishes the tarball a run of candidate.yml packed, the one staging walked,
+# and builds no package itself. Then
 # creates the GitHub Release for the tag, with notes from the merged pull
 # requests carrying the label <version>, and the ChatGPT plugin's package
 # attached with its notes.
@@ -16,6 +18,15 @@ on:
         description: Version for the gateway, MAJOR.MINOR.PATCH
         required: true
         type: string
+      candidate_run_id:
+        description: The run of candidate.yml whose tarball is published, packed from this commit at this version
+        required: true
+        type: string
+      override_reason:
+        description: Only Thomas, to release without a passed staging walk; the reason goes into the log and the Release notes
+        required: false
+        type: string
+        default: ''
 
 permissions:
   id-token: write
@@ -23,8 +34,10 @@ permissions:
   contents: write
   # To read the merged pull requests carrying the release's label, for its notes.
   pull-requests: read
-  # To read CI's result for the released commit.
+  # To read CI's result for the released commit, and download the candidate's tarball.
   actions: read
+  # To read the staging-walk status the walker set on the released commit.
+  statuses: read
   # To read the release's milestone and close it.
   issues: write
 
@@ -91,14 +104,39 @@ jobs:
           gh run list --workflow ci.yml --commit "$GITHUB_SHA" --branch "$GITHUB_REF_NAME" --event push --json status,conclusion,url \
             | node scripts/release-gate.ts "$GITHUB_REF" "$GITHUB_SHA"
 
-      # The one package is the repository's root: npm sets its version, and
-      # common and core keep their ranges, as other trains (decision 0049).
+      # The walker's staging-walk status on this commit, or Thomas's reason to release without it.
+      - name: Check the staging walk passed on the commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OVERRIDE_REASON: ${{ inputs.override_reason }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/statuses" \
+            | node scripts/staging-walk-gate.ts "$GITHUB_SHA" "$GITHUB_REPOSITORY_OWNER" "$GITHUB_ACTOR" "$OVERRIDE_REASON"
+
+      - name: Download the candidate's tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          name=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[0].name')
+          gh run download "$RUN_ID" --name "$name" --dir "$RUNNER_TEMP/candidate"
+          ls -l "$RUNNER_TEMP/candidate"
+
+      - name: Check the candidate is this commit at this version, byte for byte
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh run view "$RUN_ID" --json workflowName,conclusion,headSha \
+            | node scripts/candidate-check.ts "$VERSION" "$GITHUB_SHA" "$RUNNER_TEMP/candidate"
+
+      # Only the ChatGPT plugin's package below reads this version: the gateway
+      # published is the candidate's tarball, built nowhere here.
       - name: Set the version on the gateway
         env:
           VERSION: ${{ inputs.version }}
         run: npm version "$VERSION" --no-git-tag-version
-
-      - run: npm run build
 
       # The ChatGPT plugin's package (chatgpt-plugin design, 7.6), built and
       # checked before anything is published: a package that breaks OpenAI's
@@ -154,7 +192,7 @@ jobs:
           if [[ "$(npm view "$PACKAGE@$VERSION" version 2>/dev/null)" == "$VERSION" ]]; then
             echo "$PACKAGE@$VERSION is on npm already: skipped"
           else
-            npm publish --dry-run --access public
+            npm publish --dry-run --access public "$RUNNER_TEMP/candidate/aeolus-fleet-gateway-$VERSION.tgz"
           fi
 
       # Skips a version on npm already, so releasing a version again after it
@@ -168,7 +206,7 @@ jobs:
           if [[ "$(npm view "$PACKAGE@$VERSION" version 2>/dev/null)" == "$VERSION" ]]; then
             echo "$PACKAGE@$VERSION is on npm already: skipped"
           else
-            npm publish --access public
+            npm publish --access public "$RUNNER_TEMP/candidate/aeolus-fleet-gateway-$VERSION.tgz"
           fi
 
       # After the package is on npm. If this step fails, push the tag by hand:
@@ -188,6 +226,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
+          OVERRIDE_REASON: ${{ inputs.override_reason }}
         run: |
           if gh release view "v$VERSION" > /dev/null 2>&1; then
             echo "The GitHub Release v$VERSION exists already"
@@ -196,6 +235,9 @@ jobs:
           gh pr list --state merged --label "$VERSION" --json number,title,url --limit 1000 \
             | node scripts/release-notes.ts "$VERSION" > "$RUNNER_TEMP/release-notes.md"
           { echo; cat "$RUNNER_TEMP/plugin/aeolus-$VERSION.notes.md"; } >> "$RUNNER_TEMP/release-notes.md"
+          if [[ -n "${OVERRIDE_REASON// /}" ]]; then
+            printf '\n**Released without a passed staging walk**, by %s: %s\n' "$GITHUB_ACTOR" "$OVERRIDE_REASON" >> "$RUNNER_TEMP/release-notes.md"
+          fi
           gh release create "v$VERSION" --verify-tag --title "v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" \
             "$RUNNER_TEMP/plugin/aeolus-$VERSION.zip" "$RUNNER_TEMP/plugin/aeolus-$VERSION.tools.json"
 
