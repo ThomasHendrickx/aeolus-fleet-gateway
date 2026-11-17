@@ -3,7 +3,9 @@
  * the crew of the client's proxy ship (Q9 a), until it is stopped. It asks
  * the fleet for the reply to each call it waits on with receiveReply
  * on its lease stream wakes and safety looks (aeolus-fleet#953): a call
- * neither completed nor past its deadline. Only
+ * neither completed nor past its deadline. While a call waits it also looks
+ * again after pollMs, for receiveReply answers at once and no wake comes
+ * when the fleet gives a delivery up (long-poll W5). Only
  * replies are taken, so a message to the proxy ship that replies to no call
  * waits in the fleet and keeps no reply out. The lease stays plain: the
  * fleet hands nothing to receiveReply on a pushed lease, so this never
@@ -75,6 +77,8 @@ export function createCollectReplies(deps: CollectRepliesDeps): CollectReplies {
       /** Whether the fleet refused the crew token: set by a wait, read by the run. */
       const run = { isCrewRefused: false, isKeyUnavailable: false };
       let keyUnavailableInARow = 0;
+      /** Whether a look after pollMs is already set: one at a time. */
+      const lookAgain = { isSet: false };
 
       /** Asks the fleet once for the call's reply, and keeps it, then confirms it. */
       const waitOn = async (call: ClientCall): Promise<void> => {
@@ -102,6 +106,12 @@ export function createCollectReplies(deps: CollectRepliesDeps): CollectReplies {
         if ((await deps.crew.ack(crewToken, reply.deliveryId)).isOk) {
           await deps.crew.handled(crewToken, reply.deliveryId);
         }
+      };
+
+      /** Whether a call of the party's still waits for its answer, after the look. */
+      const isAnyWaiting = async (): Promise<boolean> => {
+        const now = deps.clock.now();
+        return (await deps.calls.waitedOn(caller, now)).some((call) => isWaiting(call, now));
       };
 
       /** A wait whose reply could not be kept: the run ends, and answers its failure. */
@@ -133,6 +143,13 @@ export function createCollectReplies(deps: CollectRepliesDeps): CollectReplies {
         if (run.isKeyUnavailable) {
           await deps.sleep(waitMs, signal);
           looks.request();
+        } else if (open.length > 0 && !lookAgain.isSet && (await isAnyWaiting())) {
+          // No wake comes when the fleet gives a call's delivery up, and receiveReply answers at once (long-poll W8): look again after pollMs, without holding back a wake meanwhile.
+          lookAgain.isSet = true;
+          void deps.sleep(deps.pollMs, signal).then(() => {
+            lookAgain.isSet = false;
+            looks.request();
+          });
         }
         run.isKeyUnavailable = false;
       }
