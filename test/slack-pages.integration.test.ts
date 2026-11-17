@@ -255,7 +255,7 @@ describe('linking a Slack account (gateway scopes S7)', () => {
 
   /** How many deliveries wait for release-notes-s7 in the fleet. */
   async function waitingForReleaseNotes(): Promise<number> {
-    const inbox = await fetch(`${fleet.url}/api/v1/ship/inbox`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${releaseNotesCrew}` }, body: JSON.stringify({ waitSeconds: 0 }) });
+    const inbox = await fetch(`${fleet.url}/api/v1/ship/inbox`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${releaseNotesCrew}` }, body: JSON.stringify({}) });
     return z.object({ waiting: z.number() }).parse(await inbox.json()).waiting;
   }
 

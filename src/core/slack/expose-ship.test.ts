@@ -79,6 +79,11 @@ describe('exposing a ship as a Slack bot', () => {
     expect(tooling.state.made).toEqual([]);
   });
 
+  it('refuses a trierarch ship', async () => {
+    ships.state.ships = [{ ...CHARLOTTE, kind: 'trierarch' }];
+    await expect(exposeShip(CHARLOTTE.shipId)).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_EXPOSABLE' } });
+  });
+
   it('refuses a person ship', async () => {
     await expect(exposeShip(CHARLOTTE.shipId)).resolves.toMatchObject({ isOk: false, error: { kind: 'NOT_EXPOSABLE', message: 'charlotte is no agent ship nor an outside A2A agent\'s proxy ship' } });
   });

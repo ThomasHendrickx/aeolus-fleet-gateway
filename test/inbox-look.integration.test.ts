@@ -1,4 +1,3 @@
-import { createApp } from '@aeolus-fleet/core/testing';
 import type { ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
@@ -22,8 +21,6 @@ import { FIXED_CLOCK } from './support/fixed-clock.js';
 const WAITING = 15;
 /** How many deliveries one receive takes at most, as a concurrent look takes them. */
 const ONE_RECEIVE = 10;
-/** Core waits about 25 seconds on a receive that finds nothing; a look must not. */
-const LOOK_TIMEOUT_MS = 60_000;
 
 let fleet: FleetServer;
 let charlotteShipId: ShipId;
@@ -37,11 +34,6 @@ let waitingDeps: Parameters<typeof waitingFor>[0];
 
 beforeEach(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
-  // No long poll: a skipped claim answers empty while the competing transaction holds it.
-  await fleet.stop();
-  const server = createApp({ databaseUrl: fleet.databaseUrl, publicUrl: fleet.url, logger: false, receiveWaitMs: 0 });
-  await server.listen({ host: '127.0.0.1', port: new URL(fleet.url).port === '' ? 80 : Number(new URL(fleet.url).port) });
-  fleet = { ...fleet, stop: () => server.close() };
   const cookie = await signIn(fleet);
   const charlotte = await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } });
   charlotteShipId = charlotte.shipId;
@@ -130,30 +122,23 @@ describe('a look at more than 10 waiting is a read (aeolus-fleet #1647)', () => 
     });
   });
 
-  it(
-    'lists every one at once while another receive holds the first 10',
-    async () => {
-      await listed();
-      const core = createPrismaClient(fleet.databaseUrl);
-      try {
-        // A concurrent receive, such as another of Bridge's looks, holds the oldest 10 rows until it commits.
-        const look = await core.$transaction(
-          async (tx) => {
-            await tx.$queryRaw`SELECT "id" FROM "deliveries" WHERE "recipient_ship_id" = ${charlotteShipId} ORDER BY "created_at", "id" LIMIT ${ONE_RECEIVE} FOR UPDATE`;
-            const startedAt = Date.now();
-            const count = await listed();
-            return { listed: count, isAtOnce: Date.now() - startedAt < 5_000 };
-          },
-          { timeout: LOOK_TIMEOUT_MS },
-        );
+  it('lists every one at once while another receive holds the first 10', async () => {
+    await listed();
+    const core = createPrismaClient(fleet.databaseUrl);
+    try {
+      // A concurrent receive, such as another of Bridge's looks, holds the oldest 10 rows until it commits.
+      const look = await core.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "deliveries" WHERE "recipient_ship_id" = ${charlotteShipId} ORDER BY "created_at", "id" LIMIT ${ONE_RECEIVE} FOR UPDATE`;
+        const startedAt = Date.now();
+        const count = await listed();
+        return { listed: count, isAtOnce: Date.now() - startedAt < 5_000 };
+      });
 
-        expect(look).toEqual({ listed: WAITING, isAtOnce: true });
-      } finally {
-        await core.$disconnect();
-      }
-    },
-    LOOK_TIMEOUT_MS,
-  );
+      expect(look).toEqual({ listed: WAITING, isAtOnce: true });
+    } finally {
+      await core.$disconnect();
+    }
+  });
 });
 
 // Keep core's claims overlapping so the competing receive encounters SKIP LOCKED.

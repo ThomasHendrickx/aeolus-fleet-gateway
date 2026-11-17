@@ -29,6 +29,7 @@ describe('an actor picks the owner of a party', () => {
       aShip({ shipId: 'shp_01m3tbfspe96yf1rnr4ank9chr', name: 'charlotte', status: 'awaitingCrew' }),
       aShip({ shipId: 'shp_01m3tbfspe96yf1rnr4ank9old', name: 'gone', status: 'retired' }),
       aShip({ shipId: 'shp_01m3tbfspe96yf1rnr4ank9agt', name: 'agent', kind: 'agent' }),
+      aShip({ name: 'trierarch', kind: 'trierarch' }),
       aShip({ shipId: 'shp_01m3tbfspe96yf1rnr4ank9app', name: 'gateway', kind: 'app' }),
     ]);
 

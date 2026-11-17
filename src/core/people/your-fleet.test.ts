@@ -4,7 +4,7 @@ import { yourFleetOf, type ListedShip } from './your-fleet.js';
 
 // Your fleet (Bridge home, as Harbour draws it, docs/design/fleet-overview):
 // each ship in one of five states, as core words them (docs/design/state-colours), and in one
-// group by its kind: People, Agents, Plugins, Through the gateway.
+// group by its kind: People, Agents, Trierarchs, Plugins, Through the gateway.
 
 let next = 0;
 
@@ -30,12 +30,13 @@ describe("a ship's tile in your fleet", () => {
 });
 
 describe('the groups of your fleet', () => {
-  it('puts argo and person ships in People, agents in Agents, plugins in Plugins and app ships Through the gateway, in that order', () => {
-    const fleet = yourFleetOf([aShip({ name: 'github', kind: 'app' }), aShip({ name: 'watch', kind: 'plugin' }), aShip({ name: 'reviewer', kind: 'agent' }), aShip({ name: 'ada', kind: 'person' }), aShip({ name: 'argo', kind: 'operator' })]);
+  it('puts trierarchs between agents and plugins', () => {
+    const fleet = yourFleetOf([aShip({ name: 'github', kind: 'app' }), aShip({ name: 'watch', kind: 'plugin' }), aShip({ name: 'trierarch', kind: 'trierarch' }), aShip({ name: 'reviewer', kind: 'agent' }), aShip({ name: 'ada', kind: 'person' }), aShip({ name: 'argo', kind: 'operator' })]);
 
     expect(fleet.groups.map(({ group, tiles }) => [group, tiles.map(({ name }) => name)])).toEqual([
       ['people', ['ada', 'argo']],
       ['agents', ['reviewer']],
+      ['trierarchs', ['trierarch']],
       ['plugins', ['watch']],
       ['throughTheGateway', ['github']],
     ]);

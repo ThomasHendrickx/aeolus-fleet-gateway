@@ -91,7 +91,7 @@ describe('a person ship takes part in a meeting', () => {
 
     expect(sent.isOk).toBe(false);
     expect(!sent.isOk && sent.error.message).toMatch(/mic/i);
-    expect(inboxOutputSchema.parse(await chiefCalls('inbox', { waitSeconds: 0 })).waiting).toBe(0);
+    expect(inboxOutputSchema.parse(await chiefCalls('inbox', {})).waiting).toBe(0);
   });
 
   it('requests the mic, gets it first in line, contributes to every other participant and releases it', async () => {

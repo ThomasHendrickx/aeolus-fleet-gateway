@@ -1,4 +1,4 @@
-import type { FleetId, ShipId, VerifiedFact } from '@aeolus-fleet/common';
+import type { FleetId, ShipId, ShipKind, VerifiedFact } from '@aeolus-fleet/common';
 
 import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
@@ -83,7 +83,7 @@ export interface ProxyShipReads {
 export interface FleetShip {
   shipId: ShipId;
   name: string;
-  kind: 'operator' | 'agent' | 'viewer' | 'person' | 'app' | 'plugin';
+  kind: ShipKind;
   status: 'awaitingCrew' | 'crewed' | 'retired';
 }
 
