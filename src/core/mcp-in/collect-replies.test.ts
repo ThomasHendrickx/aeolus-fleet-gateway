@@ -205,3 +205,26 @@ it('collects an A2A client reply on its proxy lease wake and leaves the response
   stop.abort();
   expect(await running).toEqual({ ended: 'stopped' });
 });
+
+it("looks again after pollMs while a call waits, with no wake, so a delivery the fleet gave up fails the call (long-poll W5)", async () => {
+  const streams = memoryShipWakeups();
+  const timers: (() => void)[] = [];
+  const timer: Sleep = (ms) => {
+    slept.push(ms);
+    return new Promise((resolve) => timers.push(resolve));
+  };
+  const settle = async () => { for (let tick = 0; tick < 5; tick += 1) { await new Promise((resolve) => setImmediate(resolve)); } };
+  const running = createCollectReplies({ wakeups: streams.open, crew, replies: fleet.receiver, sent: fleet.sent, calls, clock, sleep: timer, pollMs: 2000, againWaitsMs: [1000] })({ party: CLAUDE, signal: stop.signal });
+  streams.wake();
+  await settle();
+  const UNDELIVERABLE = { state: 'undeliverable', since: new Date('2026-10-19T12:00:40.000Z') } as const;
+  fleet.state.deliveries.set(MESSAGE_ID, UNDELIVERABLE);
+
+  for (const fire of timers.splice(0)) { fire(); }
+  await settle();
+
+  expect({ waits: slept, asked: fleet.state.asked.length, delivery: (await calls.findByMessage(FLEET_ID, MESSAGE_ID))?.delivery }).toEqual({ waits: [2000], asked: 2, delivery: UNDELIVERABLE });
+  stop.abort();
+  for (const fire of timers.splice(0)) { fire(); }
+  expect(await running).toEqual({ ended: 'stopped' });
+});
