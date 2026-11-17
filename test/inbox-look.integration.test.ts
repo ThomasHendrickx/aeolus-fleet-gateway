@@ -1,4 +1,3 @@
-import { createApp } from '@aeolus-fleet/core/testing';
 import type { ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
@@ -37,11 +36,6 @@ let waitingDeps: Parameters<typeof waitingFor>[0];
 
 beforeEach(async () => {
   fleet = await startFleetServer(inject('postgresUrl'));
-  // No long poll: a skipped claim answers empty while the competing transaction holds it.
-  await fleet.stop();
-  const server = createApp({ databaseUrl: fleet.databaseUrl, publicUrl: fleet.url, logger: false, receiveWaitMs: 0 });
-  await server.listen({ host: '127.0.0.1', port: new URL(fleet.url).port === '' ? 80 : Number(new URL(fleet.url).port) });
-  fleet = { ...fleet, stop: () => server.close() };
   const cookie = await signIn(fleet);
   const charlotte = await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } });
   charlotteShipId = charlotte.shipId;

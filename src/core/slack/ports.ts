@@ -1,4 +1,4 @@
-import type { FleetId, MessageId, ShipId } from '@aeolus-fleet/common';
+import type { FleetId, MessageId, ShipId, ShipKind } from '@aeolus-fleet/common';
 
 import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
@@ -105,7 +105,7 @@ export interface ShipNames {
 export interface ShipToExpose {
   readonly shipId: ShipId;
   readonly name: string;
-  readonly kind: 'operator' | 'agent' | 'viewer' | 'person' | 'app' | 'plugin';
+  readonly kind: ShipKind;
   readonly status: 'awaitingCrew' | 'crewed' | 'retired';
   readonly summary: string | null;
 }

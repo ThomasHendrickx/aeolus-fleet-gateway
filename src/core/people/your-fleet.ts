@@ -26,7 +26,7 @@ export const SHIP_STATES = ['alert', 'awaitingCrew', 'blocked', 'working', 'idle
 export type ShipState = (typeof SHIP_STATES)[number];
 
 /** The groups, in the order Your fleet shows them. */
-export const FLEET_GROUPS = ['people', 'agents', 'plugins', 'throughTheGateway'] as const;
+export const FLEET_GROUPS = ['people', 'agents', 'trierarchs', 'plugins', 'throughTheGateway'] as const;
 export type FleetGroup = (typeof FLEET_GROUPS)[number];
 
 export interface FleetTile {
@@ -54,6 +54,8 @@ function groupOf(kind: ShipKind): FleetGroup | null {
       return 'people';
     case 'agent':
       return 'agents';
+    case 'trierarch':
+      return 'trierarchs';
     case 'plugin':
       return 'plugins';
     case 'app':

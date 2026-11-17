@@ -21,7 +21,7 @@ export const SHIP_STATES: readonly ShipState[] = ['alert', 'awaitingCrew', 'bloc
 export const STATE_LABELS: Record<ShipState, string> = { alert: 'Alert', awaitingCrew: 'Awaiting crew', blocked: 'Blocked', working: 'Working', idle: 'Idle' };
 
 /** Each group as Harbour names its kind. */
-const HARBOUR_KINDS: Record<FleetGroup, HarbourGroupKind> = { people: 'people', agents: 'agents', plugins: 'plugins', throughTheGateway: 'gateway' };
+const HARBOUR_KINDS: Record<FleetGroup, HarbourGroupKind> = { people: 'people', agents: 'agents', trierarchs: 'trierarchs', plugins: 'plugins', throughTheGateway: 'gateway' };
 
 /** Your fleet as Harbour takes it: the numbers, the ships first, and each group's tiles in the order Your fleet gives. */
 export function harbourOf(fleet: YourFleet): { counts: HarbourCounts; groups: HarbourGroupShips[] } {
