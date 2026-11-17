@@ -4,6 +4,7 @@ import type { ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
+import { createPrismaInstallationRequests } from '../src/adapters/prisma/installation-requests.js';
 import { createPrismaClient } from '../src/adapters/prisma/client.js';
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, applyEmptyOwnRules, signIn } from './support/argo.js';
@@ -279,3 +280,54 @@ async function pingStateOf(shipId: ShipId): Promise<string | undefined> {
   const ship = z.object({ result: z.object({ data: z.object({ ping: z.object({ state: z.string() }).nullable() }) }) }).safeParse(await answer.json());
   return ship.success ? ship.data.result.data.ping?.state : undefined;
 }
+
+
+describe('the installation connects a hosted fleet', () => {
+  async function fleetId(): Promise<string> {
+    const response = await fetch(`${fleet.url}/trpc/console.session`, { headers: { cookie } });
+    return z.object({ result: z.object({ data: z.object({ fleetId: z.string() }) }) }).parse(await response.json()).result.data.fleetId;
+  }
+
+  it('stores a connect request, replays it after restart and keeps the connection when switched off and on', async () => {
+    const address = await started(INSTALLATION_TOKEN);
+    const id = await fleetId();
+    await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'on', fleetId: id, enabled: true } });
+    const body = { requestId: 'hosted-connect', fleetId: id, ...gatewayShip };
+    const connected = await mutate(address, { procedure: 'installation.connect', installationToken: INSTALLATION_TOKEN, body });
+    expect(connected.status, await connected.clone().text()).toBe(200);
+    const prisma = createPrismaClient(databaseUrl);
+    try {
+      const requests = createPrismaInstallationRequests(prisma);
+      await expect(requests.find('hosted-connect')).resolves.toMatchObject({ kind: 'connect', fleetId: id });
+      expect(await prisma.installationRequest.count({ where: { fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8zz' } })).toBe(0);
+      expect(JSON.stringify(await requests.find('hosted-connect'))).not.toContain(gatewayShip.secret);
+    } finally {
+      await prisma.$disconnect();
+    }
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+    const restarted = await started(INSTALLATION_TOKEN);
+    const replayed = await mutate(restarted, { procedure: 'installation.connect', installationToken: INSTALLATION_TOKEN, body: { ...body, secret: 'different-secret' } });
+    expect(replayed.status, await replayed.clone().text()).toBe(200);
+    for (const isEnabled of [false, true]) {
+      await mutate(restarted, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: `switch-${String(isEnabled)}`, fleetId: id, enabled: isEnabled } });
+      const read = await query(restarted, { procedure: 'installation.get', installationToken: INSTALLATION_TOKEN, input: { fleetId: id } });
+      expect(await read.json()).toEqual({ result: { data: { enabled: isEnabled, connected: true } } });
+    }
+  });
+
+  it('keeps one connection and refuses the other when two connects race with one secret', async () => {
+    const address = await started(INSTALLATION_TOKEN);
+    const id = await fleetId();
+    await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'on', fleetId: id, enabled: true } });
+    const responses = await Promise.all(['first', 'second'].map((requestId) => mutate(address, { procedure: 'installation.connect', installationToken: INSTALLATION_TOKEN, body: { requestId, fleetId: id, ...gatewayShip } })));
+    expect(responses.filter(({ status }) => status === 200)).toHaveLength(1);
+    expect(responses.filter(({ status }) => status !== 200)).toHaveLength(1);
+    const prisma = createPrismaClient(databaseUrl);
+    try {
+      expect(await prisma.connection.count({ where: { fleetId: id } })).toBe(1);
+      expect(await prisma.installationRequest.count({ where: { fleetId: id, kind: 'connect' } })).toBe(1);
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+});

@@ -321,6 +321,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     heldConnection: unused,
     installationTokenSent: undefined,
     installation: { mode: 'open', token: undefined },
+    installationConnect: unused,
     setFleetEnabled: unused,
     readFleet: unused,
     deleteFleet: unused,
@@ -1973,5 +1974,44 @@ describe('account removal cleanup acknowledgment', () => {
     await caller.installation.accountDisabled(account);
     clock.now = () => new Date('2026-10-21T09:10:30.001Z');
     await expect(caller.account.inView()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+});
+
+
+describe('installation.connect', () => {
+  const input = { requestId: 'connect-1', fleetId: FLEET_ID, shipId: QUIET_SHIP_ID, secret: 'a-secret' };
+  const installation = { mode: 'enabled' as const, token: 'installation-test' };
+  const result = { enabled: true as const, connected: true as const };
+
+  it('is absent without a configured installation token', async () => {
+    await expect(gatewayRouter.createCaller(aContext(undefined).context).installation.connect(input)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it.each([undefined, 'wrong'])('refuses missing or wrong installation token %s', async (installationTokenSent) => {
+    const caller = gatewayRouter.createCaller({ ...aContext(undefined).context, installation, installationTokenSent });
+    await expect(caller.installation.connect(input)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('connects without a console actor and returns the installation answer', async () => {
+    const caller = gatewayRouter.createCaller({ ...aContext(undefined).context, installation, installationTokenSent: installation.token, installationConnect: (sent) => {
+      expect(sent).toEqual(input);
+      return Promise.resolve(ok({ isEnabled: true, isConnected: true }));
+    } });
+    await expect(caller.installation.connect(input)).resolves.toEqual(result);
+  });
+
+  const refusals = [
+    ['OFF', 'FORBIDDEN'], ['REQUEST_ID_USED', 'CONFLICT'], ['ALREADY_CONNECTED', 'CONFLICT'],
+    ['SECRET_REFUSED', 'BAD_REQUEST'], ['OTHER_FLEET', 'BAD_REQUEST'], ['MISSING_SCOPES', 'BAD_REQUEST'],
+    ['SCOPE_REFUSED', 'CONFLICT'], ['FLEET_UNAVAILABLE', 'BAD_GATEWAY'],
+  ] as const;
+  it.each(refusals)('maps %s to %s', async (kind, code) => {
+    const caller = gatewayRouter.createCaller({ ...aContext(undefined).context, installation, installationTokenSent: installation.token, installationConnect: () => Promise.resolve(err({ kind, message: 'original refusal' })) });
+    await expect(caller.installation.connect(input)).rejects.toMatchObject({ code, message: 'original refusal' });
+  });
+
+  it.each([{ ...input, secret: '' }, { ...input, unexpected: true }])('refuses invalid strict input', async (sent) => {
+    const caller = gatewayRouter.createCaller({ ...aContext(undefined).context, installation, installationTokenSent: installation.token });
+    await expect(caller.installation.connect(sent)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
