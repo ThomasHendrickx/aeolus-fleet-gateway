@@ -321,6 +321,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
     heldConnection: unused,
     installationTokenSent: undefined,
     installation: { mode: 'open', token: undefined },
+    installationConnect: unused,
     setFleetEnabled: unused,
     readFleet: unused,
     deleteFleet: unused,
@@ -1994,7 +1995,7 @@ describe('installation.connect', () => {
   it('connects without a console actor and returns the installation answer', async () => {
     const caller = gatewayRouter.createCaller({ ...aContext(undefined).context, installation, installationTokenSent: installation.token, installationConnect: (sent) => {
       expect(sent).toEqual(input);
-      return Promise.resolve(ok(result));
+      return Promise.resolve(ok({ isEnabled: true, isConnected: true }));
     } });
     await expect(caller.installation.connect(input)).resolves.toEqual(result);
   });

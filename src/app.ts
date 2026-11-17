@@ -279,6 +279,7 @@ import { createConnect } from './core/connection/connect.js';
 import { createDeclareGatewayScopes } from './core/connection/declare-gateway-scopes.js';
 import { createAnswerPings } from './core/connection/answer-pings.js';
 import { createReadConnection, type ReadConnection } from './core/connection/read-connection.js';
+import { createInstallationConnect } from './core/installation/installation-connect.js';
 import { createDeleteFleet } from './core/installation/delete-fleet.js';
 import type { InstallationMode } from './core/installation/ports.js';
 import { createReadFleet } from './core/installation/read-fleet.js';
@@ -498,6 +499,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const readFleet = createReadFleet({ isServed, connections });
   const deleteFleet = createDeleteFleet({ forgetter: createPrismaFleetForgetter(prisma), requests, hasher: sha256RequestHasher, clock });
   const connect = createConnect({ door, store: connections, clock });
+  const installationConnect = createInstallationConnect({ requests, hasher: sha256RequestHasher, clock, isServed, connect });
   const declareGatewayScopes = createDeclareGatewayScopes({ door, store: connections });
   const authenticateOperator = createAuthenticateOperator({ sessions: createFleetConsoleSessions(options.fleetUrl) });
   const parties = createPrismaPartyStore(prisma);
@@ -1173,6 +1175,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     isServed,
     heldConnection,
     installation: { mode: installation, token: options.installationToken },
+    installationConnect,
     setFleetEnabled,
     readFleet,
     deleteFleet,

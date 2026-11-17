@@ -9,7 +9,7 @@ import { createInstallationConnect } from './installation-connect.js';
 
 const AT = new Date('2026-11-17T12:00:00.000Z');
 const input = { requestId: 'connect-1', fleetId: FLEET_ID, shipId: SHIP_ID, secret: 'aeolus_sk_v1_good' };
-const answer = { isOk: true, value: { enabled: true, connected: true } };
+const answer = { isOk: true, value: { isEnabled: true, isConnected: true } };
 let fleet: ReturnType<typeof fakeGatewayFleet>;
 let store: ReturnType<typeof memoryConnectionStore>;
 let requests: ReturnType<typeof memoryInstallationRequests>;
@@ -32,7 +32,7 @@ describe('the installation connects a fleet', () => {
 
   it('refuses an unserved fleet before even looking up a replay', async () => {
     await connect(input);
-    const off = createInstallationConnect({ requests, hasher: plainHasher, clock: { now: () => AT }, isServed: () => Promise.resolve(false), connect: async () => { throw new Error('must not connect'); } });
+    const off = createInstallationConnect({ requests, hasher: plainHasher, clock: { now: () => AT }, isServed: () => Promise.resolve(false), connect: () => Promise.resolve(err({ kind: 'SECRET_REFUSED', message: 'must not connect' })) });
     await expect(off(input)).resolves.toMatchObject({ isOk: false, error: { kind: 'OFF', message: 'The gateway is off for this fleet' } });
     expect(fleet.state.registers).toBe(1);
     expect(requests.held).toHaveLength(1);

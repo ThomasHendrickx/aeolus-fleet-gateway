@@ -308,10 +308,10 @@ describe('the installation connects a hosted fleet', () => {
     const restarted = await started(INSTALLATION_TOKEN);
     const replayed = await mutate(restarted, { procedure: 'installation.connect', installationToken: INSTALLATION_TOKEN, body: { ...body, secret: 'different-secret' } });
     expect(replayed.status, await replayed.clone().text()).toBe(200);
-    for (const enabled of [false, true]) {
-      await mutate(restarted, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: `switch-${String(enabled)}`, fleetId: id, enabled } });
+    for (const isEnabled of [false, true]) {
+      await mutate(restarted, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: `switch-${String(isEnabled)}`, fleetId: id, enabled: isEnabled } });
       const read = await query(restarted, { procedure: 'installation.get', installationToken: INSTALLATION_TOKEN, input: { fleetId: id } });
-      expect(await read.json()).toEqual({ result: { data: { enabled, connected: true } } });
+      expect(await read.json()).toEqual({ result: { data: { enabled: isEnabled, connected: true } } });
     }
   });
 
