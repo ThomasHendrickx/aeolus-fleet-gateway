@@ -631,14 +631,17 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
   });
 
   it.each([
-    ['request', '/api/v1/ship/requestMic'],
-    ['withdraw', '/api/v1/ship/withdrawMicRequest'],
-    ['release', '/api/v1/ship/releaseMic'],
-  ] as const)('makes the %s mic call on the meeting', async (change, url) => {
-    answer = { status: 200, body: {} };
+    [{ kind: 'holding' }, { kind: 'holding' }],
+    [{ kind: 'waiting', place: 2 }, { kind: 'requested', place: 2 }],
+  ] as const)('returns the caller standing answered by requestMic', async (caller, standing) => {
+    answer = { status: 200, body: { mic: { holder: null, pattern: 'moderator', requests: [] }, caller } };
+    await expect(createRestFleetDoor(base).meetings.changeMic('aeolus_ct_v1_charlotte', { meetingId: MEETING, change: 'request' })).resolves.toEqual({ isOk: true, value: standing });
+  });
 
-    await expect(createRestFleetDoor(base).meetings.changeMic('aeolus_ct_v1_charlotte', { meetingId: MEETING, change })).resolves.toEqual({ isOk: true, value: undefined });
-    expect(sent()).toEqual([{ url, authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { meetingId: MEETING } }]);
+  it.each(['withdraw', 'release'] as const)('answers no standing after %s', async (change) => {
+    answer = { status: 200, body: {} };
+    await expect(createRestFleetDoor(base).meetings.changeMic('aeolus_ct_v1_charlotte', { meetingId: MEETING, change })).resolves.toEqual({ isOk: true, value: { kind: 'none' } });
+    expect(sent()).toEqual([{ url: `/api/v1/ship/${change === 'withdraw' ? 'withdrawMicRequest' : 'releaseMic'}`, authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { meetingId: MEETING } }]);
   });
 
   it("answers the fleet's refusal of a mic call", async () => {

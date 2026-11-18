@@ -231,20 +231,17 @@ describe("a person's MCP client takes part in a meeting", () => {
   });
 
   it.each([
-    ['aeolus_request_mic', 'request'],
-    ['aeolus_withdraw_mic_request', 'withdraw'],
-    ['aeolus_release_mic', 'release'],
-  ] as const)('makes the %s call on the meeting', async (name, change) => {
-    const asked: Parameters<ChangeOwnMic>[0][] = [];
-    const changeOwnMic: ChangeOwnMic = (input) => {
-      asked.push(input);
-      return Promise.resolve(ok(undefined));
-    };
+    ['aeolus_request_mic', 'request', { kind: 'requested', place: 2 }, 'You wait for the mic, number 2 in line.'],
+    ['aeolus_request_mic', 'request', { kind: 'holding' }, 'You hold the mic.'],
+    ['aeolus_withdraw_mic_request', 'withdraw', { kind: 'none' }, 'You do not hold the mic or wait for it.'],
+    ['aeolus_release_mic', 'release', { kind: 'none' }, 'You do not hold the mic or wait for it.'],
+  ] as const)('answers the person their place after %s', async (name, change, standing, words) => {
+    const changeOwnMic: ChangeOwnMic = () => Promise.resolve(ok(standing));
     const mcp = await connected(personTools({ changeOwnMic }).deps);
 
     const changed = await mcp.callTool({ name, arguments: { meetingId: HEADS_MEETING_ID } });
 
-    expect({ changed, asked }).toEqual({ changed: { content: [{ type: 'text', text: '{}' }] }, asked: [{ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID, change }] });
+    expect(changed).toEqual({ content: [{ type: 'text', text: words }] });
   });
 
   it("tells the person the fleet's reason when it refuses a mic call", async () => {
