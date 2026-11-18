@@ -54,6 +54,21 @@ describe('the staging walk gate', () => {
     });
   });
 
+  it('refuses a walk whose state is success but whose description says blocked', () => {
+    const blocked = aStatus({ description: `${VERSION}: blocked, candidate run ${RUN}` });
+    expect(verdict({ statuses: [blocked, aStatus()] })).toEqual({
+      verdict: 'refused',
+      why: `The staging walk of candidate run ${RUN} (${VERSION}) on ${SHA} did not pass (blocked): ${WALK_URL}`,
+    });
+  });
+
+  it('refuses a success whose description is not an exact passed or blocked report', () => {
+    expect(verdict({ statuses: [aStatus({ description: `${VERSION}: passed with caveats, candidate run ${RUN}` })] })).toEqual({
+      verdict: 'refused',
+      why: `No staging walk of candidate run ${RUN} (${VERSION}) on ${SHA}: the walker has not reported on it`,
+    });
+  });
+
   it('refuses a candidate another candidate of the same commit and version was walked instead of', () => {
     const walkedOther = aStatus({ description: `${VERSION}: passed, candidate run 44100000002` });
     expect(verdict({ statuses: [walkedOther] })).toEqual({
