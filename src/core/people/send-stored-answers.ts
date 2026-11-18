@@ -42,6 +42,10 @@ function refusalTextOf(asker: string, refusal: FleetRefusal): string {
     case 'NOT_FOUND':
       return `${asker} was retired, so it cannot receive an answer`;
     case 'FORBIDDEN':
+      // Core's ship contract maps the daily limit to FORBIDDEN as well as reach.
+      if (/^The fleet reached its limit of \d+ messages today \(UTC\),/.test(refusal.message)) {
+        return refusal.message;
+      }
       return `you may not reach ${asker}`;
     default:
       return `${asker} did not take the answer: ${refusal.message}`;

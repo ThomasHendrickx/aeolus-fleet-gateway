@@ -12,7 +12,7 @@ import type { PersonShipDoor } from '../src/core/people/ports.js';
 import { createSendStoredAnswers } from '../src/core/people/send-stored-answers.js';
 import { commission, register, retire, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
-import { startFleetServer, type FleetServer } from './support/fleet-server.js';
+import { aFleetOfTheInstallation, startFleetServer, startInstallationServer, type FleetServer } from './support/fleet-server.js';
 import { holding } from './support/people-fakes.js';
 
 // The basket sent, against a real core and the gateway's own Postgres
@@ -159,6 +159,32 @@ async function stateOfEach(): Promise<string[]> {
 }
 
 describe('the basket sent through a real core', () => {
+  it('sends one answer and says the daily message limit refused the next', async () => {
+    await fleet.stop();
+    const installationToken = 'aeolus_installation_test_0123456789abcdef';
+    fleet = await startInstallationServer(inject('postgresUrl'), { installationToken, accountTokenIssuer: 'http://127.0.0.1:1' });
+    ({ fleetId, cookie } = await aFleetOfTheInstallation(fleet, { installationToken, name: 'limited' }));
+    door = createRestFleetDoor(fleet.url).person;
+    charlotte = await aShip({ name: 'charlotte', type: 'person', kind: 'person' });
+    const first = await aShip({ name: 'orchestrator-1', type: 'orchestrator', kind: 'app' });
+    const second = await aShip({ name: 'commercial', type: 'commercial', kind: 'app' });
+    await crewCharlotte();
+    await answeredIntoTheBasket(first, { id: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e', title: 'First?', addedAt: new Date('2026-10-31T19:53:00.000Z') });
+    await answeredIntoTheBasket(second, { id: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', title: 'Second?', addedAt: new Date('2026-10-31T19:55:00.000Z') });
+    const limits = await fetch(`${fleet.url}/trpc/installation.fleets.setLimits`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-aeolus-installation-token': installationToken },
+      body: JSON.stringify({ fleetId, dailyMessages: { kind: 'fleet', limit: 3 } }),
+    });
+    expect(limits.status).toBe(200);
+
+    await expect(aSender()()).resolves.toEqual({ sent: 1, kept: 0, refused: 1 });
+    expect((await createPrismaBasketEntries(prisma).list(fleetId, charlotte.shipId)).map(({ state, refusal }) => ({ state, refusal }))).toEqual([
+      { state: 'sent', refusal: null },
+      { state: 'refused', refusal: 'The fleet reached its limit of 3 messages today (UTC), so nothing was stored. Sending works again after 00:00 UTC.' },
+    ]);
+  });
+
   it('gives each asker one answer to its question, in reply to it, sent twice at once and once more after a restart', async () => {
     await crewCharlotte();
     const harbour = await answeredIntoTheBasket(askers.orchestrator, { id: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e', title: 'Which goes first: the Compact look (U4) or Harbour?', addedAt: new Date('2026-10-31T19:53:00.000Z') });
