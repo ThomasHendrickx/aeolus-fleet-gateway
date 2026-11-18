@@ -26,8 +26,8 @@ export type StagingWalkVerdict =
 
 /** Whether a staging-walk status is the walk of this candidate run at this version. */
 function isWalkOf(status: CommitStatus, candidate: { version: string; candidateRunId: string }): boolean {
-  const description = status.description ?? '';
-  return description.startsWith(`${candidate.version}: `) && description.endsWith(`, candidate run ${candidate.candidateRunId}`);
+  return status.description === `${candidate.version}: passed, candidate run ${candidate.candidateRunId}`
+    || status.description === `${candidate.version}: blocked, candidate run ${candidate.candidateRunId}`;
 }
 
 /** The verdict on a candidate; the statuses are GitHub's for the commit, newest first, as its API lists them. */
@@ -51,8 +51,9 @@ export function stagingWalkVerdict(release: {
   if (walk === undefined) {
     return { verdict: 'refused', why: `No staging walk of ${walked}: the walker has not reported on it` };
   }
-  if (walk.state !== 'success') {
-    return { verdict: 'refused', why: `The staging walk of ${walked} did not pass (${walk.state}): ${walk.target_url ?? 'no link'}` };
+  const reported = walk.state === 'success' && walk.description === `${release.version}: blocked, candidate run ${release.candidateRunId}` ? 'blocked' : walk.state;
+  if (reported !== 'success') {
+    return { verdict: 'refused', why: `The staging walk of ${walked} did not pass (${reported}): ${walk.target_url ?? 'no link'}` };
   }
   return { verdict: 'walked', url: walk.target_url };
 }
