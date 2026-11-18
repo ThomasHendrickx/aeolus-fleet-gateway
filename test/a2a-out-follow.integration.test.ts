@@ -287,16 +287,20 @@ describe("a ship of the fleet sends to an outside A2A agent's proxy ship (slice 
   });
 
   it.each(noAnswers)('hands a message that got %s again to a repeatable agent, as the same message', async (_kind, noAnswer) => {
+    let retried: () => void = () => undefined;
+    const retryReachedAgent = new Promise<void>((resolve) => { retried = resolve; });
     answer = (method, response) => {
       if (messageIdsSent().length === 1) {
         noAnswer(method, response);
         return;
       }
       rpcResult(response, { task: QUOTED_TASK });
+      retried();
     };
     await started({ toolCallTimeoutMs: SHORT_TIMEOUT_MS });
 
     await askForAQuote();
+    await retryReachedAgent;
     const replies = await repliesUntilCompleted();
 
     expect(told(replies)).toEqual(['text/plain: 4 EUR', 'TASK_STATE_COMPLETED']);
