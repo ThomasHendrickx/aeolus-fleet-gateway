@@ -7,6 +7,7 @@ import type { MeetingId, MessageId, ShipId, ShipKind, ShipStatus } from '@aeolus
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
+import type { MicStanding } from './mic-standing.js';
 
 /** A ship as a meeting names it. */
 export interface MeetingShip {
@@ -64,5 +65,5 @@ export interface PersonMeetingDoor {
   /** The meeting and a page of its contributions after the cursor, newest first; refused for a meeting the ship takes no part in. */
   meeting(crewToken: string, asked: { meetingId: MeetingId; cursor?: MessageId }): Promise<Result<MeetingRead, FleetRefusal>>;
   /** Makes one of the ship's own mic calls; the fleet refuses one the meeting does not allow now and says why. */
-  changeMic(crewToken: string, asked: { meetingId: MeetingId; change: OwnMicChange }): Promise<Result<undefined, FleetRefusal>>;
+  changeMic(crewToken: string, asked: { meetingId: MeetingId; change: OwnMicChange }): Promise<Result<MicStanding, FleetRefusal>>;
 }

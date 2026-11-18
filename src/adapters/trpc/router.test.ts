@@ -313,7 +313,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
           return Promise.resolve(err({ kind: 'MIC_REFUSED' as const, message: 'The fleet did not change the mic: You do not hold the mic' }));
         }
         answers.push({ grantId: grantOf(input.caller), meetingId: input.meetingId, change: input.change });
-        return Promise.resolve(ok(undefined));
+        return Promise.resolve(ok({ kind: 'none' as const }));
       },
     },
     changes,

@@ -231,11 +231,11 @@ describe("a person's MCP client takes part in a meeting", () => {
   });
 
   it.each([
-    ['aeolus_request_mic', 'request', { kind: 'requested', place: 2 }, 'You wait for the mic, number 2 in line.'],
-    ['aeolus_request_mic', 'request', { kind: 'holding' }, 'You hold the mic.'],
-    ['aeolus_withdraw_mic_request', 'withdraw', { kind: 'none' }, 'You do not hold the mic or wait for it.'],
-    ['aeolus_release_mic', 'release', { kind: 'none' }, 'You do not hold the mic or wait for it.'],
-  ] as const)('answers the person their place after %s', async (name, change, standing, words) => {
+    { name: 'aeolus_request_mic', standing: { kind: 'requested', place: 2 }, words: 'You wait for the mic, number 2 in line.' },
+    { name: 'aeolus_request_mic', standing: { kind: 'holding' }, words: 'You hold the mic.' },
+    { name: 'aeolus_withdraw_mic_request', standing: { kind: 'none' }, words: 'You do not hold the mic or wait for it.' },
+    { name: 'aeolus_release_mic', standing: { kind: 'none' }, words: 'You do not hold the mic or wait for it.' },
+  ] as const)('answers the person their place after $name', async ({ name, standing, words }) => {
     const changeOwnMic: ChangeOwnMic = () => Promise.resolve(ok(standing));
     const mcp = await connected(personTools({ changeOwnMic }).deps);
 

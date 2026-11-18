@@ -5,9 +5,10 @@ import { asPersonCrew, withOwnRefusal, type PersonCaller, type PersonCrewError }
 import type { PersonCrews } from '../people/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
+import type { MicStanding } from './mic-standing.js';
 import type { OwnMicChange, PersonMeetingDoor } from './ports.js';
 
-export type ChangeOwnMic = (input: { caller: PersonCaller; meetingId: MeetingId; change: OwnMicChange }) => Promise<Result<undefined, PersonCrewError | DomainError<'MIC_REFUSED'>>>;
+export type ChangeOwnMic = (input: { caller: PersonCaller; meetingId: MeetingId; change: OwnMicChange }) => Promise<Result<MicStanding, PersonCrewError | DomainError<'MIC_REFUSED'>>>;
 
 /**
  * Use case: a person requests a meeting's mic, withdraws their request, or
@@ -23,6 +24,6 @@ export function createChangeOwnMic(deps: { crewPersonShip: CrewPersonShip; crews
       return changed;
     }
     const taken = changed.value.value;
-    return taken.isOk ? ok(undefined) : refuse('MIC_REFUSED', `The fleet did not change the mic: ${taken.error.message}`);
+    return taken.isOk ? ok(taken.value) : refuse('MIC_REFUSED', `The fleet did not change the mic: ${taken.error.message}`);
   };
 }
