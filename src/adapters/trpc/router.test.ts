@@ -1512,6 +1512,34 @@ describe("the web app's authorize pages read the request they show through the A
 });
 
 describe("a page follows its fleet's request changes through the gateway's API, to read itself again", () => {
+  it('keeps a quiet changes stream alive', async () => {
+    const stop = new AbortController();
+    const answer = await fetchRequestHandler({
+      endpoint: '/trpc',
+      req: new Request('http://gateway.test/trpc/requests.changes', { signal: stop.signal }),
+      router: gatewayRouter,
+      createContext: () => aContext(PERSON_COOKIE).context,
+    });
+    const reader = answer.body?.getReader();
+    expect(reader).toBeDefined();
+    if (reader === undefined) return;
+    try {
+      let connected = '';
+      while (!connected.includes('\n\n')) {
+        const { value } = await reader.read();
+        connected += new TextDecoder().decode(value);
+      }
+      const next = await Promise.race([
+        reader.read().then(({ value }) => new TextDecoder().decode(value)),
+        new Promise<string>((resolve) => setTimeout(() => resolve(''), 12_000)),
+      ]);
+      expect(next).toContain('event: ping');
+    } finally {
+      stop.abort();
+      await reader.cancel();
+    }
+  }, 15_000);
+
   it('hears each change to its own fleet, and none of another fleet', async () => {
     const { context, changes } = aContext(PERSON_COOKIE);
     const stop = new AbortController();
