@@ -92,6 +92,16 @@ describe("the gateway's address as a person opens it (#1030)", () => {
     ]);
   });
 
+  it.each([
+    { from: 'a GET with no Accept header', method: 'GET' as const, headers: {} },
+    { from: 'a GET that accepts anything', method: 'GET' as const, headers: { accept: '*/*' } },
+    { from: 'a HEAD', method: 'HEAD' as const, headers: { accept: '*/*' } },
+  ])('hands Bridge to the web app for $from, so a signed-out visitor is sent to sign in and never gets a 404 (#403)', async ({ method, headers }) => {
+    const bridge = await server.inject({ method, url: '/bridge', headers });
+
+    expect(bridge.headers['content-type']).toBe('text/html; charset=utf-8');
+  });
+
   it('answers an unknown address a client calls as JSON, as before', async () => {
     const answer = await server.inject({ url: '/api/no-such-call', headers: { accept: 'application/json' } });
 

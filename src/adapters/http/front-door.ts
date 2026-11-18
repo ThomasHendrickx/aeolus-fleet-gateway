@@ -74,6 +74,15 @@ export function registerFrontDoor(server: FastifyInstance, deps: { web?: WebApp 
 
   const { web } = deps;
   if (web !== undefined) {
+    // Bridge is a page whatever the client's Accept header says (a plain GET or HEAD names none): the web app sends a signed-out visitor to sign in.
+    server.route({
+      method: ['GET', 'HEAD'],
+      url: BRIDGE,
+      handler: async (request, reply) => {
+        reply.hijack();
+        await web(request.raw, reply.raw);
+      },
+    });
     // The web app writes the answer itself: Fastify, hijacked, sends nothing more. The palette list is
     // read by the other Aeolus apps' servers, whatever they accept (header design H4).
     for (const path of [WEB_APP_FILES, WAKE_WORKER, ARGO_WAKE_ICON, ...APP_MARK_FILES, PALETTE_LIST_PATH]) {
