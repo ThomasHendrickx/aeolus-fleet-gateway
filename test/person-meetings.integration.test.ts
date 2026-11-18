@@ -97,10 +97,10 @@ describe('a person ship takes part in a meeting', () => {
   it('requests the mic, gets it first in line, contributes to every other participant and releases it', async () => {
     await chiefCalls('setMicPattern', { meetingId, pattern: 'fifo' });
 
-    await expect(meetings.changeMic(charlotte, { meetingId, change: 'request' })).resolves.toEqual({ isOk: true, value: undefined });
+    await expect(meetings.changeMic(charlotte, { meetingId, change: 'request' })).resolves.toEqual({ isOk: true, value: { kind: 'holding' } });
     const holding = await meetings.meeting(charlotte, { meetingId });
     const sent = await person.send(charlotte, { to: { kind: 'meeting', meetingId }, contentType: 'text/plain', payload: 'Marketing is on track', idempotencyKey: 'charlotte-2' });
-    await expect(meetings.changeMic(charlotte, { meetingId, change: 'release' })).resolves.toEqual({ isOk: true, value: undefined });
+    await expect(meetings.changeMic(charlotte, { meetingId, change: 'release' })).resolves.toEqual({ isOk: true, value: { kind: 'none' } });
     const released = await meetings.meeting(charlotte, { meetingId });
 
     expect(holding.isOk && holding.value.mic.holder?.name).toBe('charlotte');
@@ -115,7 +115,7 @@ describe('a person ship takes part in a meeting', () => {
   it('withdraws a request that waits in line, leaving the line', async () => {
     await meetings.changeMic(charlotte, { meetingId, change: 'request' });
 
-    await expect(meetings.changeMic(charlotte, { meetingId, change: 'withdraw' })).resolves.toEqual({ isOk: true, value: undefined });
+    await expect(meetings.changeMic(charlotte, { meetingId, change: 'withdraw' })).resolves.toEqual({ isOk: true, value: { kind: 'none' } });
     const read = await meetings.meeting(charlotte, { meetingId });
 
     expect(read.isOk && read.value.mic.requests).toEqual([]);
