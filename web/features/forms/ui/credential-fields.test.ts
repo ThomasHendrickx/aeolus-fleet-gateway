@@ -8,7 +8,7 @@ function fields(): string {
   return renderToStaticMarkup(createElement(CredentialFields, { legend: "The server's credential", fields: {}, noneHelp: 'No credential.', canEachPersonSignIn: true }));
 }
 
-describe("a server's credential, as Add MCP server draws it (design/bridge-navigation)", () => {
+describe("a server's credential, as Add MCP server draws it", () => {
   it('labels its kind once, by the legend, with no second Credential label', () => {
     const markup = fields();
 

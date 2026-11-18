@@ -13,11 +13,10 @@ function countsOf(items: readonly HomeItem[]): string {
 }
 
 /**
- * Bridge home's title row, across what waits and Your fleet (home.html,
- * design/bridge-fleet-width): what waits on the person with its one count
+ * Bridge home's title row, across what waits and Your fleet: what waits on the person with its one count
  * and what is in it, and at its right end sending any ship a message. On
  * the phone the title and its count alone; the phone sends from its top bar.
- * While the record cannot be read (states.html), when it was last read in
+ * While the record cannot be read, when it was last read in
  * place of the count, left out on the phone, as its frame draws it.
  */
 export function HomeHeading({ waiting }: { waiting: BridgeHome['waiting'] }) {

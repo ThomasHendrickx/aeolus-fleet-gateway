@@ -136,7 +136,7 @@
     }
   }
 
-  /* A working ship's tile: a band of light runs along its foot (design/bridge-fleet-width). */
+  /* A working ship's tile: a band of light runs along its foot. */
   --animate-live-band: live-band 2.4s linear infinite;
 
   @keyframes live-band {

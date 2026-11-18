@@ -51,7 +51,7 @@ function MarkSeenDoneQuestion({ question, confirm, pending, isPending, onConfirm
 }
 
 /**
- * The Messages page (#242, design/bridge-messages): every plain message to
+ * The Messages page (#242): every plain message to
  * the person, newest on top, a dot on the new ones, outside the count, Done
  * and Open on each, in a reading column; the seen ones marked done in one go
  * from the heading row, asking first and never the new ones, beside sending

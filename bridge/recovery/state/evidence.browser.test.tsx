@@ -26,11 +26,9 @@ describe('M14 recovery evidence from the real Bridge parts', () => {
     it(`fits at ${width}`, async () => {
       await page.viewport(width, 1000);
       const screen = await render(<AppRouterContext.Provider value={ROUTER}><Frame><RecordUnreadable whoDidNotAnswer="fleet" /></Frame></AppRouterContext.Provider>);
-      await page.screenshot({ path: `../../../test/evidence/405/before-${width}.png` });
       await screen.rerender(<Frame><Disconnected isRetrying={false} onRetry={() => undefined} /></Frame>);
       await expect.element(page.getByText('The gateway is not connected to your fleet', { exact: true })).toBeVisible();
       expect(document.documentElement.scrollWidth).toBe(width);
-      await page.screenshot({ path: `../../../test/evidence/405/after-${width}.png` });
     });
   }
 });

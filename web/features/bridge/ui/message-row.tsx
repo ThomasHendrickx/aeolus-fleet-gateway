@@ -17,7 +17,7 @@ function outcomeOf({ message, isOpen }: { message: Message; isOpen: boolean }): 
 }
 
 /**
- * A plain message's row (#242, design/bridge-messages): the message icon, a
+ * A plain message's row (#242): the message icon, a
  * dot while new, its first line as the title and two lines of its text, both
  * as plain words; Message, its sender, where it was seen and its age; Done in
  * place and Open beneath. Done says Marking done... until the fleet answers,

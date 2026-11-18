@@ -8,7 +8,7 @@ import { HomeHeading } from './home-heading';
 import { MessagesPanel } from './messages-panel';
 import { SendMessageProvider } from './send-message';
 
-// The Messages page (#242, design/bridge-messages): every plain message,
+// The Messages page (#242): every plain message,
 // newest on top, Done and Open on each, and the seen ones marked done in one go.
 
 const NOW = '2026-10-31T20:00:00.000Z';

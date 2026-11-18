@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { NewMessagesLine } from './new-messages-line';
 
-// The line on top of a phone's Waiting tab (#242, design/bridge-messages):
+// The line on top of a phone's Waiting tab (#242):
 // with more messages than home lists, it leads to the new ones, above
 // Waiting on you.
 

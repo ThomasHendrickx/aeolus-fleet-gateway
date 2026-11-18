@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 /**
- * Bridge home's columns (home.html, states.html, design/bridge-fleet-width):
+ * Bridge home's columns:
  * what waits on the left at its reading width, at most 44rem, and Your fleet
  * beside it taking the rest of the window, at least 20rem; one under the
  * other on a phone. The title row, then a banner, such as the record cannot

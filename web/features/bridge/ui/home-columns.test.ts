@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { HomeColumns } from './home-columns';
 
-describe("Bridge home's columns (design/bridge-fleet-width)", () => {
+describe("Bridge home's columns", () => {
   it('keeps what waits at its reading width, at most 44rem, and gives Your fleet the rest, at least 20rem', () => {
     const markup = renderToStaticMarkup(createElement(HomeColumns, { main: 'waits', aside: 'fleet' }));
 

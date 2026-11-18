@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { HOME_MESSAGES, isPlainMessageType, messageAddressOf, markedDoneSaidOf, markSeenDoneOf, notMarkedDoneOf, messagesPageSaidOf, messagesSaidOf, newMessagesSaidOf, plainTextOf, showAllSaidOf } from './messages';
 
-// Plain messages in Bridge (#242, design/bridge-messages): their first line as
+// Plain messages in Bridge (#242): their first line as
 // the title with Markdown marks taken off, outside the count, the 3 newest on
 // home, every one on the Messages page, and the seen ones marked done in one go.
 

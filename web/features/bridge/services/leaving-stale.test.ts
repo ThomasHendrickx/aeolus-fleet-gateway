@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { NOTHING_WATCHED, nextChangeAtOf, showingOf, watchedOf } from './leaving-stale';
 
 // A withdrawn or replaced item leaves Bridge's overview 5 s after the
-// withdrawal reached it (#240, design/bridge-withdrawn-leaves): struck
+// withdrawal reached it (#240): struck
 // through from 0 s, leaving in the last 300 ms, gone at 5 s; never shown when
 // Bridge was not open at the withdrawal.
 

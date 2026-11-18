@@ -1,6 +1,6 @@
 /**
  * A withdrawn or replaced item leaves Bridge's overview 5 s after its
- * withdrawal reached the open page (#240, design/bridge-withdrawn-leaves):
+ * withdrawal reached the open page (#240):
  * struck through from 0 s, leaving in the last 300 ms (the design system's
  * slow duration), gone at 5 s. The page counts from when it first saw the
  * item stale, so a late withdrawal still shows for 5 s; one already stale

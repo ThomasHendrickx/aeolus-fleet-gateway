@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { BridgeHome } from '../services/items';
 import { MessageRow } from './message-row';
 
-// A plain message's row (#242, design/bridge-messages): Done in place says
+// A plain message's row (#242): Done in place says
 // it is marking done while the fleet has not answered, and says so on the
 // row when it did not, Done staying to try again.
 
