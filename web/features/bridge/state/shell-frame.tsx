@@ -73,7 +73,7 @@ function PhoneAvatar({ fleetId, switcher, account: { email, accountUrl, theme } 
  * The part of Bridge's shell that lives in the browser: the top bar over
  * the page, Live while the page follows its changes, the phone's title
  * naming an item open in place of its list, and the page beside it, taking
- * the window (design/bridge-fleet-width). It offers every page under it the
+ * the window. It offers every page under it the
  * form to send a ship a message, which the phone's home and Messages open
  * from its top bar. It keeps the page live, and tells the gateway while it is in focus
  * (wake a person, W6). For the account signed in, the top bar's search and

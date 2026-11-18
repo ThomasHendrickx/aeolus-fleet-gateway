@@ -15,7 +15,7 @@ describe("an outside parties list's counts", () => {
   });
 });
 
-describe("an outside parties list's order (design/bridge-navigation)", () => {
+describe("an outside parties list's order", () => {
   it('lists MCP servers, then MCP clients, then A2A agents, then A2A clients, keeping the order within a kind', () => {
     const parties = [
       { kind: 'a2aAgent', name: 'research-agent' },

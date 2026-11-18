@@ -20,7 +20,7 @@ export const PARTY_KINDS: Record<ListedParty['kind'], { protocol: string; side: 
   a2aAgent: { protocol: 'A2A', side: 'server' },
 };
 
-/** The kinds in the order the list shows them (design/bridge-navigation): MCP before A2A, servers before clients. */
+/** The kinds in the order the list shows them: MCP before A2A, servers before clients. */
 const LIST_ORDER: readonly ListedParty['kind'][] = ['mcpServer', 'mcpClient', 'a2aAgent', 'a2aClient'];
 
 /** The parties grouped by kind in the list's order, each kind in the order the API answered it. */

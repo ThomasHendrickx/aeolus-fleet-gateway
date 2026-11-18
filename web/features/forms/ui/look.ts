@@ -1,7 +1,7 @@
 /** The classes the pages share, on the design tokens: a card and the button kinds. */
 export const CARD = 'rounded-lg border border-border bg-card p-6 text-card-foreground shadow-sm';
 
-/** A card in the Compact look, as Bridge's pages draw it (design/bridge-navigation): tighter, flat. */
+/** A card in the Compact look, as Bridge's pages draw it: tighter, flat. */
 export const COMPACT_CARD = 'rounded-lg border border-border bg-card p-3 text-card-foreground';
 
 const BUTTON = 'inline-flex h-9 items-center justify-center gap-2 rounded-md px-4 font-medium disabled:opacity-60';
@@ -21,5 +21,5 @@ export const INPUT = 'h-9 w-full rounded-md border border-input bg-background px
 
 export const LABEL = 'grid gap-1';
 
-/** A select in the body font, its browser chevron replaced by the design system's (design/bridge-navigation). */
+/** A select in the body font, its browser chevron replaced by the design system's. */
 export const SELECT = 'h-9 w-full appearance-none rounded-md border border-input bg-background pr-8 pl-3';

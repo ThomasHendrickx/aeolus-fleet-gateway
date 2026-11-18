@@ -1,5 +1,5 @@
 /**
- * Plain messages in Bridge (#242, design/bridge-messages): a ship's message
+ * Plain messages in Bridge (#242): a ship's message
  * to the person in text/plain or text/markdown, outside the count, until
  * the person marks it done. Its first line is its title, its text beneath,
  * both as plain words with the Markdown marks taken off; home lists the 3
