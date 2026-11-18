@@ -1,6 +1,7 @@
 import { createPersonInboxWakes } from './core/people/person-inbox-wakes.js';
 import { createWakingClientCalls } from './core/mcp-in/waking-client-calls.js';
 import { createWatchGatewayShips } from './core/connection/watch-gateway-ships.js';
+import { createFleetEvents } from './adapters/fleet/fleet-events.js';
 import { createShipWakeups } from './adapters/fleet/ship-wakeups.js';
 import { createRefreshingPersonDoor } from './core/people/refreshing-person-door.js';
 /**
@@ -481,6 +482,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // When the gateway first saw each stale question or step, so it leaves Bridge 5 s later (#240).
   const staleSightings = createStaleSightings();
   const wakeups = createShipWakeups({ fleetUrl: options.fleetUrl });
+  const fleetEvents = createFleetEvents({ fleetUrl: options.fleetUrl });
   const personCrews = createPrismaPersonCrews(prisma);
   const inboxChanges = createPrismaInboxChanges(prisma);
   const personInboxWakes = createPersonInboxWakes({ crews: personCrews, changes: inboxChanges, whoami: (token) => door.person.whoami(token), request: wakeups.request });
@@ -1129,8 +1131,6 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const gatewayStreams = createWatchGatewayShips({
     connections, wakeups, isServed,
     look: async (crew, signal) => {
-      // argo's inbox is read at once on each look of the gateway's own ship, besides its own round: follow answers at once (long-poll W5, W8).
-      argoInboxFollower.wake();
       const { acked, refused } = await answerPings(signal, crew.fleetId);
       for (const { contentType, senderShipId } of acked) {
         server.log.info({ contentType, senderShipId }, "the gateway's ship acked a message it does not handle");
@@ -1139,7 +1139,13 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     },
     failed: (error) => { server.log.error({ err: error }, 'gateway wake look failed'); },
   });
-  const pings = createRoundWorker({ name: 'gateway leases', round: gatewayStreams.reconcile, sleep, intervalMs: POLL_MS, log: server.log });
+  // The authorised fleet stream wakes argo's follower; the two-second round is a safety look (long-poll W5).
+  const argoInboxStreams = createWatchGatewayShips({
+    connections, wakeups: fleetEvents, isServed,
+    look: () => { argoInboxFollower.wake(); return Promise.resolve(); },
+    failed: (error) => { server.log.error({ err: error }, 'argo inbox event stream failed'); },
+  });
+  const pings = createRoundWorker({ name: 'gateway leases', round: async () => { await Promise.all([gatewayStreams.reconcile(), argoInboxStreams.reconcile()]); }, sleep, intervalMs: POLL_MS, log: server.log });
   const decideRequestOnly = createDecideRequest({ requests: pendingRequests, approveParty, approveClientParty, clock });
   // A decided request's outcomes are told at once, not at the next round.
   const decideRequest: DecideRequest = async (input) => {
@@ -1313,15 +1319,17 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     },
     close: async () => {
       wakeups.close();
+      fleetEvents.close();
       await outcomes.stop();
       await gatewayStreams.stop();
+      await argoInboxStreams.stop();
       await pings.stop();
       await personWaiters.stop();
       await slackTokens.stop();
       await slackSends.stop();
       await basketSends.stop();
       await slackEdits.stop();
-      // A follow waits up to 25 s while argo's inbox does not change: aborted, the round under way ends at once.
+      // Abort an inbox read under way before waiting for the follower to stop.
       argoInboxStopping.abort();
       await argoInboxFollower.stop();
       await argoInboxInSlack.stop();
