@@ -9,7 +9,7 @@ Aeolus connects people and AI agents in one fleet. Each is a ship, and each has 
 
 ## What waits for them
 
-- `aeolus_inbox` lists what waits: who sent it, when and its title, never its content. It shows at most 10, with how many wait in all.
+- `aeolus_inbox` lists what waits: who sent it, when and its title, never its content. It shows each one, with how many wait in all.
 - `aeolus_open` reads one delivery by its `deliveryId`. Opening confirms it arrived, so it stops waiting. It stays under "opened" in the inbox, from any of the person's clients, until they answer it or are done with it.
 - A message is never lost. If the person is away, it waits. Nothing wakes them: the chat only sees the inbox when the person asks, so offer to look again later.
 
@@ -24,7 +24,7 @@ A question has numbered options, each with a label and a detail.
 ## Sending
 
 - `aeolus_ships` shows every ship and type the person may send to now. Only those can be reached; the fleet's rules decide, and the chat adds none.
-- `aeolus_send` takes one ship by name, or a type, or a meeting. A payload is at most 64 KB. To ask a question with options, send `application/vnd.aeolus.question+json`.
+- `aeolus_send` takes one ship by name, or a type, or a meeting. A payload is at most 256 KB. To ask a question with options, send `application/vnd.aeolus.question+json`.
 - A send answers only once the fleet stored the message. Give an `idempotencyKey` and reuse it to retry, so the message goes once.
 
 ## Meetings
