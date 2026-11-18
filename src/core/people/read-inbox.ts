@@ -57,9 +57,10 @@ export async function waitingOn(deps: { door: Pick<PersonShipDoor, 'inbox' | 'pu
 
 interface Waiting { readonly waiting: number; readonly deliveries: PersonDelivery[] }
 interface WaitingDeps { readonly door: Pick<PersonShipDoor, 'inbox' | 'pushReceive'>; readonly held: HeldDeliveries }
+interface WaitingRead { hasStarted: boolean; readonly result: Promise<Result<Waiting, FleetRefusal>> }
 
-/** Only overlapping reads share a result; every later look counts again. Stores isolate gateway instances. */
-const receiving = new WeakMap<HeldDeliveries, Map<string, Promise<Result<Waiting, FleetRefusal>>>>();
+/** Reads share only before their fleet snapshot starts. Later reads queue behind it, so receives never compete. Stores isolate gateway instances. */
+const receiving = new WeakMap<HeldDeliveries, Map<string, WaitingRead>>();
 
 async function sharedWaiting(deps: WaitingDeps, crewToken: string): Promise<Result<Waiting, FleetRefusal>> {
   let byCrew = receiving.get(deps.held);
@@ -68,15 +69,22 @@ async function sharedWaiting(deps: WaitingDeps, crewToken: string): Promise<Resu
     receiving.set(deps.held, byCrew);
   }
   const running = byCrew.get(crewToken);
-  if (running !== undefined) {
-    return running;
+  if (running !== undefined && !running.hasStarted) {
+    return running.result;
   }
-  const read = receiveWaiting(deps, crewToken);
+  const start = (): Promise<Result<Waiting, FleetRefusal>> => {
+    read.hasStarted = true;
+    return receiveWaiting(deps, crewToken);
+  };
+  // A failed earlier read must not prevent the next batch from asking the fleet.
+  const read: WaitingRead = { hasStarted: false, result: running === undefined ? Promise.resolve().then(start) : running.result.then(start, start) };
   byCrew.set(crewToken, read);
   try {
-    return await read;
+    return await read.result;
   } finally {
-    byCrew.delete(crewToken);
+    if (byCrew.get(crewToken) === read) {
+      byCrew.delete(crewToken);
+    }
   }
 }
 
