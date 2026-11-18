@@ -1,6 +1,7 @@
 import { createPersonInboxWakes } from './core/people/person-inbox-wakes.js';
 import { createWakingClientCalls } from './core/mcp-in/waking-client-calls.js';
 import { createWatchGatewayShips } from './core/connection/watch-gateway-ships.js';
+import { createFleetEvents } from './adapters/fleet/fleet-events.js';
 import { createShipWakeups } from './adapters/fleet/ship-wakeups.js';
 import { createRefreshingPersonDoor } from './core/people/refreshing-person-door.js';
 /**
@@ -481,7 +482,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // When the gateway first saw each stale question or step, so it leaves Bridge 5 s later (#240).
   const staleSightings = createStaleSightings();
   const wakeups = createShipWakeups({ fleetUrl: options.fleetUrl });
-  const fleetEventWakes = createShipWakeups({ fleetUrl: options.fleetUrl, stream: 'fleet' });
+  const fleetEvents = createFleetEvents({ fleetUrl: options.fleetUrl });
   const personCrews = createPrismaPersonCrews(prisma);
   const inboxChanges = createPrismaInboxChanges(prisma);
   const personInboxWakes = createPersonInboxWakes({ crews: personCrews, changes: inboxChanges, whoami: (token) => door.person.whoami(token), request: wakeups.request });
@@ -1140,7 +1141,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   });
   // The authorised fleet stream wakes argo's follower; the two-second round is a safety look (long-poll W5).
   const argoInboxStreams = createWatchGatewayShips({
-    connections, wakeups: fleetEventWakes, isServed,
+    connections, wakeups: fleetEvents, isServed,
     look: () => { argoInboxFollower.wake(); return Promise.resolve(); },
     failed: (error) => { server.log.error({ err: error }, 'argo inbox event stream failed'); },
   });
@@ -1318,7 +1319,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
     },
     close: async () => {
       wakeups.close();
-      fleetEventWakes.close();
+      fleetEvents.close();
       await outcomes.stop();
       await gatewayStreams.stop();
       await argoInboxStreams.stop();
