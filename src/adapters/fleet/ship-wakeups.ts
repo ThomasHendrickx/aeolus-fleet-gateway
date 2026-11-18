@@ -1,4 +1,6 @@
 /** REST SSE hints are coalesced while a look runs; every byte keeps the stream alive. */
+import { fleetStreamItemSchema } from '@aeolus-fleet/common';
+
 import type { ShipLooks, ShipWakeups } from '../../core/connection/ship-wakeups.js';
 
 const SILENCE_MS = 60_000;
@@ -9,6 +11,8 @@ const BACKOFF_SPREAD_MS = 4_000;
 
 interface WakeupsOptions {
   fleetUrl: string;
+  /** Fleet events use the connected ship's fleet:read authority, never argo's lease. */
+  stream?: 'fleet';
   fetch?: typeof fetch;
   random?: () => number;
 }
@@ -29,6 +33,7 @@ export function createShipWakeups(options: WakeupsOptions): ShipWakeups & { requ
     let abort: AbortController | undefined;
     const spread = () => MIN_BACKOFF_MS + (options.random ?? Math.random)() * BACKOFF_SPREAD_MS;
     let backoffMs = spread();
+    let lastEventId: string | undefined;
     const isActive = () => !state.isStopped;
     const close = () => {
       state.isStopped = true;
@@ -67,8 +72,11 @@ export function createShipWakeups(options: WakeupsOptions): ShipWakeups & { requ
       const cancel = () => { void reader?.cancel().catch(() => undefined); };
       controller.signal.addEventListener('abort', cancel, { once: true });
       try {
-        const response = await (options.fetch ?? fetch)(`${options.fleetUrl}/api/v1/ship/wakeups`, {
-          headers: { authorization: `Bearer ${crewToken}`, accept: 'text/event-stream' },
+        const headers: Record<string, string> = { authorization: `Bearer ${crewToken}`, accept: 'text/event-stream' };
+        if (lastEventId !== undefined) { headers['Last-Event-ID'] = lastEventId; }
+        const path = options.stream === 'fleet' ? 'fleet/events' : 'ship/wakeups';
+        const response = await (options.fetch ?? fetch)(`${options.fleetUrl}/api/v1/${path}`, {
+          headers,
           signal: controller.signal,
         });
         if (response.status === 401 && isLeaseEnded(await response.json())) {
@@ -81,10 +89,13 @@ export function createShipWakeups(options: WakeupsOptions): ShipWakeups & { requ
         }
         reader = response.body.getReader();
         if (controller.signal.aborted) { return; }
+        // A fleet stream can be caught up and silent: follow on every successful opening.
+        if (options.stream === 'fleet') { request(); }
         const decoder = new TextDecoder();
         let pending = '';
         let event = '';
         let data = '';
+        let id = '';
         while (isActive() && !isAborted()) {
           const read = await reader.read();
           if (read.done) { break; }
@@ -96,7 +107,15 @@ export function createShipWakeups(options: WakeupsOptions): ShipWakeups & { requ
             const line = pending.slice(0, newline).replace(/\r$/, '');
             pending = pending.slice(newline + 1);
             if (line === '') {
-              if (event === 'wake') {
+              if (options.stream === 'fleet' && event === '' && data !== '') {
+                try {
+                  if (fleetStreamItemSchema.safeParse(JSON.parse(data)).success) {
+                    if (/^\d+$/.test(id)) { lastEventId = id; }
+                    backoffMs = spread();
+                    request();
+                  }
+                } catch { /* Invalid events cannot move the replay position. */ }
+              } else if (event === 'wake') {
                 backoffMs = spread();
                 request();
               } else if (event === 'end') {
@@ -104,6 +123,9 @@ export function createShipWakeups(options: WakeupsOptions): ShipWakeups & { requ
               }
               event = '';
               data = '';
+              id = '';
+            } else if (line.startsWith('id:')) {
+              id = line.slice(3).trim();
             } else if (line.startsWith('event:')) {
               event = line.slice(6).trim();
             } else if (line.startsWith('data:')) {

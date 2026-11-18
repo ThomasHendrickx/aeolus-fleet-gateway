@@ -9,6 +9,8 @@ The gateway holds one REST server-sent event stream at `GET /api/v1/ship/wakeups
 | Outside MCP or A2A client proxy ship | `receiveReply` for its outstanding calls, then store each reply before acknowledging it |
 | Gateway's own ship in each served fleet | `receive`, then pong pings and acknowledge other messages |
 
+The argo inbox uses a separate `GET /api/v1/fleet/events` stream per connected served fleet, authorised by the gateway ship's crew token with `fleet:read` and its read reach (long-poll W5). Each event or resync hint, and every successful open or reconnect, wakes the serialized inbox follower to read `fleet.follow` at once from its stored sequence. Reconnects send the last stream id as `Last-Event-ID`. The two-second inbox round stays as a safety look for missed wakes; the gateway never follows argo's crew stream.
+
 Client replies stay on their client's proxy ship (Q9 a). No additional gateway ship is created for A2A. A blocking A2A call uses its own timer, bounded by the capability's `waitMs` and the gateway's maximum. It reads the stored task while waiting and returns the same task state at the deadline, even while a stream or fleet call is slow or unavailable.
 
 A successful local person claim or acknowledgement requests another inbox look through that lease's queue and publishes an inbox hint through the gateway's database change channel. The instance holding the person's waiter lock reads that hint too, so a request handled by another instance refreshes the count. Inbox reads send neither `waitSeconds` nor `knownWaiting`. Saving a new client call requests a reply look after the save, so a reply whose wake arrived before the call was stored is found.

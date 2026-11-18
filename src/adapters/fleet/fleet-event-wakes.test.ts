@@ -21,7 +21,7 @@ async function setup() {
   const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
   const requests: { url: string; headers: Headers }[] = [];
   const wakeups = createShipWakeups({ fleetUrl: 'https://fleet.test', stream: 'fleet', random: () => 0, fetch: (url, init) => {
-    requests.push({ url: String(url), headers: new Headers(init?.headers) });
+    requests.push({ url: typeof url === 'string' ? url : url instanceof URL ? url.href : url.url, headers: new Headers(init?.headers) });
     return Promise.resolve(new Response(new ReadableStream<Uint8Array>({ start: (controller) => { streams.push(controller); } })));
   } });
   const stop = new AbortController();
@@ -49,7 +49,7 @@ it('an authorised fleet event refreshes an argo delivery without waiting for the
   try {
     test.fleet.send(anArgoEntry(1));
     const entry = anArgoEntry(1);
-    const event = { seq: 1, id: 'evt_01m3tbfspe96yf1rnr4ank9001', type: 'MessageSent', occurredAt: '2026-11-18T12:00:00.000Z', actorKind: 'ship', actorShipId: SHIP_ID, actorAccountId: null, actorSignedInAccountId: null, shipId: ARGO_SHIP_ID, messageId: entry.messageId, deliveryId: entry.deliveryId };
+    const event = { seq: 1, id: 'evt_01m3tbfspe96yf1rnr4ank9001', type: 'MessageAccepted', occurredAt: '2026-11-18T12:00:00.000Z', actorKind: 'ship', actorShipId: SHIP_ID, actorAccountId: null, actorSignedInAccountId: null, shipId: ARGO_SHIP_ID, messageId: entry.messageId, deliveryId: entry.deliveryId };
     test.write(`id: 1\ndata: ${JSON.stringify({ kind: 'event', event })}\n\n`);
     await flush();
     expect(test.messages()).toEqual([anArgoEntry(1).messageId]);
