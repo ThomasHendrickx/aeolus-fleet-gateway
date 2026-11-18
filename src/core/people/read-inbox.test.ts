@@ -37,6 +37,30 @@ function readInbox(deliveries: PersonDelivery[], options: { crewToken?: string; 
   return { ...ship, door, readInbox: createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, held, opened, routes: memoryRoutes(routes), defaults: CHAT_ON, connections }) };
 }
 
+/** A fleet count taken before its reply arrives, so a delivery can be accepted during a read. */
+async function pausedInbox() {
+  await crews.save({ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, crewToken: 'aeolus_ct_v1_charlotte', crewedAt: FIXED_CLOCK.now() });
+  const ship = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [] });
+  const counted = Promise.withResolvers<undefined>();
+  const continueFirst = Promise.withResolvers<undefined>();
+  let isFirst = true;
+  const door = {
+    ...ship.door,
+    inbox: async (token: string) => {
+      const answer = await ship.door.inbox(token);
+      if (isFirst) {
+        isFirst = false;
+        counted.resolve(undefined);
+        await continueFirst.promise;
+      }
+      return answer;
+    },
+  };
+  const held = createHeldDeliveries(FIXED_CLOCK);
+  const read = createReadInbox({ crewPersonShip: fakeCrewPersonShip(crews), crews, door, held, opened, routes: memoryRoutes([]), defaults: CHAT_ON, connections });
+  return { ...ship, held, read, counted: counted.promise, continueFirst: () => { continueFirst.resolve(undefined); }, failFirst: continueFirst.reject };
+}
+
 function aChatRoute(overrides: Partial<Route>): Route {
   return { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID, job: 'decide', place: 'chat', isOn: false, changedAt: new Date('2026-10-19T09:00:00.000Z'), ...overrides };
 }
@@ -245,6 +269,56 @@ describe('a look at what waits is a read once the gateway holds it (aeolus-fleet
     await look.readInbox(CHARLOTTE_GRANT);
 
     expect(look.calls).toEqual(['inbox', 'inbox', 'pushReceive(10)']);
+  });
+});
+
+describe('person inbox read freshness (#423)', () => {
+  it('shares reads that start together before their fleet snapshot begins', async () => {
+    const inbox = await pausedInbox();
+    const first = inbox.read(CHARLOTTE_GRANT);
+    const second = inbox.read(CHARLOTTE_GRANT);
+    await inbox.counted;
+    inbox.continueFirst();
+
+    const answers = await Promise.all([first, second]);
+
+    expect(answers).toEqual([
+      { isOk: true, value: { waiting: 0, deliveries: [], opened: [] } },
+      { isOk: true, value: { waiting: 0, deliveries: [], opened: [] } },
+    ]);
+    expect(inbox.calls).toEqual(['inbox']);
+  });
+
+  it('shares a fresh read for callers starting after a delivery, behind the earlier read', async () => {
+    const inbox = await pausedInbox();
+    const first = inbox.read(CHARLOTTE_GRANT);
+    await inbox.counted;
+    inbox.ship.deliveries.push(aPersonDelivery());
+
+    const later = inbox.read(CHARLOTTE_GRANT);
+    const together = inbox.read(CHARLOTTE_GRANT);
+    inbox.continueFirst();
+    const [before, after, shared] = await Promise.all([first, later, together]);
+
+    expect(before).toEqual({ isOk: true, value: { waiting: 0, deliveries: [], opened: [] } });
+    expect(after.isOk && { waiting: after.value.waiting, deliveries: after.value.deliveries.map(({ deliveryId }) => deliveryId) }).toEqual({ waiting: 1, deliveries: ['dlv_01m3tbfspe96yf1rnr4ank0001'] });
+    expect(shared).toEqual(after);
+    expect(inbox.calls).toEqual(['inbox', 'inbox', 'pushReceive(10)']);
+    expect(inbox.held.of('aeolus_ct_v1_charlotte')).toHaveLength(1);
+  });
+
+  it('reads afresh after an earlier overlapping read fails to answer', async () => {
+    const inbox = await pausedInbox();
+    const first = inbox.read(CHARLOTTE_GRANT);
+    const failed = expect(first).rejects.toThrow('The connection closed');
+    await inbox.counted;
+    inbox.ship.deliveries.push(aPersonDelivery());
+
+    const later = inbox.read(CHARLOTTE_GRANT);
+    inbox.failFirst(new Error('The connection closed'));
+    const [, after] = await Promise.all([failed, later]);
+
+    expect(after.isOk && after.value.waiting).toBe(1);
   });
 });
 

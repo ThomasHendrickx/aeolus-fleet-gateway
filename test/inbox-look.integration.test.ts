@@ -182,3 +182,36 @@ describe('concurrent person inbox reads (#370)', () => {
     });
   }
 });
+
+describe('person inbox reads after a delivery is accepted (#423)', () => {
+  it('reads the new delivery while a read from before its acceptance is still running', async () => {
+    await listed();
+    const originalDoor = waitingDeps.door;
+    const counted = Promise.withResolvers<undefined>();
+    const continueFirst = Promise.withResolvers<undefined>();
+    let isFirst = true;
+    waitingDeps.door = {
+      ...originalDoor,
+      inbox: async (token, wait) => {
+        const answer = await originalDoor.inbox(token, wait);
+        if (isFirst) {
+          isFirst = false;
+          counted.resolve(undefined);
+          await continueFirst.promise;
+        }
+        return answer;
+      },
+    };
+    const first = waitingFor(waitingDeps, CHARLOTTE_GRANT);
+    await counted.promise;
+    await trackerAsks(16);
+
+    const later = waitingFor(waitingDeps, CHARLOTTE_GRANT);
+    continueFirst.resolve(undefined);
+    const [before, after] = await Promise.all([first, later]);
+
+    expect(before.isOk && before.value.deliveries.length).toBe(15);
+    expect(after.isOk && { waiting: after.value.waiting, deliveries: after.value.deliveries.length }).toEqual({ waiting: 16, deliveries: 16 });
+    expect(held.of(crewToken)).toHaveLength(16);
+  });
+});
