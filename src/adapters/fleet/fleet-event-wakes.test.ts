@@ -6,7 +6,7 @@ import { FLEET_ID, SHIP_ID, memoryConnectionStore } from '../../../test/support/
 import { createFollowArgoInbox } from '../../core/argo-inbox/follow-argo-inbox.js';
 import { createWatchGatewayShips } from '../../core/connection/watch-gateway-ships.js';
 import { createRoundWorker } from '../../round-worker.js';
-import { createShipWakeups } from './ship-wakeups.js';
+import { createFleetEvents } from './fleet-events.js';
 
 const flush = () => vi.advanceTimersByTimeAsync(0);
 afterEach(() => vi.useRealTimers());
@@ -20,7 +20,7 @@ async function setup() {
   await follow.round(new AbortController().signal);
   const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
   const requests: { url: string; headers: Headers }[] = [];
-  const wakeups = createShipWakeups({ fleetUrl: 'https://fleet.test', stream: 'fleet', random: () => 0, fetch: (url, init) => {
+  const wakeups = createFleetEvents({ fleetUrl: 'https://fleet.test', random: () => 0, fetch: (url, init) => {
     requests.push({ url: typeof url === 'string' ? url : url instanceof URL ? url.href : url.url, headers: new Headers(init?.headers) });
     return Promise.resolve(new Response(new ReadableStream<Uint8Array>({ start: (controller) => { streams.push(controller); } })));
   } });
@@ -80,5 +80,17 @@ it('the two-second safety look recovers an argo delivery whose event wake was mi
     expect(test.messages()).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
     expect(test.messages()).toEqual([anArgoEntry(3).messageId]);
+  } finally { await test.stop(); }
+});
+
+it('resync on an open stream refreshes the inbox before the safety poll', async () => {
+  const test = await setup();
+  try {
+    test.fleet.send(anArgoEntry(4));
+    await flush();
+    expect(test.messages()).toEqual([]);
+    test.write('data: {"kind":"resync"}\n\n');
+    await flush();
+    expect(test.messages()).toEqual([anArgoEntry(4).messageId]);
   } finally { await test.stop(); }
 });
