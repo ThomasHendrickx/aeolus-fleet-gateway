@@ -22,7 +22,7 @@ import type { AnswerDelivery } from '../../core/people/answer-delivery.js';
 import type { DoneDelivery } from '../../core/people/done-delivery.js';
 import type { Place } from '../../core/people/item-outcome.js';
 import type { ListShips } from '../../core/people/list-ships.js';
-import { inboxWords, meetingWords, openedWords } from './person-words.js';
+import { inboxWords, meetingWords, openedWords, standingWords } from './person-words.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
 import type { GrantCaller } from '../../core/people/person-crew.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
@@ -277,7 +277,7 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
       return meetingIdRefusal(call.name);
     }
     const changed = await deps.changeOwnMic({ caller, meetingId: sent.data.meetingId, change: call.change });
-    return changed.isOk ? answered({}) : refused(changed.error);
+    return changed.isOk ? told(standingWords(changed.value)) : refused(changed.error);
   };
   mcp.server.setRequestHandler('tools/call', async (request) => {
     const result = await called(request.params);

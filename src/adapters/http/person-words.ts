@@ -46,7 +46,7 @@ export function openedWords(opened: OpenedView): string {
 
 const names = (ships: readonly MeetingShip[]): string => ships.map(({ name }) => name).join(', ');
 
-function standingWords(standing: MicStanding): string {
+export function standingWords(standing: MicStanding): string {
   switch (standing.kind) {
     case 'moderating':
       return 'You moderate, so you contribute without the mic.';
@@ -55,7 +55,7 @@ function standingWords(standing: MicStanding): string {
     case 'requested':
       return `You wait for the mic, number ${String(standing.place)} in line.`;
     case 'none':
-      return 'You do not hold the mic: request it first.';
+      return 'You do not hold the mic or wait for it.';
   }
 }
 

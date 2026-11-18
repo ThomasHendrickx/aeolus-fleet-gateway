@@ -67,7 +67,7 @@ export function fakePersonMeetingDoor(ship: { crewToken: string; meetings: Meeti
           return err(refused);
         }
         changes.push(asked);
-        return ok(undefined);
+        return ok(asked.change === 'request' ? { kind: 'requested' as const, place: 1 } : { kind: 'none' as const });
       });
     },
   };

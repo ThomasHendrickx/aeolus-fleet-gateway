@@ -27,7 +27,7 @@ describe("a person's own mic calls", () => {
 
     const changed = await changeOwnMic({ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID, change });
 
-    expect({ changed, changes }).toEqual({ changed: { isOk: true, value: undefined }, changes: [{ meetingId: HEADS_MEETING_ID, change }] });
+    expect({ changed, changes }).toEqual({ changed: { isOk: true, value: change === 'request' ? { kind: 'requested', place: 1 } : { kind: 'none' } }, changes: [{ meetingId: HEADS_MEETING_ID, change }] });
   });
 
   it.each([

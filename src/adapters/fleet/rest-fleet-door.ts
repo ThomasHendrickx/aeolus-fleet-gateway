@@ -23,6 +23,7 @@ import {
   idSchema,
   inboxOutputSchema,
   meetingOutputSchema,
+  requestMicOutputSchema,
   pushReceiveOutputSchema,
   scopesOutputSchema,
   deliveryOutputSchema,
@@ -419,7 +420,16 @@ export function createRestFleetDoor(
         const read = await call({ path: '/ship/meeting', method: 'POST', crewToken, body: asked, answers: meetingOutputSchema });
         return read.isOk ? ok(meetingReadOf(read.value)) : read;
       },
-      changeMic: (crewToken, { meetingId, change }) => done(crewToken, { path: OWN_MIC_PATHS[change], body: { meetingId } }),
+      changeMic: async (crewToken, { meetingId, change }) => {
+        if (change === 'request') {
+          const result = await call({ path: OWN_MIC_PATHS.request, method: 'POST', crewToken, body: { meetingId }, answers: requestMicOutputSchema });
+          if (!result.isOk) return result;
+          const caller = result.value.caller;
+          return ok(caller.kind === 'holding' ? { kind: 'holding' } : { kind: 'requested', place: caller.place });
+        }
+        const result = await done(crewToken, { path: OWN_MIC_PATHS[change], body: { meetingId } });
+        return result.isOk ? ok({ kind: 'none' }) : result;
+      },
     },
     handed: async (crewToken, handOver) => {
       const answered = await call({ path: '/ship/handed', method: 'POST', crewToken, body: handOver, answers: handedOutputSchema });
