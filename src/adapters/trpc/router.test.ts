@@ -1526,12 +1526,12 @@ describe("a page follows its fleet's request changes through the gateway's API, 
     try {
       let connected = '';
       while (!connected.includes('\n\n')) {
-        const { value } = await reader.read();
-        connected += new TextDecoder().decode(value);
+        const chunk: unknown = await reader.read();
+        connected += new TextDecoder().decode(z.object({ value: z.instanceof(Uint8Array) }).parse(chunk).value);
       }
       const next = await Promise.race([
-        reader.read().then(({ value }) => new TextDecoder().decode(value)),
-        new Promise<string>((resolve) => setTimeout(() => resolve(''), 12_000)),
+        reader.read().then((chunk: unknown) => new TextDecoder().decode(z.object({ value: z.instanceof(Uint8Array) }).parse(chunk).value)),
+        new Promise<string>((resolve) => { setTimeout(() => { resolve(''); }, 12_000); }),
       ]);
       expect(next).toContain('event: ping');
     } finally {

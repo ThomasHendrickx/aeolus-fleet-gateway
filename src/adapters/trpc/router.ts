@@ -267,6 +267,7 @@ function inputMessageOf(invalid: z.ZodError): string {
 
 const t = initTRPC.context<Context>().create({
   isDev: false,
+  sse: { ping: { enabled: true, intervalMs: 10_000 } },
   errorFormatter: ({ shape, error }) => {
     if (error.code === 'INTERNAL_SERVER_ERROR') {
       return { ...shape, message: INTERNAL_ERROR_MESSAGE };
