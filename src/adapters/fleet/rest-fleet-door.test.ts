@@ -10,15 +10,18 @@ let server: Server;
 let base: string;
 let received: { url: string | undefined; headers: IncomingHttpHeaders; body: string }[];
 let answer: { status: number; body: unknown };
+let answers: Record<string, { status: number; body: unknown }>;
 
 beforeEach(async () => {
   received = [];
+  answers = {};
   server = createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
       received.push({ url: request.url, headers: request.headers, body: Buffer.concat(chunks).toString('utf8') });
-      response.writeHead(answer.status, { 'content-type': 'application/json' }).end(JSON.stringify(answer.body));
+      const next = answers[request.url ?? ''] ?? answer;
+      response.writeHead(next.status, { 'content-type': 'application/json' }).end(JSON.stringify(next.body));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -698,5 +701,46 @@ describe('where the delivery of a message a proxy ship sent stands, as sentMessa
     };
 
     await expect(createRestFleetDoor(base).sentMessage('aeolus_ct_v1_gateway', 'msg_01m3tb1zgr5h2ffee12xnch8pp')).resolves.toEqual({ isOk: true, value: { deliveryId: 'dlv_01m3tb1zgr5h2ffee12xnch8pp', state: 'handed', since: new Date('2026-10-26T07:00:05.000Z') } });
+  });
+});
+
+
+describe('compact discovery and explicit full statement lookup', () => {
+  const full = { by: 'crew', version: 3, summary: 'Tracks issues', capabilities: [{ name: 'open', title: 'Open', description: 'Opens an issue', inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, inputModes: ['application/json'], outputModes: ['text/plain'], waitMs: 10, deadlineMs: 100 }] };
+  const summary = { by: 'crew', version: 3, summary: 'Tracks issues' };
+  const ship = { id: PERSON_SHIP, name: 'tracker', type: 'tracker', kind: 'app', status: 'crewed', statement: summary, verified: [] };
+
+  beforeEach(() => {
+    answers['/api/v1/ship/discover'] = { status: 200, body: { ships: [ship], types: [{ type: 'tracker', reachable: 1 }] } };
+    answers['/api/v1/ship/lookup'] = { status: 200, body: { id: PERSON_SHIP, name: 'tracker', description: null, statement: full } };
+  });
+
+  it('keeps proxy discovery compact', async () => {
+    await expect(createRestFleetDoor(base).discover('proxy-crew')).resolves.toEqual({ isOk: true, value: [{ shipId: PERSON_SHIP, kind: 'app', statement: summary }] });
+    expect(received).toHaveLength(1);
+  });
+
+  it('reads the full current statement by exactly one id as the same proxy crew', async () => {
+    await expect(createRestFleetDoor(base).lookup('proxy-crew', PERSON_SHIP)).resolves.toEqual({ isOk: true, value: { shipId: PERSON_SHIP, statement: full } });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/lookup', authorization: 'Bearer proxy-crew', accountToken: undefined, body: { id: PERSON_SHIP, includeStatement: true } }]);
+  });
+
+  it('answers null for an absent or unreachable lookup', async () => {
+    answers['/api/v1/ship/lookup'] = { status: 200, body: null };
+    await expect(createRestFleetDoor(base).lookup('proxy-crew', PERSON_SHIP)).resolves.toEqual({ isOk: true, value: null });
+  });
+
+  it('hydrates person discovery capabilities through lookup', async () => {
+    await expect(createRestFleetDoor(base).person.discover('person-crew')).resolves.toEqual({ isOk: true, value: { ships: [{ id: PERSON_SHIP, name: 'tracker', type: 'tracker', kind: 'app', statement: full }], types: [{ type: 'tracker', reachable: 1 }] } });
+  });
+
+  it('omits a person discovery ship that leaves reach before lookup', async () => {
+    answers['/api/v1/ship/lookup'] = { status: 200, body: null };
+    await expect(createRestFleetDoor(base).person.discover('person-crew')).resolves.toMatchObject({ isOk: true, value: { ships: [] } });
+  });
+
+  it('propagates lookup refusal rather than showing incomplete person capabilities', async () => {
+    answers['/api/v1/ship/lookup'] = { status: 403, body: { code: 'FORBIDDEN', message: 'scope revoked' } };
+    await expect(createRestFleetDoor(base).person.discover('person-crew')).resolves.toEqual({ isOk: false, error: { code: 'FORBIDDEN', message: 'scope revoked' } });
   });
 });
