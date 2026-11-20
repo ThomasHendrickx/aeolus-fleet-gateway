@@ -386,8 +386,9 @@ describe('the parties pages, as the account signed in', () => {
   it('shows the header every Aeolus app shows: the fleet in view and Gateway in the title, and the avatar menu', async () => {
     const body = await (await fetch(`${address}/parties?fleet=${FLEET}`, { headers: PAGE })).text();
 
-    expect(body).toContain('aria-label="Fleet: Acme. Switch fleet"');
-    expect(body).toContain('aria-label="App: Gateway. Switch app"');
+    expect(body).toContain('title="Fleet: Acme"');
+    expect(body).toContain('aria-label="Apps and fleets"');
+    expect(body).toMatch(/data-testid="app-switcher-app-name"[^>]*>.*?<span>Gateway<\/span>/);
     expect(body).toContain('data-testid="avatar-menu"');
   });
 
@@ -415,7 +416,7 @@ describe('the parties pages, as the account signed in', () => {
   it("shows the fleet the address names in the header's title, when it is not the first fleet the account may open", async () => {
     const body = await (await fetch(`${address}/parties?fleet=${FLEET}`, { headers: { accept: 'text/html', cookie: `aeolus_account_session=${SECOND_FLEET_SIGN_IN}` } })).text();
 
-    expect(body).toContain('aria-label="Fleet: Acme. Switch fleet"');
+    expect(body).toContain('title="Fleet: Acme"');
   }, 60_000);
 
   it('shows the plain bar when pagasae does not answer the apps and fleets the account may open', async () => {

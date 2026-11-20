@@ -123,8 +123,8 @@ describe("Bridge's desktop app navigation", () => {
     });
     for (const screen of ['home', 'basket', 'done', 'stay-aware', 'routing', 'settings', 'fleet'] as const) {
       const markup = renderToStaticMarkup(createElement(BridgeSidebar, { fleetId: 'flt_01', screen, counts: COUNTS, accountUrl: ACCOUNT_URL, foot: null, switcher }));
-      expect(markup).toContain('data-testid="app-switcher-apps"');
-      expect(markup.indexOf('data-testid="app-switcher-apps"')).toBeLessThan(markup.indexOf('<nav aria-label="Bridge"'));
+      expect(markup).toContain('data-testid="app-switcher-launcher"');
+      expect(markup.indexOf('data-testid="app-switcher-launcher"')).toBeLessThan(markup.indexOf('<nav aria-label="Bridge"'));
     }
   });
 });
