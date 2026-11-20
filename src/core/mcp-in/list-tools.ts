@@ -56,8 +56,8 @@ export interface ListedTool {
 
 export type ListToolsRefusal = DomainError<'PARTY_NOT_CREWED' | 'FLEET_UNAVAILABLE'>;
 
-/** Who lists: the fleet and the party its access token names. */
-export type ListTools = (caller: { fleetId: FleetId; party: string }) => Promise<Result<ListedTool[], ListToolsRefusal>>;
+/** Who lists: the fleet and the party its access token names. A tool name selects its ship before any statement lookup. */
+export type ListTools = (caller: { fleetId: FleetId; party: string }, toolName?: string) => Promise<Result<ListedTool[], ListToolsRefusal>>;
 
 /** A media type without its parameters, in lower case. */
 const essenceOf = (mode: string) => (mode.split(';')[0] ?? '').trim().toLowerCase();
@@ -107,7 +107,7 @@ function toolsOf(ship: { shipId: ShipId; statement: DiscoveredStatement }, alias
 }
 
 export function createListTools(deps: { parties: PartyStore; discovery: Discovery; aliases: ShipAliases }): ListTools {
-  return async ({ fleetId, party: name }) => {
+  return async ({ fleetId, party: name }, toolName) => {
     const party = await deps.parties.find(fleetId, name);
     if (party?.kind !== 'mcpClient' || party.state !== 'crewed' || party.crewToken === null) {
       return refuse('PARTY_NOT_CREWED', `The party ${name} is not crewed: argo crews it on the parties page`);
@@ -117,7 +117,10 @@ export function createListTools(deps: { parties: PartyStore; discovery: Discover
       return refuse('FLEET_UNAVAILABLE', `The fleet did not answer which ships the party reaches: ${discovered.error.message}`);
     }
     const crewToken = party.crewToken;
-    const statements = await Promise.all(discovered.value.filter((ship) => ship.kind !== 'operator' && ship.statement?.by === 'crew').map((ship) => deps.discovery.lookup(crewToken, ship.shipId)));
+    const reached = discovered.value.filter((ship) => ship.kind !== 'operator' && ship.statement?.by === 'crew');
+    const chosen = toolName === undefined ? undefined : reached.find((ship) => toolName.startsWith(`${deps.aliases.aliasOf(fleetId, ship.shipId)}${TOOL_NAME_SEPARATOR}`));
+    const ships = toolName === undefined ? reached : chosen === undefined ? [] : [chosen];
+    const statements = await Promise.all(ships.map((ship) => deps.discovery.lookup(crewToken, ship.shipId)));
     const tools: ListedTool[] = [];
     for (const statement of statements) {
       if (!statement.isOk) {

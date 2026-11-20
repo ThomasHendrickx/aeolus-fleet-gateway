@@ -89,7 +89,7 @@ describe("an outside MCP client's tool call is a message its proxy ship sends (i
 
   it('reads only the called alias statement when another reached ship cannot be looked up', async () => {
     discovery.state.ships.push(aDiscoveredShip({ shipId: ARGO_SHIP_ID }));
-    const lookup = discovery.lookup;
+    const lookup = discovery.lookup.bind(discovery);
     discovery.lookup = (crewToken, shipId) => shipId === CRM_SHIP_ID ? lookup(crewToken, shipId) : Promise.resolve({ isOk: false, error: { code: 'FORBIDDEN', message: 'Other ship lookup refused' } });
 
     await expect(callTool(CALLER, { name: 'a9cr2__list_deals', arguments: {} })).resolves.toMatchObject({ isOk: true, value: { state: 'submitted' } });
