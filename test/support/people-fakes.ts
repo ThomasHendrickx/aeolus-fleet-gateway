@@ -294,6 +294,13 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
       const refused = refusals.whoami.shift();
       return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => ({ name: ship.name ?? 'charlotte', fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }));
     },
+    lookup: (crewToken, shipId) => {
+      calls.push(`lookup(${shipId})`);
+      return crewed(crewToken, () => {
+        const found = ship.discovery?.ships.find((each) => each.id === shipId);
+        return found === undefined ? null : { shipId: found.id, statement: found.statement };
+      });
+    },
     discover: (crewToken) => {
       calls.push('discover');
       const refused = refusals.discover.shift();

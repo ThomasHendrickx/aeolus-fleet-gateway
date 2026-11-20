@@ -56,7 +56,7 @@ import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
 import { jobOf } from '../../core/people/item-job.js';
-import type { AccountDoor, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../core/people/ports.js';
+import type { AccountDoor, PersonDelivery, PersonShipDoor } from '../../core/people/ports.js';
 import type { Owners } from '../../core/requests/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
 
@@ -413,19 +413,10 @@ export function createRestFleetDoor(
         const answered = await call({ path: '/ship/handed', method: 'POST', crewToken, body: handOver, answers: handedOutputSchema });
         return answered.isOk ? ok(answered.value.state) : answered;
       },
+      lookup,
       discover: async (crewToken) => {
         const found = await call({ path: '/ship/discover', method: 'GET', crewToken, answers: discoverOutputSchema });
-        if (!found.isOk) return found;
-        const details = await Promise.all(found.value.ships.map(async ({ id, name, type, kind }) => {
-          const detail = await lookup(crewToken, id);
-          return detail.isOk ? ok(detail.value === null ? null : { id, name, type, kind, statement: detail.value.statement }) : detail;
-        }));
-        const ships: PersonDiscovery['ships'][number][] = [];
-        for (const detail of details) {
-          if (!detail.isOk) return detail;
-          if (detail.value !== null) ships.push(detail.value);
-        }
-        return ok({ ships, types: found.value.types });
+        return found.isOk ? ok({ ships: found.value.ships.map(({ id, name, type, kind, statement }) => ({ id, name, type, kind, statement })), types: found.value.types }) : found;
       },
       send: (crewToken, { to, contentType, payload, idempotencyKey }) =>
         call({ path: '/ship/send', method: 'POST', crewToken, body: { selector: to, contentType, payload, idempotencyKey }, answers: sendOutputSchema }),
