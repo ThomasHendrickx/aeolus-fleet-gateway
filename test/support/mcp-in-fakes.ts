@@ -40,14 +40,20 @@ export function aDiscoveredShip(overrides: Partial<DiscoveredShip> = {}): Discov
 
 /** The fleet's discover, as the proxy ship's crew calls it: the ships set, or the refusal set. */
 export function fakeDiscovery(ships: DiscoveredShip[] = [aDiscoveredShip()]) {
-  const state: { ships: DiscoveredShip[]; refusal: FleetRefusal | undefined } = { ships, refusal: undefined };
+  const state: { ships: DiscoveredShip[]; refusal: FleetRefusal | undefined; lookupRefusal: FleetRefusal | undefined; isMissing: boolean } = { ships, refusal: undefined, lookupRefusal: undefined, isMissing: false };
   const askedWith: string[] = [];
-  const discovery: Discovery & { state: typeof state; askedWith: string[] } = {
+  const lookedUp: { crewToken: string; shipId: ShipId }[] = [];
+  const discovery: Discovery & { state: typeof state; askedWith: string[]; lookedUp: typeof lookedUp } = {
     state,
     askedWith,
+    lookedUp,
+    lookup: (crewToken, shipId) => {
+      lookedUp.push({ crewToken, shipId });
+      return Promise.resolve(state.lookupRefusal === undefined ? ok(state.isMissing ? null : state.ships.find((ship) => ship.shipId === shipId) ?? null) : err(state.lookupRefusal));
+    },
     discover: (crewToken) => {
       askedWith.push(crewToken);
-      return Promise.resolve(state.refusal === undefined ? ok(state.ships) : err(state.refusal));
+      return Promise.resolve(state.refusal === undefined ? ok(state.ships.map((ship) => ({ ...ship, statement: ship.statement?.by === 'crew' ? { by: 'crew', summary: ship.statement.summary } : ship.statement }))) : err(state.refusal));
     },
   };
   return discovery;

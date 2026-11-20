@@ -17,7 +17,7 @@ beforeEach(async () => {
   const parties = memoryPartyStore();
   await parties.save({ fleetId: FLEET_ID, name: 'supplier', kind: 'a2aClient', bearerHash: 'h(b)', state: 'crewed', proxyShipId: PROXY_SHIP_ID, secret: null, crewToken: 'aeolus_ct_v1_proxy', requestId: 'r-1', requestHash: 'h', approvedAt: AT });
   discovery = fakeDiscovery();
-  find = createFindReachedShip({ listReachedShips: createListReachedShips({ parties, discovery, aliases: fakeAliases }) });
+  find = createFindReachedShip({ parties, discovery, listReachedShips: createListReachedShips({ parties, discovery, aliases: fakeAliases }) });
 });
 
 describe('an alias names a ship the A2A client reaches now (decision 0060)', () => {
@@ -34,4 +34,21 @@ describe('an alias names a ship the A2A client reaches now (decision 0060)', () 
 
     await expect(find({ ...CALLER, alias: CRM_ALIAS })).resolves.toEqual(await find({ ...CALLER, alias: 'azzzzzzz' }));
   });
+});
+
+
+it('looks up only the chosen alias as its proxy crew, preserving every capability field', async () => {
+  discovery.state.ships.push(aDiscoveredShip({ shipId: 'shp_01m3tbfspe96yf1rnr4ank9led' }));
+  await expect(find({ ...CALLER, alias: CRM_ALIAS })).resolves.toMatchObject({ isOk: true, value: { statement: aDiscoveredShip().statement } });
+  expect(discovery.lookedUp).toEqual([{ crewToken: 'aeolus_ct_v1_proxy', shipId: CRM_SHIP_ID }]);
+});
+
+it('answers unknown alias when the chosen ship leaves send reach before lookup', async () => {
+  discovery.state.isMissing = true;
+  await expect(find({ ...CALLER, alias: CRM_ALIAS })).resolves.toEqual(await find({ ...CALLER, alias: 'azzzzzzz' }));
+});
+
+it('answers fleet unavailable when the chosen statement lookup fails', async () => {
+  discovery.state.lookupRefusal = { code: 'UNAVAILABLE', message: 'down' };
+  await expect(find({ ...CALLER, alias: CRM_ALIAS })).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
 });
