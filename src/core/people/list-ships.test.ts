@@ -7,10 +7,10 @@ import { err, ok } from '../shared/result.js';
 import type { PersonDiscovery } from './ports.js';
 
 // A person reads, from their MCP client, the ships and types their person
-// ship may send to now, with what each offers: the fleet's discover, as the
+// ship may send to now, with full statements from lookup, as the
 // person ship, so their rights alone decide it (aeolus-fleet #1046).
 
-/** What the fleet's discover answers Charlotte's person ship. */
+/** The reachable ships with their full statements for Charlotte's person ship. */
 const DISCOVERY: PersonDiscovery = {
   ships: [
     {
@@ -37,7 +37,7 @@ function listing() {
 }
 
 describe('a person reads the ships they may send to', () => {
-  it("answers exactly what the fleet's discover answers their person ship: each ship's name, type, kind and statement, and each type", async () => {
+  it("answers each reachable ship with its name, type, kind and full statement, and each type", async () => {
     const { listShips } = listing();
 
     await expect(listShips(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: DISCOVERY });

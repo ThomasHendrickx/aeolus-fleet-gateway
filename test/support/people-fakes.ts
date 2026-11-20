@@ -304,7 +304,10 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
     discover: (crewToken) => {
       calls.push('discover');
       const refused = refusals.discover.shift();
-      return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => ship.discovery ?? { ships: [], types: [] });
+      return refused ? Promise.resolve(err(refused)) : crewed(crewToken, () => ({
+        ships: (ship.discovery?.ships ?? []).map((each) => ({ ...each, statement: each.statement?.by === 'crew' ? { by: 'crew' as const, summary: each.statement.summary } : each.statement })),
+        types: ship.discovery?.types ?? [],
+      }));
     },
     send: (crewToken, message) => {
       calls.push(`send(${recipientOf(message.to)})`);
