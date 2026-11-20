@@ -1,6 +1,6 @@
 import type { ShipId } from '@aeolus-fleet/common';
 
-import type { DiscoveredStatement, Discovery, ShipAliases } from '../mcp-in/ports.js';
+import type { DiscoveredStatement, DiscoveredSummary, Discovery, ShipAliases } from '../mcp-in/ports.js';
 import type { PartyStore } from '../parties/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
@@ -15,7 +15,9 @@ export interface ReachedShip {
 
 export type ListReachedShipsRefusal = DomainError<'PARTY_NOT_CREWED' | 'FLEET_UNAVAILABLE'>;
 
-export type ListReachedShips = (caller: A2aCaller) => Promise<Result<ReachedShip[], ListReachedShipsRefusal>>;
+export type ReachedSummary = Omit<ReachedShip, 'statement'> & { statement: DiscoveredSummary };
+
+export type ListReachedShips = (caller: A2aCaller) => Promise<Result<ReachedSummary[], ListReachedShipsRefusal>>;
 
 /**
  * Use case: the ships an A2A client reaches now (decision 0060), as the

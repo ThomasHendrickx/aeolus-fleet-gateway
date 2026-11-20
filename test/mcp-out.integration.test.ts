@@ -1,4 +1,4 @@
-import { discoverOutputSchema, idSchema, needsAttentionOutputSchema, type ShipId } from '@aeolus-fleet/common';
+import { idSchema, needsAttentionOutputSchema, type ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import { z } from 'zod';
 
@@ -9,7 +9,7 @@ import { applyEmptyOwnRules, commission, defineScope, grantScopes, register, sig
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
-import { receiveOne, send } from './support/ship.js';
+import { lookupShip, receiveOne, send } from './support/ship.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 import { outsidePartiesOn } from './support/outside-parties.js';
 
@@ -222,15 +222,14 @@ describe("a ship holding scopes:grant changes an outside party's scopes (decisio
 });
 
 describe("the CRM's proxy ship states its tools as the server lists them (aeolus-fleet#956)", () => {
-  it("shows in discovery each tool with the server's annotations, and argo's repeatable mark", async () => {
+  it("shows through lookup each tool with the server's annotations, and argo's repeatable mark", async () => {
     const address = await started();
     await approved(address);
 
     const marked = await mutate(address, { procedure: 'parties.markTool', cookie, body: { name: 'crm', tool: 'list_deals', isRepeatable: true } });
 
     expect(marked.status, await marked.clone().text()).toBe(200);
-    const found = await fetch(`${fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${caller.crewToken}` } });
-    const statement = discoverOutputSchema.parse(await found.json()).ships.find(({ id }) => id === proxyShipId)?.statement;
+    const statement = (await lookupShip(fleet, { crewToken: caller.crewToken, target: { id: proxyShipId } }))?.statement;
     const capabilities = statement?.by === 'crew' ? statement.capabilities : [];
     const shown = capabilities.filter(({ name }) => ['list_deals', 'create_contact'].includes(name)).map(({ name, annotations, repeatable }) => ({ name, annotations, repeatable }));
     expect(shown.sort((left, right) => left.name.localeCompare(right.name))).toEqual([
@@ -282,14 +281,13 @@ describe('an approver sets which scopes a calling ship needs for a tool of an ou
     expect(crm.calls.get('list_deals')).toBe(1);
   });
 
-  it('states what each tool needs at once, which a ship reads in discovery before it calls (P1)', async () => {
+  it('states what each tool needs at once, which a ship reads through lookup before it calls (P1)', async () => {
     const address = await approvedWithScopes();
 
     const set = await setRequirements(address, { version: 0, tools: [{ tool: 'create_deal', scopes: ['crm:write-leads'] }] });
 
     expect(z.object({ result: z.object({ data: z.object({ statementRefusal: z.string().nullable() }) }) }).parse(await set.json()).result.data.statementRefusal).toBeNull();
-    const found = await fetch(`${fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${caller.crewToken}` } });
-    const statement = discoverOutputSchema.parse(await found.json()).ships.find(({ id }) => id === proxyShipId)?.statement;
+    const statement = (await lookupShip(fleet, { crewToken: caller.crewToken, target: { id: proxyShipId } }))?.statement;
     const capabilities = statement?.by === 'crew' ? statement.capabilities : [];
     expect(capabilities.filter(({ name }) => ['create_deal', 'list_deals'].includes(name)).map(({ name, scopes }) => ({ name, scopes }))).toEqual([
       { name: 'list_deals', scopes: undefined },
@@ -360,12 +358,11 @@ describe('an approver picks which tools of an outside MCP server the fleet may c
     proxyShipId = z.object({ result: z.object({ data: z.object({ proxyShipId: idSchema('ship') }) }) }).parse(await response.json()).result.data.proxyShipId;
   }
 
-  /** The capabilities the fleet shows of the proxy ship, as a ship of the fleet discovers it, once the gateway stated it anew. */
+  /** The capabilities the fleet shows of the proxy ship, as a ship of the fleet looks it up, once the gateway stated it anew. */
   async function statedTools(address: string, party: string): Promise<string[]> {
     const restated = await mutate(address, { procedure: 'parties.state', crewToken: approver, body: { name: party } });
     expect(restated.status, await restated.clone().text()).toBe(200);
-    const found = await fetch(`${fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${caller.crewToken}` } });
-    const statement = discoverOutputSchema.parse(await found.json()).ships.find(({ id }) => id === proxyShipId)?.statement;
+    const statement = (await lookupShip(fleet, { crewToken: caller.crewToken, target: { id: proxyShipId } }))?.statement;
     return (statement?.by === 'crew' ? statement.capabilities : []).map(({ name }) => name).sort();
   }
 

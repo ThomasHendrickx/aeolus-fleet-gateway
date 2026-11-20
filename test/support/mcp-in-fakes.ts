@@ -1,7 +1,7 @@
 import { idSchema, type FleetId, type MessageId, type ShipId } from '@aeolus-fleet/common';
 
 import type { CallReply, ClientCall, DeliveryState } from '../../src/core/mcp-in/client-call.js';
-import type { CallKeys, CallSender, ClientCalls, DiscoveredShip, Discovery, ReceivedReply, ReplyReceiver, SentMessages, ShipAliases } from '../../src/core/mcp-in/ports.js';
+import type { CallKeys, CallSender, ClientCalls, DiscoveredShip, DiscoveredStatement, Discovery, ReceivedReply, ReplyReceiver, SentMessages, ShipAliases } from '../../src/core/mcp-in/ports.js';
 import { err, ok } from '../../src/core/shared/result.js';
 import { FLEET_ID } from './fleet-fakes.js';
 import type { FleetRefusal } from '../../src/core/connection/ports.js';
@@ -13,7 +13,9 @@ export const ARGO_SHIP_ID: ShipId = 'shp_01m3tbfspe96yf1rnr4ank9arg';
 export const fakeAliases: ShipAliases = { aliasOf: (_fleetId: FleetId, shipId: ShipId) => `a${shipId.slice(-4)}` };
 
 /** A ship as discover answers it, with a statement by its crew. */
-export function aDiscoveredShip(overrides: Partial<DiscoveredShip> = {}): DiscoveredShip {
+type FullShip = Omit<DiscoveredShip, 'statement'> & { statement: DiscoveredStatement };
+
+export function aDiscoveredShip(overrides: Partial<FullShip> = {}): FullShip {
   return {
     shipId: CRM_SHIP_ID,
     kind: 'app',
@@ -39,8 +41,8 @@ export function aDiscoveredShip(overrides: Partial<DiscoveredShip> = {}): Discov
 }
 
 /** The fleet's discover, as the proxy ship's crew calls it: the ships set, or the refusal set. */
-export function fakeDiscovery(ships: DiscoveredShip[] = [aDiscoveredShip()]) {
-  const state: { ships: DiscoveredShip[]; refusal: FleetRefusal | undefined; lookupRefusal: FleetRefusal | undefined; isMissing: boolean } = { ships, refusal: undefined, lookupRefusal: undefined, isMissing: false };
+export function fakeDiscovery(ships: FullShip[] = [aDiscoveredShip()]) {
+  const state: { ships: FullShip[]; refusal: FleetRefusal | undefined; lookupRefusal: FleetRefusal | undefined; isMissing: boolean } = { ships, refusal: undefined, lookupRefusal: undefined, isMissing: false };
   const askedWith: string[] = [];
   const lookedUp: { crewToken: string; shipId: ShipId }[] = [];
   const discovery: Discovery & { state: typeof state; askedWith: string[]; lookedUp: typeof lookedUp } = {

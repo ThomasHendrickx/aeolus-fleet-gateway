@@ -2,7 +2,7 @@
  * What a ship of the fleet does in a test, through core's REST API with its
  * crew token: it sends, and it receives and acknowledges its replies.
  */
-import { receiveOutputSchema, sendOutputSchema, type MessageId, type ShipId } from '@aeolus-fleet/common';
+import { lookupInputSchema, lookupOutputSchema, receiveOutputSchema, sendOutputSchema, type MessageId, type ShipId } from '@aeolus-fleet/common';
 
 import type { FleetServer } from './fleet-server.js';
 
@@ -58,4 +58,10 @@ export function receiveOne(fleet: FleetServer, crewToken: string) {
 /** What else comes for the ship within NOTHING_MORE_MS, received and acknowledged: none when nothing more came. */
 export function receiveAnyMore(fleet: FleetServer, crewToken: string) {
   return receiveWithin(fleet, { crewToken, waitMs: NOTHING_MORE_MS });
+}
+
+
+/** Reads one reachable ship's full statement as the caller, never from discovery. */
+export async function lookupShip(fleet: FleetServer, { crewToken, target }: { crewToken: string; target: { id: string } | { name: string } }) {
+  return lookupOutputSchema.parse(await call(fleet, { crewToken, path: '/ship/lookup', body: lookupInputSchema.parse({ ...target, includeStatement: true }) }));
 }

@@ -271,6 +271,14 @@ async function aTasksClient(): Promise<{ accessToken: string; tool: string }> {
 const taskIdOf = (result: unknown) => z.object({ taskId: z.string() }).parse(result).taskId;
 
 describe('an outside MCP client that declares the Tasks extension follows a long call as a task', () => {
+  it('lists full MCP tool fields after compact fleet discovery', async () => {
+    await aStatingShip();
+    const client = await aSignedInClient(setting);
+    const listed = await rpc(z.string().parse(client.tokens()?.access_token), { method: 'tools/list', params: {} });
+    const tools = z.object({ tools: z.array(z.object({ name: z.string(), inputSchema: z.object({ type: z.string() }) })) }).parse(listed.result).tools;
+    expect(tools.find(({ name }) => name.endsWith('__list_deals'))?.inputSchema.type).toBe('object');
+  });
+
   it('finds the extension stated at server/discover', async () => {
     const client = await aSignedInClient(setting);
 

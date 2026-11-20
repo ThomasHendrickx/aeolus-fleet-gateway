@@ -706,7 +706,7 @@ describe('where the delivery of a message a proxy ship sent stands, as sentMessa
 
 
 describe('compact discovery and explicit full statement lookup', () => {
-  const full = { by: 'crew', version: 3, summary: 'Tracks issues', capabilities: [{ name: 'open', title: 'Open', description: 'Opens an issue', inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, inputModes: ['application/json'], outputModes: ['text/plain'], waitMs: 10, deadlineMs: 100 }] };
+  const full = { by: 'crew', version: 4, summary: 'Tracks current issues', capabilities: [{ name: 'open', title: 'Open', description: 'Opens an issue', inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, inputModes: ['application/json'], outputModes: ['text/plain'], waitMs: 10, deadlineMs: 100, repeatable: true, scopes: ['tracker:open'], annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } }] };
   const summary = { by: 'crew', version: 3, summary: 'Tracks issues' };
   const ship = { id: PERSON_SHIP, name: 'tracker', type: 'tracker', kind: 'app', status: 'crewed', statement: summary, verified: [] };
 

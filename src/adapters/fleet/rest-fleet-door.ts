@@ -18,6 +18,7 @@ import {
   busyWaitMs,
   commissionShipOutputSchema,
   discoverOutputSchema,
+  lookupOutputSchema,
   FLEET_BUSY_WAITS_MS,
   handedOutputSchema,
   idSchema,
@@ -55,7 +56,7 @@ import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';
 import type { ProxyShipDoor } from '../../core/parties/ports.js';
 import { jobOf } from '../../core/people/item-job.js';
-import type { AccountDoor, PersonDelivery, PersonShipDoor } from '../../core/people/ports.js';
+import type { AccountDoor, PersonDelivery, PersonDiscovery, PersonShipDoor } from '../../core/people/ports.js';
 import type { Owners } from '../../core/requests/ports.js';
 import { err, ok, type Result } from '../../core/shared/result.js';
 
@@ -255,7 +256,12 @@ export function createRestFleetDoor(
     const answered = await call({ ...request, method: 'POST', crewToken, answers: z.unknown() });
     return answered.isOk ? ok(undefined) : answered;
   };
+  const lookup = async (crewToken: string, shipId: ShipId) => {
+    const found = await call({ path: '/ship/lookup', method: 'POST', crewToken, body: { id: shipId, includeStatement: true }, answers: lookupOutputSchema });
+    return found.isOk ? ok(found.value === null ? null : { shipId: found.value.id, statement: found.value.statement ?? null }) : found;
+  };
   return {
+    lookup,
     startingPrompt: async ({ crewToken, accountToken, shipId }) => {
       const issued = await call({ path: '/fleet/getStartingPrompt', method: 'POST', crewToken, accountToken, body: { shipId }, answers: startingPromptOutputSchema });
       return issued.isOk ? ok({ secret: issued.value.secret }) : issued;
@@ -409,7 +415,17 @@ export function createRestFleetDoor(
       },
       discover: async (crewToken) => {
         const found = await call({ path: '/ship/discover', method: 'GET', crewToken, answers: discoverOutputSchema });
-        return found.isOk ? ok({ ships: found.value.ships.map(({ id, name, type, kind, statement }) => ({ id, name, type, kind, statement })), types: found.value.types }) : found;
+        if (!found.isOk) return found;
+        const details = await Promise.all(found.value.ships.map(async ({ id, name, type, kind }) => {
+          const detail = await lookup(crewToken, id);
+          return detail.isOk ? ok(detail.value === null ? null : { id, name, type, kind, statement: detail.value.statement }) : detail;
+        }));
+        const ships: PersonDiscovery['ships'][number][] = [];
+        for (const detail of details) {
+          if (!detail.isOk) return detail;
+          if (detail.value !== null) ships.push(detail.value);
+        }
+        return ok({ ships, types: found.value.types });
       },
       send: (crewToken, { to, contentType, payload, idempotencyKey }) =>
         call({ path: '/ship/send', method: 'POST', crewToken, body: { selector: to, contentType, payload, idempotencyKey }, answers: sendOutputSchema }),

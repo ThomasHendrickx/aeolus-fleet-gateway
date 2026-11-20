@@ -41,7 +41,7 @@ export function GatewayHeader({ switchers, email, accountUrl, theme }: GatewayHe
         {switcher === undefined ? null : <GatewayTabs fleetId={switcher.fleet.id} />}
       </AppHeader>
       <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-4 sm:hidden">
-        {switcher === undefined ? null : <AppSwitcher switcher={switcher} layout="compact" className="min-w-0" />}
+        {switcher === undefined ? null : <AppSwitcher switcher={switcher} layout="sheet" className="min-w-0" />}
         {switcher === undefined ? null : <GatewayTabs fleetId={switcher.fleet.id} />}
         <span className="grow" />
         <AvatarMenuSheet {...account} />

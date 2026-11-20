@@ -1,7 +1,7 @@
 /**
  * Use case: the tools an outside MCP client sees (interop 3.3). Each is a
  * capability of a ship its party's proxy ship may send to now, as the fleet's
- * discover answers it: the gateway shows exactly what core answers, and adds
+ * discover selects them and lookup answers their full statements: the gateway adds
  * no reach of its own.
  */
 import type { FleetId, ShipId } from '@aeolus-fleet/common';
@@ -9,7 +9,7 @@ import type { FleetId, ShipId } from '@aeolus-fleet/common';
 import type { PartyStore } from '../parties/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import type { Capability, DiscoveredShip, Discovery, ShipAliases } from './ports.js';
+import type { Capability, DiscoveredStatement, Discovery, ShipAliases } from './ports.js';
 
 /** The optional argument a client gives so that the same call again sends no second message. */
 export const IDEMPOTENCY_ARGUMENT = 'aeolus_idempotency_key';
@@ -98,9 +98,9 @@ function toolOf({ alias, summary, shipId }: { alias: string; summary: string; sh
 }
 
 /** argo is left out: every ship may send to argo, and argo is no tool (Q12). */
-function toolsOf(ship: DiscoveredShip, alias: string): ListedTool[] {
+function toolsOf(ship: { shipId: ShipId; statement: DiscoveredStatement }, alias: string): ListedTool[] {
   const { statement } = ship;
-  if (ship.kind === 'operator' || statement?.by !== 'crew') {
+  if (statement?.by !== 'crew') {
     return [];
   }
   return statement.capabilities.flatMap((capability) => toolOf({ alias, summary: statement.summary, shipId: ship.shipId }, capability) ?? []);
@@ -116,6 +116,17 @@ export function createListTools(deps: { parties: PartyStore; discovery: Discover
     if (!discovered.isOk) {
       return refuse('FLEET_UNAVAILABLE', `The fleet did not answer which ships the party reaches: ${discovered.error.message}`);
     }
-    return ok(discovered.value.flatMap((ship) => toolsOf(ship, deps.aliases.aliasOf(fleetId, ship.shipId))));
+    const crewToken = party.crewToken;
+    const statements = await Promise.all(discovered.value.filter((ship) => ship.kind !== 'operator' && ship.statement?.by === 'crew').map((ship) => deps.discovery.lookup(crewToken, ship.shipId)));
+    const tools: ListedTool[] = [];
+    for (const statement of statements) {
+      if (!statement.isOk) {
+        return refuse('FLEET_UNAVAILABLE', `The fleet did not answer a ship's statement: ${statement.error.message}`);
+      }
+      if (statement.value !== null) {
+        tools.push(...toolsOf(statement.value, deps.aliases.aliasOf(fleetId, statement.value.shipId)));
+      }
+    }
+    return ok(tools);
   };
 }

@@ -64,7 +64,7 @@ beforeEach(async () => {
   const followTask = createFollowA2aTask({ calls, clock, sleep, pollMs: 250 });
   pushStore = memoryPushStore();
   const resolver = fakeResolver({ 'hooks.supplier.example': ['93.184.215.14'], 'inside.supplier.example': ['10.0.0.5'] });
-  const findReachedShip = createFindReachedShip({ listReachedShips: createListReachedShips({ parties, discovery, aliases }) });
+  const findReachedShip = createFindReachedShip({ parties, discovery, listReachedShips: createListReachedShips({ parties, discovery, aliases }) });
   server = Fastify();
   registerA2aEndpoint(server, {
     issuer: ISSUER,

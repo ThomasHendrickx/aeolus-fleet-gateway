@@ -1,6 +1,7 @@
-import { discoverOutputSchema, type FleetId } from '@aeolus-fleet/common';
+import type { FleetId } from '@aeolus-fleet/common';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 
+import { lookupShip } from './support/ship.js';
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaFleetForgetter } from '../src/adapters/prisma/fleet-forgetter.js';
@@ -26,7 +27,7 @@ describe("a proxy ship's statement, stated through the fleet's REST API", () => 
     await fleet.stop();
   });
 
-  it("is what discovery shows of the proxy ship: its server's tools as capabilities", async () => {
+  it("is what lookup shows of the proxy ship: its server's tools as capabilities", async () => {
     const cookie = await signIn(fleet);
     const proxy = await register(fleet, await commission(fleet, { cookie, ship: { name: 'crm', type: 'mcp-server', kind: 'app' } }));
     const caller = await register(fleet, await commission(fleet, { cookie, ship: { name: 'agent', type: 'agent', scopes: ['messages:send'] } }));
@@ -34,8 +35,8 @@ describe("a proxy ship's statement, stated through the fleet's REST API", () => 
 
     await expect(createRestFleetDoor(fleet.url).setStatement(proxy, statement)).resolves.toEqual({ isOk: true, value: undefined });
 
-    const discovered = discoverOutputSchema.parse(await (await fetch(`${fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${caller}` } })).json());
-    expect(discovered.ships.find((ship) => ship.name === 'crm')?.statement).toEqual({ by: 'crew', version: 1, ...statement });
+    const lookedUp = await lookupShip(fleet, { crewToken: caller, target: { name: 'crm' } });
+    expect(lookedUp?.statement).toEqual({ by: 'crew', version: 1, ...statement });
   });
 
   it("answers the fleet's refusal", async () => {

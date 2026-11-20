@@ -1,7 +1,8 @@
 import { createServer, type Server } from 'node:http';
 
-import { discoverOutputSchema, type ShipId } from '@aeolus-fleet/common';
+import type { ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { lookupShip } from './support/ship.js';
 import { z } from 'zod';
 
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
@@ -81,8 +82,7 @@ function addAgent(change: Record<string, unknown> = {}): Promise<Response> {
 /** The proxy ship's statement as a fleet ship discovers it, once its crew stated one. */
 async function statementOf(proxyShipId: string) {
   for (let tries = 0; tries < 50; tries += 1) {
-    const found = await fetch(`${setting.fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${caller}` } });
-    const statement = discoverOutputSchema.parse(await found.json()).ships.find(({ id }) => id === proxyShipId)?.statement;
+    const statement = (await lookupShip(setting.fleet, { crewToken: caller, target: { id: proxyShipId } }))?.statement;
     if (statement?.by === 'crew') {
       return statement;
     }

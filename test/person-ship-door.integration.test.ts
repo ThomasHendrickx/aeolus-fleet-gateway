@@ -58,7 +58,7 @@ async function trackerReceives() {
 }
 
 describe('a person ship discovers what it may send to', () => {
-  it('finds each ship by name, with its type, kind and statement, and each type', async () => {
+  it('finds each ship by name, with its type, kind and full lookup statement, and each type', async () => {
     const found = await door.discover(charlotte);
     const trackerId = found.isOk ? (found.value.ships.find(({ name }) => name === 'tracker')?.id ?? '') : '';
 

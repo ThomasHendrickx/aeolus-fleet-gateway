@@ -3,7 +3,7 @@
  * public card says only how to call: the gateway as provider, the alias's
  * interface, the bearer scheme and that an extended card exists. The
  * extended card adds the ship's statement for the caller, as the fleet's
- * discover answered it to the caller's proxy ship: its summary, and each
+ * lookup answered it to the caller's proxy ship: its summary, and each
  * capability as a skill.
  */
 import type { AgentCard, AgentSkill } from '@a2a-js/sdk';

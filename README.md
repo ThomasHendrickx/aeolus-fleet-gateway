@@ -34,7 +34,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 
 | Command | Does |
 | --- | --- |
-| `aeolus-gateway start` | Reads core's version and exits 1 when core is older than it needs (core 0.40.0 or later), saying both versions; migrates its database; serves |
+| `aeolus-gateway start` | Reads core's version and exits 1 when core is older than it needs (core 0.44.0 or later), saying both versions; migrates its database; serves |
 | `aeolus-gateway migrate` | Migrates its database, and nothing else. Needs `DATABASE_URL` alone |
 
 The gateway's pages are its web app's, a Next.js app in `web/` (aeolus-fleet's header design, H3), which the same server answers at the same address: `npm run build` builds it beside the server, and started from source (`npx tsx src/bin/aeolus-gateway.ts start`) it compiles as it is asked. It answers an address with no page of the server's own, its Not found among them, in its frame, whose header takes the shared header from `@aeolus-fleet/common/header` once common ships it.
@@ -133,7 +133,7 @@ Serve the gateway at its own origin, such as `https://gateway.example.com`, with
 
 `<GATEWAY_PUBLIC_URL>/mcp` is the gateway's MCP endpoint (Streamable HTTP, stateless). A call without a token, or with one the gateway did not issue for it, gets 401 with `resource_metadata` naming where to sign in (RFC 9728).
 
-- `tools/list` answers the capabilities of the ships the client's proxy ship may send to now, as the fleet's `discover` answers it: the gateway adds no reach of its own.
+- `tools/list` answers the capabilities of the ships the client's proxy ship may send to now, selected from the fleet's `discover` summaries and read in full through `lookup`: the gateway adds no reach of its own.
 - A tool is named `<alias>__<capability>`. The alias is 8 letters and digits derived from the ship under `GATEWAY_SECRET`: the client never sees a ship's name or id.
 - Its description is the capability's, then the ship's summary. A capability that takes plain text first gets one `text` argument. Every tool takes an optional `aeolus_idempotency_key`.
 - Left out: argo, ships with no statement by their crew, capabilities whose first input type is neither JSON nor plain text or whose input schema is not an object, and tool names over 128 characters.
@@ -145,6 +145,8 @@ Serve the gateway at its own origin, such as `https://gateway.example.com`, with
 - The first reply of the capability's first output type completes it; plain text completes a call to a ship that states no output type. An outside tool's result, as MCP out replies one, is answered as that result.
 - A call fails at its capability's `deadlineMs` after it was sent without its answer, and never by time when the capability states none (interop 3.4). A reply after the deadline is kept and changes nothing.
 - Each client party's worker takes the replies to its calls with `receiveReply` (aeolus-fleet#953) for each call neither completed nor past its deadline, at most 10 calls at once, each in its turn: it keeps each reply on its call, then acknowledges and handles its delivery. It never takes a delivery with `pushReceive`, so the proxy ship's lease stays plain, as `receiveReply` needs. A message to the proxy ship that replies to no call waits in the fleet and keeps no reply out.
+
+Core/common 0.44.0 is required for compact `ship.discover` summaries and full current statements through `ship.lookup` with `includeStatement: true` (aeolus-fleet#1957). MCP tools, extended A2A cards and person discovery read capabilities through lookup as the caller's ship, within current send reach.
 
 ## Develop
 

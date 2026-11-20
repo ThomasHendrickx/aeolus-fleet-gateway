@@ -21,19 +21,23 @@ export interface Capability {
   deadlineMs?: number;
 }
 
-/** A ship's statement as discovery shows it: its crew's, the note it was commissioned with, or none. */
+/** A ship's full statement as lookup answers it: its crew's, the note it was commissioned with, or none. */
 export type DiscoveredStatement = { by: 'crew'; summary: string; capabilities: Capability[] } | { by: 'commission' } | null;
+
+/** The statement's source and summary for selection; capabilities require lookup. */
+export type DiscoveredSummary = { by: 'crew'; summary: string } | { by: 'commission' } | null;
 
 /** A ship the caller may send to now, as discover answers it. */
 export interface DiscoveredShip {
   shipId: ShipId;
   kind: ShipKind;
-  statement: DiscoveredStatement;
+  statement: DiscoveredSummary;
 }
 
-/** Outbound port: the fleet's discover, as a proxy ship's crew calls it. */
+/** Outbound port: reached summaries and explicit full statements, as a proxy ship's crew reads them. */
 export interface Discovery {
   discover(crewToken: string): Promise<Result<DiscoveredShip[], FleetRefusal>>;
+  lookup(crewToken: string, shipId: ShipId): Promise<Result<{ shipId: ShipId; statement: DiscoveredStatement } | null, FleetRefusal>>;
 }
 
 /**

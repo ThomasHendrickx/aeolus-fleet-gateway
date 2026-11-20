@@ -50,7 +50,7 @@ beforeEach(async () => {
   whileWaiting = () => Promise.resolve();
   send = createSendA2aMessage({
     parties,
-    findReachedShip: createFindReachedShip({ listReachedShips: createListReachedShips({ parties, discovery, aliases: fakeAliases }) }),
+    findReachedShip: createFindReachedShip({ parties, discovery, listReachedShips: createListReachedShips({ parties, discovery, aliases: fakeAliases }) }),
     sender,
     calls,
     keys: fakeCallKeys(),

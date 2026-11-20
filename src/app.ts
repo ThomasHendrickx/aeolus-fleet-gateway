@@ -990,7 +990,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   // Outside A2A clients call the ships their proxy ship reaches, by alias, with the bearer they were shown (decision 0060).
   // A blocking send waits as its capability states, at most the gateway's own most, as an MCP call does (I-9).
   const listReachedShips = createListReachedShips({ parties, discovery: door, aliases });
-  const findReachedShip = createFindReachedShip({ listReachedShips });
+  const findReachedShip = createFindReachedShip({ listReachedShips, parties, discovery: door });
   const followA2aTask = createFollowA2aTask({ calls: clientCalls, clock, sleep, pollMs: MCP_WAIT_POLL_MS });
   registerA2aEndpoint(server, {
     issuer,
