@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
-import { aCallReply, aDiscoveredShip, CRM_SHIP_ID, fakeAliases, fakeCallKeys, fakeCallSender, fakeDiscovery, MESSAGE_ID, memoryClientCalls } from '../../../test/support/mcp-in-fakes.js';
+import { aCallReply, aDiscoveredShip, ARGO_SHIP_ID, CRM_SHIP_ID, fakeAliases, fakeCallKeys, fakeCallSender, fakeDiscovery, MESSAGE_ID, memoryClientCalls } from '../../../test/support/mcp-in-fakes.js';
 import { PROXY_SHIP_ID, memoryPartyStore } from '../../../test/support/party-fakes.js';
 import type { McpClientParty } from '../parties/party.js';
 import type { Sleep } from '../mcp-out/run-party.js';
@@ -85,6 +85,34 @@ describe("an outside MCP client's tool call is a message its proxy ship sends (i
         idempotencyKey: `key(${FLEET_ID}:claude:k-1)`,
       },
     ]);
+  });
+
+  it('reads only the called alias statement when another reached ship cannot be looked up', async () => {
+    discovery.state.ships.push(aDiscoveredShip({ shipId: ARGO_SHIP_ID }));
+    const lookup = discovery.lookup;
+    discovery.lookup = (crewToken, shipId) => shipId === CRM_SHIP_ID ? lookup(crewToken, shipId) : Promise.resolve({ isOk: false, error: { code: 'FORBIDDEN', message: 'Other ship lookup refused' } });
+
+    await expect(callTool(CALLER, { name: 'a9cr2__list_deals', arguments: {} })).resolves.toMatchObject({ isOk: true, value: { state: 'submitted' } });
+    expect(discovery.lookedUp).toEqual([{ crewToken: 'aeolus_ct_v1_claude', shipId: CRM_SHIP_ID }]);
+  });
+
+  it('does not read any statements for an unknown alias', async () => {
+    await expect(callTool(CALLER, { name: 'unknown__list_deals', arguments: {} })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_TOOL' } });
+    expect(discovery.lookedUp).toEqual([]);
+  });
+
+  it('refuses a tool whose ship leaves reach before lookup, sending nothing', async () => {
+    discovery.state.isMissing = true;
+
+    await expect(callTool(CALLER, { name: 'a9cr2__list_deals', arguments: {} })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_TOOL' } });
+    expect(sender.sent).toEqual([]);
+  });
+
+  it('propagates a refusal to read the called ship statement, sending nothing', async () => {
+    discovery.state.lookupRefusal = { code: 'FORBIDDEN', message: 'scope revoked' };
+
+    await expect(callTool(CALLER, { name: 'a9cr2__list_deals', arguments: {} })).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
+    expect(sender.sent).toEqual([]);
   });
 
   it("answers a handle once the fleet answered the send, and keeps the call under it, with the type its answer comes in and its deadline", async () => {
