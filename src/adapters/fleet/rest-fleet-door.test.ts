@@ -730,17 +730,9 @@ describe('compact discovery and explicit full statement lookup', () => {
     await expect(createRestFleetDoor(base).lookup('proxy-crew', PERSON_SHIP)).resolves.toEqual({ isOk: true, value: null });
   });
 
-  it('hydrates person discovery capabilities through lookup', async () => {
-    await expect(createRestFleetDoor(base).person.discover('person-crew')).resolves.toEqual({ isOk: true, value: { ships: [{ id: PERSON_SHIP, name: 'tracker', type: 'tracker', kind: 'app', statement: full }], types: [{ type: 'tracker', reachable: 1 }] } });
-  });
-
-  it('omits a person discovery ship that leaves reach before lookup', async () => {
-    answers['/api/v1/ship/lookup'] = { status: 200, body: null };
-    await expect(createRestFleetDoor(base).person.discover('person-crew')).resolves.toMatchObject({ isOk: true, value: { ships: [] } });
-  });
-
-  it('propagates lookup refusal rather than showing incomplete person capabilities', async () => {
+  it('keeps person discovery compact even when lookup is refused', async () => {
     answers['/api/v1/ship/lookup'] = { status: 403, body: { code: 'FORBIDDEN', message: 'scope revoked' } };
-    await expect(createRestFleetDoor(base).person.discover('person-crew')).resolves.toEqual({ isOk: false, error: { code: 'FORBIDDEN', message: 'scope revoked' } });
+    await expect(createRestFleetDoor(base).person.discover('person-crew')).resolves.toEqual({ isOk: true, value: { ships: [{ id: PERSON_SHIP, name: 'tracker', type: 'tracker', kind: 'app', statement: summary }], types: [{ type: 'tracker', reachable: 1 }] } });
+    expect(received).toHaveLength(1);
   });
 });
