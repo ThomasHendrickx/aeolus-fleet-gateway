@@ -122,3 +122,21 @@ describe("an MCP client's tools are the capabilities of the ships its party reac
     await expect(listTools(CALLER)).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
   });
 });
+
+
+describe('full statements after compact discovery', () => {
+  it('lists tools from lookup with their schema, modes and timing intact', async () => {
+    await expect(toolsListed()).resolves.toMatchObject([{ title: 'List deals', inputSchema: { required: ['contactId'] }, target: { waitMs: 10_000, deadlineMs: 600_000, outputContentType: 'application/vnd.aeolus.mcp-result+json; name=list_deals' } }]);
+    expect(discovery.lookedUp).toEqual([{ crewToken: 'aeolus_ct_v1_claude', shipId: 'shp_01m3tbfspe96yf1rnr4ank9cr2' }]);
+  });
+
+  it('omits a ship that leaves send reach before lookup', async () => {
+    discovery.state.isMissing = true;
+    await expect(toolsListed()).resolves.toEqual([]);
+  });
+
+  it('refuses a tool list when full statement lookup fails', async () => {
+    discovery.state.lookupRefusal = { code: 'UNAVAILABLE', message: 'down' };
+    await expect(listTools(CALLER)).resolves.toMatchObject({ isOk: false, error: { kind: 'FLEET_UNAVAILABLE' } });
+  });
+});

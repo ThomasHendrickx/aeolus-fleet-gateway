@@ -79,7 +79,7 @@ async function answerWithin(deps: CallToolDeps, sent: { fleetId: FleetId; messag
 
 export function createCallTool(deps: CallToolDeps): CallTool {
   return async (caller, call) => {
-    const listed = await deps.listTools(caller);
+    const listed = await deps.listTools(caller, call.name);
     if (!listed.isOk) {
       return listed;
     }

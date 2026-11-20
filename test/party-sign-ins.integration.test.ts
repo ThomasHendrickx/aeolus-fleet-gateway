@@ -1,5 +1,6 @@
 import { FLEET_HEADER, discoverOutputSchema, idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { lookupShip } from './support/ship.js';
 import { z } from 'zod';
 
 import { createPrismaClient } from '../src/adapters/prisma/client.js';
@@ -131,8 +132,10 @@ async function keptGrants() {
 /** The attio proxy ship as a ship of the fleet discovers it. */
 async function discoveredAttio() {
   const reader = await commission(fleet, { cookie, ship: { name: 'reader', type: 'agent', scopes: ['messages:send'] } });
-  const response = await fetch(`${fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${await register(fleet, reader)}` } });
-  return discoverOutputSchema.parse(await response.json()).ships.find(({ name }) => name === 'attio');
+  const crewToken = await register(fleet, reader);
+  const response = await fetch(`${fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${crewToken}` } });
+  const ship = discoverOutputSchema.parse(await response.json()).ships.find(({ name }) => name === 'attio');
+  return ship === undefined ? undefined : { ...ship, statement: (await lookupShip(fleet, { crewToken, target: { id: ship.id } }))?.statement };
 }
 
 describe('a person signs in to an outside MCP server for themselves', () => {

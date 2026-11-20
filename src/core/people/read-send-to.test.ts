@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { err } from '../shared/result.js';
 import type { PersonDiscovery } from './ports.js';
 import { createReadSendTo } from './read-send-to.js';
 
@@ -50,6 +51,15 @@ describe('a person reads who they can send a message to in Bridge', () => {
     };
 
     await expect(reading(discovery).readSendTo(CHARLOTTE_GRANT)).resolves.toHaveProperty('value.shipSummaries', { 'builder-core': '  Builds the fleet.\nKeeps its promises.  ' });
+  });
+
+  it('answers the send recipients without reading their full statements', async () => {
+    const ship = reading();
+    const door = { ...ship.door, lookup: () => Promise.resolve(err({ code: 'FORBIDDEN', message: 'Lookup refused' })) };
+    const readSendTo = createReadSendTo({ crewPersonShip: fakeCrewPersonShip(crews), crews, door });
+
+    await expect(readSendTo(CHARLOTTE_GRANT)).resolves.toMatchObject({ isOk: true, value: { ships: ['builder-core', 'tracker'] } });
+    expect(ship.calls).toEqual(['whoami', 'discover']);
   });
 
   it("says why when the fleet refuses their person ship's discover", async () => {

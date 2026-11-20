@@ -1,5 +1,6 @@
-import { discoverOutputSchema, idSchema, type ShipId } from '@aeolus-fleet/common';
+import { idSchema, type ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { lookupShip } from './support/ship.js';
 import { z } from 'zod';
 
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
@@ -165,8 +166,7 @@ describe("an approver sets the scopes on a 50-tool server's tools table (gateway
     const switched = await mutate(address, { procedure: 'parties.switchTools', crewToken: approver, body: { name: 'crm', tools: DESTRUCTIVE_TOOLS, isOn: false } });
 
     expect(switched.status, await switched.clone().text()).toBe(200);
-    const found = await fetch(`${fleet.url}/api/v1/ship/discover`, { headers: { authorization: `Bearer ${reader}` } });
-    const statement = discoverOutputSchema.parse(await found.json()).ships.find(({ id }) => id === proxyShipId)?.statement;
+    const statement = (await lookupShip(fleet, { crewToken: reader, target: { id: proxyShipId } }))?.statement;
     const stated = (statement?.by === 'crew' ? statement.capabilities : []).map(({ name }) => name);
     expect({ count: stated.length, isAnyDeleteStated: stated.some((name) => DESTRUCTIVE_TOOLS.includes(name)) }).toEqual({ count: 47, isAnyDeleteStated: false });
     expect((await listedTools()).filter(({ isOn }) => !isOn).map(({ name }) => name)).toEqual(DESTRUCTIVE_TOOLS);

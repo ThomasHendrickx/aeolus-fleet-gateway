@@ -24,11 +24,12 @@ describe("the ships an A2A client reaches are those the fleet's discover answers
     await expect(list({ fleetId: FLEET_ID, party: 'supplier' })).resolves.toEqual({
       isOk: true,
       value: [
-        { shipId: CRM_SHIP_ID, alias: `a${CRM_SHIP_ID.slice(-4)}`, statement: aDiscoveredShip().statement },
+        { shipId: CRM_SHIP_ID, alias: `a${CRM_SHIP_ID.slice(-4)}`, statement: { by: 'crew', summary: 'The CRM: contacts and deals.' } },
         { shipId: LEDGER_SHIP_ID, alias: 'a9led', statement: null },
       ],
     });
     expect(discovery.askedWith).toEqual(['aeolus_ct_v1_proxy']);
+    expect(discovery.lookedUp).toEqual([]);
   });
 
   it('leaves argo out: every ship may send to argo, and argo is no card', async () => {

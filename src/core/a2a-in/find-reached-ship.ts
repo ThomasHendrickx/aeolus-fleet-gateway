@@ -1,3 +1,5 @@
+import type { Discovery } from '../mcp-in/ports.js';
+import type { PartyStore } from '../parties/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import type { A2aCaller } from './authenticate-a2a-client.js';
@@ -14,13 +16,20 @@ export type FindReachedShip = (call: A2aCaller & { alias: string }) => Promise<R
  * ship and one of a ship the client cannot reach get the same refusal, so
  * the client learns nothing about ships it cannot reach.
  */
-export function createFindReachedShip(deps: { listReachedShips: ListReachedShips }): FindReachedShip {
+export function createFindReachedShip(deps: { listReachedShips: ListReachedShips; parties: Pick<PartyStore, 'find'>; discovery: Discovery }): FindReachedShip {
   return async ({ alias, ...caller }) => {
     const reached = await deps.listReachedShips(caller);
     if (!reached.isOk) {
       return reached;
     }
     const ship = reached.value.find((each) => each.alias === alias);
-    return ship === undefined ? refuse('UNKNOWN_ALIAS', 'No such agent') : ok(ship);
+    if (ship === undefined) return refuse('UNKNOWN_ALIAS', 'No such agent');
+    const party = await deps.parties.find(caller.fleetId, caller.party);
+    if (party?.state !== 'crewed' || party.crewToken === null) {
+      return refuse('PARTY_NOT_CREWED', `The party ${caller.party} is not crewed`);
+    }
+    const detail = await deps.discovery.lookup(party.crewToken, ship.shipId);
+    if (!detail.isOk) return refuse('FLEET_UNAVAILABLE', `The fleet did not answer the ship's statement: ${detail.error.message}`);
+    return detail.value === null ? refuse('UNKNOWN_ALIAS', 'No such agent') : ok({ ...ship, statement: detail.value.statement });
   };
 }

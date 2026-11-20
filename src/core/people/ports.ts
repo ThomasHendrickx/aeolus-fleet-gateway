@@ -7,7 +7,7 @@ import type { DeliveryId, DeliveryState, FleetId, MeetingId, MessageId, ShipId, 
 
 import type { ActorCredential } from '../actors/credential-of.js';
 import type { FleetRefusal } from '../connection/ports.js';
-import type { DiscoveredStatement } from '../mcp-in/ports.js';
+import type { DiscoveredStatement, DiscoveredSummary } from '../mcp-in/ports.js';
 import type { Result } from '../shared/result.js';
 import type { Place } from './item-outcome.js';
 import type { Routing } from './routing.js';
@@ -187,6 +187,12 @@ export interface PersonDiscovery {
   readonly types: readonly { readonly type: string; readonly reachable: number }[];
 }
 
+/** Compact discovery for choosing a recipient; full statements are read only when listing what ships offer. */
+export interface PersonDiscoverySummaries {
+  readonly ships: readonly (Omit<PersonDiscovery['ships'][number], 'statement'> & { readonly statement: DiscoveredSummary })[];
+  readonly types: PersonDiscovery['types'];
+}
+
 /** Who a person's message is for: one ship by its name, any ship of a type, or every other participant of a meeting, a contribution (decision 0061). */
 export type PersonSelector =
   | { readonly kind: 'ship'; readonly name: string }
@@ -228,7 +234,9 @@ export interface PersonShipDoor {
   /** The ship's own name, as the fleet knows it. */
   whoami(crewToken: string): Promise<Result<{ name: string; fleetId: FleetId; shipId: ShipId }, FleetRefusal>>;
   /** The ships and types the ship may send to now: the fleet checks its scopes and the network rules. */
-  discover(crewToken: string): Promise<Result<PersonDiscovery, FleetRefusal>>;
+  discover(crewToken: string): Promise<Result<PersonDiscoverySummaries, FleetRefusal>>;
+  /** The current full statement of one reachable ship, or null when it left reach. */
+  lookup(crewToken: string, shipId: ShipId): Promise<Result<{ shipId: ShipId; statement: DiscoveredStatement } | null, FleetRefusal>>;
   /** Sends the person's own message, once under its key. */
   send(crewToken: string, message: { to: PersonSelector; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<{ messageId: MessageId }, FleetRefusal>>;
 }

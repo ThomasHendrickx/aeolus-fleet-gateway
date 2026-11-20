@@ -18,6 +18,7 @@ import {
   busyWaitMs,
   commissionShipOutputSchema,
   discoverOutputSchema,
+  lookupOutputSchema,
   FLEET_BUSY_WAITS_MS,
   handedOutputSchema,
   idSchema,
@@ -255,7 +256,12 @@ export function createRestFleetDoor(
     const answered = await call({ ...request, method: 'POST', crewToken, answers: z.unknown() });
     return answered.isOk ? ok(undefined) : answered;
   };
+  const lookup = async (crewToken: string, shipId: ShipId) => {
+    const found = await call({ path: '/ship/lookup', method: 'POST', crewToken, body: { id: shipId, includeStatement: true }, answers: lookupOutputSchema });
+    return found.isOk ? ok(found.value === null ? null : { shipId: found.value.id, statement: found.value.statement ?? null }) : found;
+  };
   return {
+    lookup,
     startingPrompt: async ({ crewToken, accountToken, shipId }) => {
       const issued = await call({ path: '/fleet/getStartingPrompt', method: 'POST', crewToken, accountToken, body: { shipId }, answers: startingPromptOutputSchema });
       return issued.isOk ? ok({ secret: issued.value.secret }) : issued;
@@ -407,6 +413,7 @@ export function createRestFleetDoor(
         const answered = await call({ path: '/ship/handed', method: 'POST', crewToken, body: handOver, answers: handedOutputSchema });
         return answered.isOk ? ok(answered.value.state) : answered;
       },
+      lookup,
       discover: async (crewToken) => {
         const found = await call({ path: '/ship/discover', method: 'GET', crewToken, answers: discoverOutputSchema });
         return found.isOk ? ok({ ships: found.value.ships.map(({ id, name, type, kind, statement }) => ({ id, name, type, kind, statement })), types: found.value.types }) : found;

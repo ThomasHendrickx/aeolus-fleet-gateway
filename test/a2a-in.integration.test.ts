@@ -67,7 +67,7 @@ async function aStatingShip(timing: { waitMs?: number; deadlineMs?: number } = {
   const stated = await fetch(`${setting.fleet.url}/api/v1/ship/setStatement`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${crewToken}` },
-    body: JSON.stringify({ summary: 'Procurement: purchase orders.', capabilities: [{ name: 'quote', description: 'Takes a quote for an order.', inputModes: ['text/plain'], ...timing }] }),
+    body: JSON.stringify({ summary: 'Procurement: purchase orders.', capabilities: [{ name: 'quote', title: 'Quote an order', description: 'Takes a quote for an order.', inputModes: ['text/plain'], outputModes: ['text/plain'], ...timing }] }),
   });
   expect(stated.status).toBe(200);
   return { shipId: ship.shipId, crewToken };
@@ -134,14 +134,14 @@ describe('an outside A2A client reads the cards of the ships its proxy ship reac
     expect(JSON.stringify(cards)).not.toContain('procurement');
   });
 
-  it("answers the reachable ship's statement as its extended card", async () => {
+  it("answers the reachable ship's full lookup statement as its extended card", async () => {
     const { bearer } = addedSchema.parse(await (await addSupplier()).json()).result.data;
     await aStatingShip();
     const publicCards = await Promise.all((await cardAddresses()).map(async (address) => z.object({ supportedInterfaces: z.array(z.object({ url: z.string() })) }).parse(await (await fetch(address)).json())));
 
-    const extended = await Promise.all(publicCards.map(async (card) => z.object({ result: z.object({ description: z.string(), skills: z.array(z.object({ id: z.string() })).optional() }) }).parse(await (await extendedCard(card.supportedInterfaces[0]?.url ?? '', bearer)).json())));
+    const extended = await Promise.all(publicCards.map(async (card) => z.object({ result: z.object({ description: z.string(), skills: z.array(z.object({ id: z.string(), name: z.string(), description: z.string(), inputModes: z.array(z.string()), outputModes: z.array(z.string()) })).optional() }) }).parse(await (await extendedCard(card.supportedInterfaces[0]?.url ?? '', bearer)).json())));
 
-    expect(extended.map(({ result }) => result)).toContainEqual(expect.objectContaining({ description: 'Procurement: purchase orders.', skills: [expect.objectContaining({ id: 'quote' })] }));
+    expect(extended.map(({ result }) => result)).toContainEqual(expect.objectContaining({ description: 'Procurement: purchase orders.', skills: [{ id: 'quote', name: 'Quote an order', description: 'Takes a quote for an order.', inputModes: ['text/plain'], outputModes: ['text/plain'] }] }));
   });
 
   it('answers the unknown-alias error for an alias of no ship', async () => {

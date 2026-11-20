@@ -10,8 +10,8 @@ import { runningVersion } from '../http/version.js';
 
 export type { VersionFetch };
 
-/** The oldest core the gateway runs against: the ship contract it calls (docs/compatibility.md). */
-export const MINIMUM_CORE_VERSION = '0.40.0';
+/** Core/common 0.44.0: compact discovery and ship.lookup with includeStatement (aeolus-fleet docs/compatibility.md). */
+export const MINIMUM_CORE_VERSION = '0.44.0';
 
 /** Stops the start when the fleet's core is older than the gateway needs, or does not say its version. */
 export async function requireCoreVersion(fleetUrl: string, fetch: VersionFetch = globalThis.fetch): Promise<void> {

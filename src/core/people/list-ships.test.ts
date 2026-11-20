@@ -3,13 +3,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { CHARLOTTE_GRANT, fakeCrewPersonShip, fakePersonShipDoor, memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { createListShips } from './list-ships.js';
+import { err, ok } from '../shared/result.js';
 import type { PersonDiscovery } from './ports.js';
 
 // A person reads, from their MCP client, the ships and types their person
-// ship may send to now, with what each offers: the fleet's discover, as the
+// ship may send to now, with full statements from lookup, as the
 // person ship, so their rights alone decide it (aeolus-fleet #1046).
 
-/** What the fleet's discover answers Charlotte's person ship. */
+/** The reachable ships with their full statements for Charlotte's person ship. */
 const DISCOVERY: PersonDiscovery = {
   ships: [
     {
@@ -36,10 +37,49 @@ function listing() {
 }
 
 describe('a person reads the ships they may send to', () => {
-  it("answers exactly what the fleet's discover answers their person ship: each ship's name, type, kind and statement, and each type", async () => {
+  it("answers each reachable ship with its name, type, kind and full statement, and each type", async () => {
     const { listShips } = listing();
 
     await expect(listShips(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: DISCOVERY });
+  });
+
+  it('reads full statements as the person crew, one ship at a time', async () => {
+    const ship = listing();
+    let inFlight = 0;
+    let mostInFlight = 0;
+    const door = {
+      ...ship.door,
+      discover: () => Promise.resolve(ok({ ...DISCOVERY, ships: DISCOVERY.ships.map((each) => ({ ...each, statement: each.statement?.by === 'crew' ? { by: 'crew' as const, summary: each.statement.summary } : each.statement })) })),
+      lookup: async (crewToken: string, shipId: string) => {
+        expect(crewToken).toBe('aeolus_ct_v1_charlotte');
+        inFlight += 1;
+        mostInFlight = Math.max(mostInFlight, inFlight);
+        await Promise.resolve();
+        inFlight -= 1;
+        const found = DISCOVERY.ships.find((each) => each.id === shipId);
+        return ok(found === undefined ? null : { shipId: found.id, statement: found.statement });
+      },
+    };
+    const listShips = createListShips({ crewPersonShip: fakeCrewPersonShip(crews), crews, door });
+
+    await expect(listShips(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: DISCOVERY });
+    expect(mostInFlight).toBe(1);
+  });
+
+  it('omits a ship that leaves reach before its statement is read', async () => {
+    const ship = listing();
+    const door = { ...ship.door, lookup: () => Promise.resolve(ok(null)) };
+    const listShips = createListShips({ crewPersonShip: fakeCrewPersonShip(crews), crews, door });
+
+    await expect(listShips(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { ships: [], types: DISCOVERY.types } });
+  });
+
+  it('refuses an incomplete ship list when a statement cannot be read', async () => {
+    const ship = listing();
+    const door = { ...ship.door, lookup: () => Promise.resolve(err({ code: 'FORBIDDEN', message: 'scope revoked' })) };
+    const listShips = createListShips({ crewPersonShip: fakeCrewPersonShip(crews), crews, door });
+
+    await expect(listShips(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: false, error: { kind: 'SEND_REFUSED', message: 'The fleet did not say what you may send to: scope revoked' } });
   });
 
   it("says why when the fleet refuses their person ship's discover", async () => {
