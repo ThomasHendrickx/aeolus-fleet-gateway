@@ -2,9 +2,11 @@ import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
 import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, memoryFocusedPages, memoryQuietHours, memoryQuietShips, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { memoryMeetingContributions } from '../../../test/support/meeting-contributions-fake.js';
+import { aPersonDelivery, fakePersonShipDoor, memoryFocusedPages, memoryInboxChanges, memoryQuietHours, memoryQuietShips, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
+import { createRecordingMeetingDoor } from '../meetings/recording-meeting-door.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { FocusedPages, PersonShip, PushedPersonDelivery, ShownElsewhere, WakeChannel, WakeChannelName, WakesSent, WakeWindow } from './ports.js';
 import type { QuietHours } from './quiet-hours.js';
@@ -743,6 +745,25 @@ describe('meeting push preferences', () => {
     const push = aChannel('web-push');
     await waking({ ship, channels: [push.channel] })(SHIP, CREW_TOKEN);
     expect(push.woken).toEqual([]);
+  });
+
+  it('wakes ordinary deliveries while more than a receive batch of contributions arrives', async () => {
+    const contributions = Array.from({ length: RECEIVE_MAX_UPPER_BOUND + 1 }, (_, index) => aDelivery(index + 1, {
+      messageId: `msg_01m3tbfspe96yf1rnr4ank${String(index + 1).padStart(4, '0')}`,
+      meetingId,
+      contentType: 'text/plain',
+    }));
+    const ordinary = aDelivery(RECEIVE_MAX_UPPER_BOUND + 2);
+    const fleet = fakePersonShipDoor({ crewToken: CREW_TOKEN, deliveries: contributions });
+    const door = createRecordingMeetingDoor(fleet.door, { contributions: memoryMeetingContributions(), changes: memoryInboxChanges() });
+    const push = aChannel('web-push');
+    const wake = waking({ ship: { door, handOvers: fleet.handOvers }, channels: [push.channel] });
+
+    await wake(SHIP, CREW_TOKEN);
+    fleet.ship.deliveries.push(ordinary);
+    await wake(SHIP, CREW_TOKEN);
+
+    expect({ woken: push.woken, handed: fleet.handOvers }).toEqual({ woken: [SHIP], handed: [{ deliveryId: ordinary.deliveryId, handOverNumber: 1, channel: 'web-push' }] });
   });
 
   it('keeps the mic quiet for a quiet ship', async () => {
