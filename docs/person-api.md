@@ -4,9 +4,9 @@ Person clients call the gateway's tRPC API at `/trpc`, signed in as the person's
 
 ## Person record
 
-The gateway counts from now on: it owns the person's record of arriving contributions and what that person has seen per meeting. Contributions sent before the counting release count as seen. There is no backfill and no core change. Counting is exact for every meeting from that release, including meetings already open then.
+The gateway owns the person's record of arriving contributions and what that person has seen per meeting. Contributions sent before the counting release count as seen.
 
-The database migration's start time is the shared counting boundary for every gateway instance and restart. On receipt, the gateway notes each contribution by fleet, person ship, meeting and message id before exposing it. Repeated receives do not count it again. The record keeps ids and seen state, never contribution payloads.
+The database migration's start time is the shared counting boundary for every gateway instance and restart. On receipt, the gateway notes each contribution by fleet, person ship, meeting and message id before acknowledging its delivery and exposing it. Repeated receives do not count it again. The record keeps ids and seen state, never contribution payloads.
 
 `people.unseenContributions({ meetingIds })` returns `[{ meetingId, count }]`, including zero, for up to 20 meetings. It reads the person's indexed gateway record, without receiving or scanning deliveries or reading meeting history. A person with no person ship is refused. Every device reads the same durable state.
 
@@ -29,7 +29,7 @@ A web push for a meeting carries one destination and one event:
 }
 ```
 
-The ids above are abbreviated for illustration. The wire carries the full fleet and meeting ids. `bridgeUrl` is the gateway's existing fleet link; the app builds its meeting address from `fleetId` and `meetingId`.
+The ids above are abbreviated for illustration. The wire carries the full fleet and meeting ids. `bridgeUrl` is the gateway's fleet link; the app builds its meeting address from `fleetId` and `meetingId`.
 
 | `event` | Notification text | Pressed, opens |
 | --- | --- | --- |
@@ -37,8 +37,8 @@ The ids above are abbreviated for illustration. The wire carries the full fleet 
 | `added` | You were added to a meeting | That meeting |
 | `ended` | A meeting you take part in ended | That meeting, read only |
 
-The app displays the fleet name and the event's sentence. No contribution text, title or payload travels in the push. There is no waiting count or badge count on a meeting push. A batch containing several meeting events sends each event separately, with its own destination. Ordinary deliveries in the same batch keep their own existing person-ship wake and waiting count.
+The app displays the fleet name and the event's sentence. No contribution text, title or payload travels in the push. There is no waiting count or badge count on a meeting push. A batch containing several meeting events sends each event separately, with its own destination. Ordinary deliveries in the same batch keep their own person-ship wake and waiting count.
 
-Meeting pushes use the existing alerts and notices setting (`stay-aware:web-push`), including when the person turned it on. The messages setting does not enable them. Quiet hours and quiet ships apply, and a focused person page shows the delivery without sending a push. Existing wake windows and Slack hand-over rules apply. A contribution never sends a web push, even with messages enabled.
+Meeting pushes use the alerts and notices setting (`stay-aware:web-push`), including when the person turned it on. The messages setting does not enable them. Quiet hours and quiet ships apply, and a focused person page shows the delivery without sending a push. Wake windows and Slack hand-over rules apply. A contribution never sends a web push, even with messages enabled.
 
 The client reads the meeting with `people.meeting({ meetingId, cursor? })`. This returns a page of contributions and the person's mic standing. `people.contribute` sends the person's contribution, and `people.mic` requests, withdraws or releases their mic as core allows.
