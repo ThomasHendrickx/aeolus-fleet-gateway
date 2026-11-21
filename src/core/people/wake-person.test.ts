@@ -717,3 +717,54 @@ describe('waking a person with their preferences (preferences design)', () => {
     expect(email.woken).toEqual([SHIP]);
   });
 });
+
+
+describe('meeting push preferences', () => {
+  const meetingId = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' as const;
+  const defaults = routingDefaultsOf([{ job: 'stay-aware', place: 'web-push' }]);
+  const notice = () => aDelivery(1, { meetingId, contentType: 'application/vnd.aeolus.meeting.mic+json' });
+
+  it('hands the mic notice through web push with alerts on and messages off', async () => {
+    const ship = aShip([notice()]);
+    const push = aChannel('web-push');
+    await waking({ ship, channels: [push.channel], defaults })(SHIP, CREW_TOKEN);
+    expect(ship.handOvers).toEqual([{ deliveryId: notice().deliveryId, handOverNumber: 1, channel: 'web-push' }]);
+  });
+
+  it('keeps meeting notices quiet when alerts are off even with messages on', async () => {
+    const ship = aShip([notice()]);
+    const push = aChannel('web-push');
+    await waking({ ship, channels: [push.channel], defaults: routingDefaultsOf([{ job: 'everything-else', place: 'web-push' }]) })(SHIP, CREW_TOKEN);
+    expect(push.woken).toEqual([]);
+  });
+
+  it('never wakes for a contribution with messages on', async () => {
+    const ship = aShip([aDelivery(1, { meetingId, contentType: 'text/plain' })]);
+    const push = aChannel('web-push');
+    await waking({ ship, channels: [push.channel] })(SHIP, CREW_TOKEN);
+    expect(push.woken).toEqual([]);
+  });
+
+  it('keeps the mic quiet for a quiet ship', async () => {
+    const ship = aShip([notice()]);
+    const push = aChannel('web-push');
+    await waking({ ship, channels: [push.channel], defaults, quietShips: [aQuietShip()] })(SHIP, CREW_TOKEN);
+    expect(push.woken).toEqual([]);
+  });
+
+  it('holds a meeting push until quiet hours end', async () => {
+    const ship = aShip([notice()]);
+    const push = aChannel('web-push');
+    const outcome = await waking({ ship, channels: [push.channel], defaults, quietHours: [someQuietHours()] })(SHIP, CREW_TOKEN);
+    expect({ outcome, woken: push.woken, handed: ship.handOvers }).toEqual({ outcome: ok({ kind: 'inWindow', until: new Date('2026-10-23T13:00:00.000Z') }), woken: [], handed: [] });
+  });
+
+  it('shows the mic notice on a focused page and sends no push', async () => {
+    const ship = aShip([notice()]);
+    const push = aChannel('web-push');
+    const focused = memoryFocusedPages();
+    await focused.save({ ...SHIP, pageId: 'meeting', seenAt: NOW });
+    await waking({ ship, channels: [push.channel], defaults, focused })(SHIP, CREW_TOKEN);
+    expect({ woken: push.woken, handed: ship.handOvers }).toEqual({ woken: [], handed: [{ deliveryId: notice().deliveryId, handOverNumber: 1, channel: 'page' }] });
+  });
+});

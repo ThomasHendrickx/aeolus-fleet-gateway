@@ -401,9 +401,11 @@ export interface WebPushSubscriptions {
  * person's own wake says the count of what waits on their person ship and,
  * for one delivery, its sender and job and the ids a client builds the
  * item's address from; for several, how many of each job. Never an item's
- * title, text, options or any payload text.
+ * title, text, options or any payload text. A meeting event names its
+ * meeting and event only, outside the waiting count and badge.
  */
 export type Wake =
+  | { readonly fleetName: string; readonly bridgeUrl: string; readonly waitsAt: 'meeting'; readonly fleetId: FleetId; readonly meetingId: MeetingId; readonly event: 'added' | 'mic' | 'ended' }
   | { readonly fleetName: string; readonly bridgeUrl: string; readonly waitsAt: 'argo' }
   | (PersonShipWake & { readonly senderName: string; readonly job: WakeJob; readonly deliveryId: DeliveryId; readonly senderShipId: ShipId; readonly fleetId: FleetId })
   | (PersonShipWake & { readonly jobs: Readonly<Record<WakeJob, number>> });

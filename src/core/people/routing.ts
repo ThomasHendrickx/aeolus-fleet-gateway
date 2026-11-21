@@ -6,9 +6,9 @@
  * turned on, it shows every item of the job. A push place, Slack or a wake,
  * shows only what arrives after it was turned on for the job (CC20).
  */
-import type { FleetId, ShipId } from '@aeolus-fleet/common';
+import type { FleetId, MeetingId, ShipId } from '@aeolus-fleet/common';
 
-import { jobOf, type ItemJob } from './item-job.js';
+import { isMeetingNotice, jobOf, type ItemJob } from './item-job.js';
 import type { PersonShip } from './ports.js';
 
 /** The places a person routes a job to besides Bridge (CC5). */
@@ -42,6 +42,7 @@ export interface Routes {
 /** An item as routing reads it: its content type names its job, and who sent it. */
 export interface RoutedItem {
   readonly contentType: string;
+  readonly meetingId?: MeetingId | null;
   readonly sentAt: Date;
   readonly senderShipId: ShipId;
 }
@@ -76,8 +77,12 @@ export function routingOf(routes: readonly Route[], defaults: RoutingDefaults): 
   const isOn = (job: ItemJob, place: RoutingPlace): boolean => own.get(keyOf(job, place))?.isOn ?? defaults.onByDefault.has(keyOf(job, place));
   return {
     isOn,
-    isShowing: (place, { contentType, sentAt }) => {
-      const job = jobOf(contentType);
+    isShowing: (place, { contentType, sentAt, meetingId }) => {
+      const isMeetingPush = place === 'web-push' && meetingId != null;
+      if (isMeetingPush && !isMeetingNotice(contentType)) {
+        return false;
+      }
+      const job = isMeetingPush ? 'stay-aware' : jobOf(contentType);
       if (!isOn(job, place)) {
         return false;
       }

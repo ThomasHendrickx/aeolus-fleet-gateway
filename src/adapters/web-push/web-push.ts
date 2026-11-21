@@ -33,6 +33,10 @@ function bodyOf(wake: Wake): string {
   if (wake.waitsAt === 'argo') {
     return JSON.stringify({ fleetName, bridgeUrl, waitsAt: wake.waitsAt });
   }
+  if (wake.waitsAt === 'meeting') {
+    const { fleetId, meetingId, event } = wake;
+    return JSON.stringify({ fleetName, bridgeUrl, waitsAt: 'meeting', fleetId, meetingId, event });
+  }
   const { waitsAt, count } = wake;
   if ('jobs' in wake) {
     const { question, step, alert, notice, message } = wake.jobs;
