@@ -114,6 +114,16 @@ function anOpened(overrides: Partial<OpenedDelivery> = {}): OpenedDelivery {
 }
 
 describe('Bridge home: what waits on the person, with one count (CC18)', () => {
+  it('lists no meeting contribution as a plain message, waiting or previously opened', async () => {
+    const contribution = aPersonDelivery({ ...TEXT, meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
+    const waiting = await readHome([contribution]).readHome(CHARLOTTE_GRANT);
+    await opened.save(anOpened({ deliveryId: contribution.deliveryId, messageId: contribution.messageId, contentType: 'text/plain' }));
+    const seen = await readHome([], { acknowledged: [contribution] }).readHome(CHARLOTTE_GRANT);
+    for (const home of [waiting, seen]) {
+      expect(home.isOk && home.value.messages).toEqual([]);
+    }
+  });
+
   it.each([
     ['question context', { delivery: QUESTION, payload: { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Choose', context: '  The asker\'s words.\n' + 'More detail. '.repeat(100), options: [{ key: 1, label: 'Yes' }], pick: { option: 1, why: 'Ready' } }, reason: '  The asker\'s words.\n' + 'More detail. '.repeat(100) }],
     ['step why', { delivery: STEP, payload: { id: '6f1c2a40-5d1b-4b8e-9a51-0c8e3f2a7d10', title: 'Create', why: 'The build needs it.' }, reason: 'The build needs it.' }],
