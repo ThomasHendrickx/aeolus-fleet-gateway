@@ -298,6 +298,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
           }),
       }),
       controlMeetings: { list: () => Promise.resolve(ok({ items: [], nextCursor: null })), change: () => Promise.resolve(ok({})) },
+      readUnseenMeetings: () => Promise.resolve(ok([{ meetingId: HEADS_MEETING_ID, count: 2 }])),
       readUnseenContributions: ({ meetingIds }) => Promise.resolve(ok(meetingIds.map((meetingId) => ({ meetingId, count: 2 })))),
       readMeeting: ({ meetingId }) =>
         Promise.resolve(
@@ -1426,6 +1427,16 @@ describe('a person routes each job to the places that show it, through the API (
 });
 
 describe("a person takes part in a meeting through the gateway's API, signed in to its pages (decision 0061, M19)", () => {
+  it('reads meetings with something new without requiring meeting ids', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+    await expect(gatewayRouter.createCaller(context).people.unseenMeetings()).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 2 }]);
+  });
+
+  it('refuses meetings with something new to a caller who is not a person', async () => {
+    const { context } = aContext(ARGO_COOKIE);
+    await expect(gatewayRouter.createCaller(context).people.unseenMeetings()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
   it('reads unseen contribution counts for the meetings requested by the signed-in person', async () => {
     const { context } = aContext(PERSON_COOKIE);
     await expect(gatewayRouter.createCaller(context).people.unseenContributions({ meetingIds: [HEADS_MEETING_ID] })).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 2 }]);
