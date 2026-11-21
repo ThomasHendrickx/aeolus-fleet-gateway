@@ -29,7 +29,7 @@ describe('a person reads a meeting they take part in', () => {
   it('marks the contributions shown on the page seen in the person record', async () => {
     const { readMeeting, contributions } = reading();
     const ship = { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID };
-    await contributions.note(ship, aMeetingRead().contributions.items.map((item) => ({ ...item, meetingId: HEADS_MEETING_ID })), false);
+    await contributions.note(ship, { contributions: aMeetingRead().contributions.items.map((item) => ({ ...item, meetingId: HEADS_MEETING_ID })), isSeen: false });
     await readMeeting({ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID });
     await expect(contributions.unseen(ship, [HEADS_MEETING_ID])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 0 }]);
   });

@@ -19,7 +19,7 @@ afterAll(async () => { await prisma.$disconnect(); });
 describe('the person record of meeting contributions', () => {
   it('counts each arriving contribution once across concurrent receives and a restart', async () => {
     const record = createPrismaMeetingContributions(prisma);
-    await Promise.all(Array.from({ length: 4 }, () => record.note(ship, [contribution], false)));
+    await Promise.all(Array.from({ length: 4 }, () => record.note(ship, { contributions: [contribution], isSeen: false })));
     const restarted = createPrismaMeetingContributions(prisma);
     await expect(restarted.unseen(ship, [HEADS_MEETING_ID])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 1 }]);
   });
@@ -27,17 +27,17 @@ describe('the person record of meeting contributions', () => {
   it('marks only the displayed contributions seen, shared by every device', async () => {
     const record = createPrismaMeetingContributions(prisma);
     const next = { ...contribution, messageId: 'msg_01m5qa5j85mgd4z61d9c2k0002' } as const;
-    await record.note(ship, [contribution, next], false);
-    await record.note(ship, [contribution], true);
-    await record.note(ship, [contribution], false);
+    await record.note(ship, { contributions: [contribution, next], isSeen: false });
+    await record.note(ship, { contributions: [contribution], isSeen: true });
+    await record.note(ship, { contributions: [contribution], isSeen: false });
     await expect(createPrismaMeetingContributions(prisma).unseen(ship, [HEADS_MEETING_ID])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 1 }]);
   });
 
   it('keeps a contribution seen when its arrival races with its displayed page', async () => {
     const record = createPrismaMeetingContributions(prisma);
     const shown = { ...contribution, messageId: 'msg_01m5qa5j85mgd4z61d9c2k0003' } as const;
-    await Promise.all([record.note(ship, [shown], true), record.note(ship, [shown], false)]);
-    await record.note(ship, [shown], false);
+    await Promise.all([record.note(ship, { contributions: [shown], isSeen: true }), record.note(ship, { contributions: [shown], isSeen: false })]);
+    await record.note(ship, { contributions: [shown], isSeen: false });
     await expect(record.unseen(ship, [HEADS_MEETING_ID])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 0 }]);
   });
 
@@ -48,9 +48,9 @@ describe('the person record of meeting contributions', () => {
     expect(startedAt).toBeInstanceOf(Date);
     if (startedAt === undefined) { return; }
     const other = { ...ship, shipId: 'shp_01m3tb1zgr5h2ffee12xnch8pq' } as const;
-    await record.note(other, [{ ...contribution, sentAt: new Date(startedAt.getTime() - 1) }], false);
+    await record.note(other, { contributions: [{ ...contribution, sentAt: new Date(startedAt.getTime() - 1) }], isSeen: false });
     await expect(record.unseen(other, [HEADS_MEETING_ID])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 0 }]);
-    await record.note(other, [{ ...contribution, sentAt: startedAt }], false);
+    await record.note(other, { contributions: [{ ...contribution, sentAt: startedAt }], isSeen: false });
     await expect(record.unseen(other, [HEADS_MEETING_ID])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 1 }]);
   });
 
@@ -58,8 +58,8 @@ describe('the person record of meeting contributions', () => {
     const record = createPrismaMeetingContributions(prisma);
     const other = { ...ship, fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8zz' } as const;
     const otherMeeting = 'mtg_01m5qa5j85mgd4z61d9c2k0002';
-    await record.note(ship, [contribution], false);
-    await record.note(other, [contribution, { ...contribution, meetingId: otherMeeting }], false);
+    await record.note(ship, { contributions: [contribution], isSeen: false });
+    await record.note(other, { contributions: [contribution, { ...contribution, meetingId: otherMeeting }], isSeen: false });
     await expect(record.unseen(other, [HEADS_MEETING_ID, otherMeeting])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 1 }, { meetingId: otherMeeting, count: 1 }]);
     await createPrismaFleetForgetter(prisma).forget(other.fleetId);
     await expect(record.unseen(other, [HEADS_MEETING_ID])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 0 }]);

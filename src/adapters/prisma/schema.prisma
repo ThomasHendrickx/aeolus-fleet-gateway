@@ -795,3 +795,16 @@ model UnreadableReply {
   @@id([fleetId, shipId, messageId])
   @@map("unreadable_replies")
 }
+
+/// Contributions arriving from the counting rollout on, with page sightings shared by the person's devices.
+model MeetingContribution {
+  fleetId   String  @map("fleet_id")
+  shipId    String  @map("ship_id")
+  meetingId String  @map("meeting_id")
+  messageId String  @map("message_id")
+  isSeen    Boolean @map("is_seen")
+
+  @@id([fleetId, shipId, meetingId, messageId])
+  @@index([fleetId, shipId, isSeen, meetingId])
+  @@map("meeting_contributions")
+}
