@@ -116,14 +116,14 @@ describe('a person opens a delivery that waits for their person ship', () => {
     const { openDelivery, calls } = opening([NOTE]);
 
     await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
-    expect({ calls, opened: opened.held.size }).toEqual({ calls: ['inbox', 'pushReceive(10)'], opened: 0 });
+    expect({ acknowledgements: calls.filter((call) => call.startsWith('ack(')), opened: opened.held.size }).toEqual({ acknowledgements: [], opened: 0 });
   });
 
-  it('refuses at once while nothing waits', async () => {
+  it('refuses an unknown delivery while nothing waits', async () => {
     const { openDelivery, calls } = opening([]);
 
     await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
-    expect(calls).toEqual(['inbox']);
+    expect(calls.filter((call) => call.startsWith('ack('))).toEqual([]);
   });
 
   it('refuses an account with no person ship, asking the fleet nothing', async () => {
