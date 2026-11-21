@@ -192,14 +192,15 @@ export function createReadBridgeHome(deps: {
     const waitingItems = listed.filter((item) => !left.includes(item)).sort(newestFirst);
     const recorded = new Map(page.value.items.map((delivery) => [delivery.deliveryId, delivery]));
     /** The text of a message the person opened: from the record's newest page, else read again; none while the fleet cannot give it. */
-    const openedTextOf = async (deliveryId: OpenedDelivery['deliveryId']): Promise<string> => {
+    const openedMessageOf = async (deliveryId: OpenedDelivery['deliveryId']) => {
       const inRecord = recorded.get(deliveryId);
       if (inRecord !== undefined) {
-        return inRecord.payload;
+        return inRecord;
       }
       const reread = await asPersonCrew(deps, { caller, run: (crew) => withOwnRefusal(deps.door.delivery(crew.crewToken, deliveryId)) });
-      return reread.isOk && reread.value.value.isOk ? reread.value.value.value.payload : '';
+      return reread.isOk && reread.value.value.isOk ? reread.value.value.value : undefined;
     };
+    const openedTextOf = async (deliveryId: OpenedDelivery['deliveryId']): Promise<string> => (await openedMessageOf(deliveryId))?.payload ?? '';
     const openedTypes = new Map(opened.map(({ deliveryId, contentType }) => [deliveryId, contentType ?? '']));
     const items = await Promise.all(waitingItems.map(async (item) => {
       if (isTaken.has(item.deliveryId) || !isCounted(jobOf(openedTypes.get(item.deliveryId) ?? ''))) {
@@ -213,9 +214,12 @@ export function createReadBridgeHome(deps: {
         const item = taken.find(({ deliveryId }) => deliveryId === delivery.deliveryId);
         return item === undefined ? [] : [{ ...item, excerpt: excerptOf(delivery.payload) }];
       });
-    const seenMessages: HomeMessage[] = await Promise.all(
-      seen.filter(({ deliveryId }) => isPlainMessage(openedTypes.get(deliveryId) ?? '')).map(async (item) => ({ ...item, excerpt: excerptOf(await openedTextOf(item.deliveryId)) })),
-    );
+    const seenMessages: HomeMessage[] = (await Promise.all(
+      seen.filter(({ deliveryId }) => isPlainMessage(openedTypes.get(deliveryId) ?? '')).map(async (item) => {
+        const message = await openedMessageOf(item.deliveryId);
+        return message?.meetingId != null ? [] : [{ ...item, excerpt: excerptOf(message?.payload ?? '') }];
+      }),
+    )).flat();
     return ok({
       waiting: { count: items.filter(({ stale }) => stale === null).length, items },
       stayAware: [...taken.filter(({ job }) => job === 'stay-aware'), ...seenFeed].sort(newestFirst),

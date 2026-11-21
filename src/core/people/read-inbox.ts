@@ -4,6 +4,7 @@ import type { ConnectionStore, FleetRefusal } from '../connection/ports.js';
 import { ok, type Result } from '../shared/result.js';
 import type { CrewPersonShip } from './crew-person-ship.js';
 import type { HeldDeliveries } from './held-deliveries.js';
+import { isMeetingContribution } from '../meetings/is-meeting-contribution.js';
 import { isMeetingNotice } from './item-job.js';
 import { chatInboxEntryOf, chatOpenedEntryOf, type ChatInboxEntry } from './inbox-entry.js';
 import { asPersonCrew, type PersonCaller, type PersonCrewError, type PersonCrewToken } from './person-crew.js';
@@ -35,7 +36,10 @@ export async function waitingFor(
   caller: PersonCaller,
 ): Promise<Result<{ crew: PersonCrewToken; waiting: number; deliveries: PersonDelivery[] }, PersonCrewError>> {
   const read = await asPersonCrew(deps, { caller, run: (crew) => sharedWaiting(deps, crew.crewToken) });
-  return read.isOk ? ok({ crew: read.value.crew, ...read.value.value }) : read;
+  if (!read.isOk) { return read; }
+  const { waiting, deliveries } = read.value.value;
+  const ordinary = deliveries.filter((delivery) => !isMeetingContribution(delivery));
+  return ok({ crew: read.value.crew, waiting: waiting - (deliveries.length - ordinary.length), deliveries: ordinary });
 }
 
 /** What the crew holds while it is no more than wait, so a receive reaches past it; else nothing, to receive every one again. */
@@ -52,7 +56,7 @@ function stillHeld(held: HeldDeliveries, look: { crewToken: string; waiting: num
  */
 export async function waitingOn(deps: { door: Pick<PersonShipDoor, 'inbox' | 'pushReceive'>; held: HeldDeliveries }, crewToken: string): Promise<Result<PersonDelivery[], FleetRefusal>> {
   const read = await sharedWaiting(deps, crewToken);
-  return read.isOk ? ok(read.value.deliveries) : read;
+  return read.isOk ? ok(read.value.deliveries.filter((delivery) => !isMeetingContribution(delivery))) : read;
 }
 
 interface Waiting { readonly waiting: number; readonly deliveries: PersonDelivery[] }

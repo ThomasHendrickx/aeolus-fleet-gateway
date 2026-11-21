@@ -1,3 +1,4 @@
+import type { ReadUnseenContributions } from '../../core/meetings/read-unseen-contributions.js';
 /**
  * The gateway's API: one tRPC router, which the console's server and the
  * gateway's page call with the console's session cookie, as the other
@@ -236,6 +237,7 @@ export interface Context {
     readSendTo: ReadSendTo;
     sendMessage: SendMessage;
     readMeeting: ReadMeeting;
+    readUnseenContributions: ReadUnseenContributions;
     changeOwnMic: ChangeOwnMic;
   };
   /** The fleet's Slack workspace and the gateway's bot (gateway scopes, part B). */
@@ -689,6 +691,9 @@ const timeOfDaySchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'A time of
 const MINUTES_PER_HOUR = 60;
 /** The most ships a person's client asks about at once, as many as a page of conversations shows and more. */
 const QUIET_AMONG_MAX = 100;
+
+/** A page of meeting counts, sized for one client list. */
+const MEETING_COUNTS_MAX = 20;
 
 const minuteOfDayOf = (time: string): number => Number(time.slice(0, 2)) * MINUTES_PER_HOUR + Number(time.slice(3, 5));
 const timeOfDayOf = (minute: number): string => `${String(Math.floor(minute / MINUTES_PER_HOUR)).padStart(2, '0')}:${String(minute % MINUTES_PER_HOUR).padStart(2, '0')}`;
@@ -1488,6 +1493,10 @@ export const gatewayRouter = t.router({
         await held;
       }
     }),
+    /** Counts only for a page of the person's meetings, from the gateway's indexed person record. */
+    unseenContributions: personProcedure
+      .input(z.strictObject({ meetingIds: z.array(idSchema('meeting')).max(MEETING_COUNTS_MAX) }))
+      .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readUnseenContributions({ caller: ctx.caller, meetingIds: input.meetingIds }))),
     /** A meeting they take part in, with a page of its contributions, newest first, and where they stand on its mic (decision 0061). */
     meeting: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting'), cursor: idSchema('message').optional() }))
