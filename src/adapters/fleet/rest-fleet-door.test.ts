@@ -90,6 +90,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'tracker',
       senderType: 'tracker',
       senderStatus: 'crewed',
@@ -129,6 +130,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'orchestrator-1',
       senderType: 'orchestrator',
       senderStatus: 'crewed',
@@ -174,6 +176,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'builder-plugin',
       senderType: 'builder',
       senderStatus: 'crewed',
@@ -220,6 +223,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'builder-plugin',
       senderType: 'builder',
       senderStatus: 'crewed',
@@ -257,6 +261,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'orchestrator-1',
       senderType: 'orchestrator',
       senderStatus: 'crewed',
@@ -305,6 +310,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'watch',
       senderType: 'watch',
       senderStatus: 'crewed',
@@ -361,6 +367,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0002',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'tracker',
       senderType: 'tracker',
       senderStatus: 'crewed',
@@ -402,7 +409,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
 
   describe('the exchange calls (aeolus-fleet exchange-read, core main)', () => {
     const OTHER = 'shp_01m3tbfspe96yf1rnr4ank9trk';
-    const entry = { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', senderShipId: PERSON_SHIP, payload: 'On it', isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0001', sentAt: '2026-11-06T10:00:00.000Z', deliveryState: 'acknowledged', receivedDelivery: null };
+    const entry = { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', senderShipId: PERSON_SHIP, senderLeaseId: null, payload: 'On it', isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0001', sentAt: '2026-11-06T10:00:00.000Z', deliveryState: 'acknowledged', receivedDelivery: null };
 
     it.each([
       [{ kind: 'newest' as const }, { otherShipId: OTHER, limit: 20 }],
@@ -454,7 +461,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     });
 
     it('lists the exchanges after a cursor, each with its other ship and newest message', async () => {
-      const exchange = { otherShipId: OTHER, otherShipName: 'tracker', otherShipType: 'tracker', otherShipKind: 'agent', unacknowledged: 2, unseenPlainMessages: 0, newestMessage: { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', senderShipId: OTHER, payload: 'Build is red', isPayloadUnreadable: false, contentType: 'text/plain', sentAt: '2026-11-06T10:00:00.000Z' } };
+      const exchange = { otherShipId: OTHER, otherShipName: 'tracker', otherShipType: 'tracker', otherShipKind: 'agent', unacknowledged: 2, unseenPlainMessages: 0, newestMessage: { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', senderShipId: OTHER, senderLeaseId: null, payload: 'Build is red', isPayloadUnreadable: false, contentType: 'text/plain', sentAt: '2026-11-06T10:00:00.000Z' } };
       answer = { status: 200, body: { items: [exchange], nextCursor: 'msg_01m3tbfspe96yf1rnr4ank0003' } };
 
       const page = await createRestFleetDoor(base).person.exchanges('aeolus_ct_v1_charlotte', { cursor: 'msg_01m3tbfspe96yf1rnr4ank0009', limit: 20 });
@@ -524,6 +531,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
         messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
         senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+        senderLeaseId: null,
         senderName: 'tracker',
         senderType: 'tracker',
         senderStatus: 'crewed',
@@ -602,7 +610,7 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
         ],
         mic: { holder: CHARLOTTE, pattern: 'fifo', requests: [{ ship: CHIEF, requestedAt: '2026-10-24T09:02:00.000Z' }] },
         contributions: {
-          items: [{ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0002', sender: CHIEF, payload: 'Marketing first', isPayloadUnreadable: false, contentType: 'text/plain', model: 'claude-opus-5-5', sentAt: '2026-10-24T09:01:00.000Z' }],
+          items: [{ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0002', sender: CHIEF, senderLeaseId: null, payload: 'Marketing first', isPayloadUnreadable: false, contentType: 'text/plain', model: 'claude-opus-5-5', sentAt: '2026-10-24T09:01:00.000Z' }],
           nextCursor: 'msg_01m5qa5j85mgd4z61d9c2k0002',
         },
       },
