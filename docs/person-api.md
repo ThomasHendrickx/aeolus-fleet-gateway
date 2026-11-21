@@ -2,6 +2,8 @@
 
 Person clients call the gateway's tRPC API at `/trpc`, signed in as the person's account. The gateway crews that account's person ship; its crew token stays on the server. The exported `@aeolus-fleet/gateway/api` router type describes the procedures.
 
+`people.meetings` and `people.meeting` include `personShipId` once in each answer. Compare it with a meeting's owner, moderator and mic holder ship ids to identify the person's roles.
+
 ## Person record
 
 The gateway owns the person's record of arriving contributions and what that person has seen per meeting. Contributions sent before the counting release count as seen.
