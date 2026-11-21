@@ -70,61 +70,89 @@ async function chiefReceives() {
   return taken.deliveries.map(({ senderName, payload, meetingId: of }) => ({ senderName, payload, meetingId: of }));
 }
 
+/** A complete meeting burst and the person waiter that records it. */
+async function aContributionBurst(isFocused: boolean) {
+  const prisma = createPrismaClient(await migratedDatabase(inject('postgresUrl')));
+  const stop = new AbortController();
+  const hints = memoryShipWakeups();
+  const who = await person.whoami(charlotte);
+  if (!who.isOk) { throw new Error('Person ship did not answer'); }
+  const ship = { fleetId: who.value.fleetId, shipId: who.value.shipId };
+  const record = createPrismaMeetingContributions(prisma);
+  const crews = memoryPersonCrews();
+  await crews.save({ ...ship, crewToken: charlotte, crewedAt: new Date() });
+  const changes = { tell: () => Promise.resolve() };
+  const door = createRefreshingPersonDoor(createRecordingMeetingDoor(person, { contributions: record, changes }), () => { hints.wake(); });
+  let looks = 0;
+  let receives = 0;
+  const focused = memoryFocusedPages();
+  if (isFocused) { await focused.save({ ...ship, pageId: 'meeting-page', seenAt: new Date() }); }
+  const wakePerson = createWakePerson({
+    door, connections: memoryConnectionStore(), channels: [], routes: memoryRoutes(), defaults: routingDefaultsOf([]),
+    quietHours: memoryQuietHours(), quietShips: memoryQuietShips(), focused, focusFreshMs: 60_000,
+    wakesSent: { lastSentAt: () => Promise.resolve(undefined), record: () => Promise.resolve() },
+    clock: { now: () => new Date() }, attemptEnded: () => undefined,
+  });
+  const wait = createWaitOnPersonShip({
+    crews, wakeups: hints.open, changes,
+    door: { inbox: async (token, options) => { const answer = await door.inbox(token, options); looks += 1; return answer; } },
+    wakePerson: async (_ship, token) => {
+      receives += 1;
+      return wakePerson(ship, token);
+    },
+    isServed: () => Promise.resolve(true), clock: { now: () => new Date() },
+    sleep: () => new Promise(() => undefined), againWaitsMs: [100], wakeAgainWaitsMs: [100],
+  });
+  for (let number = 0; number < 120; number += 1) {
+    await chiefCalls('send', { selector: { kind: 'meeting', meetingId }, payload: `Contribution ${String(number)}`, idempotencyKey: `burst-${String(number)}`, model: 'gpt-6.1-sol' });
+  }
+  const done = wait(ship, stop.signal);
+  await expect.poll(() => hints.leases.length).toBe(1);
+  hints.wake();
+  return {
+    ship, record, prisma, hints,
+    receives: () => receives,
+    looks: () => looks,
+    recorded: () => expect.poll(async () => (await record.unseen(ship, [meetingId]))[0]?.count).toBe(120),
+    close: async () => { stop.abort(); await done; await prisma.$disconnect(); },
+  };
+}
+
+async function withContributionBurst(isFocused: boolean, check: (burst: Awaited<ReturnType<typeof aContributionBurst>>) => Promise<void>) {
+  const burst = await aContributionBurst(isFocused);
+  try { await check(burst); } finally { await burst.close(); }
+}
+
 describe('a person ship takes part in a meeting', () => {
   it.each([false, true])('counts the complete burst without another event with page focused: %s', async (isFocused) => {
-    const prisma = createPrismaClient(await migratedDatabase(inject('postgresUrl')));
-    const stop = new AbortController();
-    const hints = memoryShipWakeups();
-    const who = await person.whoami(charlotte);
-    if (!who.isOk) { throw new Error('Person ship did not answer'); }
-    const ship = { fleetId: who.value.fleetId, shipId: who.value.shipId };
-    const record = createPrismaMeetingContributions(prisma);
-    const crews = memoryPersonCrews();
-    await crews.save({ ...ship, crewToken: charlotte, crewedAt: new Date() });
-    const changes = { tell: () => Promise.resolve() };
-    const door = createRefreshingPersonDoor(createRecordingMeetingDoor(person, { contributions: record, changes }), () => { hints.wake(); });
-    let looks = 0;
-    let receives = 0;
-    const focused = memoryFocusedPages();
-    if (isFocused) { await focused.save({ ...ship, pageId: 'meeting-page', seenAt: new Date() }); }
-    const wakePerson = createWakePerson({
-      door, connections: memoryConnectionStore(), channels: [], routes: memoryRoutes(), defaults: routingDefaultsOf([]),
-      quietHours: memoryQuietHours(), quietShips: memoryQuietShips(), focused, focusFreshMs: 60_000,
-      wakesSent: { lastSentAt: () => Promise.resolve(undefined), record: () => Promise.resolve() },
-      clock: { now: () => new Date() }, attemptEnded: () => undefined,
+    await withContributionBurst(isFocused, async (burst) => {
+      await burst.recorded();
     });
-    const wait = createWaitOnPersonShip({
-      crews, wakeups: hints.open, changes,
-      door: { inbox: async (token, options) => { const answer = await door.inbox(token, options); looks += 1; return answer; } },
-      wakePerson: async (_ship, token) => {
-        receives += 1;
-        return wakePerson(ship, token);
-      },
-      isServed: () => Promise.resolve(true), clock: { now: () => new Date() },
-      sleep: () => new Promise(() => undefined), againWaitsMs: [100], wakeAgainWaitsMs: [100],
+  }, 60_000);
+
+  it.each([false, true])('shares the complete burst count with a second device with page focused: %s', async (isFocused) => {
+    await withContributionBurst(isFocused, async (burst) => {
+      await burst.recorded();
+      await expect(createPrismaMeetingContributions(burst.prisma).unseen(burst.ship, [meetingId])).resolves.toEqual([{ meetingId, count: 120 }]);
     });
-    let done: Promise<unknown> | undefined;
-    try {
-      for (let number = 0; number < 120; number += 1) {
-        await chiefCalls('send', { selector: { kind: 'meeting', meetingId }, payload: `Contribution ${String(number)}`, idempotencyKey: `burst-${String(number)}`, model: 'gpt-6.1-sol' });
-      }
-      done = wait(ship, stop.signal);
-      await expect.poll(() => hints.leases.length).toBe(1);
-      hints.wake();
-      await expect.poll(async () => (await record.unseen(ship, [meetingId]))[0]?.count).toBe(120);
-      // A second device reads the same durable count without receiving or showing history.
-      await expect(createPrismaMeetingContributions(prisma).unseen(ship, [meetingId])).resolves.toEqual([{ meetingId, count: 120 }]);
+  }, 60_000);
+
+  it.each([false, true])('leaves only the meeting notice waiting in core with page focused: %s', async (isFocused) => {
+    await withContributionBurst(isFocused, async (burst) => {
+      await burst.recorded();
       expect(await person.inbox(charlotte)).toMatchObject({ isOk: true, value: { waiting: 1 } });
-      const received = receives;
-      const looked = looks;
-      hints.wake();
-      await expect.poll(() => looks).toBeGreaterThan(looked);
-      expect(receives).toBe(received);
-    } finally {
-      stop.abort();
-      await done;
-      await prisma.$disconnect();
-    }
+    });
+  }, 60_000);
+
+  it.each([false, true])('stops receiving after the burst is recorded with page focused: %s', async (isFocused) => {
+    await withContributionBurst(isFocused, async (burst) => {
+      await burst.recorded();
+      const received = burst.receives();
+      const looked = burst.looks();
+      burst.hints.wake();
+      await expect.poll(burst.looks).toBeGreaterThan(looked);
+      expect(burst.receives()).toBe(received);
+    });
   }, 60_000);
 
   it('keeps contributions outside the ship conversation and its plain message counts', async () => {
