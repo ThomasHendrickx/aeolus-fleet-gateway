@@ -1,5 +1,6 @@
-import type { MeetingId } from '@aeolus-fleet/common';
+import { idSchema, type MeetingId } from '@aeolus-fleet/common';
 
+import { isMeetingContribution } from '../meetings/is-meeting-contribution.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
 import { inboxEntryOf, titleOf, type InboxEntry } from './inbox-entry.js';
@@ -186,7 +187,7 @@ async function openedAgain(deps: DealDeps, asked: { caller: PersonCaller; crew: 
   const { caller, crew, deliveryId, place, waiting } = asked;
   const opened = await deps.opened.find(caller.fleetId, { shipId: crew.shipId, deliveryId });
   if (!opened) {
-    return refuse('NO_SUCH_DELIVERY', `No delivery ${deliveryId} waits for you or is opened: read your inbox again`);
+    return openContribution(deps, { caller, crew, deliveryId });
   }
   const reread = await asPersonCrew(deps, { caller, run: (held) => withOwnRefusal(deps.door.delivery(held.crewToken, opened.deliveryId)) });
   if (!reread.isOk) {
@@ -202,6 +203,31 @@ async function openedAgain(deps: DealDeps, asked: { caller: PersonCaller; crew: 
   await seenIfAllItAsks(deps, { caller, opened, place });
   const stale = await doneIfStale(deps, { caller, crew, looked: opened, waiting, place });
   return ok({ ...viewOf(delivery.value), stale });
+}
+
+/** Contributions stay outside plain opened messages, but their delivery still leads to the meeting. */
+async function openContribution(deps: DealDeps, asked: { caller: PersonCaller; crew: PersonCrewToken; deliveryId: string }): Promise<Result<OpenedView, OpenError>> {
+  const { caller, crew } = asked;
+  const parsed = idSchema('delivery').safeParse(asked.deliveryId);
+  if (!parsed.success) {
+    return refuse('NO_SUCH_DELIVERY', `No delivery ${asked.deliveryId} waits for you or is opened: read your inbox again`);
+  }
+  const deliveryId = parsed.data;
+  const held = deps.held.of(crew.crewToken)?.find((delivery) => delivery.deliveryId === deliveryId && isMeetingContribution(delivery));
+  if (held !== undefined) {
+    const acknowledged = await asPersonCrew(deps, { caller, run: (current) => deps.door.ack(current.crewToken, deliveryId) });
+    return acknowledged.isOk ? ok({ ...viewOf(held), stale: null }) : acknowledged;
+  }
+  const reread = await asPersonCrew(deps, { caller, run: (current) => withOwnRefusal(deps.door.delivery(current.crewToken, deliveryId)) });
+  if (!reread.isOk) { return reread; }
+  const delivery = reread.value.value;
+  if (!delivery.isOk && delivery.error.code === KEY_UNAVAILABLE) {
+    return refuse('KEY_UNAVAILABLE', SEALED_MESSAGE);
+  }
+  if (delivery.isOk && isMeetingContribution(delivery.value)) {
+    return ok({ ...viewOf(delivery.value), stale: null });
+  }
+  return refuse('NO_SUCH_DELIVERY', `No delivery ${deliveryId} waits for you or is opened: read your inbox again`);
 }
 
 function viewOf(delivery: PersonDelivery): Omit<OpenedView, 'stale'> {
