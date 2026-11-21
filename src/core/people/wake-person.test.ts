@@ -758,6 +758,34 @@ describe('meeting push preferences', () => {
     await expect(record.unseen(SHIP, [meetingId])).resolves.toEqual([{ meetingId, count: 1 }]);
   });
 
+  it.each(['handover', 'shownElsewhere', 'ack'])('records the complete burst despite a refused %s', async (failure) => {
+    const contributions = Array.from({ length: 25 }, (_, index) => aDelivery(index + 1, {
+      messageId: `msg_01m3tbfspe96yf1rnr4ank${String(index + 1).padStart(4, '0')}`,
+      meetingId, contentType: 'text/plain',
+    }));
+    const ordinary = aDelivery(30);
+    const fleet = fakePersonShipDoor({ crewToken: CREW_TOKEN, deliveries: [ordinary, ...contributions] });
+    const record = memoryMeetingContributions();
+    const refusal = { code: 'UNAVAILABLE', message: 'Core unavailable' };
+    let isAckRefused = false;
+    const door = createRecordingMeetingDoor({
+      ...fleet.door,
+      handed: failure === 'handover' ? () => Promise.resolve(err(refusal)) : fleet.door.handed,
+      ack: async (token, id) => {
+        if (failure === 'ack' && !isAckRefused) { isAckRefused = true; return err(refusal); }
+        return fleet.door.ack(token, id);
+      },
+    }, { contributions: record, changes: memoryInboxChanges() });
+    const wake = waking({
+      ship: { door, handOvers: fleet.handOvers }, channels: [aChannel('web-push').channel],
+      ...(failure === 'shownElsewhere' ? { shownElsewhere: { show: () => Promise.resolve(err(refusal)) } } : {}),
+    });
+
+    await wake(SHIP, CREW_TOKEN);
+
+    await expect(record.unseen(SHIP, [meetingId])).resolves.toEqual([{ meetingId, count: 25 }]);
+  });
+
   it('wakes ordinary deliveries while more than a receive batch of contributions arrives', async () => {
     const contributions = Array.from({ length: RECEIVE_MAX_UPPER_BOUND + 1 }, (_, index) => aDelivery(index + 1, {
       messageId: `msg_01m3tbfspe96yf1rnr4ank${String(index + 1).padStart(4, '0')}`,
