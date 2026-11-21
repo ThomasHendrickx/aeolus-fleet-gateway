@@ -737,11 +737,10 @@ describe('compact discovery and explicit full statement lookup', () => {
   });
 });
 
-
 describe('person meeting controls', () => {
   const meetingId = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg';
   const shipId = 'shp_01m3tb1zgr5h2ffee12xnch8pp';
-  it.each([
+  const commands = [
     { call: 'leaveMeeting', input: { meetingId } },
     { call: 'rejoinMeeting', input: { meetingId } },
     { call: 'openMeeting', input: { ships: [{ name: 'charlotte' }], title: 'Weekly heads', idempotencyKey: 'open-1' } },
@@ -753,13 +752,22 @@ describe('person meeting controls', () => {
     { call: 'takeMic', input: { meetingId } },
     { call: 'setMicPattern', input: { meetingId, pattern: 'fifo' } },
     { call: 'endMeeting', input: { meetingId } },
-  ] as const)('makes $call as the person ship and passes core refusals on', async (command) => {
-    const controls = createRestFleetDoor(base).meetingControls;
+  ] as const;
+
+  it.each(commands)('returns the core result of $call', async (command) => {
     answer = { status: 200, body: command.call === 'openMeeting' ? { meetingId } : {} };
-    await expect(controls.change('person-crew', command)).resolves.toEqual({ isOk: true, value: answer.body });
+    await expect(createRestFleetDoor(base).meetingControls.change('person-crew', command)).resolves.toEqual({ isOk: true, value: answer.body });
+  });
+
+  it.each(commands)('makes $call as the person ship', async (command) => {
+    answer = { status: 200, body: command.call === 'openMeeting' ? { meetingId } : {} };
+    await createRestFleetDoor(base).meetingControls.change('person-crew', command);
     expect(sent()).toEqual([{ url: `/api/v1/ship/${command.call}`, authorization: 'Bearer person-crew', accountToken: undefined, body: command.input }]);
+  });
+
+  it.each(commands)('passes the core refusal of $call on', async (command) => {
     answer = { status: 403, body: { code: 'FORBIDDEN', message: 'Only the owner may do this' } };
-    await expect(controls.change('person-crew', command)).resolves.toEqual({ isOk: false, error: answer.body });
+    await expect(createRestFleetDoor(base).meetingControls.change('person-crew', command)).resolves.toEqual({ isOk: false, error: answer.body });
   });
 
   it('reads a bounded page through ship meetings, preserving its cursor and former participation', async () => {

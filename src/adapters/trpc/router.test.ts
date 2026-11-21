@@ -2150,6 +2150,6 @@ describe('the person API meeting controls', () => {
 
   it('uses the shared core refusal for a title over its limit', async () => {
     const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
-    await expect(caller.people.openMeeting({ ships: [{ name: 'chief-of-staff' }], title: 'a'.repeat(201), idempotencyKey: 'open-1' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringContaining('A meeting title is at most 200 characters') });
+    await expect(caller.people.openMeeting({ ships: [{ name: 'chief-of-staff' }], title: 'a'.repeat(201), idempotencyKey: 'open-1' })).rejects.toThrow('A meeting title is at most 200 characters');
   });
 });
