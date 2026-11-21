@@ -57,6 +57,12 @@ describe('a wake sent to a browser through its push service', () => {
     });
   });
 
+  it('sends the meeting destination and event without a badge count or contribution text', async () => {
+    const wake = { fleetName: 'Acme', bridgeUrl: BRIDGE_URL, waitsAt: 'meeting', fleetId: WAKE.fleetId, meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg', event: 'mic' } as const;
+    await webPush().send(subscriptionOf('/firefox'), wake);
+    expect(service.taken.map(({ text }) => JSON.parse(text))).toEqual([wake]);
+  });
+
   it('says, for several deliveries, how many of each job and the count', async () => {
     await webPush().send(subscriptionOf('/firefox'), { fleetName: 'Acme', bridgeUrl: BRIDGE_URL, waitsAt: 'personShip', count: 12, jobs: { question: 1, step: 0, alert: 1, notice: 0, message: 10 } });
 
