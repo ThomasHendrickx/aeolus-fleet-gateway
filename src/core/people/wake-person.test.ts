@@ -747,6 +747,17 @@ describe('meeting push preferences', () => {
     expect(push.woken).toEqual([]);
   });
 
+  it('records contributions without handing acknowledged deliveries to a focused page', async () => {
+    const fleet = fakePersonShipDoor({ crewToken: CREW_TOKEN, deliveries: [aDelivery(1, { meetingId, contentType: 'text/plain' })] });
+    const record = memoryMeetingContributions();
+    const door = createRecordingMeetingDoor(fleet.door, { contributions: record, changes: memoryInboxChanges() });
+    const focused = memoryFocusedPages();
+    await focused.save({ ...SHIP, pageId: 'meeting', seenAt: NOW });
+    const outcome = await waking({ ship: { door, handOvers: fleet.handOvers }, channels: [], focused })(SHIP, CREW_TOKEN);
+    expect({ outcome, handed: fleet.handOvers }).toEqual({ outcome: ok({ kind: 'settled', hasRecordedContributions: true }), handed: [] });
+    await expect(record.unseen(SHIP, [meetingId])).resolves.toEqual([{ meetingId, count: 1 }]);
+  });
+
   it('wakes ordinary deliveries while more than a receive batch of contributions arrives', async () => {
     const contributions = Array.from({ length: RECEIVE_MAX_UPPER_BOUND + 1 }, (_, index) => aDelivery(index + 1, {
       messageId: `msg_01m3tbfspe96yf1rnr4ank${String(index + 1).padStart(4, '0')}`,
