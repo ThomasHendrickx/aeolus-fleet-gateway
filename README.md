@@ -34,7 +34,7 @@ DATABASE_URL=postgresql://... FLEET_URL=https://fleet.example.com npm start
 
 | Command | Does |
 | --- | --- |
-| `aeolus-gateway start` | Reads core's version and exits 1 when core is older than it needs (core 0.44.0 or later), saying both versions; migrates its database; serves |
+| `aeolus-gateway start` | Reads core's version and exits 1 when core is older than it needs (core 0.45.0 or later), saying both versions; migrates its database; serves |
 | `aeolus-gateway migrate` | Migrates its database, and nothing else. Needs `DATABASE_URL` alone |
 
 The gateway's pages are its web app's, a Next.js app in `web/` (aeolus-fleet's header design, H3), which the same server answers at the same address: `npm run build` builds it beside the server, and started from source (`npx tsx src/bin/aeolus-gateway.ts start`) it compiles as it is asked. It answers an address with no page of the server's own, its Not found among them, in its frame, whose header takes the shared header from `@aeolus-fleet/common/header` once common ships it.
@@ -146,7 +146,7 @@ Serve the gateway at its own origin, such as `https://gateway.example.com`, with
 - A call fails at its capability's `deadlineMs` after it was sent without its answer, and never by time when the capability states none (interop 3.4). A reply after the deadline is kept and changes nothing.
 - Each client party's worker takes the replies to its calls with `receiveReply` (aeolus-fleet#953) for each call neither completed nor past its deadline, at most 10 calls at once, each in its turn: it keeps each reply on its call, then acknowledges and handles its delivery. It never takes a delivery with `pushReceive`, so the proxy ship's lease stays plain, as `receiveReply` needs. A message to the proxy ship that replies to no call waits in the fleet and keeps no reply out.
 
-Core/common 0.44.0 is required for compact `ship.discover` summaries and full current statements through `ship.lookup` with `includeStatement: true` (aeolus-fleet#1957). MCP tools, extended A2A cards and person discovery read capabilities through lookup as the caller's ship, within current send reach.
+Core/common 0.45.0 is required for the person meeting list (`ship.meetings` and its shared schemas). Since 0.44.0, it also supplies compact `ship.discover` summaries and full current statements through `ship.lookup` with `includeStatement: true` (aeolus-fleet#1957). MCP tools, extended A2A cards and person discovery read capabilities through lookup as the caller's ship, within current send reach.
 
 ## Develop
 
