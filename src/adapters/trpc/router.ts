@@ -1,3 +1,5 @@
+import { meetingsCursorSchema } from '@aeolus-fleet/common';
+import type { ControlMeetings } from '../../core/meetings/control-meetings.js';
 /**
  * The gateway's API: one tRPC router, which the console's server and the
  * gateway's page call with the console's session cookie, as the other
@@ -235,6 +237,7 @@ export interface Context {
     focusPage: FocusPage;
     readSendTo: ReadSendTo;
     sendMessage: SendMessage;
+    controlMeetings: ControlMeetings;
     readMeeting: ReadMeeting;
     changeOwnMic: ChangeOwnMic;
   };
@@ -1489,6 +1492,43 @@ export const gatewayRouter = t.router({
         await held;
       }
     }),
+    /** The person's own meetings, open first, one bounded page from core. */
+    meetings: personProcedure
+      .input(z.strictObject({ cursor: meetingsCursorSchema.optional() }).optional())
+      .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.list({ caller: ctx.caller, page: { ...(input?.cursor === undefined ? {} : { cursor: input.cursor }), limit: 20 } }))),
+    leaveMeeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'leaveMeeting', input } }))),
+    rejoinMeeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'rejoinMeeting', input } }))),
+    openMeeting: personProcedure
+      .input(z.strictObject({ ships: z.array(z.strictObject({ name: shipHandleSchema })), title: z.string().trim().max(200).optional(), idempotencyKey: idempotencyKeySchema }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'openMeeting', input } }))),
+    addToMeeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), ships: z.array(z.strictObject({ name: shipHandleSchema })) }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'addToMeeting', input } }))),
+    revokeFromMeeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), shipId: idSchema('ship') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'revokeFromMeeting', input } }))),
+    transferMeeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), shipId: idSchema('ship') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'transferMeeting', input } }))),
+    nameModerator: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), shipId: idSchema('ship') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'nameModerator', input } }))),
+    giveMic: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), shipId: idSchema('ship') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'giveMic', input } }))),
+    takeMic: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'takeMic', input } }))),
+    setMicPattern: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), pattern: z.enum(['moderator', 'fifo']) }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'setMicPattern', input } }))),
+    endMeeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'endMeeting', input } }))),
     /** A meeting they take part in, with a page of its contributions, newest first, and where they stand on its mic (decision 0061). */
     meeting: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting'), cursor: idSchema('message').optional() }))

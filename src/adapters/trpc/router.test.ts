@@ -297,6 +297,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
             }, { once: true });
           }),
       }),
+      controlMeetings: { list: () => Promise.resolve(ok({ items: [], nextCursor: null })), change: () => Promise.resolve(ok({})) },
       readMeeting: ({ meetingId }) =>
         Promise.resolve(
           meetingId === HEADS_MEETING_ID
@@ -2065,6 +2066,7 @@ describe('the person API meeting controls', () => {
   it.each(commands)('serves $call as its authenticated person and passes refusals on', async ({ call, input }) => {
     const { context } = aContext(PERSON_COOKIE);
     const asked: unknown[] = [];
+    if (context.person === undefined) throw new Error('Person API is required');
     context.person.controlMeetings = {
       list: () => Promise.resolve(ok({ items: [], nextCursor: null })),
       change: (sent) => { asked.push(sent); return Promise.resolve(ok({ meetingId })); },
@@ -2074,8 +2076,8 @@ describe('the person API meeting controls', () => {
       switch (call) {
         case 'leaveMeeting': return client.people.leaveMeeting(input);
         case 'rejoinMeeting': return client.people.rejoinMeeting(input);
-        case 'openMeeting': return client.people.openMeeting(input);
-        case 'addToMeeting': return client.people.addToMeeting(input);
+        case 'openMeeting': return client.people.openMeeting({ ...input, ships: [...input.ships] });
+        case 'addToMeeting': return client.people.addToMeeting({ ...input, ships: [...input.ships] });
         case 'revokeFromMeeting': return client.people.revokeFromMeeting(input);
         case 'transferMeeting': return client.people.transferMeeting(input);
         case 'nameModerator': return client.people.nameModerator(input);
@@ -2086,7 +2088,7 @@ describe('the person API meeting controls', () => {
       }
     };
     const result = await invoke(caller);
-    expect({ result, asked }).toEqual({ result: { meetingId }, asked: [{ caller: { fleetId: FLEET_ID, grantId: PERSON_TOKEN }, command: { call, input } }] });
+    expect({ result, asked }).toEqual({ result: { meetingId }, asked: [{ caller: { fleetId: FLEET_ID, signedIn: { accountToken: PERSON_TOKEN, personShipId: OWNER } }, command: { call, input } }] });
     context.person.controlMeetings.change = () => Promise.resolve(err({ kind: 'MEETING_REFUSED', message: 'Core refuses this meeting change' }));
     await expect(invoke(caller)).rejects.toMatchObject({ message: 'Core refuses this meeting change' });
     await expect(invoke(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context))).rejects.toMatchObject({ code: 'FORBIDDEN' });
@@ -2096,6 +2098,7 @@ describe('the person API meeting controls', () => {
     const { context } = aContext(PERSON_COOKIE);
     const asked: unknown[] = [];
     const cursor = `o.1792832400000.${meetingId}`;
+    if (context.person === undefined) throw new Error('Person API is required');
     context.person.controlMeetings = {
       change: () => Promise.resolve(ok({})),
       list: (sent) => { asked.push(sent); return Promise.resolve(ok({ items: [], nextCursor: cursor })); },
@@ -2104,8 +2107,8 @@ describe('the person API meeting controls', () => {
     await expect(caller.people.meetings()).resolves.toEqual({ items: [], nextCursor: cursor });
     await caller.people.meetings({ cursor });
     expect(asked).toEqual([
-      { caller: { fleetId: FLEET_ID, grantId: PERSON_TOKEN }, page: { limit: 20 } },
-      { caller: { fleetId: FLEET_ID, grantId: PERSON_TOKEN }, page: { cursor, limit: 20 } },
+      { caller: { fleetId: FLEET_ID, signedIn: { accountToken: PERSON_TOKEN, personShipId: OWNER } }, page: { limit: 20 } },
+      { caller: { fleetId: FLEET_ID, signedIn: { accountToken: PERSON_TOKEN, personShipId: OWNER } }, page: { cursor, limit: 20 } },
     ]);
     await expect(caller.people.meetings({ cursor: 'broken' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });

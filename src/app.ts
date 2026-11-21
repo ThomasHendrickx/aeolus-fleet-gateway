@@ -1,3 +1,4 @@
+import { createControlMeetings } from './core/meetings/control-meetings.js';
 import { createPersonInboxWakes } from './core/people/person-inbox-wakes.js';
 import { createWakingClientCalls } from './core/mcp-in/waking-client-calls.js';
 import { createWatchGatewayShips } from './core/connection/watch-gateway-ships.js';
@@ -963,6 +964,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       listShips: createListShips(asCrew),
       readSendTo: createReadSendTo(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
+      controlMeetings: createControlMeetings({ ...asCrew, door: door.meetingControls }),
       readMeeting: createReadMeeting({ ...asCrew, door: door.meetings }),
       changeOwnMic: createChangeOwnMic({ ...asCrew, door: door.meetings }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
