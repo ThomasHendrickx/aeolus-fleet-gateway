@@ -1,5 +1,6 @@
 import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from "@aeolus-fleet/common";
 
+import { isMeetingContribution } from '../meetings/is-meeting-contribution.js';
 import type { ConnectionStore, FleetRefusal } from "../connection/ports.js";
 import type { Clock } from "../shared/clock.js";
 import { err, ok, type Result } from "../shared/result.js";
@@ -22,12 +23,14 @@ import type {
 /**
  * What a wake came to: nothing left to wake (settled), a wake held back
  * until the earliest window of a channel turned on ends (inWindow), or no
- * channel sent it, so it is tried again (failed).
+ * channel sent it, so it is tried again (failed). Recorded contributions
+ * request another receive independently of the notification outcome.
  */
-export type WakeOutcome =
+export type WakeOutcome = (
   | { readonly kind: "settled" }
   | { readonly kind: "inWindow"; readonly until: Date }
-  | { readonly kind: "failed" };
+  | { readonly kind: "failed" }
+) & { readonly hasRecordedContributions?: boolean };
 
 export type WakePerson = (
   ship: PersonShip,
@@ -103,8 +106,10 @@ export function createWakePerson(deps: {
     if (!taken.isOk) {
       return taken;
     }
+    const hasRecordedContributions = taken.value.some(isMeetingContribution);
+    // The recording door already acknowledged contributions. Only ordinary deliveries can be handed on.
     const everyFresh = taken.value.filter(
-      ({ handOverNumber }) => handOverNumber === null,
+      (delivery) => delivery.handOverNumber === null && !isMeetingContribution(delivery),
     );
     // Read anew at every wake, so a change of where a job shows applies at once.
     const [routes, gateway] = await Promise.all([deps.routes.list(ship), deps.connections.binding(ship.fleetId)]);
@@ -125,9 +130,9 @@ export function createWakePerson(deps: {
       routing,
     });
     // What it left unfinished is finished at a wake tried again.
-    return isAnyUnfinished && woken.isOk && woken.value.kind === "settled"
-      ? ok({ kind: "failed" })
-      : woken;
+    if (!woken.isOk) { return woken; }
+    const outcome: WakeOutcome = isAnyUnfinished && woken.value.kind === "settled" ? { kind: "failed" } : woken.value;
+    return ok(hasRecordedContributions ? { ...outcome, hasRecordedContributions: true } : outcome);
   };
   /** Wakes the person for the fresh deliveries nothing beyond the pages showed, each through the channels on for its job. */
   const wakeFor = async (
