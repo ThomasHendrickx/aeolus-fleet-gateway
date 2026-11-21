@@ -1440,6 +1440,7 @@ describe("a person takes part in a meeting through the gateway's API, signed in 
     const { context } = aContext(PERSON_COOKIE);
 
     await expect(gatewayRouter.createCaller(context).people.meeting({ meetingId: HEADS_MEETING_ID })).resolves.toMatchObject({
+      personShipId: OWNER,
       meetingId: HEADS_MEETING_ID,
       openedAt: '2026-10-24T09:00:00.000Z',
       endedAt: null,
@@ -2145,7 +2146,7 @@ describe('the person API meeting controls', () => {
       list: (sent) => { asked.push(sent); return Promise.resolve(ok({ items: [], nextCursor: cursor })); },
     };
     const caller = gatewayRouter.createCaller(context);
-    await expect(caller.people.meetings()).resolves.toEqual({ items: [], nextCursor: cursor });
+    await expect(caller.people.meetings()).resolves.toEqual({ items: [], nextCursor: cursor, personShipId: OWNER });
     await caller.people.meetings({ cursor });
     expect(asked).toEqual([
       { caller: { fleetId: FLEET_ID, signedIn: { accountToken: PERSON_TOKEN, personShipId: OWNER } }, page: { limit: 20 } },
