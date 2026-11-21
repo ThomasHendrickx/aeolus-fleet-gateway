@@ -86,3 +86,24 @@ describe("the gateway's own steps, in Bridge only (BH8)", () => {
     expect(onForNotices.isShowing('chat', notice)).toBe(true);
   });
 });
+
+
+describe('meeting pushes under alerts and notices', () => {
+  const meetingId = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' as const;
+  const item = { senderShipId: SENDER, sentAt: TURNED_ON_AT, meetingId };
+
+  it.each(['added', 'mic', 'ended'])('routes a meeting %s push through stay-aware', (kind) => {
+    const routing = routingOf([], routingDefaultsOf([{ job: 'stay-aware', place: 'web-push' }]));
+    expect(routing.isShowing('web-push', { ...item, contentType: `application/vnd.aeolus.meeting.${kind}+json` })).toBe(true);
+  });
+
+  it('never pushes a contribution even when messages are on', () => {
+    const routing = routingOf([], routingDefaultsOf([{ job: 'everything-else', place: 'web-push' }]));
+    expect(routing.isShowing('web-push', { ...item, contentType: 'text/plain' })).toBe(false);
+  });
+
+  it('does not route a meeting notice through the messages setting', () => {
+    const routing = routingOf([], routingDefaultsOf([{ job: 'everything-else', place: 'web-push' }]));
+    expect(routing.isShowing('web-push', { ...item, contentType: 'application/vnd.aeolus.meeting.mic+json' })).toBe(false);
+  });
+});
