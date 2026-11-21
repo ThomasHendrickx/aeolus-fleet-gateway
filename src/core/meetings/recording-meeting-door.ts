@@ -1,4 +1,4 @@
-/** Records contributions before handing received deliveries to any person use case. Core can replay after a failed write. */
+/** Records contributions before acknowledging them. A failure leaves core able to replay into the idempotent person record. */
 import { isMeetingContribution } from './is-meeting-contribution.js';
 import type { InboxChanges, PersonShipDoor } from '../people/ports.js';
 import type { MeetingContributions, NotedContribution } from './meeting-contributions.js';
@@ -15,6 +15,10 @@ export function createRecordingMeetingDoor(door: PersonShipDoor, deps: { contrib
         if (!who.isOk) { return who; }
         const isChanged = await deps.contributions.note(who.value, { contributions: arrived, isSeen: false });
         if (isChanged) { await deps.changes.tell({ fleetId: who.value.fleetId, shipId: who.value.shipId }); }
+        for (const { deliveryId } of received.value.filter(isMeetingContribution)) {
+          const acknowledged = await door.ack(crewToken, deliveryId);
+          if (!acknowledged.isOk) { return acknowledged; }
+        }
       }
       return received;
     },

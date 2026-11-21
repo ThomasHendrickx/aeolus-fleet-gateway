@@ -8,7 +8,7 @@ import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
 import { createRecordingMeetingDoor } from '../meetings/recording-meeting-door.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { FocusedPages, PersonShip, PushedPersonDelivery, ShownElsewhere, WakeChannel, WakeChannelName, WakesSent, WakeWindow } from './ports.js';
+import type { FocusedPages, HandOverChannel, PersonShip, PushedPersonDelivery, ShownElsewhere, WakeChannel, WakeChannelName, WakesSent, WakeWindow } from './ports.js';
 import type { QuietHours } from './quiet-hours.js';
 import type { QuietShip } from './quiet-ships.js';
 import { ITEM_JOBS, routingDefaultsOf, type Route, type RoutingDefaults } from './routing.js';
@@ -75,7 +75,7 @@ function memoryWakesSent(sent: { channel: WakeChannelName; at: Date }[] = []): W
 
 /** The person ship's deliveries in the fleet, as its push receive hands them, and the hand-overs the gateway reported. */
 function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: FleetRefusal } = {}) {
-  const handOvers: { deliveryId: DeliveryId; handOverNumber: number; channel: string }[] = [];
+  const handOvers: { deliveryId: DeliveryId; handOverNumber: number; channel: HandOverChannel }[] = [];
   return {
     handOvers,
     door: {
@@ -93,7 +93,7 @@ function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: Flee
                 )
               : err({ code: 'UNAUTHORIZED', message: 'no' }),
         ),
-      handed: (_crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: string }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>> => {
+      handed: (_crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: HandOverChannel }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>> => {
         handOvers.push(handOver);
         return Promise.resolve(ok('handed'));
       },
