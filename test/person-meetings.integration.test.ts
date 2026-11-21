@@ -1,7 +1,8 @@
-import { idSchema, inboxOutputSchema, openMeetingOutputSchema, receiveOutputSchema, type MeetingId } from '@aeolus-fleet/common';
+import { idSchema, inboxOutputSchema, openMeetingOutputSchema, receiveOutputSchema, type MeetingId, type ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
+import type { MeetingControls } from '../src/core/meetings/control-ports.js';
 import type { PersonMeetingDoor } from '../src/core/meetings/ports.js';
 import type { PersonShipDoor } from '../src/core/people/ports.js';
 import { commission, register, signIn } from './support/argo.js';
@@ -15,6 +16,7 @@ import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 let fleet: FleetServer;
 let person: PersonShipDoor;
 let meetings: PersonMeetingDoor;
+let controls: MeetingControls;
 /** Charlotte's person ship's crew token. */
 let charlotte: string;
 /** The chief of staff's crew token: it opens the meeting and moderates. */
@@ -40,6 +42,7 @@ beforeEach(async () => {
   const door = createRestFleetDoor(fleet.url);
   person = door.person;
   meetings = door.meetings;
+  controls = door.meetingControls;
   charlotte = await register(fleet, await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } }));
   chief = await register(fleet, await commission(fleet, { cookie, ship: { name: 'chief-of-staff', type: 'agent', scopes: ['messages:send', 'messages:receive', 'meetings:open'] } }));
   const opened = await chiefCalls('openMeeting', { ships: [{ name: 'charlotte' }], title: 'Weekly heads', idempotencyKey: crypto.randomUUID(), model: 'claude-opus-5-5' });
@@ -145,5 +148,96 @@ describe('a person ship takes part in a meeting', () => {
     const read = await meetings.meeting(charlotte, { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4zzz' });
 
     expect(read.isOk).toBe(false);
+  });
+});
+
+describe('the person meeting controls against core main', () => {
+  it('lists former participation, then rejoins, with an opaque bounded cursor', async () => {
+    await expect(controls.change(charlotte, { call: 'leaveMeeting', input: { meetingId } })).resolves.toEqual({ isOk: true, value: {} });
+    const page = await controls.list(charlotte, { limit: 20 });
+    expect(page).toMatchObject({ isOk: true, value: { items: [{ meetingId, participantState: 'left', title: 'Weekly heads' }], nextCursor: null } });
+    await expect(controls.change(charlotte, { call: 'rejoinMeeting', input: { meetingId } })).resolves.toEqual({ isOk: true, value: {} });
+    const present = await controls.list(charlotte, { limit: 20 });
+    expect(present).toMatchObject({ isOk: true, value: { items: [{ meetingId, participantState: 'present' }] } });
+  });
+
+  it('refuses opening without meetings:open and states the scope', async () => {
+    const opened = await controls.change(charlotte, { call: 'openMeeting', input: { ships: [{ name: 'chief-of-staff' }], idempotencyKey: 'person-open' } });
+    expect(opened).toMatchObject({ isOk: false, error: { code: 'FORBIDDEN' } });
+    expect(!opened.isOk && opened.error.message).toContain('meetings:open');
+  });
+
+  describe('the person owns a meeting with the granted scope', () => {
+    let owner: string;
+    let owned: MeetingId;
+    let shipId: ShipId;
+
+    beforeEach(async () => {
+      const cookie = await signIn(fleet);
+      owner = await register(fleet, await commission(fleet, { cookie, ship: { name: 'owner', type: 'person', kind: 'person', scopes: ['meetings:open'] } }));
+      const opened = await controls.change(owner, { call: 'openMeeting', input: { ships: [{ name: 'charlotte' }], title: 'Person runs it', idempotencyKey: crypto.randomUUID() } });
+      if (!opened.isOk || opened.value.meetingId === undefined) throw new Error('Meeting did not open');
+      owned = opened.value.meetingId;
+      const read = await meetings.meeting(owner, { meetingId: owned });
+      if (!read.isOk) throw new Error('Meeting did not read');
+      const participant = read.value.participants.find(({ name }) => name === 'charlotte');
+      if (participant === undefined) throw new Error('Charlotte is not a participant');
+      shipId = participant.shipId;
+    });
+
+    it('opens as owner and moderator with the granted scope', async () => {
+      await expect(meetings.meeting(owner, { meetingId: owned })).resolves.toMatchObject({ isOk: true, value: { title: 'Person runs it', owner: { name: 'owner' }, moderator: { name: 'owner' } } });
+    });
+
+    it('gives the mic to a participant', async () => {
+      await controls.change(owner, { call: 'giveMic', input: { meetingId: owned, shipId } });
+      await expect(meetings.meeting(owner, { meetingId: owned })).resolves.toMatchObject({ isOk: true, value: { mic: { holder: { name: 'charlotte' } } } });
+    });
+
+    it('takes the mic back from a participant', async () => {
+      await controls.change(owner, { call: 'giveMic', input: { meetingId: owned, shipId } });
+      await controls.change(owner, { call: 'takeMic', input: { meetingId: owned } });
+      await expect(meetings.meeting(owner, { meetingId: owned })).resolves.toMatchObject({ isOk: true, value: { mic: { holder: null } } });
+    });
+
+    it('changes the mic pattern', async () => {
+      await controls.change(owner, { call: 'setMicPattern', input: { meetingId: owned, pattern: 'fifo' } });
+      await expect(meetings.meeting(owner, { meetingId: owned })).resolves.toMatchObject({ isOk: true, value: { mic: { pattern: 'fifo' } } });
+    });
+
+    it('revokes a participant', async () => {
+      await controls.change(owner, { call: 'revokeFromMeeting', input: { meetingId: owned, shipId } });
+      const revoked = await controls.list(charlotte, { limit: 20 });
+      expect(revoked.isOk && revoked.value.items.find(({ meetingId: id }) => id === owned)?.participantState).toBe('revoked');
+    });
+
+    it('adds a revoked participant by name', async () => {
+      await controls.change(owner, { call: 'revokeFromMeeting', input: { meetingId: owned, shipId } });
+      await controls.change(owner, { call: 'addToMeeting', input: { meetingId: owned, ships: [{ name: 'charlotte' }] } });
+      const added = await controls.list(charlotte, { limit: 20 });
+      expect(added.isOk && added.value.items.find(({ meetingId: id }) => id === owned)?.participantState).toBe('present');
+    });
+
+    it('names a participant as moderator', async () => {
+      await controls.change(owner, { call: 'nameModerator', input: { meetingId: owned, shipId } });
+      await expect(meetings.meeting(owner, { meetingId: owned })).resolves.toMatchObject({ isOk: true, value: { moderator: { name: 'charlotte' } } });
+    });
+
+    it('transfers ownership to a participant', async () => {
+      await controls.change(owner, { call: 'transferMeeting', input: { meetingId: owned, shipId } });
+      await expect(meetings.meeting(charlotte, { meetingId: owned })).resolves.toMatchObject({ isOk: true, value: { owner: { name: 'charlotte' } } });
+    });
+
+    it('ends the meeting', async () => {
+      await controls.change(owner, { call: 'endMeeting', input: { meetingId: owned } });
+      const ended = await meetings.meeting(owner, { meetingId: owned });
+      expect(ended.isOk && ended.value.endedAt instanceof Date).toBe(true);
+    });
+
+    it('passes the refusal after the meeting ended on', async () => {
+      await controls.change(owner, { call: 'endMeeting', input: { meetingId: owned } });
+      const ended = await controls.change(owner, { call: 'takeMic', input: { meetingId: owned } });
+      expect(!ended.isOk && ended.error.message).toMatch(/ended/i);
+    });
   });
 });

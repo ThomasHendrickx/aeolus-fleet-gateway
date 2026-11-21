@@ -12,8 +12,9 @@ import type { ReadUnseenContributions } from '../../core/meetings/read-unseen-co
  */
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
-import { idempotencyKeySchema, idSchema, payloadSchema, scopeNameSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
+import { addToMeetingInputSchema, openMeetingInputSchema, meetingsCursorSchema, setMicPatternInputSchema, idempotencyKeySchema, idSchema, payloadSchema, scopeNameSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
 import { initTRPC, TRPCError } from '@trpc/server';
+import { TRPC_ERROR_CODES_BY_KEY } from '@trpc/server/rpc';
 import { z } from 'zod';
 
 import type { ChangeHub } from '../http/live.js';
@@ -75,6 +76,7 @@ import type { ReadBasket } from '../../core/people/read-basket.js';
 import type { RemoveFromBasket } from '../../core/people/remove-from-basket.js';
 import type { SendBasket } from '../../core/people/send-basket.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
+import type { ControlMeetings } from '../../core/meetings/control-meetings.js';
 import type { ChangeOwnMic } from '../../core/meetings/change-own-mic.js';
 import type { MeetingRead } from '../../core/meetings/ports.js';
 import type { PersonMeeting, ReadMeeting } from '../../core/meetings/read-meeting.js';
@@ -236,6 +238,7 @@ export interface Context {
     focusPage: FocusPage;
     readSendTo: ReadSendTo;
     sendMessage: SendMessage;
+    controlMeetings: ControlMeetings;
     readMeeting: ReadMeeting;
     readUnseenContributions: ReadUnseenContributions;
     changeOwnMic: ChangeOwnMic;
@@ -691,6 +694,8 @@ const timeOfDaySchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'A time of
 const MINUTES_PER_HOUR = 60;
 /** The most ships a person's client asks about at once, as many as a page of conversations shows and more. */
 const QUIET_AMONG_MAX = 100;
+/** The number of meetings a person's client reads per page. */
+const MEETINGS_PER_PAGE = 20;
 
 /** A page of meeting counts, sized for one client list. */
 const MEETING_COUNTS_MAX = 20;
@@ -721,9 +726,17 @@ function meetingViewOf({ meeting, mic }: PersonMeeting) {
   };
 }
 
-function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES; message: string }>): T {
+function isTRPCErrorCode(code: string): code is TRPCError['code'] {
+  return Object.hasOwn(TRPC_ERROR_CODES_BY_KEY, code);
+}
+
+function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES; message: string } | { kind: 'MEETING_REFUSED'; code: string; message: string }>): T {
   if (!answered.isOk) {
-    throw new TRPCError({ code: PERSON_CODES[answered.error.kind], message: answered.error.message });
+    const refusal = answered.error;
+    const code = refusal.kind === 'MEETING_REFUSED'
+      ? (isTRPCErrorCode(refusal.code) ? refusal.code : 'BAD_GATEWAY')
+      : PERSON_CODES[refusal.kind];
+    throw new TRPCError({ code, message: refusal.message });
   }
   return answered.value;
 }
@@ -1493,6 +1506,43 @@ export const gatewayRouter = t.router({
         await held;
       }
     }),
+    /** The person's own meetings, open first, one bounded page from core. */
+    meetings: personProcedure
+      .input(z.strictObject({ cursor: meetingsCursorSchema.optional() }).optional())
+      .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.list({ caller: ctx.caller, page: { ...(input?.cursor === undefined ? {} : { cursor: input.cursor }), limit: MEETINGS_PER_PAGE } }))),
+    leaveMeeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'leaveMeeting', input } }))),
+    rejoinMeeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'rejoinMeeting', input } }))),
+    openMeeting: personProcedure
+      .input(openMeetingInputSchema.pick({ title: true, idempotencyKey: true }).extend({ ships: z.array(z.strictObject({ name: shipHandleSchema })).optional() }).strict())
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'openMeeting', input } }))),
+    addToMeeting: personProcedure
+      .input(addToMeetingInputSchema.pick({ meetingId: true }).extend({ ships: z.array(z.strictObject({ name: shipHandleSchema })).optional() }).strict())
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'addToMeeting', input } }))),
+    revokeFromMeeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), shipId: idSchema('ship') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'revokeFromMeeting', input } }))),
+    transferMeeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), shipId: idSchema('ship') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'transferMeeting', input } }))),
+    nameModerator: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), shipId: idSchema('ship') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'nameModerator', input } }))),
+    giveMic: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting'), shipId: idSchema('ship') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'giveMic', input } }))),
+    takeMic: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'takeMic', input } }))),
+    setMicPattern: personProcedure
+      .input(setMicPatternInputSchema.strict())
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'setMicPattern', input } }))),
+    endMeeting: personProcedure
+      .input(z.strictObject({ meetingId: idSchema('meeting') }))
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'endMeeting', input } }))),
     /** Counts only for a page of the person's meetings, from the gateway's indexed person record. */
     unseenContributions: personProcedure
       .input(z.strictObject({ meetingIds: z.array(idSchema('meeting')).max(MEETING_COUNTS_MAX) }))

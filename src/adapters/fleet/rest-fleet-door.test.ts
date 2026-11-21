@@ -90,6 +90,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'tracker',
       senderType: 'tracker',
       senderStatus: 'crewed',
@@ -129,6 +130,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'orchestrator-1',
       senderType: 'orchestrator',
       senderStatus: 'crewed',
@@ -174,6 +176,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'builder-plugin',
       senderType: 'builder',
       senderStatus: 'crewed',
@@ -220,6 +223,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'builder-plugin',
       senderType: 'builder',
       senderStatus: 'crewed',
@@ -257,6 +261,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'orchestrator-1',
       senderType: 'orchestrator',
       senderStatus: 'crewed',
@@ -305,6 +310,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'watch',
       senderType: 'watch',
       senderStatus: 'crewed',
@@ -361,6 +367,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
       deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002',
       messageId: 'msg_01m3tbfspe96yf1rnr4ank0002',
       senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+      senderLeaseId: null,
       senderName: 'tracker',
       senderType: 'tracker',
       senderStatus: 'crewed',
@@ -402,7 +409,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
 
   describe('the exchange calls (aeolus-fleet exchange-read, core main)', () => {
     const OTHER = 'shp_01m3tbfspe96yf1rnr4ank9trk';
-    const entry = { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', senderShipId: PERSON_SHIP, payload: 'On it', isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0001', sentAt: '2026-11-06T10:00:00.000Z', deliveryState: 'acknowledged', receivedDelivery: null };
+    const entry = { messageId: 'msg_01m3tbfspe96yf1rnr4ank0002', senderShipId: PERSON_SHIP, senderLeaseId: null, payload: 'On it', isPayloadUnreadable: false, contentType: 'text/plain', inReplyTo: 'msg_01m3tbfspe96yf1rnr4ank0001', sentAt: '2026-11-06T10:00:00.000Z', deliveryState: 'acknowledged', receivedDelivery: null };
 
     it.each([
       [{ kind: 'newest' as const }, { otherShipId: OTHER, limit: 20 }],
@@ -454,7 +461,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
     });
 
     it('lists the exchanges after a cursor, each with its other ship and newest message', async () => {
-      const exchange = { otherShipId: OTHER, otherShipName: 'tracker', otherShipType: 'tracker', otherShipKind: 'agent', unacknowledged: 2, unseenPlainMessages: 0, newestMessage: { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', senderShipId: OTHER, payload: 'Build is red', isPayloadUnreadable: false, contentType: 'text/plain', sentAt: '2026-11-06T10:00:00.000Z' } };
+      const exchange = { otherShipId: OTHER, otherShipName: 'tracker', otherShipType: 'tracker', otherShipKind: 'agent', unacknowledged: 2, unseenPlainMessages: 0, newestMessage: { messageId: 'msg_01m3tbfspe96yf1rnr4ank0003', senderShipId: OTHER, senderLeaseId: null, payload: 'Build is red', isPayloadUnreadable: false, contentType: 'text/plain', sentAt: '2026-11-06T10:00:00.000Z' } };
       answer = { status: 200, body: { items: [exchange], nextCursor: 'msg_01m3tbfspe96yf1rnr4ank0003' } };
 
       const page = await createRestFleetDoor(base).person.exchanges('aeolus_ct_v1_charlotte', { cursor: 'msg_01m3tbfspe96yf1rnr4ank0009', limit: 20 });
@@ -524,6 +531,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
         deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0001',
         messageId: 'msg_01m3tbfspe96yf1rnr4ank0001',
         senderShipId: 'shp_01m3tbfspe96yf1rnr4ank9trk',
+        senderLeaseId: null,
         senderName: 'tracker',
         senderType: 'tracker',
         senderStatus: 'crewed',
@@ -602,7 +610,7 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
         ],
         mic: { holder: CHARLOTTE, pattern: 'fifo', requests: [{ ship: CHIEF, requestedAt: '2026-10-24T09:02:00.000Z' }] },
         contributions: {
-          items: [{ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0002', sender: CHIEF, payload: 'Marketing first', isPayloadUnreadable: false, contentType: 'text/plain', model: 'claude-opus-5-5', sentAt: '2026-10-24T09:01:00.000Z' }],
+          items: [{ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0002', sender: CHIEF, senderLeaseId: null, payload: 'Marketing first', isPayloadUnreadable: false, contentType: 'text/plain', model: 'claude-opus-5-5', sentAt: '2026-10-24T09:01:00.000Z' }],
           nextCursor: 'msg_01m5qa5j85mgd4z61d9c2k0002',
         },
       },
@@ -734,5 +742,47 @@ describe('compact discovery and explicit full statement lookup', () => {
     answers['/api/v1/ship/lookup'] = { status: 403, body: { code: 'FORBIDDEN', message: 'scope revoked' } };
     await expect(createRestFleetDoor(base).person.discover('person-crew')).resolves.toEqual({ isOk: true, value: { ships: [{ id: PERSON_SHIP, name: 'tracker', type: 'tracker', kind: 'app', statement: summary }], types: [{ type: 'tracker', reachable: 1 }] } });
     expect(received).toHaveLength(1);
+  });
+});
+
+describe('person meeting controls', () => {
+  const meetingId = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg';
+  const shipId = 'shp_01m3tb1zgr5h2ffee12xnch8pp';
+  const commands = [
+    { call: 'leaveMeeting', input: { meetingId } },
+    { call: 'rejoinMeeting', input: { meetingId } },
+    { call: 'openMeeting', input: { ships: [{ name: 'charlotte' }], title: 'Weekly heads', idempotencyKey: 'open-1' } },
+    { call: 'addToMeeting', input: { meetingId, ships: [{ name: 'charlotte' }] } },
+    { call: 'revokeFromMeeting', input: { meetingId, shipId } },
+    { call: 'transferMeeting', input: { meetingId, shipId } },
+    { call: 'nameModerator', input: { meetingId, shipId } },
+    { call: 'giveMic', input: { meetingId, shipId } },
+    { call: 'takeMic', input: { meetingId } },
+    { call: 'setMicPattern', input: { meetingId, pattern: 'fifo' } },
+    { call: 'endMeeting', input: { meetingId } },
+  ] as const;
+
+  it.each(commands)('returns the core result of $call', async (command) => {
+    answer = { status: 200, body: command.call === 'openMeeting' ? { meetingId } : {} };
+    await expect(createRestFleetDoor(base).meetingControls.change('person-crew', command)).resolves.toEqual({ isOk: true, value: answer.body });
+  });
+
+  it.each(commands)('makes $call as the person ship', async (command) => {
+    answer = { status: 200, body: command.call === 'openMeeting' ? { meetingId } : {} };
+    await createRestFleetDoor(base).meetingControls.change('person-crew', command);
+    expect(sent()).toEqual([{ url: `/api/v1/ship/${command.call}`, authorization: 'Bearer person-crew', accountToken: undefined, body: command.input }]);
+  });
+
+  it.each(commands)('passes the core refusal of $call on', async (command) => {
+    answer = { status: 403, body: { code: 'FORBIDDEN', message: 'Only the owner may do this' } };
+    await expect(createRestFleetDoor(base).meetingControls.change('person-crew', command)).resolves.toEqual({ isOk: false, error: answer.body });
+  });
+
+  it('reads a bounded page through ship meetings, preserving its cursor and former participation', async () => {
+    const cursor = `o.1792832400000.${meetingId}`;
+    const entry = { meetingId, title: 'Weekly heads', openedAt: '2026-10-24T09:00:00.000Z', endedAt: null, owner: { id: shipId, name: 'charlotte' }, moderator: { id: shipId, name: 'charlotte' }, presentParticipants: 1, micHolder: null, placeInLine: null, lastContributionAt: null, participantState: 'revoked' };
+    answer = { status: 200, body: { items: [entry], nextCursor: cursor } };
+    await expect(createRestFleetDoor(base).meetingControls.list('person-crew', { cursor, limit: 20 })).resolves.toEqual({ isOk: true, value: answer.body });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/meetings', authorization: 'Bearer person-crew', accountToken: undefined, body: { cursor, limit: 20 } }]);
   });
 });
