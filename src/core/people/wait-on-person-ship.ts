@@ -51,6 +51,7 @@ export function createWaitOnPersonShip(deps: {
     let looks: ShipLooks | undefined;
     let watchedToken: string | undefined;
     let knownWaiting: number | undefined;
+    let shouldReceiveAgain = false;
     let refusedInARow = 0;
     /** When to ask for a wake again though the count did not rise: a window ended, or a failed wake waited out. */
     let wakeAgainAt: Date | undefined;
@@ -124,13 +125,16 @@ export function createWaitOnPersonShip(deps: {
         const hasRisen = waiting > (knownWaiting ?? 0);
         knownWaiting = waiting;
         const isWakeDue = wakeAgainAt !== undefined && wakeAgainAt.getTime() <= deps.clock.now().getTime();
-        if (!hasRisen && !isWakeDue) {
+        if (!hasRisen && !isWakeDue && !shouldReceiveAgain) {
           continue;
         }
         const woken = await deps.wakePerson(ship, crew.crewToken);
         if (!woken.isOk && isEndedCrew(woken.error) && (await isDropped(crew.crewToken))) {
           return { reason: 'crewEnded' };
         }
+        // Contribution acknowledgements lower the count. Drain another bounded batch without waiting for a rise or an alert window.
+        shouldReceiveAgain = woken.isOk && woken.value.hasRecordedContributions === true;
+        if (shouldReceiveAgain) { looks.request(); }
         // A wake the fleet refused counts as one that failed: tried again after a wait.
         const outcome = woken.isOk ? woken.value : ({ kind: 'failed' } as const);
         switch (outcome.kind) {
