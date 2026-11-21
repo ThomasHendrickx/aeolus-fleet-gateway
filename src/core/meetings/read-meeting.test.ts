@@ -20,12 +20,20 @@ beforeEach(() => {
 
 function reading(meetings = [aMeetingRead()]) {
   const contributions = memoryMeetingContributions();
+  const changes = memoryInboxChanges();
   const fleet = fakePersonMeetingDoor({ crewToken: 'aeolus_ct_v1_charlotte', meetings });
-  const readMeeting = createReadMeeting({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: fleet.door, contributions, changes: memoryInboxChanges() });
-  return { ...fleet, readMeeting, contributions };
+  const readMeeting = createReadMeeting({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: fleet.door, contributions, changes });
+  return { ...fleet, readMeeting, contributions, changes };
 }
 
 describe('a person reads a meeting they take part in', () => {
+  it('tells other devices once after the displayed page changes the person record', async () => {
+    const { readMeeting, changes } = reading();
+    await readMeeting({ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID });
+    await readMeeting({ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID });
+    expect(changes.told).toEqual([{ fleetId: FLEET_ID, shipId: PERSON_SHIP_ID }]);
+  });
+
   it('marks the contributions shown on the page seen in the person record', async () => {
     const { readMeeting, contributions } = reading();
     const ship = { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID };

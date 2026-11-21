@@ -30,7 +30,7 @@ describe('unseen contributions per meeting in the person record', () => {
   it('records each received contribution before exposing it and ignores meeting notices', async () => {
     const { contributions, read } = setup();
     const fleet = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [aPersonDelivery({ meetingId: HEADS_MEETING_ID, contentType: 'text/plain' }), aPersonDelivery({ deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0002', meetingId: HEADS_MEETING_ID, contentType: 'application/vnd.aeolus.meeting.mic+json' })] });
-    const door = createRecordingMeetingDoor(fleet.door, contributions);
+    const door = createRecordingMeetingDoor(fleet.door, { contributions, changes: memoryInboxChanges() });
     await door.pushReceive('aeolus_ct_v1_charlotte', { max: 10 });
     await door.pushReceive('aeolus_ct_v1_charlotte', { max: 10 });
     await expect(read({ caller: CHARLOTTE_GRANT, meetingIds: [HEADS_MEETING_ID] })).resolves.toEqual({ isOk: true, value: [{ meetingId: HEADS_MEETING_ID, count: 1 }] });
@@ -46,6 +46,27 @@ describe('unseen contributions per meeting in the person record', () => {
     await readMeeting({ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID });
     await contributions.note(ship, { contributions: [{ ...message, meetingId: HEADS_MEETING_ID }], isSeen: false });
     await expect(createReadUnseenContributions({ contributions, crewPersonShip: fakeCrewPersonShip(crews) })({ caller: CHARLOTTE_GRANT, meetingIds: [HEADS_MEETING_ID] })).resolves.toEqual({ isOk: true, value: [{ meetingId: HEADS_MEETING_ID, count: 1 }] });
+  });
+
+  it('tells other devices after recording arrivals, without telling them again on replay', async () => {
+    const { contributions } = setup();
+    const changes = memoryInboxChanges();
+    const fleet = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [aPersonDelivery({ meetingId: HEADS_MEETING_ID, contentType: 'text/plain' })] });
+    const door = createRecordingMeetingDoor(fleet.door, { contributions, changes });
+    await door.pushReceive('aeolus_ct_v1_charlotte', { max: 10 });
+    await door.pushReceive('aeolus_ct_v1_charlotte', { max: 10 });
+    expect(changes.told).toEqual([ship]);
+  });
+
+  it('does not expose or acknowledge arrivals whose person record could not be stored', async () => {
+    const { contributions } = setup();
+    const changes = memoryInboxChanges();
+    const fleet = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [aPersonDelivery({ meetingId: HEADS_MEETING_ID, contentType: 'text/plain' })] });
+    const unavailable = { ...contributions, note: () => Promise.reject(new Error('Database unavailable')) };
+    const door = createRecordingMeetingDoor(fleet.door, { contributions: unavailable, changes });
+    await expect(door.pushReceive('aeolus_ct_v1_charlotte', { max: 10 })).rejects.toThrow('Database unavailable');
+    expect(changes.told).toEqual([]);
+    expect(fleet.calls.some((call) => call.startsWith('ack('))).toBe(false);
   });
 
   it('refuses a caller without a person ship', async () => {

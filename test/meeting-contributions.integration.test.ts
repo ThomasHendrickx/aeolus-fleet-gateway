@@ -17,6 +17,24 @@ beforeEach(async () => { await prisma.$executeRaw`DELETE FROM meeting_contributi
 afterAll(async () => { await prisma.$disconnect(); });
 
 describe('the person record of meeting contributions', () => {
+  it('reports only new arrivals or a first sighting as a change', async () => {
+    const record = createPrismaMeetingContributions(prisma);
+    const outcomes = [];
+    outcomes.push(await record.note(ship, { contributions: [contribution], isSeen: false }));
+    outcomes.push(await record.note(ship, { contributions: [contribution], isSeen: false }));
+    outcomes.push(await record.note(ship, { contributions: [contribution], isSeen: true }));
+    outcomes.push(await record.note(ship, { contributions: [contribution], isSeen: true }));
+    expect(outcomes).toEqual([true, false, true, false]);
+  });
+
+  it('rolls back contribution arrivals with their transaction', async () => {
+    await expect(prisma.$transaction(async (db) => {
+      await createPrismaMeetingContributions(db).note(ship, { contributions: [contribution], isSeen: false });
+      throw new Error('Rollback');
+    })).rejects.toThrow('Rollback');
+    await expect(createPrismaMeetingContributions(prisma).unseen(ship, [HEADS_MEETING_ID])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 0 }]);
+  });
+
   it('counts each arriving contribution once across concurrent receives and a restart', async () => {
     const record = createPrismaMeetingContributions(prisma);
     await Promise.all(Array.from({ length: 4 }, () => record.note(ship, { contributions: [contribution], isSeen: false })));
