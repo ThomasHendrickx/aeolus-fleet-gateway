@@ -297,6 +297,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
             }, { once: true });
           }),
       }),
+      readUnseenContributions: ({ meetingIds }) => Promise.resolve(ok(meetingIds.map((meetingId) => ({ meetingId, count: 2 })))),
       readMeeting: ({ meetingId }) =>
         Promise.resolve(
           meetingId === HEADS_MEETING_ID
@@ -1424,6 +1425,16 @@ describe('a person routes each job to the places that show it, through the API (
 });
 
 describe("a person takes part in a meeting through the gateway's API, signed in to its pages (decision 0061, M19)", () => {
+  it('reads unseen contribution counts for the meetings requested by the signed-in person', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+    await expect(gatewayRouter.createCaller(context).people.unseenContributions({ meetingIds: [HEADS_MEETING_ID] })).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 2 }]);
+  });
+
+  it('refuses more than one page of meeting counts', async () => {
+    const { context } = aContext(PERSON_COOKIE);
+    await expect(gatewayRouter.createCaller(context).people.unseenContributions({ meetingIds: Array.from({ length: 21 }, () => HEADS_MEETING_ID) })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
   it('reads a meeting with its times in ISO 8601, and where they stand on its mic', async () => {
     const { context } = aContext(PERSON_COOKIE);
 

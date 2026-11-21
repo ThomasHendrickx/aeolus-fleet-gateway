@@ -435,11 +435,11 @@ describe('a chat lists no meeting notice: it is informational or out of date, an
     expect(read.isOk && read.value.opened).toEqual([]);
   });
 
-  it("lists a meeting's own contribution, which is a message", async () => {
+  it("leaves meeting contributions in their own meeting", async () => {
     const contribution = aPersonDelivery({ ...noticeOf('0024', 'text/plain'), payload: 'Marketing is on track', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
 
     const read = await readInbox([contribution]).readInbox(CHARLOTTE_GRANT);
 
-    expect(read.isOk && read.value.deliveries.map(({ deliveryId }) => deliveryId)).toEqual([contribution.deliveryId]);
+    expect(read.isOk && read.value).toEqual({ waiting: 0, deliveries: [], opened: [] });
   });
 });
