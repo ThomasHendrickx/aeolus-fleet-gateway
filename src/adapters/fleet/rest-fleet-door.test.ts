@@ -736,3 +736,37 @@ describe('compact discovery and explicit full statement lookup', () => {
     expect(received).toHaveLength(1);
   });
 });
+
+
+describe('person meeting controls', () => {
+  const meetingId = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg';
+  const shipId = 'shp_01m3tb1zgr5h2ffee12xnch8pp';
+  it.each([
+    { call: 'leaveMeeting', input: { meetingId } },
+    { call: 'rejoinMeeting', input: { meetingId } },
+    { call: 'openMeeting', input: { ships: [{ name: 'charlotte' }], title: 'Weekly heads', idempotencyKey: 'open-1' } },
+    { call: 'addToMeeting', input: { meetingId, ships: [{ name: 'charlotte' }] } },
+    { call: 'revokeFromMeeting', input: { meetingId, shipId } },
+    { call: 'transferMeeting', input: { meetingId, shipId } },
+    { call: 'nameModerator', input: { meetingId, shipId } },
+    { call: 'giveMic', input: { meetingId, shipId } },
+    { call: 'takeMic', input: { meetingId } },
+    { call: 'setMicPattern', input: { meetingId, pattern: 'fifo' } },
+    { call: 'endMeeting', input: { meetingId } },
+  ] as const)('makes $call as the person ship and passes core refusals on', async (command) => {
+    const controls = createRestFleetDoor(base).meetingControls;
+    answer = { status: 200, body: command.call === 'openMeeting' ? { meetingId } : {} };
+    await expect(controls.change('person-crew', command)).resolves.toEqual({ isOk: true, value: answer.body });
+    expect(sent()).toEqual([{ url: `/api/v1/ship/${command.call}`, authorization: 'Bearer person-crew', accountToken: undefined, body: command.input }]);
+    answer = { status: 403, body: { code: 'FORBIDDEN', message: 'Only the owner may do this' } };
+    await expect(controls.change('person-crew', command)).resolves.toEqual({ isOk: false, error: answer.body });
+  });
+
+  it('reads a bounded page through ship meetings, preserving its cursor and former participation', async () => {
+    const cursor = `o.1792832400000.${meetingId}`;
+    const entry = { meetingId, title: 'Weekly heads', openedAt: '2026-10-24T09:00:00.000Z', endedAt: null, owner: { id: shipId, name: 'charlotte' }, moderator: { id: shipId, name: 'charlotte' }, presentParticipants: 1, micHolder: null, placeInLine: null, lastContributionAt: null, participantState: 'revoked' };
+    answer = { status: 200, body: { items: [entry], nextCursor: cursor } };
+    await expect(createRestFleetDoor(base).meetingControls.list('person-crew', { cursor, limit: 20 })).resolves.toEqual({ isOk: true, value: answer.body });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/meetings', authorization: 'Bearer person-crew', accountToken: undefined, body: { cursor, limit: 20 } }]);
+  });
+});
