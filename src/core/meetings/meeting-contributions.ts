@@ -15,8 +15,8 @@ export interface UnseenContributions {
 }
 
 export interface MeetingContributions {
-  /** Idempotent arrival or sighting. Seen never becomes unseen; contributions before rollout stay seen without backfill. */
-  note(ship: PersonShip, sighting: { readonly contributions: readonly NotedContribution[]; readonly isSeen: boolean }): Promise<void>;
+  /** Idempotent arrival or sighting. Returns whether it changed. Seen never becomes unseen; contributions before rollout stay seen without backfill. */
+  note(ship: PersonShip, sighting: { readonly contributions: readonly NotedContribution[]; readonly isSeen: boolean }): Promise<boolean>;
   /** Indexed counts for the requested meetings only, including zero. Never reads delivery history. */
   unseen(ship: PersonShip, meetingIds: readonly MeetingId[]): Promise<UnseenContributions[]>;
 }

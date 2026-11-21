@@ -2,6 +2,18 @@
 
 Person clients call the gateway's tRPC API at `/trpc`, signed in as the person's account. The gateway crews that account's person ship; its crew token stays on the server. The exported `@aeolus-fleet/gateway/api` router type describes the procedures.
 
+## Person record
+
+The gateway counts from now on: it owns the person's record of arriving contributions and what that person has seen per meeting. Contributions sent before the counting release count as seen. There is no backfill and no core change. Counting is exact for every meeting from that release, including meetings already open then.
+
+The database migration's start time is the shared counting boundary for every gateway instance and restart. On receipt, the gateway notes each contribution by fleet, person ship, meeting and message id before exposing it. Repeated receives do not count it again. The record keeps ids and seen state, never contribution payloads.
+
+`people.unseenContributions({ meetingIds })` returns `[{ meetingId, count }]`, including zero, for up to 20 meetings. It reads the person's indexed gateway record, without receiving or scanning deliveries or reading meeting history. A person with no person ship is refused. Every device reads the same durable state.
+
+`people.meeting({ meetingId, cursor? })` returns the requested page and marks only the other participants' contributions on that page seen. It records sightings even before the corresponding delivery arrives; later arrival never makes a seen contribution unseen. A refused meeting read marks nothing. Reading one page leaves the other pages unseen. Clients fetch this call when showing the page, since reading marks that page seen. Record changes notify the person's clients through `requests.changes`; replay and repeated sightings do not notify again.
+
+Contributions stay in their meeting. They are outside ordinary inbox items, the home plain-message list, ship conversations, the waiting count and icon badge. Meeting added, mic and ended notices remain outside those counts too. The fleet's delivery record remains available independently; a meeting page records seen state without acknowledging deliveries.
+
 ## Meeting pushes
 
 A web push for a meeting carries one destination and one event:

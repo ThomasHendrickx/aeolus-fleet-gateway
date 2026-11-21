@@ -36,8 +36,8 @@ export function createReadMeeting(deps: { crewPersonShip: CrewPersonShip; crews:
       return refuse('NO_SUCH_MEETING', `The fleet did not read the meeting to you: ${meeting.error.message}`);
     }
     const ship = { fleetId: caller.fleetId, shipId: read.value.crew.shipId };
-    await deps.contributions.note(ship, { contributions: meeting.value.contributions.items.filter(({ sender }) => sender.shipId !== ship.shipId).map(({ messageId, sentAt }) => ({ meetingId, messageId, sentAt })), isSeen: true });
-    await deps.changes.tell(ship);
+    const isChanged = await deps.contributions.note(ship, { contributions: meeting.value.contributions.items.filter(({ sender }) => sender.shipId !== ship.shipId).map(({ messageId, sentAt }) => ({ meetingId, messageId, sentAt })), isSeen: true });
+    if (isChanged) { await deps.changes.tell(ship); }
     return ok({ meeting: meeting.value, mic: micStandingOf(meeting.value, read.value.crew.shipId) });
   };
 }

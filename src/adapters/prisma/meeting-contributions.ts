@@ -14,16 +14,20 @@ export function createPrismaMeetingContributions(db: Db): MeetingContributions {
   };
   return {
     note: async ({ fleetId, shipId }, { contributions, isSeen }) => {
-      if (contributions.length === 0) { return; }
+      if (contributions.length === 0) { return false; }
       const since = await countingStarted();
+      let isChanged = false;
       for (const { meetingId, messageId, sentAt } of contributions) {
         if (sentAt < since) { continue; }
-        await db.$executeRaw`
+        const changed = await db.$executeRaw`
           INSERT INTO meeting_contributions (fleet_id, ship_id, meeting_id, message_id, is_seen)
           VALUES (${fleetId}, ${shipId}, ${meetingId}, ${messageId}, ${isSeen})
           ON CONFLICT (fleet_id, ship_id, meeting_id, message_id)
-          DO UPDATE SET is_seen = meeting_contributions.is_seen OR EXCLUDED.is_seen`;
+          DO UPDATE SET is_seen = TRUE
+          WHERE NOT meeting_contributions.is_seen AND EXCLUDED.is_seen`;
+        isChanged = changed > 0 || isChanged;
       }
+      return isChanged;
     },
     unseen: async ({ fleetId, shipId }, meetingIds) => {
       const rows = await db.meetingContribution.groupBy({ by: ['meetingId'], where: { fleetId, shipId, meetingId: { in: [...meetingIds] }, isSeen: false }, _count: true });

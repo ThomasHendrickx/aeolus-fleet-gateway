@@ -1,9 +1,9 @@
 /** Records contributions before handing received deliveries to any person use case. Core can replay after a failed write. */
 import { isMeetingContribution } from './is-meeting-contribution.js';
-import type { PersonShipDoor } from '../people/ports.js';
+import type { InboxChanges, PersonShipDoor } from '../people/ports.js';
 import type { MeetingContributions, NotedContribution } from './meeting-contributions.js';
 
-export function createRecordingMeetingDoor(door: PersonShipDoor, contributions: MeetingContributions): PersonShipDoor {
+export function createRecordingMeetingDoor(door: PersonShipDoor, deps: { contributions: MeetingContributions; changes: InboxChanges }): PersonShipDoor {
   return {
     ...door,
     pushReceive: async (crewToken, take) => {
@@ -13,7 +13,8 @@ export function createRecordingMeetingDoor(door: PersonShipDoor, contributions: 
       if (arrived.length > 0) {
         const who = await door.whoami(crewToken);
         if (!who.isOk) { return who; }
-        await contributions.note(who.value, { contributions: arrived, isSeen: false });
+        const isChanged = await deps.contributions.note(who.value, { contributions: arrived, isSeen: false });
+        if (isChanged) { await deps.changes.tell({ fleetId: who.value.fleetId, shipId: who.value.shipId }); }
       }
       return received;
     },

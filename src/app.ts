@@ -490,7 +490,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
   const personCrews = createPrismaPersonCrews(prisma);
   const inboxChanges = createPrismaInboxChanges(prisma);
   const personInboxWakes = createPersonInboxWakes({ crews: personCrews, changes: inboxChanges, whoami: (token) => door.person.whoami(token), request: wakeups.request });
-  const personDoor = createReadablePersonDoor(holdingDoor(createRefreshingPersonDoor(createRecordingMeetingDoor(door.person, meetingContributions), personInboxWakes.changed), { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) }), { opened: storedOpenedDeliveries, replies: createPrismaUnreadableReplies(prisma), clock, refusedReply: (refusal) => { server.log.warn(refusal, 'the fleet refused the reply to an unreadable delivery'); } });
+  const personDoor = createReadablePersonDoor(holdingDoor(createRefreshingPersonDoor(createRecordingMeetingDoor(door.person, { contributions: meetingContributions, changes: inboxChanges }), personInboxWakes.changed), { held: heldDeliveries, letGo: createPrismaLetGoDeliveries(prisma) }), { opened: storedOpenedDeliveries, replies: createPrismaUnreadableReplies(prisma), clock, refusedReply: (refusal) => { server.log.warn(refusal, 'the fleet refused the reply to an unreadable delivery'); } });
   const readConnection = createReadConnection({ door, store: connections });
   // A fleet's connection as the gateway holds it, asking the fleet nothing: what a fleet that is off reads.
   const heldConnection: ReadConnection = async (fleetId) => {
