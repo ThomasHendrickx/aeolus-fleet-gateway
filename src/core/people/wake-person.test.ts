@@ -747,6 +747,64 @@ describe('meeting push preferences', () => {
     expect(push.woken).toEqual([]);
   });
 
+  it('records contributions without handing acknowledged deliveries to a focused page', async () => {
+    const fleet = fakePersonShipDoor({ crewToken: CREW_TOKEN, deliveries: [aDelivery(1, { meetingId, contentType: 'text/plain' })] });
+    const record = memoryMeetingContributions();
+    const door = createRecordingMeetingDoor(fleet.door, { contributions: record, changes: memoryInboxChanges() });
+    const focused = memoryFocusedPages();
+    await focused.save({ ...SHIP, pageId: 'meeting', seenAt: NOW });
+    const outcome = await waking({ ship: { door, handOvers: fleet.handOvers }, channels: [], focused })(SHIP, CREW_TOKEN);
+    expect({ outcome, handed: fleet.handOvers }).toEqual({ outcome: ok({ kind: 'settled' }), handed: [] });
+    await expect(record.unseen(SHIP, [meetingId])).resolves.toEqual([{ meetingId, count: 1 }]);
+  });
+
+  it.each(['handover', 'shownElsewhere', 'ack'])('records the complete burst despite a refused %s', async (failure) => {
+    const contributions = Array.from({ length: 25 }, (_, index) => aDelivery(index + 1, {
+      messageId: `msg_01m3tbfspe96yf1rnr4ank${String(index + 1).padStart(4, '0')}`,
+      meetingId, contentType: 'text/plain',
+    }));
+    const ordinary = aDelivery(30);
+    const fleet = fakePersonShipDoor({ crewToken: CREW_TOKEN, deliveries: [ordinary, ...contributions] });
+    const record = memoryMeetingContributions();
+    const refusal = { code: 'UNAVAILABLE', message: 'Core unavailable' };
+    let isAckRefused = false;
+    const door = createRecordingMeetingDoor({
+      ...fleet.door,
+      handed: (token, input) => failure === 'handover' ? Promise.resolve(err(refusal)) : fleet.door.handed(token, input),
+      ack: async (token, id) => {
+        if (failure === 'ack' && !isAckRefused) { isAckRefused = true; return err(refusal); }
+        return fleet.door.ack(token, id);
+      },
+    }, { contributions: record, changes: memoryInboxChanges() });
+    const wake = waking({
+      ship: { door, handOvers: fleet.handOvers }, channels: [aChannel('web-push').channel],
+      ...(failure === 'shownElsewhere' ? { shownElsewhere: { show: () => Promise.resolve(err(refusal)) } } : {}),
+    });
+
+    await wake(SHIP, CREW_TOKEN);
+
+    await expect(record.unseen(SHIP, [meetingId])).resolves.toEqual([{ meetingId, count: 25 }]);
+  });
+
+  it('sends only one failed channel wake while draining the contribution burst', async () => {
+    const contributions = Array.from({ length: 25 }, (_, index) => aDelivery(index + 1, {
+      messageId: `msg_01m3tbfspe96yf1rnr4ank${String(index + 1).padStart(4, '0')}`,
+      meetingId, contentType: 'text/plain',
+    }));
+    const fleet = fakePersonShipDoor({ crewToken: CREW_TOKEN, deliveries: [aDelivery(30), ...contributions] });
+    const door = createRecordingMeetingDoor(fleet.door, { contributions: memoryMeetingContributions(), changes: memoryInboxChanges() });
+    const attempts: PersonShip[] = [];
+    const push = aChannel('web-push');
+    const wake = waking({ ship: { door, handOvers: fleet.handOvers }, channels: [{
+      ...push.channel,
+      wake: (ship) => { attempts.push(ship); return Promise.resolve(err({ kind: 'unavailable', reason: 'Channel unavailable' })); },
+    }] });
+
+    await wake(SHIP, CREW_TOKEN);
+
+    expect(attempts).toEqual([SHIP]);
+  });
+
   it('wakes ordinary deliveries while more than a receive batch of contributions arrives', async () => {
     const contributions = Array.from({ length: RECEIVE_MAX_UPPER_BOUND + 1 }, (_, index) => aDelivery(index + 1, {
       messageId: `msg_01m3tbfspe96yf1rnr4ank${String(index + 1).padStart(4, '0')}`,

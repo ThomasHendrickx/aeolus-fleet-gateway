@@ -212,7 +212,7 @@ export interface PersonShipDoor {
    * one is not shut out by held ones, and excluding leaves out the ones the
    * crew took already, so it reaches past them.
    */
-  pushReceive(crewToken: string, take: { max: number; shouldSkipHanded?: boolean; excluding?: readonly DeliveryId[] }): Promise<Result<PushedPersonDelivery[], FleetRefusal>>;
+  pushReceive(crewToken: string, take: { max: number; shouldSkipHanded?: boolean; excluding?: readonly DeliveryId[]; onRecordedContributions?: (deliveryIds: readonly DeliveryId[]) => void }): Promise<Result<PushedPersonDelivery[], FleetRefusal>>;
   /** A page of the ship's record (Bridge, CC12): its deliveries in every state and across its leases, newest first, after the cursor; records nothing. */
   record(crewToken: string, page: { cursor: DeliveryId | null; limit: number }): Promise<Result<RecordPage, FleetRefusal>>;
   /** A page of the ship's exchange with one other ship (aeolus-fleet exchange-read): both ways, whole, newest first; records nothing. */

@@ -1,5 +1,6 @@
 import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from "@aeolus-fleet/common";
 
+import { isMeetingContribution } from '../meetings/is-meeting-contribution.js';
 import type { ConnectionStore, FleetRefusal } from "../connection/ports.js";
 import type { Clock } from "../shared/clock.js";
 import { err, ok, type Result } from "../shared/result.js";
@@ -22,12 +23,14 @@ import type {
 /**
  * What a wake came to: nothing left to wake (settled), a wake held back
  * until the earliest window of a channel turned on ends (inWindow), or no
- * channel sent it, so it is tried again (failed).
+ * channel sent it, so it is tried again (failed). Contributions are drained
+ * before the notification outcome is decided.
  */
-export type WakeOutcome =
+export type WakeOutcome = (
   | { readonly kind: "settled" }
   | { readonly kind: "inWindow"; readonly until: Date }
-  | { readonly kind: "failed" };
+  | { readonly kind: "failed" }
+);
 
 export type WakePerson = (
   ship: PersonShip,
@@ -96,15 +99,40 @@ export function createWakePerson(deps: {
   const attemptKey = (ship: PersonShip): string =>
     `${ship.fleetId}/${ship.shipId}`;
   const wakePerson: WakePerson = async (ship, crewToken) => {
-    const taken = await deps.door.pushReceive(crewToken, {
-      max: RECEIVE_MAX_UPPER_BOUND,
-      shouldSkipHanded: true,
-    });
-    if (!taken.isOk) {
-      return taken;
-    }
-    const everyFresh = taken.value.filter(
-      ({ handOverNumber }) => handOverNumber === null,
+    // Drain recorded contributions before waking channels. A later wake refusal
+    // must not strand the remaining batches behind the failed-wake backoff.
+    const deliveries = new Map<DeliveryId, PushedPersonDelivery>();
+    let refusal: FleetRefusal | undefined;
+    const progress = { hasRecorded: false, deliveryIds: new Set<DeliveryId>() };
+    const unacknowledged = new Set<DeliveryId>();
+    const hasRecorded = (): boolean => progress.hasRecorded;
+    do {
+      progress.hasRecorded = false;
+      const recorded: DeliveryId[] = [];
+      const taken = await deps.door.pushReceive(crewToken, {
+        max: RECEIVE_MAX_UPPER_BOUND,
+        shouldSkipHanded: true,
+        excluding: [...unacknowledged],
+        onRecordedContributions: (deliveryIds) => {
+          recorded.push(...deliveryIds);
+          for (const deliveryId of deliveryIds) {
+            if (!progress.deliveryIds.has(deliveryId)) { progress.hasRecorded = true; }
+            progress.deliveryIds.add(deliveryId);
+          }
+        },
+      });
+      if (!taken.isOk) {
+        refusal ??= taken.error;
+        for (const deliveryId of recorded) { unacknowledged.add(deliveryId); }
+      } else {
+        for (const delivery of taken.value) { deliveries.set(delivery.deliveryId, delivery); }
+      }
+      // Recorded deliveries are excluded even when their acknowledgement failed.
+    } while (hasRecorded());
+    if (refusal !== undefined) { return err(refusal); }
+    // The recording door already acknowledged contributions. Only ordinary deliveries can be handed on.
+    const everyFresh = [...deliveries.values()].filter(
+      (delivery) => delivery.handOverNumber === null && !isMeetingContribution(delivery),
     );
     // Read anew at every wake, so a change of where a job shows applies at once.
     const [routes, gateway] = await Promise.all([deps.routes.list(ship), deps.connections.binding(ship.fleetId)]);
@@ -125,9 +153,9 @@ export function createWakePerson(deps: {
       routing,
     });
     // What it left unfinished is finished at a wake tried again.
-    return isAnyUnfinished && woken.isOk && woken.value.kind === "settled"
-      ? ok({ kind: "failed" })
-      : woken;
+    if (!woken.isOk) { return woken; }
+    const outcome: WakeOutcome = isAnyUnfinished && woken.value.kind === "settled" ? { kind: "failed" } : woken.value;
+    return ok(outcome);
   };
   /** Wakes the person for the fresh deliveries nothing beyond the pages showed, each through the channels on for its job. */
   const wakeFor = async (
