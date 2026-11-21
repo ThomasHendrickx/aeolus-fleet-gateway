@@ -1,4 +1,3 @@
-import type { MeetingControls } from '../../core/meetings/control-ports.js';
 /**
  * The fleet's ship calls over its REST API (`/api/v1`), as any ship that is
  * not TypeScript-bound may make them: the gateway uses the public API like
@@ -55,6 +54,7 @@ import { z } from 'zod';
 
 import type { FleetDoor, FleetRefusal, GatewayInbox } from '../../core/connection/ports.js';
 import type { CallSender, Discovery, ReplyReceiver, SentMessages } from '../../core/mcp-in/ports.js';
+import type { MeetingControls } from '../../core/meetings/control-ports.js';
 import type { MeetingRead, MeetingShip, OwnMicChange, PersonMeetingDoor } from '../../core/meetings/ports.js';
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
 import type { StatementDoor } from '../../core/mcp-out/state-party.js';

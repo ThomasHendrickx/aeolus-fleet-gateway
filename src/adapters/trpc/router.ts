@@ -1,5 +1,3 @@
-import { meetingsCursorSchema } from '@aeolus-fleet/common';
-import type { ControlMeetings } from '../../core/meetings/control-meetings.js';
 /**
  * The gateway's API: one tRPC router, which the console's server and the
  * gateway's page call with the console's session cookie, as the other
@@ -13,8 +11,9 @@ import type { ControlMeetings } from '../../core/meetings/control-meetings.js';
  */
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
-import { idempotencyKeySchema, idSchema, payloadSchema, scopeNameSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
+import { addToMeetingInputSchema, openMeetingInputSchema, meetingsCursorSchema, setMicPatternInputSchema, idempotencyKeySchema, idSchema, payloadSchema, scopeNameSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
 import { initTRPC, TRPCError } from '@trpc/server';
+import { TRPC_ERROR_CODES_BY_KEY } from '@trpc/server/rpc';
 import { z } from 'zod';
 
 import type { ChangeHub } from '../http/live.js';
@@ -76,6 +75,7 @@ import type { ReadBasket } from '../../core/people/read-basket.js';
 import type { RemoveFromBasket } from '../../core/people/remove-from-basket.js';
 import type { SendBasket } from '../../core/people/send-basket.js';
 import type { OpenDelivery } from '../../core/people/open-delivery.js';
+import type { ControlMeetings } from '../../core/meetings/control-meetings.js';
 import type { ChangeOwnMic } from '../../core/meetings/change-own-mic.js';
 import type { MeetingRead } from '../../core/meetings/ports.js';
 import type { PersonMeeting, ReadMeeting } from '../../core/meetings/read-meeting.js';
@@ -685,7 +685,6 @@ const PERSON_CODES = {
   INVALID_QUIET_HOURS: 'BAD_REQUEST',
   NO_SUCH_MEETING: 'NOT_FOUND',
   MIC_REFUSED: 'CONFLICT',
-  MEETING_REFUSED: 'CONFLICT',
 } as const satisfies Record<string, TRPCError['code']>;
 
 /** A time of the day as a person's client sends and shows it, "HH:MM" on a 24 hour clock. */
@@ -693,6 +692,8 @@ const timeOfDaySchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'A time of
 const MINUTES_PER_HOUR = 60;
 /** The most ships a person's client asks about at once, as many as a page of conversations shows and more. */
 const QUIET_AMONG_MAX = 100;
+/** The number of meetings a person's client reads per page. */
+const MEETINGS_PER_PAGE = 20;
 
 const minuteOfDayOf = (time: string): number => Number(time.slice(0, 2)) * MINUTES_PER_HOUR + Number(time.slice(3, 5));
 const timeOfDayOf = (minute: number): string => `${String(Math.floor(minute / MINUTES_PER_HOUR)).padStart(2, '0')}:${String(minute % MINUTES_PER_HOUR).padStart(2, '0')}`;
@@ -720,9 +721,17 @@ function meetingViewOf({ meeting, mic }: PersonMeeting) {
   };
 }
 
-function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES; message: string }>): T {
+function isTRPCErrorCode(code: string): code is TRPCError['code'] {
+  return Object.hasOwn(TRPC_ERROR_CODES_BY_KEY, code);
+}
+
+function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES; message: string } | { kind: 'MEETING_REFUSED'; code: string; message: string }>): T {
   if (!answered.isOk) {
-    throw new TRPCError({ code: PERSON_CODES[answered.error.kind], message: answered.error.message });
+    const refusal = answered.error;
+    const code = refusal.kind === 'MEETING_REFUSED'
+      ? (isTRPCErrorCode(refusal.code) ? refusal.code : 'BAD_GATEWAY')
+      : PERSON_CODES[refusal.kind];
+    throw new TRPCError({ code, message: refusal.message });
   }
   return answered.value;
 }
@@ -1495,7 +1504,7 @@ export const gatewayRouter = t.router({
     /** The person's own meetings, open first, one bounded page from core. */
     meetings: personProcedure
       .input(z.strictObject({ cursor: meetingsCursorSchema.optional() }).optional())
-      .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.list({ caller: ctx.caller, page: { ...(input?.cursor === undefined ? {} : { cursor: input.cursor }), limit: 20 } }))),
+      .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.list({ caller: ctx.caller, page: { ...(input?.cursor === undefined ? {} : { cursor: input.cursor }), limit: MEETINGS_PER_PAGE } }))),
     leaveMeeting: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting') }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'leaveMeeting', input } }))),
@@ -1503,10 +1512,10 @@ export const gatewayRouter = t.router({
       .input(z.strictObject({ meetingId: idSchema('meeting') }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'rejoinMeeting', input } }))),
     openMeeting: personProcedure
-      .input(z.strictObject({ ships: z.array(z.strictObject({ name: shipHandleSchema })), title: z.string().trim().max(200).optional(), idempotencyKey: idempotencyKeySchema }))
+      .input(openMeetingInputSchema.pick({ title: true, idempotencyKey: true }).extend({ ships: z.array(z.strictObject({ name: shipHandleSchema })).optional() }).strict())
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'openMeeting', input } }))),
     addToMeeting: personProcedure
-      .input(z.strictObject({ meetingId: idSchema('meeting'), ships: z.array(z.strictObject({ name: shipHandleSchema })) }))
+      .input(addToMeetingInputSchema.pick({ meetingId: true }).extend({ ships: z.array(z.strictObject({ name: shipHandleSchema })).optional() }).strict())
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'addToMeeting', input } }))),
     revokeFromMeeting: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting'), shipId: idSchema('ship') }))
@@ -1524,7 +1533,7 @@ export const gatewayRouter = t.router({
       .input(z.strictObject({ meetingId: idSchema('meeting') }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'takeMic', input } }))),
     setMicPattern: personProcedure
-      .input(z.strictObject({ meetingId: idSchema('meeting'), pattern: z.enum(['moderator', 'fifo']) }))
+      .input(setMicPatternInputSchema.strict())
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'setMicPattern', input } }))),
     endMeeting: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting') }))
