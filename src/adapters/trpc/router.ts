@@ -682,6 +682,7 @@ const PERSON_CODES = {
   INVALID_QUIET_HOURS: 'BAD_REQUEST',
   NO_SUCH_MEETING: 'NOT_FOUND',
   MIC_REFUSED: 'CONFLICT',
+  MEETING_REFUSED: 'CONFLICT',
 } as const satisfies Record<string, TRPCError['code']>;
 
 /** A time of the day as a person's client sends and shows it, "HH:MM" on a 24 hour clock. */
