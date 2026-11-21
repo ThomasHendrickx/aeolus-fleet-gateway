@@ -1,3 +1,4 @@
+import { idSchema } from '@aeolus-fleet/common';
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
@@ -82,5 +83,62 @@ describe('the person record of meeting contributions', () => {
     await createPrismaFleetForgetter(prisma).forget(other.fleetId);
     await expect(record.unseen(other, [HEADS_MEETING_ID])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 0 }]);
     await expect(record.unseen(ship, [HEADS_MEETING_ID])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 1 }]);
+  });
+});
+
+/** Distinct meetings and chronological message ids, independent of arrival order. */
+function aContribution(number: number) {
+  return {
+    meetingId: idSchema('meeting').parse(`mtg_${String(number).padStart(26, '0')}`),
+    messageId: idSchema('message').parse(`msg_${String(number).padStart(26, '0')}`),
+    sentAt: new Date('2099-01-01T00:00:00Z'),
+  };
+}
+
+describe('meetings with something new in the person record', () => {
+  it('finds a meeting beyond the first meetings page without a list of meeting ids', async () => {
+    const record = createPrismaMeetingContributions(prisma);
+    await record.note(ship, { contributions: Array.from({ length: 20 }, (_, index) => aContribution(index + 1)), isSeen: true });
+    const beyond = aContribution(21);
+    await record.note(ship, { contributions: [beyond], isSeen: false });
+    await expect(record.unseenMeetings(ship)).resolves.toEqual([{ meetingId: beyond.meetingId, count: 1 }]);
+  });
+
+  it.each([20, 21])('bounds %s meetings to the newest twenty with their complete unseen counts', async (total) => {
+    const record = createPrismaMeetingContributions(prisma);
+    // Arrival order differs from message order. The oldest meeting has the newest contribution.
+    for (let number = total; number > 0; number -= 1) {
+      await record.note(ship, { contributions: [aContribution(number)], isSeen: false });
+    }
+    const newest = { ...aContribution(30), meetingId: aContribution(1).meetingId };
+    await record.note(ship, { contributions: [newest], isSeen: false });
+    await record.note(ship, { contributions: [newest], isSeen: false });
+    const expected = [
+      { meetingId: aContribution(1).meetingId, count: 2 },
+      ...Array.from({ length: 19 }, (_, index) => ({ meetingId: aContribution(total - index).meetingId, count: 1 })),
+    ];
+    await expect(createPrismaMeetingContributions(prisma).unseenMeetings(ship)).resolves.toEqual(expected);
+  });
+
+  it('excludes seen records and other fleets and people, including when they have newer contributions', async () => {
+    const record = createPrismaMeetingContributions(prisma);
+    await record.note(ship, { contributions: [aContribution(1), aContribution(2)], isSeen: false });
+    await record.note(ship, { contributions: [aContribution(2), aContribution(30)], isSeen: true });
+    await record.note({ ...ship, fleetId: 'flt_01m3tb1zgr5h2ffee12xnch8zz' }, { contributions: [aContribution(40)], isSeen: false });
+    await record.note({ ...ship, shipId: 'shp_01m3tb1zgr5h2ffee12xnch8pq' }, { contributions: [aContribution(50)], isSeen: false });
+    await expect(record.unseenMeetings(ship)).resolves.toEqual([{ meetingId: aContribution(1).meetingId, count: 1 }]);
+    await record.note(ship, { contributions: [aContribution(1)], isSeen: true });
+    await expect(record.unseenMeetings(ship)).resolves.toEqual([]);
+  });
+
+  it('orders by the newest remaining unseen contribution after a page is read', async () => {
+    const record = createPrismaMeetingContributions(prisma);
+    const newest = { ...aContribution(3), meetingId: aContribution(1).meetingId };
+    await record.note(ship, { contributions: [aContribution(1), aContribution(2), newest], isSeen: false });
+    await record.note(ship, { contributions: [newest], isSeen: true });
+    await expect(record.unseenMeetings(ship)).resolves.toEqual([
+      { meetingId: aContribution(2).meetingId, count: 1 },
+      { meetingId: aContribution(1).meetingId, count: 1 },
+    ]);
   });
 });
