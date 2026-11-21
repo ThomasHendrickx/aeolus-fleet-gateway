@@ -140,7 +140,8 @@ describe('a person ship takes part in a meeting', () => {
   it.each([false, true])('leaves only the meeting notice waiting in core with page focused: %s', async (isFocused) => {
     await withContributionBurst(isFocused, async (burst) => {
       await burst.recorded();
-      expect(await person.inbox(charlotte)).toMatchObject({ isOk: true, value: { waiting: 1 } });
+      // Recording is durable before the final core acknowledgement completes.
+      await expect.poll(() => person.inbox(charlotte)).toMatchObject({ isOk: true, value: { waiting: 1 } });
     });
   }, 60_000);
 
