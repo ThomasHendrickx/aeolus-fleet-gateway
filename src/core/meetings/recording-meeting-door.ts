@@ -14,6 +14,7 @@ export function createRecordingMeetingDoor(door: PersonShipDoor, deps: { contrib
         const who = await door.whoami(crewToken);
         if (!who.isOk) { return who; }
         const isChanged = await deps.contributions.note(who.value, { contributions: arrived, isSeen: false });
+        take.onRecordedContributions?.(received.value.filter(isMeetingContribution).map(({ deliveryId }) => deliveryId));
         if (isChanged) { await deps.changes.tell({ fleetId: who.value.fleetId, shipId: who.value.shipId }); }
         for (const { deliveryId } of received.value.filter(isMeetingContribution)) {
           const acknowledged = await door.ack(crewToken, deliveryId);
