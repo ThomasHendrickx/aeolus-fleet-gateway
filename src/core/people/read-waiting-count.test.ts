@@ -102,8 +102,8 @@ describe('a person reads the count of what waits on them', () => {
     await expect(counting([QUESTION]).readWaitingCount(CHARLOTTE_GRANT)).resolves.toEqual({ isOk: true, value: { count: 1 } });
   });
 
-  it('counts no plain message contributed to a meeting, for a person read and a wake alike', async () => {
-    const contributed = aPersonDelivery({ ...MESSAGE, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0008', meetingId: 'mtg_01m3tbfspe96yf1rnr4ank0001' });
+  it.each(['text/plain', 'application/vnd.aeolus.question+json'])('counts no %s contribution to a meeting, for a person read and a wake alike', async (contentType) => {
+    const contributed = aPersonDelivery({ ...MESSAGE, contentType, deliveryId: 'dlv_01m3tbfspe96yf1rnr4ank0008', meetingId: 'mtg_01m3tbfspe96yf1rnr4ank0001' });
     const { door } = fakePersonShipDoor({ crewToken: 'aeolus_ct_v1_charlotte', deliveries: [QUESTION, MESSAGE, contributed] });
     const held = createHeldDeliveries(FIXED_CLOCK);
 

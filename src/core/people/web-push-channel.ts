@@ -1,5 +1,6 @@
-import type { FleetId } from '@aeolus-fleet/common';
+import { MEETING_ADDED_CONTENT_TYPE, MEETING_MIC_CONTENT_TYPE, MEETING_ENDED_CONTENT_TYPE, type FleetId } from '@aeolus-fleet/common';
 
+import { essenceOf } from './item-job.js';
 import type { Clock } from '../shared/clock.js';
 import { err, ok, type Result } from '../shared/result.js';
 import type { PersonShip, Wake, WakeChannel, WakeWindow, WebPush, WebPushSubscription, WebPushSubscriptions } from './ports.js';
@@ -18,7 +19,8 @@ import { wakeJobOf, type WakeJob } from './wake-job.js';
  * record; while the fleet does not answer it, the wake did not go out. For
  * one delivery it names its sender and job and the delivery, ship and fleet
  * ids, so a client builds the item's address itself; for several, how many
- * of each job. It never says what an item says.
+ * of each job. Meeting events each name their meeting and event, without a
+ * waiting count. Contributions never wake a browser. It never says what an item says.
  */
 export function createWebPushChannel(deps: {
   subscriptions: WebPushSubscriptions;
@@ -58,25 +60,53 @@ export function createWebPushChannel(deps: {
       if (browsers.length === 0) {
         return err({ kind: 'unavailable', reason: 'no push service took the wake' });
       }
-      const wake = await wakeOf(ship, window);
+      const meetingWakes: ((fleetName: string) => Wake)[] = [];
+      const ordinary = window.waitsAt === 'personShip' ? window.deliveries.filter((delivery) => {
+        const event = meetingEventOf(delivery.contentType);
+        if (delivery.meetingId === null || event === undefined) {
+          return delivery.meetingId === null;
+        }
+        const meetingId = delivery.meetingId;
+        meetingWakes.push((fleetName) => ({ fleetName, bridgeUrl: deps.bridgeUrlOf(ship.fleetId), waitsAt: 'meeting', fleetId: ship.fleetId, meetingId, event }));
+        return false;
+      }) : [];
+      const wake = window.waitsAt === 'personShip' && ordinary.length === 0
+        ? ok(undefined)
+        : await wakeOf(ship, window.waitsAt === 'personShip' ? { ...window, deliveries: ordinary } : window);
       if (!wake.isOk) {
         return err({ kind: 'unavailable', reason: wake.error });
       }
-      let isTaken = false;
-      for (const subscription of browsers) {
-        const sent = await deps.webPush.send(subscription, wake.value(subscription.fleetName));
-        switch (sent) {
-          case 'sent':
-            isTaken = true;
-            break;
-          case 'gone':
-            await deps.subscriptions.markGone(ship.fleetId, { shipId: ship.shipId, endpoint: subscription.endpoint, goneAt: deps.clock.now() });
-            break;
-          case 'failed':
-            break;
+      const wakes = [...meetingWakes, ...(wake.value === undefined ? [] : [wake.value])];
+      for (const makeWake of wakes) {
+        let isTaken = false;
+        for (const subscription of browsers) {
+          const sent = await deps.webPush.send(subscription, makeWake(subscription.fleetName));
+          switch (sent) {
+            case 'sent':
+              isTaken = true;
+              break;
+            case 'gone':
+              await deps.subscriptions.markGone(ship.fleetId, { shipId: ship.shipId, endpoint: subscription.endpoint, goneAt: deps.clock.now() });
+              break;
+            case 'failed':
+              break;
+          }
+        }
+        if (!isTaken) {
+          return err({ kind: 'unavailable', reason: 'no push service took the wake' });
         }
       }
-      return isTaken ? ok(undefined) : err({ kind: 'unavailable', reason: 'no push service took the wake' });
+      return ok(undefined);
     },
   };
+}
+
+/** The event a meeting notice names; contributions and other deliveries have none. */
+function meetingEventOf(contentType: string): 'added' | 'mic' | 'ended' | undefined {
+  switch (essenceOf(contentType)) {
+    case MEETING_ADDED_CONTENT_TYPE: return 'added';
+    case MEETING_MIC_CONTENT_TYPE: return 'mic';
+    case MEETING_ENDED_CONTENT_TYPE: return 'ended';
+    default: return undefined;
+  }
 }

@@ -50,6 +50,15 @@ describe('a person opens a delivery that waits for their person ship', () => {
     await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: true, value: { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' } });
   });
 
+  it('opens a contribution already acknowledged by the gateway without making it a plain opened message', async () => {
+    const contribution = aPersonDelivery({ ...NOTE, meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
+    const { openDelivery, door } = opening([contribution]);
+    await door.ack('aeolus_ct_v1_charlotte', contribution.deliveryId);
+
+    await expect(openDelivery({ caller: CALLER, deliveryId: contribution.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: true, value: { meetingId: contribution.meetingId } });
+    expect([...opened.held.values()]).toEqual([]);
+  });
+
   it('says a meeting notice as a sentence, so the person is never shown its payload', async () => {
     const notice = aPersonDelivery({ ...NOTE, senderName: 'tracker', contentType: 'application/vnd.aeolus.meeting.mic+json', payload: '{"meetingId":"mtg_01m5qa5j85mgd4z61d9c2k4mtg"}', meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' });
     const { openDelivery } = opening([notice]);
@@ -107,14 +116,14 @@ describe('a person opens a delivery that waits for their person ship', () => {
     const { openDelivery, calls } = opening([NOTE]);
 
     await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
-    expect({ calls, opened: opened.held.size }).toEqual({ calls: ['inbox', 'pushReceive(10)'], opened: 0 });
+    expect({ acknowledgements: calls.filter((call) => call.startsWith('ack(')), opened: opened.held.size }).toEqual({ acknowledgements: [], opened: 0 });
   });
 
-  it('refuses at once while nothing waits', async () => {
+  it('refuses an unknown delivery while nothing waits', async () => {
     const { openDelivery, calls } = opening([]);
 
     await expect(openDelivery({ caller: CALLER, deliveryId: QUESTION.deliveryId, place: 'chat' })).resolves.toMatchObject({ isOk: false, error: { kind: 'NO_SUCH_DELIVERY' } });
-    expect(calls).toEqual(['inbox']);
+    expect(calls.filter((call) => call.startsWith('ack('))).toEqual([]);
   });
 
   it('refuses an account with no person ship, asking the fleet nothing', async () => {

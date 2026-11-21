@@ -188,3 +188,29 @@ describe('the web push channel', () => {
     expect({ woken, held: subscriptions.held, sent: push.sent }).toEqual({ woken: err({ kind: 'unavailable', reason: 'no push service took the wake' }), held: [aWebPushSubscription({ goneAt: NOW })], sent: [] });
   });
 });
+
+
+describe('meeting pushes', () => {
+  it.each(['added', 'mic', 'ended'])('opens the meeting for %s without adding a badge count or payload', async (kind) => {
+    await subscriptions.save(aWebPushSubscription());
+    const meetingId = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' as const;
+    const delivery = aPersonDelivery({ meetingId, contentType: `application/vnd.aeolus.meeting.${kind}+json`, payload: 'private meeting content' });
+    await webPushChannel().wake(SHIP, forPersonShip([delivery]));
+    expect(push.sent).toEqual([{ endpoint: aWebPushSubscription().endpoint, wake: {
+      fleetName: 'Acme', bridgeUrl: OVERVIEW_URL, waitsAt: 'meeting', fleetId: FLEET_ID, meetingId, event: kind,
+    } }]);
+  });
+
+  it('sends one destination per meeting event when several arrive together', async () => {
+    await subscriptions.save(aWebPushSubscription());
+    const meetingId = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' as const;
+    await webPushChannel().wake(SHIP, forPersonShip([
+      aPersonDelivery({ meetingId, contentType: 'application/vnd.aeolus.meeting.added+json' }),
+      aPersonDelivery({ meetingId, contentType: 'application/vnd.aeolus.meeting.mic+json' }),
+    ]));
+    expect(push.sent.map(({ wake }) => wake)).toEqual([
+      { fleetName: 'Acme', bridgeUrl: OVERVIEW_URL, waitsAt: 'meeting', fleetId: FLEET_ID, meetingId, event: 'added' },
+      { fleetName: 'Acme', bridgeUrl: OVERVIEW_URL, waitsAt: 'meeting', fleetId: FLEET_ID, meetingId, event: 'mic' },
+    ]);
+  });
+});

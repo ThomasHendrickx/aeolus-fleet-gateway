@@ -2,11 +2,13 @@ import { RECEIVE_MAX_UPPER_BOUND, type DeliveryId } from '@aeolus-fleet/common';
 import { describe, expect, it } from 'vitest';
 
 import { FLEET_ID, memoryConnectionStore } from '../../../test/support/fleet-fakes.js';
-import { aPersonDelivery, memoryFocusedPages, memoryQuietHours, memoryQuietShips, memoryRoutes } from '../../../test/support/people-fakes.js';
+import { memoryMeetingContributions } from '../../../test/support/meeting-contributions-fake.js';
+import { aPersonDelivery, fakePersonShipDoor, memoryFocusedPages, memoryInboxChanges, memoryQuietHours, memoryQuietShips, memoryRoutes } from '../../../test/support/people-fakes.js';
 import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import type { FleetRefusal } from '../connection/ports.js';
+import { createRecordingMeetingDoor } from '../meetings/recording-meeting-door.js';
 import { err, ok, type Result } from '../shared/result.js';
-import type { FocusedPages, PersonShip, PushedPersonDelivery, ShownElsewhere, WakeChannel, WakeChannelName, WakesSent, WakeWindow } from './ports.js';
+import type { FocusedPages, HandOverChannel, PersonShip, PushedPersonDelivery, ShownElsewhere, WakeChannel, WakeChannelName, WakesSent, WakeWindow } from './ports.js';
 import type { QuietHours } from './quiet-hours.js';
 import type { QuietShip } from './quiet-ships.js';
 import { ITEM_JOBS, routingDefaultsOf, type Route, type RoutingDefaults } from './routing.js';
@@ -73,7 +75,7 @@ function memoryWakesSent(sent: { channel: WakeChannelName; at: Date }[] = []): W
 
 /** The person ship's deliveries in the fleet, as its push receive hands them, and the hand-overs the gateway reported. */
 function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: FleetRefusal } = {}) {
-  const handOvers: { deliveryId: DeliveryId; handOverNumber: number; channel: string }[] = [];
+  const handOvers: { deliveryId: DeliveryId; handOverNumber: number; channel: HandOverChannel }[] = [];
   return {
     handOvers,
     door: {
@@ -91,7 +93,7 @@ function aShip(deliveries: PushedPersonDelivery[], options: { pushReceive?: Flee
                 )
               : err({ code: 'UNAUTHORIZED', message: 'no' }),
         ),
-      handed: (_crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: string }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>> => {
+      handed: (_crewToken: string, handOver: { deliveryId: DeliveryId; handOverNumber: number; channel: HandOverChannel }): Promise<Result<'handed' | 'acknowledged' | 'undeliverable', FleetRefusal>> => {
         handOvers.push(handOver);
         return Promise.resolve(ok('handed'));
       },
@@ -715,5 +717,75 @@ describe('waking a person with their preferences (preferences design)', () => {
     await waking({ ship, channels: [email.channel], quietHours: [someQuietHours({ shipId: OTHER_SHIP })], quietShips: [aQuietShip({ shipId: OTHER_SHIP })] })(SHIP, CREW_TOKEN);
 
     expect(email.woken).toEqual([SHIP]);
+  });
+});
+
+
+describe('meeting push preferences', () => {
+  const meetingId = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' as const;
+  const defaults = routingDefaultsOf([{ job: 'stay-aware', place: 'web-push' }]);
+  const notice = () => aDelivery(1, { meetingId, contentType: 'application/vnd.aeolus.meeting.mic+json' });
+
+  it('hands the mic notice through web push with alerts on and messages off', async () => {
+    const ship = aShip([notice()]);
+    const push = aChannel('web-push');
+    await waking({ ship, channels: [push.channel], defaults })(SHIP, CREW_TOKEN);
+    expect(ship.handOvers).toEqual([{ deliveryId: notice().deliveryId, handOverNumber: 1, channel: 'web-push' }]);
+  });
+
+  it('keeps meeting notices quiet when alerts are off even with messages on', async () => {
+    const ship = aShip([notice()]);
+    const push = aChannel('web-push');
+    await waking({ ship, channels: [push.channel], defaults: routingDefaultsOf([{ job: 'everything-else', place: 'web-push' }]) })(SHIP, CREW_TOKEN);
+    expect(push.woken).toEqual([]);
+  });
+
+  it('never wakes for a contribution with messages on', async () => {
+    const ship = aShip([aDelivery(1, { meetingId, contentType: 'text/plain' })]);
+    const push = aChannel('web-push');
+    await waking({ ship, channels: [push.channel] })(SHIP, CREW_TOKEN);
+    expect(push.woken).toEqual([]);
+  });
+
+  it('wakes ordinary deliveries while more than a receive batch of contributions arrives', async () => {
+    const contributions = Array.from({ length: RECEIVE_MAX_UPPER_BOUND + 1 }, (_, index) => aDelivery(index + 1, {
+      messageId: `msg_01m3tbfspe96yf1rnr4ank${String(index + 1).padStart(4, '0')}`,
+      meetingId,
+      contentType: 'text/plain',
+    }));
+    const ordinary = aDelivery(RECEIVE_MAX_UPPER_BOUND + 2);
+    const fleet = fakePersonShipDoor({ crewToken: CREW_TOKEN, deliveries: contributions });
+    const door = createRecordingMeetingDoor(fleet.door, { contributions: memoryMeetingContributions(), changes: memoryInboxChanges() });
+    const push = aChannel('web-push');
+    const wake = waking({ ship: { door, handOvers: fleet.handOvers }, channels: [push.channel] });
+
+    await wake(SHIP, CREW_TOKEN);
+    fleet.ship.deliveries.push(ordinary);
+    await wake(SHIP, CREW_TOKEN);
+
+    expect({ woken: push.woken, handed: fleet.handOvers }).toEqual({ woken: [SHIP], handed: [{ deliveryId: ordinary.deliveryId, handOverNumber: 1, channel: 'web-push' }] });
+  });
+
+  it('keeps the mic quiet for a quiet ship', async () => {
+    const ship = aShip([notice()]);
+    const push = aChannel('web-push');
+    await waking({ ship, channels: [push.channel], defaults, quietShips: [aQuietShip()] })(SHIP, CREW_TOKEN);
+    expect(push.woken).toEqual([]);
+  });
+
+  it('holds a meeting push until quiet hours end', async () => {
+    const ship = aShip([notice()]);
+    const push = aChannel('web-push');
+    const outcome = await waking({ ship, channels: [push.channel], defaults, quietHours: [someQuietHours()] })(SHIP, CREW_TOKEN);
+    expect({ outcome, woken: push.woken, handed: ship.handOvers }).toEqual({ outcome: ok({ kind: 'inWindow', until: new Date('2026-10-23T13:00:00.000Z') }), woken: [], handed: [] });
+  });
+
+  it('shows the mic notice on a focused page and sends no push', async () => {
+    const ship = aShip([notice()]);
+    const push = aChannel('web-push');
+    const focused = memoryFocusedPages();
+    await focused.save({ ...SHIP, pageId: 'meeting', seenAt: NOW });
+    await waking({ ship, channels: [push.channel], defaults, focused })(SHIP, CREW_TOKEN);
+    expect({ woken: push.woken, handed: ship.handOvers }).toEqual({ woken: [], handed: [{ deliveryId: notice().deliveryId, handOverNumber: 1, channel: 'page' }] });
   });
 });

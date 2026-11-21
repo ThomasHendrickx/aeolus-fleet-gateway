@@ -60,6 +60,17 @@ async function chiefReceives() {
 }
 
 describe('a person ship takes part in a meeting', () => {
+  it('keeps contributions outside the ship conversation and its plain message counts', async () => {
+    await chiefCalls('send', { selector: { kind: 'meeting', meetingId }, payload: 'Meeting only', idempotencyKey: 'meeting-only', model: 'gpt-6.1-sol' });
+    const who = await person.whoami(chief);
+    expect(who.isOk).toBe(true);
+    if (!who.isOk) { return; }
+    const exchange = await person.exchange(charlotte, { otherShipId: who.value.shipId, start: { kind: 'newest' }, limit: 20 });
+    const exchanges = await person.exchanges(charlotte, { cursor: null, limit: 20 });
+    expect(exchange.isOk && exchange.value.items.map(({ payload }) => payload)).not.toContain('Meeting only');
+    expect(exchanges.isOk && exchanges.value.items.every(({ unseenPlainMessages }) => unseenPlainMessages === 0)).toBe(true);
+  });
+
   it("finds the meeting by the added notice's envelope", async () => {
     const taken = await person.pushReceive(charlotte, { max: 10 });
 
