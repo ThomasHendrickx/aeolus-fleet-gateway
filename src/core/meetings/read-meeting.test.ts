@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FLEET_ID } from '../../../test/support/fleet-fakes.js';
 import { CHARLOTTE, CHIEF_OF_STAFF, HEAD_OF_MARKETING, HEADS_MEETING_ID, aMeetingRead, fakePersonMeetingDoor } from '../../../test/support/meeting-fakes.js';
 import { CHARLOTTE_GRANT, fakeCrewPersonShip, memoryPersonCrews } from '../../../test/support/people-fakes.js';
+import { memoryMeetingContributions } from '../../../test/support/meeting-contributions-fake.js';
+import { memoryInboxChanges } from '../../../test/support/people-fakes.js';
+import { PERSON_SHIP_ID } from '../../../test/support/sign-in-fakes.js';
 import { createReadMeeting } from './read-meeting.js';
 
 // A person reads a meeting they take part in as their person ship (decision
@@ -16,12 +19,21 @@ beforeEach(() => {
 });
 
 function reading(meetings = [aMeetingRead()]) {
+  const contributions = memoryMeetingContributions();
   const fleet = fakePersonMeetingDoor({ crewToken: 'aeolus_ct_v1_charlotte', meetings });
-  const readMeeting = createReadMeeting({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: fleet.door });
-  return { ...fleet, readMeeting };
+  const readMeeting = createReadMeeting({ crewPersonShip: fakeCrewPersonShip(crews), crews, door: fleet.door, contributions, changes: memoryInboxChanges() });
+  return { ...fleet, readMeeting, contributions };
 }
 
 describe('a person reads a meeting they take part in', () => {
+  it('marks the contributions shown on the page seen in the person record', async () => {
+    const { readMeeting, contributions } = reading();
+    const ship = { fleetId: FLEET_ID, shipId: PERSON_SHIP_ID };
+    await contributions.note(ship, aMeetingRead().contributions.items.map((item) => ({ ...item, meetingId: HEADS_MEETING_ID })), false);
+    await readMeeting({ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID });
+    await expect(contributions.unseen(ship, [HEADS_MEETING_ID])).resolves.toEqual([{ meetingId: HEADS_MEETING_ID, count: 0 }]);
+  });
+
   it('reads it as the fleet answers it, with the newest contributions first', async () => {
     const { readMeeting } = reading();
 
