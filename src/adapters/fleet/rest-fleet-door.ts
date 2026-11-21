@@ -1,3 +1,4 @@
+import type { MeetingControls } from '../../core/meetings/control-ports.js';
 /**
  * The fleet's ship calls over its REST API (`/api/v1`), as any ship that is
  * not TypeScript-bound may make them: the gateway uses the public API like
@@ -25,6 +26,9 @@ import {
   inboxOutputSchema,
   meetingOutputSchema,
   requestMicOutputSchema,
+  meetingsOutputSchema,
+  openMeetingOutputSchema,
+  meetingChangedOutputSchema,
   pushReceiveOutputSchema,
   scopesOutputSchema,
   deliveryOutputSchema,
@@ -249,7 +253,7 @@ function parsedOf<T>(schema: z.ZodType<T>, payload: string): T | undefined {
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & ReplyReceiver & SentMessages & AccountDoor & Owners & { person: PersonShipDoor; meetings: PersonMeetingDoor; gatewayInbox: GatewayInbox } {
+): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & ReplyReceiver & SentMessages & AccountDoor & Owners & { person: PersonShipDoor; meetings: PersonMeetingDoor; meetingControls: MeetingControls; gatewayInbox: GatewayInbox } {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   const done = async (crewToken: string, request: { path: string; body: unknown }) => {
@@ -420,6 +424,12 @@ export function createRestFleetDoor(
       },
       send: (crewToken, { to, contentType, payload, idempotencyKey }) =>
         call({ path: '/ship/send', method: 'POST', crewToken, body: { selector: to, contentType, payload, idempotencyKey }, answers: sendOutputSchema }),
+    },
+    meetingControls: {
+      list: (crewToken, input) => call({ path: '/ship/meetings', method: 'POST', crewToken, body: input, answers: meetingsOutputSchema }),
+      change: (crewToken, command) => command.call === 'openMeeting'
+        ? call({ path: '/ship/openMeeting', method: 'POST', crewToken, body: command.input, answers: openMeetingOutputSchema })
+        : call({ path: `/ship/${command.call}`, method: 'POST', crewToken, body: command.input, answers: meetingChangedOutputSchema }),
     },
     // The meeting calls a person ship's crew makes for the person (decision 0061, M19).
     meetings: {
