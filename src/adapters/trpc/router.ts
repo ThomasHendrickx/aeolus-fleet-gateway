@@ -1,3 +1,4 @@
+import type { ReadUnseenMeetings } from '../../core/meetings/read-unseen-meetings.js';
 import type { ReadUnseenContributions } from '../../core/meetings/read-unseen-contributions.js';
 /**
  * The gateway's API: one tRPC router, which the console's server and the
@@ -240,6 +241,7 @@ export interface Context {
     sendMessage: SendMessage;
     controlMeetings: ControlMeetings;
     readMeeting: ReadMeeting;
+    readUnseenMeetings: ReadUnseenMeetings;
     readUnseenContributions: ReadUnseenContributions;
     changeOwnMic: ChangeOwnMic;
   };
@@ -1543,6 +1545,8 @@ export const gatewayRouter = t.router({
     endMeeting: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting') }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'endMeeting', input } }))),
+    /** Twenty meetings with unseen contributions, newest first, from the person's record. */
+    unseenMeetings: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readUnseenMeetings(ctx.caller))),
     /** Counts only for a page of the person's meetings, from the gateway's indexed person record. */
     unseenContributions: personProcedure
       .input(z.strictObject({ meetingIds: z.array(idSchema('meeting')).max(MEETING_COUNTS_MAX) }))
