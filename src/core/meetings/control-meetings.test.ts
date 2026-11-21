@@ -6,12 +6,12 @@ import { ok, err } from '../shared/result.js';
 import { createControlMeetings } from './control-meetings.js';
 import type { MeetingControls } from './control-ports.js';
 
-function controlling(isRefused = false) {
+function controlling(refusalCode?: string) {
   const crews = memoryPersonCrews();
   const tokens: string[] = [];
   const door: MeetingControls = {
-    list: (token) => { tokens.push(token); return Promise.resolve(ok({ items: [], nextCursor: null })); },
-    change: (token) => { tokens.push(token); return Promise.resolve(isRefused ? err({ code: 'FORBIDDEN', message: 'Missing scope meetings:open' }) : ok({ meetingId: HEADS_MEETING_ID })); },
+    list: (token) => { tokens.push(token); return Promise.resolve(refusalCode === undefined ? ok({ items: [], nextCursor: null }) : err({ code: refusalCode, message: 'Core refuses this meeting call' })); },
+    change: (token) => { tokens.push(token); return Promise.resolve(refusalCode !== undefined ? err({ code: refusalCode, message: 'Core refuses this meeting call' }) : ok({ meetingId: HEADS_MEETING_ID })); },
   };
   return { controls: createControlMeetings({ crewPersonShip: fakeCrewPersonShip(crews), crews, door }), tokens };
 }
@@ -22,9 +22,13 @@ describe('a person controls meetings as their own crew', () => {
     await expect(controls.change({ caller: CHARLOTTE_GRANT, command: { call: 'openMeeting', input: { ships: [{ name: 'chief-of-staff' }], idempotencyKey: 'open-1' } } })).resolves.toEqual(ok({ meetingId: HEADS_MEETING_ID }));
     expect(tokens).toEqual(['aeolus_ct_v1_charlotte']);
   });
-  it('passes the core scope refusal reason on', async () => {
-    const { controls } = controlling(true);
-    await expect(controls.change({ caller: CHARLOTTE_GRANT, command: { call: 'openMeeting', input: { ships: [], idempotencyKey: 'open-1' } } })).resolves.toEqual(err({ kind: 'MEETING_REFUSED', message: 'Missing scope meetings:open' }));
+  it.each(['FORBIDDEN', 'NOT_FOUND', 'BAD_REQUEST', 'CONFLICT'])('keeps core code %s when a meeting change is refused', async (code) => {
+    const { controls } = controlling(code);
+    await expect(controls.change({ caller: CHARLOTTE_GRANT, command: { call: 'openMeeting', input: { ships: [], idempotencyKey: 'open-1' } } })).resolves.toEqual(err({ kind: 'MEETING_REFUSED', code, message: 'Core refuses this meeting call' }));
+  });
+  it.each(['FORBIDDEN', 'NOT_FOUND', 'BAD_REQUEST', 'CONFLICT'])('keeps core code %s when a meeting page is refused', async (code) => {
+    const { controls } = controlling(code);
+    await expect(controls.list({ caller: CHARLOTTE_GRANT, page: { limit: 20 } })).resolves.toEqual(err({ kind: 'MEETING_REFUSED', code, message: 'Core refuses this meeting call' }));
   });
   it('reads a page as the person', async () => {
     const { controls, tokens } = controlling();

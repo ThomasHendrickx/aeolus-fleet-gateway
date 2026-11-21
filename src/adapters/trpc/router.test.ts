@@ -2045,7 +2045,6 @@ describe('installation.connect', () => {
   });
 });
 
-
 describe('the person API meeting controls', () => {
   const meetingId = HEADS_MEETING_ID;
   const shipId = 'shp_01m3tb1zgr5h2ffee12xnch8pp';
@@ -2063,35 +2062,66 @@ describe('the person API meeting controls', () => {
     { call: 'endMeeting', input: { meetingId } },
   ] as const;
 
-  it.each(commands)('serves $call as its authenticated person and passes refusals on', async ({ call, input }) => {
+  function invokeMeeting(caller: ReturnType<typeof gatewayRouter.createCaller>, { call, input }: typeof commands[number]) {
+    switch (call) {
+      case 'leaveMeeting': return caller.people.leaveMeeting(input);
+      case 'rejoinMeeting': return caller.people.rejoinMeeting(input);
+      case 'openMeeting': return caller.people.openMeeting({ ...input, ships: [...input.ships] });
+      case 'addToMeeting': return caller.people.addToMeeting({ ...input, ships: [...input.ships] });
+      case 'revokeFromMeeting': return caller.people.revokeFromMeeting(input);
+      case 'transferMeeting': return caller.people.transferMeeting(input);
+      case 'nameModerator': return caller.people.nameModerator(input);
+      case 'giveMic': return caller.people.giveMic(input);
+      case 'takeMic': return caller.people.takeMic(input);
+      case 'setMicPattern': return caller.people.setMicPattern(input);
+      case 'endMeeting': return caller.people.endMeeting(input);
+    }
+  }
+
+  it.each(commands)('returns the core result of $call', async (command) => {
+    const { context } = aContext(PERSON_COOKIE);
+    if (context.person === undefined) throw new Error('Person API is required');
+    context.person.controlMeetings.change = () => Promise.resolve(ok({ meetingId }));
+    await expect(invokeMeeting(gatewayRouter.createCaller(context), command)).resolves.toEqual({ meetingId });
+  });
+
+  it.each(commands)('makes $call as its authenticated person', async (command) => {
     const { context } = aContext(PERSON_COOKIE);
     const asked: unknown[] = [];
     if (context.person === undefined) throw new Error('Person API is required');
-    context.person.controlMeetings = {
-      list: () => Promise.resolve(ok({ items: [], nextCursor: null })),
-      change: (sent) => { asked.push(sent); return Promise.resolve(ok({ meetingId })); },
-    };
-    const caller = gatewayRouter.createCaller(context);
-    const invoke = (client: typeof caller) => {
-      switch (call) {
-        case 'leaveMeeting': return client.people.leaveMeeting(input);
-        case 'rejoinMeeting': return client.people.rejoinMeeting(input);
-        case 'openMeeting': return client.people.openMeeting({ ...input, ships: [...input.ships] });
-        case 'addToMeeting': return client.people.addToMeeting({ ...input, ships: [...input.ships] });
-        case 'revokeFromMeeting': return client.people.revokeFromMeeting(input);
-        case 'transferMeeting': return client.people.transferMeeting(input);
-        case 'nameModerator': return client.people.nameModerator(input);
-        case 'giveMic': return client.people.giveMic(input);
-        case 'takeMic': return client.people.takeMic(input);
-        case 'setMicPattern': return client.people.setMicPattern(input);
-        case 'endMeeting': return client.people.endMeeting(input);
-      }
-    };
-    const result = await invoke(caller);
-    expect({ result, asked }).toEqual({ result: { meetingId }, asked: [{ caller: { fleetId: FLEET_ID, signedIn: { accountToken: PERSON_TOKEN, personShipId: OWNER } }, command: { call, input } }] });
-    context.person.controlMeetings.change = () => Promise.resolve(err({ kind: 'MEETING_REFUSED', message: 'Core refuses this meeting change' }));
-    await expect(invoke(caller)).rejects.toMatchObject({ message: 'Core refuses this meeting change' });
-    await expect(invoke(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context))).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    context.person.controlMeetings.change = (sent) => { asked.push(sent); return Promise.resolve(ok({})); };
+    await invokeMeeting(gatewayRouter.createCaller(context), command);
+    expect(asked).toEqual([{ caller: { fleetId: FLEET_ID, signedIn: { accountToken: PERSON_TOKEN, personShipId: OWNER } }, command }]);
+  });
+
+  describe.each(['FORBIDDEN', 'NOT_FOUND', 'BAD_REQUEST', 'CONFLICT'])('core refuses with %s', (code) => {
+    it.each(commands)('keeps the code and reason for $call', async (command) => {
+      const { context } = aContext(PERSON_COOKIE);
+      if (context.person === undefined) throw new Error('Person API is required');
+      context.person.controlMeetings.change = () => Promise.resolve(err({ kind: 'MEETING_REFUSED', code, message: 'Core refuses this meeting change' }));
+      await expect(invokeMeeting(gatewayRouter.createCaller(context), command)).rejects.toMatchObject({ code, message: 'Core refuses this meeting change' });
+    });
+
+    it('keeps the code and reason for a meeting page', async () => {
+      const { context } = aContext(PERSON_COOKIE);
+      if (context.person === undefined) throw new Error('Person API is required');
+      context.person.controlMeetings.list = () => Promise.resolve(err({ kind: 'MEETING_REFUSED', code, message: 'Core refuses this meeting page' }));
+      await expect(gatewayRouter.createCaller(context).people.meetings()).rejects.toMatchObject({ code, message: 'Core refuses this meeting page' });
+    });
+  });
+
+  it.each(commands)('refuses $call without a person', async (command) => {
+    await expect(invokeMeeting(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context), command)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('allows opening without an invitee list as core does', async () => {
+    const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
+    await expect(caller.people.openMeeting({ idempotencyKey: 'open-alone' })).resolves.toEqual({});
+  });
+
+  it('allows adding without an invitee list as core does', async () => {
+    const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
+    await expect(caller.people.addToMeeting({ meetingId })).resolves.toEqual({});
   });
 
   it('reads twenty meetings and passes the next cursor back unchanged', async () => {
@@ -2113,10 +2143,13 @@ describe('the person API meeting controls', () => {
     await expect(caller.people.meetings({ cursor: 'broken' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
-  it('accepts invitees by name only and a title of at most 200 characters', async () => {
-    const { context } = aContext(PERSON_COOKIE);
-    const caller = gatewayRouter.createCaller(context);
+  it('accepts a title at the shared core limit', async () => {
+    const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
     await expect(caller.people.openMeeting({ ships: [{ name: 'chief-of-staff' }], title: 'a'.repeat(200), idempotencyKey: 'open-1' })).resolves.toEqual({});
-    await expect(caller.people.openMeeting({ ships: [{ name: 'chief-of-staff' }], title: 'a'.repeat(201), idempotencyKey: 'open-1' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('uses the shared core refusal for a title over its limit', async () => {
+    const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
+    await expect(caller.people.openMeeting({ ships: [{ name: 'chief-of-staff' }], title: 'a'.repeat(201), idempotencyKey: 'open-1' })).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringContaining('A meeting title is at most 200 characters') });
   });
 });
