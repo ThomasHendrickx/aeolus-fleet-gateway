@@ -194,6 +194,13 @@ describe('the waiter of a person ship', () => {
     expect(waiter.woken.map(({ crewToken }) => crewToken)).toEqual([CREW_TOKEN, CREW_TOKEN]);
   });
 
+  it('receives the next contribution batch when acknowledgements lowered the waiting count', async () => {
+    const recorded = { kind: 'settled' as const, hasRecordedContributions: true };
+    const waiter = await waiting([ok({ waiting: 120 }), ok({ waiting: 110 }), ok({ waiting: 110 })], { wakes: [ok(recorded)] });
+    await runUntilIdle(waiter);
+    expect(waiter.woken.map(({ crewToken }) => crewToken)).toEqual([CREW_TOKEN, CREW_TOKEN]);
+  });
+
   it('wakes no one at its first look when nothing waits', async () => {
     const waiter = await waiting([ok({ waiting: 0 })]);
 

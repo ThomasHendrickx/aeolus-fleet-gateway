@@ -71,7 +71,7 @@ async function chiefReceives() {
 }
 
 describe('a person ship takes part in a meeting', () => {
-  it('demonstrates that a falling waiting count strands a burst until a later rise', async () => {
+  it.each([false, true])('counts the complete burst without another event with page focused: %s', async (isFocused) => {
     const prisma = createPrismaClient(await migratedDatabase(inject('postgresUrl')));
     const stop = new AbortController();
     const hints = memoryShipWakeups();
@@ -86,6 +86,7 @@ describe('a person ship takes part in a meeting', () => {
     let looks = 0;
     let receives = 0;
     const focused = memoryFocusedPages();
+    if (isFocused) { await focused.save({ ...ship, pageId: 'meeting-page', seenAt: new Date() }); }
     const wakePerson = createWakePerson({
       door, connections: memoryConnectionStore(), channels: [], routes: memoryRoutes(), defaults: routingDefaultsOf([]),
       quietHours: memoryQuietHours(), quietShips: memoryQuietShips(), focused, focusFreshMs: 60_000,
@@ -110,28 +111,15 @@ describe('a person ship takes part in a meeting', () => {
       done = wait(ship, stop.signal);
       await expect.poll(() => hints.leases.length).toBe(1);
       hints.wake();
-      await expect.poll(() => looks).toBe(2);
-      // The first batch contains the added notice and nine contributions.
-      await expect(record.unseen(ship, [meetingId])).resolves.toEqual([{ meetingId, count: 9 }]);
-      expect(await person.inbox(charlotte)).toMatchObject({ isOk: true, value: { waiting: 112 } });
-      // A safety poll and another event hint do not receive at the same count.
+      await expect.poll(async () => (await record.unseen(ship, [meetingId]))[0]?.count).toBe(120);
+      // A second device reads the same durable count without receiving or showing history.
+      await expect(createPrismaMeetingContributions(prisma).unseen(ship, [meetingId])).resolves.toEqual([{ meetingId, count: 120 }]);
+      expect(await person.inbox(charlotte)).toMatchObject({ isOk: true, value: { waiting: 1 } });
+      const received = receives;
+      const looked = looks;
       hints.wake();
-      await expect.poll(() => looks).toBe(3);
-      expect(receives).toBe(1);
-      await expect(record.unseen(ship, [meetingId])).resolves.toEqual([{ meetingId, count: 9 }]);
-      await chiefCalls('send', { selector: { kind: 'meeting', meetingId }, payload: 'Later event', idempotencyKey: 'later-event', model: 'gpt-6.1-sol' });
-      hints.wake();
-      await expect.poll(() => receives).toBe(2);
-      await expect.poll(async () => (await record.unseen(ship, [meetingId]))[0]?.count).toBe(18);
-      // Core already has the complete history while the gateway index is short.
-      const page = await meetings.meeting(charlotte, { meetingId });
-      expect(page.isOk && page.value.contributions.items.length).toBe(100);
-      // Direct reception, as an inbox read can do, immediately advances the index.
-      await door.pushReceive(charlotte, { max: 10, shouldSkipHanded: true });
-      expect((await record.unseen(ship, [meetingId]))[0]?.count).toBeGreaterThan(18);
-      await focused.save({ ...ship, pageId: 'meeting-page', seenAt: new Date() });
-      // The focused page tries to hand over contributions already acked by the recording door.
-      await expect(wakePerson(ship, charlotte)).resolves.toMatchObject({ isOk: false, error: { code: 'DELIVERY_NOT_IN_FLIGHT' } });
+      await expect.poll(() => looks).toBeGreaterThan(looked);
+      expect(receives).toBe(received);
     } finally {
       stop.abort();
       await done;
