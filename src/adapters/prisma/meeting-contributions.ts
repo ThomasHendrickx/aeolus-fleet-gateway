@@ -4,6 +4,8 @@ import { idSchema } from '@aeolus-fleet/common';
 import type { MeetingContributions } from '../../core/meetings/meeting-contributions.js';
 import type { Db } from './client.js';
 
+const UNSEEN_MEETINGS_PAGE = 20;
+
 export function createPrismaMeetingContributions(db: Db): MeetingContributions {
   // The database rollout, shared by every gateway instance and restart. No delivery history is backfilled.
   const countingStarted = async (): Promise<Date> => {
@@ -28,6 +30,15 @@ export function createPrismaMeetingContributions(db: Db): MeetingContributions {
         isChanged = changed > 0 || isChanged;
       }
       return isChanged;
+    },
+    unseenMeetings: async ({ fleetId, shipId }) => {
+      // One grouped read through the fleet/ship/seen/meeting index. Time-ordered
+      // message ids give recency without storing a second copy of the timestamp.
+      const rows = await db.meetingContribution.groupBy({
+        by: ['meetingId'], where: { fleetId, shipId, isSeen: false },
+        _count: true, orderBy: [{ _max: { messageId: 'desc' } }, { meetingId: 'desc' }], take: UNSEEN_MEETINGS_PAGE,
+      });
+      return rows.map((row) => ({ meetingId: idSchema('meeting').parse(row.meetingId), count: row._count }));
     },
     unseen: async ({ fleetId, shipId }, meetingIds) => {
       const rows = await db.meetingContribution.groupBy({ by: ['meetingId'], where: { fleetId, shipId, meetingId: { in: [...meetingIds] }, isSeen: false }, _count: true });
