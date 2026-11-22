@@ -78,6 +78,7 @@ export type DomainErrorKind =
   | 'NO_SUCH_MEETING'
   | 'MIC_REFUSED'
   | 'MEETING_REFUSED'
+  | 'LOOKUP_REFUSED'
   | 'SCOPE_NOT_LISTED'
   | 'SLACK_SCOPE_NOT_HELD'
   | 'SLACK_NOT_CONNECTED'

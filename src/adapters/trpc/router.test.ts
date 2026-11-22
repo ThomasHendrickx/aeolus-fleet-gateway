@@ -311,6 +311,7 @@ function aContext(cookie: string | undefined, crewToken?: string): {
             ? ok({ meeting: aMeetingRead(), mic: { kind: 'requested' as const, place: 1 } })
             : err({ kind: 'NO_SUCH_MEETING' as const, message: `The fleet did not read the meeting to you: Meeting ${meetingId} does not exist` }),
         ),
+      lookupShip: () => Promise.resolve(ok(null)),
       readSendTo: (caller) => Promise.resolve(grantOf(caller) === PERSON_TOKEN ? ok({ sentAs: 'charlotte', shipSummaries: {}, ships: ['builder-core', 'tracker'], shipIds: { 'builder-core': 'shp_01m3tbfspe96yf1rnr4ank9trk', tracker: 'shp_01m3tbfspe96yf1rnr4ank9h1a' } }) : err({ kind: 'SIGNED_OUT' as const, message: 'Your sign-in ended: sign in again' })),
       sendMessage: (input) => {
         answers.push({ grantId: grantOf(input.caller), to: JSON.stringify(input.to), contentType: input.contentType, payload: input.payload, idempotencyKey: input.idempotencyKey ?? '' });
@@ -2223,7 +2224,7 @@ describe('a person looks up one reachable ship for a conversation header (#390)'
 
   afterEach(async () => {
     server.closeAllConnections();
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) => server.close((error) => { if (error) reject(error); else resolve(); }));
   });
 
   it('answers an allowed ship by name with its header description', async () => {

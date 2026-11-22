@@ -257,6 +257,7 @@ import { createReadUnseenContributions } from './core/meetings/read-unseen-contr
 import { createReadMeeting } from './core/meetings/read-meeting.js';
 import { createReadWaitingAmong } from './core/people/read-waiting-among.js';
 import { createCountWaitingOn, createReadWaitingCount } from './core/people/read-waiting-count.js';
+import { createLookupShip } from './core/people/lookup-ship.js';
 import { createReadSendTo } from './core/people/read-send-to.js';
 import { createSendMessage } from './core/people/send-message.js';
 import { createWaitOnPersonShip } from './core/people/wait-on-person-ship.js';
@@ -967,6 +968,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       turnOffWebPush: createTurnOffWebPush({ crewPersonShip: asCrew.crewPersonShip, subscriptions: webPushSubscriptions }),
       focusPage: createFocusPage({ focused: focusedPages, clock, sleep, seenEveryMs: FOCUS_SEEN_EVERY_MS }),
       listShips: createListShips(asCrew),
+      lookupShip: createLookupShip(asCrew),
       readSendTo: createReadSendTo(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
       controlMeetings: createControlMeetings({ ...asCrew, door: door.meetingControls }),

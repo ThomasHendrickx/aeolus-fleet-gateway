@@ -199,8 +199,20 @@ export type PersonSelector =
   | { readonly kind: 'type'; readonly type: string }
   | { readonly kind: 'meeting'; readonly meetingId: MeetingId };
 
+/** One ship selected for a conversation header, without listing send reach. */
+export type ShipLookup = { readonly id: ShipId } | { readonly name: string };
+
+/** The description core makes visible for one reachable ship. */
+export interface ShipHeader {
+  readonly id: ShipId;
+  readonly name: string;
+  readonly description: string | null;
+}
+
 /** Outbound port: the fleet's calls the gateway makes as the crew of a person ship. */
 export interface PersonShipDoor {
+  /** One reachable ship by name or id, without its full statement; absent and unreachable both answer null. */
+  lookupHeader(crewToken: string, target: ShipLookup): Promise<Result<ShipHeader | null, FleetRefusal>>;
   /**
    * The current waiting count, without a waiting input. The lease stream
    * requests reads; the optional signal cancels an in-flight HTTP read.
