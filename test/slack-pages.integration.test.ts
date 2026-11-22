@@ -102,10 +102,7 @@ beforeAll(async () => {
     SLACK_API_URL: slack.apiUrl,
   });
   // The gateway takes a moment to start, and its web app compiles as it is first asked.
-  const deadline = Date.now() + STARTUP_MS;
-  while ((await fetch(`${address}/api/health`).then((response) => response.status, () => undefined)) !== 200 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-  }
+  await expect.poll(() => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: STARTUP_MS, interval: POLL_MS }).toBe(200);
   expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
   prisma = createPrismaClient(databaseUrl);
 }, 120_000);
@@ -418,8 +415,8 @@ describe('linking a Slack account (gateway scopes S7)', () => {
 
     let answers: Awaited<ReturnType<typeof releaseNotesReceives>> = [];
     await expect.poll(async () => (answers = [...answers, ...(await releaseNotesReceives())]).length, { timeout: 30_000 }).toBe(2);
-    // A further event round, which would send a second time what it sent once.
-    await new Promise((resolve) => setTimeout(resolve, 6_000));
+    // Core took the message of the reply, so a further event round has nothing to send a second time.
+    await expect.poll(() => prisma.slackEvent.count({ where: { fleetId, eventId: 'Ev-1382-thread', takenAt: { not: null } } }), { timeout: 30_000 }).toBe(1);
     answers = [...answers, ...(await releaseNotesReceives())];
 
     expect({ pressed: pressed.status, replied: replied.status, isInSlackYet }).toEqual({ pressed: 200, replied: 200, isInSlackYet: false });
@@ -514,8 +511,8 @@ describe('linking a Slack account (gateway scopes S7)', () => {
       const later = await personCall('putInBasket', { deliveryId, option: 3, optionLabel: 'Both', note: '' });
       expect({ status: later.status, said: JSON.stringify(await later.json()).includes('Already answered in Slack: option 2. Nothing is sent.') }).toEqual({ status: 409, said: true });
       expect((await personCall('sendBasket', {})).status).toBe(200);
-      // A basket round after Send, which would send what the basket held.
-      await new Promise((resolve) => setTimeout(resolve, 6_000));
+      // Send left nothing of the basket for a further basket round to send.
+      await expect.poll(() => prisma.basketEntry.count({ where: { fleetId, messageId: questionMessageId, state: { in: ['waiting', 'sending'] } } }), { timeout: 30_000 }).toBe(0);
       const answers = (await releaseNotesReceives()).filter(({ inReplyTo }) => inReplyTo === questionMessageId);
       expect(answers.map(({ payload }) => payload)).toEqual(['{"questionId":"7d1e2f3a-4b5c-4d6e-8f70-819a2b3c4d5e","option":2}']);
 

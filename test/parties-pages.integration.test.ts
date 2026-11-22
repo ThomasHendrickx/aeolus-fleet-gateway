@@ -83,10 +83,7 @@ beforeAll(async () => {
     PAGASAE_APP_CLIENT_SECRET: PAGASAE_APP_CLIENT.clientSecret,
   });
   // The gateway takes a moment to start, and its web app compiles as it is first asked.
-  const deadline = Date.now() + STARTUP_MS;
-  while ((await fetch(`${address}/api/health`).then((response) => response.status, () => undefined)) !== 200 && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-  }
+  await expect.poll(() => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: STARTUP_MS, interval: POLL_MS }).toBe(200);
 }, 120_000);
 
 afterAll(async () => {
