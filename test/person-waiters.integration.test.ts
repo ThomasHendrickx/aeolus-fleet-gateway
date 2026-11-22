@@ -1,7 +1,8 @@
 import { createShipWakeups } from '../src/adapters/fleet/ship-wakeups.js';
 import Fastify from 'fastify';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject } from 'vitest';
 
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaPersonCrews } from '../src/adapters/prisma/person-crews.js';
@@ -44,8 +45,8 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-beforeEach(async () => {
-  fleet = await startFleetServer(inject('postgresUrl'));
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
+  fleet = await startFleetServer(inject('postgresUrl'), { isFresh });
   const cookie = await signIn(fleet);
   charlotteCrew = await register(fleet, await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } }));
   tracker = await register(fleet, await commission(fleet, { cookie, ship: { name: 'tracker', type: 'issue-tracker', kind: 'app' } }));
@@ -113,7 +114,7 @@ async function trackerSendsCharlotte(): Promise<void> {
 }
 
 describe('the waiters of the person ships the gateway crews', () => {
-  it('start for every crew held once the gateway starts, as after a restart', async () => {
+  freshFleetTest('start for every crew held once the gateway starts, as after a restart', async () => {
     const instance = anInstance();
 
     instance.start();
@@ -135,7 +136,7 @@ describe('the waiters of the person ships the gateway crews', () => {
     await expect.poll(() => told, { timeout: 10_000 }).toEqual([charlotte]);
   });
 
-  it('are one per ship across two instances', async () => {
+  freshFleetTest('are one per ship across two instances', async () => {
     const first = anInstance();
     const second = anInstance();
 
@@ -147,7 +148,7 @@ describe('the waiters of the person ships the gateway crews', () => {
     expect(first.waitingOn().length + second.waitingOn().length).toBe(1);
   });
 
-  it('are taken over by the other instance once the one waiting stops', async () => {
+  freshFleetTest('are taken over by the other instance once the one waiting stops', async () => {
     const first = anInstance();
     first.start();
     await expect.poll(() => first.waitingOn()).toEqual([charlotte]);
@@ -161,7 +162,7 @@ describe('the waiters of the person ships the gateway crews', () => {
     await expect.poll(() => second.waitingOn()).toEqual([charlotte]);
   });
 
-  it("are taken over by the other instance once the waiting one's connection to the database ends, freeing its locks", async () => {
+  freshFleetTest("are taken over by the other instance once the waiting one's connection to the database ends, freeing its locks", async () => {
     // The first instance looks again only after a minute, so the second is the one to take the lock.
     const first = anInstance({ roundMs: 60_000 });
     first.start();

@@ -1,7 +1,8 @@
 import { receiveOutputSchema, sendOutputSchema } from '@aeolus-fleet/common';
 import { z } from 'zod';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject } from 'vitest';
 
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaUnreadableReplies } from '../src/adapters/prisma/unreadable-replies.js';
 import { createPrismaOpenedDeliveries } from '../src/adapters/prisma/opened-deliveries.js';
@@ -29,8 +30,8 @@ let charlotte: string;
 /** The issue tracker's crew token. */
 let tracker: string;
 
-beforeEach(async () => {
-  fleet = await startFleetServer(inject('postgresUrl'));
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
+  fleet = await startFleetServer(inject('postgresUrl'), { isFresh });
   cookie = await signIn(fleet);
   door = createRestFleetDoor(fleet.url).person;
   charlotte = await register(fleet, await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } }));
@@ -122,7 +123,7 @@ describe("a person ship sends the person's own message", () => {
     await expect(trackerReceives()).resolves.toEqual([{ senderName: 'charlotte', contentType: 'text/plain', payload: 'standup moved to 10:00' }]);
   });
 
-  it('no message is lost when the gateway restarts mid-send: the same send with the same key, from a new gateway, is told sent as the same message, and the receiver holds one', async () => {
+  freshFleetTest('no message is lost when the gateway restarts mid-send: the same send with the same key, from a new gateway, is told sent as the same message, and the receiver holds one', async () => {
     const taken = await door.send(charlotte, { to: { kind: 'ship', name: 'tracker' }, contentType: 'text/plain', payload: 'standup moved to 10:00', idempotencyKey: 'charlotte-restart' });
     // The gateway restarts before its tool answered: a new door, holding nothing of the first.
     const restarted = createRestFleetDoor(fleet.url).person;
@@ -367,7 +368,7 @@ describe('a malformed question or step never reaches the person', () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });
-  it.each(['application/vnd.aeolus.question+json', 'application/vnd.aeolus.step+json'] as const)('returns and handles %s once across concurrent reads and a gateway restart', async (contentType) => {
+  freshFleetTest.each(['application/vnd.aeolus.question+json', 'application/vnd.aeolus.step+json'] as const)('returns and handles %s once across concurrent reads and a gateway restart', async (contentType) => {
     const opened = createPrismaOpenedDeliveries(prisma);
     const sent = await fetch(`${fleet.url}/api/v1/ship/send`, {
       method: 'POST',

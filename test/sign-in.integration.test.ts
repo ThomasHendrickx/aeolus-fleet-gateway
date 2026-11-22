@@ -1,6 +1,7 @@
 import { idSchema, type FleetId } from '@aeolus-fleet/common';
 import { Client, StreamableHTTPClientTransport, auth } from '@modelcontextprotocol/client';
-import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, inject } from 'vitest';
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { z } from 'zod';
 
 
@@ -36,8 +37,8 @@ let app: GatewayApp;
 let pagasae: FakePagasae;
 let fleetId: FleetId;
 
-beforeEach(async () => {
-  const fleet = await startFleetServer(inject('postgresUrl'));
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
+  const fleet = await startFleetServer(inject('postgresUrl'), { isFresh });
   const port = await aFreePort();
   const address = `http://127.0.0.1:${String(port)}`;
   pagasae = await startFakePagasae();
@@ -190,7 +191,7 @@ describe('the plugin sign-in under load and across a restart (chatgpt-plugin des
     return `${setting.address}/authorize?${request.toString()}`;
   }
 
-  it('how big: sign-ins at launch: 100 people start the plugin sign-in at once, and each gets a code within 2 seconds of returning', async () => {
+  freshFleetTest('how big: sign-ins at launch: 100 people start the plugin sign-in at once, and each gets a code within 2 seconds of returning', async () => {
     pagasae.answer(charlotteIn(pagasae, fleetId));
     const client = await aRegisteredClient(setting, false);
 
@@ -208,7 +209,7 @@ describe('the plugin sign-in under load and across a restart (chatgpt-plugin des
     expect(returns.filter(({ hasCode, isInTime }) => !hasCode || !isInTime)).toEqual([]);
   });
 
-  it('the sign-in survives a restart: the gateway restarts before the person returns from pagasae, and a code is issued', async () => {
+  freshFleetTest('the sign-in survives a restart: the gateway restarts before the person returns from pagasae, and a code is issued', async () => { // privacy-guard: allow private-repo
     pagasae.answer(charlotteIn(pagasae, fleetId));
     const client = await aRegisteredClient(setting, false);
     const browser = aBrowser();

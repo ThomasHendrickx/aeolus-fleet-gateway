@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 
 import type { ShipId } from '@aeolus-fleet/common';
-import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, inject } from 'vitest';
 import { z } from 'zod';
 
 import { createPrismaInstallationRequests } from '../src/adapters/prisma/installation-requests.js';
@@ -10,6 +10,7 @@ import { createGatewayApp, type GatewayApp } from '../src/app.js';
 import { commission, register, applyEmptyOwnRules, signIn } from './support/argo.js';
 import { migratedDatabase } from './support/database.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { connectGateway, mutate, query } from './support/gateway-api.js';
 import { TEST_GATEWAY_SECRET } from './support/mcp-client.js';
 
@@ -27,8 +28,8 @@ let gatewayShip: { shipId: ShipId; secret: string };
 let databaseUrl: string;
 const apps: GatewayApp[] = [];
 
-beforeEach(async () => {
-  fleet = await startFleetServer(inject('postgresUrl'));
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
+  fleet = await startFleetServer(inject('postgresUrl'), { isFresh });
   cookie = await signIn(fleet);
   gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: GATEWAY_SCOPES } });
   databaseUrl = await migratedDatabase(inject('postgresUrl'));
@@ -155,7 +156,7 @@ describe('argo connects the gateway', () => {
     await expect(refusalOf(response)).resolves.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
-  it('is connected again after a restart with the kept crew token', async () => {
+  freshFleetTest('is connected again after a restart with the kept crew token', async () => {
     await connectGateway(await started(), { cookie, ...gatewayShip });
     await Promise.all(apps.splice(0).map((app) => app.close()));
 
@@ -288,7 +289,7 @@ describe('the installation connects a hosted fleet', () => {
     return z.object({ result: z.object({ data: z.object({ fleetId: z.string() }) }) }).parse(await response.json()).result.data.fleetId;
   }
 
-  it('stores a connect request, replays it after restart and keeps the connection when switched off and on', async () => {
+  freshFleetTest('stores a connect request, replays it after restart and keeps the connection when switched off and on', async () => {
     const address = await started(INSTALLATION_TOKEN);
     const id = await fleetId();
     await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'on', fleetId: id, enabled: true } });
@@ -315,7 +316,7 @@ describe('the installation connects a hosted fleet', () => {
     }
   });
 
-  it('keeps one connection and refuses the other when two connects race with one secret', async () => {
+  freshFleetTest('keeps one connection and refuses the other when two connects race with one secret', async () => {
     const address = await started(INSTALLATION_TOKEN);
     const id = await fleetId();
     await mutate(address, { procedure: 'installation.setEnabled', installationToken: INSTALLATION_TOKEN, body: { requestId: 'on', fleetId: id, enabled: true } });

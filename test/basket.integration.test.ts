@@ -1,6 +1,7 @@
 import { receiveOutputSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject } from 'vitest';
 
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaBasketEntries } from '../src/adapters/prisma/basket-entries.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
@@ -46,8 +47,8 @@ async function aShip(ship: { name: string; type: string; kind: 'person' | 'app' 
   return { shipId: commissioned.shipId, crewToken: await register(fleet, commissioned) };
 }
 
-beforeEach(async () => {
-  fleet = await startFleetServer(inject('postgresUrl'));
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
+  fleet = await startFleetServer(inject('postgresUrl'), { isFresh });
   cookie = await signIn(fleet);
   door = createRestFleetDoor(fleet.url).person;
   charlotte = await aShip({ name: 'charlotte', type: 'person', kind: 'person' });
@@ -185,7 +186,7 @@ describe('the basket sent through a real core', () => {
     ]);
   });
 
-  it('gives each asker one answer to its question, in reply to it, sent twice at once and once more after a restart', async () => {
+  freshFleetTest('gives each asker one answer to its question, in reply to it, sent twice at once and once more after a restart', async () => {
     await crewCharlotte();
     const harbour = await answeredIntoTheBasket(askers.orchestrator, { id: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e', title: 'Which goes first: the Compact look (U4) or Harbour?', addedAt: new Date('2026-10-31T19:53:00.000Z') });
     const pricing = await answeredIntoTheBasket(askers.commercial, { id: '5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b', title: 'Pricing page: a price per ship, or plans only?', addedAt: new Date('2026-10-31T19:55:00.000Z') });
@@ -200,7 +201,7 @@ describe('the basket sent through a real core', () => {
     expect((await door.delivery(charlotte.crewToken, harbour.deliveryId)).isOk).toBe(false);
   });
 
-  it('goes on after a gateway restart between the fleet storing an answer and its question reported handled: the asker holds one answer, and the question is handled', async () => {
+  freshFleetTest('goes on after a gateway restart between the fleet storing an answer and its question reported handled: the asker holds one answer, and the question is handled', async () => {
     await crewCharlotte();
     const harbour = await answeredIntoTheBasket(askers.orchestrator, { id: '9b2f6c1e-4a7d-4e0b-8c3f-2d5a6b7c8d9e', title: 'Which goes first: the Compact look (U4) or Harbour?', addedAt: new Date('2026-10-31T19:53:00.000Z') });
     const stoppedBeforeHandled: PersonShipDoor = { ...door, handled: () => Promise.resolve({ isOk: false, error: { code: 'UNAVAILABLE', message: 'The gateway stopped' } }) };

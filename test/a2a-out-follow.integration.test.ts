@@ -1,7 +1,8 @@
 import { createServer, type Server, type ServerResponse } from 'node:http';
 
 import { idSchema, needsAttentionOutputSchema, type ShipId } from '@aeolus-fleet/common';
-import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, inject } from 'vitest';
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { z } from 'zod';
 
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
@@ -61,7 +62,7 @@ const stream = (response: ServerResponse, sent: { events: unknown[]; end: 'ended
   }
 };
 
-beforeEach(async () => {
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
   taken = [];
   isStreaming = false;
   answer = (method, response) => {
@@ -83,7 +84,7 @@ beforeEach(async () => {
     });
   });
   await new Promise<void>((resolve) => agent.listen(0, '127.0.0.1', resolve));
-  const fleet = await startFleetServer(inject('postgresUrl'));
+  const fleet = await startFleetServer(inject('postgresUrl'), { isFresh });
   setting = { fleet, address: '', cookie: await signIn(fleet), databaseUrl: await migratedDatabase(inject('postgresUrl')), pagasae: await startFakePagasae() };
 });
 
@@ -238,7 +239,7 @@ describe("a ship of the fleet sends to an outside A2A agent's proxy ship (slice 
     expect(taken.map(({ method }) => method)).toEqual(['SendMessage', 'SubscribeToTask', 'GetTask']);
   });
 
-  it('follows the task again after a restart in the middle of a chunked artifact, and replies no change twice', async () => {
+  freshFleetTest('follows the task again after a restart in the middle of a chunked artifact, and replies no change twice', async () => {
     isStreaming = true;
     let subscriptions = 0;
     answer = (method, response) => {

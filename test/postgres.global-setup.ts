@@ -4,6 +4,7 @@ import type { TestProject } from 'vitest/node';
 
 import { POSTGRES_IMAGE, REAPER_IMAGE } from './support/container-images.js';
 import { startContainerSweeper } from './support/container-sweeper.js';
+import { startFleetServer } from './support/fleet-server.js';
 import { stopContainer } from './support/stop-container.js';
 import { TestPostgres } from './support/postgres-container.js';
 
@@ -11,6 +12,7 @@ declare module 'vitest' {
   export interface ProvidedContext {
     /** Admin URL of the Postgres container shared by the integration tests. */
     postgresUrl: string;
+    fleetTemplateUrl: string;
     testRun: string;
   }
 }
@@ -27,7 +29,16 @@ export async function setup(project: TestProject): Promise<() => Promise<void>> 
   await startContainerSweeper(run);
   project.provide('testRun', run);
   const container = await new TestPostgres(POSTGRES_IMAGE, run).start();
-  project.provide('postgresUrl', container.getConnectionUri());
+  const postgresUrl = container.getConnectionUri();
+  project.provide('postgresUrl', postgresUrl);
+  try {
+    const fleet = await startFleetServer(postgresUrl, { isFresh: true });
+    await fleet.stop();
+    project.provide('fleetTemplateUrl', fleet.databaseUrl);
+  } catch (error) {
+    await container.stop();
+    throw error;
+  }
 
   return async () => {
     await stopContainer({ name: 'Postgres', stop: () => container.stop() });

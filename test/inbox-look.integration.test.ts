@@ -1,6 +1,7 @@
 import type { ShipId } from '@aeolus-fleet/common';
-import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, inject } from 'vitest';
 
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaClient } from '../src/adapters/prisma/client.js';
 import { createHeldDeliveries, holdingDoor, type HeldDeliveries } from '../src/core/people/held-deliveries.js';
@@ -32,8 +33,8 @@ let held: HeldDeliveries;
 let crewToken: string;
 let waitingDeps: Parameters<typeof waitingFor>[0];
 
-beforeEach(async () => {
-  fleet = await startFleetServer(inject('postgresUrl'));
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
+  fleet = await startFleetServer(inject('postgresUrl'), { isFresh });
   const cookie = await signIn(fleet);
   const charlotte = await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } });
   charlotteShipId = charlotte.shipId;
@@ -122,7 +123,7 @@ describe('a look at more than 10 waiting is a read (aeolus-fleet #1647)', () => 
     });
   });
 
-  it('lists every one at once while another receive holds the first 10', async () => {
+  freshFleetTest('lists every one at once while another receive holds the first 10', async () => {
     await listed();
     const core = createPrismaClient(fleet.databaseUrl);
     try {
@@ -144,7 +145,7 @@ describe('a look at more than 10 waiting is a read (aeolus-fleet #1647)', () => 
 // Keep core's claims overlapping so the competing receive encounters SKIP LOCKED.
 describe('concurrent person inbox reads (#370)', () => {
   for (const otherRead of ['waitingFor', 'waitingOn'] as const) {
-    it(`shares all 14 deliveries between waitingFor and ${otherRead}`, async () => {
+    freshFleetTest(`shares all 14 deliveries between waitingFor and ${otherRead}`, async () => {
       // Start with seven held deliveries and seven pending, as a busy person receives more.
       const initial = await waitingDeps.door.pushReceive(crewToken, { max: 7 });
       expect(initial.isOk).toBe(true);
@@ -184,7 +185,7 @@ describe('concurrent person inbox reads (#370)', () => {
 });
 
 describe('person inbox reads after a delivery is accepted (#423)', () => {
-  it('reads the new delivery while a read from before its acceptance is still running', async () => {
+  freshFleetTest('reads the new delivery while a read from before its acceptance is still running', async () => {
     await listed();
     const originalDoor = waitingDeps.door;
     const counted = Promise.withResolvers<undefined>();

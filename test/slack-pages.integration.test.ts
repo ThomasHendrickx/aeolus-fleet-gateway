@@ -71,7 +71,7 @@ async function sent(testId: string, form: { fields?: Record<string, string>; pat
 }
 
 beforeAll(async () => {
-  fleet = await startFleetServer(inject('postgresUrl'));
+  fleet = await startFleetServer(inject('postgresUrl'), { isFresh: true });
   pagasae = await startFakePagasae();
   slack = await startFakeSlack();
   const cookie = await signIn(fleet);

@@ -1,5 +1,6 @@
 import { idSchema, needsAttentionOutputSchema, type ShipId } from '@aeolus-fleet/common';
-import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, inject } from 'vitest';
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { z } from 'zod';
 
 import { createGatewayApp, type GatewayApp } from '../src/app.js';
@@ -43,8 +44,8 @@ async function started(): Promise<string> {
   return app.server.listen({ host: '127.0.0.1', port: 0 });
 }
 
-beforeEach(async () => {
-  [fleet, crm, databaseUrl] = await Promise.all([startFleetServer(inject('postgresUrl')), startMockCrm({ slowToolMs: 50 }), migratedDatabase(inject('postgresUrl'))]);
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
+  [fleet, crm, databaseUrl] = await Promise.all([startFleetServer(inject('postgresUrl'), { isFresh }), startMockCrm({ slowToolMs: 50 }), migratedDatabase(inject('postgresUrl'))]);
   cookie = await signIn(fleet);
   const agent = await commission(fleet, { cookie, ship: { name: 'agent', type: 'agent', scopes: ['messages:send'] } });
   caller = { shipId: agent.shipId, crewToken: await register(fleet, agent) };
@@ -139,7 +140,7 @@ describe('a ship of the fleet calls an outside MCP server through its proxy ship
     expect(dismissed.status, await dismissed.clone().text()).toBe(200);
   });
 
-  it('takes the calls again after a restart, with the kept crew token', async () => {
+  freshFleetTest('takes the calls again after a restart, with the kept crew token', async () => {
     await approved(await started());
     await Promise.all(apps.splice(0).map((app) => app.close()));
     await started();
@@ -317,7 +318,7 @@ describe('an approver sets which scopes a calling ship needs for a tool of an ou
     expect(z.object({ result: z.object({ data: z.object({ version: z.number(), tools: z.array(z.unknown()) }) }) }).parse(await read.json()).result.data).toEqual({ version: 0, tools: [] });
   });
 
-  it('refuses the second of two changes made on the same version, keeping the first', async () => {
+  freshFleetTest('refuses the second of two changes made on the same version, keeping the first', async () => {
     const address = await approvedWithScopes();
 
     const both = await Promise.all([setRequirements(address, { version: 0, party: ['crm:write-leads'], tools: [] }), setRequirements(address, { version: 0, party: ['fleet:read'], tools: [] })]);

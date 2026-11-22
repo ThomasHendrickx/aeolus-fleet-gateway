@@ -1,5 +1,6 @@
 import { FLEET_HEADER, idSchema, needsAttentionOutputSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
-import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, inject } from 'vitest';
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { z } from 'zod';
 
 import { createPartySignIns } from '../src/adapters/oauth/party-sign-ins.js';
@@ -86,8 +87,8 @@ async function attioAdded(): Promise<void> {
   proxyShipId = z.object({ result: z.object({ data: z.object({ proxyShipId: idSchema('ship') }) }) }).parse(await added.json()).result.data.proxyShipId;
 }
 
-beforeEach(async () => {
-  [fleet, databaseUrl, pagasae, attio] = await Promise.all([startFleetServer(inject('postgresUrl')), migratedDatabase(inject('postgresUrl')), startFakePagasae(), startAttioDouble()]);
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
+  [fleet, databaseUrl, pagasae, attio] = await Promise.all([startFleetServer(inject('postgresUrl'), { isFresh }), migratedDatabase(inject('postgresUrl')), startFakePagasae(), startAttioDouble()]); // privacy-guard: allow private-repo
   cookie = await signIn(fleet);
   const mathildeShip = await commission(fleet, { cookie, ship: { name: 'mathilde', type: 'person', kind: 'person' } });
   const jorisShip = await commission(fleet, { cookie, ship: { name: 'joris', type: 'person', kind: 'person' } });
@@ -299,7 +300,7 @@ describe('a restart under a grant', () => {
     return [];
   }
 
-  it('never calls again a call that may have run when the gateway stopped mid call', async () => {
+  freshFleetTest('never calls again a call that may have run when the gateway stopped mid call', async () => {
     await attioAdded();
     await signedIn(MATHILDE_BROWSER, MATHILDE_ACCOUNT);
     const leadScout = await aShip('lead-scout', mathilde.shipId);
@@ -333,7 +334,7 @@ async function grantIdle(personShipId: ShipId): Promise<void> {
 }
 
 describe('keeping grants alive (Q7)', () => {
-  it('refreshes once for two calls Attio refuses at once, both answered under the new token, the old refresh token never used again (scenario 17)', async () => {
+  freshFleetTest('refreshes once for two calls Attio refuses at once, both answered under the new token, the old refresh token never used again (scenario 17)', async () => {
     await attioAdded();
     await signedIn(MATHILDE_BROWSER, MATHILDE_ACCOUNT);
     const [leadScout, otherScout] = await Promise.all([aShip('lead-scout', mathilde.shipId), aShip('other-scout', mathilde.shipId)]);
@@ -349,7 +350,7 @@ describe('keeping grants alive (Q7)', () => {
     expect(attio.authorizations.slice(-2)).toEqual(['Bearer attio-access-3', 'Bearer attio-access-3']);
   });
 
-  it('refreshes a grant once when two gateway instances on one database keep it alive at once (scenario 17)', async () => {
+  freshFleetTest('refreshes a grant once when two gateway instances on one database keep it alive at once (scenario 17)', async () => {
     await attioAdded();
     await signedIn(MATHILDE_BROWSER, MATHILDE_ACCOUNT);
     await gatewayStopped();
@@ -418,7 +419,7 @@ describe('keeping grants alive (Q7)', () => {
     expect(attio.calledAs).toEqual([]);
   });
 
-  it("loses the grant at the next refresh when the gateway stopped after Attio rotated its refresh token, tells the owner once, and a call gets Q5's error result: no call is lost (scenario 22)", async () => {
+  freshFleetTest("loses the grant at the next refresh when the gateway stopped after Attio rotated its refresh token, tells the owner once, and a call gets Q5's error result: no call is lost (scenario 22)", async () => {
     await attioAdded();
     await signedIn(MATHILDE_BROWSER, MATHILDE_ACCOUNT);
     const leadScout = await aShip('lead-scout', mathilde.shipId);
