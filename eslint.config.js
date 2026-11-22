@@ -146,14 +146,14 @@ const mcpSideForbiddenImports = [
  * The runner is vitest's browser mode, which eslint-plugin-playwright does not cover (it reads
  * @playwright/test), so these are no-restricted-syntax selectors.
  */
-const e2eTestFiles = ['**/*.browser.test.{ts,tsx}', 'test/{start,parties-pages,slack-pages}.integration.test.ts'];
+const e2eTestFiles = ['**/*.browser.test.{ts,tsx}', '**/*.e2e.test.{ts,tsx}', 'test/{start,parties-pages,slack-pages}.integration.test.ts'];
 const sleepMessage = "No fixed sleep in an end-to-end test: wait with a retrying assertion (expect.poll, expect.element), a known response or the part's data-state.";
 const rawLocatorMessage = 'No raw locator in an end-to-end test: use getByTestId, getByRole or getByText.';
 
 /** @type {SyntaxRestriction[]} */
 const e2eSyntax = [
   { selector: 'CallExpression[callee.property.name="waitForTimeout"]', message: sleepMessage },
-  { selector: 'NewExpression[callee.name="Promise"] CallExpression[callee.name="setTimeout"]', message: sleepMessage },
+  { selector: 'NewExpression[callee.name="Promise"] CallExpression:matches([callee.name="setTimeout"], [callee.property.name="setTimeout"])', message: sleepMessage },
   { selector: 'Literal[value="networkidle"]', message: "No networkidle in an end-to-end test: wait on a known response or the part's data-state." },
   { selector: 'CallExpression[callee.property.name="locator"]', message: rawLocatorMessage },
   { selector: 'Literal[value=/\\[data-testid/]', message: rawLocatorMessage },
@@ -270,7 +270,7 @@ export default defineConfig(
   {
     // Repeats the e2e list: this block's import rules replace the e2e block's for its files.
     name: 'aeolus/e2e-tests-in-bridge',
-    files: ['bridge/**/*.browser.test.{ts,tsx}'],
+    files: ['bridge/**/*.{browser,e2e}.test.{ts,tsx}'],
     rules: importRules({ patterns: [...prismaOutsideItsAdapter, ...bridgeForbiddenImports, ...sleepImports], syntax: e2eSyntax }),
   },
 );
