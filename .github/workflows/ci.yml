@@ -62,7 +62,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - uses: ./.github/actions/install
+      # The one job that always installs fresh, whatever the cache holds: it proves a package.json
+      # change still installs from package-lock.json (#446).
+      - run: npm ci
       # The same steps as release.yml, with a throwaway prerelease version:
       # npm requires a tag for a prerelease.
       - run: npm version "0.0.0-ci.${{ github.run_id }}" --no-git-tag-version
