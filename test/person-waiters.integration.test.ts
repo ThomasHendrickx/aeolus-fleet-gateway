@@ -136,7 +136,7 @@ describe('the waiters of the person ships the gateway crews', () => {
     await expect.poll(() => told, { timeout: 10_000 }).toEqual([charlotte]);
   });
 
-  it('are one per ship across two instances', async () => {
+  freshFleetTest('are one per ship across two instances', async () => {
     const first = anInstance();
     const second = anInstance();
 
@@ -148,7 +148,7 @@ describe('the waiters of the person ships the gateway crews', () => {
     expect(first.waitingOn().length + second.waitingOn().length).toBe(1);
   });
 
-  it('are taken over by the other instance once the one waiting stops', async () => {
+  freshFleetTest('are taken over by the other instance once the one waiting stops', async () => {
     const first = anInstance();
     first.start();
     await expect.poll(() => first.waitingOn()).toEqual([charlotte]);
@@ -162,7 +162,7 @@ describe('the waiters of the person ships the gateway crews', () => {
     await expect.poll(() => second.waitingOn()).toEqual([charlotte]);
   });
 
-  it("are taken over by the other instance once the waiting one's connection to the database ends, freeing its locks", async () => {
+  freshFleetTest("are taken over by the other instance once the waiting one's connection to the database ends, freeing its locks", async () => {
     // The first instance looks again only after a minute, so the second is the one to take the lock.
     const first = anInstance({ roundMs: 60_000 });
     first.start();
