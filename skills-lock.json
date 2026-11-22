@@ -3,119 +3,126 @@
   "skills": {
     "aip-skill-writing": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/aip-skill-writing/SKILL.md",
       "computedHash": "c37a022306166325f94048268e45fd950974cf0c0fa12aecc04b1a4d9f3ba109"
     },
     "behaviour-driven-development": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/behaviour-driven-development/SKILL.md",
       "computedHash": "cd842b8bdc2e53cd64b9cba21743cc62490f5e14115c46bbf9e0c10f93c1fd6f"
     },
     "code-review": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/code-review/SKILL.md",
       "computedHash": "dd453924d32754b6f0f49f03b6ea2071512cea7c47373e4eda78e5e4235ccb6e"
     },
     "cqrs": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/cqrs/SKILL.md",
       "computedHash": "e0e14ff7214421d7c52c337d72ea545c2b395a979f25f9b2510fa9ae5c7e1d04"
     },
     "domain-events": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/domain-events/SKILL.md",
       "computedHash": "0ee6203731425bfd4dfea44dba3755286ca83f0040af159dc40ebd07b1b226d7"
     },
     "domain-modelling": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/domain-modelling/SKILL.md",
       "computedHash": "cfed78607594e8c581415454c91d1b5516ed2c8b11d44d420ba39351ccd43e23"
     },
     "go": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/go/SKILL.md",
       "computedHash": "893a4d140bb63bc75fe53a71004900cee2a828c05487de0207f626f1dc45934e"
     },
     "performance": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/performance/SKILL.md",
       "computedHash": "526514d99284b5bc2ea237db80eea2c4a1a2ef8fdd6770f4079fc3aea3a555d5"
     },
     "ports-and-adapters": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/ports-and-adapters/SKILL.md",
       "computedHash": "1715ee001845376fba1853259b325d447c1c1d5ff3733935434c4aaecfd2d259"
     },
     "pull-request": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/pull-request/SKILL.md",
       "computedHash": "9787083219cd0248c5bc6a117120e021268dc688acea4bef7eb3596d71193a55"
     },
     "remote-calls": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/remote-calls/SKILL.md",
       "computedHash": "128be31d9d4e62c99618c6f19f6a9b1d83b43567422ebd332f5c4a3bc0d9503a"
     },
     "repository": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/repository/SKILL.md",
       "computedHash": "9c974122c70f98a8b1a799e376f86d77d3e3914bf34648abf98a95498634e7eb"
     },
+    "scenario-video": {
+      "source": "ThomasHendrickx/skills",
+      "ref": "v3.16.1",
+      "sourceType": "github",
+      "skillPath": "skills/scenario-video/SKILL.md",
+      "computedHash": "b143f1414182d064f1a0a4305e74b6195ca458fe1d91e518fffaf70ad960342c"
+    },
     "software-development": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/software-development/SKILL.md",
       "computedHash": "68eea63b78d52942ad3ce26dfbb0986f977e8e9436ded320af39086cdf9b9266"
     },
     "test-driven-development": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/test-driven-development/SKILL.md",
       "computedHash": "5490168315cf8d391ef7a59035d07e944e92a3f814e36aa97a4a704fe6298ebf"
     },
     "typescript": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/typescript/SKILL.md",
       "computedHash": "d3ba152a23fea033309b5c0bbad27c56d0867d9cf9a9c7dd696329c132cf77e3"
     },
     "web-frontend": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/web-frontend/SKILL.md",
       "computedHash": "7a33d660f9cd9ece1b6a8bac31ea8b5d7754dcc18017d4966a93173bcf36064e"
     },
     "writing-for-agents": {
       "source": "ThomasHendrickx/skills",
-      "ref": "v3.16.0",
+      "ref": "v3.16.1",
       "sourceType": "github",
       "skillPath": "skills/writing-for-agents/SKILL.md",
       "computedHash": "10a1e2c3991be255508ed40fe5cefed7bf6ec54beb186d2030fef169a7971bc0"

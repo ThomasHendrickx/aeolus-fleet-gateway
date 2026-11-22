@@ -1,0 +1,111 @@
+<title>{{TITLE}}</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* One 16:9 stage (canvas, caption, clock with two counters, proof card, closing card, end card), controls and chapters under it.
+   A deliberately single light look, like a bright office floor seen from above. */
+:root{
+  --page:#eef1f5; --paper:#f6f8fb; --card:#ffffff; --ink:#18212d; --muted:#5d6878; --line:#d9dfe7;
+  --slate:#4a6a9e; --agent:#5b52d6; --app:#1f9a6a; --gate:#e0613b; --amber:#c98a1a;
+  --display:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  --body:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+body{background:var(--page);color:var(--ink);font:15px/1.5 var(--body)}
+.wrap{max-width:1200px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px;display:grid;gap:14px}
+.top{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
+.top h1{font:700 21px/1.2 var(--display);margin:0;letter-spacing:-.01em}
+.top span{font:500 12px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.stage{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;background:var(--paper);border-radius:16px;overflow:hidden;border:1px solid var(--line);container-type:inline-size}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.cap{position:absolute;left:3.8cqw;top:3.4cqw;width:60cqw;pointer-events:none}
+.cap .h{font:700 3.3cqw/1.05 var(--display);letter-spacing:-.02em;text-wrap:balance;color:var(--ink)}
+.cap .s{margin-top:.8cqw;font-size:1.45cqw;line-height:1.4;color:var(--muted);max-width:58cqw}
+.clock{position:absolute;right:3.8cqw;top:3.4cqw;text-align:right;pointer-events:none}
+.clock .k{font:500 1cqw/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.clock .v{margin-top:.5cqw;font:700 3cqw/1 var(--display);letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.cnt{margin-top:1cqw;display:grid;gap:.3cqw;justify-items:end}
+.cnt div{display:flex;gap:.8cqw;align-items:baseline;font-size:1.1cqw;line-height:1.4;color:var(--muted)}
+.cnt b{display:inline-block;min-width:1.6cqw;text-align:right;font:700 1.55cqw/1 var(--display);font-variant-numeric:tabular-nums;transform-origin:70% 60%}
+#cH{color:var(--amber)} #cS{color:var(--gate)} .cnt .of{font:700 1.2cqw/1 var(--display);color:var(--ink)}
+.proof{position:absolute;inset:0;display:grid;place-content:center;pointer-events:none;opacity:0}
+.pc{background:var(--card);border:1px solid var(--line);border-radius:2cqw;padding:3.2cqw 4.4cqw 3cqw;box-shadow:0 1.4cqw 4cqw rgba(24,33,45,.12);text-align:center}
+.pt{font:700 3.8cqw/1.05 var(--display);letter-spacing:-.02em;color:var(--ink)}
+.pg{margin-top:2.6cqw;display:grid;grid-template-columns:auto auto auto;column-gap:4.4cqw;row-gap:1.5cqw;align-items:baseline}
+.ph{font:500 1.05cqw/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);text-align:right}
+.ph.a{color:var(--slate)}
+.pl{font-size:1.55cqw;color:var(--muted);text-align:left}
+.pv{font:700 3.2cqw/1 var(--display);letter-spacing:-.02em;font-variant-numeric:tabular-nums;text-align:right;color:#8d97a6}
+.pv.a{color:var(--slate)} .pv.g{color:var(--gate)} .pv.h{color:var(--amber)}
+.pf{margin-top:2.6cqw;font:600 1.9cqw/1.3 var(--body);color:var(--ink)}
+.closing{position:absolute;inset:0;display:grid;place-content:center;pointer-events:none;opacity:0}
+.cc{width:76cqw;background:var(--card);border:1px solid var(--line);border-radius:2cqw;padding:3cqw 3.8cqw 2.8cqw;box-shadow:0 1.4cqw 4cqw rgba(24,33,45,.12)}
+.ct{font:700 3.4cqw/1.05 var(--display);letter-spacing:-.02em;text-align:center;color:var(--ink)}
+.cg{margin-top:2.4cqw;display:grid;grid-template-columns:1fr 1fr;column-gap:3.6cqw}
+.chd{font:500 1.05cqw/1 var(--mono);letter-spacing:.14em;text-transform:uppercase}
+.chd.use{color:var(--app)} .chd.skip{color:var(--gate)}
+.cg ol{margin:1.1cqw 0 0;padding-left:2cqw;font-size:1.5cqw;line-height:1.32;color:var(--ink)}
+.cg li{margin-top:.75cqw;padding-left:.3cqw} .cg li::marker{font-weight:700}
+.cu li::marker{color:var(--app)} .cs li::marker{color:var(--gate)}
+.cn{margin-top:2.2cqw;padding-top:1.6cqw;border-top:1px solid var(--line);font-size:1.4cqw;line-height:1.35;color:var(--muted);text-align:center}
+.end{position:absolute;inset:0;background:radial-gradient(ellipse 46% 52% at 50% 50%,rgba(246,248,251,.96),rgba(246,248,251,0));display:grid;place-content:center;justify-items:center;text-align:center;pointer-events:none;opacity:0}
+.end svg{width:6cqw;height:auto}
+.end .w{margin-top:1.4cqw;font:700 7cqw/1 var(--display);letter-spacing:-.03em;color:var(--ink)}
+.end .t{margin-top:1.2cqw;font-size:2cqw;color:var(--ink)}
+.end .u{margin-top:1.6cqw;font:500 1.3cqw/1 var(--mono);letter-spacing:.12em;color:var(--slate)}
+.end .scn{margin-top:2.2cqw;font:500 1.05cqw/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:.6cqw 1.2cqw;background:rgba(255,255,255,.7)}
+.ctrl{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+button{font:500 14px/1 var(--body);color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:10px 16px;cursor:pointer}
+button:hover{border-color:var(--slate)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--slate);outline-offset:2px}
+#scrub{flex:1;min-width:160px;accent-color:var(--slate)}
+.time{font:500 13px/1 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.chapters{display:flex;flex-wrap:wrap;gap:8px}
+.chapters button{font-size:13px;padding:8px 12px;color:var(--muted)}
+.chapters button.on{color:var(--ink);border-color:var(--slate)}
+@media (max-width:520px){.chapters button{font-size:12px;padding:7px 10px}}
+</style>
+
+<div class="wrap">
+  <div class="top"><h1>{{HEADING}}</h1><span>{{KICKER}}</span></div>
+  <div class="stage" id="stage">
+    <canvas id="cv" role="img" aria-label="{{ARIA}}"></canvas>
+    <div class="cap" id="cap"><div class="h" id="capH"></div><div class="s" id="capS"></div></div>
+    <div class="clock" id="clock"><div class="k" id="clockK"></div><div class="v" id="clockV"></div>
+      <div class="cnt" id="cnt"><div><span id="lblH"></span><b id="cH">0</b></div><div><span id="lblD"></span><b id="cS">0</b><span class="of" id="of"></span></div></div></div>
+    <div class="proof" id="proof"><div class="pc">
+      <div class="pt pr0" id="pT"></div>
+      <div class="pg">
+        <div class="pr1"></div><div class="ph pr1" id="pA"></div><div class="ph a pr1" id="pB"></div>
+        <div class="pl pr1" id="pD"></div><div class="pv g pr1" id="pDA"></div><div class="pv g pr1" id="pDB"></div>
+        <div class="pl pr2" id="pH"></div><div class="pv h pr2" id="pHA"></div><div class="pv a pr2" id="pHB"></div>
+      </div>
+      <div class="pf pr3" id="pF"></div>
+    </div></div>
+    <div class="closing" id="closing"><div class="cc">
+      <div class="ct cr0" id="cT"></div>
+      <div class="cg">
+        <div class="cu cr1"><div class="chd use" id="cUT"></div><ol id="cU"></ol></div>
+        <div class="cs cr2"><div class="chd skip" id="cST"></div><ol id="cS2"></ol></div>
+      </div>
+      <div class="cn cr3" id="cN"></div>
+    </div></div>
+    <div class="end" id="end">
+      <svg viewBox="0 0 64 56" aria-hidden="true"><path d="M32 4 L32 40 L12 40 Z" fill="#4a6a9e"/><path d="M35 10 L35 40 L52 40 Z" fill="#4a6a9e" opacity=".55"/><path d="M6 44 H58 L52 52 H12 Z" fill="#18212d"/></svg>
+      <div class="w" id="eW"></div>
+      <div class="t" id="eT"></div>
+      <div class="u" id="eU"></div>
+      <div class="scn" id="eL"></div>
+    </div>
+  </div>
+  <div class="ctrl">
+    <button id="play" type="button">Pause</button>
+    <button id="again" type="button">Replay</button>
+    <button id="snd" type="button" aria-pressed="false">Sound on</button>
+    <audio id="aud" src="sound.mp3" preload="auto"></audio>
+    <input id="scrub" type="range" min="0" max="90" step="0.05" value="0" aria-label="Position in the video">
+    <span class="time" id="time"></span>
+  </div>
+  <div class="chapters" id="chapters"></div>
+</div>

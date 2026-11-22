@@ -1,0 +1,140 @@
+{
+ "voice": "af_heart",
+ "respell": {
+  "Lies": "Lees",
+  "Jens": "Yens",
+  "Aeolus": "Eeohlus"
+ },
+ "lines": [
+  {
+   "t": 0.5,
+   "end": 3.2,
+   "text": "One call to a heating installer, played twice."
+  },
+  {
+   "t": 3.6,
+   "end": 7.0,
+   "text": "Ten fifteen. Lies calls. No heating, two small kids."
+  },
+  {
+   "t": 7.2,
+   "end": 10.3,
+   "text": "The line is busy. She'll get a callback."
+  },
+  {
+   "t": 10.6,
+   "end": 13.9,
+   "text": "After lunch, Nadia calls back, and moves another customer."
+  },
+  {
+   "t": 14.1,
+   "end": 17.1,
+   "text": "Then she phones that customer, Lies again, and Jens."
+  },
+  {
+   "t": 17.4,
+   "end": 20.5,
+   "text": "On site, Jens finds the real fault: the compressor."
+  },
+  {
+   "t": 20.7,
+   "end": 23.0,
+   "text": "That evening, he mails his notes to Sara."
+  },
+  {
+   "t": 23.2,
+   "end": 26.8,
+   "text": "On Thursday, Sara retypes them into a quote, and lowers the labour."
+  },
+  {
+   "t": 27.0,
+   "end": 29.5,
+   "text": "On Friday, Wim approves it, from his desk."
+  },
+  {
+   "t": 29.8,
+   "end": 32.4,
+   "text": "The quote reaches Lies the next week."
+  },
+  {
+   "t": 32.6,
+   "end": 35.2,
+   "text": "Four decisions. Fourteen hand-offs by people."
+  },
+  {
+   "t": 35.5,
+   "end": 37.7,
+   "text": "Same call. Now on Aeolus."
+  },
+  {
+   "t": 38.7,
+   "end": 42.5,
+   "text": "Ten fifteen. The line is busy, so the voice agent answers."
+  },
+  {
+   "t": 42.7,
+   "end": 45.7,
+   "text": "The planning agent finds two o'clock, if another visit moves."
+  },
+  {
+   "t": 45.9,
+   "end": 48.7,
+   "text": "Nadia decides. Both customers are told."
+  },
+  {
+   "t": 48.9,
+   "end": 52.8,
+   "text": "Jens's phone has the brief, and the sensor is in his van."
+  },
+  {
+   "t": 53.5,
+   "end": 55.4,
+   "text": "On site, he finds the compressor."
+  },
+  {
+   "t": 55.6,
+   "end": 59.3,
+   "text": "His voice note becomes a report, a parts order and a quote."
+  },
+  {
+   "t": 59.5,
+   "end": 62.2,
+   "text": "Sara lowers the labour for a ten-year customer."
+  },
+  {
+   "t": 62.4,
+   "end": 65.5,
+   "text": "Wim approves it from the side of a football pitch."
+  },
+  {
+   "t": 65.8,
+   "end": 69.6,
+   "text": "Lies accepts. Repair booked, parts ordered, invoice sent."
+  },
+  {
+   "t": 69.8,
+   "end": 71.2,
+   "text": "All done before five."
+  },
+  {
+   "t": 71.6,
+   "end": 74.3,
+   "text": "Same call. Same four decisions, by people."
+  },
+  {
+   "t": 74.5,
+   "end": 76.6,
+   "text": "Fourteen hand-offs by people, or none."
+  },
+  {
+   "t": 76.9,
+   "end": 80.6,
+   "text": "Human intelligence where it counts. Full speed everywhere else."
+  },
+  {
+   "t": 82.0,
+   "end": 86.0,
+   "text": "Aeolus. The open network for people, apps and agents."
+  }
+ ]
+}

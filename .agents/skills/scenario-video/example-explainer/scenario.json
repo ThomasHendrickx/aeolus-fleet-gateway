@@ -1,0 +1,181 @@
+{
+ "page": {
+  "title": "How a trierarch works",
+  "heading": "How a trierarch keeps your ships crewed",
+  "kicker": "Explainer · 2 min · voice and music",
+  "aria": "Animated explainer of the Aeolus trierarch. By hand, the operator crews three ships with four steps each (pick a computer, make a worktree, start the session, paste the crew line with its secret), and restarts a session that ended at night: thirteen steps. With a trierarch: the trierarch plugin beside the fleet picks a computer for each crew request, and a trierarch on each computer, a plain process, makes the worktree, registers so the session never sees the secret, starts the session, wakes it when a message arrives, restarts it when it ends, tells the owner after five restarts in an hour, and releases the ship when its request is removed. Use it when ships must stay crewed with no one watching, when sessions spread over several computers, and to have worktrees and secrets handled; skip it for a ship or two you crew yourself, in a chat client, or on Windows."
+ },
+ "timeline": {"dur": 122, "a0": 4.4, "a1": 32.0, "join": 33.0, "b0": 36.0, "proof": 84.0, "end": 116.0, "center": {"x": 640, "y": 420}, "netFrom": 0, "wave": false, "mark": false, "chipB": 34.2},
+ "people": {
+  "you": {"x": 120, "y": 330, "name": "You", "role": "Operator", "spec": {"skin": "#e8c3a0", "hair": "#3b2a20", "style": "short", "bg": "#e1ebfa", "shirt": "#2d3e63"}}
+ },
+ "apps": {
+  "fleet": {"x": 470, "y": 250, "label": "Fleet", "kind": "fleet", "w": 120},
+  "tplugin": {"x": 712, "y": 250, "label": "Trierarch plugin", "kind": "process", "w": 190},
+  "ctri": {"x": 548, "y": 433, "label": "Trierarch", "kind": "process", "w": 128, "h": 34},
+  "linuxtri": {"x": 1018, "y": 433, "label": "Trierarch", "kind": "process", "w": 128, "h": 34}
+ },
+ "frames": {
+  "comp": {"x": 230, "y": 410, "w": 400, "h": 270, "label": "Computer A", "sub": "Claude Code"},
+  "linux": {"x": 680, "y": 410, "w": 420, "h": 270, "label": "Linux server", "sub": "Claude Code · Codex"}
+ },
+ "agents": {
+  "builder": {"x": 330, "y": 552, "r": 21, "label": "Builder · Claude Code", "lab": "below", "from": 0},
+  "tester": {"x": 520, "y": 552, "r": 21, "label": "Tester · Claude Code", "lab": "below", "from": 0},
+  "reviewer": {"x": 800, "y": 552, "r": 21, "label": "Reviewer · Codex", "lab": "below", "from": 0}
+ },
+ "show": {
+  "builder": [[9.2, 20.6], [27.0, 32.0], [60.4, 70.8], [71.9, 81.0]],
+  "tester": [[15.4, 32.0], [61.0, 75.2]],
+  "reviewer": [[17.2, 32.0], [61.4, 999]],
+  "tplugin": [[33.0, 999]],
+  "ctri": [[33.4, 999]],
+  "linuxtri": [[45.4, 999]]
+ },
+ "hops": [
+  ["you", "comp", 7.2, 7.9, "doc", 0.12, 1],
+  ["builder", "fleet", 12.0, 12.6, "spark"],
+  ["you", "comp", 14.6, 15.2, "doc", 0.12, 1],
+  ["tester", "fleet", 16.0, 16.5, "spark"],
+  ["you", "linux", 16.4, 17.1, "doc", -0.12, 1],
+  ["reviewer", "fleet", 17.8, 18.3, "spark"],
+  ["you", "comp", 26.0, 26.8, "doc", 0.12, 1],
+  ["builder", "fleet", 27.6, 28.1, "spark"],
+  ["fleet", "tplugin", 36.8, 37.3, "spark"],
+  ["tplugin", "ctri", 39.2, 39.8, "spark"],
+  ["ctri", "tplugin", 40.0, 40.6, "spark"],
+  ["linuxtri", "tplugin", 46.0, 46.6, "spark"],
+  ["you", "fleet", 49.6, 50.4, "doc"],
+  ["fleet", "tplugin", 50.8, 51.2, "spark"],
+  ["tplugin", "ctri", 51.4, 52.0, "spark"],
+  ["you", "fleet", 52.6, 53.2, "doc"],
+  ["you", "fleet", 53.2, 53.8, "doc"],
+  ["fleet", "tplugin", 53.9, 54.3, "spark"],
+  ["tplugin", "ctri", 54.4, 55.0, "spark"],
+  ["tplugin", "linuxtri", 54.5, 55.1, "spark"],
+  ["ctri", "fleet", 59.0, 59.6, "spark"],
+  ["linuxtri", "fleet", 59.4, 60.0, "spark"],
+  ["ctri", "builder", 60.0, 60.4, "spark"],
+  ["ctri", "tester", 60.6, 61.0, "spark"],
+  ["linuxtri", "reviewer", 61.0, 61.4, "spark"],
+  ["fleet", "ctri", 65.4, 66.0, "msg"],
+  ["ctri", "builder", 66.2, 66.7, "msg"],
+  ["ctri", "builder", 71.5, 71.9, "spark"],
+  ["ctri", "fleet", 75.4, 75.9, "msg"],
+  ["fleet", "you", 76.0, 76.5, "msg"],
+  ["you", "fleet", 79.6, 80.2, "doc"],
+  ["fleet", "ctri", 80.3, 80.7, "spark"],
+  ["ctri", "fleet", 81.6, 82.0, "msg"],
+  ["fleet", "you", 82.1, 82.6, "msg"]
+ ],
+ "edges": {
+  "builder>fleet": {"bend": -0.1, "to": 32.0},
+  "tester>fleet": {"bend": 0.05, "to": 32.0},
+  "reviewer>fleet": {"bend": 0.1, "to": 32.0},
+  "you>fleet": 0.1,
+  "fleet>tplugin": 0,
+  "tplugin>ctri": 0.12,
+  "tplugin>linuxtri": -0.12,
+  "ctri>fleet": -0.1,
+  "linuxtri>fleet": 0.06,
+  "ctri>builder": 0.1,
+  "ctri>tester": -0.1,
+  "linuxtri>reviewer": 0.08
+ },
+ "tags": [
+  {"from": 4.6, "to": 12.6, "text": "3 ships need crew", "at": "app", "of": "fleet", "icon": "dot", "col": "ink"},
+  {"from": 12.8, "to": 16.4, "text": "2 ships need crew", "at": "app", "of": "fleet", "icon": "dot", "col": "ink"},
+  {"from": 16.6, "to": 18.2, "text": "1 ship needs crew", "at": "app", "of": "fleet", "icon": "dot", "col": "ink"},
+  {"from": 18.4, "to": 19.6, "text": "All three crewed", "at": "app", "of": "fleet", "icon": "check", "col": "app"},
+  {"from": 7.2, "to": 8.2, "text": "1 · Pick a computer with room", "x": 400, "y": 345, "icon": "clock", "col": "ink"},
+  {"from": 8.2, "to": 9.2, "text": "2 · Make a worktree", "x": 400, "y": 345, "icon": "folder", "col": "ink"},
+  {"from": 9.2, "to": 10.0, "text": "3 · Start the session", "x": 400, "y": 345, "icon": "spark", "col": "ink"},
+  {"from": 11.6, "to": 13.8, "text": "The secret enters the session", "x": 560, "y": 300, "icon": "lock", "col": "ink", "ic": "gate"},
+  {"from": 14.6, "to": 18.4, "text": "Same four steps, by you", "x": 400, "y": 345, "icon": "clock", "col": "ink"},
+  {"from": 8.2, "to": 32.0, "text": "worktree · builder", "at": "below", "of": "builder", "dy": 59, "icon": "folder", "col": "ink", "size": 12},
+  {"from": 15.0, "to": 32.0, "text": "worktree · tester", "at": "below", "of": "tester", "dy": 59, "icon": "folder", "col": "ink", "size": 12},
+  {"from": 16.8, "to": 32.0, "text": "worktree · reviewer", "at": "below", "of": "reviewer", "dy": 59, "icon": "folder", "col": "ink", "size": 12},
+  {"from": 20.6, "to": 22.6, "text": "Session ended", "at": "above", "of": "builder", "icon": "cross", "col": "ink", "sfx": "down"},
+  {"from": 22.8, "to": 24.9, "text": "Its ship waits for you", "at": "above", "of": "builder", "icon": "dot", "col": "ink"},
+  {"from": 36.6, "to": 41.8, "text": "Brings computers in, picks the computer", "at": "app", "of": "tplugin", "icon": "check", "col": "ink", "ic": "slate"},
+  {"from": 38.8, "to": 42.2, "text": "A plain process, not an AI", "at": "app", "of": "ctri", "icon": "dot", "col": "ink", "ic": "slate"},
+  {"from": 46.8, "to": 49.0, "text": "Linux server: Claude Code, Codex · room for 4", "at": "app", "of": "tplugin", "icon": "check", "col": "ink", "ic": "slate"},
+  {"from": 52.2, "to": 54.4, "text": "Fits, with the most room", "at": "app", "of": "ctri", "icon": "check", "col": "app"},
+  {"from": 55.2, "to": 57.2, "text": "Only this one offers Codex", "at": "app", "of": "linuxtri", "icon": "check", "col": "app"},
+  {"from": 55.6, "to": 57.9, "text": "If none fits, it says why", "at": "app", "of": "fleet", "icon": "dot", "col": "ink"},
+  {"from": 58.4, "to": 81.4, "text": "worktree · builder", "at": "below", "of": "builder", "dy": 59, "icon": "folder", "col": "ink", "size": 12},
+  {"from": 60.6, "to": 84.0, "text": "worktree · tester", "at": "below", "of": "tester", "dy": 59, "icon": "folder", "col": "ink", "size": 12},
+  {"from": 61.0, "to": 84.0, "text": "worktree · reviewer", "at": "below", "of": "reviewer", "dy": 59, "icon": "folder", "col": "ink", "size": 12},
+  {"from": 59.4, "to": 62.6, "text": "Registers itself; the secret stays here", "at": "app", "of": "ctri", "icon": "lock", "col": "ink", "ic": "slate"},
+  {"from": 60.4, "to": 62.2, "text": "crewing", "at": "above", "of": "builder", "icon": "dot", "col": "ink", "ic": "slate", "size": 12},
+  {"from": 62.2, "to": 66.6, "text": "running", "at": "above", "of": "builder", "icon": "dot", "col": "ink", "ic": "app", "size": 12},
+  {"from": 66.8, "to": 69.6, "text": "Woken with the message", "at": "above", "of": "builder", "icon": "msg", "col": "ink", "size": 12},
+  {"from": 69.8, "to": 70.8, "text": "running", "at": "above", "of": "builder", "icon": "dot", "col": "ink", "ic": "app", "size": 12},
+  {"from": 70.8, "to": 72.2, "text": "restarting", "at": "above", "of": "builder", "icon": "dot", "col": "ink", "ic": "amber", "size": 12, "sfx": "down"},
+  {"from": 72.2, "to": 74.6, "text": "Restarted in the same worktree", "at": "above", "of": "builder", "icon": "check", "col": "app", "size": 12, "sfx": "up"},
+  {"from": 74.8, "to": 80.4, "text": "running", "at": "above", "of": "builder", "icon": "dot", "col": "ink", "ic": "app", "size": 12},
+  {"from": 80.4, "to": 81.6, "text": "releasing", "at": "above", "of": "builder", "icon": "dot", "col": "ink", "ic": "muted", "size": 12},
+  {"from": 61.6, "to": 74.9, "text": "running", "at": "above", "of": "tester", "icon": "dot", "col": "ink", "ic": "app", "size": 12},
+  {"from": 75.0, "to": 78.6, "text": "crashed", "at": "above", "of": "tester", "icon": "dot", "col": "ink", "ic": "gate", "size": 12, "sfx": "down"},
+  {"from": 61.8, "to": 84.0, "text": "running", "at": "above", "of": "reviewer", "icon": "dot", "col": "ink", "ic": "app", "size": 12},
+  {"from": 76.6, "to": 78.6, "text": "Tester crashed: you decide", "at": "right", "of": "you", "icon": "dot", "col": "ink", "ic": "gate"},
+  {"from": 82.6, "to": 84.0, "text": "Unpushed work reported to you", "at": "right", "of": "you", "icon": "msg", "col": "ink"}
+ ],
+ "vignettes": [
+  {"type": "terminalCard", "from": 9.8, "to": 13.8, "x": 250, "y": 318, "w": 640, "title": "4 · Paste the crew line", "line": "/aeolus:crew https://fleet.example.com shp_7k2m9x4q aeolus_sk_v1_3f9c2a71", "hl": [52, 73], "typeDur": 1.4},
+  {"type": "terminalCard", "from": 42.8, "to": 46.4, "x": 680, "y": 318, "w": 530, "title": "Linux server", "line": "npx @aeolus-fleet/trierarch init --fleet-url … --secret …", "typeDur": 1.8},
+  {"type": "requestCard", "from": 49.4, "to": 57.6, "x": 880, "y": 212, "title": "Crew request · Builder", "rows": [["Harness", "Claude Code · Opus"], ["Workspace", "worktree of web-app"]], "status": ["Unassigned", "Assigned to Computer A"], "change": 52.2},
+  {"type": "requestCard", "from": 78.8, "to": 83.8, "x": 880, "y": 212, "title": "Crew request · Builder", "rows": [["Harness", "Claude Code · Opus"], ["Workspace", "worktree of web-app"]], "status": ["Running", "Releasing"], "ic0": "app", "ic1": "muted", "change": 80.0, "button": "Remove", "press": 79.6, "done": "Removed"}
+ ],
+ "captions": [
+  {"a": 0, "b": 4.4, "g": "Intro", "h": "How a trierarch keeps your ships crewed.", "s": "What the trierarch and its plugin do, and when to use them."},
+  {"a": 4.4, "b": 14.4, "g": "By hand", "h": "By hand: four steps for every ship."},
+  {"a": 14.4, "b": 19.4, "g": "By hand", "h": "The same four steps, for each ship."},
+  {"a": 19.4, "b": 25.0, "g": "By hand", "h": "At night a session ends. Nobody restarts it."},
+  {"a": 25.0, "b": 32.0, "g": "By hand", "h": "You notice at 08:30 and start it again."},
+  {"a": 32.0, "b": 36.0, "g": "The switch", "h": "Same ships. Now with a trierarch."},
+  {"a": 36.0, "b": 42.4, "g": "How it works", "h": "Two parts: one plugin, a trierarch per computer."},
+  {"a": 42.4, "b": 49.0, "g": "How it works", "h": "A computer joins with one setup line."},
+  {"a": 49.0, "b": 58.0, "g": "How it works", "h": "One crew request per ship. The plugin places it."},
+  {"a": 58.0, "b": 65.0, "g": "How it works", "h": "The trierarch crews it. The secret stays out."},
+  {"a": 65.0, "b": 70.0, "g": "How it works", "h": "A message arrives: the idle session wakes."},
+  {"a": 70.0, "b": 74.6, "g": "How it works", "h": "A session ends at night. It restarts itself."},
+  {"a": 74.6, "b": 78.6, "g": "How it works", "h": "Five restarts in an hour? You are told."},
+  {"a": 78.6, "b": 84.0, "g": "How it works", "h": "Remove the request: the ship is released."},
+  {"a": 84.0, "b": 94.0, "g": "The proof", "h": ""},
+  {"a": 94.0, "b": 116.0, "g": "Use it or not", "h": ""},
+  {"a": 116.0, "b": 122, "g": "End", "h": ""}
+ ],
+ "clockA": [
+  [0, "Monday", "09:00"],
+  [19.4, "Tuesday", "02:10"],
+  [25.0, "Tuesday", "08:30"]
+ ],
+ "clockB": {
+  "day": "Monday",
+  "keys": [[36.0, 540], [64.9, 552], [69.99, 556], [70.0, 130, "Tuesday"], [78.59, 135, "Tuesday"], [78.6, 600, "Tuesday"], [84.0, 603, "Tuesday"]]
+ },
+ "counters": [
+  {"label": "Crew steps by you", "a": [7.2, 8.2, 9.2, 10.0, 14.8, 15.2, 15.6, 16.0, 16.6, 17.0, 17.4, 17.8, 26.4], "b": [44.4, 50.0, 52.9, 53.5]},
+  {"label": "Restarts by you", "a": [26.4], "b": []}
+ ],
+ "labels": {"handoffs": "", "decisions": "", "chipA": "By hand", "chipB": "With a trierarch"},
+ "proof": {
+  "title": "Same three ships.",
+  "colA": "By hand",
+  "colB": "With a trierarch",
+  "rows": [{"label": "Crew steps per new ship", "a": 4, "b": 1, "ca": "h", "cb": "a"}, {"label": "Restarts by you", "a": 1, "b": 0, "ca": "g", "cb": "a"}],
+  "footer": ["One setup line per computer, once.", "Then the trierarch keeps them crewed."],
+  "times": [84.4, 84.9, 88.0, 90.4]
+ },
+ "closing": {
+  "from": 94.0,
+  "title": "When to use a trierarch",
+  "use": {"title": "Use it when", "items": ["Ships must stay crewed with no one watching", "Sessions spread over several computers", "You want worktrees and secrets handled for you"]},
+  "skip": {"title": "Skip it when", "items": ["You crew a ship or two from sessions you work in: the aeolus plugin is enough", "You work from a chat client: it connects over MCP", "The computer runs Windows, or cannot run a background service"]},
+  "note": "On one computer, sessions share your user account. Run them in containers when one must not reach another.",
+  "times": [94.4, 94.9, 103.4, 111.6]
+ },
+ "end": {"word": "Aeolus", "tagline": "The open network for people, apps and agents", "url": "AEOLUS-FLEET.DEV", "label": "Explainer"},
+ "sound": {"turn": [74.5, 78.5]}
+}
