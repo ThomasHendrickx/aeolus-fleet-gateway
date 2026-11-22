@@ -1,9 +1,14 @@
+import { createServer, type Server } from 'node:http';
+
 import { PAYLOAD_MAX_BYTES, type FleetId, type ShipId } from '@aeolus-fleet/common';
 import { TRPCError } from '@trpc/server';
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 
+import { createRestFleetDoor } from '../fleet/rest-fleet-door.js';
+import { createCrewPersonShip } from '../../core/people/crew-person-ship.js';
+import { memoryPersonCrews } from '../../../test/support/people-fakes.js';
 import { createEndSignIns } from '../../core/sign-in/end-sign-ins.js';
 import { createStopSlackLink } from '../../core/slack/stop-slack-link.js';
 import { memoryAccountGrants } from '../../../test/support/sign-in-fakes.js';
@@ -2174,5 +2179,124 @@ describe('the person API meeting controls', () => {
   it('uses the shared core refusal for a title over its limit', async () => {
     const caller = gatewayRouter.createCaller(aContext(PERSON_COOKIE).context);
     await expect(caller.people.openMeeting({ ships: [{ name: 'chief-of-staff' }], title: 'a'.repeat(201), idempotencyKey: 'open-1' })).rejects.toThrow('A meeting title is at most 200 characters');
+  });
+});
+
+
+describe('a person looks up one reachable ship for a conversation header (#390)', () => {
+  const tracker = { id: 'shp_01m3tbfspe96yf1rnr4ank9h1a', name: 'tracker', description: 'Tracks issues' } as const;
+  let server: Server;
+  let caller: ReturnType<typeof gatewayRouter.createCaller>;
+  let lookupContext: Context;
+  let received: { path: string | undefined; authorization: string | undefined; body: unknown }[];
+  let answer: { status: number; body: unknown };
+
+  beforeEach(async () => {
+    received = [];
+    answer = { status: 200, body: tracker };
+    server = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.on('end', () => {
+        const body: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        received.push({ path: request.url, authorization: request.headers.authorization, body });
+        response.writeHead(answer.status, { 'content-type': 'application/json' }).end(JSON.stringify(answer.body));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address !== null ? address.port : 0;
+    const door = createRestFleetDoor(`http://127.0.0.1:${String(port)}`);
+    const crews = memoryPersonCrews();
+    await crews.save({ fleetId: FLEET, shipId: OWNER, crewToken: 'person-crew', crewedAt: FOCUSED_AT });
+    const crewPersonShip = createCrewPersonShip({
+      accountTokenOf: () => Promise.resolve(err({ kind: 'signedOut' })),
+      connections: memoryConnectionStore(), door, crews, clock: { now: () => FOCUSED_AT },
+    });
+    const { context } = aContext(PERSON_COOKIE);
+    const { createLookupShip } = await import('../../core/people/lookup-ship.js');
+    if (context.person === undefined) throw new Error('The signed-in person context is required');
+    context.person.lookupShip = createLookupShip({ crewPersonShip, crews, door: door.person });
+    lookupContext = context;
+    caller = gatewayRouter.createCaller(context);
+  });
+
+  afterEach(async () => {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  });
+
+  it('answers an allowed ship by name with its header description', async () => {
+    // Given the person may send to tracker.
+    // When their client looks up that name.
+    const found = await caller.people.lookup({ name: 'tracker' });
+
+    // Then it receives the single ship header.
+    expect(found).toEqual(tracker);
+  });
+
+  it('answers the same allowed ship by id', async () => {
+    // Given the person may send to tracker.
+    // When their client looks up its id.
+    const found = await caller.people.lookup({ id: tracker.id });
+
+    // Then it receives the same header.
+    expect(found).toEqual(tracker);
+    expect(received[0]?.body).toEqual({ id: tracker.id });
+  });
+
+  it('answers null for a ship outside the person ship send reach', async () => {
+    // Given core hides the requested ship from the person.
+    answer.body = null;
+
+    // When their client asks for that ship.
+    const found = await caller.people.lookup({ name: 'private-ship' });
+
+    // Then the API reveals no ship.
+    expect(found).toBeNull();
+  });
+
+  it('answers null for an unknown name', async () => {
+    // Given no active ship has that name.
+    answer.body = null;
+
+    // When the person looks it up.
+    const found = await caller.people.lookup({ name: 'unknown' });
+
+    // Then absence is indistinguishable from a ship outside reach.
+    expect(found).toBeNull();
+  });
+
+  it('surfaces a core refusal as the API error with its message', async () => {
+    // Given core refuses the person ship scope.
+    answer = { status: 403, body: { code: 'FORBIDDEN', message: 'messages:send is required' } };
+
+    // When the person looks up a ship.
+    const found = caller.people.lookup({ name: 'tracker' });
+
+    // Then core supplies the refusal, rather than a null header.
+    await expect(found).rejects.toMatchObject({ code: 'FORBIDDEN', message: 'messages:send is required' });
+  });
+
+  it('makes one ship.lookup call as the person crew and no list call', async () => {
+    // Given a conversation needs only tracker at fleet scale.
+    // When its header reads the ship.
+    await caller.people.lookup({ name: 'tracker' });
+
+    // Then the only core read is the bounded lookup, without a full statement.
+    expect(received).toEqual([{ path: '/api/v1/ship/lookup', authorization: 'Bearer person-crew', body: { name: 'tracker' } }]);
+  });
+
+  it.each([{}, { name: 'tracker', id: tracker.id }, { name: '' }, { id: 'shp_invalid' }])('refuses a lookup without exactly one valid name or id: %j', async (input) => {
+    // Given a lookup input that does not identify exactly one ship.
+    // When it reaches the person API.
+    const response = await fetchRequestHandler({
+      endpoint: '/trpc', router: gatewayRouter, createContext: () => lookupContext,
+      req: new Request(`http://gateway.example/trpc/people.lookup?input=${encodeURIComponent(JSON.stringify(input))}`),
+    });
+
+    // Then validation refuses it before any core call.
+    expect(response.status).toBe(400);
+    expect(received).toEqual([]);
   });
 });
