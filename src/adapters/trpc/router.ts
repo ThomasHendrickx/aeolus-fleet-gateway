@@ -85,6 +85,7 @@ import type { PersonCaller } from '../../core/people/person-crew.js';
 import type { SendMessage } from '../../core/people/send-message.js';
 import type { ReadWaitingAmong } from '../../core/people/read-waiting-among.js';
 import type { ReadWaitingCount } from '../../core/people/read-waiting-count.js';
+import type { LookupShip } from '../../core/people/lookup-ship.js';
 import type { ReadSendTo } from '../../core/people/read-send-to.js';
 import type { ReadBridgeHome } from '../../core/people/read-bridge-home.js';
 import type { ReadInbox } from '../../core/people/read-inbox.js';
@@ -237,6 +238,7 @@ export interface Context {
     turnOnWebPush: TurnOnWebPush;
     turnOffWebPush: TurnOffWebPush;
     focusPage: FocusPage;
+    lookupShip: LookupShip;
     readSendTo: ReadSendTo;
     sendMessage: SendMessage;
     controlMeetings: ControlMeetings;
@@ -732,10 +734,10 @@ function isTRPCErrorCode(code: string): code is TRPCError['code'] {
   return Object.hasOwn(TRPC_ERROR_CODES_BY_KEY, code);
 }
 
-function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES; message: string } | { kind: 'MEETING_REFUSED'; code: string; message: string }>): T {
+function personAnswerOf<T>(answered: Result<T, { kind: keyof typeof PERSON_CODES; message: string } | { kind: 'MEETING_REFUSED' | 'LOOKUP_REFUSED'; code: string; message: string }>): T {
   if (!answered.isOk) {
     const refusal = answered.error;
-    const code = refusal.kind === 'MEETING_REFUSED'
+    const code = 'code' in refusal
       ? (isTRPCErrorCode(refusal.code) ? refusal.code : 'BAD_GATEWAY')
       : PERSON_CODES[refusal.kind];
     throw new TRPCError({ code, message: refusal.message });
@@ -1562,6 +1564,7 @@ export const gatewayRouter = t.router({
         personAnswerOf(await ctx.person.sendMessage({ caller: ctx.caller, to: { kind: 'meeting', meetingId }, contentType: CONTRIBUTION_CONTENT_TYPE, payload, idempotencyKey })),
       ),
     /** Who they can send a message to from Bridge (aeolus-fleet #1547): the ships their person ship may send to now, and its name. */
+    lookup: personProcedure.input(z.union([z.strictObject({ name: z.string().min(1) }), z.strictObject({ id: idSchema('ship') })])).query(async ({ ctx, input }) => personAnswerOf(await ctx.person.lookupShip({ caller: ctx.caller, target: input }))),
     sendTo: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readSendTo(ctx.caller))),
     /** Sends a ship a message from Bridge as their person ship, once under the page's key; it answers once the fleet stored it. */
     send: personProcedure

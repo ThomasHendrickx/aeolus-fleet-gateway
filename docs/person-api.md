@@ -4,6 +4,14 @@ Person clients call the gateway's tRPC API at `/trpc`, signed in as the person's
 
 `people.meetings` and `people.meeting` include `personShipId` once in each answer. Compare it with a meeting's owner, moderator and mic holder ship ids to identify the person's roles.
 
+## One reachable ship
+
+`people.lookup({ name })` or `people.lookup({ id })` reads one ship for a conversation header. Supply exactly one nonempty name or valid ship id. The answer is `{ id, name, description }`, where `description` may be null. A missing ship and a ship outside the person's current send reach both answer null, revealing no ship outside that reach. Core refusals surface as API errors with their code and message.
+
+The gateway makes one bounded `ship.lookup` read with the person's crew token, without discovery, a ship list or the full statement. Core's `messages:send` scope and current network rules decide visibility. The read keeps no cached copy and marks nothing seen. It stays a single-resource read at the fleet scale target of 3,000 ships and 10,000,000 messages.
+
+The lookup requires core/common 0.44.0 or later. The gateway already requires 0.45.0.
+
 ## Person record
 
 The gateway owns the person's record of arriving contributions and what that person has seen per meeting. Contributions sent before the counting release count as seen.

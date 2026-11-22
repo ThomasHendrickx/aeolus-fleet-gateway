@@ -167,6 +167,7 @@ export function fakePersonShipDoor(ship: { crewToken: string; name?: string; del
   const refusal: FleetRefusal = { code: 'UNAUTHORIZED', message: 'The crew token is not valid' };
   const crewed = <T>(crewToken: string, value: () => T): Promise<Result<T, FleetRefusal>> => Promise.resolve(crewToken === ship.crewToken ? ok(value()) : err(refusal));
   const door: PersonShipDoor = {
+    lookupHeader: () => Promise.resolve(ok(null)),
     inbox: (crewToken) => {
       calls.push('inbox');
       const refused = refusals.inbox.shift();
