@@ -1,8 +1,8 @@
 import { createServer, type Server } from 'node:http';
 
-import { afterEach, describe, expect, inject, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, inject, it } from 'vitest';
 
-import { createPrismaClient } from '../../src/adapters/prisma/client.js';
+import { createPrismaClient, type PrismaClient } from '../../src/adapters/prisma/client.js';
 import { signIn } from './argo.js';
 import { aFreePort, startFleetServer, type FleetServer } from './fleet-server.js';
 
@@ -35,23 +35,53 @@ async function aStrangerOn(port: number): Promise<void> {
 }
 
 describe('startFleetServer', () => {
-  it('copies the initialised fleet into isolated databases', async () => {
-    fleet = await startFleetServer(inject('postgresUrl'));
-    const other = await startFleetServer(inject('postgresUrl'));
-    const first = createPrismaClient(fleet.databaseUrl);
-    const second = createPrismaClient(other.databaseUrl);
-    try {
-      expect(await signIn(fleet)).toBeTruthy();
-      expect(await signIn(other)).toBeTruthy();
-      const firstFleet = await first.$queryRaw<{ id: string; name: string }[]>`SELECT id, name FROM fleets`;
-      const secondFleet = await second.$queryRaw<{ id: string; name: string }[]>`SELECT id, name FROM fleets`;
-      expect(firstFleet).toEqual(secondFleet);
-      await first.$executeRaw`UPDATE fleets SET name = 'changed'`;
-      expect(await second.$queryRaw<{ name: string }[]>`SELECT name FROM fleets`).toEqual([{ name: 'test fleet' }]);
-    } finally {
-      await Promise.all([first.$disconnect(), second.$disconnect(), other.stop()]);
+  describe('copies the initialised fleet', () => {
+    let templateFleets: { id: string; name: string }[];
+    let other: FleetServer | undefined;
+    const clients: PrismaClient[] = [];
+
+    function clientFor(server: FleetServer): PrismaClient {
+      const client = createPrismaClient(server.databaseUrl);
+      clients.push(client);
+      return client;
     }
-  }, 120_000);
+
+    beforeAll(async () => {
+      const template = createPrismaClient(inject('fleetTemplateUrl'));
+      try {
+        templateFleets = await template.$queryRaw<{ id: string; name: string }[]>`SELECT id, name FROM fleets`;
+      } finally {
+        await template.$disconnect();
+      }
+    });
+
+    afterEach(async () => {
+      await Promise.all(clients.splice(0).map((client) => client.$disconnect()));
+      await other?.stop();
+      other = undefined;
+    });
+
+    it("holds the template's fleet", async () => {
+      fleet = await startFleetServer(inject('postgresUrl'));
+
+      expect(await clientFor(fleet).$queryRaw`SELECT id, name FROM fleets`).toEqual(templateFleets);
+    }, 120_000);
+
+    it('lets the person sign in on a copy', async () => {
+      fleet = await startFleetServer(inject('postgresUrl'));
+
+      expect(await signIn(fleet)).toBeTruthy();
+    }, 120_000);
+
+    it("leaves the other copy's fleet as the template's after a write", async () => {
+      fleet = await startFleetServer(inject('postgresUrl'));
+      other = await startFleetServer(inject('postgresUrl'));
+
+      await clientFor(fleet).$executeRaw`UPDATE fleets SET name = 'changed'`;
+
+      expect(await clientFor(other).$queryRaw`SELECT id, name FROM fleets`).toEqual(templateFleets);
+    }, 120_000);
+  });
 
   it('starts a separately initialised fleet when fresh setup is requested', async () => {
     fleet = await startFleetServer(inject('postgresUrl'));
