@@ -1,0 +1,130 @@
+{
+ "S0.1|skill-md": [
+  "PASS",
+  "applies=False files added in src/queries=[]"
+ ],
+ "S0.2|skill-md": [
+  "PASS",
+  "violations=['src/core/commands/cancel_order.py', 'src/queries/order_summary.py']"
+ ],
+ "S0.3|skill-md": [
+  "PASS",
+  "violations=['src/core/commands/cancel_order.py', 'src/queries/order_summary.py']"
+ ],
+ "S0.4|skill-md": [
+  "PASS",
+  "problems=[1, 3] applies=True (agent's P0 output)"
+ ],
+ "S1.1|skill-md": [
+  "PASS",
+  "query modules=['customer_totals.py'] read types={'customer_totals.py': ['CustomerTotalsPage', 'CustomerTotalsRow']} query imports of domain=[] page reaches src.queries=True page still loads all orders=False queryTests exit=0 (OK)"
+ ],
+ "S1.2|skill-md": [
+  "PASS",
+  "src/queries/customer_totals.py does the grouping, sum, HAVING, ORDER BY, LIMIT/OFFSET and a count(*) total in SQL; src/web/staff_pages.py only maps rows."
+ ],
+ "S1.3|skill-md": [
+  "PASS",
+  "methods added to repository ports or adapters=[]"
+ ],
+ "S1.4|skill-md": [
+  "PASS",
+  "query modules=['order_edit_form.py'] read types={'order_edit_form.py': ['OrderEditForm', 'OrderEditFormNotFound']} query imports of domain=[] form loads the Order=False new tables=[] queryTests exit=0 (OK)"
+ ],
+ "S1.5|skill-md": [
+  "PASS",
+  "src/queries/customer_list.py selects the persisted loyalty_tier column; the rule is applied only in src/core/customers.py (via core/loyalty.py) on place, cancel, suspend and reinstate, and saved by pg_customers.py. No query code evaluates it."
+ ],
+ "S2.1|skill-md": [
+  "PASS",
+  "applies=True new tables=[] PROJECTION.json=False"
+ ],
+ "S2.2|skill-md": [
+  "PASS",
+  "table=monthly_revenue_projection query reads projection=True query reads invoices=False report correct=True ([[\"2026-11-01\", 900, 1], [\"2026-10-01\", 700, 1], [\"2026-09-01\", 3500, 2]]) same change twice same rows=True rebuild equals incremental=True rows=4 rebuild exit=0"
+ ],
+ "S2.3|skill-md": [
+  "PASS",
+  "src/adapters/revenue_projection.py docstring declares trigger (same transaction as the invoice command), staleness (none, synchronous), idempotency key (invoice_id, change) and rebuild (python3 -m src.adapters.revenue_projection). The schema backs the key, and read-your-own-writes is not needed because the projection is synchronous."
+ ],
+ "S2.4|skill-md": [
+  "PASS",
+  "rolled-back dispatch: raised RaiseException, tables changed=[]; committed dispatch: committed, new tables that gained a row=['order_shipping_processed_events', 'shipping_outbox']; PROJECTION.json={\"table\": \"order_shipping\", \"rebuild\": \"python3 -m src.projections.rebuild\", \"process\": \"python3 -m src.projections.process\"}"
+ ],
+ "S3.1|skill-md": [
+  "PASS",
+  "touched page calls the finder=False reaches src.queries=True untouched page unchanged=True finder still in port and adapter=True queryTests exit=0 (OK)"
+ ],
+ "S4.1|skill-md": [
+  "PASS",
+  "src/core/commands/change_shipping_address.py takes only order_id, street, city and postcode, and returns order.version. It is wired through main.py and web/order_pages.py post_shipping_address."
+ ],
+ "S4.2|skill-md": [
+  "PASS",
+  "update_order still defined=True original UpdateOrder tests exit=0 (OK)"
+ ],
+ "S0.1|aip": [
+  "PASS",
+  "applies=False files added in src/queries=[]"
+ ],
+ "S0.2|aip": [
+  "PASS",
+  "violations=['src/core/commands/cancel_order.py', 'src/queries/order_summary.py']"
+ ],
+ "S0.3|aip": [
+  "PASS",
+  "violations=['src/core/commands/cancel_order.py', 'src/queries/order_summary.py']"
+ ],
+ "S0.4|aip": [
+  "PASS",
+  "problems=[1, 3] applies=True (agent's P0 output)"
+ ],
+ "S1.1|aip": [
+  "PASS",
+  "query modules=['customer_totals.py'] read types={'customer_totals.py': ['CustomerTotalsPage', 'CustomerTotalsRow']} query imports of domain=[] page reaches src.queries=True page still loads all orders=False queryTests exit=0 (OK)"
+ ],
+ "S1.2|aip": [
+  "PASS",
+  "src/queries/customer_totals.py does the non-cancelled filter, count/sum aggregation, HAVING, ORDER BY and LIMIT/OFFSET in SQL (plus a count(*) total); src/web/staff_pages.py only maps rows, and the in-code list_all loops were removed."
+ ],
+ "S1.3|aip": [
+  "PASS",
+  "methods added to repository ports or adapters=[]"
+ ],
+ "S1.4|aip": [
+  "PASS",
+  "query modules=['order_edit_form.py'] read types={'order_edit_form.py': ['OrderEditForm', 'OrderNotFound']} query imports of domain=[] form loads the Order=False new tables=[] queryTests exit=0 (OK)"
+ ],
+ "S1.5|aip": [
+  "PASS",
+  "src/queries/customer_list.py just selects the loyalty_tier column; the rule (src/core/loyalty.py) is evaluated only by refresh_loyalty_tier in write commands (place_order, customer_status), which persists it to customers.loyalty_tier (schema.sql)."
+ ],
+ "S2.1|aip": [
+  "PASS",
+  "applies=True new tables=[] PROJECTION.json=False"
+ ],
+ "S2.2|aip": [
+  "PASS",
+  "table=monthly_revenue_projection query reads projection=True query reads invoices=False report correct=True ([[\"2026-11-01\", 900, 1], [\"2026-10-01\", 700, 1], [\"2026-09-01\", 3500, 2]]) same change twice same rows=True rebuild equals incremental=True rows=4 rebuild exit=0"
+ ],
+ "S2.3|aip": [
+  "PASS",
+  "src/adapters/pg_revenue_projection.py docstring declares the trigger (same transaction as the invoice change), staleness (zero), idempotency key ((invoice_id, change) in monthly_revenue_applied) and the rebuild command, with a rebuild() implementation. schema.sql repeats the key and rebuild. The projection is synchronous, and the docstring states the read-your-own-writes outcome."
+ ],
+ "S2.4|aip": [
+  "PASS",
+  "rolled-back dispatch: raised RaiseException, tables changed=[]; committed dispatch: committed, new tables that gained a row=['processed_shipping_events', 'shipping_outbox']; PROJECTION.json={\"table\": \"order_shipping_status\", \"rebuild\": \"python3 -m src.rebuild_projection\", \"process\": \"python3 -m src.process_projection\"}"
+ ],
+ "S3.1|aip": [
+  "PASS",
+  "touched page calls the finder=False reaches src.queries=True untouched page unchanged=True finder still in port and adapter=True queryTests exit=0 (OK)"
+ ],
+ "S4.1|aip": [
+  "PASS",
+  "src/core/commands/change_shipping_address.py is named for the change, takes only order_id, street, city, postcode, and returns order.version; wired through src/main.py and web/order_pages.post_shipping_address."
+ ],
+ "S4.2|aip": [
+  "PASS",
+  "update_order still defined=True original UpdateOrder tests exit=0 (OK)"
+ ]
+}

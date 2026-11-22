@@ -1,0 +1,1 @@
+Customers cancel an order from the order page while it is still placed. Support reports that the cancel button sometimes refuses an order that is still placed, and that the summary card's total now and then differs from the order's total. Look at the order page's code paths and make both trustworthy.

@@ -1,0 +1,127 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 09:25:17.101140464 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [1, 3, 4], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/adapters/pg_orders.py repo/src/adapters/pg_orders.py
+--- base/src/adapters/pg_orders.py	2026-11-07 09:24:42.070494934 +0100
++++ repo/src/adapters/pg_orders.py	2026-11-07 09:25:17.224139219 +0100
+@@ -17,7 +17,7 @@
+         lines = self.conn.execute(
+             "SELECT sku, quantity, unit_price_cents FROM order_lines WHERE order_id = %s ORDER BY line_no", (order_id,)).fetchall()
+         return Order(row[0], row[1], row[2], row[3], Address(row[4], row[5], row[6]),
+-                     [OrderLine(*line) for line in lines], status=row[7], note=row[8], version=row[9], customer_email=row[10])
++                     [OrderLine(*line) for line in lines], status=row[7], note=row[8], version=row[9])
+ 
+     def save(self, order):
+         try:
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/core/orders.py repo/src/core/orders.py
+--- base/src/core/orders.py	2026-11-07 09:24:42.070494934 +0100
++++ repo/src/core/orders.py	2026-11-07 09:25:17.223139229 +0100
+@@ -41,7 +41,6 @@
+     status: str = "placed"
+     note: str = ""
+     version: int = 1
+-    customer_email: str = ""
+ 
+     def __post_init__(self):
+         if not self.lines:
+@@ -51,17 +50,6 @@
+     def total_cents(self):
+         return sum(line.total_cents for line in self.lines)
+ 
+-    def to_form(self):
+-        return {
+-            "number": self.number,
+-            "status": self.status,
+-            "street": self.shipping_address.street,
+-            "city": self.shipping_address.city,
+-            "postcode": self.shipping_address.postcode,
+-            "note": self.note,
+-            "customer_email": self.customer_email,
+-        }
+-
+     def ship(self):
+         if self.status != "placed":
+             raise OrderError(f"cannot ship a {self.status} order")
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-07 09:17:28.565879511 +0100
++++ repo/src/main.py	2026-11-07 09:25:17.189139573 +0100
+@@ -1,5 +1,9 @@
+ """Composition root: wires use cases and reads to Postgres. The web handlers in src/web call these."""
++from dataclasses import asdict
++
+ from src.adapters.pg_unit_of_work import PgUnitOfWork
++from src.db import connect
++from src.queries.order_edit_form import order_edit_form as _order_edit_form
+ from src.core.commands.place_order import place_order as _place_order
+ from src.core.commands.register_customer import register_customer as _register_customer
+ from src.core.commands.ship_order import ship_order as _ship_order
+@@ -15,3 +19,8 @@
+ 
+ def register_customer(*args, **kwargs):
+     return _register_customer(PgUnitOfWork(), *args, **kwargs)
++
++
++def order_edit_form(order_id):
++    with connect() as conn:
++        return asdict(_order_edit_form(conn, order_id))
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/queries/order_edit_form.py repo/src/queries/order_edit_form.py
+--- base/src/queries/order_edit_form.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/queries/order_edit_form.py	2026-11-07 09:25:17.176139705 +0100
+@@ -0,0 +1,27 @@
++"""Query: the staff order edit form (read type + handler). Reads the tables directly; no domain imports."""
++from dataclasses import dataclass
++
++
++
++class OrderNotFound(Exception):
++    pass
++
++
++@dataclass(frozen=True)
++class OrderEditForm:
++    number: str
++    status: str
++    street: str
++    city: str
++    postcode: str
++    note: str
++    customer_email: str
++
++
++def order_edit_form(conn, order_id):
++    row = conn.execute(
++        "SELECT o.number, o.status, o.shipping_street, o.shipping_city, o.shipping_postcode, o.note, c.email"
++        " FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = %s", (order_id,)).fetchone()
++    if row is None:
++        raise OrderNotFound(order_id)
++    return OrderEditForm(*row)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/web/staff_pages.py repo/src/web/staff_pages.py
+--- base/src/web/staff_pages.py	2026-11-07 09:24:42.070494934 +0100
++++ repo/src/web/staff_pages.py	2026-11-07 09:25:17.193139533 +0100
+@@ -1,7 +1,6 @@
+-from src.adapters.pg_unit_of_work import PgUnitOfWork
++from src import main
+ 
+ 
+ def order_edit_form(order_id):
+     """Staff edit form for one order."""
+-    with PgUnitOfWork() as uow:
+-        return uow.orders.get(order_id).to_form()
++    return main.order_edit_form(order_id)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_order_edit_form.py repo/tests/test_order_edit_form.py
+--- base/tests/test_order_edit_form.py	2026-11-07 09:24:42.070494934 +0100
++++ repo/tests/test_order_edit_form.py	2026-11-07 09:25:23.845072221 +0100
+@@ -10,3 +10,11 @@
+         self.assertEqual(form["number"], "N-7")
+         self.assertEqual(form["customer_email"], "ann@example.com")
+         self.assertEqual(form["city"], "Ghent")
++
++    def test_form_shape_and_missing_order(self):
++        from src.queries.order_edit_form import OrderNotFound
++        self.customer("bob")
++        self.order("o2", "bob")
++        self.assertEqual(set(order_edit_form("o2")), {"number", "status", "street", "city", "postcode", "note", "customer_email"})
++        with self.assertRaises(OrderNotFound):
++            order_edit_form("nope")

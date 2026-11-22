@@ -1,0 +1,5 @@
+# Report
+- P0: ran scripts/scan_port_types.py on src/core/ports with sqlite3 -> no violations (no ports existed). Problems 1 (place_order writes orders and order_lines directly) and 2 (no contract suite for both adapters) hold; 3 and 4 do not. applies=true. Wrote RESULT.json: {"violations": [], "problems": [1, 2], "applies": true}.
+- P1: root Order (lines, total derived from lines, unique number). Added port src/core/ports/order_repository.py (get, save, list_for_customer_by_due_desc with PageRequest), DuplicateOrderNumber and PageRequest in src/core/orders.py. Wrote contract tests (tests/test_order_repository_contract.py) run against in-memory and SQLite adapters, added in-memory adapter and SQLite adapter (paged in SQL, maps inside). The unit of work exposes `orders`; place_order now saves through it, and the repository never commits. The list finder (task need) was done as part of the port.
+- P1 step 7 via scripts/run_check.py: direction check ok, 14 tests pass.
+- P2/P3 not run separately (finder added in P1; no generic calls existed). Not done: a cqrs read model, since the list returns full aggregates.

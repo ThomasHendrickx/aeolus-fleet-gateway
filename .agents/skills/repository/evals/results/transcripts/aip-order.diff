@@ -1,0 +1,321 @@
+diff -ruN -x __pycache__ -x '*.pyc' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-06 17:27:06.459640008 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [1, 2], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/memory_order_repository.py repo/src/adapters/memory_order_repository.py
+--- base/src/adapters/memory_order_repository.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/adapters/memory_order_repository.py	2026-11-06 17:27:31.840382937 +0100
+@@ -0,0 +1,24 @@
++import copy
++
++from src.core.orders import DuplicateOrderNumber
++from src.core.ports.order_repository import OrderRepository
++
++
++class InMemoryOrderRepository(OrderRepository):
++    def __init__(self):
++        self._orders = {}
++
++    def get(self, order_id):
++        order = self._orders.get(order_id)
++        return copy.deepcopy(order) if order else None
++
++    def save(self, order):
++        if any(o.number == order.number and o.id != order.id for o in self._orders.values()):
++            raise DuplicateOrderNumber(order.number)
++        self._orders[order.id] = copy.deepcopy(order)
++
++    def list_for_customer_by_due_desc(self, customer_id, page):
++        mine = [o for o in self._orders.values() if o.customer_id == customer_id]
++        mine.sort(key=lambda o: o.number)
++        mine.sort(key=lambda o: o.due, reverse=True)
++        return [copy.deepcopy(o) for o in mine[page.offset:page.offset + page.limit]]
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/sqlite_order_repository.py repo/src/adapters/sqlite_order_repository.py
+--- base/src/adapters/sqlite_order_repository.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/adapters/sqlite_order_repository.py	2026-11-06 17:27:31.841382927 +0100
+@@ -0,0 +1,59 @@
++import sqlite3
++from datetime import date
++
++from src.core.orders import DuplicateOrderNumber, Line, Order
++from src.core.ports.order_repository import OrderRepository
++
++
++class SqliteOrderRepository(OrderRepository):
++    """Uses the connection of the surrounding unit of work; never commits."""
++
++    def __init__(self, connection):
++        self._conn = connection
++
++    def get(self, order_id):
++        row = self._conn.execute(
++            "SELECT id, number, customer_id, due, status FROM orders WHERE id = ?", (order_id,)
++        ).fetchone()
++        return self._load(row) if row else None
++
++    def save(self, order):
++        taken = self._conn.execute(
++            "SELECT 1 FROM orders WHERE number = ? AND id != ?", (order.number, order.id)
++        ).fetchone()
++        if taken:
++            raise DuplicateOrderNumber(order.number)
++        try:
++            self._conn.execute(
++                "INSERT INTO orders (id, number, customer_id, due, status, total_cents) VALUES (?, ?, ?, ?, ?, ?) "
++                "ON CONFLICT(id) DO UPDATE SET number=excluded.number, customer_id=excluded.customer_id, "
++                "due=excluded.due, status=excluded.status, total_cents=excluded.total_cents",
++                (order.id, order.number, order.customer_id, order.due.isoformat(), order.status, order.total_cents),
++            )
++        except sqlite3.IntegrityError as error:
++            raise DuplicateOrderNumber(order.number) from error
++        self._conn.execute("DELETE FROM order_lines WHERE order_id = ?", (order.id,))
++        for position, line in enumerate(order.lines):
++            self._conn.execute(
++                "INSERT INTO order_lines (order_id, position, sku, quantity, unit_cents) VALUES (?, ?, ?, ?, ?)",
++                (order.id, position, line.sku, line.quantity, line.unit_cents),
++            )
++
++    def list_for_customer_by_due_desc(self, customer_id, page):
++        rows = self._conn.execute(
++            "SELECT id, number, customer_id, due, status FROM orders WHERE customer_id = ? "
++            "ORDER BY due DESC, number ASC LIMIT ? OFFSET ?",
++            (customer_id, page.limit, page.offset),
++        ).fetchall()
++        return [self._load(row) for row in rows]
++
++    def _load(self, row):
++        order_id, number, customer_id, due, status = row
++        lines = [
++            Line(sku, quantity, unit_cents)
++            for sku, quantity, unit_cents in self._conn.execute(
++                "SELECT sku, quantity, unit_cents FROM order_lines WHERE order_id = ? ORDER BY position",
++                (order_id,),
++            )
++        ]
++        return Order(order_id, number, customer_id, date.fromisoformat(due), lines, status)
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/unit_of_work.py repo/src/adapters/unit_of_work.py
+--- base/src/adapters/unit_of_work.py	2026-11-06 17:25:52.668387408 +0100
++++ repo/src/adapters/unit_of_work.py	2026-11-06 17:27:31.842382917 +0100
+@@ -1,4 +1,6 @@
+ from src.adapters import schema
++from src.adapters.memory_order_repository import InMemoryOrderRepository
++from src.adapters.sqlite_order_repository import SqliteOrderRepository
+ 
+ 
+ class SqliteUnitOfWork:
+@@ -6,6 +8,7 @@
+ 
+     def __init__(self, path=":memory:"):
+         self.connection = schema.connect(path)
++        self.orders = SqliteOrderRepository(self.connection)
+ 
+     def __enter__(self):
+         return self
+@@ -16,3 +19,14 @@
+         else:
+             self.connection.rollback()
+         return False
++
++
++class InMemoryUnitOfWork:
++    def __init__(self):
++        self.orders = InMemoryOrderRepository()
++
++    def __enter__(self):
++        return self
++
++    def __exit__(self, exc_type, exc, tb):
++        return False
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/orders.py repo/src/core/orders.py
+--- base/src/core/orders.py	2026-11-06 17:25:52.667387419 +0100
++++ repo/src/core/orders.py	2026-11-06 17:27:31.802383322 +0100
+@@ -2,6 +2,10 @@
+ from datetime import date
+ 
+ 
++class DuplicateOrderNumber(Exception):
++    """Another order already holds this order number."""
++
++
+ @dataclass(frozen=True)
+ class Line:
+     sku: str
+@@ -16,7 +20,18 @@
+     customer_id: str
+     due: date
+     lines: list = field(default_factory=list)
++    status: str = "placed"
+ 
+     @property
+     def total_cents(self):
+         return sum(line.quantity * line.unit_cents for line in self.lines)
++
++
++@dataclass(frozen=True)
++class PageRequest:
++    limit: int = 20
++    offset: int = 0
++
++    def __post_init__(self):
++        if self.limit < 1 or self.offset < 0:
++            raise ValueError("limit must be >= 1 and offset >= 0")
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/place_order.py repo/src/core/place_order.py
+--- base/src/core/place_order.py	2026-11-06 17:25:52.668387408 +0100
++++ repo/src/core/place_order.py	2026-11-06 17:27:31.842382917 +0100
+@@ -1,19 +1,14 @@
+ import uuid
+ 
++from src.core.orders import Line, Order
++
+ 
+ def place_order(uow, number, customer_id, due, lines):
+-    """lines: list of (sku, quantity, unit_cents). Returns the new order id."""
+-    order_id = str(uuid.uuid4())
+-    total = sum(q * c for _, q, c in lines)
++    """lines: list of (sku, quantity, unit_cents). Returns the new order id.
++
++    Raises DuplicateOrderNumber when the number is taken.
++    """
++    order = Order(str(uuid.uuid4()), number, customer_id, due, [Line(*line) for line in lines])
+     with uow:
+-        conn = uow.connection
+-        conn.execute(
+-            "INSERT INTO orders (id, number, customer_id, due, status, total_cents) VALUES (?, ?, ?, ?, 'placed', ?)",
+-            (order_id, number, customer_id, due.isoformat(), total),
+-        )
+-        for position, (sku, quantity, unit_cents) in enumerate(lines):
+-            conn.execute(
+-                "INSERT INTO order_lines (order_id, position, sku, quantity, unit_cents) VALUES (?, ?, ?, ?, ?)",
+-                (order_id, position, sku, quantity, unit_cents),
+-            )
+-    return order_id
++        uow.orders.save(order)
++    return order.id
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/ports/order_repository.py repo/src/core/ports/order_repository.py
+--- base/src/core/ports/order_repository.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/core/ports/order_repository.py	2026-11-06 17:27:31.839382948 +0100
+@@ -0,0 +1,24 @@
++from abc import ABC, abstractmethod
++from typing import Optional
++
++from src.core.orders import Order, PageRequest
++
++
++class OrderRepository(ABC):
++    """Repository for the Order aggregate root; lines load and save with their order.
++
++    Never commits: the use case's unit of work owns the transaction.
++    """
++
++    @abstractmethod
++    def get(self, order_id: str) -> Optional[Order]:
++        """The order with all its lines, or None when the id is unknown."""
++
++    @abstractmethod
++    def save(self, order: Order) -> None:
++        """Save the whole aggregate (order and lines). Raises DuplicateOrderNumber
++        when another order already has the number."""
++
++    @abstractmethod
++    def list_for_customer_by_due_desc(self, customer_id: str, page: PageRequest) -> list:
++        """A customer's orders, latest due date first (ties by number), one page."""
+diff -ruN -x __pycache__ -x '*.pyc' base/tests/test_order_repository_contract.py repo/tests/test_order_repository_contract.py
+--- base/tests/test_order_repository_contract.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/test_order_repository_contract.py	2026-11-06 17:27:31.843382907 +0100
+@@ -0,0 +1,71 @@
++import unittest
++from datetime import date
++
++from src.adapters.memory_order_repository import InMemoryOrderRepository
++from src.adapters.schema import connect
++from src.adapters.sqlite_order_repository import SqliteOrderRepository
++from src.core.orders import DuplicateOrderNumber, Line, Order, PageRequest
++
++
++def order(id, number, customer="c1", due=date(2026, 1, 10), lines=None):
++    return Order(id, number, customer, due, lines if lines is not None else [Line("tea", 2, 300), Line("mug", 1, 900)])
++
++
++class OrderRepositoryContract:
++    def make_repo(self):
++        raise NotImplementedError
++
++    def setUp(self):
++        self.repo = self.make_repo()
++
++    def test_round_trip_with_lines_and_total(self):
++        self.repo.save(order("1", "N-1"))
++        got = self.repo.get("1")
++        self.assertEqual([Line("tea", 2, 300), Line("mug", 1, 900)], got.lines)
++        self.assertEqual(1500, got.total_cents)
++        self.assertEqual(date(2026, 1, 10), got.due)
++
++    def test_not_found_is_none(self):
++        self.assertIsNone(self.repo.get("missing"))
++
++    def test_duplicate_number_fails(self):
++        self.repo.save(order("1", "N-1"))
++        with self.assertRaises(DuplicateOrderNumber):
++            self.repo.save(order("2", "N-1"))
++        self.assertIsNone(self.repo.get("2"))
++
++    def test_resave_replaces_lines(self):
++        self.repo.save(order("1", "N-1"))
++        self.repo.save(order("1", "N-1", lines=[Line("pot", 1, 500)]))
++        self.assertEqual([Line("pot", 1, 500)], self.repo.get("1").lines)
++        self.assertEqual(500, self.repo.get("1").total_cents)
++
++    def test_list_latest_due_first_for_customer_only(self):
++        self.repo.save(order("1", "N-1", due=date(2026, 1, 1)))
++        self.repo.save(order("2", "N-2", due=date(2026, 3, 1)))
++        self.repo.save(order("3", "N-3", due=date(2026, 2, 1)))
++        self.repo.save(order("4", "N-4", customer="c2", due=date(2026, 9, 1)))
++        got = self.repo.list_for_customer_by_due_desc("c1", PageRequest(10, 0))
++        self.assertEqual(["2", "3", "1"], [o.id for o in got])
++
++    def test_list_is_paged(self):
++        for i in range(5):
++            self.repo.save(order(str(i), f"N-{i}", due=date(2026, 1, 1 + i)))
++        first = self.repo.list_for_customer_by_due_desc("c1", PageRequest(2, 0))
++        second = self.repo.list_for_customer_by_due_desc("c1", PageRequest(2, 2))
++        self.assertEqual(["4", "3"], [o.id for o in first])
++        self.assertEqual(["2", "1"], [o.id for o in second])
++
++
++class InMemoryContract(OrderRepositoryContract, unittest.TestCase):
++    def make_repo(self):
++        return InMemoryOrderRepository()
++
++
++class SqliteContract(OrderRepositoryContract, unittest.TestCase):
++    def make_repo(self):
++        return SqliteOrderRepository(connect())
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff -ruN -x __pycache__ -x '*.pyc' base/tests/test_place_order.py repo/tests/test_place_order.py
+--- base/tests/test_place_order.py	2026-11-06 17:25:52.668387408 +0100
++++ repo/tests/test_place_order.py	2026-11-06 17:27:31.862382715 +0100
+@@ -2,6 +2,7 @@
+ from datetime import date
+ 
+ from src.adapters.unit_of_work import SqliteUnitOfWork
++from src.core.orders import DuplicateOrderNumber
+ from src.core.place_order import place_order
+ 
+ 
+@@ -13,6 +14,12 @@
+         lines = uow.connection.execute("SELECT COUNT(*) FROM order_lines WHERE order_id = ?", (order_id,)).fetchone()[0]
+         self.assertEqual((1500, 2), (total, lines))
+ 
++    def test_duplicate_number_fails(self):
++        uow = SqliteUnitOfWork()
++        place_order(uow, "N-1", "c1", date(2026, 1, 10), [("tea", 1, 300)])
++        with self.assertRaises(DuplicateOrderNumber):
++            place_order(uow, "N-1", "c2", date(2026, 1, 11), [("tea", 1, 300)])
++
+ 
+ if __name__ == "__main__":
+     unittest.main()

@@ -1,0 +1,4 @@
+# aip skill v0.3a3 commit 2c20a02fe2b6c34eb98476853865a6b07946dc62
+# (aip/ copied to a folder named ports-and-adapters so the directory-name check applies)
+$ python scripts/validate.py ports-and-adapters
+VALID: /tmp/w/chk/ports-and-adapters (name: ports-and-adapters)

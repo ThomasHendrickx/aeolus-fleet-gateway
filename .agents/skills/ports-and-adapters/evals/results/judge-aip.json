@@ -1,0 +1,4 @@
+{"S1.3":{"verdict":"PASS","why":"src/core/ports/orders.py returns the domain Order and the OrderModel-to-Order mapping (cents to Decimal, status code to OrderStatus) lives only in src/adapters/prisma_orders.py; core/summary.py just delegates."},
+"S2.1":{"verdict":"PASS","why":"The 10000 threshold and VIP rule appear only in src/core/pricing.py price_order, and both src/adapters/rest.py and src/adapters/mcp.py just translate and call it."},
+"S2.2":{"verdict":"FAIL","why":"tests/test_mcp.py test_big_order_discount and test_vip_coupon assert discount arithmetic (9000, 8500 cents), which is the business rule, not only translation and error mapping."},
+"S3.2":{"verdict":"PASS","why":"src/adapters/rest_refunds.py has no threshold, window or amount comparisons; it calls refunds.request_refund and maps outcome.kind to HTTP statuses, with the rules in src/core/refunds.py."}}

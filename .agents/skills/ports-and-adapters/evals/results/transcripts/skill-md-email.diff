@@ -1,0 +1,92 @@
+diff -ruN -x __pycache__ -x '*.pyc' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-06 11:56:26.801167873 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [2, 4], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/in_memory_mailer.py repo/src/adapters/in_memory_mailer.py
+--- base/src/adapters/in_memory_mailer.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/adapters/in_memory_mailer.py	2026-11-06 11:56:26.803167853 +0100
+@@ -0,0 +1,6 @@
++class InMemoryOverdueReminders:
++    def __init__(self):
++        self.sent = []
++
++    def send_overdue_reminder(self, to, invoice_id):
++        self.sent.append((to, invoice_id))
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/vendor_mailer.py repo/src/adapters/vendor_mailer.py
+--- base/src/adapters/vendor_mailer.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/adapters/vendor_mailer.py	2026-11-06 11:56:26.855167329 +0100
+@@ -0,0 +1,9 @@
++import email_sdk
++
++
++class VendorOverdueReminders:
++    def __init__(self, api_key):
++        self._client = email_sdk.Client(api_key)
++
++    def send_overdue_reminder(self, to, invoice_id):
++        self._client.send(to, f"Invoice {invoice_id} is overdue", f"Invoice {invoice_id} is overdue.")
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/invoices.py repo/src/core/invoices.py
+--- base/src/core/invoices.py	2026-11-06 11:54:51.877124234 +0100
++++ repo/src/core/invoices.py	2026-11-06 11:56:26.854167339 +0100
+@@ -8,3 +8,8 @@
+     customer_email: str
+     due: date
+     paid: bool = False
++
++
++def remind_overdue(invoice, today, reminders):
++    if not invoice.paid and invoice.due < today:
++        reminders.send_overdue_reminder(invoice.customer_email, invoice.id)
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/ports/mailer.py repo/src/core/ports/mailer.py
+--- base/src/core/ports/mailer.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/core/ports/mailer.py	2026-11-06 11:56:26.802167863 +0100
+@@ -0,0 +1,7 @@
++from typing import Protocol
++
++
++class OverdueReminders(Protocol):
++    """Outbound port: tell a customer their invoice is overdue."""
++
++    def send_overdue_reminder(self, to: str, invoice_id: str) -> None: ...
+diff -ruN -x __pycache__ -x '*.pyc' base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-06 11:54:51.878124225 +0100
++++ repo/src/main.py	2026-11-06 11:56:26.856167319 +0100
+@@ -1 +1,8 @@
+-"""Composition root. Nothing is wired yet."""
++"""Composition root."""
++from src.adapters.vendor_mailer import VendorOverdueReminders
++from src.core.invoices import remind_overdue
++
++
++def build_remind_overdue(api_key):
++    reminders = VendorOverdueReminders(api_key)
++    return lambda invoice, today: remind_overdue(invoice, today, reminders)
+diff -ruN -x __pycache__ -x '*.pyc' base/tests/test_remind_overdue.py repo/tests/test_remind_overdue.py
+--- base/tests/test_remind_overdue.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/test_remind_overdue.py	2026-11-06 11:56:26.804167843 +0100
+@@ -0,0 +1,24 @@
++import unittest
++from datetime import date
++
++from src.adapters.in_memory_mailer import InMemoryOverdueReminders
++from src.core.invoices import Invoice, remind_overdue
++
++TODAY = date(2026, 6, 1)
++
++
++class RemindOverdueTest(unittest.TestCase):
++    def setUp(self):
++        self.mailer = InMemoryOverdueReminders()
++
++    def test_unpaid_past_due_sends_one(self):
++        remind_overdue(Invoice("7", "a@b.c", date(2026, 5, 1)), TODAY, self.mailer)
++        self.assertEqual(self.mailer.sent, [("a@b.c", "7")])
++
++    def test_paid_sends_none(self):
++        remind_overdue(Invoice("7", "a@b.c", date(2026, 5, 1), paid=True), TODAY, self.mailer)
++        self.assertEqual(self.mailer.sent, [])
++
++    def test_not_yet_due_sends_none(self):
++        remind_overdue(Invoice("7", "a@b.c", date(2026, 7, 1)), TODAY, self.mailer)
++        self.assertEqual(self.mailer.sent, [])

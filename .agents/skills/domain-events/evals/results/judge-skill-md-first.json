@@ -1,0 +1,3 @@
+{"S1.3": {"verdict": "PASS", "why": "InvoicePaid is a past-tense event in src/sales/core/events.py and is listed in docs/event-list.md as 'a customer paid an invoice'."},
+ "S2.2": {"verdict": "FAIL", "why": "src/contracts/invoice_paid.py carries event_id, invoice_id and invoice_version in addition to order_id and paid_on. Shipping's stated need is only the order and the date, so the payload holds fields beyond the need."},
+ "S4.2": {"verdict": "PASS", "why": "src/sales/core/commands/pay_invoice.py now calls uow.accounts.get, record_payment and save directly in the same transaction, and credit_customer_account is removed from the handler registry in src/sales/core/handlers.py."}}

@@ -1,0 +1,220 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:33:17.199914882 +0100
+@@ -0,0 +1,34 @@
++{
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/aip/retries/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/retries/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/retries/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "violations": [],
++  "problems": [
++    1,
++    2,
++    5
++  ],
++  "applies": true,
++  "proceduresRun": [
++    "P0",
++    "P1",
++    "P2"
++  ]
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/adapters/vendor.js repo/src/adapters/vendor.js
+--- base/src/adapters/vendor.js	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/adapters/vendor.js	2026-11-09 13:32:54.827143048 +0100
+@@ -1,7 +1,50 @@
+ import { request } from '../infra/network.js';
++import { readFileSync } from 'node:fs';
++import { retry, handleWhen, DelegateBackoff } from 'cockatiel';
++const isTransient = error => error.status === 429 || error.status >= 500 && error.status <= 599
++  || ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN'].includes(error.code)
++  || error.message === 'network aborted';
++const config = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
++
+ export function makeVendor(network, { dependency = 'payment' } = {}) {
++  const settings = config[dependency];
++  if (!settings) throw new Error(`No timeout configured for ${dependency}`);
++
++  async function call(operation, payload, eligible) {
++    try {
++      return await execute(operation, payload, eligible);
++    } catch (error) {
++      if (isTransient(error)) {
++        const unavailable = new Error(`Dependency ${dependency} unavailable`, { cause: error });
++        unavailable.code = 'PROVIDER_UNAVAILABLE';
++        unavailable.status = error.status;
++        throw unavailable;
++      }
++      throw error;
++    }
++  }
++
++  function execute(operation, payload, eligible) {
++    const send = () => request(network, { operation, payload, timeout: settings.timeoutMs });
++    if (!eligible || !settings.maxRetries) return send();
++    const started = Date.now();
++    let retries = 0;
++    let delay = 0;
++    const policy = retry(handleWhen(error => {
++      if (!isTransient(error)) return false;
++      const cap = Math.min(settings.backoffMaxMs, settings.backoffBaseMs * 2 ** retries++);
++      const seconds = Number(error.headers?.['retry-after']);
++      const retryAfter = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : 0;
++      delay = Math.max(retryAfter, 1 + Math.floor(Math.random() * cap));
++      return Date.now() - started + delay + settings.timeoutMs <= settings.retryBudgetMs;
++    }), {
++      maxAttempts: settings.maxRetries,
++      backoff: new DelegateBackoff(() => delay),
++    });
++    return policy.execute(send);
++  }
+   return {
+-    lookup: (sku) => request(network, { operation: 'lookup', payload: { sku } }),
+-    charge: (order) => request(network, { operation: 'charge', payload: order }),
++    lookup: sku => call('lookup', { sku }, true),
++    charge: order => call('charge', order, Boolean(order.idempotencyKey)),
+   };
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/config.json repo/src/config.json
+--- base/src/config.json	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/config.json	2026-11-09 13:31:49.984804333 +0100
+@@ -1 +1,16 @@
+-{}
++{
++  "payment": {
++    "timeoutMs": 100,
++    "timeoutSource": "measurement.json payment: p999Ms 80 + paddingMs 20",
++    "maxRetries": 3,
++    "backoffBaseMs": 40,
++    "backoffMaxMs": 160,
++    "retryBudgetMs": 2400,
++    "retrySource": "measurement.json payment transientRetryCap, backoffBaseMs, retryBudgetMs; three retries with capped exponential full jitter, under requestBudgetMs 2500",
++    "backoffMaxReason": "Cap exponential delay at base * 2^(maxRetries-1)"
++  },
++  "catalog": {
++    "timeoutMs": 100,
++    "timeoutSource": "measurement.json catalog: p999Ms 80 + paddingMs 20"
++  }
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/core/checkout.js repo/src/core/checkout.js
+--- base/src/core/checkout.js	2026-11-09 13:20:13.964901996 +0100
++++ repo/src/core/checkout.js	2026-11-09 13:32:54.827143048 +0100
+@@ -1,6 +1,14 @@
+ export async function checkout(vendor, order) {
+-  const stock = await vendor.lookup(order.sku);
+-  if (!stock.available) return { status: 'unavailable' };
+-  await vendor.charge(order);
+-  return { status: 'confirmed' };
++  try {
++    const stock = await vendor.lookup(order.sku);
++    if (!stock.available) return { status: 'unavailable' };
++    await vendor.charge(order);
++    return { status: 'confirmed' };
++  } catch (error) {
++    if (error.code !== 'PROVIDER_UNAVAILABLE') throw error;
++    return {
++      status: 'temporarily_unavailable',
++      message: 'Payments are temporarily unavailable. Please try again later.',
++    };
++  }
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/tests/vendor.test.mjs repo/tests/vendor.test.mjs
+--- base/tests/vendor.test.mjs	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/vendor.test.mjs	2026-11-09 13:32:54.834142976 +0100
+@@ -0,0 +1,79 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import FakeTimers from '@sinonjs/fake-timers';
++import { makeVendor } from '../src/adapters/vendor.js';
++import { Network } from '../src/infra/network.js';
++
++async function timed(run) {
++  const clock = FakeTimers.install({toFake:['setTimeout','clearTimeout','Date']});
++  try { await run(clock); } finally { clock.uninstall(); }
++}
++test('both calls cancel slow requests within 100 ms', () => timed(async clock => {
++  for (const method of ['lookup', 'charge']) {
++    const network = new Network(Array.from({length:4}, () => ({delay:1000})));
++    const result = makeVendor(network)[method]({sku:'a'}).then(() => null, error => error);
++    await clock.runAllAsync();
++    assert.ok(await result instanceof Error);
++    assert.equal(network.requests[0].end - network.requests[0].start, 100);
++    assert.equal(network.active, 0);
++  }
++}));
++
++test('lookup retries transient faults with jitter and respects cap', () => timed(async clock => {
++  const network = new Network([{status:503}, {status:429}, {value:{available:true}}]);
++  const result = makeVendor(network).lookup('a').catch(error => error);
++  await clock.runAllAsync();
++  assert.deepEqual(await result, {available:true});
++  assert.equal(network.requests.length, 3);
++  assert.ok(network.requests[1].start > network.requests[0].end);
++  const failed = new Network(Array.from({length:8}, () => ({status:503})));
++  const outcome = makeVendor(failed).lookup('a').catch(error => error);
++  await clock.runAllAsync();
++  assert.equal((await outcome).status, 503);
++  assert.equal(failed.requests.length, 4);
++}));
++test('Retry-After is honored and cannot exceed retry budget', () => timed(async clock => {
++  for (const seconds of [1, 3]) {
++    const network = new Network([{status:429, headers:{'retry-after':String(seconds)}}, {}]);
++    const start = Date.now();
++    const result = makeVendor(network).lookup('a').catch(error => error);
++    await clock.runAllAsync();
++    await result;
++    assert.equal(network.requests.length, seconds === 1 ? 2 : 1);
++    if (seconds === 1) assert.ok(network.requests[1].start - start >= 1000);
++    assert.ok(Date.now() - start <= 2400);
++  }
++}));
++test('unkeyed creates and business errors are never retried', () => timed(async clock => {
++  for (const [method, status] of [['charge',503], ['lookup',400]]) {
++    const network = new Network([{status}, {}]);
++    const outcome = makeVendor(network)[method]({sku:'a'}).catch(error => error);
++    await clock.runAllAsync();
++    assert.equal((await outcome).status, status);
++    assert.equal(network.requests.length, 1);
++  }
++}));
++test('keyed create can retry and independent catalog lookup proceeds', () => timed(async clock => {
++  const network = new Network([{status:503}, {}]);
++  const order = {sku:'a', idempotencyKey:'order-1'};
++  const result = makeVendor(network).charge(order).catch(error => error);
++  const catalog = new Network([{}]);
++  const other = makeVendor(catalog, {dependency:'catalog'}).lookup('a');
++  await clock.runAllAsync();
++  await result;
++  await other;
++  assert.equal(network.requests.length, 2);
++  assert.ok(network.requests.every(request => request.payload.idempotencyKey === 'order-1'));
++  assert.equal(catalog.requests.length, 1);
++}));
++test('checkout shows declared fallback after exhausted retries', () => timed(async clock => {
++  const { checkout } = await import('../src/core/checkout.js');
++  const network = new Network(Array.from({length:4}, () => ({status:503})));
++  const outcome = checkout(makeVendor(network), {sku:'a'});
++  await clock.runAllAsync();
++  assert.deepEqual(await outcome, {
++    status:'temporarily_unavailable',
++    message:'Payments are temporarily unavailable. Please try again later.',
++  });
++  assert.ok(network.requests.every(request => request.operation === 'lookup'));
++}));

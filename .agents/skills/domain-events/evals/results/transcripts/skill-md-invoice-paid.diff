@@ -1,0 +1,327 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 18:02:41.896882279 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [1], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/docs/event-list.md repo/docs/event-list.md
+--- base/docs/event-list.md	2026-11-07 17:53:34.559439980 +0100
++++ repo/docs/event-list.md	2026-11-07 18:02:41.913882106 +0100
+@@ -6,6 +6,7 @@
+ 
+ - OrderPlaced: a customer placed an order (order id, customer id, total).
+ - InvoiceIssued: an invoice was issued for an order (invoice id, order id, amount).
++- InvoicePaid: a customer paid an invoice (invoice id, order id, paid on date).
+ 
+ ## shipping
+ 
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/schema.sql repo/schema.sql
+--- base/schema.sql	2026-11-07 17:53:34.559439980 +0100
++++ repo/schema.sql	2026-11-07 18:02:41.913882106 +0100
+@@ -25,6 +25,18 @@
+     version integer NOT NULL DEFAULT 1
+ );
+ 
++-- Sales outbox: written in the same transaction as the change; the relay publishes rows after commit.
++CREATE TABLE sales_outbox (
++    id bigserial PRIMARY KEY,
++    event_type text NOT NULL,
++    aggregate_id text NOT NULL,
++    aggregate_version integer NOT NULL,
++    payload jsonb NOT NULL,
++    created_at timestamptz NOT NULL DEFAULT now(),
++    published_at timestamptz,
++    attempts integer NOT NULL DEFAULT 0
++);
++
+ -- Shipping context
+ CREATE TABLE fulfilments (
+     id text PRIMARY KEY,
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/contracts/invoice_paid.py repo/src/contracts/invoice_paid.py
+--- base/src/contracts/invoice_paid.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/contracts/invoice_paid.py	2026-11-07 18:02:41.918882055 +0100
+@@ -0,0 +1,24 @@
++"""Integration event sales.invoice-paid, version 1. Producer: sales. Consumer: shipping (starts fulfilment).
++
++Fields are additive-only; a breaking change is a new version (new topic, e.g. sales.invoice-paid.v2).
++Carries ids and the facts of the change only; no state transfer is declared.
++"""
++TOPIC = "sales.invoice-paid.v1"
++VERSION = 1
++FIELDS = {
++    "event_id": int,         # outbox row id; consumers record it to stay idempotent
++    "invoice_id": str,
++    "invoice_version": int,  # aggregate version after the change; consumers ignore older ones
++    "order_id": str,         # the order that was paid
++    "paid_on": str,          # ISO date (YYYY-MM-DD) the invoice was paid
++}
++
++
++def build(event_id: int, invoice_version: int, internal: dict) -> dict:
++    return {
++        "event_id": event_id,
++        "invoice_id": internal["invoice_id"],
++        "invoice_version": invoice_version,
++        "order_id": internal["order_id"],
++        "paid_on": internal["paid_on"],
++    }
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/main.py	2026-11-07 18:02:41.914882096 +0100
+@@ -1,4 +1,5 @@
+ """Composition root: wires each context's use cases to Postgres."""
++from src.sales.adapters.relay import publish_pending
+ from src.sales.adapters.pg import PgSalesUnitOfWork
+ from src.sales.core.commands.cancel_invoice import cancel_invoice as _cancel_invoice
+ from src.sales.core.commands.issue_invoice import issue_invoice as _issue_invoice
+@@ -17,7 +18,9 @@
+ 
+ 
+ def pay_invoice(invoice_id, paid_on):
+-    return _pay_invoice(PgSalesUnitOfWork(), invoice_id, paid_on)
++    version = _pay_invoice(PgSalesUnitOfWork(), invoice_id, paid_on)
++    publish_pending()  # after commit; rows that fail stay in the outbox for the next run
++    return version
+ 
+ 
+ def cancel_invoice(invoice_id):
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/adapters/pg.py repo/src/sales/adapters/pg.py
+--- base/src/sales/adapters/pg.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/adapters/pg.py	2026-11-07 18:02:41.914882096 +0100
+@@ -1,3 +1,8 @@
++import dataclasses
++import datetime
++
++from psycopg.types.json import Jsonb
++
+ from src.db import connect
+ from src.sales.core.invoices import Invoice
+ from src.sales.core.orders import Order, OrderLine
+@@ -50,6 +55,19 @@
+         invoice.version = row[0]
+ 
+ 
++class PgOutbox:
++    """Writes recorded domain events to sales_outbox on the use case's connection (same transaction)."""
++
++    def __init__(self, conn):
++        self.conn = conn
++
++    def add(self, aggregate_id, aggregate_version, events):
++        for event in events:
++            payload = {k: v.isoformat() if isinstance(v, datetime.date) else v for k, v in dataclasses.asdict(event).items()}
++            self.conn.execute("INSERT INTO sales_outbox (event_type, aggregate_id, aggregate_version, payload) VALUES (%s, %s, %s, %s)",
++                              (type(event).__name__, aggregate_id, aggregate_version, Jsonb(payload)))
++
++
+ class PgSalesUnitOfWork:
+     """One transaction per use case: commits when the block succeeds, rolls back when it raises."""
+ 
+@@ -59,6 +77,7 @@
+         self.tx.__enter__()
+         self.orders = PgOrderRepository(self.conn)
+         self.invoices = PgInvoiceRepository(self.conn)
++        self.outbox = PgOutbox(self.conn)
+         return self
+ 
+     def __exit__(self, *exc):
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/adapters/relay.py repo/src/sales/adapters/relay.py
+--- base/src/sales/adapters/relay.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/sales/adapters/relay.py	2026-11-07 18:02:41.919882045 +0100
+@@ -0,0 +1,39 @@
++"""Outbox relay: publishes sales_outbox rows to the bus after commit, at least once, with retry.
++Maps internal events to integration-event contracts; internal events never leave the context."""
++import time
++
++from src.contracts import invoice_paid
++from src.db import connect
++from src.infra import bus
++
++RETRIES = 3
++
++
++def _to_contract(event_type, row_id, version, payload):
++    """(topic, body) for an internal event that has a published contract, else None."""
++    if event_type == "InvoicePaid":
++        return invoice_paid.TOPIC, invoice_paid.build(row_id, version, payload)
++    return None
++
++
++def publish_pending(retries: int = RETRIES, delay: float = 0.0) -> int:
++    """Publish unpublished rows in id order; returns how many were published. A row is marked published
++    only after the bus accepted it, so a crash in between re-publishes (at least once)."""
++    published = 0
++    with connect(autocommit=True) as conn:
++        rows = conn.execute("SELECT id, event_type, aggregate_version, payload FROM sales_outbox"
++                            " WHERE published_at IS NULL AND event_type = 'InvoicePaid' ORDER BY id").fetchall()
++        for row_id, event_type, version, payload in rows:
++            topic, body = _to_contract(event_type, row_id, version, payload)
++            for attempt in range(1, retries + 1):
++                conn.execute("UPDATE sales_outbox SET attempts = attempts + 1 WHERE id = %s", (row_id,))
++                try:
++                    bus.publish(topic, body)
++                    break
++                except Exception:
++                    if attempt == retries:
++                        return published  # stays unpublished; the next run retries it, order preserved
++                    time.sleep(delay)
++            conn.execute("UPDATE sales_outbox SET published_at = now() WHERE id = %s", (row_id,))
++            published += 1
++    return published
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/commands/pay_invoice.py repo/src/sales/core/commands/pay_invoice.py
+--- base/src/sales/core/commands/pay_invoice.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/core/commands/pay_invoice.py	2026-11-07 18:02:41.914882096 +0100
+@@ -6,4 +6,5 @@
+         invoice = uow.invoices.get(invoice_id)
+         invoice.pay(paid_on)
+         uow.invoices.save(invoice)
++        uow.outbox.add(invoice.id, invoice.version, invoice.events)
+     return invoice.version
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/events.py repo/src/sales/core/events.py
+--- base/src/sales/core/events.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/core/events.py	2026-11-07 18:02:41.913882106 +0100
+@@ -1,5 +1,6 @@
+ """Sales domain events (see docs/event-list.md). Aggregates record them in `events`."""
+ from dataclasses import dataclass
++from datetime import date
+ 
+ 
+ @dataclass(frozen=True)
+@@ -14,3 +15,10 @@
+     invoice_id: str
+     order_id: str
+     amount_cents: int
++
++
++@dataclass(frozen=True)
++class InvoicePaid:
++    invoice_id: str
++    order_id: str
++    paid_on: date
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/invoices.py repo/src/sales/core/invoices.py
+--- base/src/sales/core/invoices.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/core/invoices.py	2026-11-07 18:02:41.913882106 +0100
+@@ -1,7 +1,7 @@
+ from dataclasses import dataclass, field
+ from datetime import date
+ 
+-from src.sales.core.events import InvoiceIssued
++from src.sales.core.events import InvoiceIssued, InvoicePaid
+ 
+ 
+ class InvoiceNotPayable(Exception):
+@@ -29,6 +29,7 @@
+         if self.status != "issued":
+             raise InvoiceNotPayable(f"invoice {self.id} is {self.status}")
+         self.status, self.paid_on = "paid", on
++        self.events.append(InvoicePaid(self.id, self.order_id, on))
+ 
+     def cancel(self) -> None:
+         if self.status != "issued":
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/ports.py repo/src/sales/core/ports.py
+--- base/src/sales/core/ports.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/core/ports.py	2026-11-07 18:02:41.914882096 +0100
+@@ -22,9 +22,14 @@
+     def save(self, invoice: Invoice) -> None: ...
+ 
+ 
++class Outbox(Protocol):
++    def add(self, aggregate_id: str, aggregate_version: int, events: list) -> None: ...
++
++
+ class SalesUnitOfWork(Protocol):
+     orders: OrderRepository
+     invoices: InvoiceRepository
++    outbox: Outbox
+ 
+     def __enter__(self) -> "SalesUnitOfWork": ...
+ 
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_invoice_paid_contract.py repo/tests/test_invoice_paid_contract.py
+--- base/tests/test_invoice_paid_contract.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/test_invoice_paid_contract.py	2026-11-07 18:02:41.920882035 +0100
+@@ -0,0 +1,50 @@
++import json
++from datetime import date
++from unittest import mock
++
++from src import main
++from src.contracts import invoice_paid
++from src.infra import bus
++from src.sales.adapters import relay
++from tests.support import DbTest
++
++
++class InvoicePaidContractTest(DbTest):
++    def messages(self):
++        return bus.fetch(invoice_paid.TOPIC)
++
++    def test_payload_matches_the_contract(self):
++        self.invoice()
++        main.pay_invoice("i1", date(2026, 11, 2))
++        (_, body), = self.messages()
++        self.assertEqual(set(body), set(invoice_paid.FIELDS))
++        for name, kind in invoice_paid.FIELDS.items():
++            self.assertIsInstance(body[name], kind)
++        self.assertEqual((body["order_id"], body["paid_on"], body["invoice_id"], body["invoice_version"]),
++                         ("o1", "2026-11-02", "i1", 2))
++        json.dumps(body)
++
++    def test_nothing_is_published_for_a_payment_that_did_not_happen(self):
++        self.invoice()
++        self.assertEqual(self.messages(), [])
++        main.pay_invoice("i1", date(2026, 11, 2))
++        try:
++            main.pay_invoice("i1", date(2026, 11, 3))
++        except Exception:
++            pass
++        self.assertEqual(len(self.messages()), 1)
++
++    def test_other_internal_events_are_not_published(self):
++        self.invoice()
++        self.assertEqual(self.rows("SELECT count(*) FROM bus_messages"), [(0,)])
++
++    def test_publish_failure_is_retried_and_published_later_exactly_once_marked(self):
++        self.invoice()
++        with mock.patch.object(bus, "publish", side_effect=ConnectionError):
++            main.pay_invoice("i1", date(2026, 11, 2))  # payment succeeds; publish fails
++        self.assertEqual(self.messages(), [])
++        self.assertEqual(self.rows("SELECT attempts FROM sales_outbox WHERE event_type = 'InvoicePaid' AND published_at IS NULL"),
++                         [(relay.RETRIES,)])
++        self.assertEqual(relay.publish_pending(), 1)
++        self.assertEqual(len(self.messages()), 1)
++        self.assertEqual(relay.publish_pending(), 0)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_sales.py repo/tests/test_sales.py
+--- base/tests/test_sales.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/tests/test_sales.py	2026-11-07 18:02:41.919882045 +0100
+@@ -26,3 +26,32 @@
+         self.invoice()
+         main.cancel_invoice("i1")
+         self.assertEqual(self.rows("SELECT status FROM invoices"), [("cancelled",)])
++
++
++class InvoicePaidOutboxTest(DbTest):
++    def test_paying_writes_one_outbox_row_in_the_same_transaction(self):
++        self.invoice()
++        main.pay_invoice("i1", date(2026, 11, 2))
++        self.assertEqual(self.rows("SELECT event_type, aggregate_id, aggregate_version, payload FROM sales_outbox"
++                                   " WHERE event_type = 'InvoicePaid'"),
++                         [("InvoicePaid", "i1", 2, {"invoice_id": "i1", "order_id": "o1", "paid_on": "2026-11-02"})])
++
++    def test_a_failed_payment_leaves_no_outbox_row(self):
++        self.invoice()
++        main.pay_invoice("i1", date(2026, 11, 2))
++        with self.assertRaises(InvoiceNotPayable):
++            main.pay_invoice("i1", date(2026, 11, 3))
++        self.assertEqual(self.rows("SELECT count(*) FROM sales_outbox WHERE event_type = 'InvoicePaid'"), [(1,)])
++
++    def test_rollback_after_the_outbox_write_leaves_no_row(self):
++        from src.sales.adapters.pg import PgSalesUnitOfWork
++        self.invoice()
++        with self.assertRaises(RuntimeError):
++            with PgSalesUnitOfWork() as uow:
++                invoice = uow.invoices.get("i1")
++                invoice.pay(date(2026, 11, 2))
++                uow.invoices.save(invoice)
++                uow.outbox.add(invoice.id, invoice.version, invoice.events)
++                raise RuntimeError("boom")
++        self.assertEqual(self.rows("SELECT count(*) FROM sales_outbox"), [(0,)])
++        self.assertEqual(self.rows("SELECT status FROM invoices"), [("issued",)])

@@ -1,0 +1,30 @@
+PASS: body validates against the bundled schema
+PASS: source/ORIGINAL_SKILL.md equals SKILL.md
+PASS: step names unique
+PASS: P0 has 3 steps (found 3)
+PASS: P1 has 5 steps (found 5)
+PASS: P2 has 5 steps (found 5)
+PASS: P3 has 7 steps (found 7)
+PASS: P4 has 5 steps (found 5)
+PASS: every step is a P0..P4 node
+PASS: scripts exist
+PASS: source and compiled deterministic helpers are identical
+PASS: five script steps
+PASS: depends_on targets exist
+PASS: P0 step 1 is the only entry node
+PASS: graph is acyclic
+PASS: inputs resolve and edges are typed
+PASS: 5 problems in trigger_when
+PASS: 12 failure modes in anti_patterns
+PASS: all source step descriptions preserved verbatim
+PASS: P0 kinds SAA
+PASS: P1 kinds AAAAS
+PASS: P2 kinds AAAAS
+PASS: P3 kinds AAAAAAS
+PASS: P4 kinds AAAAS
+PASS: problem text and numbering preserved
+PASS: rules verbatim with numbering
+PASS: solution verbatim
+PASS: exclusions verbatim
+PASS: failure modes verbatim
+PASS: all problem/rule citations resolve

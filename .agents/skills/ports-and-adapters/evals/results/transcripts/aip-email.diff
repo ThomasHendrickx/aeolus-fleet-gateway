@@ -1,0 +1,107 @@
+diff -ruN -x __pycache__ -x '*.pyc' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-06 11:56:29.491140771 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [2, 4], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/email_sdk_mailer.py repo/src/adapters/email_sdk_mailer.py
+--- base/src/adapters/email_sdk_mailer.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/adapters/email_sdk_mailer.py	2026-11-06 11:56:29.494140741 +0100
+@@ -0,0 +1,14 @@
++"""Driven adapter: ReminderMailer over the vendor email SDK. Mapping to SDK terms lives here."""
++import email_sdk
++
++
++class EmailSdkMailer:
++    def __init__(self, api_key):
++        self._client = email_sdk.Client(api_key)
++
++    def send_overdue_reminder(self, customer_email, invoice_id):
++        self._client.send(
++            customer_email,
++            f"Invoice {invoice_id} is overdue",
++            f"Invoice {invoice_id} is overdue. Please pay it as soon as possible.",
++        )
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/fake_mailer.py repo/src/adapters/fake_mailer.py
+--- base/src/adapters/fake_mailer.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/adapters/fake_mailer.py	2026-11-06 11:56:29.493140751 +0100
+@@ -0,0 +1,9 @@
++"""In-memory adapter for ReminderMailer."""
++
++
++class InMemoryMailer:
++    def __init__(self):
++        self.sent = []
++
++    def send_overdue_reminder(self, customer_email, invoice_id):
++        self.sent.append((customer_email, invoice_id))
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/invoices.py repo/src/core/invoices.py
+--- base/src/core/invoices.py	2026-11-06 11:54:51.877124234 +0100
++++ repo/src/core/invoices.py	2026-11-06 11:56:29.493140751 +0100
+@@ -8,3 +8,10 @@
+     customer_email: str
+     due: date
+     paid: bool = False
++
++
++def remind_overdue(invoice: Invoice, today: date, mailer) -> None:
++    """Send one reminder if the invoice is unpaid and past its due date."""
++    if invoice.paid or today <= invoice.due:
++        return
++    mailer.send_overdue_reminder(invoice.customer_email, invoice.id)
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/ports/mailer.py repo/src/core/ports/mailer.py
+--- base/src/core/ports/mailer.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/core/ports/mailer.py	2026-11-06 11:56:29.492140761 +0100
+@@ -0,0 +1,6 @@
++"""Outbound port: how the core asks for a reminder to reach a customer."""
++from typing import Protocol
++
++
++class ReminderMailer(Protocol):
++    def send_overdue_reminder(self, customer_email: str, invoice_id: str) -> None: ...
+diff -ruN -x __pycache__ -x '*.pyc' base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-06 11:54:51.878124225 +0100
++++ repo/src/main.py	2026-11-06 11:56:29.495140731 +0100
+@@ -1 +1,6 @@
+-"""Composition root. Nothing is wired yet."""
++"""Composition root."""
++from src.adapters.email_sdk_mailer import EmailSdkMailer
++
++
++def build_mailer(api_key):
++    return EmailSdkMailer(api_key)
+diff -ruN -x __pycache__ -x '*.pyc' base/tests/test_invoices.py repo/tests/test_invoices.py
+--- base/tests/test_invoices.py	2026-11-06 11:54:51.878124225 +0100
++++ repo/tests/test_invoices.py	2026-11-06 11:56:29.496140721 +0100
+@@ -7,3 +7,32 @@
+ class InvoiceTest(unittest.TestCase):
+     def test_fields(self):
+         self.assertEqual(Invoice("1", "a@b.c", date(2026, 1, 1)).id, "1")
++
++
++from src.adapters.fake_mailer import InMemoryMailer
++from src.core.invoices import remind_overdue
++
++
++class RemindOverdueTest(unittest.TestCase):
++    def setUp(self):
++        self.mailer = InMemoryMailer()
++
++    def test_unpaid_past_due_sends_one(self):
++        remind_overdue(Invoice("7", "a@b.c", date(2026, 1, 1)), date(2026, 2, 1), self.mailer)
++        self.assertEqual(self.mailer.sent, [("a@b.c", "7")])
++
++    def test_paid_sends_none(self):
++        remind_overdue(Invoice("7", "a@b.c", date(2026, 1, 1), paid=True), date(2026, 2, 1), self.mailer)
++        self.assertEqual(self.mailer.sent, [])
++
++    def test_not_yet_due_sends_none(self):
++        remind_overdue(Invoice("7", "a@b.c", date(2026, 3, 1)), date(2026, 2, 1), self.mailer)
++        self.assertEqual(self.mailer.sent, [])
++
++    def test_subject_in_adapter(self):
++        import email_sdk
++        from unittest import mock
++        from src.adapters.email_sdk_mailer import EmailSdkMailer
++        with mock.patch.object(email_sdk.Client, "send") as send:
++            EmailSdkMailer("k").send_overdue_reminder("a@b.c", "7")
++        self.assertEqual(send.call_args.args[:2], ("a@b.c", "Invoice 7 is overdue"))

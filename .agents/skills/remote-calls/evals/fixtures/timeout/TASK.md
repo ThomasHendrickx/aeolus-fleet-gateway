@@ -1,0 +1,1 @@
+Payment availability lookup occasionally takes several seconds and holds checkout requests. Set a measured time budget for the payment calls in src/adapters/vendor.js. Weather is outside this task. Apply P0 then P1 only.

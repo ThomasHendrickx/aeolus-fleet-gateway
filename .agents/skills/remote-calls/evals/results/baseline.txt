@@ -1,0 +1,15 @@
+S1.1: red missing behavior: OK
+S1.2: red missing behavior: OK
+S2.1: red missing behavior: OK
+S2.2: green negative control: OK
+S2.3: red missing behavior: OK
+S2.4: red missing behavior: OK
+S3.1: red missing behavior: OK
+S3.2: red missing behavior: OK
+S3.3: green negative control: OK
+S3.4: red missing behavior: OK
+S3.5: red missing behavior: OK
+S3.6: red missing behavior: OK
+S3.7: red missing behavior: OK
+S4.1: red missing behavior: OK
+Baseline checked: all missing positive behavior is red; safe-create and client-error negative controls are green. No fresh-agent scenario results claimed.

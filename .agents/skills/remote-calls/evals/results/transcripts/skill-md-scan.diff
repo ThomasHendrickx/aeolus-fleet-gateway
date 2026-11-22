@@ -1,0 +1,82 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/P0_SCAN.json repo/P0_SCAN.json
+--- base/P0_SCAN.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/P0_SCAN.json	2026-11-09 13:24:30.918281882 +0100
+@@ -0,0 +1,37 @@
++{
++  "violations": [
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/scan/repo/src/core/leak.js",
++      "line": 1,
++      "module": "cockatiel"
++    }
++  ],
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/scan/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/scan/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/scan/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "unsupported": [
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/scan/repo/src/core/leak.js",
++      "line": 2,
++      "reason": "assigned client alias requires flow analysis"
++    }
++  ],
++  "clean": false
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:24:55.634029844 +0100
+@@ -0,0 +1,37 @@
++{
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/scan/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/scan/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/scan/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "violations": [
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/scan/repo/src/core/leak.js",
++      "line": 1,
++      "module": "cockatiel"
++    }
++  ],
++  "problems": [
++    1,
++    3
++  ],
++  "applies": true,
++  "proceduresRun": [
++    "P0"
++  ]
++}

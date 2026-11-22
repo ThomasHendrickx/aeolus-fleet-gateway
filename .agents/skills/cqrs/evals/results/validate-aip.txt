@@ -1,0 +1,5 @@
+# aip skill v0.3a3 commit 2c20a02fe2b6c34eb98476853865a6b07946dc62
+# (aip/ copied to a folder named cqrs so the directory-name check applies; jsonschema 4.26.0, pyyaml 6.0.1)
+$ python3 scripts/validate.py /tmp/f4849/vc/cqrs
+VALID: /tmp/f4849/vc/cqrs (name: cqrs)
+# exit 0

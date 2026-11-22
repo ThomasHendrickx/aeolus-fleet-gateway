@@ -1,0 +1,13 @@
+{
+  "name": "remote-calls-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check src/adapters/vendor.js && node --check src/core/checkout.js"
+  },
+  "dependencies": {
+    "cockatiel": "4.0.0",
+    "@sinonjs/fake-timers": "15.4.0",
+    "acorn": "8.15.0"
+  }
+}

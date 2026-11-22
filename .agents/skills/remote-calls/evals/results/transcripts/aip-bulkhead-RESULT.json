@@ -1,0 +1,35 @@
+{
+  "violations": [],
+  "missingTimeouts": [
+    {
+      "path": "/tmp/remote-calls-runs/aip/bulkhead/repo/src/adapters/untouched.js",
+      "line": 2,
+      "module": "../infra/network.js",
+      "timeoutOption": "timeout"
+    },
+    {
+      "path": "/tmp/remote-calls-runs/aip/bulkhead/repo/src/adapters/vendor.js",
+      "line": 4,
+      "module": "../infra/network.js",
+      "timeoutOption": "timeout"
+    },
+    {
+      "path": "/tmp/remote-calls-runs/aip/bulkhead/repo/src/adapters/vendor.js",
+      "line": 5,
+      "module": "../infra/network.js",
+      "timeoutOption": "timeout"
+    }
+  ],
+  "unsupported": [],
+  "clean": false,
+  "problems": [
+    1,
+    4
+  ],
+  "applies": true,
+  "proceduresRun": [
+    "P0",
+    "P1",
+    "P4"
+  ]
+}

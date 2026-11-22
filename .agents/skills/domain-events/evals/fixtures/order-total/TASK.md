@@ -1,0 +1,1 @@
+Sales wants a volume discount: a line with a quantity of 10 or more gets 10% off that line's price (rounded down to the cent). The order total, and so the invoice amount, must include it. Today's total is `Order.total_cents` in `src/sales/core/orders.py`.

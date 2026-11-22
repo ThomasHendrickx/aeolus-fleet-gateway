@@ -1,0 +1,16 @@
+PASS aip-breaker: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS aip-bulkhead: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS aip-local: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS aip-outbox: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS aip-retries: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS aip-scan: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS aip-sdk: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS aip-timeout: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS skill-md-breaker: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS skill-md-bulkhead: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS skill-md-local: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS skill-md-outbox: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS skill-md-retries: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS skill-md-scan: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS skill-md-sdk: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0
+PASS skill-md-timeout: immutable boundaries, companion, measurement, dependencies unchanged; evaluated instructions equal shipped form; worker exit 0

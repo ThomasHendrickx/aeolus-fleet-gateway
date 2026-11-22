@@ -1,0 +1,230 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:35:44.870408862 +0100
+@@ -0,0 +1,35 @@
++{
++  "violations": [],
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/aip/bulkhead/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/bulkhead/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/bulkhead/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "unsupported": [],
++  "clean": false,
++  "problems": [
++    1,
++    4
++  ],
++  "applies": true,
++  "proceduresRun": [
++    "P0",
++    "P1",
++    "P4"
++  ]
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/adapters/vendor.js repo/src/adapters/vendor.js
+--- base/src/adapters/vendor.js	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/adapters/vendor.js	2026-11-09 13:34:57.389893092 +0100
+@@ -1,7 +1,30 @@
+ import { request } from '../infra/network.js';
++import { bulkhead } from 'cockatiel';
++import config from '../config.json' with { type: 'json' };
++
++export class ProviderUnavailableError extends Error {
++  constructor(cause) {
++    super('Provider temporarily unavailable', { cause });
++    this.code = 'PROVIDER_UNAVAILABLE';
++  }
++}
++
+ export function makeVendor(network, { dependency = 'payment' } = {}) {
++  const settings = config[dependency];
++  if (!settings) throw new Error(`Missing provider config: ${dependency}`);
++  const limiter = bulkhead(settings.concurrencyLimit, settings.queueSize);
++  const call = async (operation, payload) => {
++    try {
++      return await limiter.execute(() => request(network, {
++        operation, payload, timeout: settings.timeoutMs,
++      }));
++    } catch (error) {
++      if (error.status && error.status < 500 && error.status !== 429) throw error;
++      throw new ProviderUnavailableError(error);
++    }
++  };
+   return {
+-    lookup: (sku) => request(network, { operation: 'lookup', payload: { sku } }),
+-    charge: (order) => request(network, { operation: 'charge', payload: order }),
++    lookup: (sku) => call('lookup', { sku }),
++    charge: (order) => call('charge', order),
+   };
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/config.json repo/src/config.json
+--- base/src/config.json	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/config.json	2026-11-09 13:34:57.418892797 +0100
+@@ -1 +1,16 @@
+-{}
++{
++  "payment": {
++    "timeoutMs": 100,
++    "timeoutReason": "measurement.json: p999Ms 80 + paddingMs 20",
++    "concurrencyLimit": 2,
++    "queueSize": 0,
++    "limitReason": "measurement.json: Incident: four consecutive remote 503s exhausted checkout slots; recovery checks every 200 ms. Request budget 2500 ms. Load sample: two calls fit available per-provider capacity; queueing consumes the page latency budget."
++  },
++  "catalog": {
++    "timeoutMs": 100,
++    "timeoutReason": "measurement.json: p999Ms 80 + paddingMs 20",
++    "concurrencyLimit": 2,
++    "queueSize": 0,
++    "limitReason": "measurement.json: Catalog has a separate vendor connection budget; payment traffic must not use it."
++  }
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/core/checkout.js repo/src/core/checkout.js
+--- base/src/core/checkout.js	2026-11-09 13:20:13.964901996 +0100
++++ repo/src/core/checkout.js	2026-11-09 13:34:57.391893072 +0100
+@@ -1,6 +1,14 @@
+ export async function checkout(vendor, order) {
+-  const stock = await vendor.lookup(order.sku);
+-  if (!stock.available) return { status: 'unavailable' };
+-  await vendor.charge(order);
+-  return { status: 'confirmed' };
++  try {
++    const stock = await vendor.lookup(order.sku);
++    if (!stock.available) return { status: 'unavailable' };
++    await vendor.charge(order);
++    return { status: 'confirmed' };
++  } catch (error) {
++    if (error.code !== 'PROVIDER_UNAVAILABLE') throw error;
++    return {
++      status: 'temporarily_unavailable',
++      message: 'Payments are temporarily unavailable. Please try again later.',
++    };
++  }
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/tests/resilience.test.mjs repo/tests/resilience.test.mjs
+--- base/tests/resilience.test.mjs	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/resilience.test.mjs	2026-11-09 13:35:18.550677285 +0100
+@@ -0,0 +1,108 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import FakeTimers from '@sinonjs/fake-timers';
++import { Network } from '../src/infra/network.js';
++import { makeVendor } from '../src/adapters/vendor.js';
++import { checkout } from '../src/core/checkout.js';
++
++for (const dependency of ['payment', 'catalog']) {
++  for (const operation of ['lookup', 'charge']) {
++    test(`${dependency} ${operation} aborts at measured timeout`, async () => {
++      const clock = FakeTimers.install({toFake: ['Date', 'setTimeout', 'clearTimeout']});
++      try {
++        const network = new Network([{delay: 1000}]);
++        const vendor = makeVendor(network, {dependency});
++        let error;
++        const call = vendor[operation](operation === 'lookup' ? 'sku' : {sku:'sku'}).catch(e => { error = e; });
++        await clock.tickAsync(99);
++        assert.equal(network.active, 1);
++        await clock.tickAsync(2);
++        assert.ok(error);
++        assert.equal(network.active, 0);
++        assert.equal(network.requests[0].end, 100);
++        await call;
++      } finally { clock.uninstall(); }
++    });
++  }
++}
++
++const fallback = {status:'temporarily_unavailable', message:'Payments are temporarily unavailable. Please try again later.'};
++test('payment saturation leaves catalog independent and checkout fails fast', async () => {
++  const clock = FakeTimers.install({toFake: ['Date', 'setTimeout', 'clearTimeout']});
++  try {
++    const payment = new Network([{delay:80}, {delay:80}]);
++    const vendor = makeVendor(payment);
++    const first = vendor.lookup('a');
++    const second = vendor.charge({sku:'b'});
++    const catalog = new Network([{delay:10}]);
++    const catalogCall = makeVendor(catalog, {dependency:'catalog'}).lookup('c');
++    const overflow = checkout(vendor, {sku:'overflow'});
++    const observedOverflow = overflow.then(value => ({value}), error => ({error}));
++    await clock.tickAsync(0);
++    assert.equal(payment.requests.length, 2);
++    assert.deepEqual(await observedOverflow, {value:fallback});
++    assert.equal(payment.requests.length, 2);
++    await clock.tickAsync(10);
++    assert.deepEqual(await catalogCall, {available:true});
++    assert.equal(payment.active, 2);
++    await clock.tickAsync(70);
++    await Promise.all([first, second]);
++    const recovered = vendor.lookup('recovered');
++    await clock.tickAsync(1);
++    await recovered;
++    assert.equal(payment.peak, 2);
++  } finally { clock.uninstall(); }
++});
++
++test('checkout shows fallback for remote failure and timeout', async () => {
++  const clock = FakeTimers.install({toFake: ['Date', 'setTimeout', 'clearTimeout']});
++  try {
++    for (const steps of [[{status:503}], [{value:{available:true}}, {delay:1000}]]) {
++      const result = checkout(makeVendor(new Network(steps)), {sku:'a'});
++      const observed = result.then(value => ({value}), error => ({error}));
++      await clock.tickAsync(101);
++      assert.deepEqual(await observed, {value:fallback});
++    }
++  } finally { clock.uninstall(); }
++});
++
++test('catalog also enforces two calls with no queue, and releases slots after timeout', async () => {
++  const clock = FakeTimers.install({toFake: ['Date', 'setTimeout', 'clearTimeout']});
++  try {
++    const network = new Network([{delay:1000}, {delay:1000}]);
++    const vendor = makeVendor(network, {dependency:'catalog'});
++    const calls = [vendor.lookup('a'), vendor.charge({sku:'b'})].map(p => p.catch(e => e));
++    await assert.rejects(vendor.lookup('overflow'), {code:'PROVIDER_UNAVAILABLE'});
++    assert.equal(network.requests.length, 2);
++    assert.equal(clock.now, 0);
++    const payment = makeVendor(new Network([{delay:10}]));
++    const other = payment.lookup('c');
++    await clock.tickAsync(10);
++    assert.deepEqual(await other, {available:true});
++    await clock.tickAsync(90);
++    assert.equal(network.active, 0);
++    assert.ok((await Promise.all(calls)).every(e => e.code === 'PROVIDER_UNAVAILABLE'));
++    const recovered = vendor.lookup('d');
++    await clock.tickAsync(1);
++    await recovered;
++    assert.equal(network.peak, 2);
++  } finally { clock.uninstall(); }
++});
++
++test('checkout preserves successful, out-of-stock and client-error behavior', async () => {
++  const clock = FakeTimers.install({toFake: ['Date', 'setTimeout', 'clearTimeout']});
++  try {
++    for (const [steps, expected] of [
++      [[{}, {}], {status:'confirmed'}],
++      [[{value:{available:false}}], {status:'unavailable'}],
++    ]) {
++      const result = checkout(makeVendor(new Network(steps)), {sku:'a'});
++      await clock.tickAsync(5);
++      assert.deepEqual(await result, expected);
++    }
++    const result = checkout(makeVendor(new Network([{status:400}])), {sku:'a'});
++    const assertion = assert.rejects(result, {status:400});
++    await clock.tickAsync(1);
++    await assertion;
++  } finally { clock.uninstall(); }
++});

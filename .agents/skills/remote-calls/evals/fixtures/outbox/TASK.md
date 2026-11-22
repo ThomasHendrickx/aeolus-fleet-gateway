@@ -1,0 +1,1 @@
+Review the email notification outbox consumer for reliability work. It already has bounded delivery retries and dead-letter storage, and runs outside the user request. Its SDK timeout and delivery policy are configured by the platform. Run the applicability gate and honor its scope decision.

@@ -1,0 +1,374 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:27:09.326666500 +0100
+@@ -0,0 +1,34 @@
++{
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/retries/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/retries/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/retries/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "violations": [],
++  "problems": [
++    1,
++    2,
++    5
++  ],
++  "applies": true,
++  "proceduresRun": [
++    "P0",
++    "P1",
++    "P2"
++  ]
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/p0-scan.json repo/p0-scan.json
+--- base/p0-scan.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/p0-scan.json	2026-11-09 13:25:51.069464543 +0100
+@@ -0,0 +1,25 @@
++{
++  "violations": [],
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/retries/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/retries/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/retries/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "unsupported": [],
++  "clean": false
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/p1-before.txt repo/p1-before.txt
+--- base/p1-before.txt	1970-01-01 01:00:00.000000000 +0100
++++ repo/p1-before.txt	2026-11-09 13:26:04.648326071 +0100
+@@ -0,0 +1,15 @@
++✖ tests/vendor.test.mjs (87.186877ms)
++ℹ tests 1
++ℹ suites 0
++ℹ pass 0
++ℹ fail 1
++ℹ cancelled 0
++ℹ skipped 0
++ℹ todo 0
++ℹ duration_ms 97.833648
++
++✖ failing tests:
++
++test at tests/vendor.test.mjs:1:1
++✖ tests/vendor.test.mjs (87.186877ms)
++  'test failed'
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/p1-check.json repo/p1-check.json
+--- base/p1-check.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/p1-check.json	2026-11-09 13:26:18.582183977 +0100
+@@ -0,0 +1 @@
++{"passed": true, "results": [{"command": "node dependency-check.mjs", "exit": 0, "output": ""}, {"command": "npm run check && node --test tests/*.test.mjs", "exit": 0, "output": "\n> check\n> node --check src/adapters/vendor.js && node --check src/core/checkout.js\n\n\u2714 lookup has a native timeout (11.568954ms)\n\u2139 tests 1\n\u2139 suites 0\n\u2139 pass 1\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 124.908766\n"}]}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/p2-before.txt repo/p2-before.txt
+--- base/p2-before.txt	1970-01-01 01:00:00.000000000 +0100
++++ repo/p2-before.txt	2026-11-09 13:26:33.907027699 +0100
+@@ -0,0 +1,91 @@
++✔ lookup has a native timeout (9.648324ms)
++✔ charge has a native timeout (1.431788ms)
++✖ transient read recovers (9.917599ms)
++✖ retry cap (2.871599ms)
++✖ Retry-After seconds honoured (2.275036ms)
++✔ Retry-After beyond budget stops without another call (1.547072ms)
++✔ unkeyed create never retries (2.358191ms)
++✖ keyed create can recover with same key (1.85364ms)
++✔ business errors never retry (1.5959ms)
++ℹ tests 9
++ℹ suites 0
++ℹ pass 5
++ℹ fail 4
++ℹ cancelled 0
++ℹ skipped 0
++ℹ todo 0
++ℹ duration_ms 141.725841
++
++✖ failing tests:
++
++test at tests/vendor.test.mjs:30:1
++✖ transient read recovers (9.917599ms)
++  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
++  
++    assert.ok(r.value)
++  
++      at file:///tmp/remote-calls-runs/skill-md/retries/repo/tests/vendor.test.mjs:31:10
++      at scenario (file:///tmp/remote-calls-runs/skill-md/retries/repo/tests/vendor.test.mjs:27:5)
++      at async Test.run (node:internal/test_runner/test:1409:7)
++      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
++    generatedMessage: true,
++    code: 'ERR_ASSERTION',
++    actual: undefined,
++    expected: true,
++    operator: '==',
++    diff: 'simple'
++  }
++
++test at tests/vendor.test.mjs:33:1
++✖ retry cap (2.871599ms)
++  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++  
++  1 !== 4
++  
++      at file:///tmp/remote-calls-runs/skill-md/retries/repo/tests/vendor.test.mjs:34:30
++      at scenario (file:///tmp/remote-calls-runs/skill-md/retries/repo/tests/vendor.test.mjs:27:5)
++      at async Test.run (node:internal/test_runner/test:1409:7)
++      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
++    generatedMessage: true,
++    code: 'ERR_ASSERTION',
++    actual: 1,
++    expected: 4,
++    operator: 'strictEqual',
++    diff: 'simple'
++  }
++
++test at tests/vendor.test.mjs:36:1
++✖ Retry-After seconds honoured (2.275036ms)
++  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
++  
++    assert.ok(r.value)
++  
++      at file:///tmp/remote-calls-runs/skill-md/retries/repo/tests/vendor.test.mjs:37:10
++      at scenario (file:///tmp/remote-calls-runs/skill-md/retries/repo/tests/vendor.test.mjs:27:5)
++      at async Test.run (node:internal/test_runner/test:1409:7)
++      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
++    generatedMessage: true,
++    code: 'ERR_ASSERTION',
++    actual: undefined,
++    expected: true,
++    operator: '==',
++    diff: 'simple'
++  }
++
++test at tests/vendor.test.mjs:45:1
++✖ keyed create can recover with same key (1.85364ms)
++  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
++  
++    assert.ok(r.value)
++  
++      at file:///tmp/remote-calls-runs/skill-md/retries/repo/tests/vendor.test.mjs:46:10
++      at scenario (file:///tmp/remote-calls-runs/skill-md/retries/repo/tests/vendor.test.mjs:27:5)
++      at async Test.run (node:internal/test_runner/test:1409:7)
++      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
++    generatedMessage: true,
++    code: 'ERR_ASSERTION',
++    actual: undefined,
++    expected: true,
++    operator: '==',
++    diff: 'simple'
++  }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/p2-check.json repo/p2-check.json
+--- base/p2-check.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/p2-check.json	2026-11-09 13:27:29.405461741 +0100
+@@ -0,0 +1 @@
++{"passed": true, "results": [{"command": "node dependency-check.mjs", "exit": 0, "output": ""}, {"command": "npm run check && node --test tests/*.test.mjs", "exit": 0, "output": "\n> check\n> node --check src/adapters/vendor.js && node --check src/core/checkout.js\n\n\u2714 lookup has a native timeout (8.848922ms)\n\u2714 charge has a native timeout (1.456685ms)\n\u2714 transient read recovers (1.548503ms)\n\u2714 retry cap (2.297892ms)\n\u2714 Retry-After seconds honoured (0.932372ms)\n\u2714 Retry-After beyond budget stops without another call (0.769434ms)\n\u2714 unkeyed create never retries (0.922845ms)\n\u2714 keyed create can recover with same key (0.886565ms)\n\u2714 business errors never retry (0.68295ms)\n\u2714 checkout shows declared fallback after exhausted provider errors (2.248435ms)\n\u2714 another dependency continues during payment backoff (1.030694ms)\n\u2714 backoff doubles with bounded jitter (0.973243ms)\n\u2139 tests 12\n\u2139 suites 0\n\u2139 pass 12\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 128.368317\n"}]}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/adapters/vendor.js repo/src/adapters/vendor.js
+--- base/src/adapters/vendor.js	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/adapters/vendor.js	2026-11-09 13:26:54.949813112 +0100
+@@ -1,7 +1,46 @@
+ import { request } from '../infra/network.js';
++import { readFileSync } from 'node:fs';
++import { retry, handleWhen, DelegateBackoff } from 'cockatiel';
++const config = JSON.parse(readFileSync(new URL('../config.json', import.meta.url), 'utf8'));
++const transient = error => error.status === 429 || error.status >= 500 ||
++  (error.status === undefined && (error.message === 'network aborted' ||
++    ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN'].includes(error.code)));
++
+ export function makeVendor(network, { dependency = 'payment' } = {}) {
++  const settings = config[dependency];
++  if (!settings) throw new Error(`Missing dependency config: ${dependency}`);
++  async function call(operation, payload, safe) {
++    const started = Date.now();
++    const deadline = started + Math.min(settings.retryBudgetMs, settings.requestBudgetMs);
++    const send = () => request(network, { operation, payload, timeout: settings.timeoutMs });
++    try {
++      if (!safe) return await send();
++      const policy = retry(handleWhen(transient), {
++        maxAttempts: settings.retryCap,
++        backoff: new DelegateBackoff(({attempt, result}) => {
++          const error = result.error;
++          const seconds = Number(error.headers?.['retry-after']);
++          const serverDelay = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : 0;
++          // Equal jitter: each exponential interval varies between half and full.
++          const exponential = settings.backoffBaseMs * 2 ** (attempt - 1);
++          const delay = Math.max(serverDelay, exponential * (0.5 + Math.random() * 0.5));
++          // Reserve enough time for the next native timeout; never shorten Retry-After.
++          if (Date.now() + delay + settings.timeoutMs > deadline) throw error;
++          return delay;
++        }),
++      });
++      return await policy.execute(send);
++    } catch (error) {
++      if (transient(error)) {
++        const unavailable = new Error('Provider temporarily unavailable', { cause: error });
++        unavailable.code = 'PROVIDER_UNAVAILABLE';
++        throw unavailable;
++      }
++      throw error;
++    }
++  }
+   return {
+-    lookup: (sku) => request(network, { operation: 'lookup', payload: { sku } }),
+-    charge: (order) => request(network, { operation: 'charge', payload: order }),
++    lookup: sku => call('lookup', { sku }, true),
++    charge: order => call('charge', order, Boolean(order.idempotencyKey)),
+   };
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/config.json repo/src/config.json
+--- base/src/config.json	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/config.json	2026-11-09 13:26:18.022189687 +0100
+@@ -1 +1,20 @@
+-{}
++{
++  "payment": {
++    "timeoutMs": 100,
++    "timeoutSource": "measurement.json payment: p999Ms 80 + paddingMs 20",
++    "retryCap": 3,
++    "backoffBaseMs": 40,
++    "retryBudgetMs": 2400,
++    "requestBudgetMs": 2500,
++    "retrySource": "payment transientRetryCap, backoffBaseMs, retryBudgetMs and requestBudgetMs measurements; catalog uses the same conservative policy because transient-specific samples are unavailable. Cap means three retries after the initial call."
++  },
++  "catalog": {
++    "timeoutMs": 100,
++    "timeoutSource": "measurement.json catalog: p999Ms 80 + paddingMs 20",
++    "retryCap": 3,
++    "backoffBaseMs": 40,
++    "retryBudgetMs": 2400,
++    "requestBudgetMs": 2500,
++    "retrySource": "payment transientRetryCap, backoffBaseMs, retryBudgetMs and requestBudgetMs measurements; catalog uses the same conservative policy because transient-specific samples are unavailable. Cap means three retries after the initial call."
++  }
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/core/checkout.js repo/src/core/checkout.js
+--- base/src/core/checkout.js	2026-11-09 13:20:13.964901996 +0100
++++ repo/src/core/checkout.js	2026-11-09 13:26:54.950813101 +0100
+@@ -1,6 +1,13 @@
+ export async function checkout(vendor, order) {
+-  const stock = await vendor.lookup(order.sku);
+-  if (!stock.available) return { status: 'unavailable' };
+-  await vendor.charge(order);
+-  return { status: 'confirmed' };
++  try {
++    const stock = await vendor.lookup(order.sku);
++    if (!stock.available) return { status: 'unavailable' };
++    await vendor.charge(order);
++    return { status: 'confirmed' };
++  } catch (error) {
++    if (error.code === 'PROVIDER_UNAVAILABLE') {
++      return { status: 'temporarily_unavailable', message: 'Payments are temporarily unavailable. Please try again later.' };
++    }
++    throw error;
++  }
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/tests/vendor.test.mjs repo/tests/vendor.test.mjs
+--- base/tests/vendor.test.mjs	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/vendor.test.mjs	2026-11-09 13:27:28.925466636 +0100
+@@ -0,0 +1,81 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import FakeTimers from '@sinonjs/fake-timers';
++import { Network } from '../src/infra/network.js';
++import { makeVendor } from '../src/adapters/vendor.js';
++
++for (const operation of ['lookup', 'charge']) test(`${operation} has a native timeout`, async () => {
++  const clock = FakeTimers.install({toFake: ['setTimeout', 'clearTimeout', 'Date']});
++  try {
++    const network = new Network([{delay: 500}]);
++    const promise = makeVendor(network)[operation](operation === 'charge' ? {} : 'sku');
++    const outcome = promise.then(() => 'success', () => 'failed');
++    await clock.tickAsync(101);
++    assert.equal(network.requests[0].end, 100);
++    await clock.runAllAsync();
++    await outcome;
++  } finally { clock.uninstall(); }
++});
++
++async function scenario(steps, run, verify) {
++  const clock = FakeTimers.install({toFake: ['setTimeout', 'clearTimeout', 'Date']});
++  try {
++    const network = new Network(steps);
++    const result = run(makeVendor(network)).then(value => ({value}), error => ({error}));
++    await clock.runAllAsync();
++    verify(await result, network, clock.now);
++  } finally { clock.uninstall(); }
++}
++test('transient read recovers', () => scenario([{status:503}, {status:200}], v => v.lookup('sku'), (r,n) => {
++  assert.ok(r.value); assert.equal(n.requests.length,2); assert.ok(n.requests[1].start > 0);
++}));
++test('retry cap', () => scenario(Array(10).fill({status:503}), v => v.lookup('sku'), (r,n) => {
++  assert.ok(r.error); assert.equal(n.requests.length,4);
++}));
++test('Retry-After seconds honoured', () => scenario([{status:429,headers:{'retry-after':'1'}},{}], v => v.lookup('sku'), (r,n) => {
++  assert.ok(r.value); assert.ok(n.requests[1].start >= 1000);
++}));
++test('Retry-After beyond budget stops without another call', () => scenario([{status:429,headers:{'retry-after':'5'}},{}], v => v.lookup('sku'), (r,n,t) => {
++  assert.ok(r.error); assert.equal(n.requests.length,1); assert.ok(t <= 2500);
++}));
++test('unkeyed create never retries', () => scenario([{status:503},{}], v => v.charge({}), (r,n) => {
++  assert.ok(r.error); assert.equal(n.requests.length,1);
++}));
++test('keyed create can recover with same key', () => scenario([{status:503},{}], v => v.charge({idempotencyKey:'key'}), (r,n) => {
++  assert.ok(r.value); assert.equal(n.requests.length,2); assert.equal(n.requests[1].payload.idempotencyKey,'key');
++}));
++test('business errors never retry', () => scenario([{status:400},{}], v => v.lookup('sku'), (r,n) => {
++  assert.equal(r.error.status,400); assert.equal(n.requests.length,1);
++}));
++
++test('checkout shows declared fallback after exhausted provider errors', async () => {
++  const {checkout} = await import('../src/core/checkout.js');
++  await scenario(Array(4).fill({status:503}), v => checkout(v,{sku:'sku'}), (r,n) => {
++    assert.deepEqual(r.value,{status:'temporarily_unavailable',message:'Payments are temporarily unavailable. Please try again later.'});
++    assert.equal(n.requests.length,4);
++  });
++});
++test('another dependency continues during payment backoff', async () => {
++  const clock = FakeTimers.install({toFake:['setTimeout','clearTimeout','Date']});
++  try {
++    const payment = new Network([{status:429,headers:{'retry-after':'1'}},{}]);
++    const catalog = new Network([{}]);
++    const pending = makeVendor(payment).lookup('sku');
++    await clock.tickAsync(10);
++    const other = makeVendor(catalog,{dependency:'catalog'}).lookup('sku');
++    await clock.tickAsync(1);
++    assert.deepEqual(await other,{available:true});
++    assert.equal(payment.requests.length,1);
++    await clock.runAllAsync();
++    await pending;
++  } finally { clock.uninstall(); }
++});
++test('backoff doubles with bounded jitter', () => scenario(Array(4).fill({status:503}), v => v.lookup('sku'), (r,n,t) => {
++  assert.ok(r.error);
++  const starts = n.requests.map(r => r.start);
++  for (let i=1;i<starts.length;i++) {
++    const gap = starts[i]-starts[i-1];
++    assert.ok(gap >= 20 * 2 ** (i-1) - 1 && gap <= 40 * 2 ** (i-1));
++  }
++  assert.ok(t <= 2400);
++}));

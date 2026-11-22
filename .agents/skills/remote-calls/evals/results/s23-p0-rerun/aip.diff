@@ -1,0 +1,78 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:57:44.169020859 +0100
+@@ -0,0 +1,19 @@
++{
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-s23-rerun/aip/sdk/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "violations": [],
++  "problems": [
++    1,
++    5
++  ],
++  "applies": false,
++  "proceduresRun": [
++    "P0"
++  ]
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/adapters/vendor.js repo/src/adapters/vendor.js
+--- base/src/adapters/vendor.js	2026-11-09 13:21:59.186829095 +0100
++++ repo/src/adapters/vendor.js	2026-11-09 13:57:44.145021103 +0100
+@@ -1,6 +1,6 @@
+-import { retry, handleAll } from 'cockatiel';
+ import { makeSDK } from '../infra/sdk.js';
+ export function makeVendor(network, {dependency='payment'}={}) {
+- const sdk=makeSDK(network); const outer=retry(handleAll,{maxAttempts:1});
+- return {lookup:sku=>outer.execute(()=>sdk.lookup(sku)),charge:order=>sdk.charge(order)};
++ const sdk=makeSDK(network);
++ // The SDK owns lookup retries and its three-attempt budget.
++ return {lookup:sku=>sdk.lookup(sku),charge:order=>sdk.charge(order)};
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/config.json repo/src/config.json
+--- base/src/config.json	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/config.json	2026-11-09 13:57:44.148021072 +0100
+@@ -1 +1,11 @@
+-{}
++{
++  "payment": {
++    "retry": {
++      "owner": "SDK",
++      "maxAttempts": 3,
++      "adapterRetries": 0,
++      "source": "src/infra/sdk.js defines two retries (three total attempts). TASK.md reports six requests caused by the extra adapter retry.",
++      "reason": "Delegate lookup to the existing SDK policy so a single read stays within its three-attempt budget."
++    }
++  }
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/tests/sdk-attempt-budget.test.mjs repo/tests/sdk-attempt-budget.test.mjs
+--- base/tests/sdk-attempt-budget.test.mjs	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/sdk-attempt-budget.test.mjs	2026-11-09 13:57:35.003113996 +0100
+@@ -0,0 +1,22 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { makeVendor } from '../src/adapters/vendor.js';
++import { Network } from '../src/infra/network.js';
++
++test('lookup stops after the SDK three-attempt budget', async () => {
++  const network = new Network(Array.from({length: 6}, () => ({status: 503})));
++  await assert.rejects(makeVendor(network).lookup('sku'), {status: 503});
++  assert.equal(network.requests.length, 3);
++});
++
++test('lookup can recover on the SDK final attempt', async () => {
++  const network = new Network([{status: 503}, {status: 503}, {status: 200, value: {available: true}}]);
++  assert.deepEqual(await makeVendor(network).lookup('sku'), {available: true});
++  assert.equal(network.requests.length, 3);
++});
++
++test('unkeyed charge remains a single attempt', async () => {
++  const network = new Network([{status: 503}, {status: 200}]);
++  await assert.rejects(makeVendor(network).charge({id: 'order'}), {status: 503});
++  assert.equal(network.requests.length, 1);
++});

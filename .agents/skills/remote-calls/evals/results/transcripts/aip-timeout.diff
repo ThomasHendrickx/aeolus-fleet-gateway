@@ -1,0 +1,119 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:31:32.614981475 +0100
+@@ -0,0 +1,31 @@
++{
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/aip/timeout/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/timeout/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/timeout/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "violations": [],
++  "problems": [
++    1
++  ],
++  "applies": true,
++  "proceduresRun": [
++    "P0",
++    "P1"
++  ]
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/adapters/vendor.js repo/src/adapters/vendor.js
+--- base/src/adapters/vendor.js	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/adapters/vendor.js	2026-11-09 13:31:12.966181858 +0100
+@@ -1,7 +1,10 @@
+ import { request } from '../infra/network.js';
++import config from '../config.json' with { type: 'json' };
++
+ export function makeVendor(network, { dependency = 'payment' } = {}) {
++  const timeoutOptions = dependency === 'payment' ? { timeout: config.payment.timeoutMs } : {};
+   return {
+-    lookup: (sku) => request(network, { operation: 'lookup', payload: { sku } }),
+-    charge: (order) => request(network, { operation: 'charge', payload: order }),
++    lookup: (sku) => request(network, { operation: 'lookup', payload: { sku }, ...timeoutOptions }),
++    charge: (order) => request(network, { operation: 'charge', payload: order, ...timeoutOptions }),
+   };
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/config.json repo/src/config.json
+--- base/src/config.json	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/config.json	2026-11-09 13:31:12.965181868 +0100
+@@ -1 +1,7 @@
+-{}
++{
++  "payment": {
++    "timeoutMs": 100,
++    "source": "measurement.json: payment.p999Ms (80 ms) + payment.paddingMs (20 ms)",
++    "reason": "Bound each payment lookup and charge using measured tail latency plus padding; use the HTTP client's native cancellation."
++  }
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/tests/timeouts.test.mjs repo/tests/timeouts.test.mjs
+--- base/tests/timeouts.test.mjs	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/timeouts.test.mjs	2026-11-09 13:31:32.024987492 +0100
+@@ -0,0 +1,52 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import FakeTimers from '@sinonjs/fake-timers';
++import { makeVendor } from '../src/adapters/vendor.js';
++import { Network } from '../src/infra/network.js';
++import { readWeather } from '../src/adapters/untouched.js';
++
++for (const operation of ['lookup', 'charge']) {
++  test(`payment ${operation} aborts at measured 100 ms budget`, async () => {
++    const clock = FakeTimers.install();
++    try {
++      const network = new Network([{ delay: 1000 }]);
++      const vendor = makeVendor(network);
++      let outcome;
++      const pending = vendor[operation](operation === 'lookup' ? 'sku' : { id: 'order' })
++        .then(() => { outcome = 'resolved'; }, () => { outcome = 'rejected'; });
++      await clock.tickAsync(99);
++      assert.equal(outcome, undefined);
++      await clock.tickAsync(2);
++      assert.equal(outcome, 'rejected');
++      await pending;
++      assert.equal(network.active, 0);
++      assert.equal(network.requests.length, 1);
++      assert.equal(network.requests[0].end - network.requests[0].start, 100);
++    } finally { clock.uninstall(); }
++  });
++}
++
++test('fast payment succeeds and weather retains its behavior', async () => {
++  const clock = FakeTimers.install();
++  try {
++    const payment = new Network([{ delay: 50, value: { available: true } }]);
++    const weather = new Network([{ delay: 200, value: { sunny: true } }]);
++    const result = makeVendor(payment).lookup('sku');
++    const forecast = readWeather(weather);
++    await clock.tickAsync(50);
++    assert.deepEqual(await result, { available: true });
++    await clock.tickAsync(150);
++    assert.deepEqual(await forecast, { sunny: true });
++    assert.equal(clock.countTimers(), 0);
++  } finally { clock.uninstall(); }
++});
++
++test('other vendor dependencies remain unchanged', async () => {
++  const clock = FakeTimers.install();
++  try {
++    const network = new Network([{ delay: 200, value: { available: true } }]);
++    const pending = makeVendor(network, { dependency: 'catalog' }).lookup('sku');
++    await clock.tickAsync(200);
++    assert.deepEqual(await pending, { available: true });
++  } finally { clock.uninstall(); }
++});

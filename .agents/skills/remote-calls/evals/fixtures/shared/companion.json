@@ -1,0 +1,25 @@
+{
+  "paths": {
+    "domain": [
+      "src/core"
+    ],
+    "adapters": [
+      "src/adapters"
+    ]
+  },
+  "outboundClients": [
+    {
+      "module": "../infra/network.js",
+      "timeoutOption": "timeout"
+    }
+  ],
+  "resilience": {
+    "library": "cockatiel",
+    "config": "src/config.json"
+  },
+  "measurement": "measurement.json",
+  "checks": {
+    "dependencyDirection": "node dependency-check.mjs",
+    "resilienceTests": "npm run check && node --test tests/*.test.mjs"
+  }
+}

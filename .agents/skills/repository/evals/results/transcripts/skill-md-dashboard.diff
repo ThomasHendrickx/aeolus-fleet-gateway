@@ -1,0 +1,40 @@
+diff -ruN -x __pycache__ -x '*.pyc' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-06 17:27:13.214571590 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [3], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/customer_totals.py repo/src/adapters/customer_totals.py
+--- base/src/adapters/customer_totals.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/adapters/customer_totals.py	2026-11-06 17:27:13.224571489 +0100
+@@ -0,0 +1,9 @@
++"""Read model for the finance dashboard: bypasses the Orders repository (display read, not a command)."""
++
++
++def customer_totals(conn):
++    """One row per customer: (customer_id, order_count, total_cents), biggest total first. Drafts excluded."""
++    return conn.execute(
++        "SELECT customer_id, COUNT(*), SUM(total_cents) FROM orders WHERE status <> 'draft' "
++        "GROUP BY customer_id ORDER BY SUM(total_cents) DESC, customer_id"
++    ).fetchall()
+diff -ruN -x __pycache__ -x '*.pyc' base/tests/test_customer_totals.py repo/tests/test_customer_totals.py
+--- base/tests/test_customer_totals.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/test_customer_totals.py	2026-11-06 17:27:13.224571489 +0100
+@@ -0,0 +1,18 @@
++import unittest
++from datetime import date
++
++from src.adapters import schema
++from src.adapters.customer_totals import customer_totals
++from src.adapters.sqlite_orders import SqliteOrders
++from src.core.orders import Line, Order
++
++
++class CustomerTotalsTest(unittest.TestCase):
++    def test_totals_exclude_drafts_and_sort_desc(self):
++        repo = SqliteOrders(schema.connect())
++        d = date(2026, 1, 1)
++        repo.save(Order("o1", "N-1", "c1", d, "placed", [Line("a", 1, 100)]))
++        repo.save(Order("o2", "N-2", "c2", d, "placed", [Line("a", 1, 500)]))
++        repo.save(Order("o3", "N-3", "c2", d, "paid", [Line("a", 1, 200)]))
++        repo.save(Order("o4", "N-4", "c1", d, "draft", [Line("a", 1, 9999)]))
++        self.assertEqual([("c2", 2, 700), ("c1", 1, 100)], customer_totals(repo.conn))

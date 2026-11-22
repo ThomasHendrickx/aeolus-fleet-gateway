@@ -1,0 +1,2 @@
+class DuplicateOrderNumber(Exception):
+    pass

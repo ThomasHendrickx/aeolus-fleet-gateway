@@ -1,0 +1,1 @@
+Outages at the payment provider make checkout hang and other pages slow. Four failures within a second are common in an outage; an outage can last minutes, and payment recovers abruptly. Isolate sustained payment failure, recover when healthy, and make checkout display the declared unavailable state. Catalog is healthy. Apply P0, P1, P2, P3.

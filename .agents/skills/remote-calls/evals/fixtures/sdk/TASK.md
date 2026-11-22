@@ -1,0 +1,1 @@
+The payment SDK already performs up to three attempts, but the adapter also retries it: incident logs show six outbound requests for one availability read. Configure the existing layer so the request stays within the SDK attempt budget. Apply P0, P1, P2.

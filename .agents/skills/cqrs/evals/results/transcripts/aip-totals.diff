@@ -1,0 +1,199 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 09:25:16.072150876 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [1, 3], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/adapters/pg_customers.py repo/src/adapters/pg_customers.py
+--- base/src/adapters/pg_customers.py	2026-11-07 09:24:41.135504395 +0100
++++ repo/src/adapters/pg_customers.py	2026-11-07 09:25:31.604993697 +0100
+@@ -20,6 +20,3 @@
+             "INSERT INTO customers (id, name, email, created_on) VALUES (%s, %s, %s, %s)"
+             " ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email",
+             (customer.id, customer.name, customer.email, customer.created_on))
+-
+-    def list_all(self):
+-        return [Customer(*row) for row in self.conn.execute("SELECT id, name, email, created_on FROM customers ORDER BY id").fetchall()]
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/adapters/pg_orders.py repo/src/adapters/pg_orders.py
+--- base/src/adapters/pg_orders.py	2026-11-07 09:24:41.135504395 +0100
++++ repo/src/adapters/pg_orders.py	2026-11-07 09:25:31.604993697 +0100
+@@ -42,7 +42,3 @@
+                         [(order.id, n, l.sku, l.quantity, l.unit_price_cents) for n, l in enumerate(order.lines, 1)])
+         except psycopg.errors.UniqueViolation as error:
+             raise DuplicateOrderNumber(order.number) from error
+-
+-    def list_all(self):
+-        ids = [row[0] for row in self.conn.execute("SELECT id FROM orders ORDER BY placed_on, id").fetchall()]
+-        return [self.get(order_id) for order_id in ids]
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/core/ports.py repo/src/core/ports.py
+--- base/src/core/ports.py	2026-11-07 09:24:41.136504385 +0100
++++ repo/src/core/ports.py	2026-11-07 09:25:31.604993697 +0100
+@@ -17,16 +17,12 @@
+ 
+     def save(self, order: Order) -> None: ...
+ 
+-    def list_all(self) -> list[Order]: ...
+-
+ 
+ class CustomerRepository(Protocol):
+     def get(self, customer_id: str) -> Customer: ...
+ 
+     def save(self, customer: Customer) -> None: ...
+ 
+-    def list_all(self) -> list[Customer]: ...
+-
+ 
+ class UnitOfWork(Protocol):
+     orders: OrderRepository
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-07 09:17:28.565879511 +0100
++++ repo/src/main.py	2026-11-07 09:25:16.080150795 +0100
+@@ -15,3 +15,7 @@
+ 
+ def register_customer(*args, **kwargs):
+     return _register_customer(PgUnitOfWork(), *args, **kwargs)
++
++
++from src.queries.customer_totals import PAGE_SIZE as CUSTOMER_TOTALS_PAGE_SIZE  # noqa: E402
++from src.queries.customer_totals import customer_totals  # noqa: E402,F401
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/queries/customer_totals.py repo/src/queries/customer_totals.py
+--- base/src/queries/customer_totals.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/queries/customer_totals.py	2026-11-07 09:25:16.074150856 +0100
+@@ -0,0 +1,43 @@
++"""Query: staff customer totals page. Reads the tables directly; no domain imports."""
++from dataclasses import dataclass
++
++from src.db import connect
++
++PAGE_SIZE = 20
++
++
++@dataclass(frozen=True)
++class CustomerTotalsRow:
++    customer_id: str
++    name: str
++    orders: int
++    total_cents: int
++
++
++@dataclass(frozen=True)
++class CustomerTotalsPage:
++    page: int
++    total_customers: int
++    rows: list
++
++
++_TOTALS = """
++    SELECT c.id AS customer_id, c.name, count(DISTINCT o.id) AS orders,
++           sum(l.quantity * l.unit_price_cents)::bigint AS total_cents
++    FROM customers c
++    JOIN orders o ON o.customer_id = c.id AND o.status <> 'cancelled'
++    JOIN order_lines l ON l.order_id = o.id
++    GROUP BY c.id, c.name
++    HAVING count(DISTINCT o.id) >= %(min_orders)s
++"""
++
++
++def customer_totals(page=1, min_orders=0):
++    params = {"min_orders": min_orders, "limit": PAGE_SIZE, "offset": (page - 1) * PAGE_SIZE}
++    with connect() as conn:
++        total = conn.execute(f"SELECT count(*) FROM ({_TOTALS}) t", params).fetchone()[0]
++        found = conn.execute(
++            f"{_TOTALS} ORDER BY total_cents DESC, c.name LIMIT %(limit)s OFFSET %(offset)s", params
++        ).fetchall()
++    rows = [CustomerTotalsRow(cid, name, int(n), int(t)) for cid, name, n, t in found]
++    return CustomerTotalsPage(page, total, rows)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/web/staff_pages.py repo/src/web/staff_pages.py
+--- base/src/web/staff_pages.py	2026-11-07 09:24:41.136504385 +0100
++++ repo/src/web/staff_pages.py	2026-11-07 09:25:16.075150846 +0100
+@@ -1,21 +1,16 @@
+-from src.adapters.pg_unit_of_work import PgUnitOfWork
++from src import main
+ 
+-PAGE_SIZE = 20
++PAGE_SIZE = main.CUSTOMER_TOTALS_PAGE_SIZE
+ 
+ 
+ def customer_totals_page(page=1, min_orders=0):
+     """Staff page: each customer's order count and total spent, highest spender first."""
+-    with PgUnitOfWork() as uow:
+-        orders = uow.orders.list_all()
+-        customers = {c.id: c for c in uow.customers.list_all()}
+-    totals = {}
+-    for order in orders:
+-        if order.status == "cancelled":
+-            continue
+-        row = totals.setdefault(order.customer_id, {"orders": 0, "total_cents": 0})
+-        row["orders"] += 1
+-        row["total_cents"] += order.total_cents
+-    rows = [{"customer_id": cid, "name": customers[cid].name, **t} for cid, t in totals.items() if t["orders"] >= min_orders]
+-    rows.sort(key=lambda r: (-r["total_cents"], r["name"]))
+-    start = (page - 1) * PAGE_SIZE
+-    return {"page": page, "rows": rows[start:start + PAGE_SIZE]}
++    result = main.customer_totals(page, min_orders)
++    return {
++        "page": result.page,
++        "total_customers": result.total_customers,
++        "rows": [
++            {"customer_id": r.customer_id, "name": r.name, "orders": r.orders, "total_cents": r.total_cents}
++            for r in result.rows
++        ],
++    }
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_customer_totals_page.py repo/tests/test_customer_totals_page.py
+--- base/tests/test_customer_totals_page.py	2026-11-07 09:24:41.136504385 +0100
++++ repo/tests/test_customer_totals_page.py	2026-11-07 09:25:16.087150725 +0100
+@@ -1,3 +1,5 @@
++from src import main
++from src.db import connect
+ from src.web.staff_pages import customer_totals_page
+ from tests.support import DbTest
+ 
+@@ -10,3 +12,49 @@
+         self.order("o2", "bob", lines=(("A", 3, 1000),))
+         rows = customer_totals_page()["rows"]
+         self.assertEqual([(r["customer_id"], r["orders"], r["total_cents"]) for r in rows], [("bob", 1, 3000), ("ann", 1, 1000)])
++
++    def test_cancelled_excluded_and_count(self):
++        self.customer("ann")
++        self.customer("bob")
++        self.customer("cy")
++        self.order("o1", "ann", lines=(("A", 1, 1000), ("B", 2, 500)))
++        self.order("o2", "ann")
++        self.order("o3", "bob")
++        self.order("o4", "cy")
++        main.ship_order("o3")
++        with connect() as conn:
++            conn.execute("UPDATE orders SET status='cancelled' WHERE id='o4'")
++        page = customer_totals_page()
++        self.assertEqual(page["total_customers"], 2)
++        self.assertEqual([(r["customer_id"], r["orders"], r["total_cents"]) for r in page["rows"]],
++                         [("ann", 2, 3000), ("bob", 1, 1000)])
++
++    def test_empty(self):
++        page = customer_totals_page()
++        self.assertEqual((page["rows"], page["total_customers"]), ([], 0))
++
++    def test_min_orders_filter_and_count(self):
++        self.customer("ann")
++        self.customer("bob")
++        self.order("o1", "ann")
++        self.order("o2", "ann")
++        self.order("o3", "bob")
++        page = customer_totals_page(min_orders=2)
++        self.assertEqual([r["customer_id"] for r in page["rows"]], ["ann"])
++        self.assertEqual(page["total_customers"], 1)
++
++    def test_name_tiebreak(self):
++        self.customer("zed")
++        self.customer("amy")
++        self.order("o1", "zed")
++        self.order("o2", "amy")
++        self.assertEqual([r["customer_id"] for r in customer_totals_page()["rows"]], ["amy", "zed"])
++
++    def test_paging(self):
++        for i in range(25):
++            self.customer(f"c{i:02d}")
++            self.order(f"o{i}", f"c{i:02d}", lines=(("A", 1, 1000 + i),))
++        p1, p2 = customer_totals_page(1), customer_totals_page(2)
++        self.assertEqual((len(p1["rows"]), len(p2["rows"]), p1["total_customers"], p2["total_customers"]), (20, 5, 25, 25))
++        self.assertEqual(p1["rows"][0]["customer_id"], "c24")
++        self.assertEqual(p2["rows"][-1]["customer_id"], "c00")

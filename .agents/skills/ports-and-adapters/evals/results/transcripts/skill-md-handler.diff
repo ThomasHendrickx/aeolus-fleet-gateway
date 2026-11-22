@@ -1,0 +1,105 @@
+diff -ruN -x __pycache__ -x '*.pyc' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-06 11:57:15.459677631 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [3], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/rest_refunds.py repo/src/adapters/rest_refunds.py
+--- base/src/adapters/rest_refunds.py	2026-11-06 11:54:51.896124043 +0100
++++ repo/src/adapters/rest_refunds.py	2026-11-06 11:57:27.033561022 +0100
+@@ -1,13 +1,22 @@
+-"""POST /refunds handler. The refund rules live here."""
++"""POST /refunds handler: translation only; the rules live in src.core.refunds."""
+ from datetime import date
+ 
++from src.core.refunds import RefundCommand, request_refund
++
++_REJECTIONS = {
++    "invalid_amount": (422, "amount must be positive"),
++    "window_closed": (409, "refund window closed"),
++    "exceeds_payment": (409, "refund exceeds payment"),
++}
++
+ 
+ def post_refund(body, today=None):
+-    today = today or date.today()
+-    if body["amount_cents"] <= 0:
+-        return 422, {"error": "amount must be positive"}
+-    if (today - body["paid_on"]).days > 30:
+-        return 409, {"error": "refund window closed"}
+-    if body["amount_cents"] > body["paid_cents"]:
+-        return 409, {"error": "refund exceeds payment"}
+-    return 200, {"status": "refunded", "amount_cents": body["amount_cents"]}
++    outcome = request_refund(
++        RefundCommand(body["amount_cents"], body["paid_cents"], body["paid_on"]),
++        today or date.today(),
++    )
++    if outcome.status == "rejected":
++        code, message = _REJECTIONS[outcome.reason]
++        return code, {"error": message}
++    code = 202 if outcome.status == "pending_approval" else 200
++    return code, {"status": outcome.status, "amount_cents": outcome.amount_cents}
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/refunds.py repo/src/core/refunds.py
+--- base/src/core/refunds.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/core/refunds.py	2026-11-06 11:57:27.032561032 +0100
+@@ -0,0 +1,32 @@
++"""Refund use case (inbound port): the refund rules, free of transport."""
++from dataclasses import dataclass
++from datetime import date
++
++REFUND_WINDOW_DAYS = 30
++APPROVAL_THRESHOLD_CENTS = 50000
++
++
++@dataclass(frozen=True)
++class RefundCommand:
++    amount_cents: int
++    paid_cents: int
++    paid_on: date
++
++
++@dataclass(frozen=True)
++class RefundOutcome:
++    status: str  # refunded | pending_approval | rejected
++    amount_cents: int = 0
++    reason: str = ""  # invalid_amount | window_closed | exceeds_payment when rejected
++
++
++def request_refund(command: RefundCommand, today: date) -> RefundOutcome:
++    if command.amount_cents <= 0:
++        return RefundOutcome("rejected", reason="invalid_amount")
++    if (today - command.paid_on).days > REFUND_WINDOW_DAYS:
++        return RefundOutcome("rejected", reason="window_closed")
++    if command.amount_cents > command.paid_cents:
++        return RefundOutcome("rejected", reason="exceeds_payment")
++    if command.amount_cents > APPROVAL_THRESHOLD_CENTS:
++        return RefundOutcome("pending_approval", command.amount_cents)
++    return RefundOutcome("refunded", command.amount_cents)
+diff -ruN -x __pycache__ -x '*.pyc' base/tests/test_refunds.py repo/tests/test_refunds.py
+--- base/tests/test_refunds.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/test_refunds.py	2026-11-06 11:57:27.034561012 +0100
+@@ -0,0 +1,25 @@
++import unittest
++from datetime import date
++
++from src.adapters import rest_refunds
++
++TODAY = date(2026, 3, 1)
++
++
++def post(amount, paid=100000, paid_on=date(2026, 2, 20)):
++    return rest_refunds.post_refund(
++        {"amount_cents": amount, "paid_cents": paid, "paid_on": paid_on}, TODAY)
++
++
++class RefundScenarios(unittest.TestCase):
++    def test_above_threshold_is_pending_approval(self):
++        self.assertEqual(post(50001), (202, {"status": "pending_approval", "amount_cents": 50001}))
++
++    def test_at_threshold_is_refunded(self):
++        self.assertEqual(post(50000), (200, {"status": "refunded", "amount_cents": 50000}))
++
++    def test_existing_outcomes(self):
++        self.assertEqual(post(0)[0], 422)
++        self.assertEqual(post(100, paid_on=date(2026, 1, 1))[0], 409)
++        self.assertEqual(post(200, paid=100), (409, {"error": "refund exceeds payment"}))
++        self.assertEqual(post(100), (200, {"status": "refunded", "amount_cents": 100}))

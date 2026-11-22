@@ -1,0 +1,154 @@
+{
+  "S0.1|skill-md": {
+    "result": "pass",
+    "evidence": "applies=False; application changes=[]"
+  },
+  "S0.2|skill-md": {
+    "result": "pass",
+    "evidence": "missingTimeouts=[{'path': '/tmp/remote-calls-runs/skill-md/scan/repo/src/adapters/untouched.js', 'line': 2, 'module': '../infra/network.js', 'timeoutOption': 'timeout'}, {'path': '/tmp/remote-calls-runs/skill-md/scan/repo/src/adapters/vendor.js', 'line': 4, 'module': '../infra/network.js', 'timeoutOption': 'timeout'}, {'path': '/tmp/remote-calls-runs/skill-md/scan/repo/src/adapters/vendor.js', 'line': 5, 'module': '../infra/network.js', 'timeoutOption': 'timeout'}]"
+  },
+  "S0.3|skill-md": {
+    "result": "pass",
+    "evidence": "violations=[{'path': '/tmp/remote-calls-runs/skill-md/scan/repo/src/core/leak.js', 'line': 1, 'module': 'cockatiel'}]"
+  },
+  "S0.4|skill-md": {
+    "result": "pass",
+    "evidence": "independent judge: scan/repo/TASK.md supplies payment outage with checkout hangs and other-page slowdown. events.jsonl records actual P0 scanner execution and RESULT.json writing. Actual scan/repo/RESULT.json has problems [1, 3], applies true, proceduresRun [P0]. Application diff is empty.; observable check: problems=[1, 3]"
+  },
+  "S0.5|skill-md": {
+    "result": "pass",
+    "evidence": "independent judge: outbox P0 ran (scanner command recorded in events.jsonl); actual RESULT.json has problems [], applies false, proceduresRun [P0]. Recursive base/repo diff shows only RESULT.json and node_modules added; no application changes and no breaker added. P0 stopping is the behavior under test; later procedures were not run.; observable check: applies=False; application changes=[]"
+  },
+  "S1.1|skill-md": {
+    "result": "pass",
+    "evidence": "slow call failed after 100 ms; configured timeout 100 ms with source/reason"
+  },
+  "S1.2|skill-md": {
+    "result": "pass",
+    "evidence": "touched adapter changed=True; weather adapter unchanged=True"
+  },
+  "S2.1|skill-md": {
+    "result": "pass",
+    "evidence": "503 then 200 -> available; two outbound attempts"
+  },
+  "S2.2|skill-md": {
+    "result": "pass",
+    "evidence": "create without idempotency key failed; one outbound attempt"
+  },
+  "S2.4|skill-md": {
+    "result": "pass",
+    "evidence": "429 then 200 -> next attempt after 2000 ms (>=2000)"
+  },
+  "S2.3|skill-md": {
+    "result": "pass",
+    "evidence": "independent judge: Independently imported finished makeVendor, unchanged makeSDK and unchanged Network in Node. Ten scripted 503s: SDK=3 outbound attempts, adapter=3, both reject HTTP 503. Two 503s then success: SDK=3, adapter=3, both return {ok:true}. Unkeyed charge=1 attempt. Read supplied skill, PROMPT.md, TASK.md, companion documents/JSON, measurement, baseline, RESULT.json, actual AGENT_REPORT.md and complete recursive baseline/repo diff. Adapter removes Cockatiel outer retry and delegates directly to makeSDK; SDK and external boundary are byte-unchanged. No second retry layer remains. P0 evidence: RESULT.json preserves missing timeout at untouched.js:2, violations=[], applies=false, proceduresRun=[P0]. Independent execution of shipped P0 scanner reproduces those findings (exit 1, unsupported=[], clean=false). Actual report explicitly records scanner command and SDK-mechanism stop; AIP additionally has matching p0-scan.json. Beyond P0: complete diffs show no timeout, breaker, bulkhead, fallback or new retry implementation; unrelated untouched.js and SDK timeout remain unchanged. Only adapter delegation, three budget regression tests, RESULT.json, and (AIP only) descriptive config metadata were added. Tests/check commands are ordinary verification of the P0-authorized fix. Historical procedure execution cannot be proven from artifacts alone; supplied evidence is consistent with P0 only.; observable check: P0 stopped=True; procedures=['P0']; persistent SDK failure -> exactly SDK three attempts"
+  },
+  "S3.1|skill-md": {
+    "result": "pass",
+    "evidence": "breaker opened after 4 requests; three later calls fail fast with zero outbound attempts"
+  },
+  "S3.2|skill-md": {
+    "result": "pass",
+    "evidence": "after open duration exactly one concurrent trial reached dependency; success permitted next call"
+  },
+  "S3.3|skill-md": {
+    "result": "pass",
+    "evidence": "twelve alternating 400/422 responses reached dependency once each; next 200 succeeded"
+  },
+  "S3.4|skill-md": {
+    "result": "pass",
+    "evidence": "breaker opened after 4 requests; three later calls fail fast with zero outbound attempts"
+  },
+  "S3.5|skill-md": {
+    "result": "pass",
+    "evidence": "independent judge: Independent Node fake-clock execution against breaker/repo API drove four unkeyed 503 charges, observed circuit_state_change Open at fake time 4ms, then called checkout while open. Promise resolved to {status:temporarily_unavailable,message:Payments are temporarily unavailable. Please try again later.}; outbound count stayed 4 before/after. No raw error escaped. P3 ran, supported by application diff and recorded execution.; observable check: checkout returns its declared temporarily_unavailable state and clear user message; no raw exception"
+  },
+  "S3.6|skill-md": {
+    "result": "pass",
+    "evidence": "state transition logs=[{\"event\":\"circuit_state_change\",\"dependency\":\"payment\",\"state\":\"Open\"},{\"event\":\"circuit_state_change\",\"dependency\":\"payment\",\"state\":\"HalfOpen\"},{\"event\":\"circuit_state_change\",\"dependency\":\"payment\",\"state\":\"Closed\"}]; metrics=[{\"event\":\"circuit_state_change\",\"dependency\":\"payment\",\"state\":\"Open\"},{\"event\":\"circuit_state_change\",\"dependency\":\"payment\",\"state\":\"HalfOpen\"},{\"event\":\"circuit_state_change\",\"dependency\":\"payment\",\"state\":\"Closed\"}]"
+  },
+  "S3.7|skill-md": {
+    "result": "pass",
+    "evidence": "payment breaker open; independent catalog lookup succeeds and reaches catalog once"
+  },
+  "S4.1|skill-md": {
+    "result": "pass",
+    "evidence": "payment peak=2; catalog succeeded in 10 ms while payment saturated"
+  },
+  "S0.1|aip": {
+    "result": "pass",
+    "evidence": "applies=False; application changes=[]"
+  },
+  "S0.2|aip": {
+    "result": "pass",
+    "evidence": "missingTimeouts=[{'path': '/tmp/remote-calls-runs/aip/scan/repo/src/adapters/untouched.js', 'line': 2, 'module': '../infra/network.js', 'timeoutOption': 'timeout'}, {'path': '/tmp/remote-calls-runs/aip/scan/repo/src/adapters/vendor.js', 'line': 4, 'module': '../infra/network.js', 'timeoutOption': 'timeout'}, {'path': '/tmp/remote-calls-runs/aip/scan/repo/src/adapters/vendor.js', 'line': 5, 'module': '../infra/network.js', 'timeoutOption': 'timeout'}]"
+  },
+  "S0.3|aip": {
+    "result": "pass",
+    "evidence": "violations=[{'path': '/tmp/remote-calls-runs/aip/scan/repo/src/core/leak.js', 'line': 1, 'module': 'cockatiel'}]"
+  },
+  "S0.4|aip": {
+    "result": "pass",
+    "evidence": "independent judge: scan events show python3 scanner executed, followed by recorded P0 decision; scan/repo/RESULT.json contains problems [1,3], applies true, proceduresRun [P0]. No baseline application files changed.; observable check: problems=[1, 3]"
+  },
+  "S0.5|aip": {
+    "result": "pass",
+    "evidence": "independent judge: outbox events show P0 scanner executed and gate decision recorded as applies false, proceduresRun [P0]. Byte comparison of every baseline file against repo found no changes and only RESULT.json added; no breaker was added.; observable check: applies=False; application changes=[]"
+  },
+  "S1.1|aip": {
+    "result": "pass",
+    "evidence": "slow call failed after 100 ms; configured timeout 100 ms with source/reason"
+  },
+  "S1.2|aip": {
+    "result": "pass",
+    "evidence": "touched adapter changed=True; weather adapter unchanged=True"
+  },
+  "S2.1|aip": {
+    "result": "pass",
+    "evidence": "503 then 200 -> available; two outbound attempts"
+  },
+  "S2.2|aip": {
+    "result": "pass",
+    "evidence": "create without idempotency key failed; one outbound attempt"
+  },
+  "S2.4|aip": {
+    "result": "pass",
+    "evidence": "429 then 200 -> next attempt after 2000 ms (>=2000)"
+  },
+  "S2.3|aip": {
+    "result": "pass",
+    "evidence": "independent judge: Independently imported finished makeVendor, unchanged makeSDK and unchanged Network in Node. Ten scripted 503s: SDK=3 outbound attempts, adapter=3, both reject HTTP 503. Two 503s then success: SDK=3, adapter=3, both return {ok:true}. Unkeyed charge=1 attempt. Read supplied skill, PROMPT.md, TASK.md, companion documents/JSON, measurement, baseline, RESULT.json, actual AGENT_REPORT.md and complete recursive baseline/repo diff. Adapter removes Cockatiel outer retry and delegates directly to makeSDK; SDK and external boundary are byte-unchanged. No second retry layer remains. P0 evidence: RESULT.json preserves missing timeout at untouched.js:2, violations=[], applies=false, proceduresRun=[P0]. Independent execution of shipped P0 scanner reproduces those findings (exit 1, unsupported=[], clean=false). Actual report explicitly records scanner command and SDK-mechanism stop; AIP additionally has matching p0-scan.json. Beyond P0: complete diffs show no timeout, breaker, bulkhead, fallback or new retry implementation; unrelated untouched.js and SDK timeout remain unchanged. Only adapter delegation, three budget regression tests, RESULT.json, and (AIP only) descriptive config metadata were added. Tests/check commands are ordinary verification of the P0-authorized fix. Historical procedure execution cannot be proven from artifacts alone; supplied evidence is consistent with P0 only.; observable check: P0 stopped=True; procedures=['P0']; persistent SDK failure -> exactly SDK three attempts"
+  },
+  "S3.1|aip": {
+    "result": "pass",
+    "evidence": "breaker opened after 4 requests; three later calls fail fast with zero outbound attempts"
+  },
+  "S3.2|aip": {
+    "result": "pass",
+    "evidence": "after open duration exactly one concurrent trial reached dependency; success permitted next call"
+  },
+  "S3.3|aip": {
+    "result": "pass",
+    "evidence": "twelve alternating 400/422 responses reached dependency once each; next 200 succeeded"
+  },
+  "S3.4|aip": {
+    "result": "pass",
+    "evidence": "breaker opened after 4 requests; three later calls fail fast with zero outbound attempts"
+  },
+  "S3.5|aip": {
+    "result": "pass",
+    "evidence": "independent judge: Independent Node fake-clock probe opened payment breaker with four unkeyed charge 503s. checkout returned exact declared temporarily_unavailable fallback and clear payment message on open lookup and open charge paths; external request ledger stayed at four and both open calls consumed 0 fake milliseconds. No raw error reached checkout caller.; observable check: checkout returns its declared temporarily_unavailable state and clear user message; no raw exception"
+  },
+  "S3.6|aip": {
+    "result": "pass",
+    "evidence": "state transition logs=[{\"dependency\":\"payment\",\"state\":\"Open\",\"event\":\"circuit_state_change\"},{\"dependency\":\"payment\",\"state\":\"HalfOpen\",\"event\":\"circuit_state_change\"},{\"dependency\":\"payment\",\"state\":\"Closed\",\"event\":\"circuit_state_change\"}]; metrics=[{\"dependency\":\"payment\",\"state\":\"Open\",\"event\":\"circuit_state_change\"},{\"dependency\":\"payment\",\"state\":\"HalfOpen\",\"event\":\"circuit_state_change\"},{\"dependency\":\"payment\",\"state\":\"Closed\",\"event\":\"circuit_state_change\"}]"
+  },
+  "S3.7|aip": {
+    "result": "pass",
+    "evidence": "payment breaker open; independent catalog lookup succeeds and reaches catalog once"
+  },
+  "S4.1|aip": {
+    "result": "pass",
+    "evidence": "payment peak=2; catalog succeeded in 10 ms while payment saturated"
+  }
+}

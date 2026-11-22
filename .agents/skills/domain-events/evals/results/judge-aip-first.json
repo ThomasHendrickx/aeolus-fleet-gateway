@@ -1,0 +1,3 @@
+{"S1.3": {"verdict": "PASS", "why": "src/sales/core/events.py adds InvoicePaid (past-tense fact, raised in invoices.py pay()), and docs/event-list.md lists InvoicePaid with its fields."},
+"S2.2": {"verdict": "PASS", "why": "src/contracts/invoice_paid.py carries order_id and paid_on (what shipping needs) plus only event_id, invoice_id and invoice_version, which are identity and ordering metadata declared in the docstring with 'No state transfer'; no extra business state such as the amount or customer."},
+"S4.2": {"verdict": "PASS", "why": "src/sales/core/commands/pay_invoice.py now calls uow.accounts.get, record_payment and save explicitly, and credit_customer_account is removed from HANDLERS in src/sales/core/handlers.py (only the receipt remains)."}}

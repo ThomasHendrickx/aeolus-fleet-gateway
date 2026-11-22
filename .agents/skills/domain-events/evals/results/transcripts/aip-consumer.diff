@@ -1,0 +1,302 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/CONSUMER.json repo/CONSUMER.json
+--- base/CONSUMER.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/CONSUMER.json	2026-11-07 18:03:14.871547549 +0100
+@@ -0,0 +1 @@
++{"deliver": "python3 -m src.shipping.consumers.worker --ignore-backoff", "dead_letter": "SELECT message_id, body, attempts, error, dead_at, alerted FROM shipping_dead_letters ORDER BY message_id"}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 18:02:32.196980745 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [4], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/schema.sql repo/schema.sql
+--- base/schema.sql	2026-11-07 18:01:14.666767800 +0100
++++ repo/schema.sql	2026-11-07 18:02:54.021759197 +0100
+@@ -57,3 +57,31 @@
+     last_id bigint NOT NULL,
+     PRIMARY KEY (consumer, topic)
+ );
++
++-- Shipping's consumer of invoice events: what it processed (same transaction as the effect),
++-- the newest invoice version seen, delivery attempts and the dead-letter.
++CREATE TABLE shipping_processed_events (
++    event_id text PRIMARY KEY,
++    processed_at timestamptz NOT NULL DEFAULT now()
++);
++
++CREATE TABLE shipping_invoice_versions (
++    invoice_id text PRIMARY KEY,
++    version integer NOT NULL
++);
++
++CREATE TABLE shipping_delivery_attempts (
++    message_id bigint PRIMARY KEY,
++    attempts integer NOT NULL,
++    next_attempt_at timestamptz NOT NULL,
++    last_error text NOT NULL
++);
++
++CREATE TABLE shipping_dead_letters (
++    message_id bigint PRIMARY KEY,
++    body jsonb NOT NULL,
++    attempts integer NOT NULL,
++    error text NOT NULL,
++    dead_at timestamptz NOT NULL DEFAULT now(),
++    alerted boolean NOT NULL DEFAULT false
++);
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/main.py	2026-11-07 18:02:54.037759034 +0100
+@@ -30,3 +30,7 @@
+ 
+ def cancel_fulfilment(order_id):
+     return shipping.cancel_fulfilment(PgShippingUnitOfWork(), order_id)
++
++
++def apply_invoice_event(event_id, invoice_id, invoice_version, effect):
++    return shipping.apply_invoice_event(PgShippingUnitOfWork(), event_id, invoice_id, invoice_version, effect)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/adapters/pg.py repo/src/shipping/adapters/pg.py
+--- base/src/shipping/adapters/pg.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/shipping/adapters/pg.py	2026-11-07 18:02:54.037759034 +0100
+@@ -19,6 +19,26 @@
+         self.conn.execute("UPDATE fulfilments SET status = %s WHERE id = %s", (fulfilment.status, fulfilment.id))
+ 
+ 
++class PgInbox:
++    """Which events this consumer processed and the newest invoice version it has seen."""
++
++    def __init__(self, conn):
++        self.conn = conn
++
++    def claim(self, event_id):
++        row = self.conn.execute("INSERT INTO shipping_processed_events (event_id) VALUES (%s) ON CONFLICT DO NOTHING RETURNING event_id",
++                                (event_id,)).fetchone()
++        return row is not None
++
++    def newest_version(self, invoice_id):
++        row = self.conn.execute("SELECT version FROM shipping_invoice_versions WHERE invoice_id = %s FOR UPDATE", (invoice_id,)).fetchone()
++        return row[0] if row else None
++
++    def set_newest_version(self, invoice_id, version):
++        self.conn.execute("INSERT INTO shipping_invoice_versions (invoice_id, version) VALUES (%s, %s)"
++                          " ON CONFLICT (invoice_id) DO UPDATE SET version = EXCLUDED.version", (invoice_id, version))
++
++
+ class PgShippingUnitOfWork:
+     """Shipping's own transaction per use case."""
+ 
+@@ -27,6 +47,7 @@
+         self.tx = self.conn.transaction()
+         self.tx.__enter__()
+         self.fulfilments = PgFulfilmentRepository(self.conn)
++        self.inbox = PgInbox(self.conn)
+         return self
+ 
+     def __exit__(self, *exc):
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/consumers/invoice_events.py repo/src/shipping/consumers/invoice_events.py
+--- base/src/shipping/consumers/invoice_events.py	2026-11-07 18:01:14.669767770 +0100
++++ repo/src/shipping/consumers/invoice_events.py	2026-11-07 18:02:54.041758994 +0100
+@@ -1,13 +1,21 @@
+-"""Shipping's handler for Sales' invoice events: a payment requests fulfilment, a refund cancels it."""
++"""Shipping's handler for Sales' invoice events: a payment requests fulfilment, a refund cancels it.
++
++Idempotent: the event id is recorded in the effect's transaction. An event older than the newest invoice
++version already seen is ignored. Failures propagate to the worker, which retries and dead-letters."""
+ from datetime import date
+ from uuid import uuid4
+ 
+ from src import main
+ from src.contracts import sales_invoice_events as contract
++from src.shipping.core import commands
+ 
+ 
+-def handle(body: dict) -> None:
++def handle(body: dict) -> bool:
+     if body["type"] == contract.INVOICE_PAID:
+-        main.request_fulfilment(f"f-{uuid4().hex[:12]}", body["order_id"], date.fromisoformat(body["occurred_on"]))
++        on = date.fromisoformat(body["occurred_on"])
++        effect = lambda uow: commands.request_fulfilment_once(uow, f"f-{uuid4().hex[:12]}", body["order_id"], on)
+     elif body["type"] == contract.INVOICE_REFUNDED:
+-        main.cancel_fulfilment(body["order_id"])
++        effect = lambda uow: commands.cancel_fulfilments_of(uow, body["order_id"])
++    else:
++        return False  # not an event Shipping reacts to (additive contract changes)
++    return main.apply_invoice_event(body["event_id"], body["invoice_id"], body["invoice_version"], effect)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/consumers/worker.py repo/src/shipping/consumers/worker.py
+--- base/src/shipping/consumers/worker.py	2026-11-07 18:01:14.669767770 +0100
++++ repo/src/shipping/consumers/worker.py	2026-11-07 18:03:02.132676862 +0100
+@@ -1,32 +1,92 @@
+-"""Delivery loop: `python3 -m src.shipping.consumers.worker` hands every new message on the topic to the handler once."""
++"""Delivery loop: `python3 -m src.shipping.consumers.worker [--ignore-backoff]` runs one delivery pass.
++
++Messages are handled in bus order. A failing message is retried on later passes with a growing wait
++(BACKOFF_SECONDS * 2^(attempt-1)); the pass stops at it so later messages are not handled out of order.
++After MAX_ATTEMPTS it moves to shipping_dead_letters, an alert mail goes to ALERT_ADDRESS and the
++consumer moves on. --ignore-backoff treats every wait as elapsed."""
+ import logging
++import sys
++
++from psycopg.types.json import Jsonb
+ 
+ from src.contracts import sales_invoice_events as contract
+ from src.db import connect
+-from src.infra import bus
++from src.infra import bus, mail
+ from src.shipping.consumers import invoice_events
+ 
+ log = logging.getLogger(__name__)
+ CONSUMER = "shipping"
++MAX_ATTEMPTS = 5
++BACKOFF_SECONDS = 30
++ALERT_ADDRESS = "shipping-oncall@example.com"
++
++
++def _set_offset(conn, offset):
++    conn.execute("INSERT INTO bus_offsets (consumer, topic, last_id) VALUES (%s, %s, %s)"
++                 " ON CONFLICT (consumer, topic) DO UPDATE SET last_id = EXCLUDED.last_id", (CONSUMER, contract.TOPIC, offset))
++
++
++def _record_failure(message_id, body, error):
++    """Count the failed attempt; dead-letter and advance the offset at MAX_ATTEMPTS. Returns True when dead-lettered."""
++    with connect() as conn:
++        attempts = conn.execute(
++            "INSERT INTO shipping_delivery_attempts (message_id, attempts, next_attempt_at, last_error)"
++            " VALUES (%s, 1, now() + make_interval(secs => %s), %s)"
++            " ON CONFLICT (message_id) DO UPDATE SET attempts = shipping_delivery_attempts.attempts + 1,"
++            " last_error = EXCLUDED.last_error RETURNING attempts", (message_id, BACKOFF_SECONDS, error)).fetchone()[0]
++        if attempts < MAX_ATTEMPTS:
++            conn.execute("UPDATE shipping_delivery_attempts SET next_attempt_at = now() + make_interval(secs => %s)"
++                         " WHERE message_id = %s", (BACKOFF_SECONDS * 2 ** (attempts - 1), message_id))
++            return False
++        conn.execute("INSERT INTO shipping_dead_letters (message_id, body, attempts, error) VALUES (%s, %s, %s, %s)"
++                     " ON CONFLICT DO NOTHING", (message_id, Jsonb(body), attempts, error))
++        conn.execute("DELETE FROM shipping_delivery_attempts WHERE message_id = %s", (message_id,))
++        _set_offset(conn, message_id)
++        return True
++
++
++def _alert_dead_letters():
++    """Mail an alert for every dead letter not yet alerted; retried on the next pass if mail fails."""
++    with connect(autocommit=True) as conn:
++        pending = conn.execute("SELECT message_id, attempts, error FROM shipping_dead_letters WHERE NOT alerted ORDER BY message_id").fetchall()
++        for message_id, attempts, error in pending:
++            try:
++                mail.send(ALERT_ADDRESS, f"Dead-lettered invoice event {message_id}",
++                          f"Shipping gave up on bus message {message_id} after {attempts} attempts: {error}")
++            except Exception:
++                log.exception("could not send dead-letter alert for message %s", message_id)
++                continue
++            conn.execute("UPDATE shipping_dead_letters SET alerted = true WHERE message_id = %s", (message_id,))
+ 
+ 
+-def run_once() -> int:
+-    """Deliver every message after this consumer's offset; return how many were handled."""
++def run_once(ignore_backoff: bool = False) -> int:
++    """Deliver messages after this consumer's offset in order; return how many were handled."""
+     with connect(autocommit=True) as conn:
+         row = conn.execute("SELECT last_id FROM bus_offsets WHERE consumer = %s AND topic = %s", (CONSUMER, contract.TOPIC)).fetchone()
+     offset, handled = (row[0] if row else 0), 0
+     for message_id, body in bus.fetch(contract.TOPIC, offset):
++        if not ignore_backoff:
++            with connect(autocommit=True) as conn:
++                waiting = conn.execute("SELECT 1 FROM shipping_delivery_attempts WHERE message_id = %s AND next_attempt_at > now()",
++                                       (message_id,)).fetchone()
++            if waiting:
++                break
+         try:
+             invoice_events.handle(body)
+-            handled += 1
+-        except Exception:
++        except Exception as exc:
+             log.exception("handler failed on message %s", message_id)
++            if _record_failure(message_id, body, f"{type(exc).__name__}: {exc}"):
++                offset = message_id  # dead-lettered: move on
++                continue
++            break  # keep order: nothing after a failing message is handled until it is delivered or dead-lettered
++        handled += 1
+         offset = message_id
+-        with connect(autocommit=True) as conn:
+-            conn.execute("INSERT INTO bus_offsets (consumer, topic, last_id) VALUES (%s, %s, %s)"
+-                         " ON CONFLICT (consumer, topic) DO UPDATE SET last_id = EXCLUDED.last_id", (CONSUMER, contract.TOPIC, offset))
++        with connect() as conn:
++            _set_offset(conn, offset)
++            conn.execute("DELETE FROM shipping_delivery_attempts WHERE message_id = %s", (message_id,))
++    _alert_dead_letters()
+     return handled
+ 
+ 
+ if __name__ == "__main__":
+-    print(f"handled {run_once()}")
++    print(f"handled {run_once(ignore_backoff='--ignore-backoff' in sys.argv)}")
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/core/commands.py repo/src/shipping/core/commands.py
+--- base/src/shipping/core/commands.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/shipping/core/commands.py	2026-11-07 18:02:54.037759034 +0100
+@@ -14,3 +14,28 @@
+         for fulfilment in uow.fulfilments.for_order(order_id):
+             fulfilment.cancel()
+             uow.fulfilments.save(fulfilment)
++
++
++def apply_invoice_event(uow, event_id: str, invoice_id: str, invoice_version: int, effect) -> bool:
++    """Run `effect(uow)` once per event, in the transaction that records the event as processed.
++
++    Returns False when the event was already processed or is older than the newest version seen for the invoice."""
++    with uow:
++        if not uow.inbox.claim(event_id):
++            return False
++        newest = uow.inbox.newest_version(invoice_id)
++        if newest is not None and invoice_version <= newest:
++            return False
++        uow.inbox.set_newest_version(invoice_id, invoice_version)
++        effect(uow)
++        return True
++
++
++def request_fulfilment_once(uow, fulfilment_id: str, order_id: str, on: date) -> None:
++    uow.fulfilments.add(Fulfilment(fulfilment_id, order_id, on))
++
++
++def cancel_fulfilments_of(uow, order_id: str) -> None:
++    for fulfilment in uow.fulfilments.for_order(order_id):
++        fulfilment.cancel()
++        uow.fulfilments.save(fulfilment)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_invoice_consumer.py repo/tests/test_invoice_consumer.py
+--- base/tests/test_invoice_consumer.py	2026-11-07 18:01:14.669767770 +0100
++++ repo/tests/test_invoice_consumer.py	2026-11-07 18:03:04.254655321 +0100
+@@ -17,3 +17,37 @@
+         bus.publish("sales.invoices.v1", REFUNDED)
+         worker.run_once()
+         self.assertEqual(self.rows("SELECT order_id, status FROM fulfilments"), [("o1", "cancelled")])
++
++    def test_same_event_twice_requests_one_fulfilment(self):
++        bus.publish("sales.invoices.v1", PAID)
++        bus.publish("sales.invoices.v1", PAID)
++        worker.run_once()
++        worker.run_once()
++        self.assertEqual(self.rows("SELECT order_id, status FROM fulfilments"), [("o1", "requested")])
++
++    def test_refund_before_payment_leaves_no_active_fulfilment(self):
++        bus.publish("sales.invoices.v1", REFUNDED)
++        bus.publish("sales.invoices.v1", PAID)
++        worker.run_once()
++        self.assertEqual(self.rows("SELECT status FROM fulfilments WHERE status <> 'cancelled'"), [])
++
++    def test_failing_message_is_retried_then_dead_lettered_with_alert(self):
++        from unittest import mock
++        bus.publish("sales.invoices.v1", PAID)
++        with mock.patch("src.shipping.core.commands.request_fulfilment_once", side_effect=RuntimeError("boom")):
++            for _ in range(worker.MAX_ATTEMPTS):
++                worker.run_once(ignore_backoff=True)
++        self.assertEqual(self.rows("SELECT message_id FROM shipping_dead_letters"), [(1,)])
++        self.assertEqual(len(self.rows("SELECT 1 FROM sent_mail")), 1)
++        self.assertEqual(self.rows("SELECT 1 FROM fulfilments"), [])
++
++    def test_transient_failure_succeeds_on_retry(self):
++        from unittest import mock
++        bus.publish("sales.invoices.v1", PAID)
++        with mock.patch("src.shipping.core.commands.request_fulfilment_once", side_effect=RuntimeError("boom")):
++            worker.run_once()
++        self.assertEqual(self.rows("SELECT 1 FROM fulfilments"), [])
++        worker.run_once()  # still waiting
++        self.assertEqual(self.rows("SELECT 1 FROM fulfilments"), [])
++        worker.run_once(ignore_backoff=True)
++        self.assertEqual(self.rows("SELECT order_id FROM fulfilments"), [("o1",)])

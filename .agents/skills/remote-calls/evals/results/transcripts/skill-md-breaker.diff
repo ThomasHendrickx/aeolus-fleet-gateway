@@ -1,0 +1,205 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:30:17.758744874 +0100
+@@ -0,0 +1,34 @@
++{
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/breaker/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/breaker/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/breaker/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "violations": [],
++  "problems": [
++    1,
++    3
++  ],
++  "applies": true,
++  "proceduresRun": [
++    "P0",
++    "P1",
++    "P2",
++    "P3"
++  ]
++}
+\ No newline at end of file
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/adapters/vendor.js repo/src/adapters/vendor.js
+--- base/src/adapters/vendor.js	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/adapters/vendor.js	2026-11-09 13:29:49.242035691 +0100
+@@ -1,7 +1,50 @@
++import { readFileSync } from 'node:fs';
++import { handleWhen, retry, DelegateBackoff, circuitBreaker, SamplingBreaker, CircuitState, BrokenCircuitError } from 'cockatiel';
++import { log, metric } from '../infra/telemetry.js';
+ import { request } from '../infra/network.js';
++const config = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
++const fault = error => error.message === 'network aborted' || error.status === 429 || error.status >= 500 || (!error.status && !(error instanceof TypeError));
+ export function makeVendor(network, { dependency = 'payment' } = {}) {
++  const cfg = config[dependency];
++  const b = cfg.breaker;
++  const breaker = b && circuitBreaker(handleWhen(fault), {
++    breaker: new SamplingBreaker({ threshold: b.failureRate, duration: b.windowMs,
++      minimumRps: b.minimumCalls * 1000 / b.windowMs }),
++    halfOpenAfter: b.openMs,
++  });
++  breaker?.onStateChange(state => {
++    const event = { event: 'circuit_state_change', dependency, state: CircuitState[state] };
++    log(event); metric(event);
++  });
++  async function invoke(operation, payload, idempotent) {
++    const started = Date.now();
++    const r = cfg.retry;
++    let delay;
++    const policy = retry(handleWhen(error => {
++      if (!idempotent || error instanceof BrokenCircuitError || breaker?.state === CircuitState.Open || !fault(error)) return false;
++      const retryAfter = Number(error.headers?.['retry-after'] ?? 0) * 1000;
++      delay = Math.max(delay ?? 0, Number.isFinite(retryAfter) ? retryAfter : 0);
++      return Date.now() - started + delay + cfg.timeoutMs <= r.budgetMs;
++    }), {
++      maxAttempts: idempotent ? r.maxRetries : 0,
++      backoff: new DelegateBackoff(() => delay),
++    });
++    try { return await policy.execute(({ attempt }) => {
++      delay = Math.random() * r.baseMs * 2 ** attempt;
++      if (breaker?.state === CircuitState.HalfOpen) throw new BrokenCircuitError();
++      const call = () => request(network, { operation, payload, timeout: cfg.timeoutMs });
++      return breaker ? breaker.execute(call) : call();
++    }); } catch (error) {
++      if (error instanceof BrokenCircuitError || fault(error)) {
++        const unavailable = new Error(`${dependency} temporarily unavailable`, { cause: error });
++        unavailable.code = 'DEPENDENCY_UNAVAILABLE';
++        throw unavailable;
++      }
++      throw error;
++    }
++  }
+   return {
+-    lookup: (sku) => request(network, { operation: 'lookup', payload: { sku } }),
+-    charge: (order) => request(network, { operation: 'charge', payload: order }),
++    lookup: sku => invoke('lookup', { sku }, true),
++    charge: order => invoke('charge', order, Boolean(order.idempotencyKey)),
+   };
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/config.json repo/src/config.json
+--- base/src/config.json	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/config.json	2026-11-09 13:28:46.370676856 +0100
+@@ -1 +1,30 @@
+-{}
++{
++  "payment": {
++    "timeoutMs": 100,
++    "timeoutSource": "measurement.json: p999Ms + paddingMs",
++    "retry": {
++      "maxRetries": 3,
++      "baseMs": 40,
++      "budgetMs": 2400,
++      "source": "measurement.json transientRetryCap, backoffBaseMs, retryBudgetMs; full jitter; reserve one timeout before retry"
++    },
++    "breaker": {
++      "windowMs": 1000,
++      "minimumCalls": 4,
++      "failureRate": 0.5,
++      "openMs": 200,
++      "halfOpenTrials": 1,
++      "source": "measurement.json breaker and incident: four failures per second, probe recovery every 200ms; one half-open trial"
++    }
++  },
++  "catalog": {
++    "timeoutMs": 100,
++    "timeoutSource": "measurement.json: p999Ms + paddingMs",
++    "retry": {
++      "maxRetries": 3,
++      "baseMs": 40,
++      "budgetMs": 2400,
++      "source": "Assumed same retry envelope as payment within measured 2500ms request budget; idempotent calls only"
++    }
++  }
++}
+\ No newline at end of file
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/core/checkout.js repo/src/core/checkout.js
+--- base/src/core/checkout.js	2026-11-09 13:20:13.964901996 +0100
++++ repo/src/core/checkout.js	2026-11-09 13:30:17.729745170 +0100
+@@ -1,6 +1,16 @@
+ export async function checkout(vendor, order) {
+-  const stock = await vendor.lookup(order.sku);
+-  if (!stock.available) return { status: 'unavailable' };
+-  await vendor.charge(order);
+-  return { status: 'confirmed' };
++  try {
++    const stock = await vendor.lookup(order.sku);
++    if (!stock.available) return { status: 'unavailable' };
++    await vendor.charge(order);
++    return { status: 'confirmed' };
++  } catch (error) {
++    if (error.code === 'DEPENDENCY_UNAVAILABLE') {
++      return {
++        status: 'temporarily_unavailable',
++        message: 'Payments are temporarily unavailable. Please try again later.',
++      };
++    }
++    throw error;
++  }
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/tests/resilience.test.mjs repo/tests/resilience.test.mjs
+--- base/tests/resilience.test.mjs	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/resilience.test.mjs	2026-11-09 13:29:49.242035691 +0100
+@@ -0,0 +1,46 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import FakeTimers from '@sinonjs/fake-timers';
++import { Network } from '../src/infra/network.js';
++import { makeVendor } from '../src/adapters/vendor.js';
++import { checkout } from '../src/core/checkout.js';
++import { logs, metrics } from '../src/infra/telemetry.js';
++async function timed(fn) { const clock = FakeTimers.install({toFake:['Date','setTimeout','clearTimeout']}); try { await fn(clock); } finally { clock.uninstall(); } }
++async function settle(clock, promise, ms=3000) { let result; promise.then(value=>{result={value};},error=>{result={error};}); await clock.tickAsync(ms); assert.ok(result, 'call must settle within budget'); return result; }
++test('native timeout cancels unkeyed charge within 100ms',()=>timed(async clock=>{
++ const n=new Network([{delay:5000}]); const p=makeVendor(n).charge({});
++ const r=await settle(clock,p,101); assert.ok(r.error); assert.equal(n.requests[0].end,100); assert.equal(n.active,0);
++}));
++test('idempotent retries, cap, Retry-After and budget',()=>timed(async clock=>{
++ let n=new Network([{status:503},{status:200}]); assert.ok((await settle(clock,makeVendor(n).lookup('a'))).value); assert.equal(n.requests.length,2);
++ n=new Network(Array(6).fill({status:503})); assert.ok((await settle(clock,makeVendor(n,{dependency:'catalog'}).lookup('a'))).error); assert.equal(n.requests.length,4);
++ n=new Network([{status:429,headers:{'retry-after':'1'}},{}]); await settle(clock,makeVendor(n).charge({idempotencyKey:'k'})); assert.ok(n.requests[1].start-n.requests[0].end>=1000);
++ n=new Network([{status:503,headers:{'retry-after':'10'}}]); assert.ok((await settle(clock,makeVendor(n).lookup('a'))).error); assert.equal(n.requests.length,1);
++ n=new Network([{status:503},{}]); assert.ok((await settle(clock,makeVendor(n).charge({}))).error); assert.equal(n.requests.length,1);
++}));
++test('payment opens at four failures, isolates catalog, probes once and reports transitions',()=>timed(async clock=>{
++ logs.length=0; metrics.length=0;
++ const n=new Network([...Array(4).fill({status:503}),{delay:20},{}]); const v=makeVendor(n);
++ for(let i=0;i<3;i++) { assert.ok((await settle(clock,v.charge({}),1)).error); }
++ assert.equal(n.requests.length,3);
++ assert.ok((await settle(clock,v.charge({}),1)).error);
++ const before=n.requests.length;
++ const r=await settle(clock,checkout(v,{sku:'a'}),1);
++ assert.deepEqual(r.value,{status:'temporarily_unavailable',message:'Payments are temporarily unavailable. Please try again later.'}); assert.equal(n.requests.length,before);
++ const other=new Network(); assert.ok((await settle(clock,makeVendor(other,{dependency:'catalog'}).lookup('a'),1)).value);
++ await clock.tickAsync(201);
++ const trial=v.lookup('a'); const competing=v.lookup('b');
++ const competingResult=await settle(clock,competing,1); assert.ok(competingResult.error); assert.equal(n.requests.length,5);
++ assert.ok((await settle(clock,trial,21)).value);
++ assert.ok((await settle(clock,v.lookup('c'),1)).value);
++ assert.deepEqual(logs.map(e=>e.state),['Open','HalfOpen','Closed']); assert.deepEqual(metrics,logs); assert.ok(logs.every(e=>e.dependency==='payment'));
++}));
++test('client errors never trip and failed recovery reopens',()=>timed(async clock=>{
++ const n=new Network(Array(8).fill({status:400})); const v=makeVendor(n);
++ for(let i=0;i<8;i++) assert.ok((await settle(clock,v.lookup('a'),1)).error);
++ assert.equal(n.requests.length,8);
++ const bad=new Network(Array(10).fill({status:503})); const b=makeVendor(bad);
++ for(let i=0;i<4;i++) await settle(clock,b.charge({}),1);
++ await clock.tickAsync(201); await settle(clock,b.charge({}),1);
++ await settle(clock,b.charge({}),1); assert.equal(bad.requests.length,5);
++}));
