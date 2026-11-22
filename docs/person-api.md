@@ -2,6 +2,8 @@
 
 Person clients call the gateway's tRPC API at `/trpc`, signed in as the person's account. The gateway crews that account's person ship; its crew token stays on the server. The exported `@aeolus-fleet/gateway/api` router type describes the procedures.
 
+`people.meetings` and `people.meeting` include `personShipId` once in each answer. Compare it with a meeting's owner, moderator and mic holder ship ids to identify the person's roles.
+
 ## Person record
 
 The gateway owns the person's record of arriving contributions and what that person has seen per meeting. Contributions sent before the counting release count as seen.
@@ -9,6 +11,10 @@ The gateway owns the person's record of arriving contributions and what that per
 The database migration's start time is the shared counting boundary for every gateway instance and restart. On receipt, the gateway notes each contribution by fleet, person ship, meeting and message id before acknowledging its delivery and exposing it. Repeated receives do not count it again. The record keeps ids and seen state, never contribution payloads.
 
 `people.unseenContributions({ meetingIds })` returns `[{ meetingId, count }]`, including zero, for up to 20 meetings. It reads the person's indexed gateway record, without receiving or scanning deliveries or reading meeting history. A person with no person ship is refused. Every device reads the same durable state.
+
+`people.unseenMeetings()` returns `[{ meetingId, count }]` for at most 20 meetings with unseen contributions, newest unseen contribution first (by time-ordered message id). No meeting ids or cursor are required. An empty array means nothing is new; a nonempty array enables the Meetings dot and supplies Home's meetings with something new, including ended meetings and meetings beyond the first page of `people.meetings`. It is a bounded summary, not a complete list when more than 20 meetings have something new. Reading it marks nothing seen.
+
+The read uses one grouped query over the gateway's contribution record, with the fleet, person ship and unseen state selected through the existing index, and orders and limits the groups in Postgres. It neither scans meeting pages nor calls core per meeting, and adds no reach. A person with no person ship is refused. After a meeting page is shown, `requests.changes` tells clients to refresh this read as well as their per-meeting counts.
 
 `people.meeting({ meetingId, cursor? })` returns the requested page and marks only the other participants' contributions on that page seen. It records sightings even before the corresponding delivery arrives; later arrival never makes a seen contribution unseen. A refused meeting read marks nothing. Reading one page leaves the other pages unseen. Clients fetch this call when showing the page, since reading marks that page seen. Record changes notify the person's clients through `requests.changes`; replay and repeated sightings do not notify again.
 

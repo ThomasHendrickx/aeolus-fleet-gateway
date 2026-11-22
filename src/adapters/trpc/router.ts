@@ -1,3 +1,4 @@
+import type { ReadUnseenMeetings } from '../../core/meetings/read-unseen-meetings.js';
 import type { ReadUnseenContributions } from '../../core/meetings/read-unseen-contributions.js';
 /**
  * The gateway's API: one tRPC router, which the console's server and the
@@ -240,6 +241,7 @@ export interface Context {
     sendMessage: SendMessage;
     controlMeetings: ControlMeetings;
     readMeeting: ReadMeeting;
+    readUnseenMeetings: ReadUnseenMeetings;
     readUnseenContributions: ReadUnseenContributions;
     changeOwnMic: ChangeOwnMic;
   };
@@ -1509,7 +1511,7 @@ export const gatewayRouter = t.router({
     /** The person's own meetings, open first, one bounded page from core. */
     meetings: personProcedure
       .input(z.strictObject({ cursor: meetingsCursorSchema.optional() }).optional())
-      .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.list({ caller: ctx.caller, page: { ...(input?.cursor === undefined ? {} : { cursor: input.cursor }), limit: MEETINGS_PER_PAGE } }))),
+      .query(async ({ ctx, input }) => ({ ...personAnswerOf(await ctx.person.controlMeetings.list({ caller: ctx.caller, page: { ...(input?.cursor === undefined ? {} : { cursor: input.cursor }), limit: MEETINGS_PER_PAGE } })), personShipId: personShipOf(ctx.caller).shipId })),
     leaveMeeting: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting') }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'leaveMeeting', input } }))),
@@ -1543,6 +1545,8 @@ export const gatewayRouter = t.router({
     endMeeting: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting') }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'endMeeting', input } }))),
+    /** Twenty meetings with unseen contributions, newest first, from the person's record. */
+    unseenMeetings: personProcedure.query(async ({ ctx }) => personAnswerOf(await ctx.person.readUnseenMeetings(ctx.caller))),
     /** Counts only for a page of the person's meetings, from the gateway's indexed person record. */
     unseenContributions: personProcedure
       .input(z.strictObject({ meetingIds: z.array(idSchema('meeting')).max(MEETING_COUNTS_MAX) }))
@@ -1550,7 +1554,7 @@ export const gatewayRouter = t.router({
     /** A meeting they take part in, with a page of its contributions, newest first, and where they stand on its mic (decision 0061). */
     meeting: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting'), cursor: idSchema('message').optional() }))
-      .query(async ({ ctx, input: { meetingId, cursor } }) => meetingViewOf(personAnswerOf(await ctx.person.readMeeting({ caller: ctx.caller, meetingId, ...(cursor === undefined ? {} : { cursor }) })))),
+      .query(async ({ ctx, input: { meetingId, cursor } }) => ({ ...meetingViewOf(personAnswerOf(await ctx.person.readMeeting({ caller: ctx.caller, meetingId, ...(cursor === undefined ? {} : { cursor }) }))), personShipId: personShipOf(ctx.caller).shipId })),
     /** Contributes to a meeting, once under the page's key; the fleet takes it while they hold the mic or moderate. */
     contribute: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting'), payload: payloadSchema.min(1), idempotencyKey: z.string().min(1) }))

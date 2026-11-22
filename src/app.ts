@@ -252,6 +252,7 @@ import type { PersonCrews, WakeChannel } from './core/people/ports.js';
 import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
 import { createPrismaMeetingContributions } from './adapters/prisma/meeting-contributions.js';
 import { createRecordingMeetingDoor } from './core/meetings/recording-meeting-door.js';
+import { createReadUnseenMeetings } from './core/meetings/read-unseen-meetings.js';
 import { createReadUnseenContributions } from './core/meetings/read-unseen-contributions.js';
 import { createReadMeeting } from './core/meetings/read-meeting.js';
 import { createReadWaitingAmong } from './core/people/read-waiting-among.js';
@@ -969,6 +970,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       readSendTo: createReadSendTo(asCrew),
       sendMessage: createSendMessage({ ...asCrew, keys: { newIdempotencyKey: randomUUID } }),
       controlMeetings: createControlMeetings({ ...asCrew, door: door.meetingControls }),
+      readUnseenMeetings: createReadUnseenMeetings({ ...asCrew, contributions: meetingContributions }),
       readUnseenContributions: createReadUnseenContributions({ ...asCrew, contributions: meetingContributions }),
       readMeeting: createReadMeeting({ ...asCrew, door: door.meetings, contributions: meetingContributions, changes: inboxChanges }),
       changeOwnMic: createChangeOwnMic({ ...asCrew, door: door.meetings }),

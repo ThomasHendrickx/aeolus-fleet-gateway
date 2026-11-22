@@ -7,6 +7,7 @@ const MARKETING = { shipId: 'shp_01m5qa5j85mgd4z61d9c2kmkt0', name: 'head-of-mar
 
 function aMeeting(overrides: Partial<MeetingView> = {}): MeetingView {
   return {
+    personShipId: CHIEF.shipId,
     meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',
     title: 'Weekly heads',
     owner: CHIEF,
