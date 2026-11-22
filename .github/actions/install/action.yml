@@ -1,0 +1,30 @@
+# Restores node_modules from the Actions cache, keyed on the runner OS, the Node
+# version and the hash of package-lock.json, and skips `npm ci` on a hit. On a
+# miss it runs `npm ci` and saves node_modules. The Prisma client is generated
+# into src/adapters/prisma/generated, outside node_modules, so it is generated
+# on a hit too (on a miss `npm ci` generates it in its postinstall). Needs the
+# repository checked out and Node set up.
+name: Install
+description: Restores node_modules from the Actions cache, running npm ci on a miss.
+runs:
+  using: composite
+  steps:
+    - id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('package-lock.json') }}
+    - name: Install with npm ci
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci
+    - name: Generate the Prisma client
+      if: steps.restore.outputs.cache-hit == 'true'
+      shell: bash
+      run: npm run generate
+    - name: Save node_modules
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: node_modules
+        key: ${{ steps.restore.outputs.cache-primary-key }}
