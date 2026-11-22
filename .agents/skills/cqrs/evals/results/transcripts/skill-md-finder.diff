@@ -1,0 +1,94 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 09:25:36.002949193 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [1], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/queries/my_orders.py repo/src/queries/my_orders.py
+--- base/src/queries/my_orders.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/queries/my_orders.py	2026-11-07 09:25:36.003949182 +0100
+@@ -0,0 +1,33 @@
++from dataclasses import dataclass
++from datetime import date
++
++from src.db import connect
++
++PAGE_SIZE = 10
++
++
++@dataclass(frozen=True)
++class MyOrderRow:
++    number: str
++    placed_on: date
++    status: str
++    total_cents: int
++
++
++@dataclass(frozen=True)
++class MyOrdersPage:
++    rows: list
++    has_more: bool
++
++
++def my_orders(customer_id: str, page: int = 1) -> MyOrdersPage:
++    """A customer's orders, newest first, PAGE_SIZE per page (pages start at 1)."""
++    page = max(page, 1)
++    with connect() as conn:
++        found = conn.execute(
++            "SELECT o.number, o.placed_on, o.status, COALESCE(SUM(l.quantity * l.unit_price_cents), 0)"
++            " FROM orders o LEFT JOIN order_lines l ON l.order_id = o.id"
++            " WHERE o.customer_id = %s GROUP BY o.id"
++            " ORDER BY o.placed_on DESC, o.number DESC LIMIT %s OFFSET %s",
++            (customer_id, PAGE_SIZE + 1, (page - 1) * PAGE_SIZE)).fetchall()
++    return MyOrdersPage([MyOrderRow(*r) for r in found[:PAGE_SIZE]], len(found) > PAGE_SIZE)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/web/customer_pages.py repo/src/web/customer_pages.py
+--- base/src/web/customer_pages.py	2026-11-07 09:24:39.295523013 +0100
++++ repo/src/web/customer_pages.py	2026-11-07 09:25:36.003949182 +0100
+@@ -1,9 +1,9 @@
+-from src.adapters.pg_unit_of_work import PgUnitOfWork
++from src.queries.my_orders import my_orders
+ 
+ 
+-def my_orders_page(customer_id):
+-    """Customer's 'My orders' page: their 10 most recent orders."""
+-    with PgUnitOfWork() as uow:
+-        orders = uow.orders.find_recent_for_customer(customer_id, 10)
+-    return {"rows": [{"number": o.number, "placed_on": o.placed_on.isoformat(), "status": o.status, "total_cents": o.total_cents}
+-                     for o in orders]}
++def my_orders_page(customer_id, page=1):
++    """Customer's 'My orders' page: 10 orders per page, newest first; has_more drives the 'show more' link."""
++    result = my_orders(customer_id, page)
++    return {"rows": [{"number": r.number, "placed_on": r.placed_on.isoformat(), "status": r.status, "total_cents": r.total_cents}
++                     for r in result.rows],
++            "has_more": result.has_more, "next_page": page + 1 if result.has_more else None}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_pages.py repo/tests/test_pages.py
+--- base/tests/test_pages.py	2026-11-07 09:24:39.296523003 +0100
++++ repo/tests/test_pages.py	2026-11-07 09:25:36.019949021 +0100
+@@ -17,6 +17,28 @@
+         self.assertEqual(len(rows), 10)
+         self.assertEqual(rows[0], {"number": "N-o12", "placed_on": "2026-03-12", "status": "placed", "total_cents": 1200})
+ 
++    def test_my_orders_next_page(self):
++        first = my_orders_page("ann")
++        self.assertTrue(first["has_more"])
++        self.assertEqual(first["next_page"], 2)
++        second = my_orders_page("ann", 2)
++        self.assertEqual([r["number"] for r in second["rows"]], ["N-o02", "N-o01"])
++        self.assertEqual(second["rows"][1]["total_cents"], 100)
++        self.assertFalse(second["has_more"])
++        self.assertIsNone(second["next_page"])
++
++    def test_my_orders_exactly_ten_has_no_more(self):
++        self.customer("bob")
++        for day in range(1, 11):
++            self.order(f"b{day:02}", "bob", placed_on=date(2026, 3, day))
++        self.assertFalse(my_orders_page("bob")["has_more"])
++
++    def test_my_orders_empty_and_total_sums_lines(self):
++        self.customer("cy")
++        self.assertEqual(my_orders_page("cy"), {"rows": [], "has_more": False, "next_page": None})
++        self.order("c1", "cy", lines=(("A", 2, 150), ("B", 1, 70)))
++        self.assertEqual(my_orders_page("cy")["rows"][0]["total_cents"], 370)
++
+     def test_customer_panel_last_five(self):
+         panel = customer_panel("ann")
+         self.assertEqual([o["number"] for o in panel["recent"]], ["N-o12", "N-o11", "N-o10", "N-o09", "N-o08"])

@@ -1,0 +1,13 @@
+test_esm_renamed_import_options_and_string_trap (test_scan_remote_calls.JavaScriptScan.test_esm_renamed_import_options_and_string_trap) ... ok
+test_check_runner_reports_real_failure_and_success (test_scan_remote_calls.PythonScan.test_check_runner_reports_real_failure_and_success) ... ok
+test_comments_and_strings_do_not_import_or_call (test_scan_remote_calls.PythonScan.test_comments_and_strings_do_not_import_or_call) ... ok
+test_module_alias_and_multiline_timeout (test_scan_remote_calls.PythonScan.test_module_alias_and_multiline_timeout) ... ok
+test_nondefault_timeout_option (test_scan_remote_calls.PythonScan.test_nondefault_timeout_option) ... ok
+test_s02_adapter_aliased_function_missing_timeout (test_scan_remote_calls.PythonScan.test_s02_adapter_aliased_function_missing_timeout) ... ok
+test_s03_domain_library_import_aliased (test_scan_remote_calls.PythonScan.test_s03_domain_library_import_aliased) ... ok
+test_uncertainty_never_clean (test_scan_remote_calls.PythonScan.test_uncertainty_never_clean) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.233s
+
+OK

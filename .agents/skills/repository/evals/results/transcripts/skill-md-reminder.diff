@@ -1,0 +1,147 @@
+diff -ruN -x __pycache__ -x '*.pyc' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-06 17:27:28.007421760 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [3], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/memory_orders.py repo/src/adapters/memory_orders.py
+--- base/src/adapters/memory_orders.py	2026-11-06 17:25:52.669387398 +0100
++++ repo/src/adapters/memory_orders.py	2026-11-06 17:27:28.024421588 +0100
+@@ -19,3 +19,8 @@
+     def list_for_customer(self, customer_id):
+         mine = [o for o in self._orders.values() if o.customer_id == customer_id]
+         return sorted(mine, key=lambda o: (o.due, o.number))
++
++    def find_overdue(self, today, page):
++        hits = [o for o in self._orders.values() if o.status == "placed" and o.due < today]
++        hits.sort(key=lambda o: (o.due, o.number))
++        return [copy.deepcopy(o) for o in hits[page.offset:page.offset + page.limit]]
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/sqlite_orders.py repo/src/adapters/sqlite_orders.py
+--- base/src/adapters/sqlite_orders.py	2026-11-06 17:25:52.669387398 +0100
++++ repo/src/adapters/sqlite_orders.py	2026-11-06 17:27:28.024421588 +0100
+@@ -40,3 +40,10 @@
+     def list_for_customer(self, customer_id):
+         rows = self.conn.execute("SELECT id FROM orders WHERE customer_id = ? ORDER BY due, number", (customer_id,)).fetchall()
+         return [self.get(row[0]) for row in rows]
++
++    def find_overdue(self, today, page):
++        rows = self.conn.execute(
++            "SELECT id FROM orders WHERE status = 'placed' AND due < ? ORDER BY due, number LIMIT ? OFFSET ?",
++            (today.isoformat(), page.limit, page.offset),
++        ).fetchall()
++        return [self.get(row[0]) for row in rows]
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/ports/orders.py repo/src/core/ports/orders.py
+--- base/src/core/ports/orders.py	2026-11-06 17:25:52.669387398 +0100
++++ repo/src/core/ports/orders.py	2026-11-06 17:27:28.024421588 +0100
+@@ -1,11 +1,24 @@
++from dataclasses import dataclass
+ from typing import Protocol
+ 
++from datetime import date
++
+ from src.core.orders import Order
+ 
+ 
++@dataclass(frozen=True)
++class PageRequest:
++    limit: int
++    offset: int = 0
++
++
+ class Orders(Protocol):
+     def get(self, order_id: str) -> Order | None: ...
+ 
+     def save(self, order: Order) -> None: ...
+ 
+     def list_for_customer(self, customer_id: str) -> list[Order]: ...
++
++    def find_overdue(self, today: date, page: PageRequest) -> list[Order]:
++        """Placed (unpaid) orders with due before today, ordered by (due, number)."""
++        ...
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/reminders.py repo/src/core/reminders.py
+--- base/src/core/reminders.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/core/reminders.py	2026-11-06 17:27:28.029421537 +0100
+@@ -0,0 +1,17 @@
++from src.core.ports.orders import PageRequest
++
++PAGE_SIZE = 100
++
++
++def send_reminders(orders, notifier, today):
++    by_customer = {}
++    offset = 0
++    while True:
++        page = orders.find_overdue(today, PageRequest(PAGE_SIZE, offset))
++        for order in page:
++            by_customer.setdefault(order.customer_id, []).append(order.number)
++        if len(page) < PAGE_SIZE:
++            break
++        offset += PAGE_SIZE
++    for customer_id, numbers in by_customer.items():
++        notifier.send(customer_id, "Overdue orders", "\n".join(numbers))
+diff -ruN -x __pycache__ -x '*.pyc' base/tests/test_orders_contract.py repo/tests/test_orders_contract.py
+--- base/tests/test_orders_contract.py	2026-11-06 17:25:52.669387398 +0100
++++ repo/tests/test_orders_contract.py	2026-11-06 17:27:28.024421588 +0100
+@@ -7,6 +7,7 @@
+ from src.adapters.sqlite_orders import SqliteOrders
+ from src.core.errors import DuplicateOrderNumber
+ from src.core.orders import Line, Order
++from src.core.ports.orders import PageRequest
+ 
+ 
+ def make(order_id, number, customer, due, status="placed", lines=()):
+@@ -40,6 +41,28 @@
+         self.repo.save(make("o3", "N-3", "c2", date(2026, 1, 1)))
+         self.assertEqual(["N-1", "N-2"], [o.number for o in self.repo.list_for_customer("c1")])
+ 
++    def _seed_overdue(self):
++        self.repo.save(make("o1", "N-3", "c1", date(2026, 1, 5)))
++        self.repo.save(make("o2", "N-1", "c1", date(2026, 1, 5)))
++        self.repo.save(make("o3", "N-2", "c2", date(2026, 1, 1)))
++        self.repo.save(make("o4", "N-4", "c3", date(2026, 1, 1), status="paid"))
++        self.repo.save(make("o5", "N-5", "c3", date(2026, 1, 10)))  # due today
++        self.repo.save(make("o6", "N-6", "c3", date(2026, 1, 11)))  # not yet due
++        self.repo.save(make("o7", "N-7", "c4", date(2026, 1, 1), status="draft"))
++
++    def test_find_overdue_only_placed_before_today_ordered(self):
++        self._seed_overdue()
++        got = self.repo.find_overdue(date(2026, 1, 10), PageRequest(limit=10))
++        self.assertEqual(["N-2", "N-1", "N-3"], [o.number for o in got])
++
++    def test_find_overdue_pages(self):
++        self._seed_overdue()
++        today = date(2026, 1, 10)
++        first = self.repo.find_overdue(today, PageRequest(limit=2))
++        second = self.repo.find_overdue(today, PageRequest(limit=2, offset=2))
++        self.assertEqual(["N-2", "N-1"], [o.number for o in first])
++        self.assertEqual(["N-3"], [o.number for o in second])
++
+ 
+ class InMemoryOrdersContract(OrdersContract, unittest.TestCase):
+     def setUp(self):
+diff -ruN -x __pycache__ -x '*.pyc' base/tests/test_reminders.py repo/tests/test_reminders.py
+--- base/tests/test_reminders.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/test_reminders.py	2026-11-06 17:27:28.030421527 +0100
+@@ -0,0 +1,23 @@
++import unittest
++from datetime import date
++
++from src.adapters.memory_orders import InMemoryOrders
++from src.adapters.recording_notifier import RecordingNotifier
++from src.core.orders import Order
++from src.core.reminders import send_reminders
++
++
++class SendRemindersTest(unittest.TestCase):
++    def test_one_mail_per_customer_listing_overdue_unpaid(self):
++        repo, notifier = InMemoryOrders(), RecordingNotifier()
++        d = date(2026, 1, 1)
++        repo.save(Order("1", "N-1", "c1", d))
++        repo.save(Order("2", "N-2", "c1", d))
++        repo.save(Order("3", "N-3", "c2", d, "paid"))
++        repo.save(Order("4", "N-4", "c3", date(2026, 2, 1)))
++        send_reminders(repo, notifier, date(2026, 1, 10))
++        self.assertEqual([("c1", "Overdue orders", "N-1\nN-2")], notifier.sent)
++
++
++if __name__ == "__main__":
++    unittest.main()

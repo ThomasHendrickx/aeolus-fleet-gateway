@@ -41,5 +41,5 @@ Responsive layout (a must: a page that breaks, cuts off or wastes the screen at 
 - Tests: each page has a story or visual check at 375, 1440 and 1920.
 
 Quality:
-- Keyboard reachable, accessible names, status never by colour alone. `data-testid="{area}-{element}"` on elements tests touch.
+- Keyboard reachable, accessible names, status never by colour alone. `data-testid="{area}-{element}"` on elements tests touch; a part with async work also shows its state as `data-state` (idle, pending, success, failure).
 - Storybook: a story per meaningful state of each `ui/` part.

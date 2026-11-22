@@ -1,0 +1,14 @@
+{
+ "S1.3": {
+  "verdict": "PASS",
+  "why": "src/sales/core/events.py adds InvoicePaid (past-tense fact, raised in invoices.py pay()), and docs/event-list.md lists InvoicePaid with its fields."
+ },
+ "S2.2": {
+  "verdict": "PASS",
+  "why": "In invoice_paid.py the contract FIELDS are event_id, invoice_id, order_id, paid_on and invoice_version. TASK.md says Shipping needs the order and the payment date, which are order_id and paid_on. The remaining fields are the ids and the version every event carries, so the payload has no extra state."
+ },
+ "S4.2": {
+  "verdict": "PASS",
+  "why": "src/sales/core/commands/pay_invoice.py now calls uow.accounts.get, record_payment and save explicitly, and credit_customer_account is removed from HANDLERS in src/sales/core/handlers.py (only the receipt remains)."
+ }
+}

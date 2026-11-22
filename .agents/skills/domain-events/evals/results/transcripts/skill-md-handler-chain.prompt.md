@@ -1,0 +1,6 @@
+You work in the repository at /tmp/f4849/de-work/skill-md/handler-chain/repo. Apply the skill in /tmp/f4849/de-work/skill-md/handler-chain/skill (read its SKILL.md first and follow its procedures) to the task in /tmp/f4849/de-work/skill-md/handler-chain/repo/TASK.md. The repo companion is /tmp/f4849/de-work/skill-md/handler-chain/repo/COMPANION.md; run commands from /tmp/f4849/de-work/skill-md/handler-chain/repo. The Postgres database for this repo is already running; its URL is in /tmp/f4849/de-work/skill-md/handler-chain/repo/database.url.
+
+Run P0, then P4. Before anything else, run P0 and write its result to /tmp/f4849/de-work/skill-md/handler-chain/repo/RESULT.json as {"violations": [...], "problems": [numbers], "applies": bool}.
+If the skill has script steps, run them (scripts are under the skill folder; read a script's header for usage). Do the steps yourself; do not look outside /tmp/f4849/de-work/skill-md/handler-chain/repo and /tmp/f4849/de-work/skill-md/handler-chain/skill.
+If P0 says applies is false, stop after P0.
+Finish with a short report (the steps you ran, what you changed, anything you could not do) and also write it to /tmp/f4849/de-work/skill-md/handler-chain/AGENT_REPORT.md.

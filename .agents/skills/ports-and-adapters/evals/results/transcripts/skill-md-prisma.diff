@@ -1,0 +1,118 @@
+diff -ruN -x __pycache__ -x '*.pyc' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-06 11:56:32.099114496 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [2, 4], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/memory.py repo/src/adapters/memory.py
+--- base/src/adapters/memory.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/adapters/memory.py	2026-11-06 11:56:32.103114455 +0100
+@@ -0,0 +1,15 @@
++from src.core.orders import Order
++
++
++class InMemoryOrders:
++    def __init__(self, orders=()):
++        self._orders = {o.id: o for o in orders}
++
++    def add(self, order: Order):
++        self._orders[order.id] = order
++
++    def order_by_id(self, order_id: int) -> Order:
++        try:
++            return self._orders[order_id]
++        except KeyError:
++            raise LookupError(order_id) from None
+diff -ruN -x __pycache__ -x '*.pyc' base/src/adapters/prisma_orders.py repo/src/adapters/prisma_orders.py
+--- base/src/adapters/prisma_orders.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/adapters/prisma_orders.py	2026-11-06 11:56:32.104114445 +0100
+@@ -0,0 +1,17 @@
++from decimal import Decimal
++
++from prismalike import Client
++from src.core.orders import Order, OrderStatus
++
++_STATUS = {0: OrderStatus.NEW, 1: OrderStatus.PAID, 2: OrderStatus.SHIPPED}
++
++
++class PrismaOrders:
++    def __init__(self, client: Client):
++        self._client = client
++
++    def order_by_id(self, order_id: int) -> Order:
++        model = self._client.order_find_unique({"id": order_id})
++        if model is None:
++            raise LookupError(order_id)
++        return Order(model.id, Decimal(model.totalCents) / 100, _STATUS[model.statusCode])
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/orders.py repo/src/core/orders.py
+--- base/src/core/orders.py	2026-11-06 11:54:51.884124164 +0100
++++ repo/src/core/orders.py	2026-11-06 11:56:32.102114466 +0100
+@@ -14,3 +14,8 @@
+     id: int
+     total: Decimal
+     status: OrderStatus
++
++
++def order_summary(orders, order_id: int) -> Order:
++    """Use case: summarise an order. `orders` is an OrderSummarySource."""
++    return orders.order_by_id(order_id)
+diff -ruN -x __pycache__ -x '*.pyc' base/src/core/ports/__init__.py repo/src/core/ports/__init__.py
+--- base/src/core/ports/__init__.py	2026-11-06 11:54:51.881124194 +0100
++++ repo/src/core/ports/__init__.py	2026-11-06 11:56:32.100114486 +0100
+@@ -0,0 +1,8 @@
++from typing import Protocol
++
++from src.core.orders import Order
++
++
++class OrderSummarySource(Protocol):
++    def order_by_id(self, order_id: int) -> Order:
++        """Return the order, or raise LookupError if unknown."""
+diff -ruN -x __pycache__ -x '*.pyc' base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-06 11:54:51.885124154 +0100
++++ repo/src/main.py	2026-11-06 11:56:32.105114435 +0100
+@@ -1 +1,9 @@
+-"""Composition root. Nothing is wired yet."""
++"""Composition root."""
++from prismalike import Client
++from src.adapters.prisma_orders import PrismaOrders
++from src.core.orders import order_summary
++
++
++def build_order_summary(url: str):
++    orders = PrismaOrders(Client(url))
++    return lambda order_id: order_summary(orders, order_id)
+diff -ruN -x __pycache__ -x '*.pyc' base/tests/test_order_summary.py repo/tests/test_order_summary.py
+--- base/tests/test_order_summary.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/test_order_summary.py	2026-11-06 11:56:32.106114425 +0100
+@@ -0,0 +1,31 @@
++import unittest
++from decimal import Decimal
++
++from src.adapters.memory import InMemoryOrders
++from src.adapters.prisma_orders import PrismaOrders
++from src.core.orders import Order, OrderStatus, order_summary
++from prismalike import OrderModel
++
++
++class SummaryTest(unittest.TestCase):
++    def test_stored_order(self):
++        fake = InMemoryOrders([Order(1, Decimal("19.99"), OrderStatus.PAID)])
++        o = order_summary(fake, 1)
++        self.assertEqual((o.total, o.status), (Decimal("19.99"), OrderStatus.PAID))
++
++    def test_unknown(self):
++        with self.assertRaises(LookupError):
++            order_summary(InMemoryOrders(), 9)
++
++
++class FakeClient:
++    def order_find_unique(self, where):
++        return OrderModel(1, 1999, 1) if where["id"] == 1 else None
++
++
++class AdapterTest(unittest.TestCase):
++    def test_mapping(self):
++        o = PrismaOrders(FakeClient()).order_by_id(1)
++        self.assertEqual((o.total, o.status), (Decimal("19.99"), OrderStatus.PAID))
++        with self.assertRaises(LookupError):
++            PrismaOrders(FakeClient()).order_by_id(2)

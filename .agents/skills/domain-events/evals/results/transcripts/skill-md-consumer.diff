@@ -1,0 +1,300 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/CONSUMER.json repo/CONSUMER.json
+--- base/CONSUMER.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/CONSUMER.json	2026-11-07 18:03:06.183635740 +0100
+@@ -0,0 +1 @@
++{"deliver": "python3 -m src.shipping.consumers.worker --ignore-backoff", "dead_letter": "SELECT id, consumer, topic, message_id, body, attempts, last_error, dead_at FROM dead_letters ORDER BY id"}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 18:02:52.566773966 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [4], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/schema.sql repo/schema.sql
+--- base/schema.sql	2026-11-07 18:01:06.357852152 +0100
++++ repo/schema.sql	2026-11-07 18:02:52.578773845 +0100
+@@ -57,3 +57,40 @@
+     last_id bigint NOT NULL,
+     PRIMARY KEY (consumer, topic)
+ );
++
++-- Shipping's invoice-event consumer: what it has processed, and the newest invoice version it has seen.
++CREATE TABLE processed_events (
++    consumer text NOT NULL,
++    event_id text NOT NULL,
++    PRIMARY KEY (consumer, event_id)
++);
++
++CREATE TABLE seen_invoice_versions (
++    consumer text NOT NULL,
++    invoice_id text NOT NULL,
++    version integer NOT NULL,
++    PRIMARY KEY (consumer, invoice_id)
++);
++
++-- Messages whose handler failed and will be tried again.
++CREATE TABLE consumer_retries (
++    consumer text NOT NULL,
++    message_id bigint NOT NULL,
++    body jsonb NOT NULL,
++    attempts integer NOT NULL,
++    last_error text NOT NULL,
++    next_attempt_at timestamptz NOT NULL,
++    PRIMARY KEY (consumer, message_id)
++);
++
++-- Messages that failed every attempt and will not be delivered again.
++CREATE TABLE dead_letters (
++    id bigserial PRIMARY KEY,
++    consumer text NOT NULL,
++    topic text NOT NULL,
++    message_id bigint NOT NULL,
++    body jsonb NOT NULL,
++    attempts integer NOT NULL,
++    last_error text NOT NULL,
++    dead_at timestamptz NOT NULL DEFAULT now()
++);
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/main.py	2026-11-07 18:02:52.600773621 +0100
+@@ -30,3 +30,7 @@
+ 
+ def cancel_fulfilment(order_id):
+     return shipping.cancel_fulfilment(PgShippingUnitOfWork(), order_id)
++
++
++def handle_invoice_event(consumer, event):
++    return shipping.handle_invoice_event(PgShippingUnitOfWork(), consumer, event)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/adapters/pg.py repo/src/shipping/adapters/pg.py
+--- base/src/shipping/adapters/pg.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/shipping/adapters/pg.py	2026-11-07 18:02:52.596773662 +0100
+@@ -19,6 +19,31 @@
+         self.conn.execute("UPDATE fulfilments SET status = %s WHERE id = %s", (fulfilment.status, fulfilment.id))
+ 
+ 
++class PgProcessedEvents:
++    def __init__(self, conn):
++        self.conn = conn
++
++    def add(self, consumer, event_id) -> bool:
++        """Record the event id; False if it was already recorded."""
++        return self.conn.execute("INSERT INTO processed_events (consumer, event_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
++                                 (consumer, event_id)).rowcount == 1
++
++
++class PgInvoiceVersions:
++    def __init__(self, conn):
++        self.conn = conn
++
++    def get(self, consumer, invoice_id):
++        row = self.conn.execute("SELECT version FROM seen_invoice_versions WHERE consumer = %s AND invoice_id = %s FOR UPDATE",
++                                (consumer, invoice_id)).fetchone()
++        return row[0] if row else None
++
++    def set(self, consumer, invoice_id, version):
++        self.conn.execute("INSERT INTO seen_invoice_versions (consumer, invoice_id, version) VALUES (%s, %s, %s)"
++                          " ON CONFLICT (consumer, invoice_id) DO UPDATE SET version = EXCLUDED.version",
++                          (consumer, invoice_id, version))
++
++
+ class PgShippingUnitOfWork:
+     """Shipping's own transaction per use case."""
+ 
+@@ -27,6 +52,8 @@
+         self.tx = self.conn.transaction()
+         self.tx.__enter__()
+         self.fulfilments = PgFulfilmentRepository(self.conn)
++        self.processed_events = PgProcessedEvents(self.conn)
++        self.invoice_versions = PgInvoiceVersions(self.conn)
+         return self
+ 
+     def __exit__(self, *exc):
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/consumers/invoice_events.py repo/src/shipping/consumers/invoice_events.py
+--- base/src/shipping/consumers/invoice_events.py	2026-11-07 18:01:06.357852152 +0100
++++ repo/src/shipping/consumers/invoice_events.py	2026-11-07 18:02:52.601773611 +0100
+@@ -1,13 +1,8 @@
+-"""Shipping's handler for Sales' invoice events: a payment requests fulfilment, a refund cancels it."""
+-from datetime import date
+-from uuid import uuid4
++"""Shipping's handler for Sales' invoice events: a payment requests fulfilment, a refund cancels it.
+ 
++Idempotent and version-aware: the event id and the invoice version are recorded in the effect's transaction."""
+ from src import main
+-from src.contracts import sales_invoice_events as contract
+ 
+ 
+-def handle(body: dict) -> None:
+-    if body["type"] == contract.INVOICE_PAID:
+-        main.request_fulfilment(f"f-{uuid4().hex[:12]}", body["order_id"], date.fromisoformat(body["occurred_on"]))
+-    elif body["type"] == contract.INVOICE_REFUNDED:
+-        main.cancel_fulfilment(body["order_id"])
++def handle(body: dict, consumer: str = "shipping") -> bool:
++    return main.handle_invoice_event(consumer, body)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/consumers/worker.py repo/src/shipping/consumers/worker.py
+--- base/src/shipping/consumers/worker.py	2026-11-07 18:01:06.358852142 +0100
++++ repo/src/shipping/consumers/worker.py	2026-11-07 18:02:52.601773611 +0100
+@@ -1,5 +1,10 @@
+-"""Delivery loop: `python3 -m src.shipping.consumers.worker` hands every new message on the topic to the handler once."""
++"""Delivery loop: `python3 -m src.shipping.consumers.worker [--ignore-backoff]` runs one delivery pass.
++
++A pass first retries failed messages that are due, then hands every new message on the topic to the handler.
++A message that fails is retried with growing waits; after MAX_ATTEMPTS it moves to dead_letters and an alert is logged.
++`--ignore-backoff` treats every waiting retry as due."""
+ import logging
++import sys
+ 
+ from src.contracts import sales_invoice_events as contract
+ from src.db import connect
+@@ -8,19 +13,57 @@
+ 
+ log = logging.getLogger(__name__)
+ CONSUMER = "shipping"
++MAX_ATTEMPTS = 5
++BACKOFF_SECONDS = 30
+ 
+ 
+-def run_once() -> int:
+-    """Deliver every message after this consumer's offset; return how many were handled."""
++def _fail(message_id, body, attempts, error):
++    """Record a failed attempt: schedule a retry, or dead-letter and alert after MAX_ATTEMPTS."""
++    with connect() as conn:
++        if attempts >= MAX_ATTEMPTS:
++            conn.execute("INSERT INTO dead_letters (consumer, topic, message_id, body, attempts, last_error)"
++                         " VALUES (%s, %s, %s, %s::jsonb, %s, %s)",
++                         (CONSUMER, contract.TOPIC, message_id, _json(body), attempts, error))
++            conn.execute("DELETE FROM consumer_retries WHERE consumer = %s AND message_id = %s", (CONSUMER, message_id))
++            log.critical("ALERT: message %s on %s dead-lettered after %s attempts: %s", message_id, contract.TOPIC, attempts, error)
++        else:
++            conn.execute("INSERT INTO consumer_retries (consumer, message_id, body, attempts, last_error, next_attempt_at)"
++                         " VALUES (%s, %s, %s::jsonb, %s, %s, now() + make_interval(secs => %s))"
++                         " ON CONFLICT (consumer, message_id) DO UPDATE SET attempts = EXCLUDED.attempts,"
++                         " last_error = EXCLUDED.last_error, next_attempt_at = EXCLUDED.next_attempt_at",
++                         (CONSUMER, message_id, _json(body), attempts, error, BACKOFF_SECONDS * 2 ** (attempts - 1)))
++
++
++def _json(body):
++    import json
++    return json.dumps(body)
++
++
++def _attempt(message_id, body, attempts_so_far):
++    try:
++        invoice_events.handle(body, CONSUMER)
++    except Exception as exc:
++        log.exception("handler failed on message %s", message_id)
++        _fail(message_id, body, attempts_so_far + 1, f"{type(exc).__name__}: {exc}")
++        return False
++    if attempts_so_far:
++        with connect() as conn:
++            conn.execute("DELETE FROM consumer_retries WHERE consumer = %s AND message_id = %s", (CONSUMER, message_id))
++    return True
++
++
++def run_once(ignore_backoff: bool = False) -> int:
++    """One delivery pass; return how many messages were handled successfully."""
++    handled = 0
+     with connect(autocommit=True) as conn:
++        due = conn.execute("SELECT message_id, body, attempts FROM consumer_retries WHERE consumer = %s"
++                           " AND (%s OR next_attempt_at <= now()) ORDER BY message_id", (CONSUMER, ignore_backoff)).fetchall()
+         row = conn.execute("SELECT last_id FROM bus_offsets WHERE consumer = %s AND topic = %s", (CONSUMER, contract.TOPIC)).fetchone()
+-    offset, handled = (row[0] if row else 0), 0
++    for message_id, body, attempts in due:
++        handled += _attempt(message_id, body, attempts)
++    offset = row[0] if row else 0
+     for message_id, body in bus.fetch(contract.TOPIC, offset):
+-        try:
+-            invoice_events.handle(body)
+-            handled += 1
+-        except Exception:
+-            log.exception("handler failed on message %s", message_id)
++        handled += _attempt(message_id, body, 0)
+         offset = message_id
+         with connect(autocommit=True) as conn:
+             conn.execute("INSERT INTO bus_offsets (consumer, topic, last_id) VALUES (%s, %s, %s)"
+@@ -29,4 +72,5 @@
+ 
+ 
+ if __name__ == "__main__":
+-    print(f"handled {run_once()}")
++    logging.basicConfig(level=logging.INFO)
++    print(f"handled {run_once(ignore_backoff='--ignore-backoff' in sys.argv)}")
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/core/commands.py repo/src/shipping/core/commands.py
+--- base/src/shipping/core/commands.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/shipping/core/commands.py	2026-11-07 18:02:58.765711040 +0100
+@@ -1,4 +1,5 @@
+ from datetime import date
++from uuid import uuid4
+ 
+ from src.shipping.core.fulfilments import Fulfilment
+ 
+@@ -14,3 +15,29 @@
+         for fulfilment in uow.fulfilments.for_order(order_id):
+             fulfilment.cancel()
+             uow.fulfilments.save(fulfilment)
++
++
++def handle_invoice_event(uow, consumer: str, event: dict) -> bool:
++    """Apply one Sales invoice event once. Returns False when it was ignored (already processed or older than seen).
++
++    The processed-event record, the seen version and the effect share the unit of work's transaction."""
++    from src.contracts import sales_invoice_events as contract
++
++    with uow:
++        if not uow.processed_events.add(consumer, event["event_id"]):
++            return False
++        invoice_id, version = event["invoice_id"], event["invoice_version"]
++        seen = uow.invoice_versions.get(consumer, invoice_id)
++        if seen is not None and version <= seen:
++            return False
++        uow.invoice_versions.set(consumer, invoice_id, version)
++        if event["type"] == contract.INVOICE_PAID:
++            if not uow.fulfilments.for_order(event["order_id"]):
++                uow.fulfilments.add(Fulfilment(f"f-{uuid4().hex[:12]}", event["order_id"], date.fromisoformat(event["occurred_on"])))
++        elif event["type"] == contract.INVOICE_REFUNDED:
++            for fulfilment in uow.fulfilments.for_order(event["order_id"]):
++                fulfilment.cancel()
++                uow.fulfilments.save(fulfilment)
++        else:
++            raise ValueError(f"unknown event type {event['type']!r}")
++        return True
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_invoice_consumer.py repo/tests/test_invoice_consumer.py
+--- base/tests/test_invoice_consumer.py	2026-11-07 18:01:06.358852142 +0100
++++ repo/tests/test_invoice_consumer.py	2026-11-07 18:02:58.766711030 +0100
+@@ -17,3 +17,39 @@
+         bus.publish("sales.invoices.v1", REFUNDED)
+         worker.run_once()
+         self.assertEqual(self.rows("SELECT order_id, status FROM fulfilments"), [("o1", "cancelled")])
++
++    def test_same_event_twice_requests_one_fulfilment(self):
++        bus.publish("sales.invoices.v1", PAID)
++        bus.publish("sales.invoices.v1", PAID)
++        worker.run_once()
++        self.assertEqual(self.rows("SELECT order_id, status FROM fulfilments"), [("o1", "requested")])
++
++    def test_refund_before_payment_leaves_no_fulfilment(self):
++        bus.publish("sales.invoices.v1", REFUNDED)
++        bus.publish("sales.invoices.v1", PAID)
++        worker.run_once()
++        self.assertEqual(self.rows("SELECT * FROM fulfilments"), [])
++
++    def test_failure_is_retried_then_dead_lettered(self):
++        from unittest import mock
++        bus.publish("sales.invoices.v1", PAID)
++        with mock.patch.object(worker.invoice_events, "handle", side_effect=RuntimeError("boom")):
++            for _ in range(worker.MAX_ATTEMPTS):
++                self.assertEqual(self.rows("SELECT * FROM dead_letters"), [])
++                worker.run_once(ignore_backoff=True)
++        self.assertEqual(self.rows("SELECT message_id, attempts FROM dead_letters"), [(1, worker.MAX_ATTEMPTS)])
++        self.assertEqual(self.rows("SELECT * FROM consumer_retries"), [])
++        worker.run_once(ignore_backoff=True)
++        self.assertEqual(len(self.rows("SELECT * FROM dead_letters")), 1)
++
++    def test_retry_succeeds_after_transient_failure(self):
++        from unittest import mock
++        bus.publish("sales.invoices.v1", PAID)
++        with mock.patch.object(worker.invoice_events, "handle", side_effect=RuntimeError("boom")):
++            worker.run_once()
++        self.assertEqual(self.rows("SELECT * FROM fulfilments"), [])
++        worker.run_once()  # backoff not elapsed
++        self.assertEqual(self.rows("SELECT * FROM fulfilments"), [])
++        worker.run_once(ignore_backoff=True)
++        self.assertEqual(self.rows("SELECT status FROM fulfilments"), [("requested",)])
++        self.assertEqual(self.rows("SELECT * FROM consumer_retries"), [])

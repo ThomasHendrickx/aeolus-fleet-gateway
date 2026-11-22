@@ -1,0 +1,30 @@
+PASS: body validates against the bundled schema
+PASS: source/ORIGINAL_SKILL.md equals SKILL.md
+PASS: step names unique
+PASS: P0 has 3 steps (found 3)
+PASS: P1 has 5 steps (found 5)
+PASS: P2 has 5 steps (found 5)
+PASS: P3 has 4 steps (found 4)
+PASS: P4 has 4 steps (found 4)
+PASS: every step is a P0..P4 node
+PASS: scripts exist
+PASS: P0 step kinds SAA (found SAA)
+PASS: P1 step kinds AAAAS (found AAAAS)
+PASS: P2 step kinds AAAAS (found AAAAS)
+PASS: P3 step kinds AAAS (found AAAS)
+PASS: P4 step kinds AAAS (found AAAS)
+PASS: SKILL.md P0 tags match (SAA)
+PASS: SKILL.md P1 tags match (AAAAS)
+PASS: SKILL.md P2 tags match (AAAAS)
+PASS: SKILL.md P3 tags match (AAAS)
+PASS: SKILL.md P4 tags match (AAAS)
+PASS: each node description cites its step and kind
+PASS: depends_on targets exist
+PASS: P0 step 1 is the only entry node
+PASS: graph is acyclic
+PASS: inputs resolve and edges are typed
+PASS: 4 problems in trigger_when
+PASS: 9 failure modes in anti_patterns
+PASS: 9 rules in scope_and_approval
+PASS: 2 not-needed-when sentences in do_not_use_when
+PASS: every cited problem and rule number exists

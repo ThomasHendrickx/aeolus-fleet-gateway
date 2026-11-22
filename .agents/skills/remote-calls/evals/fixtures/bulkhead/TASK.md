@@ -1,0 +1,1 @@
+Slow payment provider requests consume a shared application concurrency budget and catalog pages stall even though catalog responds in 10 ms. Load measurements allow two calls per provider with no queue. Isolate provider capacity with the declared page fallback. Apply P0, P1, P4.

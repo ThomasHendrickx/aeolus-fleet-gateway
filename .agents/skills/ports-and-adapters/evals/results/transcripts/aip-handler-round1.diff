@@ -1,0 +1,5 @@
+diff -ruN -x __pycache__ -x '*.pyc' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-06 11:56:30.219133437 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [], "applies": false}

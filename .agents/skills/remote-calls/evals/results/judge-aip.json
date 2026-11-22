@@ -1,0 +1,14 @@
+{
+  "S0.4": {
+    "result": "pass",
+    "evidence": "scan events show python3 scanner executed, followed by recorded P0 decision; scan/repo/RESULT.json contains problems [1,3], applies true, proceduresRun [P0]. No baseline application files changed."
+  },
+  "S0.5": {
+    "result": "pass",
+    "evidence": "outbox events show P0 scanner executed and gate decision recorded as applies false, proceduresRun [P0]. Byte comparison of every baseline file against repo found no changes and only RESULT.json added; no breaker was added."
+  },
+  "S3.5": {
+    "result": "pass",
+    "evidence": "Independent Node fake-clock probe opened payment breaker with four unkeyed charge 503s. checkout returned exact declared temporarily_unavailable fallback and clear payment message on open lookup and open charge paths; external request ledger stayed at four and both open calls consumed 0 fake milliseconds. No raw error reached checkout caller."
+  }
+}

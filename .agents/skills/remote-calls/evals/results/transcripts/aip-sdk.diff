@@ -1,0 +1,71 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:32:09.052609874 +0100
+@@ -0,0 +1,14 @@
++{
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/aip/sdk/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "violations": [],
++  "problems": [1, 5],
++  "applies": false,
++  "proceduresRun": ["P0"]
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/adapters/vendor.js repo/src/adapters/vendor.js
+--- base/src/adapters/vendor.js	2026-11-09 13:21:59.186829095 +0100
++++ repo/src/adapters/vendor.js	2026-11-09 13:32:17.109527708 +0100
+@@ -1,6 +1,7 @@
+-import { retry, handleAll } from 'cockatiel';
+ import { makeSDK } from '../infra/sdk.js';
++
+ export function makeVendor(network, {dependency='payment'}={}) {
+- const sdk=makeSDK(network); const outer=retry(handleAll,{maxAttempts:1});
+- return {lookup:sku=>outer.execute(()=>sdk.lookup(sku)),charge:order=>sdk.charge(order)};
++ const sdk = makeSDK(network);
++ // The SDK owns retries and enforces its three-attempt budget.
++ return {lookup: sku => sdk.lookup(sku), charge: order => sdk.charge(order)};
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/config.json repo/src/config.json
+--- base/src/config.json	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/config.json	2026-11-09 13:32:17.110527697 +0100
+@@ -1 +1,8 @@
+-{}
++{
++  "payment": {
++    "retryOwner": "sdk",
++    "adapterRetries": 0,
++    "source": "TASK.md and src/infra/sdk.js: the SDK already allows three total attempts; the incident recorded six when the adapter retried the SDK sequence.",
++    "reason": "Delegate directly to the SDK so one availability read stays within its existing attempt budget."
++  }
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/tests/vendor.test.mjs repo/tests/vendor.test.mjs
+--- base/tests/vendor.test.mjs	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/vendor.test.mjs	2026-11-09 13:32:09.053609864 +0100
+@@ -0,0 +1,22 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { makeVendor } from '../src/adapters/vendor.js';
++import { Network } from '../src/infra/network.js';
++
++test('lookup stops at the existing SDK three-attempt budget', async () => {
++  const network = new Network(Array.from({length: 6}, () => ({status: 503})));
++  await assert.rejects(makeVendor(network).lookup('sku'), {status: 503});
++  assert.equal(network.requests.length, 3);
++});
++
++test('lookup can recover on the third SDK attempt', async () => {
++  const network = new Network([{status: 503}, {status: 503}, {value: {available: true}}]);
++  assert.deepEqual(await makeVendor(network).lookup('sku'), {available: true});
++  assert.equal(network.requests.length, 3);
++});
++
++test('charge without an idempotency key is attempted once', async () => {
++  const network = new Network([{status: 503}]);
++  await assert.rejects(makeVendor(network).charge({id: 'order'}), {status: 503});
++  assert.equal(network.requests.length, 1);
++});

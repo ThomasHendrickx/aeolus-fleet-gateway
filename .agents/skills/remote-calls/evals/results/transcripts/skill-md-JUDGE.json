@@ -1,0 +1,14 @@
+{
+  "S0.4": {
+    "result": "pass",
+    "evidence": "scan/repo/TASK.md supplies payment outage with checkout hangs and other-page slowdown. events.jsonl records actual P0 scanner execution and RESULT.json writing. Actual scan/repo/RESULT.json has problems [1, 3], applies true, proceduresRun [P0]. Application diff is empty."
+  },
+  "S0.5": {
+    "result": "pass",
+    "evidence": "outbox P0 ran (scanner command recorded in events.jsonl); actual RESULT.json has problems [], applies false, proceduresRun [P0]. Recursive base/repo diff shows only RESULT.json and node_modules added; no application changes and no breaker added. P0 stopping is the behavior under test; later procedures were not run."
+  },
+  "S3.5": {
+    "result": "pass",
+    "evidence": "Independent Node fake-clock execution against breaker/repo API drove four unkeyed 503 charges, observed circuit_state_change Open at fake time 4ms, then called checkout while open. Promise resolved to {status:temporarily_unavailable,message:Payments are temporarily unavailable. Please try again later.}; outbound count stayed 4 before/after. No raw error escaped. P3 ran, supported by application diff and recorded execution."
+  }
+}

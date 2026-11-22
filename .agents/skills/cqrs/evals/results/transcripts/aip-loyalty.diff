@@ -1,0 +1,267 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 09:25:36.992939175 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [1, 3], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/schema.sql repo/schema.sql
+--- base/schema.sql	2026-11-07 09:24:42.412491473 +0100
++++ repo/schema.sql	2026-11-07 09:25:37.009939003 +0100
+@@ -28,3 +28,11 @@
+ );
+ 
+ ALTER TABLE customers ADD COLUMN suspended boolean NOT NULL DEFAULT false;
++
++-- Loyalty tier is persisted by the write side (src/core/loyalty.py); the staff list only reads it.
++ALTER TABLE customers ADD COLUMN loyalty_tier text NOT NULL DEFAULT 'standard';
++UPDATE customers c SET loyalty_tier = 'gold'
++ WHERE NOT c.suspended AND (SELECT count(*) FROM orders o WHERE o.customer_id = c.id AND o.status <> 'cancelled') > 10;
++
++CREATE INDEX customers_name_id ON customers (name, id);
++CREATE INDEX orders_customer_id ON orders (customer_id);
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/adapters/pg_customers.py repo/src/adapters/pg_customers.py
+--- base/src/adapters/pg_customers.py	2026-11-07 09:24:42.412491473 +0100
++++ repo/src/adapters/pg_customers.py	2026-11-07 09:25:49.240815233 +0100
+@@ -5,24 +5,23 @@
+     pass
+ 
+ 
+-COLUMNS = "id, name, email, created_on, suspended"
++COLUMNS = "id, name, email, created_on, suspended, loyalty_tier"
+ 
+ 
+ class PgCustomerRepository:
+     def __init__(self, conn):
+         self.conn = conn
+ 
+-    def get(self, customer_id):
+-        row = self.conn.execute(f"SELECT {COLUMNS} FROM customers WHERE id = %s", (customer_id,)).fetchone()
++    def get(self, customer_id, for_update=False):
++        lock = " FOR UPDATE" if for_update else ""
++        row = self.conn.execute(f"SELECT {COLUMNS} FROM customers WHERE id = %s{lock}", (customer_id,)).fetchone()
+         if row is None:
+             raise CustomerNotFound(customer_id)
+         return Customer(*row)
+ 
+     def save(self, customer):
+         self.conn.execute(
+-            "INSERT INTO customers (id, name, email, created_on, suspended) VALUES (%s, %s, %s, %s, %s)"
+-            " ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email, suspended = EXCLUDED.suspended",
+-            (customer.id, customer.name, customer.email, customer.created_on, customer.suspended))
+-
+-    def list_all(self):
+-        return [Customer(*row) for row in self.conn.execute(f"SELECT {COLUMNS} FROM customers ORDER BY name").fetchall()]
++            "INSERT INTO customers (id, name, email, created_on, suspended, loyalty_tier) VALUES (%s, %s, %s, %s, %s, %s)"
++            " ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email, suspended = EXCLUDED.suspended,"
++            " loyalty_tier = EXCLUDED.loyalty_tier",
++            (customer.id, customer.name, customer.email, customer.created_on, customer.suspended, customer.loyalty_tier))
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/adapters/pg_orders.py repo/src/adapters/pg_orders.py
+--- base/src/adapters/pg_orders.py	2026-11-07 09:24:42.413491463 +0100
++++ repo/src/adapters/pg_orders.py	2026-11-07 09:25:49.240815233 +0100
+@@ -43,6 +43,6 @@
+         except psycopg.errors.UniqueViolation as error:
+             raise DuplicateOrderNumber(order.number) from error
+ 
+-    def list_for_customer(self, customer_id):
+-        ids = [row[0] for row in self.conn.execute("SELECT id FROM orders WHERE customer_id = %s ORDER BY placed_on", (customer_id,)).fetchall()]
+-        return [self.get(order_id) for order_id in ids]
++    def count_not_cancelled(self, customer_id):
++        return self.conn.execute("SELECT count(*) FROM orders WHERE customer_id = %s AND status <> 'cancelled'",
++                                 (customer_id,)).fetchone()[0]
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/core/commands/customer_status.py repo/src/core/commands/customer_status.py
+--- base/src/core/commands/customer_status.py	2026-11-07 09:24:42.413491463 +0100
++++ repo/src/core/commands/customer_status.py	2026-11-07 09:25:37.010938992 +0100
+@@ -1,8 +1,12 @@
++from src.core.commands.loyalty_tier import refresh_loyalty_tier
++
++
+ def suspend_customer(uow, customer_id: str) -> str:
+     with uow:
+         customer = uow.customers.get(customer_id)
+         customer.suspend()
+         uow.customers.save(customer)
++        refresh_loyalty_tier(uow, customer_id)
+     return customer_id
+ 
+ 
+@@ -11,6 +15,7 @@
+         customer = uow.customers.get(customer_id)
+         customer.reinstate()
+         uow.customers.save(customer)
++        refresh_loyalty_tier(uow, customer_id)
+     return customer_id
+ 
+ 
+@@ -19,4 +24,5 @@
+         order = uow.orders.get(order_id)
+         order.cancel()
+         uow.orders.save(order)
++        refresh_loyalty_tier(uow, order.customer_id)
+     return order.version
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/core/commands/loyalty_tier.py repo/src/core/commands/loyalty_tier.py
+--- base/src/core/commands/loyalty_tier.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/core/commands/loyalty_tier.py	2026-11-07 09:25:37.010938992 +0100
+@@ -0,0 +1,8 @@
++from src.core.loyalty import loyalty_tier
++
++
++def refresh_loyalty_tier(uow, customer_id: str) -> None:
++    """Recompute and persist the customer's tier inside the caller's transaction (the customer row is locked)."""
++    customer = uow.customers.get(customer_id, for_update=True)
++    customer.loyalty_tier = loyalty_tier(uow.orders.count_not_cancelled(customer_id), customer.suspended)
++    uow.customers.save(customer)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/core/commands/place_order.py repo/src/core/commands/place_order.py
+--- base/src/core/commands/place_order.py	2026-11-07 09:17:28.559879572 +0100
++++ repo/src/core/commands/place_order.py	2026-11-07 09:25:37.010938992 +0100
+@@ -1,5 +1,6 @@
+ from datetime import date
+ 
++from src.core.commands.loyalty_tier import refresh_loyalty_tier
+ from src.core.orders import Address, Order, OrderLine
+ 
+ 
+@@ -8,4 +9,5 @@
+     with uow:
+         uow.customers.get(customer_id)
+         uow.orders.save(order)
++        refresh_loyalty_tier(uow, customer_id)
+     return order.id
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/core/customers.py repo/src/core/customers.py
+--- base/src/core/customers.py	2026-11-07 09:24:42.414491453 +0100
++++ repo/src/core/customers.py	2026-11-07 09:25:37.009939003 +0100
+@@ -9,6 +9,7 @@
+     email: str
+     created_on: date
+     suspended: bool = False
++    loyalty_tier: str = "standard"
+ 
+     def suspend(self):
+         self.suspended = True
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/core/ports.py repo/src/core/ports.py
+--- base/src/core/ports.py	2026-11-07 09:24:42.414491453 +0100
++++ repo/src/core/ports.py	2026-11-07 09:25:49.240815233 +0100
+@@ -17,16 +17,14 @@
+ 
+     def save(self, order: Order) -> None: ...
+ 
+-    def list_for_customer(self, customer_id: str) -> list[Order]: ...
++    def count_not_cancelled(self, customer_id: str) -> int: ...
+ 
+ 
+ class CustomerRepository(Protocol):
+-    def get(self, customer_id: str) -> Customer: ...
++    def get(self, customer_id: str, for_update: bool = False) -> Customer: ...
+ 
+     def save(self, customer: Customer) -> None: ...
+ 
+-    def list_all(self) -> list[Customer]: ...
+-
+ 
+ class UnitOfWork(Protocol):
+     orders: OrderRepository
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-07 09:24:42.415491443 +0100
++++ repo/src/main.py	2026-11-07 09:25:37.010938992 +0100
+@@ -30,3 +30,8 @@
+ def cancel_order(order_id):
+     from src.core.commands.customer_status import cancel_order as _cancel
+     return _cancel(PgUnitOfWork(), order_id)
++
++
++def customer_list(page=1):
++    from src.queries.customer_list import customer_list as _customer_list
++    return _customer_list(page)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/queries/customer_list.py repo/src/queries/customer_list.py
+--- base/src/queries/customer_list.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/queries/customer_list.py	2026-11-07 09:25:37.010938992 +0100
+@@ -0,0 +1,32 @@
++"""Query: staff customer list. Reads the tables directly; the tier is persisted by the write side."""
++from dataclasses import dataclass
++
++from src.db import connect
++
++PAGE_SIZE = 25
++
++
++@dataclass(frozen=True)
++class CustomerListRow:
++    customer_id: str
++    name: str
++    email: str
++    tier: str
++
++
++@dataclass(frozen=True)
++class CustomerListPage:
++    page: int
++    page_size: int
++    total: int
++    rows: list
++
++
++def customer_list(page: int = 1) -> CustomerListPage:
++    page = max(page, 1)
++    with connect() as conn:
++        total = conn.execute("SELECT count(*) FROM customers").fetchone()[0]
++        found = conn.execute(
++            "SELECT id, name, email, loyalty_tier FROM customers ORDER BY name, id LIMIT %s OFFSET %s",
++            (PAGE_SIZE, (page - 1) * PAGE_SIZE)).fetchall()
++    return CustomerListPage(page, PAGE_SIZE, total, [CustomerListRow(*row) for row in found])
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/web/staff_pages.py repo/src/web/staff_pages.py
+--- base/src/web/staff_pages.py	2026-11-07 09:24:42.415491443 +0100
++++ repo/src/web/staff_pages.py	2026-11-07 09:25:37.010938992 +0100
+@@ -1,17 +1,9 @@
+-from src.adapters.pg_unit_of_work import PgUnitOfWork
+-from src.core.loyalty import loyalty_tier
++from dataclasses import asdict
+ 
+-PAGE_SIZE = 25
++from src import main
+ 
+ 
+ def customer_list(page=1):
+     """Staff customer list: name, email and loyalty tier, by name."""
+-    with PgUnitOfWork() as uow:
+-        rows = []
+-        for customer in uow.customers.list_all():
+-            orders = uow.orders.list_for_customer(customer.id)
+-            counted = sum(1 for o in orders if o.status != "cancelled")
+-            rows.append({"customer_id": customer.id, "name": customer.name, "email": customer.email,
+-                         "tier": loyalty_tier(counted, customer.suspended)})
+-    start = (page - 1) * PAGE_SIZE
+-    return {"page": page, "rows": rows[start:start + PAGE_SIZE]}
++    result = main.customer_list(page)
++    return {"page": result.page, "total": result.total, "rows": [asdict(r) for r in result.rows]}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_customer_list.py repo/tests/test_customer_list.py
+--- base/tests/test_customer_list.py	2026-11-07 09:24:42.416491433 +0100
++++ repo/tests/test_customer_list.py	2026-11-07 09:25:37.010938992 +0100
+@@ -13,3 +13,30 @@
+         main.cancel_order("cy0")
+         tiers = {r["customer_id"]: r["tier"] for r in customer_list()["rows"]}
+         self.assertEqual(tiers, {"ann": "gold", "bob": "standard", "cy": "standard"})
++
++    def test_shape_empty_sort_count_and_paging(self):
++        self.assertEqual(customer_list(), {"page": 1, "total": 0, "rows": []})
++        for n in range(30):
++            self.customer(f"c{n:02d}", name=f"Name {29 - n:02d}")
++        first, second = customer_list(1), customer_list(2)
++        self.assertEqual(first["total"], 30)
++        self.assertEqual(len(first["rows"]), 25)
++        self.assertEqual(len(second["rows"]), 5)
++        names = [r["name"] for r in first["rows"] + second["rows"]]
++        self.assertEqual(names, sorted(names))
++        self.assertEqual(set(first["rows"][0]), {"customer_id", "name", "email", "tier"})
++
++    def test_tier_follows_orders_and_suspension(self):
++        self.customer("ann")
++        for n in range(11):
++            self.order(f"a{n}", "ann")
++        tier = lambda: customer_list()["rows"][0]["tier"]
++        self.assertEqual(tier(), "gold")
++        main.suspend_customer("ann")
++        self.assertEqual(tier(), "standard")
++        main.reinstate_customer("ann")
++        self.assertEqual(tier(), "gold")
++        main.cancel_order("a0")
++        self.assertEqual(tier(), "standard")
++        self.order("a11", "ann")
++        self.assertEqual(tier(), "gold")

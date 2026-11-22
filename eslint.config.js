@@ -140,8 +140,31 @@ const mcpSideForbiddenImports = [
   },
 ];
 
+/**
+ * End-to-end and browser tests wait on what the app does (a retrying assertion, a known response or
+ * the part's data-state), never on time, and find parts by test id, role or text.
+ * The runner is vitest's browser mode, which eslint-plugin-playwright does not cover (it reads
+ * @playwright/test), so these are no-restricted-syntax selectors.
+ */
+const e2eTestFiles = ['**/*.browser.test.{ts,tsx}', '**/*.e2e.test.{ts,tsx}', 'test/{start,parties-pages,slack-pages}.integration.test.ts'];
+const sleepMessage = "No fixed sleep in an end-to-end test: wait with a retrying assertion (expect.poll, expect.element), a known response or the part's data-state.";
+const rawLocatorMessage = 'No raw locator in an end-to-end test: use getByTestId, getByRole or getByText.';
+
+/** @type {SyntaxRestriction[]} */
+const e2eSyntax = [
+  { selector: 'CallExpression[callee.property.name="waitForTimeout"]', message: sleepMessage },
+  { selector: 'NewExpression[callee.name="Promise"] CallExpression:matches([callee.name="setTimeout"], [callee.property.name="setTimeout"])', message: sleepMessage },
+  { selector: 'Literal[value="networkidle"]', message: "No networkidle in an end-to-end test: wait on a known response or the part's data-state." },
+  { selector: 'CallExpression[callee.property.name="locator"]', message: rawLocatorMessage },
+  { selector: 'Literal[value=/\\[data-testid/]', message: rawLocatorMessage },
+  { selector: 'TemplateElement[value.raw=/\\[data-testid/]', message: rawLocatorMessage },
+];
+
+/** @type {ImportRestriction[]} */
+const sleepImports = [{ regex: '^(node:)?timers/promises$', message: sleepMessage }];
+
 export default defineConfig(
-  globalIgnores(['**/node_modules/', '**/dist/', '**/coverage/', 'src/adapters/prisma/generated/', 'web/.next/', 'web/next-env.d.ts']),
+  globalIgnores(['.agents/', '.claude/', '**/node_modules/', '**/dist/', '**/coverage/', 'src/adapters/prisma/generated/', 'web/.next/', 'web/next-env.d.ts']),
 
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
@@ -237,5 +260,17 @@ export default defineConfig(
     name: 'aeolus/mcp-side-core',
     files: mcpSideCoreFiles,
     rules: importRules({ patterns: [...coreForbiddenImports, ...coreImpure.imports, ...mcpSideForbiddenImports], syntax: coreImpure.syntax }),
+  },
+
+  {
+    name: 'aeolus/e2e-tests',
+    files: e2eTestFiles,
+    rules: importRules({ patterns: [...prismaOutsideItsAdapter, ...sleepImports], syntax: e2eSyntax }),
+  },
+  {
+    // Repeats the e2e list: this block's import rules replace the e2e block's for its files.
+    name: 'aeolus/e2e-tests-in-bridge',
+    files: ['bridge/**/*.{browser,e2e}.test.{ts,tsx}'],
+    rules: importRules({ patterns: [...prismaOutsideItsAdapter, ...bridgeForbiddenImports, ...sleepImports], syntax: e2eSyntax }),
   },
 );

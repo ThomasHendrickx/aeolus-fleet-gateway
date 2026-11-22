@@ -1,0 +1,5 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 09:25:03.906273983 +0100
+@@ -0,0 +1 @@
++{"violations": ["src/queries/order_summary.py imports src.core.orders (query side imports domain model, rule 4)", "src/core/commands/cancel_order.py imports src.queries.order_summary (command handler reads a query to decide, rule 9)"], "problems": [1], "applies": true}

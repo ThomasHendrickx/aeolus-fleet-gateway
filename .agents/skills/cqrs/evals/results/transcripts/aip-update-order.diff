@@ -1,0 +1,97 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 09:25:33.474974774 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [5], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/core/commands/change_shipping_address.py repo/src/core/commands/change_shipping_address.py
+--- base/src/core/commands/change_shipping_address.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/core/commands/change_shipping_address.py	2026-11-07 09:25:33.475974764 +0100
+@@ -0,0 +1,10 @@
++from src.core.orders import Address
++
++
++def change_shipping_address(uow, order_id: str, street: str, city: str, postcode: str) -> int:
++    """Customer changes the shipping address of their order until it ships. Returns the new version."""
++    with uow:
++        order = uow.orders.get(order_id)
++        order.change_shipping_address(Address(street, city, postcode))
++        uow.orders.save(order)
++    return order.version
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/core/orders.py repo/src/core/orders.py
+--- base/src/core/orders.py	2026-11-07 09:17:28.555879613 +0100
++++ repo/src/core/orders.py	2026-11-07 09:25:33.487974642 +0100
+@@ -55,6 +55,11 @@
+             raise OrderError(f"cannot ship a {self.status} order")
+         self.status = "shipped"
+ 
++    def change_shipping_address(self, address: Address):
++        if self.status != "placed":
++            raise OrderError(f"the address of a {self.status} order cannot change")
++        self.shipping_address = address
++
+     def cancel(self):
+         if self.status != "placed":
+             raise OrderError(f"cannot cancel a {self.status} order")
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-07 09:24:45.015465135 +0100
++++ repo/src/main.py	2026-11-07 09:25:33.487974642 +0100
+@@ -13,6 +13,11 @@
+     return _ship_order(PgUnitOfWork(), order_id)
+ 
+ 
++def change_shipping_address(order_id, street, city, postcode):
++    from src.core.commands.change_shipping_address import change_shipping_address as _change
++    return _change(PgUnitOfWork(), order_id, street, city, postcode)
++
++
+ def register_customer(*args, **kwargs):
+     return _register_customer(PgUnitOfWork(), *args, **kwargs)
+ 
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/web/order_pages.py repo/src/web/order_pages.py
+--- base/src/web/order_pages.py	2026-11-07 09:24:45.015465135 +0100
++++ repo/src/web/order_pages.py	2026-11-07 09:25:33.491974602 +0100
+@@ -4,3 +4,8 @@
+ def put_order(order_id, body):
+     """Staff edit screen saves the whole order form."""
+     return {"version": main.update_order(order_id, body)}
++
++
++def post_shipping_address(order_id, body):
++    """Order page: the customer changes the shipping address until the order ships."""
++    return {"version": main.change_shipping_address(order_id, body["street"], body["city"], body["postcode"])}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_change_shipping_address.py repo/tests/test_change_shipping_address.py
+--- base/tests/test_change_shipping_address.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/test_change_shipping_address.py	2026-11-07 09:25:33.492974591 +0100
+@@ -0,0 +1,32 @@
++from src import main
++from src.adapters.pg_unit_of_work import PgUnitOfWork
++from src.core.orders import Address, OrderError
++from tests.support import HOME, DbTest
++
++
++def load(order_id):
++    with PgUnitOfWork() as uow:
++        return uow.orders.get(order_id)
++
++
++class ChangeShippingAddressTest(DbTest):
++    def setUp(self):
++        super().setUp()
++        self.customer("ann")
++        self.order("o1", "ann")
++
++    def test_address_changes_while_placed(self):
++        version = main.change_shipping_address("o1", "2 Side St", "Bruges", "8000")
++        self.assertEqual(load("o1").shipping_address, Address("2 Side St", "Bruges", "8000"))
++        self.assertEqual(version, 2)
++
++    def test_address_of_a_shipped_order_does_not_change(self):
++        main.ship_order("o1")
++        with self.assertRaises(OrderError):
++            main.change_shipping_address("o1", "2 Side St", "Bruges", "8000")
++        self.assertEqual(load("o1").shipping_address, HOME)
++
++    def test_other_fields_untouched(self):
++        main.update_order("o1", {"note": "hi"})
++        main.change_shipping_address("o1", "2 Side St", "Bruges", "8000")
++        self.assertEqual(load("o1").note, "hi")

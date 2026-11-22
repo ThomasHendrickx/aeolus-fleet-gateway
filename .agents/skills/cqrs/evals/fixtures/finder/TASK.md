@@ -1,0 +1,1 @@
+On the customer's "My orders" page (`my_orders_page` in `src/web/customer_pages.py`), show order number, placed date, status and total for their 10 most recent orders, with a "show more" link that loads the next 10 (the page takes a page number). Today the page has no paging: it calls the order repository's `find_recent_for_customer` and builds its rows from whole orders.

@@ -1,0 +1,2 @@
+PASS skill-md: immutable fixture inputs, SDK, boundaries and unrelated adapter unchanged; evaluated instructions/helpers equal shipped form.
+PASS aip: immutable fixture inputs, SDK, boundaries and unrelated adapter unchanged; evaluated instructions/helpers equal shipped form.

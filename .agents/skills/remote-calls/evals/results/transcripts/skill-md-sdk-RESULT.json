@@ -1,0 +1,14 @@
+{
+  "missingTimeouts": [
+    {
+      "path": "/tmp/remote-calls-runs/skill-md/sdk/repo/src/adapters/untouched.js",
+      "line": 2,
+      "module": "../infra/network.js",
+      "timeoutOption": "timeout"
+    }
+  ],
+  "violations": [],
+  "problems": [5],
+  "applies": false,
+  "proceduresRun": ["P0"]
+}

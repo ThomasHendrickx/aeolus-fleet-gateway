@@ -1,0 +1,102 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 18:02:14.806157286 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/schema.sql repo/schema.sql
+--- base/schema.sql	2026-11-07 18:01:06.850847147 +0100
++++ repo/schema.sql	2026-11-07 18:02:14.824157103 +0100
+@@ -54,5 +54,6 @@
+     customer_id text PRIMARY KEY,
+     email text NOT NULL,
+     paid_total_cents integer NOT NULL DEFAULT 0,
++    last_payment_on date,
+     version integer NOT NULL DEFAULT 1
+ );
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/adapters/pg.py repo/src/sales/adapters/pg.py
+--- base/src/sales/adapters/pg.py	2026-11-07 18:01:06.851847137 +0100
++++ repo/src/sales/adapters/pg.py	2026-11-07 18:02:14.828157063 +0100
+@@ -60,7 +60,7 @@
+         self.conn = conn
+ 
+     def get(self, customer_id):
+-        row = self.conn.execute("SELECT customer_id, email, paid_total_cents, version FROM customer_accounts WHERE customer_id = %s",
++        row = self.conn.execute("SELECT customer_id, email, paid_total_cents, last_payment_on, version FROM customer_accounts WHERE customer_id = %s",
+                                 (customer_id,)).fetchone()
+         if row is None:
+             raise NotFound(customer_id)
+@@ -70,9 +70,9 @@
+         self.conn.execute("INSERT INTO customer_accounts (customer_id, email) VALUES (%s, %s)", (account.customer_id, account.email))
+ 
+     def save(self, account):
+-        row = self.conn.execute("UPDATE customer_accounts SET paid_total_cents = %s, version = version + 1"
++        row = self.conn.execute("UPDATE customer_accounts SET paid_total_cents = %s, last_payment_on = %s, version = version + 1"
+                                 " WHERE customer_id = %s AND version = %s RETURNING version",
+-                                (account.paid_total_cents, account.customer_id, account.version)).fetchone()
++                                (account.paid_total_cents, account.last_payment_on, account.customer_id, account.version)).fetchone()
+         if row is None:
+             raise StaleInvoice(account.customer_id)
+         account.version = row[0]
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/accounts.py repo/src/sales/core/accounts.py
+--- base/src/sales/core/accounts.py	2026-11-07 18:01:06.851847137 +0100
++++ repo/src/sales/core/accounts.py	2026-11-07 18:02:14.827157073 +0100
+@@ -1,4 +1,5 @@
+ from dataclasses import dataclass
++from datetime import date
+ 
+ 
+ @dataclass
+@@ -6,9 +7,11 @@
+     customer_id: str
+     email: str
+     paid_total_cents: int = 0
++    last_payment_on: date | None = None
+     version: int = 1
+ 
+-    def record_payment(self, amount_cents: int) -> None:
++    def record_payment(self, amount_cents: int, on: date) -> None:
+         if amount_cents <= 0:
+             raise ValueError("a payment is positive")
+         self.paid_total_cents += amount_cents
++        self.last_payment_on = on
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/commands/pay_invoice.py repo/src/sales/core/commands/pay_invoice.py
+--- base/src/sales/core/commands/pay_invoice.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/core/commands/pay_invoice.py	2026-11-07 18:02:14.828157063 +0100
+@@ -6,4 +6,7 @@
+         invoice = uow.invoices.get(invoice_id)
+         invoice.pay(paid_on)
+         uow.invoices.save(invoice)
++        account = uow.accounts.get(invoice.customer_id)
++        account.record_payment(invoice.amount_cents, paid_on)
++        uow.accounts.save(account)
+     return invoice.version
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/handlers.py repo/src/sales/core/handlers.py
+--- base/src/sales/core/handlers.py	2026-11-07 18:01:06.851847137 +0100
++++ repo/src/sales/core/handlers.py	2026-11-07 18:02:14.828157063 +0100
+@@ -2,16 +2,10 @@
+ from src.sales.core.events import InvoicePaid
+ 
+ 
+-def credit_customer_account(uow, event: InvoicePaid) -> None:
+-    account = uow.accounts.get(event.customer_id)
+-    account.record_payment(event.amount_cents)
+-    uow.accounts.save(account)
+-
+-
+ def send_payment_receipt(uow, event: InvoicePaid) -> None:
+     account = uow.accounts.get(event.customer_id)
+     uow.mailer.send(account.email, f"Receipt for invoice {event.invoice_id}",
+                     f"We received {event.amount_cents / 100:.2f} on {event.paid_on}.")
+ 
+ 
+-HANDLERS = {InvoicePaid: [credit_customer_account, send_payment_receipt]}
++HANDLERS = {InvoicePaid: [send_payment_receipt]}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_accounts.py repo/tests/test_accounts.py
+--- base/tests/test_accounts.py	2026-11-07 18:01:06.852847127 +0100
++++ repo/tests/test_accounts.py	2026-11-07 18:02:14.828157063 +0100
+@@ -10,4 +10,5 @@
+         self.invoice(customer_id="ann")
+         main.pay_invoice("i1", date(2026, 11, 2))
+         self.assertEqual(self.rows("SELECT paid_total_cents FROM customer_accounts"), [(1000,)])
++        self.assertEqual(self.rows("SELECT last_payment_on FROM customer_accounts"), [(date(2026, 11, 2),)])
+         self.assertEqual(self.rows("SELECT to_address FROM sent_mail"), [("ann@example.com",)])

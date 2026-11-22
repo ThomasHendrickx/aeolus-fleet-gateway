@@ -1,0 +1,1 @@
+Change request: investigate whether reading the in-memory config cache needs reliability work. It reads an object already in the same process and makes no network request. Run the applicability gate only; report the result.

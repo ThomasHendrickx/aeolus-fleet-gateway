@@ -1,0 +1,114 @@
+{
+ "S0.1|skill-md": [
+  "PASS",
+  "applies=False event list or events module changed=[]"
+ ],
+ "S0.2|skill-md": [
+  "PASS",
+  "violations=['src/sales/core/commands/cancel_invoice.py', 'src/sales/core/commands/pay_invoice.py']"
+ ],
+ "S4.1|skill-md": [
+  "PASS",
+  "rolled-back payment: raised RaiseException, tables changed=[]; committed payment: committed, rows gained in new tables={'outbox': 1}; cancel_invoice.py unchanged=True"
+ ],
+ "S0.3|skill-md": [
+  "PASS",
+  "problems=[1] applies=True (agent's P0 output)"
+ ],
+ "S1.1|skill-md": [
+  "PASS",
+  "rolled-back payment: raised RaiseException, tables changed=[]; committed payment: committed, rows gained in new tables={'sales_outbox': 1}"
+ ],
+ "S1.2|skill-md": [
+  "PASS",
+  "domain or use case files importing the bus client=[]"
+ ],
+ "S1.3|skill-md": [
+  "PASS",
+  "InvoicePaid is a past-tense event in src/sales/core/events.py and is listed in docs/event-list.md as 'a customer paid an invoice'."
+ ],
+ "S2.1|skill-md": [
+  "PASS",
+  "contract files=['invoice_paid.py'] versioned={'invoice_paid.py': True} shipping imports of sales=[]"
+ ],
+ "S2.2|skill-md": [
+  "PASS",
+  "In invoice_paid.py (src/contracts) the published FIELDS are only order_id and paid_on, which TASK.md says Shipping needs, plus the ids and version (event_id, invoice_id, invoice_version). Nothing else is included, such as an amount or customer data."
+ ],
+ "S2.3|skill-md": [
+  "PASS",
+  "applies=True contract files added=[]"
+ ],
+ "S3.1|skill-md": [
+  "PASS",
+  "same InvoicePaid delivered twice -> fulfilments for o1=[('requested',)] deliver exits=[0, 0, 0]"
+ ],
+ "S3.2|skill-md": [
+  "PASS",
+  "InvoiceRefunded v3 then InvoicePaid v2 -> fulfilments for o2=[] deliver exits=[0, 0, 0]"
+ ],
+ "S3.3|skill-md": [
+  "PASS",
+  "handler attempts=5 dead-letter rows=['(1,shipping,sales.invoices.v1,1,\"{\"\"type\"\": \"\"InvoicePaid\"\", \"\"event_id\"\": \"\"e4\"\", \"\"order_id\"\": \"\"o3\"\", \"\"invoice_id\"\": \"\"i3\"\", \"\"occurred_on\"\": \"\"2026-11-02\"\", \"\"invoice_version\"\": 2}\",5,\"RaiseException: harness: fulfilment refused\\nCONTEXT:  PL/pgSQL function harness_fail_o3() line 3 at RAISE\",\"2026-11-07 17:05:55.281633+00\")'] message e4 (bus id 1) dead-lettered=True deliver exits=[0, 0, 0, 0, 0, 0, 0, 0]"
+ ],
+ "S4.2|skill-md": [
+  "PASS",
+  "src/sales/core/commands/pay_invoice.py now calls uow.accounts.get, record_payment and save directly in the same transaction, and credit_customer_account is removed from the handler registry in src/sales/core/handlers.py."
+ ],
+ "S0.1|aip": [
+  "PASS",
+  "applies=False event list or events module changed=[]"
+ ],
+ "S0.2|aip": [
+  "PASS",
+  "violations=['src/sales/core/commands/cancel_invoice.py', 'src/sales/core/commands/pay_invoice.py']"
+ ],
+ "S4.1|aip": [
+  "PASS",
+  "rolled-back payment: raised RaiseException, tables changed=[]; committed payment: committed, rows gained in new tables={'sales_outbox': 1}; cancel_invoice.py unchanged=True"
+ ],
+ "S0.3|aip": [
+  "PASS",
+  "problems=[1, 2, 3] applies=True (agent's P0 output)"
+ ],
+ "S1.1|aip": [
+  "PASS",
+  "rolled-back payment: raised RaiseException, tables changed=[]; committed payment: committed, rows gained in new tables={'sales_outbox': 1}"
+ ],
+ "S1.2|aip": [
+  "PASS",
+  "domain or use case files importing the bus client=[]"
+ ],
+ "S1.3|aip": [
+  "PASS",
+  "src/sales/core/events.py adds InvoicePaid (past-tense fact, raised in invoices.py pay()), and docs/event-list.md lists InvoicePaid with its fields."
+ ],
+ "S2.1|aip": [
+  "PASS",
+  "contract files=['invoice_paid.py'] versioned={'invoice_paid.py': True} shipping imports of sales=[]"
+ ],
+ "S2.2|aip": [
+  "PASS",
+  "In invoice_paid.py the contract FIELDS are event_id, invoice_id, order_id, paid_on and invoice_version. TASK.md says Shipping needs the order and the payment date, which are order_id and paid_on. The remaining fields are the ids and the version every event carries, so the payload has no extra state."
+ ],
+ "S2.3|aip": [
+  "PASS",
+  "applies=True contract files added=[]"
+ ],
+ "S3.1|aip": [
+  "PASS",
+  "same InvoicePaid delivered twice -> fulfilments for o1=[('requested',)] deliver exits=[0, 0, 0]"
+ ],
+ "S3.2|aip": [
+  "PASS",
+  "InvoiceRefunded v3 then InvoicePaid v2 -> fulfilments for o2=[] deliver exits=[0, 0, 0]"
+ ],
+ "S3.3|aip": [
+  "PASS",
+  "handler attempts=5 dead-letter rows=['(1,\"{\"\"type\"\": \"\"InvoicePaid\"\", \"\"event_id\"\": \"\"e4\"\", \"\"order_id\"\": \"\"o3\"\", \"\"invoice_id\"\": \"\"i3\"\", \"\"occurred_on\"\": \"\"2026-11-02\"\", \"\"invoice_version\"\": 2}\",5,\"RaiseException: harness: fulfilment refused\\nCONTEXT:  PL/pgSQL function harness_fail_o3() line 3 at RAISE\",\"2026-11-07 17:06:10.775344+00\",t)'] message e4 (bus id 1) dead-lettered=True deliver exits=[0, 0, 0, 0, 0, 0, 0, 0]"
+ ],
+ "S4.2|aip": [
+  "PASS",
+  "src/sales/core/commands/pay_invoice.py now calls uow.accounts.get, record_payment and save explicitly, and credit_customer_account is removed from HANDLERS in src/sales/core/handlers.py (only the receipt remains)."
+ ]
+}

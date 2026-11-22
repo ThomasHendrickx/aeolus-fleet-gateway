@@ -1,0 +1,372 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/PROJECTION.json repo/PROJECTION.json
+--- base/PROJECTION.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/PROJECTION.json	2026-11-07 18:03:07.674620605 +0100
+@@ -0,0 +1 @@
++{"table": "order_shipping_status", "rebuild": "python3 -m src.rebuild_projection", "process": "python3 -m src.process_projection"}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 18:02:14.049164970 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [3], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/schema.sql repo/schema.sql
+--- base/schema.sql	2026-11-07 18:01:29.427617950 +0100
++++ repo/schema.sql	2026-11-07 18:02:51.285786970 +0100
+@@ -33,5 +33,34 @@
+     order_id text NOT NULL,
+     status text NOT NULL DEFAULT 'pending',
+     carrier text,
+-    dispatched_on date
++    dispatched_on date,
++    version integer NOT NULL DEFAULT 1
++);
++
++-- Shipping's outbox: integration events written in the command's transaction (Shipping context).
++CREATE TABLE shipping_outbox (
++    id bigserial PRIMARY KEY,
++    event_type text NOT NULL,
++    payload jsonb NOT NULL,
++    created_at timestamptz NOT NULL DEFAULT now(),
++    published_at timestamptz,
++    attempts integer NOT NULL DEFAULT 0,
++    dead_lettered boolean NOT NULL DEFAULT false
++);
++
++-- Orders-side projection of shipping status, fed only by Shipping's published events.
++-- Trigger: outbox consumer. Staleness bound: applied right after the shipping command commits
++-- (relay run in dispatch/create), at worst the next `python3 -m src.process_projection` run (cron, 1 min).
++-- Idempotency key: shipping_outbox.id in processed_shipping_events, plus shipment version guard.
++CREATE TABLE order_shipping_status (
++    order_id text PRIMARY KEY,
++    shipment_id text NOT NULL,
++    status text NOT NULL,
++    carrier text,
++    dispatched_on date,
++    version integer NOT NULL
++);
++
++CREATE TABLE processed_shipping_events (
++    event_id bigint PRIMARY KEY
+ );
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-07 18:01:29.427617950 +0100
++++ repo/src/main.py	2026-11-07 18:02:51.311786706 +0100
+@@ -20,10 +20,20 @@
+ def create_shipment(shipment_id, order_id):
+     from src.shipping.adapters.pg import ShippingUnitOfWork
+     from src.shipping.core.commands import create_shipment as _create
+-    return _create(ShippingUnitOfWork(), shipment_id, order_id)
++    result = _create(ShippingUnitOfWork(), shipment_id, order_id)
++    _apply_projection()
++    return result
+ 
+ 
+ def dispatch_shipment(shipment_id, carrier, on):
+     from src.shipping.adapters.pg import ShippingUnitOfWork
+     from src.shipping.core.commands import dispatch_shipment as _dispatch
+-    return _dispatch(ShippingUnitOfWork(), shipment_id, carrier, on)
++    result = _dispatch(ShippingUnitOfWork(), shipment_id, carrier, on)
++    _apply_projection()
++    return result
++
++
++def _apply_projection():
++    """Relay after commit: read-your-own-writes for the shipping status on 'My orders'."""
++    from src.projections.order_shipping import process
++    process()
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/process_projection.py repo/src/process_projection.py
+--- base/src/process_projection.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/process_projection.py	2026-11-07 18:02:51.296786858 +0100
+@@ -0,0 +1,5 @@
++"""Apply pending shipping events to the order shipping projection: python3 -m src.process_projection"""
++from src.projections.order_shipping import process
++
++if __name__ == "__main__":
++    print(f"applied {process()} events")
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/projections/order_shipping.py repo/src/projections/order_shipping.py
+--- base/src/projections/order_shipping.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/projections/order_shipping.py	2026-11-07 18:02:51.295786868 +0100
+@@ -0,0 +1,41 @@
++"""Orders-side projection of shipping status, built only from Shipping's published events.
++
++Trigger: outbox consumer. Idempotency key: the outbox event id (processed_shipping_events) plus the shipment version.
++Staleness bound: the relay runs right after each shipping command commits; otherwise the next process run (1 min).
++Read-your-own-writes: main.create_shipment/dispatch_shipment apply the projection before returning, so the dispatch
++(and the email that follows it) never precedes the row a customer reads.
++Rebuild: `python3 -m src.rebuild_projection` replays the whole outbox into an emptied projection.
++"""
++from src.shipping.adapters.relay import publish_pending
++
++
++def apply(event_id, payload, conn):
++    if conn.execute("INSERT INTO processed_shipping_events (event_id) VALUES (%s) ON CONFLICT DO NOTHING RETURNING 1",
++                    (event_id,)).fetchone() is None:
++        return  # redelivery: already applied
++    # Upsert guarded by version: an older event after a newer one is ignored.
++    conn.execute(
++        "INSERT INTO order_shipping_status (order_id, shipment_id, status, carrier, dispatched_on, version)"
++        " VALUES (%(order_id)s, %(shipment_id)s, %(status)s, %(carrier)s, %(on)s, %(version)s)"
++        " ON CONFLICT (order_id) DO UPDATE SET shipment_id = excluded.shipment_id, status = excluded.status,"
++        " carrier = excluded.carrier, dispatched_on = excluded.dispatched_on, version = excluded.version"
++        " WHERE order_shipping_status.version < excluded.version",
++        {"order_id": payload["order_id"], "shipment_id": payload["shipment_id"], "version": payload["version"],
++         "status": "dispatched" if "carrier" in payload else "pending",
++         "carrier": payload.get("carrier"), "on": payload.get("dispatched_on")})
++
++
++HANDLERS = {"ShipmentCreated": [apply], "ShipmentDispatched": [apply]}
++
++
++def process():
++    """Apply pending updates."""
++    return publish_pending(HANDLERS)
++
++
++def rebuild():
++    from src.db import connect
++    with connect() as conn:
++        conn.execute("TRUNCATE order_shipping_status, processed_shipping_events")
++        conn.execute("UPDATE shipping_outbox SET published_at = NULL, attempts = 0 WHERE NOT dead_lettered")
++    return process()
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/queries/my_orders.py repo/src/queries/my_orders.py
+--- base/src/queries/my_orders.py	2026-11-07 18:01:29.427617950 +0100
++++ repo/src/queries/my_orders.py	2026-11-07 18:02:51.311786706 +0100
+@@ -20,7 +20,7 @@
+        (SELECT sum(l.quantity * l.unit_price_cents) FROM order_lines l WHERE l.order_id = o.id) AS total_cents,
+        coalesce(s.status, 'pending'), s.carrier, s.dispatched_on
+ FROM orders o
+-LEFT JOIN shipments s ON s.order_id = o.id
++LEFT JOIN order_shipping_status s ON s.order_id = o.id
+ WHERE o.customer_id = %(customer_id)s
+ ORDER BY o.placed_on DESC, o.number DESC
+ LIMIT %(limit)s OFFSET %(offset)s
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/rebuild_projection.py repo/src/rebuild_projection.py
+--- base/src/rebuild_projection.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/rebuild_projection.py	2026-11-07 18:02:51.296786858 +0100
+@@ -0,0 +1,5 @@
++"""Rebuild the order shipping projection from the shipping outbox: python3 -m src.rebuild_projection"""
++from src.projections.order_shipping import rebuild
++
++if __name__ == "__main__":
++    print(f"replayed {rebuild()} events")
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/adapters/pg.py repo/src/shipping/adapters/pg.py
+--- base/src/shipping/adapters/pg.py	2026-11-07 18:01:29.428617940 +0100
++++ repo/src/shipping/adapters/pg.py	2026-11-07 18:02:51.285786970 +0100
+@@ -1,3 +1,5 @@
++from psycopg.types.json import Jsonb
++
+ from src.db import connect
+ from src.shipping.core.shipments import Shipment
+ 
+@@ -11,7 +13,7 @@
+         self.conn = conn
+ 
+     def get(self, shipment_id):
+-        row = self.conn.execute("SELECT id, order_id, status, carrier, dispatched_on FROM shipments WHERE id = %s", (shipment_id,)).fetchone()
++        row = self.conn.execute("SELECT id, order_id, status, carrier, dispatched_on, version FROM shipments WHERE id = %s", (shipment_id,)).fetchone()
+         if row is None:
+             raise ShipmentNotFound(shipment_id)
+         return Shipment(*row)
+@@ -20,8 +22,17 @@
+         self.conn.execute("INSERT INTO shipments (id, order_id, status) VALUES (%s, %s, %s)", (shipment.id, shipment.order_id, shipment.status))
+ 
+     def save(self, shipment):
+-        self.conn.execute("UPDATE shipments SET status = %s, carrier = %s, dispatched_on = %s WHERE id = %s",
++        self.conn.execute("UPDATE shipments SET status = %s, carrier = %s, dispatched_on = %s, version = version + 1 WHERE id = %s",
+                           (shipment.status, shipment.carrier, shipment.dispatched_on, shipment.id))
++        shipment.version += 1
++
++
++class PgOutbox:
++    def __init__(self, conn):
++        self.conn = conn
++
++    def add(self, event_type, payload):
++        self.conn.execute("INSERT INTO shipping_outbox (event_type, payload) VALUES (%s, %s)", (event_type, Jsonb(payload)))
+ 
+ 
+ class ShippingUnitOfWork:
+@@ -32,6 +43,7 @@
+         self.tx = self.conn.transaction()
+         self.tx.__enter__()
+         self.shipments = PgShipmentRepository(self.conn)
++        self.outbox = PgOutbox(self.conn)
+         return self
+ 
+     def __exit__(self, *exc):
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/adapters/relay.py repo/src/shipping/adapters/relay.py
+--- base/src/shipping/adapters/relay.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/shipping/adapters/relay.py	2026-11-07 18:02:51.292786899 +0100
+@@ -0,0 +1,36 @@
++"""Relay: publishes shipping_outbox rows after commit, at least once, in outbox order. Retries, then dead-letters."""
++import logging
++
++from src.db import connect
++
++MAX_ATTEMPTS = 5
++log = logging.getLogger("shipping.relay")
++
++
++def publish_pending(handlers):
++    """handlers: {event_type: callable(event_id, payload, conn)}; each runs in the transaction that marks the row published.
++    Returns the number of rows published."""
++    published = 0
++    while True:
++        with connect() as conn:
++            row = conn.execute(
++                "SELECT id, event_type, payload FROM shipping_outbox WHERE published_at IS NULL AND NOT dead_lettered"
++                " ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED").fetchone()
++            if row is None:
++                return published
++            event_id, event_type, payload = row
++            try:
++                with conn.transaction():
++                    for handler in handlers.get(event_type, []):
++                        handler(event_id, payload, conn)
++                    conn.execute("UPDATE shipping_outbox SET published_at = now() WHERE id = %s", (event_id,))
++                published += 1
++            except Exception:
++                attempts = conn.execute("UPDATE shipping_outbox SET attempts = attempts + 1 WHERE id = %s RETURNING attempts",
++                                        (event_id,)).fetchone()[0]
++                if attempts >= MAX_ATTEMPTS:
++                    conn.execute("UPDATE shipping_outbox SET dead_lettered = true WHERE id = %s", (event_id,))
++                    log.error("ALERT: shipping outbox event %s dead-lettered after %s attempts", event_id, attempts)
++                else:
++                    log.warning("shipping outbox event %s failed (attempt %s)", event_id, attempts)
++                    return published  # retry on the next run, keeping order
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/contracts.py repo/src/shipping/contracts.py
+--- base/src/shipping/contracts.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/shipping/contracts.py	2026-11-07 18:02:51.290786919 +0100
+@@ -0,0 +1,19 @@
++"""Shipping's published integration events (one producer: Shipping). Additive changes only; a breaking change is a new version.
++
++ShipmentCreated v1:    shipment_id, order_id, version
++ShipmentDispatched v1: shipment_id, order_id, version, carrier, dispatched_on (ISO date)
++`version` is the shipment's version after the change. The payload carries the dispatch facts because the
++Orders-side projection needs them (declared state transfer).
++"""
++CONTRACT_VERSION = 1
++
++
++def shipment_created(shipment):
++    return "ShipmentCreated", {"contract_version": CONTRACT_VERSION, "shipment_id": shipment.id,
++                               "order_id": shipment.order_id, "version": shipment.version}
++
++
++def shipment_dispatched(shipment):
++    return "ShipmentDispatched", {"contract_version": CONTRACT_VERSION, "shipment_id": shipment.id,
++                                  "order_id": shipment.order_id, "version": shipment.version,
++                                  "carrier": shipment.carrier, "dispatched_on": shipment.dispatched_on.isoformat()}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/core/commands.py repo/src/shipping/core/commands.py
+--- base/src/shipping/core/commands.py	2026-11-07 18:01:29.429617930 +0100
++++ repo/src/shipping/core/commands.py	2026-11-07 18:02:51.291786909 +0100
+@@ -1,11 +1,14 @@
+ from datetime import date
+ 
++from src.shipping import contracts
+ from src.shipping.core.shipments import Shipment
+ 
+ 
+ def create_shipment(uow, shipment_id: str, order_id: str) -> str:
+     with uow:
+-        uow.shipments.add(Shipment(shipment_id, order_id))
++        shipment = Shipment(shipment_id, order_id)
++        uow.shipments.add(shipment)
++        uow.outbox.add(*contracts.shipment_created(shipment))
+     return shipment_id
+ 
+ 
+@@ -14,4 +17,5 @@
+         shipment = uow.shipments.get(shipment_id)
+         shipment.dispatch(carrier, on)
+         uow.shipments.save(shipment)
++        uow.outbox.add(*contracts.shipment_dispatched(shipment))
+     return shipment_id
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/shipping/core/shipments.py repo/src/shipping/core/shipments.py
+--- base/src/shipping/core/shipments.py	2026-11-07 18:01:29.429617930 +0100
++++ repo/src/shipping/core/shipments.py	2026-11-07 18:02:51.285786970 +0100
+@@ -13,6 +13,7 @@
+     status: str = "pending"
+     carrier: str | None = None
+     dispatched_on: date | None = None
++    version: int = 1
+ 
+     def dispatch(self, carrier: str, on: date):
+         if self.status != "pending":
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_order_shipping_projection.py repo/tests/test_order_shipping_projection.py
+--- base/tests/test_order_shipping_projection.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/test_order_shipping_projection.py	2026-11-07 18:02:51.315786665 +0100
+@@ -0,0 +1,74 @@
++from datetime import date
++
++from src import main
++from src.db import connect
++from src.projections import order_shipping
++from src.web.customer_pages import my_orders_page
++from tests.support import DbTest
++
++
++def rows_of_projection():
++    with connect() as conn:
++        return conn.execute("SELECT order_id, shipment_id, status, carrier, dispatched_on, version FROM order_shipping_status ORDER BY order_id").fetchall()
++
++
++class ShippingProjectionTest(DbTest):
++    def setUp(self):
++        super().setUp()
++        self.customer("ann")
++        self.order("o1", "ann")
++
++    def test_dispatch_visible_immediately(self):
++        main.create_shipment("s1", "o1")
++        main.dispatch_shipment("s1", "bpost", date(2026, 3, 3))
++        row = my_orders_page("ann")["rows"][0]
++        self.assertEqual((row["shipping_status"], row["carrier"], row["dispatched_on"]), ("dispatched", "bpost", date(2026, 3, 3)))
++
++    def test_order_without_shipment_is_pending(self):
++        self.assertEqual(my_orders_page("ann")["rows"][0]["shipping_status"], "pending")
++
++    def test_redelivery_applies_once(self):
++        main.create_shipment("s1", "o1")
++        main.dispatch_shipment("s1", "bpost", date(2026, 3, 3))
++        before = rows_of_projection()
++        with connect() as conn:
++            conn.execute("UPDATE shipping_outbox SET published_at = NULL")
++        order_shipping.process()
++        self.assertEqual(rows_of_projection(), before)
++
++    def test_older_event_after_newer_is_ignored(self):
++        main.create_shipment("s1", "o1")
++        main.dispatch_shipment("s1", "bpost", date(2026, 3, 3))
++        with connect() as conn:
++            payload = conn.execute("SELECT payload FROM shipping_outbox WHERE event_type = 'ShipmentCreated'").fetchone()[0]
++            order_shipping.apply(999, payload, conn)
++        self.assertEqual(rows_of_projection()[0][2], "dispatched")
++
++    def test_rebuild_equals_incremental(self):
++        self.order("o2", "ann", number="N-o2")
++        main.create_shipment("s1", "o1")
++        main.create_shipment("s2", "o2")
++        main.dispatch_shipment("s1", "bpost", date(2026, 3, 3))
++        incremental = rows_of_projection()
++        order_shipping.rebuild()
++        self.assertEqual(rows_of_projection(), incremental)
++
++    def test_no_outbox_row_when_command_rolls_back(self):
++        main.create_shipment("s1", "o1")
++        main.dispatch_shipment("s1", "bpost", date(2026, 3, 3))
++        with self.assertRaises(Exception):
++            main.dispatch_shipment("s1", "dhl", date(2026, 3, 4))
++        with connect() as conn:
++            self.assertEqual(conn.execute("SELECT count(*) FROM shipping_outbox").fetchone()[0], 2)
++
++    def test_failing_handler_retried_then_dead_lettered(self):
++        from src.shipping.adapters.relay import MAX_ATTEMPTS, publish_pending
++        main.create_shipment("s1", "o1")
++        with connect() as conn:
++            conn.execute("INSERT INTO shipping_outbox (event_type, payload) VALUES ('Boom', '{}')")
++        def boom(*a):
++            raise RuntimeError("x")
++        for _ in range(MAX_ATTEMPTS):
++            publish_pending({"Boom": [boom]})
++        with connect() as conn:
++            self.assertTrue(conn.execute("SELECT dead_lettered FROM shipping_outbox WHERE event_type = 'Boom'").fetchone()[0])

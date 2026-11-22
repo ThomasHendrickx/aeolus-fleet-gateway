@@ -1,0 +1,1 @@
+Payment availability reads intermittently receive 503 or 429 during deployments, then recover. Payment creates have occasionally produced duplicate charges after ambiguous failures; orders currently have no idempotency key. Fix reliability for the lookup and preserve create safety. Apply P0, P1, P2; there is no sustained failure incident for a breaker.

@@ -1,0 +1,34 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:29:41.274116948 +0100
+@@ -0,0 +1,30 @@
++{
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/aip/local/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/local/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/local/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "violations": [],
++  "problems": [
++    1
++  ],
++  "applies": false,
++  "proceduresRun": [
++    "P0"
++  ]
++}

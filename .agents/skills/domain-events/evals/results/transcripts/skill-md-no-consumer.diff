@@ -1,0 +1,201 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 18:02:15.505150190 +0100
+@@ -0,0 +1 @@
++{"violations": ["src/sales/core/commands/pay_invoice.py imports src.infra.mail"], "problems": [2], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/docs/event-list.md repo/docs/event-list.md
+--- base/docs/event-list.md	2026-11-07 17:53:34.559439980 +0100
++++ repo/docs/event-list.md	2026-11-07 18:02:15.523150007 +0100
+@@ -6,6 +6,7 @@
+ 
+ - OrderPlaced: a customer placed an order (order id, customer id, total).
+ - InvoiceIssued: an invoice was issued for an order (invoice id, order id, amount).
++- InvoicePaid: an invoice was paid (invoice id, customer id, amount, paid on).
+ 
+ ## shipping
+ 
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/schema.sql repo/schema.sql
+--- base/schema.sql	2026-11-07 17:53:34.559439980 +0100
++++ repo/schema.sql	2026-11-07 18:02:15.523150007 +0100
+@@ -25,6 +25,15 @@
+     version integer NOT NULL DEFAULT 1
+ );
+ 
++-- Sales outbox: events written in the change's transaction, dispatched by the relay after commit.
++CREATE TABLE sales_outbox (
++    id bigserial PRIMARY KEY,
++    type text NOT NULL,
++    payload jsonb NOT NULL,
++    created_at timestamptz NOT NULL DEFAULT now(),
++    dispatched_at timestamptz
++);
++
+ -- Shipping context
+ CREATE TABLE fulfilments (
+     id text PRIMARY KEY,
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/main.py	2026-11-07 18:02:15.530149936 +0100
+@@ -1,4 +1,6 @@
+ """Composition root: wires each context's use cases to Postgres."""
++from src.db import connect
++from src.sales.adapters.relay import relay_outbox
+ from src.sales.adapters.pg import PgSalesUnitOfWork
+ from src.sales.core.commands.cancel_invoice import cancel_invoice as _cancel_invoice
+ from src.sales.core.commands.issue_invoice import issue_invoice as _issue_invoice
+@@ -17,7 +19,9 @@
+ 
+ 
+ def pay_invoice(invoice_id, paid_on):
+-    return _pay_invoice(PgSalesUnitOfWork(), invoice_id, paid_on)
++    version = _pay_invoice(PgSalesUnitOfWork(), invoice_id, paid_on)
++    relay_outbox()  # after commit
++    return version
+ 
+ 
+ def cancel_invoice(invoice_id):
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/adapters/pg.py repo/src/sales/adapters/pg.py
+--- base/src/sales/adapters/pg.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/adapters/pg.py	2026-11-07 18:02:15.523150007 +0100
+@@ -1,3 +1,7 @@
++from dataclasses import asdict
++
++from psycopg.types.json import Jsonb
++
+ from src.db import connect
+ from src.sales.core.invoices import Invoice
+ from src.sales.core.orders import Order, OrderLine
+@@ -48,6 +52,10 @@
+         if row is None:
+             raise StaleInvoice(invoice.id)
+         invoice.version = row[0]
++        for event in invoice.events:
++            self.conn.execute("INSERT INTO sales_outbox (type, payload) VALUES (%s, %s)",
++                              (type(event).__name__, Jsonb(asdict(event))))
++        invoice.events.clear()
+ 
+ 
+ class PgSalesUnitOfWork:
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/adapters/relay.py repo/src/sales/adapters/relay.py
+--- base/src/sales/adapters/relay.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/sales/adapters/relay.py	2026-11-07 18:02:15.523150007 +0100
+@@ -0,0 +1,22 @@
++"""Outbox relay: dispatches committed events, at least once. The only place that sends a receipt."""
++from src.db import connect
++from src.infra import mail
++
++
++def _dispatch(type_, payload):
++    if type_ == "InvoicePaid":
++        mail.send(f"{payload['customer_id']}@example.com", f"Receipt for invoice {payload['invoice_id']}",
++                  f"We received {payload['amount_cents'] / 100:.2f} on {payload['paid_on']}.")
++
++
++def relay_outbox() -> int:
++    """Send every undispatched event, then mark it. A crash between send and mark means a resend (at least once)."""
++    done = 0
++    with connect() as conn:
++        rows = conn.execute("SELECT id, type, payload FROM sales_outbox WHERE dispatched_at IS NULL ORDER BY id").fetchall()
++    for id_, type_, payload in rows:
++        _dispatch(type_, payload)
++        with connect() as conn:
++            conn.execute("UPDATE sales_outbox SET dispatched_at = now() WHERE id = %s", (id_,))
++        done += 1
++    return done
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/commands/pay_invoice.py repo/src/sales/core/commands/pay_invoice.py
+--- base/src/sales/core/commands/pay_invoice.py	2026-11-07 18:01:05.760858213 +0100
++++ repo/src/sales/core/commands/pay_invoice.py	2026-11-07 18:02:15.523150007 +0100
+@@ -1,13 +1,9 @@
+ from datetime import date
+ 
+-from src.infra import mail
+-
+ 
+ def pay_invoice(uow, invoice_id: str, paid_on: date) -> int:
+     with uow:
+         invoice = uow.invoices.get(invoice_id)
+         invoice.pay(paid_on)
+-        mail.send(f"{invoice.customer_id}@example.com", f"Receipt for invoice {invoice.id}",
+-                  f"We received {invoice.amount_cents / 100:.2f} on {paid_on.isoformat()}.")
+-        uow.invoices.save(invoice)
++        uow.invoices.save(invoice)  # records the InvoicePaid event in the outbox, same transaction
+     return invoice.version
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/events.py repo/src/sales/core/events.py
+--- base/src/sales/core/events.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/core/events.py	2026-11-07 18:02:15.523150007 +0100
+@@ -14,3 +14,11 @@
+     invoice_id: str
+     order_id: str
+     amount_cents: int
++
++
++@dataclass(frozen=True)
++class InvoicePaid:
++    invoice_id: str
++    customer_id: str
++    amount_cents: int
++    paid_on: str
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/invoices.py repo/src/sales/core/invoices.py
+--- base/src/sales/core/invoices.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/core/invoices.py	2026-11-07 18:02:15.523150007 +0100
+@@ -1,7 +1,7 @@
+ from dataclasses import dataclass, field
+ from datetime import date
+ 
+-from src.sales.core.events import InvoiceIssued
++from src.sales.core.events import InvoiceIssued, InvoicePaid
+ 
+ 
+ class InvoiceNotPayable(Exception):
+@@ -29,6 +29,7 @@
+         if self.status != "issued":
+             raise InvoiceNotPayable(f"invoice {self.id} is {self.status}")
+         self.status, self.paid_on = "paid", on
++        self.events.append(InvoicePaid(self.id, self.customer_id, self.amount_cents, on.isoformat()))
+ 
+     def cancel(self) -> None:
+         if self.status != "issued":
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_receipt.py repo/tests/test_receipt.py
+--- base/tests/test_receipt.py	2026-11-07 18:01:05.761858203 +0100
++++ repo/tests/test_receipt.py	2026-11-07 18:02:21.249091881 +0100
+@@ -9,3 +9,40 @@
+         self.invoice(customer_id="ann")
+         main.pay_invoice("i1", date(2026, 11, 2))
+         self.assertEqual(self.rows("SELECT to_address, subject FROM sent_mail"), [("ann@example.com", "Receipt for invoice i1")])
++
++    def test_commit_writes_one_outbox_row(self):
++        self.invoice()
++        main.pay_invoice("i1", date(2026, 11, 2))
++        self.assertEqual(self.rows("SELECT type, payload->>'invoice_id' FROM sales_outbox WHERE type = 'InvoicePaid'"),
++                         [("InvoicePaid", "i1")])
++
++    def test_failed_payment_sends_no_receipt_and_leaves_no_outbox_row(self):
++        from unittest import mock
++        from src.sales.adapters.pg import StaleInvoice
++        self.invoice()
++        real = main.PgSalesUnitOfWork
++
++        class Racing(real):
++            def __enter__(self):
++                uow = super().__enter__()
++                get = uow.invoices.get
++
++                def get_then_race(invoice_id):  # a concurrent update lands after we read
++                    invoice = get(invoice_id)
++                    with main.connect() as other:
++                        other.execute("UPDATE invoices SET version = version + 1 WHERE id = 'i1'")
++                    return invoice
++                uow.invoices.get = get_then_race
++                return uow
++
++        with mock.patch.object(main, "PgSalesUnitOfWork", Racing):
++            with self.assertRaises(StaleInvoice):
++                main.pay_invoice("i1", date(2026, 11, 2))
++        self.assertEqual(self.rows("SELECT count(*) FROM sent_mail"), [(0,)])
++        self.assertEqual(self.rows("SELECT count(*) FROM sales_outbox WHERE type = 'InvoicePaid'"), [(0,)])
++
++    def test_relay_twice_sends_once(self):
++        self.invoice()
++        main.pay_invoice("i1", date(2026, 11, 2))
++        main.relay_outbox()
++        self.assertEqual(self.rows("SELECT count(*) FROM sent_mail"), [(1,)])

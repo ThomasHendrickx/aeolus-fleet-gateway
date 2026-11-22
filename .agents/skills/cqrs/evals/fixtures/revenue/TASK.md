@@ -1,0 +1,1 @@
+Finance's monthly revenue report (`monthly_revenue_report` in `src/web/finance_pages.py`: revenue per calendar month for the last 24 months, voided invoices excluded) is too slow in production; the latest staging run is in MEASUREMENT.md. Make it meet its budget. Finance check the report right after issuing or voiding an invoice and expect to see the change.

@@ -1,0 +1,189 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 09:25:28.699023103 +0100
+@@ -0,0 +1 @@
++{"violations": [], "problems": [1], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/schema.sql repo/schema.sql
+--- base/schema.sql	2026-11-07 09:17:28.553879633 +0100
++++ repo/schema.sql	2026-11-07 09:25:42.744880968 +0100
+@@ -15,6 +15,7 @@
+     shipping_city text NOT NULL,
+     shipping_postcode text NOT NULL,
+     note text NOT NULL DEFAULT '',
++    total_cents integer NOT NULL DEFAULT 0,
+     version integer NOT NULL DEFAULT 1
+ );
+ 
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/adapters/pg_orders.py repo/src/adapters/pg_orders.py
+--- base/src/adapters/pg_orders.py	2026-11-07 09:24:44.679468535 +0100
++++ repo/src/adapters/pg_orders.py	2026-11-07 09:25:42.744880968 +0100
+@@ -23,18 +23,18 @@
+         try:
+             with self.conn.transaction():
+                 updated = self.conn.execute(
+-                    "UPDATE orders SET status = %s, note = %s, shipping_street = %s, shipping_city = %s, shipping_postcode = %s,"
++                    "UPDATE orders SET status = %s, note = %s, total_cents = %s, shipping_street = %s, shipping_city = %s, shipping_postcode = %s,"
+                     " version = version + 1 WHERE id = %s AND version = %s RETURNING version",
+-                    (order.status, order.note, order.shipping_address.street, order.shipping_address.city,
++                    (order.status, order.note, order.total_cents, order.shipping_address.street, order.shipping_address.city,
+                      order.shipping_address.postcode, order.id, order.version)).fetchone()
+                 if updated:
+                     order.version = updated[0]
+                 else:
+                     self.conn.execute(
+-                        "INSERT INTO orders (id, number, customer_id, status, placed_on, shipping_street, shipping_city, shipping_postcode, note)"
+-                        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
++                        "INSERT INTO orders (id, number, customer_id, status, placed_on, shipping_street, shipping_city, shipping_postcode, note, total_cents)"
++                        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                         (order.id, order.number, order.customer_id, order.status, order.placed_on, order.shipping_address.street,
+-                         order.shipping_address.city, order.shipping_address.postcode, order.note))
++                         order.shipping_address.city, order.shipping_address.postcode, order.note, order.total_cents))
+                 self.conn.execute("DELETE FROM order_lines WHERE order_id = %s", (order.id,))
+                 with self.conn.cursor() as cur:
+                     cur.executemany(
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-07 09:17:28.565879511 +0100
++++ repo/src/main.py	2026-11-07 09:25:42.751880897 +0100
+@@ -1,5 +1,6 @@
+ """Composition root: wires use cases and reads to Postgres. The web handlers in src/web call these."""
+ from src.adapters.pg_unit_of_work import PgUnitOfWork
++from src.queries.customer_orders import my_orders as _my_orders
+ from src.core.commands.place_order import place_order as _place_order
+ from src.core.commands.register_customer import register_customer as _register_customer
+ from src.core.commands.ship_order import ship_order as _ship_order
+@@ -15,3 +16,7 @@
+ 
+ def register_customer(*args, **kwargs):
+     return _register_customer(PgUnitOfWork(), *args, **kwargs)
++
++
++def my_orders(customer_id, page=1):
++    return _my_orders(customer_id, page)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/queries/customer_orders.py repo/src/queries/customer_orders.py
+--- base/src/queries/customer_orders.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/queries/customer_orders.py	2026-11-07 09:25:42.748880928 +0100
+@@ -0,0 +1,34 @@
++"""Query: a customer's 'My orders' list. Reads the tables directly; returns read types only."""
++from dataclasses import dataclass
++from datetime import date
++
++from src.db import connect
++
++PAGE_SIZE = 10
++
++
++@dataclass(frozen=True)
++class OrderRow:
++    number: str
++    placed_on: date
++    status: str
++    total_cents: int
++
++
++@dataclass(frozen=True)
++class OrdersPage:
++    rows: list
++    page: int
++    total: int
++    has_more: bool
++
++
++def my_orders(customer_id, page=1):
++    page = max(1, page)
++    with connect() as conn:
++        rows = conn.execute(
++            "SELECT number, placed_on, status, total_cents FROM orders WHERE customer_id = %s"
++            " ORDER BY placed_on DESC, number DESC LIMIT %s OFFSET %s",
++            (customer_id, PAGE_SIZE, (page - 1) * PAGE_SIZE)).fetchall()
++        total = conn.execute("SELECT count(*) FROM orders WHERE customer_id = %s", (customer_id,)).fetchone()[0]
++    return OrdersPage([OrderRow(*r) for r in rows], page, total, page * PAGE_SIZE < total)
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/web/customer_pages.py repo/src/web/customer_pages.py
+--- base/src/web/customer_pages.py	2026-11-07 09:24:44.680468525 +0100
++++ repo/src/web/customer_pages.py	2026-11-07 09:25:42.749880918 +0100
+@@ -1,9 +1,9 @@
+-from src.adapters.pg_unit_of_work import PgUnitOfWork
++from src import main
+ 
+ 
+-def my_orders_page(customer_id):
+-    """Customer's 'My orders' page: their 10 most recent orders."""
+-    with PgUnitOfWork() as uow:
+-        orders = uow.orders.find_recent_for_customer(customer_id, 10)
++def my_orders_page(customer_id, page=1):
++    """Customer's 'My orders' page: 10 orders per page, newest first."""
++    result = main.my_orders(customer_id, page)
+     return {"rows": [{"number": o.number, "placed_on": o.placed_on.isoformat(), "status": o.status, "total_cents": o.total_cents}
+-                     for o in orders]}
++                     for o in result.rows],
++            "page": result.page, "total": result.total, "show_more": result.has_more}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_customer_orders.py repo/tests/test_customer_orders.py
+--- base/tests/test_customer_orders.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/test_customer_orders.py	2026-11-07 09:25:42.752880887 +0100
+@@ -0,0 +1,53 @@
++from datetime import date
++
++from src.queries.customer_orders import my_orders
++from tests.support import DbTest
++
++
++class MyOrdersQueryTest(DbTest):
++    def setUp(self):
++        super().setUp()
++        self.customer("ann")
++        self.customer("bob")
++
++    def fill(self, n):
++        for day in range(1, n + 1):
++            self.order(f"o{day:02}", "ann", placed_on=date(2026, 3, day), lines=(("A", 1, 100 * day), ("B", 2, 10)))
++
++    def test_shape_and_total(self):
++        self.fill(1)
++        page = my_orders("ann")
++        self.assertEqual(len(page.rows), 1)
++        row = page.rows[0]
++        self.assertEqual((row.number, row.placed_on, row.status, row.total_cents), ("N-o01", date(2026, 3, 1), "placed", 120))
++
++    def test_empty(self):
++        page = my_orders("ann")
++        self.assertEqual((page.rows, page.total, page.has_more), ([], 0, False))
++
++    def test_newest_first_and_only_own_orders(self):
++        self.fill(3)
++        self.order("b1", "bob")
++        self.assertEqual([r.number for r in my_orders("ann").rows], ["N-o03", "N-o02", "N-o01"])
++
++    def test_first_page_has_ten_and_more(self):
++        self.fill(12)
++        page = my_orders("ann")
++        self.assertEqual(len(page.rows), 10)
++        self.assertEqual((page.total, page.has_more), (12, True))
++
++    def test_next_page(self):
++        self.fill(12)
++        page = my_orders("ann", 2)
++        self.assertEqual([r.number for r in page.rows], ["N-o02", "N-o01"])
++        self.assertFalse(page.has_more)
++
++    def test_exactly_ten_has_no_more(self):
++        self.fill(10)
++        self.assertFalse(my_orders("ann").has_more)
++
++    def test_status_change_is_visible(self):
++        self.fill(1)
++        from src import main
++        main.ship_order("o01")
++        self.assertEqual(my_orders("ann").rows[0].status, "shipped")
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_pages.py repo/tests/test_pages.py
+--- base/tests/test_pages.py	2026-11-07 09:24:44.680468525 +0100
++++ repo/tests/test_pages.py	2026-11-07 09:25:42.753880877 +0100
+@@ -20,3 +20,10 @@
+     def test_customer_panel_last_five(self):
+         panel = customer_panel("ann")
+         self.assertEqual([o["number"] for o in panel["recent"]], ["N-o12", "N-o11", "N-o10", "N-o09", "N-o08"])
++
++    def test_my_orders_show_more(self):
++        page1 = my_orders_page("ann")
++        self.assertTrue(page1["show_more"])
++        page2 = my_orders_page("ann", 2)
++        self.assertEqual([r["number"] for r in page2["rows"]], ["N-o02", "N-o01"])
++        self.assertFalse(page2["show_more"])

@@ -1,0 +1,178 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:29:05.324483566 +0100
+@@ -0,0 +1,33 @@
++{
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/bulkhead/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/bulkhead/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/skill-md/bulkhead/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "violations": [],
++  "problems": [
++    1,
++    4
++  ],
++  "applies": true,
++  "proceduresRun": [
++    "P0",
++    "P1",
++    "P4"
++  ]
++}
+\ No newline at end of file
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/adapters/vendor.js repo/src/adapters/vendor.js
+--- base/src/adapters/vendor.js	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/adapters/vendor.js	2026-11-09 13:28:44.022700801 +0100
+@@ -1,7 +1,15 @@
++import { bulkhead } from 'cockatiel';
+ import { request } from '../infra/network.js';
++import config from '../config.json' with { type: 'json' };
++const limits = new Map(Object.entries(config).map(([name, settings]) =>
++  [name, bulkhead(settings.concurrencyLimit, settings.queueSize)]));
++
+ export function makeVendor(network, { dependency = 'payment' } = {}) {
++  const settings = config[dependency];
++  if (!settings) throw new Error(`Unknown dependency: ${dependency}`);
++  const limit = limits.get(dependency);
+   return {
+-    lookup: (sku) => request(network, { operation: 'lookup', payload: { sku } }),
+-    charge: (order) => request(network, { operation: 'charge', payload: order }),
++    lookup: (sku) => limit.execute(() => request(network, { operation: 'lookup', payload: { sku }, timeout: settings.timeoutMs })),
++    charge: (order) => limit.execute(() => request(network, { operation: 'charge', payload: order, timeout: settings.timeoutMs })),
+   };
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/config.json repo/src/config.json
+--- base/src/config.json	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/config.json	2026-11-09 13:28:44.022700801 +0100
+@@ -1 +1,16 @@
+-{}
++{
++  "payment": {
++    "timeoutMs": 100,
++    "timeoutSource": "measurement.json: p999Ms (80) + paddingMs (20)",
++    "concurrencyLimit": 2,
++    "queueSize": 0,
++    "capacitySource": "measurement.json: Incident: four consecutive remote 503s exhausted checkout slots; recovery checks every 200 ms. Request budget 2500 ms. Load sample: two calls fit available per-provider capacity; queueing consumes the page latency budget."
++  },
++  "catalog": {
++    "timeoutMs": 100,
++    "timeoutSource": "measurement.json: p999Ms (80) + paddingMs (20)",
++    "concurrencyLimit": 2,
++    "queueSize": 0,
++    "capacitySource": "measurement.json: Catalog has a separate vendor connection budget; payment traffic must not use it."
++  }
++}
+\ No newline at end of file
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/core/checkout.js repo/src/core/checkout.js
+--- base/src/core/checkout.js	2026-11-09 13:20:13.964901996 +0100
++++ repo/src/core/checkout.js	2026-11-09 13:28:44.030700719 +0100
+@@ -1,6 +1,12 @@
+ export async function checkout(vendor, order) {
+-  const stock = await vendor.lookup(order.sku);
+-  if (!stock.available) return { status: 'unavailable' };
+-  await vendor.charge(order);
+-  return { status: 'confirmed' };
++  try {
++    const stock = await vendor.lookup(order.sku);
++    if (!stock.available) return { status: 'unavailable' };
++    await vendor.charge(order);
++    return { status: 'confirmed' };
++  } catch (error) {
++    // Adapter failures are translated to the page's declared unavailable state.
++    if (error?.status >= 400 && error.status < 500 && error.status !== 429) throw error;
++    return { status: 'temporarily_unavailable', message: 'Payments are temporarily unavailable. Please try again later.' };
++  }
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/tests/resilience.test.mjs repo/tests/resilience.test.mjs
+--- base/tests/resilience.test.mjs	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/resilience.test.mjs	2026-11-09 13:29:04.683490103 +0100
+@@ -0,0 +1,73 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import FakeTimers from '@sinonjs/fake-timers';
++import { Network } from '../src/infra/network.js';
++import { makeVendor } from '../src/adapters/vendor.js';
++
++for (const dependency of ['payment', 'catalog']) {
++  for (const operation of ['lookup', 'charge']) {
++    test(`${dependency} ${operation} cancels at measured timeout`, async () => {
++      const clock = FakeTimers.install();
++      try {
++        const network = new Network([{ delay: 1000 }]);
++        const vendor = makeVendor(network, { dependency });
++        const result = assert.rejects(vendor[operation]({ sku: 'x' }));
++        await clock.tickAsync(100);
++        assert.equal(network.active, 0);
++        assert.equal(network.requests[0].end - network.requests[0].start, 100);
++        await result;
++      } finally { clock.uninstall(); }
++    });
++  }
++}
++
++import { checkout } from '../src/core/checkout.js';
++const fallback = { status: 'temporarily_unavailable', message: 'Payments are temporarily unavailable. Please try again later.' };
++test('saturated payment leaves catalog capacity independent and rejects checkout immediately', async () => {
++  const clock = FakeTimers.install();
++  try {
++    const payment = new Network([{ delay: 90 }, { delay: 90 }]);
++    const vendor = makeVendor(payment);
++    const pending = [vendor.lookup('a'), vendor.charge({ sku: 'b' })];
++    assert.deepEqual(await checkout(vendor, { sku: 'c' }), fallback);
++    assert.equal(payment.requests.length, 2);
++    assert.equal(clock.now, 0);
++    const catalog = new Network([{ delay: 10 }]);
++    const read = makeVendor(catalog, { dependency: 'catalog' }).lookup('c');
++    await clock.tickAsync(10);
++    assert.deepEqual(await read, { available: true });
++    assert.equal(payment.active, 2);
++    await clock.tickAsync(80);
++    await Promise.all(pending);
++    const released = vendor.lookup('released');
++    await clock.tickAsync(1);
++    await released;
++    assert.equal(payment.peak, 2);
++  } finally { clock.uninstall(); }
++});
++
++test('instances of one dependency share capacity; charge rejection uses page fallback', async () => {
++  const clock = FakeTimers.install();
++  try {
++    const network = new Network([{ delay: 90 }, { delay: 90 }]);
++    const first = makeVendor(network);
++    const second = makeVendor(network);
++    const pending = [first.lookup('a'), second.lookup('b')];
++    const page = checkout({ lookup: async () => ({ available: true }), charge: second.charge }, { sku: 'c' });
++    assert.deepEqual(await page, fallback);
++    assert.equal(network.requests.length, 2);
++    await clock.tickAsync(90);
++    await Promise.all(pending);
++  } finally { clock.uninstall(); }
++});
++
++test('checkout exposes timeout fallback and preserves normal checkout states', async () => {
++  const clock = FakeTimers.install();
++  try {
++    const page = checkout(makeVendor(new Network([{ delay: 1000 }])), { sku: 'a' });
++    await clock.tickAsync(100);
++    assert.deepEqual(await page, fallback);
++    assert.deepEqual(await checkout({ lookup: async () => ({ available: false }) }, {}), { status: 'unavailable' });
++    assert.deepEqual(await checkout({ lookup: async () => ({ available: true }), charge: async () => {} }, {}), { status: 'confirmed' });
++  } finally { clock.uninstall(); }
++});

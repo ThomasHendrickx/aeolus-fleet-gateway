@@ -1,0 +1,1 @@
+Investigate checkout: outages at the payment provider make checkout hang and other pages slow. First inventory missing timeout settings and layering violations. Run the applicability gate only, record the evidence and leave application files unchanged.

@@ -1,0 +1,8 @@
+{
+  "runner": "collaboration.spawn_agent",
+  "task_name": "/root/s23_aip_rerun",
+  "fresh_context": "none",
+  "status": "completed",
+  "scenario": "S2.3",
+  "procedure": "P0"
+}

@@ -1,0 +1,28 @@
+{
+  "payment": {
+    "p999Ms": 80,
+    "paddingMs": 20,
+    "requestBudgetMs": 2500,
+    "transientRetryCap": 3,
+    "backoffBaseMs": 40,
+    "retryBudgetMs": 2400,
+    "breaker": {
+      "windowMs": 1000,
+      "minimumCalls": 4,
+      "failureRate": 0.5,
+      "openMs": 200,
+      "halfOpenTrials": 1
+    },
+    "concurrencyLimit": 2,
+    "queueSize": 0,
+    "reason": "Incident: four consecutive remote 503s exhausted checkout slots; recovery checks every 200 ms. Request budget 2500 ms. Load sample: two calls fit available per-provider capacity; queueing consumes the page latency budget."
+  },
+  "catalog": {
+    "p999Ms": 80,
+    "paddingMs": 20,
+    "requestBudgetMs": 2500,
+    "concurrencyLimit": 2,
+    "queueSize": 0,
+    "reason": "Catalog has a separate vendor connection budget; payment traffic must not use it."
+  }
+}

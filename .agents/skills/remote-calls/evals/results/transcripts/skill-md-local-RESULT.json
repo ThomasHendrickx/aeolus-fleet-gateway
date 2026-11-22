@@ -1,0 +1,28 @@
+{
+  "missingTimeouts": [
+    {
+      "path": "/tmp/remote-calls-runs/skill-md/local/repo/src/adapters/untouched.js",
+      "line": 2,
+      "module": "../infra/network.js",
+      "timeoutOption": "timeout"
+    },
+    {
+      "path": "/tmp/remote-calls-runs/skill-md/local/repo/src/adapters/vendor.js",
+      "line": 4,
+      "module": "../infra/network.js",
+      "timeoutOption": "timeout"
+    },
+    {
+      "path": "/tmp/remote-calls-runs/skill-md/local/repo/src/adapters/vendor.js",
+      "line": 5,
+      "module": "../infra/network.js",
+      "timeoutOption": "timeout"
+    }
+  ],
+  "violations": [],
+  "problems": [],
+  "applies": false,
+  "proceduresRun": [
+    "P0"
+  ]
+}

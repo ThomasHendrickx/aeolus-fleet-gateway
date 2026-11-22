@@ -1,0 +1,229 @@
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-07 18:02:21.876085516 +0100
+@@ -0,0 +1 @@
++{"violations": [{"path": "src/sales/core/commands/pay_invoice.py", "imports": ["src.infra.mail"], "rule": 2}], "problems": [2], "applies": true}
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/docs/event-list.md repo/docs/event-list.md
+--- base/docs/event-list.md	2026-11-07 17:53:34.559439980 +0100
++++ repo/docs/event-list.md	2026-11-07 18:02:21.892085354 +0100
+@@ -6,6 +6,7 @@
+ 
+ - OrderPlaced: a customer placed an order (order id, customer id, total).
+ - InvoiceIssued: an invoice was issued for an order (invoice id, order id, amount).
++- InvoicePaid: an invoice was paid and the payment recorded (invoice id, order id, customer id, amount, paid on).
+ 
+ ## shipping
+ 
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/schema.sql repo/schema.sql
+--- base/schema.sql	2026-11-07 17:53:34.559439980 +0100
++++ repo/schema.sql	2026-11-07 18:02:21.892085354 +0100
+@@ -25,6 +25,16 @@
+     version integer NOT NULL DEFAULT 1
+ );
+ 
++-- Sales outbox: written in the same transaction as the change; the relay publishes after commit.
++CREATE TABLE sales_outbox (
++    id bigserial PRIMARY KEY,
++    event_type text NOT NULL,
++    payload jsonb NOT NULL,
++    attempts integer NOT NULL DEFAULT 0,
++    last_error text,
++    processed_at timestamptz
++);
++
+ -- Shipping context
+ CREATE TABLE fulfilments (
+     id text PRIMARY KEY,
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/main.py repo/src/main.py
+--- base/src/main.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/main.py	2026-11-07 18:02:21.892085354 +0100
+@@ -1,5 +1,6 @@
+ """Composition root: wires each context's use cases to Postgres."""
+ from src.sales.adapters.pg import PgSalesUnitOfWork
++from src.sales.adapters.relay import relay_outbox
+ from src.sales.core.commands.cancel_invoice import cancel_invoice as _cancel_invoice
+ from src.sales.core.commands.issue_invoice import issue_invoice as _issue_invoice
+ from src.sales.core.commands.pay_invoice import pay_invoice as _pay_invoice
+@@ -17,7 +18,9 @@
+ 
+ 
+ def pay_invoice(invoice_id, paid_on):
+-    return _pay_invoice(PgSalesUnitOfWork(), invoice_id, paid_on)
++    version = _pay_invoice(PgSalesUnitOfWork(), invoice_id, paid_on)
++    relay_outbox()  # after commit; a failure here leaves the row for the next run
++    return version
+ 
+ 
+ def cancel_invoice(invoice_id):
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/adapters/pg.py repo/src/sales/adapters/pg.py
+--- base/src/sales/adapters/pg.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/adapters/pg.py	2026-11-07 18:02:21.892085354 +0100
+@@ -1,3 +1,7 @@
++import dataclasses
++
++from psycopg.types.json import Jsonb
++
+ from src.db import connect
+ from src.sales.core.invoices import Invoice
+ from src.sales.core.orders import Order, OrderLine
+@@ -23,6 +27,11 @@
+                             [(order.id, n, l.sku, l.quantity, l.unit_price_cents) for n, l in enumerate(order.lines, 1)])
+ 
+ 
++def _dumps(obj):
++    import json
++    return json.dumps(obj, default=lambda o: o.isoformat())
++
++
+ class StaleInvoice(Exception):
+     pass
+ 
+@@ -48,6 +57,11 @@
+         if row is None:
+             raise StaleInvoice(invoice.id)
+         invoice.version = row[0]
++        for event in invoice.events:
++            if type(event).__name__ == "InvoicePaid":
++                self.conn.execute("INSERT INTO sales_outbox (event_type, payload) VALUES (%s, %s)",
++                                  (type(event).__name__, Jsonb(dataclasses.asdict(event), dumps=_dumps)))
++        invoice.events = [e for e in invoice.events if type(e).__name__ != "InvoicePaid"]
+ 
+ 
+ class PgSalesUnitOfWork:
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/adapters/relay.py repo/src/sales/adapters/relay.py
+--- base/src/sales/adapters/relay.py	1970-01-01 01:00:00.000000000 +0100
++++ repo/src/sales/adapters/relay.py	2026-11-07 18:02:21.892085354 +0100
+@@ -0,0 +1,27 @@
++"""Outbox relay: publishes sales_outbox rows after commit, at least once. A failed row is retried on the
++next run (attempts and last_error recorded). InvoicePaid becomes the customer's receipt mail."""
++from src.db import connect
++from src.infra import mail
++
++
++def _send(event_type, payload):
++    if event_type == "InvoicePaid":
++        mail.send(f"{payload['customer_id']}@example.com", f"Receipt for invoice {payload['invoice_id']}",
++                  f"We received {payload['amount_cents'] / 100:.2f} on {payload['paid_on']}.")
++
++
++def relay_outbox(limit: int = 100) -> int:
++    """Publish pending rows oldest first; returns how many were published."""
++    published = 0
++    with connect(autocommit=True) as conn:
++        rows = conn.execute("SELECT id, event_type, payload FROM sales_outbox WHERE processed_at IS NULL ORDER BY id LIMIT %s",
++                            (limit,)).fetchall()
++        for row_id, event_type, payload in rows:
++            try:
++                _send(event_type, payload)
++            except Exception as error:
++                conn.execute("UPDATE sales_outbox SET attempts = attempts + 1, last_error = %s WHERE id = %s", (str(error), row_id))
++                continue
++            conn.execute("UPDATE sales_outbox SET processed_at = now(), attempts = attempts + 1 WHERE id = %s", (row_id,))
++            published += 1
++    return published
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/commands/pay_invoice.py repo/src/sales/core/commands/pay_invoice.py
+--- base/src/sales/core/commands/pay_invoice.py	2026-11-07 18:01:10.130813849 +0100
++++ repo/src/sales/core/commands/pay_invoice.py	2026-11-07 18:02:21.892085354 +0100
+@@ -1,13 +1,9 @@
+ from datetime import date
+ 
+-from src.infra import mail
+-
+ 
+ def pay_invoice(uow, invoice_id: str, paid_on: date) -> int:
+     with uow:
+         invoice = uow.invoices.get(invoice_id)
+         invoice.pay(paid_on)
+-        mail.send(f"{invoice.customer_id}@example.com", f"Receipt for invoice {invoice.id}",
+-                  f"We received {invoice.amount_cents / 100:.2f} on {paid_on.isoformat()}.")
+         uow.invoices.save(invoice)
+     return invoice.version
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/events.py repo/src/sales/core/events.py
+--- base/src/sales/core/events.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/core/events.py	2026-11-07 18:02:21.892085354 +0100
+@@ -1,5 +1,6 @@
+ """Sales domain events (see docs/event-list.md). Aggregates record them in `events`."""
+ from dataclasses import dataclass
++from datetime import date
+ 
+ 
+ @dataclass(frozen=True)
+@@ -14,3 +15,12 @@
+     invoice_id: str
+     order_id: str
+     amount_cents: int
++
++
++@dataclass(frozen=True)
++class InvoicePaid:
++    invoice_id: str
++    order_id: str
++    customer_id: str
++    amount_cents: int
++    paid_on: date
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/src/sales/core/invoices.py repo/src/sales/core/invoices.py
+--- base/src/sales/core/invoices.py	2026-11-07 17:53:34.559439980 +0100
++++ repo/src/sales/core/invoices.py	2026-11-07 18:02:21.892085354 +0100
+@@ -1,7 +1,7 @@
+ from dataclasses import dataclass, field
+ from datetime import date
+ 
+-from src.sales.core.events import InvoiceIssued
++from src.sales.core.events import InvoiceIssued, InvoicePaid
+ 
+ 
+ class InvoiceNotPayable(Exception):
+@@ -29,6 +29,7 @@
+         if self.status != "issued":
+             raise InvoiceNotPayable(f"invoice {self.id} is {self.status}")
+         self.status, self.paid_on = "paid", on
++        self.events.append(InvoicePaid(self.id, self.order_id, self.customer_id, self.amount_cents, on))
+ 
+     def cancel(self) -> None:
+         if self.status != "issued":
+diff -ruN -x __pycache__ -x '*.pyc' -x database.url base/tests/test_receipt.py repo/tests/test_receipt.py
+--- base/tests/test_receipt.py	2026-11-07 18:01:10.130813849 +0100
++++ repo/tests/test_receipt.py	2026-11-07 18:02:21.892085354 +0100
+@@ -1,6 +1,9 @@
+ from datetime import date
++from unittest import mock
+ 
+ from src import main
++from src.sales.adapters import relay
++from src.sales.adapters.pg import StaleInvoice
+ from tests.support import DbTest
+ 
+ 
+@@ -9,3 +12,32 @@
+         self.invoice(customer_id="ann")
+         main.pay_invoice("i1", date(2026, 11, 2))
+         self.assertEqual(self.rows("SELECT to_address, subject FROM sent_mail"), [("ann@example.com", "Receipt for invoice i1")])
++
++    def test_commit_writes_one_outbox_row(self):
++        self.invoice()
++        with mock.patch.object(main, "relay_outbox"):
++            main.pay_invoice("i1", date(2026, 11, 2))
++        self.assertEqual(self.rows("SELECT event_type FROM sales_outbox"), [("InvoicePaid",)])
++        self.assertEqual(self.rows("SELECT count(*) FROM sent_mail"), [(0,)])
++
++    def test_failed_payment_sends_no_receipt_and_no_outbox_row(self):
++        self.invoice()
++        with mock.patch("src.sales.adapters.pg.PgInvoiceRepository.save", side_effect=StaleInvoice("i1")):
++            with self.assertRaises(StaleInvoice):
++                main.pay_invoice("i1", date(2026, 11, 2))
++        self.assertEqual(self.rows("SELECT count(*) FROM sent_mail"), [(0,)])
++        self.assertEqual(self.rows("SELECT count(*) FROM sales_outbox"), [(0,)])
++
++    def test_relay_failure_is_retried_and_mails_once(self):
++        self.invoice()
++        with mock.patch.object(relay.mail, "send", side_effect=RuntimeError("smtp down")):
++            main.pay_invoice("i1", date(2026, 11, 2))
++        self.assertEqual(self.rows("SELECT count(*) FROM sent_mail"), [(0,)])
++        self.assertEqual(relay.relay_outbox(), 1)
++        self.assertEqual(relay.relay_outbox(), 0)
++        self.assertEqual(self.rows("SELECT count(*) FROM sent_mail"), [(1,)])
++
++    def test_nothing_is_published_on_the_bus(self):
++        self.invoice()
++        main.pay_invoice("i1", date(2026, 11, 2))
++        self.assertEqual(self.rows("SELECT count(*) FROM bus_messages"), [(0,)])

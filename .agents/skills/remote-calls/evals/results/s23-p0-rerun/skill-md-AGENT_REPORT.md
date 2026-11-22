@@ -1,0 +1,7 @@
+Applied the supplied remote-calls skill. Actual procedures run: P0 only.
+
+P0 scanner: `python` was unavailable (exit 127), then `python3 /tmp/remote-calls-s23-rerun/skill-md/sdk/skill/scripts/scan_remote_calls.py companion.json .` ran successfully as a scanner and returned exit 1: missing timeout at src/adapters/untouched.js:2, no domain violations, no unsupported constructs, clean false. RESULT.json preserves its findings. Task problem: 5 (SDK and adapter retries multiply). The SDK already supplies the mechanism, so P0 step 3 stops and directs configuring that mechanism. Applicability is false; requested P1 and P2 were not executed past this gate. The unrelated timeout finding stays unchanged.
+
+Removed the adapter's outer Cockatiel retry so lookup delegates directly to the existing SDK, retaining its existing three total attempts and native 100 ms timeout. No new resilience values or mechanism were introduced. Charge keeps its single attempt. No external boundary, measurement, companion, existing checker, or SDK changes.
+
+Added tests/sdk-budget.test.mjs. Before the change, `node --test tests/*.test.mjs` failed its budget regression with six actual outbound attempts versus three expected; recovery and charge tests passed. After the change, `node dependency-check.mjs`, `npm run check`, and `node --test tests/*.test.mjs` all passed (3 tests). Tests cover exhausted SDK budget, success on attempt three, and single-attempt charge.

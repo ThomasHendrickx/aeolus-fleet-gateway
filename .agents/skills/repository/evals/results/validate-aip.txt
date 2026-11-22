@@ -1,0 +1,5 @@
+# aip skill v0.3a3 commit 2c20a02fe2b6c34eb98476853865a6b07946dc62
+# (aip/ copied to a folder named repository so the directory-name check applies; jsonschema 4.26.0, pyyaml installed with pip --user --break-system-packages)
+$ python3 scripts/validate.py /tmp/w40/repository
+VALID: /tmp/w40/repository (name: repository)
+# exit 0

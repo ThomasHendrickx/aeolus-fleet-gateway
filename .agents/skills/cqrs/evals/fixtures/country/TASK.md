@@ -1,0 +1,1 @@
+Staff maintain the list of countries we ship to (ISO code and name) in the admin: add a country, rename one, and list them alphabetically by name. The checkout's country dropdown shows the same list. The `countries` table exists; nothing uses it yet.

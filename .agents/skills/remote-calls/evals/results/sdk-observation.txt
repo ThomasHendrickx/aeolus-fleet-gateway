@@ -1,0 +1,7 @@
+SDK behavior observations only. S2.3 remains NOT RUN because P2 never ran.
+
+skill-md: exit 0
+persistent SDK failure -> exactly SDK three attempts
+
+aip: exit 0
+persistent SDK failure -> exactly SDK three attempts

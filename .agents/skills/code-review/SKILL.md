@@ -13,6 +13,8 @@ Run two axes, each in its own subagent so neither colours the other (without sub
 
 Each axis reports in under 400 words, with file and hunk per finding.
 
+Also check the pull request's CI use: runs, reruns, cancelled runs, and pushes that were not a green head run locally first. Name waste under its own heading; waste alone never blocks a merge.
+
 Report the axes under their own headings, unmerged and unranked across axes. Mark each finding blocking (an acceptance criterion fails, or a documented rule is broken) or not. End with the count per axis and the worst finding within each.
 
 One review per change. A fix for a blocking finding is checked against that finding, not reviewed again. Non-blocking findings go to the backlog, not into this change.

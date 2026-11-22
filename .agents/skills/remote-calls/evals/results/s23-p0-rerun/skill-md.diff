@@ -1,0 +1,48 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:57:39.862064623 +0100
+@@ -0,0 +1,7 @@
++{
++  "missingTimeouts": [{"path":"/tmp/remote-calls-s23-rerun/skill-md/sdk/repo/src/adapters/untouched.js","line":2,"module":"../infra/network.js","timeoutOption":"timeout"}],
++  "violations": [],
++  "problems": [5],
++  "applies": false,
++  "proceduresRun": ["P0"]
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/adapters/vendor.js repo/src/adapters/vendor.js
+--- base/src/adapters/vendor.js	2026-11-09 13:21:59.186829095 +0100
++++ repo/src/adapters/vendor.js	2026-11-09 13:57:39.861064634 +0100
+@@ -1,6 +1,6 @@
+-import { retry, handleAll } from 'cockatiel';
+ import { makeSDK } from '../infra/sdk.js';
+ export function makeVendor(network, {dependency='payment'}={}) {
+- const sdk=makeSDK(network); const outer=retry(handleAll,{maxAttempts:1});
+- return {lookup:sku=>outer.execute(()=>sdk.lookup(sku)),charge:order=>sdk.charge(order)};
++ // The SDK owns the three-attempt budget; an adapter retry multiplies it.
++ const sdk = makeSDK(network);
++ return {lookup:sku=>sdk.lookup(sku),charge:order=>sdk.charge(order)};
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/tests/sdk-budget.test.mjs repo/tests/sdk-budget.test.mjs
+--- base/tests/sdk-budget.test.mjs	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/sdk-budget.test.mjs	2026-11-09 13:57:31.653148035 +0100
+@@ -0,0 +1,20 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { makeVendor } from '../src/adapters/vendor.js';
++import { Network } from '../src/infra/network.js';
++
++test('failed availability read stays within three SDK attempts', async () => {
++ const network = new Network(Array.from({length: 6}, () => ({status:503})));
++ await assert.rejects(makeVendor(network).lookup('sku'));
++ assert.equal(network.requests.length, 3);
++});
++test('SDK can recover on its third attempt', async () => {
++ const network = new Network([{status:503},{status:503},{status:200,value:{available:true}}]);
++ assert.deepEqual(await makeVendor(network).lookup('sku'), {available:true});
++ assert.equal(network.requests.length, 3);
++});
++test('charge remains a single attempt', async () => {
++ const network = new Network([{status:503}]);
++ await assert.rejects(makeVendor(network).charge({id:'order'}));
++ assert.equal(network.requests.length, 1);
++});

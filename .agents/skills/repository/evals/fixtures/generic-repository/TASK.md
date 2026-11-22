@@ -1,0 +1,1 @@
+Customers who already paid are still getting overdue reminders (`send_reminders` in `src/core/reminders.py`). Only orders that are still unpaid and past their due date should be reminded about; drafts are not reminders material either. Fix the reminders.

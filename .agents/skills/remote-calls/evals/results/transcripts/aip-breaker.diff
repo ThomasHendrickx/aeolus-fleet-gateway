@@ -1,0 +1,309 @@
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/RESULT.json repo/RESULT.json
+--- base/RESULT.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/RESULT.json	2026-11-09 13:35:16.024703046 +0100
+@@ -0,0 +1,34 @@
++{
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/aip/breaker/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/breaker/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/breaker/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "violations": [],
++  "problems": [
++    1,
++    3
++  ],
++  "applies": true,
++  "proceduresRun": [
++    "P0",
++    "P1",
++    "P2",
++    "P3"
++  ]
++}
+\ No newline at end of file
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/p0-scan.json repo/p0-scan.json
+--- base/p0-scan.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/p0-scan.json	2026-11-09 13:32:50.519186982 +0100
+@@ -0,0 +1,25 @@
++{
++  "violations": [],
++  "missingTimeouts": [
++    {
++      "path": "/tmp/remote-calls-runs/aip/breaker/repo/src/adapters/untouched.js",
++      "line": 2,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/breaker/repo/src/adapters/vendor.js",
++      "line": 4,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    },
++    {
++      "path": "/tmp/remote-calls-runs/aip/breaker/repo/src/adapters/vendor.js",
++      "line": 5,
++      "module": "../infra/network.js",
++      "timeoutOption": "timeout"
++    }
++  ],
++  "unsupported": [],
++  "clean": false
++}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/p1-check.json repo/p1-check.json
+--- base/p1-check.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/p1-check.json	2026-11-09 13:33:17.147915413 +0100
+@@ -0,0 +1 @@
++{"passed": true, "results": [{"command": "node dependency-check.mjs", "exit": 0, "output": ""}, {"command": "npm run check && node --test tests/*.test.mjs", "exit": 0, "output": "\n> check\n> node --check src/adapters/vendor.js && node --check src/core/checkout.js\n\n\u2714 unkeyed charge has a measured native timeout and no retry (6.747334ms)\n\u2139 tests 1\n\u2139 suites 0\n\u2139 pass 1\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 104.72626\n"}]}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/p2-check.json repo/p2-check.json
+--- base/p2-check.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/p2-check.json	2026-11-09 13:33:40.038681964 +0100
+@@ -0,0 +1 @@
++{"passed": true, "results": [{"command": "node dependency-check.mjs", "exit": 0, "output": ""}, {"command": "npm run check && node --test tests/*.test.mjs", "exit": 0, "output": "\n> check\n> node --check src/adapters/vendor.js && node --check src/core/checkout.js\n\n\u2714 tests/vendor.test.mjs (152.387409ms)\n\u2139 tests 1\n\u2139 suites 0\n\u2139 pass 1\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 167.444431\n"}]}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/p3-check.json repo/p3-check.json
+--- base/p3-check.json	1970-01-01 01:00:00.000000000 +0100
++++ repo/p3-check.json	2026-11-09 13:35:16.354699680 +0100
+@@ -0,0 +1 @@
++{"passed": true, "results": [{"command": "node dependency-check.mjs", "exit": 0, "output": ""}, {"command": "npm run check && node --test tests/*.test.mjs", "exit": 0, "output": "\n> check\n> node --check src/adapters/vendor.js && node --check src/core/checkout.js\n\n\u2714 unkeyed charge has a measured native timeout and no retry (5.370086ms)\n\u2714 eligible retries recover, cap attempts, and honour Retry-After (2.454169ms)\n\u2714 payment breaker opens, isolates catalog, shows fallback, and recovers with one trial (3.369045ms)\n\u2714 client errors never open the circuit (1.210022ms)\n\u2714 keyed charges retry; Retry-After beyond budget fails without retry (0.826889ms)\n\u2714 rate breaker requires minimum traffic, counts successes, and reopens after failed trial (1.13975ms)\n\u2714 timed out eligible lookup remains bounded and cancels every native request (1.08815ms)\n\u2139 tests 7\n\u2139 suites 0\n\u2139 pass 7\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 82.986315\n"}]}
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/adapters/vendor.js repo/src/adapters/vendor.js
+--- base/src/adapters/vendor.js	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/adapters/vendor.js	2026-11-09 13:34:20.498269330 +0100
+@@ -1,7 +1,53 @@
++import { readFileSync } from 'node:fs';
++import { handleWhen, retry, DelegateBackoff, circuitBreaker, SamplingBreaker, CircuitState, BrokenCircuitError }  from 'cockatiel';
++import { log, metric } from '../infra/telemetry.js';
+ import { request } from '../infra/network.js';
++const config = JSON.parse(readFileSync(new URL('../config.json', import.meta.url)));
++export const isRemoteFault = e => e?.status === 429 || (e?.status >= 500 && e?.status <= 599)
++  || e?.message === 'network aborted' || ['ECONNRESET','ECONNREFUSED','ETIMEDOUT','ENOTFOUND','EAI_AGAIN'].includes(e?.code);
+ export function makeVendor(network, { dependency = 'payment' } = {}) {
+-  return {
+-    lookup: (sku) => request(network, { operation: 'lookup', payload: { sku } }),
+-    charge: (order) => request(network, { operation: 'charge', payload: order }),
++ const settings = config[dependency];
++ if (!settings) throw new Error(`Unknown dependency: ${dependency}`);
++ const b = settings.breaker;
++ const breaker = b && circuitBreaker(handleWhen(isRemoteFault), {
++  breaker: new SamplingBreaker({threshold:b.failureRate, duration:b.windowMs, minimumRps:b.minimumCalls * 1000 / b.windowMs}),
++  halfOpenAfter:b.openMs, halfOpenSampling:{calls:b.halfOpenTrials, threshold:0},
++ });
++ breaker?.onStateChange(state => {
++  const event={dependency, state:CircuitState[state], event:'circuit_state_change'};
++  log(event); metric(event);
++ });
++ async function call(operation, payload, eligible) {
++  const native = () => request(network, {operation, payload, timeout: settings.timeoutMs});
++  const send = () => {
++   // Cockatiel queues excess half-open callers; this port promises fail-fast.
++   if (breaker?.state === CircuitState.HalfOpen) throw new BrokenCircuitError();
++   return breaker ? breaker.execute(native) : native();
+   };
++  if (!eligible || !settings.retry) return send();
++  const r = settings.retry;
++  const started = Date.now();
++  let delay = 0;
++  let failures = 0;
++  const policy = retry(handleWhen(e => {
++   if (e instanceof BrokenCircuitError || breaker?.state === CircuitState.Open || !isRemoteFault(e)) return false;
++   delay = Math.max(Math.random() * r.baseMs * 2 ** failures++, Math.max(0, Number(e.headers?.['retry-after']) || 0) * 1000);
++   return Date.now() - started + delay + settings.timeoutMs <= Math.min(r.budgetMs, settings.requestBudgetMs);
++  }), {maxAttempts:r.maxRetries, backoff:new DelegateBackoff(() => delay)});
++  return policy.execute(send);
++ }
++ async function exposed(...args) {
++  try { return await call(...args); }
++  catch(error) {
++   if (isRemoteFault(error) || error instanceof BrokenCircuitError) {
++    const unavailable = new Error(`${dependency} temporarily unavailable`, {cause:error});
++    unavailable.code = 'DEPENDENCY_UNAVAILABLE'; throw unavailable;
++   }
++   throw error;
++  }
++ }
++ return {
++  lookup: sku => exposed('lookup', {sku}, true),
++  charge: order => exposed('charge', order, Boolean(order.idempotencyKey)),
++ };
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/config.json repo/src/config.json
+--- base/src/config.json	2026-11-09 13:21:59.183829125 +0100
++++ repo/src/config.json	2026-11-09 13:33:16.662920359 +0100
+@@ -1 +1,26 @@
+-{}
++{
++  "payment": {
++    "timeoutMs": 100,
++    "source": "measurement.json: p999Ms + paddingMs",
++    "requestBudgetMs": 2500,
++    "retry": {
++      "maxRetries": 3,
++      "baseMs": 40,
++      "budgetMs": 2400,
++      "reason": "measurement.json transientRetryCap, backoffBaseMs, retryBudgetMs; full jitter; reserve native timeout within page budget"
++    },
++    "breaker": {
++      "windowMs": 1000,
++      "minimumCalls": 4,
++      "failureRate": 0.5,
++      "openMs": 200,
++      "halfOpenTrials": 1,
++      "reason": "Incident: four consecutive remote 503s exhausted checkout slots; recovery checks every 200 ms. Request budget 2500 ms. Load sample: two calls fit available per-provider capacity; queueing consumes the page latency budget."
++    }
++  },
++  "catalog": {
++    "timeoutMs": 100,
++    "source": "measurement.json: p999Ms + paddingMs",
++    "requestBudgetMs": 2500
++  }
++}
+\ No newline at end of file
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/src/core/checkout.js repo/src/core/checkout.js
+--- base/src/core/checkout.js	2026-11-09 13:20:13.964901996 +0100
++++ repo/src/core/checkout.js	2026-11-09 13:35:16.003703260 +0100
+@@ -1,6 +1,14 @@
+ export async function checkout(vendor, order) {
+-  const stock = await vendor.lookup(order.sku);
+-  if (!stock.available) return { status: 'unavailable' };
+-  await vendor.charge(order);
+-  return { status: 'confirmed' };
++  try {
++    const stock = await vendor.lookup(order.sku);
++    if (!stock.available) return { status: 'unavailable' };
++    await vendor.charge(order);
++    return { status: 'confirmed' };
++  } catch (error) {
++    if (error.code === 'DEPENDENCY_UNAVAILABLE') return {
++      status: 'temporarily_unavailable',
++      message: 'Payments are temporarily unavailable. Please try again later.',
++    };
++    throw error;
++  }
+ }
+diff -ruN '--exclude=node_modules' '--exclude=__pycache__' base/tests/vendor.test.mjs repo/tests/vendor.test.mjs
+--- base/tests/vendor.test.mjs	1970-01-01 01:00:00.000000000 +0100
++++ repo/tests/vendor.test.mjs	2026-11-09 13:34:50.316965225 +0100
+@@ -0,0 +1,108 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import FakeTimers from '@sinonjs/fake-timers';
++import { makeVendor } from '../src/adapters/vendor.js';
++import { Network } from '../src/infra/network.js';
++
++test('unkeyed charge has a measured native timeout and no retry', async () => {
++ const clock = FakeTimers.install({toFake:['Date','setTimeout','clearTimeout']});
++ try {
++  const n = new Network([{delay:10000}]);
++  const result = makeVendor(n).charge({}).catch(e => e);
++  await clock.tickAsync(110);
++  assert.equal(n.active, 0);
++  assert.ok(await result instanceof Error);
++  assert.equal(n.requests.length,1);
++ } finally { clock.uninstall(); }
++});
++
++test('eligible retries recover, cap attempts, and honour Retry-After', async () => {
++ const clock = FakeTimers.install({toFake:['Date','setTimeout','clearTimeout']});
++ try {
++  const n = new Network([{status:503,headers:{'retry-after':'1'}},{status:200}]);
++  const p = makeVendor(n).lookup('x');
++  await clock.tickAsync(999); assert.equal(n.requests.length,1);
++  await clock.tickAsync(2); await p; assert.equal(n.requests.length,2);
++  const cap = new Network(Array(10).fill({status:503}));
++  const q = makeVendor(cap,{dependency:'payment'}).lookup('x').catch(e=>e);
++  await clock.tickAsync(3000); assert.ok(await q instanceof Error);
++  assert.equal(cap.requests.length,4);
++ } finally { clock.uninstall(); }
++});
++
++import { checkout } from '../src/core/checkout.js';
++import { logs, metrics } from '../src/infra/telemetry.js';
++test('payment breaker opens, isolates catalog, shows fallback, and recovers with one trial', async () => {
++ const clock = FakeTimers.install({toFake:['Date','setTimeout','clearTimeout']});
++ try {
++  logs.length = metrics.length = 0;
++  const n = new Network([...Array(4).fill({status:503}),{delay:50},{status:200}]);
++  const vendor = makeVendor(n);
++  for(let i=0;i<4;i++) { const p=vendor.charge({}).catch(e=>e); await clock.tickAsync(1); await p; }
++  const fallback = await checkout(vendor,{sku:'x'});
++  assert.deepEqual(fallback,{status:'temporarily_unavailable',message:'Payments are temporarily unavailable. Please try again later.'});
++  assert.equal(n.requests.length,4);
++  const catalog = new Network(); const c = makeVendor(catalog,{dependency:'catalog'}).lookup('x');
++  await clock.tickAsync(1); await c;
++  await clock.tickAsync(200);
++  const trial=vendor.charge({}); await clock.tickAsync(1);
++  await assert.rejects(vendor.charge({})); assert.equal(n.requests.length,5);
++  await clock.tickAsync(50); await trial;
++  const healthy=vendor.charge({}); await clock.tickAsync(1); await healthy;
++  assert.deepEqual(logs.map(e=>e.state),['Open','HalfOpen','Closed']);
++  assert.deepEqual(metrics,logs);
++ } finally {clock.uninstall();}
++});
++
++test('client errors never open the circuit', async () => {
++ const clock=FakeTimers.install({toFake:['Date','setTimeout','clearTimeout']});
++ try {
++  const n=new Network(Array(8).fill({status:400})); const v=makeVendor(n);
++  for(let i=0;i<8;i++){const p=v.charge({}).catch(e=>e); await clock.tickAsync(1); assert.equal((await p).status,400);}
++  assert.equal(n.requests.length,8);
++ }finally{clock.uninstall();}
++});
++
++test('keyed charges retry; Retry-After beyond budget fails without retry', async () => {
++ const clock=FakeTimers.install({toFake:['Date','setTimeout','clearTimeout']});
++ try {
++  const n=new Network([{status:503},{status:200}]);
++  const p=makeVendor(n).charge({idempotencyKey:'order-1'});
++  await clock.tickAsync(100); await p;
++  assert.equal(n.requests.length,2);
++  assert.equal(n.requests[1].payload.idempotencyKey,'order-1');
++  const slow=new Network([{status:429,headers:{'retry-after':'10'}}]);
++  const q=makeVendor(slow).lookup('x').catch(e=>e);
++  await clock.tickAsync(1); assert.equal((await q).code,'DEPENDENCY_UNAVAILABLE');
++  await clock.tickAsync(10000); assert.equal(slow.requests.length,1);
++ }finally{clock.uninstall();}
++});
++
++test('rate breaker requires minimum traffic, counts successes, and reopens after failed trial', async () => {
++ const clock=FakeTimers.install({toFake:['Date','setTimeout','clearTimeout']});
++ try {
++  logs.length=metrics.length=0;
++  const n=new Network([{status:503},{status:200},{status:503},{status:200},{status:503},{status:503}]);
++  const v=makeVendor(n);
++  for(let i=0;i<4;i++){const p=v.charge({}).catch(e=>e);await clock.tickAsync(1);await p;}
++  assert.equal(logs.length,0); // Two faults in four calls: rate is not over 50%.
++  const p=v.charge({}).catch(e=>e);await clock.tickAsync(1);await p;
++  assert.equal(logs.at(-1).state,'Open');
++  await clock.tickAsync(200);
++  const q=v.charge({}).catch(e=>e);await clock.tickAsync(1);await q;
++  assert.equal(logs.at(-1).state,'Open');
++  await assert.rejects(v.lookup('x')); assert.equal(n.requests.length,6);
++ }finally{clock.uninstall();}
++});
++
++test('timed out eligible lookup remains bounded and cancels every native request', async () => {
++ const clock=FakeTimers.install({toFake:['Date','setTimeout','clearTimeout']});
++ try {
++  const n=new Network(Array(5).fill({delay:10000}));
++  const p=makeVendor(n).lookup('x').catch(e=>e);
++  await clock.tickAsync(1000);
++  assert.equal((await p).code,'DEPENDENCY_UNAVAILABLE');
++  assert.equal(n.requests.length,4); assert.equal(n.active,0);
++  for(const r of n.requests) assert.equal(r.end-r.start,100);
++ }finally{clock.uninstall();}
++});

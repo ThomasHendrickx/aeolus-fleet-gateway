@@ -17,7 +17,9 @@ Push green heads only. One tiny rule may batch several tests.
 Layers:
 - Unit (beside the file): domain logic and use cases through their interface. Ports get hand-written in-memory fakes, no mocking library. Fake only system boundaries (database, network, clock, ids, vendors), never your own modules. Assert outcomes and stored state, not calls.
 - Integration: every adapter that touches a database runs against a real database in a container.
-- End to end (few, critical journeys): interact via `data-testid="{area}-{element}"`, assert via role or text.
+- End to end (few, critical journeys): act via `data-testid="{area}-{element}"`, assert via role or text with a retrying assertion. Wait on what the app does (a known response, or the part's `data-state`), never on a sleep or `networkidle`.
+- Each journey runs against a production build, never a dev server, seeds its own data, fakes outside services, starts once the app answers its readiness check, fakes the clock, reduces motion and asserts end state, never a duration, ms budget or animation timing.
+- CI retries an e2e test once with a trace; one that passes only on retry is flaky: fix it, never set its retries to 0.
 
 Rules:
 - Name tests as the rule, in domain language: `refuses a second claim while a lease is held`.

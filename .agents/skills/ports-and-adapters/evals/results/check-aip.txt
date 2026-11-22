@@ -1,0 +1,16 @@
+PASS: body validates against procedure.schema.json
+PASS: source/ORIGINAL_SKILL.md equals SKILL.md
+PASS: step names unique
+PASS: P0 has 3 steps (found 3)
+PASS: P1 has 8 steps (found 8)
+PASS: P2 has 5 steps (found 5)
+PASS: P3 has 4 steps (found 4)
+PASS: every step is a P0..P3 node
+PASS: scripts exist
+PASS: four script steps
+PASS: depends_on targets exist
+PASS: P0 step 1 is the only entry node
+PASS: graph is acyclic
+PASS: inputs resolve and edges are typed
+PASS: 4 problems in trigger_when
+PASS: 5 failure modes in anti_patterns

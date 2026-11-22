@@ -1,0 +1,18 @@
+{
+ "S1.2": {
+  "verdict": "PASS",
+  "why": "src/queries/customer_totals.py does the non-cancelled filter, count/sum aggregation, HAVING, ORDER BY and LIMIT/OFFSET in SQL (plus a count(*) total); src/web/staff_pages.py only maps rows, and the in-code list_all loops were removed."
+ },
+ "S1.5": {
+  "verdict": "PASS",
+  "why": "src/queries/customer_list.py just selects the loyalty_tier column; the rule (src/core/loyalty.py) is evaluated only by refresh_loyalty_tier in write commands (place_order, customer_status), which persists it to customers.loyalty_tier (schema.sql)."
+ },
+ "S2.3": {
+  "verdict": "PASS",
+  "why": "src/adapters/pg_revenue_projection.py docstring declares the trigger (same transaction as the invoice change), staleness (zero), idempotency key ((invoice_id, change) in monthly_revenue_applied) and the rebuild command, with a rebuild() implementation. schema.sql repeats the key and rebuild. The projection is synchronous, and the docstring states the read-your-own-writes outcome."
+ },
+ "S4.1": {
+  "verdict": "PASS",
+  "why": "src/core/commands/change_shipping_address.py is named for the change, takes only order_id, street, city, postcode, and returns order.version; wired through src/main.py and web/order_pages.post_shipping_address."
+ }
+}
