@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto';
 
 import { FLEET_HEADER, idSchema, type FleetId } from '@aeolus-fleet/common';
-import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, inject, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { createPrismaRoutes } from '../src/adapters/prisma/routes.js';
@@ -102,7 +102,10 @@ beforeAll(async () => {
     SLACK_API_URL: slack.apiUrl,
   });
   // The gateway takes a moment to start, and its web app compiles as it is first asked.
-  await expect.poll(() => fetch(`${address}/api/health`).then((response) => response.status, () => undefined), { timeout: STARTUP_MS, interval: POLL_MS }).toBe(200);
+  // expect.poll runs only inside a test, so a hook retries with vi.waitFor.
+  await vi.waitFor(async () => {
+    expect(await fetch(`${address}/api/health`).then((response) => response.status, () => undefined)).toBe(200);
+  }, { timeout: STARTUP_MS, interval: POLL_MS });
   expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
   prisma = createPrismaClient(databaseUrl);
 }, 120_000);
