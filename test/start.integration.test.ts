@@ -14,7 +14,7 @@ let gateway: RunningGateway | undefined;
 let address: string;
 
 beforeAll(async () => {
-  fleet = await startFleetServer(inject('postgresUrl'));
+  fleet = await startFleetServer(inject('postgresUrl'), { isFresh: true });
   pagasae = await startFakePagasae();
   pagasae.sharedSignIn(SIGN_IN, charlotteIn(pagasae, FLEET));
   const port = await aFreePort();

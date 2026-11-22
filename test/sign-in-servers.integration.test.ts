@@ -1,5 +1,6 @@
 import { idSchema, type FleetId, type ShipId } from '@aeolus-fleet/common';
-import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, inject } from 'vitest';
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { z } from 'zod';
 
 import { createPrismaClient } from '../src/adapters/prisma/client.js';
@@ -39,8 +40,8 @@ async function started(options: AttioDoubleOptions = {}): Promise<void> {
   expect((await connectGateway(address, { cookie, ...gatewayShip })).status).toBe(200);
 }
 
-beforeEach(async () => {
-  [fleet, databaseUrl] = await Promise.all([startFleetServer(inject('postgresUrl')), migratedDatabase(inject('postgresUrl'))]);
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
+  [fleet, databaseUrl] = await Promise.all([startFleetServer(inject('postgresUrl'), { isFresh }), migratedDatabase(inject('postgresUrl'))]);
   cookie = await signIn(fleet);
   owner = (await commission(fleet, { cookie, ship: { name: 'mathilde', type: 'person', kind: 'person' } })).shipId;
   const agent = await commission(fleet, { cookie, ship: { name: 'agent', type: 'agent' } });
@@ -152,7 +153,7 @@ describe('supplied outside OAuth clients (decision 0074)', () => {
 
 
 describe('plain gateway URL identities (decision 0074)', () => {
-  it('persists distinct opaque URL identities, reuses one after restart and changes it after retirement', async () => {
+  freshFleetTest('persists distinct opaque URL identities, reuses one after restart and changes it after retirement', async () => {
     await started({ isRegistering: false });
     const client = { source: 'url', mode: 'plain' };
     const body = { requestId: 'url-client', name: 'attio', url: attio.url, credential: { kind: 'personSignIn', client }, ownerShipId: owner };

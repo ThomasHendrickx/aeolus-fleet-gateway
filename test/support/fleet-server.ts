@@ -15,6 +15,8 @@ import { idSchema, type FleetId } from '@aeolus-fleet/common';
 import { createApp } from '@aeolus-fleet/core/testing';
 import { z } from 'zod';
 
+import { createPrismaClient } from '../../src/adapters/prisma/client.js';
+
 const run = promisify(execFile);
 
 /** How long a starting fleet server gets to listen. */
@@ -156,18 +158,33 @@ const START_ATTEMPTS = 3;
 const PORT_TAKEN = 'exited before it listened';
 
 /**
- * Migrates a new database, creates its fleet and argo, and starts core on a free port, answering once it listens.
- * When another process took the port first, it starts again on a new port with a new fleet:init, whose PUBLIC_URL holds the port.
+ * Starts core on its own copy of the initialised fleet database. Tests of
+ * persistence or concurrency can request a fresh migration and fleet:init.
+ * A taken port is retried with a new database and port.
  */
-export async function startFleetServer(adminUrl: string, options: { aPort?: () => Promise<number> } = {}): Promise<FleetServer> {
+export async function startFleetServer(adminUrl: string, options: { aPort?: () => Promise<number>; isFresh?: boolean } = {}): Promise<FleetServer> {
   const aPort = options.aPort ?? aFreePort;
   const bin = coreBin();
   for (let attempt = 1; ; attempt += 1) {
     const databaseUrl = aNewDatabaseUrl(adminUrl, 'fleet');
-    await run(process.execPath, [bin, 'migrate'], { env: { ...process.env, DATABASE_URL: databaseUrl } });
+    if (options.isFresh) {
+      await run(process.execPath, [bin, 'migrate'], { env: { ...process.env, DATABASE_URL: databaseUrl } });
+    } else {
+      const { inject } = await import('vitest');
+      const templateUrl = inject('fleetTemplateUrl');
+      const database = new URL(databaseUrl).pathname.slice(1);
+      const template = new URL(templateUrl).pathname.slice(1);
+      const identifier = z.string().regex(/^[a-z0-9_]+$/);
+      const client = createPrismaClient(adminUrl);
+      try {
+        await client.$executeRawUnsafe(`CREATE DATABASE "${identifier.parse(database)}" TEMPLATE "${identifier.parse(template)}"`);
+      } finally {
+        await client.$disconnect();
+      }
+    }
     const port = await aPort();
     const url = `http://127.0.0.1:${String(port)}`;
-    const ticket = await initialiseFleet(bin, { DATABASE_URL: databaseUrl, PUBLIC_URL: url });
+    const ticket = options.isFresh ? await initialiseFleet(bin, { DATABASE_URL: databaseUrl, PUBLIC_URL: url }) : undefined;
     let core: { stop(): Promise<void> };
     try {
       core = await startCore(bin, { databaseUrl, port });
@@ -178,7 +195,9 @@ export async function startFleetServer(adminUrl: string, options: { aPort?: () =
       throw error;
     }
     try {
-      await setOperatorLogin(url, ticket);
+      if (ticket !== undefined) {
+        await setOperatorLogin(url, ticket);
+      }
     } catch (error) {
       await core.stop();
       throw error;

@@ -2,6 +2,8 @@ import { createServer, type Server } from 'node:http';
 
 import { afterEach, describe, expect, inject, it } from 'vitest';
 
+import { createPrismaClient } from '../../src/adapters/prisma/client.js';
+import { signIn } from './argo.js';
 import { aFreePort, startFleetServer, type FleetServer } from './fleet-server.js';
 
 let stranger: Server | undefined;
@@ -33,6 +35,38 @@ async function aStrangerOn(port: number): Promise<void> {
 }
 
 describe('startFleetServer', () => {
+  it('copies the initialised fleet into isolated databases', async () => {
+    fleet = await startFleetServer(inject('postgresUrl'));
+    const other = await startFleetServer(inject('postgresUrl'));
+    const first = createPrismaClient(fleet.databaseUrl);
+    const second = createPrismaClient(other.databaseUrl);
+    try {
+      expect(await signIn(fleet)).toBeTruthy();
+      expect(await signIn(other)).toBeTruthy();
+      const firstFleet = await first.$queryRaw<{ id: string; name: string }[]>`SELECT id, name FROM fleets`;
+      const secondFleet = await second.$queryRaw<{ id: string; name: string }[]>`SELECT id, name FROM fleets`;
+      expect(firstFleet).toEqual(secondFleet);
+      await first.$executeRaw`UPDATE fleets SET name = 'changed'`;
+      expect(await second.$queryRaw<{ name: string }[]>`SELECT name FROM fleets`).toEqual([{ name: 'test fleet' }]);
+    } finally {
+      await Promise.all([first.$disconnect(), second.$disconnect(), other.stop()]);
+    }
+  }, 120_000);
+
+  it('starts a separately initialised fleet when fresh setup is requested', async () => {
+    fleet = await startFleetServer(inject('postgresUrl'));
+    const fresh = await startFleetServer(inject('postgresUrl'), { isFresh: true });
+    const first = createPrismaClient(fleet.databaseUrl);
+    const second = createPrismaClient(fresh.databaseUrl);
+    try {
+      const copied = await first.$queryRaw<{ id: string }[]>`SELECT id FROM fleets`;
+      const independent = await second.$queryRaw<{ id: string }[]>`SELECT id FROM fleets`;
+      expect(copied).not.toEqual(independent);
+    } finally {
+      await Promise.all([first.$disconnect(), second.$disconnect(), fresh.stop()]);
+    }
+  }, 120_000);
+
   it('starts on a new port when the first one is taken', async () => {
     const taken = await aFreePort();
     await aStrangerOn(taken);

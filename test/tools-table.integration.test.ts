@@ -1,5 +1,6 @@
 import { idSchema, type ShipId } from '@aeolus-fleet/common';
-import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, inject } from 'vitest';
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { lookupShip } from './support/ship.js';
 import { z } from 'zod';
 
@@ -34,8 +35,8 @@ const dataOf = <T extends z.ZodType>(schema: T) => z.object({ result: z.object({
 const listedToolSchema = z.object({ name: z.string(), isReadOnly: z.boolean().optional(), isDestructive: z.boolean().optional(), isOn: z.boolean(), isNew: z.boolean() });
 const requirementsSchema = z.object({ version: z.number(), party: z.array(z.string()), tools: z.array(z.object({ tool: z.string(), scopes: z.array(z.string()) })) });
 
-beforeEach(async () => {
-  [fleet, server, databaseUrl] = await Promise.all([startFleetServer(inject('postgresUrl')), startFiftyTools(), migratedDatabase(inject('postgresUrl'))]);
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
+  [fleet, server, databaseUrl] = await Promise.all([startFleetServer(inject('postgresUrl'), { isFresh }), startFiftyTools(), migratedDatabase(inject('postgresUrl'))]);
   cookie = await signIn(fleet);
   const gatewayShip = await commission(fleet, { cookie, ship: { name: 'gateway', type: 'gateway', kind: 'app', scopes: GATEWAY_SCOPES } });
   const owner = (await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } })).shipId;
@@ -145,7 +146,7 @@ describe("an approver sets the scopes on a 50-tool server's tools table (gateway
     });
   });
 
-  it('keeps one of two bulk changes made at once on the same version whole, and nothing of the other', async () => {
+  freshFleetTest('keeps one of two bulk changes made at once on the same version whole, and nothing of the other', async () => {
     const [first, second] = [EVERY_FIFTY_TOOL.slice(0, 25), EVERY_FIFTY_TOOL.slice(25)];
 
     const both = await Promise.all([setScopes({ version: 0, tools: first.map((tool) => ({ tool, scopes: ['crm:read-leads'] })) }), setScopes({ version: 0, tools: second.map((tool) => ({ tool, scopes: ['crm:write-leads'] })) })]);

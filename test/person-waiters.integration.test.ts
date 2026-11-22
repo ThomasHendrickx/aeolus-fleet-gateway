@@ -1,7 +1,8 @@
 import { createShipWakeups } from '../src/adapters/fleet/ship-wakeups.js';
 import Fastify from 'fastify';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject } from 'vitest';
 
+import { fleetTest as it, freshFleetTest } from './support/fleet-test.js';
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
 import { createPrismaClient, type PrismaClient } from '../src/adapters/prisma/client.js';
 import { createPrismaPersonCrews } from '../src/adapters/prisma/person-crews.js';
@@ -44,8 +45,8 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-beforeEach(async () => {
-  fleet = await startFleetServer(inject('postgresUrl'));
+beforeEach<{ isFresh: boolean }>(async ({ isFresh }) => {
+  fleet = await startFleetServer(inject('postgresUrl'), { isFresh });
   const cookie = await signIn(fleet);
   charlotteCrew = await register(fleet, await commission(fleet, { cookie, ship: { name: 'charlotte', type: 'person', kind: 'person' } }));
   tracker = await register(fleet, await commission(fleet, { cookie, ship: { name: 'tracker', type: 'issue-tracker', kind: 'app' } }));
@@ -113,7 +114,7 @@ async function trackerSendsCharlotte(): Promise<void> {
 }
 
 describe('the waiters of the person ships the gateway crews', () => {
-  it('start for every crew held once the gateway starts, as after a restart', async () => {
+  freshFleetTest('start for every crew held once the gateway starts, as after a restart', async () => {
     const instance = anInstance();
 
     instance.start();
