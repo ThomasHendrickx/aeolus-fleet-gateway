@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  NODE_VERSION: 26
+
 # A later push to a pull request cancels its earlier run; a push to main or a hotfix branch never
 # cancels another, so every commit there keeps its own CI result.
 concurrency:
@@ -22,9 +25,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 26
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/install
       - run: npm run typecheck
       - run: npm run lint
       # The browser the web parts' browser tests run in.
@@ -38,9 +41,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 26
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/install
       # The images Testcontainers starts, from the Actions cache.
       - uses: ./.github/actions/test-images
       - run: npm run test:integration
@@ -57,8 +60,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 26
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
+      # The one job that always installs fresh, whatever the cache holds: it proves a package.json
+      # change still installs from package-lock.json (#446).
       - run: npm ci
       # The same steps as release.yml, with a throwaway prerelease version:
       # npm requires a tag for a prerelease.
