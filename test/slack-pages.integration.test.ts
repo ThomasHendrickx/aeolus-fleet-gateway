@@ -418,16 +418,20 @@ describe('linking a Slack account (gateway scopes S7)', () => {
 
     let answers: Awaited<ReturnType<typeof releaseNotesReceives>> = [];
     await expect.poll(async () => (answers = [...answers, ...(await releaseNotesReceives())]).length, { timeout: 30_000 }).toBe(2);
-    // Core took the message of the reply, so a further event round has nothing to send a second time.
+    // Core took the message of the reply. A round runs events one at a time, so a later event kept after that and taken proves a further event round ran: a duplicate of the reply would have been sent in it.
     await expect.poll(() => prisma.slackEvent.count({ where: { fleetId, eventId: 'Ev-1382-thread', takenAt: { not: null } } }), { timeout: 30_000 }).toBe(1);
-    answers = [...answers, ...(await releaseNotesReceives())];
+    const next = await slackEvent(releaseNotesAppId, { event: { type: 'message', channel_type: 'im', channel: 'D0CHARLOTTE', user: 'U0CHARLOTTE', text: 'And tag it twice', ts: '1730019960.000600', thread_ts: questionTs }, eventId: 'Ev-1382-next' });
+    expect(next.status).toBe(200);
+    await expect.poll(() => prisma.slackEvent.count({ where: { fleetId, eventId: 'Ev-1382-next', takenAt: { not: null } } }), { timeout: 30_000 }).toBe(1);
+    await expect.poll(async () => (answers = [...answers, ...(await releaseNotesReceives())]).length, { timeout: 30_000 }).toBe(3);
 
     expect({ pressed: pressed.status, replied: replied.status, isInSlackYet }).toEqual({ pressed: 200, replied: 200, isInSlackYet: false });
     expect(answers).toEqual(expect.arrayContaining([
       { contentType: 'application/vnd.aeolus.answer+json', payload: '{"questionId":"0b6f3c1e-2d7a-4c39-8e0b-7a1d5c3f9e22","option":1}', inReplyTo: questionMessageId },
       { contentType: 'text/markdown', payload: 'Tag it today', inReplyTo: questionMessageId },
     ]));
-    expect(answers).toHaveLength(2);
+    expect(answers).toHaveLength(3);
+    expect(answers.filter(({ payload }) => payload === 'Tag it today')).toHaveLength(1);
   }, 120_000);
 
   it('posts every question sent at once, each with its pick, one with options longer than a button shows among them (aeolus-fleet#1574)', async () => {
@@ -514,8 +518,16 @@ describe('linking a Slack account (gateway scopes S7)', () => {
       const later = await personCall('putInBasket', { deliveryId, option: 3, optionLabel: 'Both', note: '' });
       expect({ status: later.status, said: JSON.stringify(await later.json()).includes('Already answered in Slack: option 2. Nothing is sent.') }).toEqual({ status: 409, said: true });
       expect((await personCall('sendBasket', {})).status).toBe(200);
-      // Send left nothing of the basket for a further basket round to send.
-      await expect.poll(() => prisma.basketEntry.count({ where: { fleetId, messageId: questionMessageId, state: { in: ['waiting', 'sending'] } } }), { timeout: 30_000 }).toBe(0);
+      // A basket round after Send would send what the basket held. A second question's answer, put in the basket after that, is sent only by a round after it: once that is sent, a further basket round ran.
+      const nextQuestion = JSON.stringify({ id: '8e2f3a4b-5c6d-4e7f-9a81-92ab3c4d5e6f', title: 'And then?', context: 'A later one', options: [{ key: 1, label: 'Ship it', detail: '' }], pick: { option: 1, why: 'demo' } });
+      const nextMessageId = await releaseNotesSends({ contentType: 'application/vnd.aeolus.question+json', payload: nextQuestion });
+      await expect.poll(() => prisma.slackPost.count({ where: { fleetId, messageId: nextMessageId, ts: { not: null } } }), { timeout: 30_000 }).toBe(1);
+      const nextDeliveryId = (await prisma.slackPost.findFirstOrThrow({ where: { fleetId, messageId: nextMessageId } })).deliveryId;
+      expect((await personCall('open', { deliveryId: nextDeliveryId })).status).toBe(200);
+      expect((await personCall('putInBasket', { deliveryId: nextDeliveryId, option: 1, optionLabel: 'Ship it', note: '' })).status).toBe(200);
+      expect((await personCall('sendBasket', {})).status).toBe(200);
+      await expect.poll(() => prisma.basketEntry.count({ where: { fleetId, messageId: nextMessageId, state: 'sent' } }), { timeout: 30_000 }).toBe(1);
+      expect(await prisma.basketEntry.count({ where: { fleetId, messageId: questionMessageId, state: { in: ['waiting', 'sending'] } } })).toBe(0);
       const answers = (await releaseNotesReceives()).filter(({ inReplyTo }) => inReplyTo === questionMessageId);
       expect(answers.map(({ payload }) => payload)).toEqual(['{"questionId":"7d1e2f3a-4b5c-4d6e-8f70-819a2b3c4d5e","option":2}']);
 
