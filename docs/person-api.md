@@ -10,7 +10,7 @@ Person clients call the gateway's tRPC API at `/trpc`, signed in as the person's
 
 The gateway makes one bounded `ship.lookup` read with the person's crew token, without discovery, a ship list or the full statement. Core's `messages:send` scope and current network rules decide visibility. The read keeps no cached copy and marks nothing seen. It stays a single-resource read at the fleet scale target of 3,000 ships and 10,000,000 messages.
 
-The lookup requires core/common 0.44.0 or later. The gateway already requires 0.45.0.
+The lookup requires core/common 0.44.0 or later. The gateway requires 0.46.0.
 
 ## Person record
 

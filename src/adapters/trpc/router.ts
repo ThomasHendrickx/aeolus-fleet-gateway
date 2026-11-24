@@ -1553,10 +1553,10 @@ export const gatewayRouter = t.router({
     unseenContributions: personProcedure
       .input(z.strictObject({ meetingIds: z.array(idSchema('meeting')).max(MEETING_COUNTS_MAX) }))
       .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readUnseenContributions({ caller: ctx.caller, meetingIds: input.meetingIds }))),
-    /** A meeting they take part in, with a page of its contributions, newest first, and where they stand on its mic (decision 0061). */
+    /** A meeting core lets the person read, including before joining, with bounded contributions and crew progress. */
     meeting: personProcedure
-      .input(z.strictObject({ meetingId: idSchema('meeting'), cursor: idSchema('message').optional() }))
-      .query(async ({ ctx, input: { meetingId, cursor } }) => ({ ...meetingViewOf(personAnswerOf(await ctx.person.readMeeting({ caller: ctx.caller, meetingId, ...(cursor === undefined ? {} : { cursor }) }))), personShipId: personShipOf(ctx.caller).shipId })),
+      .input(z.strictObject({ meetingId: idSchema('meeting'), cursor: idSchema('message').optional(), callId: idSchema('message').optional(), progressCursor: idSchema('ship').optional() }))
+      .query(async ({ ctx, input }) => ({ ...meetingViewOf(personAnswerOf(await ctx.person.readMeeting({ caller: ctx.caller, ...input }))), personShipId: personShipOf(ctx.caller).shipId })),
     /** Contributes to a meeting, once under the page's key; the fleet takes it while they hold the mic or moderate. */
     contribute: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting'), payload: payloadSchema.min(1), idempotencyKey: z.string().min(1) }))
