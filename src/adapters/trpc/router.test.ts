@@ -1466,6 +1466,21 @@ describe("a person takes part in a meeting through the gateway's API, signed in 
     });
   });
 
+  it('reads a selected round and the next crew progress page as the signed-in person before joining', async () => {
+    // Given a person who has not joined the meeting, and core permits the read.
+    const { context } = aContext(PERSON_COOKIE);
+    if (context.person === undefined) throw new Error('Person API is required');
+    const asked: unknown[] = [];
+    context.person.readMeeting = (input) => { asked.push(input); return Promise.resolve(ok({ meeting: aMeetingRead({ participants: [] }), mic: { kind: 'none' } })); };
+    const callId = 'msg_01m5qa5j85mgd4z61d9c2k0004';
+
+    // When the person reads a particular round and advances its crew progress page.
+    await gatewayRouter.createCaller(context).people.meeting({ meetingId: HEADS_MEETING_ID, callId, progressCursor: OWNER });
+
+    // Then the authenticated person and both cursors reach core without a participation gate.
+    expect(asked).toEqual([{ caller: { fleetId: FLEET_ID, signedIn: { accountToken: PERSON_TOKEN, personShipId: OWNER } }, meetingId: HEADS_MEETING_ID, callId, progressCursor: OWNER }]);
+  });
+
   it('says a meeting they take no part in is not found', async () => {
     const { context } = aContext(PERSON_COOKIE);
 
