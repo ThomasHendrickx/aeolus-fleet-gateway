@@ -10,8 +10,8 @@ import { runningVersion } from '../http/version.js';
 
 export type { VersionFetch };
 
-/** Core/common 0.46.0: meeting lists, person joins and meeting calls. */
-export const MINIMUM_CORE_VERSION = '0.46.0';
+/** Core/common 0.46.1: meeting call question, number and closed call count. */
+export const MINIMUM_CORE_VERSION = '0.46.1';
 
 /** Stops the start when the fleet's core is older than the gateway needs, or does not say its version. */
 export async function requireCoreVersion(fleetUrl: string, fetch: VersionFetch = globalThis.fetch): Promise<void> {

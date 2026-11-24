@@ -603,6 +603,7 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
         goal: null,
         endsAt: null,
         endAfterCalls: null,
+        closedCalls: 0,
         call: null,
         owner: CHIEF,
         moderator: CHIEF,
@@ -627,7 +628,7 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
       value: {
         meetingId: MEETING,
         title: 'Weekly heads',
-        goal: null, endsAt: null, endAfterCalls: null, call: null,
+        goal: null, endsAt: null, endAfterCalls: null, closedCalls: 0, call: null,
         owner: { shipId: CHIEF.id, name: 'chief-of-staff' },
         moderator: { shipId: CHIEF.id, name: 'chief-of-staff' },
         openedAt: new Date('2026-10-24T09:00:00.000Z'),
@@ -649,14 +650,14 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
   it('carries the goal, end condition, round answers and bounded crew progress in one meeting read', async () => {
     // Given core has a round with one answered ship and a next progress page.
     const call = {
-      callId: 'msg_01m5qa5j85mgd4z61d9c2k0004',
+      callId: 'msg_01m5qa5j85mgd4z61d9c2k0004', question: null, number: 1,
       expectedShipIds: [CHIEF.id], silentShipIds: [], notAskedShipIds: [],
       deadline: '2026-10-24T09:10:00.000Z', openedAt: '2026-10-24T09:05:00.000Z', closedAt: null,
       answers: [{ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0005', sender: CHIEF, senderLeaseId: null, callId: 'msg_01m5qa5j85mgd4z61d9c2k0004', isLate: false, payload: 'Ready', isPayloadUnreadable: false, contentType: 'text/plain', model: 'gpt-6.1-sol', sentAt: '2026-10-24T09:06:00.000Z' }],
       lateAnswers: [],
       progress: { items: [{ ship: CHIEF, progress: 'answered', status: 'crewed', turn: 'busy', deliveredAt: '2026-10-24T09:05:00.000Z', acknowledgedAt: '2026-10-24T09:06:00.000Z' }], nextCursor: CHIEF.id },
     };
-    answer = { status: 200, body: { meetingId: MEETING, title: 'Weekly heads', goal: 'Choose the launch date', endsAt: '2026-10-24T10:00:00.000Z', endAfterCalls: 3, call, owner: CHIEF, moderator: CHIEF, openedAt: '2026-10-24T09:00:00.000Z', endedAt: null, participants: [], mic: { holder: null, pattern: 'moderator', requests: [] }, contributions: { items: [], nextCursor: null } } };
+    answer = { status: 200, body: { meetingId: MEETING, title: 'Weekly heads', goal: 'Choose the launch date', endsAt: '2026-10-24T10:00:00.000Z', endAfterCalls: 3, closedCalls: 0, call, owner: CHIEF, moderator: CHIEF, openedAt: '2026-10-24T09:00:00.000Z', endedAt: null, participants: [], mic: { holder: null, pattern: 'moderator', requests: [] }, contributions: { items: [], nextCursor: null } } };
 
     // When a person reads a selected round and progress page before joining.
     const read = await createRestFleetDoor(base).meetings.meeting('person-crew', { meetingId: MEETING, callId: 'msg_01m5qa5j85mgd4z61d9c2k0004', progressCursor: PERSON_SHIP });

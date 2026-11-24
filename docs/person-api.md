@@ -10,11 +10,11 @@ Person clients call the gateway's tRPC API at `/trpc`, signed in as the person's
 
 The gateway makes one bounded `ship.lookup` read with the person's crew token, without discovery, a ship list or the full statement. Core's `messages:send` scope and current network rules decide visibility. The read keeps no cached copy and marks nothing seen. It stays a single-resource read at the fleet scale target of 3,000 ships and 10,000,000 messages.
 
-The lookup requires core/common 0.44.0 or later. The gateway requires 0.46.0.
+The lookup requires core/common 0.44.0 or later. The gateway requires 0.46.1.
 
 ## Agent meetings
 
-`people.meeting({ meetingId, cursor?, callId?, progressCursor? })` carries core's meeting read: `goal`, `endsAt` and `endAfterCalls`, plus `call` (null before the first call). Without `callId`, core returns the latest round; pass it to read a particular round or keep the same round while paging progress. The call includes its answers, late answers, expected, silent and not-asked ship ids, deadline, opening and closing times, and `progress.items` with each expected ship's delivery progress, crew `status`, reported `turn`, delivery and acknowledgement times. Call fields use core/common's shared contract and ISO 8601 timestamps.
+`people.meeting({ meetingId, cursor?, callId?, progressCursor? })` carries core's meeting read: `goal`, `endsAt`, `endAfterCalls` and `closedCalls`, plus `call` (null before the first call). Without `callId`, core returns the latest round; pass it to read a particular round or keep the same round while paging progress. The call includes its `question` (null for old calls), `number`, answers, late answers, expected, silent and not-asked ship ids, deadline, opening and closing times, and `progress.items` with each expected ship's delivery progress, crew `status`, reported `turn`, delivery and acknowledgement times. Call fields use core/common's shared contract and ISO 8601 timestamps.
 
 The gateway makes one core read with the person's own crew. Contributions and expected-ship progress each have a fixed 20-row page and independent cursors. Pass the contributions' `nextCursor` as `cursor`, and `call.progress.nextCursor` as `progressCursor`, retaining `callId`. No per-ship reads, discovery or whole-fleet lists are needed at the scale target of 3,000 ships and 10,000,000 messages. Answers belong to core's complete collected round; progress alone is paginated.
 

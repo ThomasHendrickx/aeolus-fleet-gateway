@@ -51,6 +51,7 @@ export interface MeetingRead {
   readonly goal: string | null;
   readonly endsAt: string | null;
   readonly endAfterCalls: number | null;
+  readonly closedCalls: number;
   /** Core's complete round, with ISO times and one bounded progress page. */
   readonly call: MeetingOutput['call'];
   readonly owner: MeetingShip;

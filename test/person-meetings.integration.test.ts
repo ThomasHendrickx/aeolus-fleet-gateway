@@ -377,6 +377,21 @@ describe('agent meetings through the person API against core 0.46.0', () => {
     expect(repeated.deliveries.filter(({ contentType }) => contentType === MEETING_ROUND_CONTENT_TYPE)).toEqual([]);
   });
 
+  it('a person reads the question and number of the second call and the closed call count', async () => {
+    // Given a meeting whose first call has closed and second call is open.
+    const { meetingId } = await anAgentMeeting();
+    const first = openCallOutputSchema.parse(await chiefCalls('openCall', { meetingId, question: 'First question?', idempotencyKey: 'first-call', model: 'gpt-6.1-sol' }));
+    await controls.change(charlotte, { call: 'rejoinMeeting', input: { meetingId } });
+    await controls.change(charlotte, { call: 'closeCall', input: { meetingId, callId: first.callId } });
+    const second = openCallOutputSchema.parse(await chiefCalls('openCall', { meetingId, question: 'Second question?', idempotencyKey: 'second-call', model: 'gpt-6.1-sol' }));
+
+    // When a person reads the meeting.
+    const read = await meetings.meeting(charlotte, { meetingId });
+
+    // Then the open call and closed call count are carried from core.
+    expect(read).toMatchObject({ isOk: true, value: { closedCalls: 1, call: { callId: second.callId, question: 'Second question?', number: 2 } } });
+  });
+
   it('core refuses a person read and first join outside owner reach', async () => {
     // Given a person outside the meeting owner send reach.
     const agentMeeting = await anAgentMeeting();

@@ -22,7 +22,7 @@ function aCoreAt(server: string): VersionFetch {
 
 describe('the gateway starts only against a core it runs with (decision 0049)', () => {
   it('starts against a core at its minimum', async () => {
-    await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.46.0'))).resolves.toBeUndefined();
+    await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.46.1'))).resolves.toBeUndefined();
   });
 
   it('refuses core 0.45.0 before serving agent meeting reads and closeCall', async () => {
@@ -31,7 +31,7 @@ describe('the gateway starts only against a core it runs with (decision 0049)', 
     // When the gateway checks whether it can start.
     const start = requireCoreVersion(FLEET_URL, core);
     // Then it requires the release that carries person meeting calls.
-    await expect(start).rejects.toThrow('needs core 0.46.0 or later');
+    await expect(start).rejects.toThrow('needs core 0.46.1 or later');
   });
 
   it('refuses core 0.44.0, before the person meeting list can complete', async () => {
@@ -42,16 +42,16 @@ describe('the gateway starts only against a core it runs with (decision 0049)', 
     const start = requireCoreVersion(FLEET_URL, core);
 
     // Then it refuses before serving the person meeting list.
-    await expect(start).rejects.toThrow('needs core 0.46.0 or later');
+    await expect(start).rejects.toThrow('needs core 0.46.1 or later');
   });
 
   it('refuses core 0.43.0, before compact discovery and full statement lookup', async () => {
-    await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.43.0'))).rejects.toThrow('needs core 0.46.0 or later');
+    await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.43.0'))).rejects.toThrow('needs core 0.46.1 or later');
   });
 
   it('refuses core 0.37.2, whose Harbour words no awaiting crew or blocked ship', async () => {
     await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.37.2'))).rejects.toEqual(
-      new ConfigError('gateway 0.0.0 needs core 0.46.0 or later; the fleet at https://fleet.example runs core 0.37.2: upgrade core first'),
+      new ConfigError('gateway 0.0.0 needs core 0.46.1 or later; the fleet at https://fleet.example runs core 0.37.2: upgrade core first'),
     );
   });
 
@@ -65,18 +65,18 @@ describe('the gateway starts only against a core it runs with (decision 0049)', 
 
   it('refuses to start against core 0.30.0, which holds no meetings, naming the gateway and both versions', async () => {
     await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.30.0'))).rejects.toThrow(
-      new ConfigError('gateway 0.0.0 needs core 0.46.0 or later; the fleet at https://fleet.example runs core 0.30.0: upgrade core first'),
+      new ConfigError('gateway 0.0.0 needs core 0.46.1 or later; the fleet at https://fleet.example runs core 0.30.0: upgrade core first'),
     );
   });
 
   it('refuses to start against an older minor whose patch is higher', async () => {
     await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.28.12'))).rejects.toThrow(
-      new ConfigError('gateway 0.0.0 needs core 0.46.0 or later; the fleet at https://fleet.example runs core 0.28.12: upgrade core first'),
+      new ConfigError('gateway 0.0.0 needs core 0.46.1 or later; the fleet at https://fleet.example runs core 0.28.12: upgrade core first'),
     );
   });
 
   it('asks the fleet at /api/version, keeping its path, whether or not it ends in a slash', async () => {
-    const core = aCore({ server: '0.46.0', common: '0.46.0' });
+    const core = aCore({ server: '0.46.1', common: '0.46.1' });
     await requireCoreVersion('https://example.com/fleet/', core);
     expect(core.asked).toEqual(['https://example.com/fleet/api/version']);
   });
@@ -84,19 +84,19 @@ describe('the gateway starts only against a core it runs with (decision 0049)', 
   it('refuses to start when the fleet does not answer, saying why', async () => {
     const down: VersionFetch = () => Promise.reject(new Error('connect ECONNREFUSED 127.0.0.1:4000'));
     await expect(requireCoreVersion(FLEET_URL, down)).rejects.toThrow(
-      new ConfigError('gateway 0.0.0 needs core 0.46.0 or later, and could not read the version of the fleet at https://fleet.example: connect ECONNREFUSED 127.0.0.1:4000'),
+      new ConfigError('gateway 0.0.0 needs core 0.46.1 or later, and could not read the version of the fleet at https://fleet.example: connect ECONNREFUSED 127.0.0.1:4000'),
     );
   });
 
   it('refuses to start when the fleet answers an HTTP error', async () => {
     await expect(requireCoreVersion(FLEET_URL, aCore({}, 503))).rejects.toThrow(
-      new ConfigError('gateway 0.0.0 needs core 0.46.0 or later, and could not read the version of the fleet at https://fleet.example: HTTP 503'),
+      new ConfigError('gateway 0.0.0 needs core 0.46.1 or later, and could not read the version of the fleet at https://fleet.example: HTTP 503'),
     );
   });
 
   it('refuses to start when the answer holds no MAJOR.MINOR.PATCH version', async () => {
     await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.28'))).rejects.toThrow(
-      new ConfigError('gateway 0.0.0 needs core 0.46.0 or later, and could not read the version of the fleet at https://fleet.example: its /api/version answered no core version'),
+      new ConfigError('gateway 0.0.0 needs core 0.46.1 or later, and could not read the version of the fleet at https://fleet.example: its /api/version answered no core version'),
     );
   });
 });
