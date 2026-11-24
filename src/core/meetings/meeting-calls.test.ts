@@ -19,6 +19,16 @@ describe('meeting calls as a person ship', () => {
     expect(calls).toEqual([{ token: 'aeolus_ct_v1_charlotte', input: call }]);
   });
 
+  it('passes through the fleet refusal to open a call', async () => {
+    const door: MeetingCallDoor = {
+      openCall: () => Promise.resolve(err({ code: 'FORBIDDEN', message: 'Only the moderator may open a call' })),
+      ackMeetingUpTo: () => Promise.resolve(ok({ acknowledged: 0 })),
+    };
+    const crews = memoryPersonCrews();
+    const meetingCalls = createMeetingCalls({ crews, crewPersonShip: fakeCrewPersonShip(crews), door });
+    await expect(meetingCalls.open({ caller: CHARLOTTE_GRANT, call: { meetingId: HEADS_MEETING_ID, question: 'Friday?', idempotencyKey: 'call-1' } })).resolves.toEqual(err({ kind: 'MEETING_REFUSED', code: 'FORBIDDEN', message: 'Only the moderator may open a call' }));
+  });
+
   it('passes through the fleet refusal to mark contributions read', async () => {
     const door: MeetingCallDoor = {
       openCall: () => Promise.resolve(ok({ callId: 'msg_01m5qa5j85mgd4z61d9c2k0001' })),

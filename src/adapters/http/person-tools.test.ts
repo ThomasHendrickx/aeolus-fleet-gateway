@@ -246,6 +246,24 @@ describe('meeting calls through a person MCP client', () => {
     expect({ result, asked }).toEqual({ result: { content: [{ type: 'text', text: JSON.stringify({ callId }) }] }, asked: [{ caller: CHARLOTTE_GRANT, call }] });
   });
 
+  it('reports the fleet refusal to open a call', async () => {
+    const meetingCalls: PersonToolsDeps['meetingCalls'] = { open: () => Promise.resolve(err({ kind: 'MEETING_REFUSED', code: 'FORBIDDEN', message: 'Only the moderator may open a call' })), acknowledge: unused };
+    const mcp = await connected(personTools({ meetingCalls }).deps);
+    await expect(mcp.callTool({ name: 'aeolus_open_call', arguments: { meetingId: HEADS_MEETING_ID, question: 'Friday?', idempotencyKey: 'call-1' } })).resolves.toEqual({ content: [{ type: 'text', text: 'Only the moderator may open a call' }], isError: true });
+  });
+
+  it('reports the fleet refusal to answer a call', async () => {
+    const sendMessage: SendMessage = () => Promise.resolve(err({ kind: 'SEND_REFUSED', message: 'The fleet did not take your message: The call ended' }));
+    const mcp = await connected(personTools({ sendMessage }).deps);
+    await expect(mcp.callTool({ name: 'aeolus_send', arguments: { meeting: HEADS_MEETING_ID, callId: 'msg_01m5qa5j85mgd4z61d9c2k0001', contentType: 'text/plain', payload: 'Friday works' } })).resolves.toEqual({ content: [{ type: 'text', text: 'The fleet did not take your message: The call ended' }], isError: true });
+  });
+
+  it('reports the fleet refusal to request the mic with queued words', async () => {
+    const changeOwnMic: ChangeOwnMic = () => Promise.resolve(err({ kind: 'MIC_REFUSED', message: 'The fleet did not change the mic: The meeting ended' }));
+    const mcp = await connected(personTools({ changeOwnMic }).deps);
+    await expect(mcp.callTool({ name: 'aeolus_request_mic', arguments: { meetingId: HEADS_MEETING_ID, payload: 'I agree', contentType: 'text/plain' } })).resolves.toEqual({ content: [{ type: 'text', text: 'The fleet did not change the mic: The meeting ended' }], isError: true });
+  });
+
   it('marks meeting contributions read through a message', async () => {
     const asked: unknown[] = [];
     const meetingCalls: PersonToolsDeps['meetingCalls'] = { open: unused, acknowledge: (input) => { asked.push(input); return Promise.resolve(ok({ acknowledged: 2 })); } };

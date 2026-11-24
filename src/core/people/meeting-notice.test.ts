@@ -8,7 +8,7 @@ const MEETING_ID = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg';
 const SHIP_ID = 'shp_01m5qa5j85mgd4z61d9c2k4shp';
 const ADDED = 'application/vnd.aeolus.meeting.added+json';
 const addedPayload = (title: string | null): string =>
-  JSON.stringify({ meetingId: MEETING_ID, title, owner: { id: SHIP_ID, name: 'chief-of-staff' }, moderator: { id: SHIP_ID, name: 'chief-of-staff' }, participants: [{ id: SHIP_ID, name: 'chief-of-staff' }] });
+  JSON.stringify({ goal: null, meetingId: MEETING_ID, title, owner: { id: SHIP_ID, name: 'chief-of-staff' }, moderator: { id: SHIP_ID, name: 'chief-of-staff' }, participants: [{ id: SHIP_ID, name: 'chief-of-staff' }] });
 
 describe('a meeting notice, said as a sentence', () => {
   it('says who added the person to which meeting', () => {
