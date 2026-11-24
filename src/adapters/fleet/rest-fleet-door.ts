@@ -185,6 +185,7 @@ function meetingReadOf(read: MeetingOutput): MeetingRead {
     goal: read.goal,
     endsAt: read.endsAt,
     endAfterCalls: read.endAfterCalls,
+    closedCalls: read.closedCalls,
     call: read.call,
     owner: meetingShipOf(read.owner),
     moderator: meetingShipOf(read.moderator),
