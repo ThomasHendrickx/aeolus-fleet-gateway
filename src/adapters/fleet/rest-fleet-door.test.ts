@@ -590,7 +590,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
 });
 
 describe("the meeting calls the gateway makes as the crew of a person's ship (decision 0061)", () => {
-  const MEETING = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg';
+  const MEETING = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' as const;
   const CHIEF = { id: 'shp_01m5qa5j85mgd4z61d9c2kchf0', name: 'chief-of-staff' };
   const CHARLOTTE = { id: PERSON_SHIP, name: 'charlotte' };
 
@@ -599,7 +599,7 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
       status: 200,
       body: {
         meetingId: MEETING,
-        title: 'Weekly heads',
+        title: 'Weekly heads', goal: null, endsAt: null, endAfterCalls: null, call: null,
         owner: CHIEF,
         moderator: CHIEF,
         openedAt: '2026-10-24T09:00:00.000Z',
@@ -610,7 +610,7 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
         ],
         mic: { holder: CHARLOTTE, pattern: 'fifo', requests: [{ ship: CHIEF, requestedAt: '2026-10-24T09:02:00.000Z' }] },
         contributions: {
-          items: [{ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0002', sender: CHIEF, senderLeaseId: null, payload: 'Marketing first', isPayloadUnreadable: false, contentType: 'text/plain', model: 'claude-opus-5-5', sentAt: '2026-10-24T09:01:00.000Z' }],
+          items: [{ callId: null, isLate: false, messageId: 'msg_01m5qa5j85mgd4z61d9c2k0002', sender: CHIEF, senderLeaseId: null, payload: 'Marketing first', isPayloadUnreadable: false, contentType: 'text/plain', model: 'claude-opus-5-5', sentAt: '2026-10-24T09:01:00.000Z' }],
           nextCursor: 'msg_01m5qa5j85mgd4z61d9c2k0002',
         },
       },
@@ -641,7 +641,28 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
     expect(sent()).toEqual([{ url: '/api/v1/ship/meeting', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { meetingId: MEETING, cursor: 'msg_01m5qa5j85mgd4z61d9c2k0003' } }]);
   });
 
+  it('opens a call through core as the person ship', async () => {
+    const input = { meetingId: MEETING, question: 'Friday?', idempotencyKey: 'call-1' };
+    answer = { status: 200, body: { callId: 'msg_01m5qa5j85mgd4z61d9c2k0001' } };
+    await expect(createRestFleetDoor(base).meetingCalls.openCall('person-crew', input)).resolves.toEqual({ isOk: true, value: answer.body });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/openCall', authorization: 'Bearer person-crew', accountToken: undefined, body: input }]);
+  });
+
+  it('marks contributions read through core as the person ship', async () => {
+    const input = { meetingId: MEETING, messageId: 'msg_01m5qa5j85mgd4z61d9c2k0001' as const };
+    answer = { status: 200, body: { acknowledged: 2 } };
+    await expect(createRestFleetDoor(base).meetingCalls.ackMeetingUpTo('person-crew', input)).resolves.toEqual({ isOk: true, value: answer.body });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/ackMeetingUpTo', authorization: 'Bearer person-crew', accountToken: undefined, body: input }]);
+  });
+
+  it('passes queued words to core when requesting the mic', async () => {
+    answer = { status: 200, body: { mic: { holder: null, pattern: 'moderator', requests: [] }, caller: { kind: 'waiting', place: 1 } } };
+    await createRestFleetDoor(base).meetings.changeMic('person-crew', { meetingId: MEETING, change: 'request', payload: 'I agree', contentType: 'text/plain' });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/requestMic', authorization: 'Bearer person-crew', accountToken: undefined, body: { meetingId: MEETING, payload: 'I agree', contentType: 'text/plain' } }]);
+  });
+
   it.each([
+    [{ kind: 'said', messageId: 'msg_01m5qa5j85mgd4z61d9c2k0001' }, { kind: 'said', messageId: 'msg_01m5qa5j85mgd4z61d9c2k0001' }],
     [{ kind: 'holding' }, { kind: 'holding' }],
     [{ kind: 'waiting', place: 2 }, { kind: 'requested', place: 2 }],
   ] as const)('returns the caller standing answered by requestMic', async (caller, standing) => {

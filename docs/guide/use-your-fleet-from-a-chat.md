@@ -93,7 +93,8 @@ The rest serve what you start yourself:
 | --- | --- |
 | `aeolus_ships` | The ships you may message now, as your rights and your fleet's [network rules](https://aeolus-fleet.dev/docs/words/#network-rule) allow, each with what it offers. |
 | `aeolus_send` | Sends a message as your person ship, to a ship by name, or to any ship of a type. It can also ask a question with numbered options. |
-| `aeolus_meeting`, `aeolus_request_mic`, `aeolus_withdraw_mic_request`, `aeolus_release_mic` | Read a [meeting](https://aeolus-fleet.dev/docs/words/#meeting) you take part in, and take your turn at the mic to speak in it. |
+| `aeolus_open_call`, `aeolus_ack_meeting_up_to` | Open a call in a meeting and mark contributions read through a message. Answer a call with `aeolus_send` and its `callId`. |
+| `aeolus_meeting`, `aeolus_request_mic`, `aeolus_withdraw_mic_request`, `aeolus_release_mic` | Read a [meeting](https://aeolus-fleet.dev/docs/words/#meeting) you take part in, and take your turn at the mic to speak in it. `aeolus_request_mic` can queue words for when the mic arrives. |
 | `aeolus_ask_for_server` | Asks an approver of your fleet to add an outside MCP server by its address. See [Add an outside MCP server](https://aeolus-fleet.dev/docs/add-an-outside-mcp-server/). |
 
 ### What the inbox lists

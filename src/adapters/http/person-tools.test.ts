@@ -39,6 +39,7 @@ function personTools(overrides: Partial<PersonToolsDeps> = {}) {
     askForServer: unused,
     readMeeting: unused,
     changeOwnMic: unused,
+    meetingCalls: { open: unused, acknowledge: unused },
     // A fleet that does not answer the inbox state, so each answer goes alone; the state's own tests give it.
     readInboxState: () => Promise.resolve(err({ kind: 'FLEET_UNAVAILABLE', message: 'The fleet did not answer' })),
     listShips: () => Promise.resolve(ok(DISCOVERY)),
@@ -98,7 +99,7 @@ describe("a person's MCP client starts a message", () => {
 
     const listed = await mcp.listTools();
 
-    expect(listed.tools.map(({ name }) => name)).toEqual(['aeolus_setup', 'aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_meeting', 'aeolus_request_mic', 'aeolus_withdraw_mic_request', 'aeolus_release_mic', 'aeolus_ask_for_server']);
+    expect(listed.tools.map(({ name }) => name)).toEqual(['aeolus_setup', 'aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_meeting', 'aeolus_open_call', 'aeolus_ack_meeting_up_to', 'aeolus_request_mic', 'aeolus_withdraw_mic_request', 'aeolus_release_mic', 'aeolus_ask_for_server']);
   });
 
   it('reads the ships and types their person ship may send to with aeolus_ships', async () => {
@@ -235,6 +236,25 @@ describe('meeting calls through a person MCP client', () => {
     expect(asked).toEqual([{ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID, change: 'request', payload: 'I agree', contentType: 'text/plain' }]);
   });
 
+  it('opens a call as the person and returns its id', async () => {
+    const asked: unknown[] = [];
+    const callId = 'msg_01m5qa5j85mgd4z61d9c2k0001' as const;
+    const meetingCalls: PersonToolsDeps['meetingCalls'] = { open: (input) => { asked.push(input); return Promise.resolve(ok({ callId })); }, acknowledge: unused };
+    const mcp = await connected(personTools({ meetingCalls }).deps);
+    const call = { meetingId: HEADS_MEETING_ID, question: 'Friday?', idempotencyKey: 'call-1' };
+    const result = await mcp.callTool({ name: 'aeolus_open_call', arguments: call });
+    expect({ result, asked }).toEqual({ result: { content: [{ type: 'text', text: JSON.stringify({ callId }) }] }, asked: [{ caller: CHARLOTTE_GRANT, call }] });
+  });
+
+  it('marks meeting contributions read through a message', async () => {
+    const asked: unknown[] = [];
+    const meetingCalls: PersonToolsDeps['meetingCalls'] = { open: unused, acknowledge: (input) => { asked.push(input); return Promise.resolve(ok({ acknowledged: 2 })); } };
+    const mcp = await connected(personTools({ meetingCalls }).deps);
+    const read = { meetingId: HEADS_MEETING_ID, messageId: 'msg_01m5qa5j85mgd4z61d9c2k0001' };
+    const result = await mcp.callTool({ name: 'aeolus_ack_meeting_up_to', arguments: read });
+    expect({ result, asked }).toEqual({ result: { content: [{ type: 'text', text: '{"acknowledged":2}' }] }, asked: [{ caller: CHARLOTTE_GRANT, read }] });
+  });
+
   it('lists tools to open a call and mark contributions read', async () => {
     const listed = await (await connected(personTools().deps)).listTools();
     expect(listed.tools.map(({ name }) => name)).toEqual(expect.arrayContaining(['aeolus_open_call', 'aeolus_ack_meeting_up_to']));
@@ -307,7 +327,9 @@ describe("a person's tools say what each call does (chatgpt-plugin design, 7.4)"
       aeolus_done: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       aeolus_answer: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       aeolus_send: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-      aeolus_request_mic: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      aeolus_open_call: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      aeolus_ack_meeting_up_to: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      aeolus_request_mic: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       aeolus_withdraw_mic_request: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       aeolus_release_mic: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       aeolus_ask_for_server: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },

@@ -250,7 +250,7 @@ export interface PersonShipDoor {
   /** The current full statement of one reachable ship, or null when it left reach. */
   lookup(crewToken: string, shipId: ShipId): Promise<Result<{ shipId: ShipId; statement: DiscoveredStatement } | null, FleetRefusal>>;
   /** Sends the person's own message, once under its key. */
-  send(crewToken: string, message: { to: PersonSelector; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<{ messageId: MessageId }, FleetRefusal>>;
+  send(crewToken: string, message: { to: PersonSelector; callId?: MessageId; contentType: string; payload: string; idempotencyKey: string }): Promise<Result<{ messageId: MessageId }, FleetRefusal>>;
 }
 
 /**

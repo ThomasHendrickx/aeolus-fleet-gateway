@@ -1,3 +1,4 @@
+import type { MicChangeResult } from '../../core/meetings/ports.js';
 /**
  * What a person's chat reads aloud (#238): the inbox, an opened delivery and
  * a meeting as sentences. Times are said in UTC to the minute, and an id
@@ -6,7 +7,6 @@
  */
 import type { MeetingShip, MeetingParticipant } from '../../core/meetings/ports.js';
 import type { PersonMeeting } from '../../core/meetings/read-meeting.js';
-import type { MicStanding } from '../../core/meetings/mic-standing.js';
 import type { ItemJob } from '../../core/people/item-job.js';
 import type { ChatInboxEntry } from '../../core/people/inbox-entry.js';
 import type { OpenedView } from '../../core/people/open-delivery.js';
@@ -46,8 +46,10 @@ export function openedWords(opened: OpenedView): string {
 
 const names = (ships: readonly MeetingShip[]): string => ships.map(({ name }) => name).join(', ');
 
-export function standingWords(standing: MicStanding): string {
+export function standingWords(standing: MicChangeResult): string {
   switch (standing.kind) {
+    case 'said':
+      return `Your words were contributed (messageId ${standing.messageId}).`;
     case 'moderating':
       return 'You moderate, so you contribute without the mic.';
     case 'holding':
