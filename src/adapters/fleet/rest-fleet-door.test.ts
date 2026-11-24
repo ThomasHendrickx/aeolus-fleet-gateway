@@ -674,6 +674,15 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
     await expect(createRestFleetDoor(base).meetings.changeMic('aeolus_ct_v1_charlotte', { meetingId: MEETING, change: 'request' })).resolves.toEqual({ isOk: true, value: standing });
   });
 
+  it('rejects a contribution result for a mic request that submitted no words', async () => {
+    // Given core answers the new said variant despite no submitted words.
+    answer = { status: 200, body: { mic: { holder: null, pattern: 'moderator', requests: [] }, caller: { kind: 'said', messageId: 'msg_01m5qa5j85mgd4z61d9c2k0005' } } };
+    // When a person requests only the mic.
+    const requested = createRestFleetDoor(base).meetings.changeMic('person-crew', { meetingId: MEETING, change: 'request' });
+    // Then a protocol mismatch cannot become a waiting position with no place.
+    await expect(requested).rejects.toThrow('The fleet answered said to a mic request without words');
+  });
+
   it.each(['withdraw', 'release'] as const)('answers no standing after %s', async (change) => {
     answer = { status: 200, body: {} };
     await expect(createRestFleetDoor(base).meetings.changeMic('aeolus_ct_v1_charlotte', { meetingId: MEETING, change })).resolves.toEqual({ isOk: true, value: { kind: 'none' } });
