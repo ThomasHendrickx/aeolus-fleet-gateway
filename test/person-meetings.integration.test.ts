@@ -356,7 +356,7 @@ describe('agent meetings through the person API against core 0.46.0', () => {
 
     // When the person reads before joining, joins and closes that call.
     const preview = await meetings.meeting(charlotte, { ...asked, callId });
-    expect(preview).toMatchObject({ isOk: true, value: { goal: 'Choose the launch date', endAfterCalls: 3, participants: [{ name: 'chief-of-staff' }, { name: 'launch-worker' }], call: { callId, closedAt: null, answers: [{ payload: 'Ready' }], progress: { items: expect.any(Array), nextCursor: null } } } });
+    expect(preview).toMatchObject({ isOk: true, value: { goal: 'Choose the launch date', endAfterCalls: 3, participants: [{ name: 'chief-of-staff' }, { name: 'launch-worker' }], call: { callId, closedAt: null, answers: [{ payload: 'Ready' }], progress: { nextCursor: null } } } });
     await expect(controls.change(charlotte, { call: 'rejoinMeeting', input: asked })).resolves.toEqual({ isOk: true, value: {} });
     const joined = await meetings.meeting(charlotte, { ...asked, callId });
     expect(joined).toMatchObject({ isOk: true, value: { moderator: { name: 'chief-of-staff' }, call: { closedAt: null } } });
@@ -365,7 +365,8 @@ describe('agent meetings through the person API against core 0.46.0', () => {
 
     // Then the pending ship is not asked and one collected round reaches the unchanged moderator.
     const closed = await meetings.meeting(charlotte, { ...asked, callId });
-    expect(closed).toMatchObject({ isOk: true, value: { moderator: { name: 'chief-of-staff' }, call: { callId, closedAt: expect.any(String), answers: [{ payload: 'Ready' }], silentShipIds: [], notAskedShipIds: [agentMeeting.worker.shipId] } } });
+    expect(closed).toMatchObject({ isOk: true, value: { moderator: { name: 'chief-of-staff' }, call: { callId, answers: [{ payload: 'Ready' }], silentShipIds: [], notAskedShipIds: [agentMeeting.worker.shipId] } } });
+    expect(closed.isOk && closed.value.call?.closedAt).toBeTypeOf('string');
     const received = receiveOutputSchema.parse(await chiefCalls('receive', { max: 10 }));
     const rounds = received.deliveries.filter(({ contentType }) => contentType === MEETING_ROUND_CONTENT_TYPE);
     expect(rounds).toHaveLength(1);

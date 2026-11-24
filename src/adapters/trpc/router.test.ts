@@ -2166,7 +2166,7 @@ describe('the person API meeting controls', () => {
     // When it tries to close a call.
     const closed = caller.people.closeCall({ meetingId, callId: 'msg_01m5qa5j85mgd4z61d9c2k0004' });
     // Then the person API refuses it.
-    await expect(closed).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(closed).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it.each([

@@ -13,7 +13,7 @@ import type { ReadUnseenContributions } from '../../core/meetings/read-unseen-co
  */
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
-import { addToMeetingInputSchema, openMeetingInputSchema, meetingsCursorSchema, setMicPatternInputSchema, idempotencyKeySchema, idSchema, payloadSchema, scopeNameSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
+import { closeCallInputSchema, addToMeetingInputSchema, openMeetingInputSchema, meetingsCursorSchema, setMicPatternInputSchema, idempotencyKeySchema, idSchema, payloadSchema, scopeNameSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
 import { initTRPC, TRPCError } from '@trpc/server';
 import { TRPC_ERROR_CODES_BY_KEY } from '@trpc/server/rpc';
 import { z } from 'zod';
@@ -1520,6 +1520,10 @@ export const gatewayRouter = t.router({
     rejoinMeeting: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting') }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'rejoinMeeting', input } }))),
+    /** A present person closes this call; core delivers one collected round to its moderator. */
+    closeCall: personProcedure
+      .input(closeCallInputSchema.strict())
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'closeCall', input } }))),
     openMeeting: personProcedure
       .input(openMeetingInputSchema.pick({ title: true, idempotencyKey: true }).extend({ ships: z.array(z.strictObject({ name: shipHandleSchema })).optional() }).strict())
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'openMeeting', input } }))),
