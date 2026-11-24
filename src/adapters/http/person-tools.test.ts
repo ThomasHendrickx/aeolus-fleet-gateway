@@ -213,6 +213,34 @@ describe("a person's MCP client finishes a step with aeolus_done (Bridge, CC14)"
   });
 });
 
+describe('meeting calls through a person MCP client', () => {
+  it('answers a call by sending its call id to the meeting', async () => {
+    const { deps, asked } = personTools();
+    const mcp = await connected(deps);
+    const callId = 'msg_01m5qa5j85mgd4z61d9c2k0001';
+
+    const result = await mcp.callTool({ name: 'aeolus_send', arguments: { meeting: HEADS_MEETING_ID, callId, contentType: 'text/plain', payload: 'Friday works', idempotencyKey: 'answer-1' } });
+
+    expect(result.isError).not.toBe(true);
+    expect(asked).toEqual([{ caller: CHARLOTTE_GRANT, to: { kind: 'meeting', meetingId: HEADS_MEETING_ID }, callId, contentType: 'text/plain', payload: 'Friday works', idempotencyKey: 'answer-1' }]);
+  });
+
+  it('queues words when requesting the mic', async () => {
+    const asked: unknown[] = [];
+    const changeOwnMic: ChangeOwnMic = (input) => { asked.push(input); return Promise.resolve(ok({ kind: 'requested', place: 1 })); };
+    const mcp = await connected(personTools({ changeOwnMic }).deps);
+
+    await mcp.callTool({ name: 'aeolus_request_mic', arguments: { meetingId: HEADS_MEETING_ID, payload: 'I agree', contentType: 'text/plain' } });
+
+    expect(asked).toEqual([{ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID, change: 'request', payload: 'I agree', contentType: 'text/plain' }]);
+  });
+
+  it('lists tools to open a call and mark contributions read', async () => {
+    const listed = await (await connected(personTools().deps)).listTools();
+    expect(listed.tools.map(({ name }) => name)).toEqual(expect.arrayContaining(['aeolus_open_call', 'aeolus_ack_meeting_up_to']));
+  });
+});
+
 describe("a person's MCP client takes part in a meeting", () => {
   it('reads a meeting, where the person stands on its mic and a page of contributions after the cursor, with aeolus_meeting', async () => {
     const asked: Parameters<ReadMeeting>[0][] = [];
