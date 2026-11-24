@@ -590,7 +590,7 @@ describe("the calls the gateway makes as the crew of a person's ship (Q20)", () 
 });
 
 describe("the meeting calls the gateway makes as the crew of a person's ship (decision 0061)", () => {
-  const MEETING = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg';
+  const MEETING = 'mtg_01m5qa5j85mgd4z61d9c2k4mtg' as const;
   const CHIEF = { id: 'shp_01m5qa5j85mgd4z61d9c2kchf0', name: 'chief-of-staff' };
   const CHARLOTTE = { id: PERSON_SHIP, name: 'charlotte' };
 
@@ -664,6 +664,32 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
     // Then every round field survives, and no separate ship read is needed.
     expect(read).toMatchObject({ isOk: true, value: { goal: 'Choose the launch date', endsAt: '2026-10-24T10:00:00.000Z', endAfterCalls: 3, call } });
     expect(sent()).toEqual([{ url: '/api/v1/ship/meeting', authorization: 'Bearer person-crew', accountToken: undefined, body: { meetingId: MEETING, callId: call.callId, progressCursor: PERSON_SHIP, limit: 20, progressLimit: 20 } }]);
+  });
+
+  it('opens a call through core as the person ship', async () => {
+    const input = { meetingId: MEETING, question: 'Friday?', idempotencyKey: 'call-1' };
+    answer = { status: 200, body: { callId: 'msg_01m5qa5j85mgd4z61d9c2k0001' } };
+    await expect(createRestFleetDoor(base).meetingCalls.openCall('person-crew', input)).resolves.toEqual({ isOk: true, value: answer.body });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/openCall', authorization: 'Bearer person-crew', accountToken: undefined, body: input }]);
+  });
+
+  it('marks contributions read through core as the person ship', async () => {
+    const input = { meetingId: MEETING, messageId: 'msg_01m5qa5j85mgd4z61d9c2k0001' as const };
+    answer = { status: 200, body: { acknowledged: 2 } };
+    await expect(createRestFleetDoor(base).meetingCalls.ackMeetingUpTo('person-crew', input)).resolves.toEqual({ isOk: true, value: answer.body });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/ackMeetingUpTo', authorization: 'Bearer person-crew', accountToken: undefined, body: input }]);
+  });
+
+  it('passes queued words to core when requesting the mic', async () => {
+    answer = { status: 200, body: { mic: { holder: null, pattern: 'moderator', requests: [] }, caller: { kind: 'waiting', place: 1 } } };
+    await createRestFleetDoor(base).meetings.changeMic('person-crew', { meetingId: MEETING, change: 'request', payload: 'I agree', contentType: 'text/plain' });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/requestMic', authorization: 'Bearer person-crew', accountToken: undefined, body: { meetingId: MEETING, payload: 'I agree', contentType: 'text/plain' } }]);
+  });
+
+  it('returns said when queued words are contributed', async () => {
+    const caller = { kind: 'said', messageId: 'msg_01m5qa5j85mgd4z61d9c2k0001' };
+    answer = { status: 200, body: { mic: { holder: null, pattern: 'moderator', requests: [] }, caller } };
+    await expect(createRestFleetDoor(base).meetings.changeMic('person-crew', { meetingId: MEETING, change: 'request', payload: 'I agree' })).resolves.toEqual({ isOk: true, value: caller });
   });
 
   it.each([

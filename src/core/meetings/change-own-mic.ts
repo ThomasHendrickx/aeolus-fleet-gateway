@@ -5,10 +5,9 @@ import { asPersonCrew, withOwnRefusal, type PersonCaller, type PersonCrewError }
 import type { PersonCrews } from '../people/ports.js';
 import { refuse, type DomainError } from '../shared/errors.js';
 import { ok, type Result } from '../shared/result.js';
-import type { MicStanding } from './mic-standing.js';
-import type { OwnMicChange, PersonMeetingDoor } from './ports.js';
+import type { MicChangeResult, OwnMicChange, PersonMeetingDoor } from './ports.js';
 
-export type ChangeOwnMic = (input: { caller: PersonCaller; meetingId: MeetingId; change: OwnMicChange }) => Promise<Result<MicStanding, PersonCrewError | DomainError<'MIC_REFUSED'>>>;
+export type ChangeOwnMic = (input: { caller: PersonCaller; meetingId: MeetingId; change: OwnMicChange; payload?: string; contentType?: string }) => Promise<Result<MicChangeResult, PersonCrewError | DomainError<'MIC_REFUSED'>>>;
 
 /**
  * Use case: a person requests a meeting's mic, withdraws their request, or
@@ -18,8 +17,8 @@ export type ChangeOwnMic = (input: { caller: PersonCaller; meetingId: MeetingId;
  * until it is served or withdrawn, so a person who reads slowly loses no place.
  */
 export function createChangeOwnMic(deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonMeetingDoor }): ChangeOwnMic {
-  return async ({ caller, meetingId, change }) => {
-    const changed = await asPersonCrew(deps, { caller, run: (crew) => withOwnRefusal(deps.door.changeMic(crew.crewToken, { meetingId, change })) });
+  return async ({ caller, meetingId, change, payload, contentType }) => {
+    const changed = await asPersonCrew(deps, { caller, run: (crew) => withOwnRefusal(deps.door.changeMic(crew.crewToken, { meetingId, change, ...(payload === undefined ? {} : { payload }), ...(contentType === undefined ? {} : { contentType }) })) });
     if (!changed.isOk) {
       return changed;
     }

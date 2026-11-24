@@ -39,6 +39,7 @@ function personTools(overrides: Partial<PersonToolsDeps> = {}) {
     askForServer: unused,
     readMeeting: unused,
     changeOwnMic: unused,
+    meetingCalls: { open: unused, acknowledge: unused },
     // A fleet that does not answer the inbox state, so each answer goes alone; the state's own tests give it.
     readInboxState: () => Promise.resolve(err({ kind: 'FLEET_UNAVAILABLE', message: 'The fleet did not answer' })),
     listShips: () => Promise.resolve(ok(DISCOVERY)),
@@ -98,7 +99,7 @@ describe("a person's MCP client starts a message", () => {
 
     const listed = await mcp.listTools();
 
-    expect(listed.tools.map(({ name }) => name)).toEqual(['aeolus_setup', 'aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_meeting', 'aeolus_request_mic', 'aeolus_withdraw_mic_request', 'aeolus_release_mic', 'aeolus_ask_for_server']);
+    expect(listed.tools.map(({ name }) => name)).toEqual(['aeolus_setup', 'aeolus_inbox', 'aeolus_open', 'aeolus_answer', 'aeolus_done', 'aeolus_ships', 'aeolus_send', 'aeolus_meeting', 'aeolus_open_call', 'aeolus_ack_meeting_up_to', 'aeolus_request_mic', 'aeolus_withdraw_mic_request', 'aeolus_release_mic', 'aeolus_ask_for_server']);
   });
 
   it('reads the ships and types their person ship may send to with aeolus_ships', async () => {
@@ -213,6 +214,71 @@ describe("a person's MCP client finishes a step with aeolus_done (Bridge, CC14)"
   });
 });
 
+describe('meeting calls through a person MCP client', () => {
+  it('answers a call by sending its call id to the meeting', async () => {
+    const { deps, asked } = personTools();
+    const mcp = await connected(deps);
+    const callId = 'msg_01m5qa5j85mgd4z61d9c2k0001';
+
+    const result = await mcp.callTool({ name: 'aeolus_send', arguments: { meeting: HEADS_MEETING_ID, callId, contentType: 'text/plain', payload: 'Friday works', idempotencyKey: 'answer-1' } });
+
+    expect(result.isError).not.toBe(true);
+    expect(asked).toEqual([{ caller: CHARLOTTE_GRANT, to: { kind: 'meeting', meetingId: HEADS_MEETING_ID }, callId, contentType: 'text/plain', payload: 'Friday works', idempotencyKey: 'answer-1' }]);
+  });
+
+  it('queues words when requesting the mic', async () => {
+    const asked: unknown[] = [];
+    const changeOwnMic: ChangeOwnMic = (input) => { asked.push(input); return Promise.resolve(ok({ kind: 'requested', place: 1 })); };
+    const mcp = await connected(personTools({ changeOwnMic }).deps);
+
+    await mcp.callTool({ name: 'aeolus_request_mic', arguments: { meetingId: HEADS_MEETING_ID, payload: 'I agree', contentType: 'text/plain' } });
+
+    expect(asked).toEqual([{ caller: CHARLOTTE_GRANT, meetingId: HEADS_MEETING_ID, change: 'request', payload: 'I agree', contentType: 'text/plain' }]);
+  });
+
+  it('opens a call as the person and returns its id', async () => {
+    const asked: unknown[] = [];
+    const callId = 'msg_01m5qa5j85mgd4z61d9c2k0001' as const;
+    const meetingCalls: PersonToolsDeps['meetingCalls'] = { open: (input) => { asked.push(input); return Promise.resolve(ok({ callId })); }, acknowledge: unused };
+    const mcp = await connected(personTools({ meetingCalls }).deps);
+    const call = { meetingId: HEADS_MEETING_ID, question: 'Friday?', idempotencyKey: 'call-1' };
+    const result = await mcp.callTool({ name: 'aeolus_open_call', arguments: call });
+    expect({ result, asked }).toEqual({ result: { content: [{ type: 'text', text: JSON.stringify({ callId }) }] }, asked: [{ caller: CHARLOTTE_GRANT, call }] });
+  });
+
+  it('reports the fleet refusal to open a call', async () => {
+    const meetingCalls: PersonToolsDeps['meetingCalls'] = { open: () => Promise.resolve(err({ kind: 'MEETING_REFUSED', code: 'FORBIDDEN', message: 'Only the moderator may open a call' })), acknowledge: unused };
+    const mcp = await connected(personTools({ meetingCalls }).deps);
+    await expect(mcp.callTool({ name: 'aeolus_open_call', arguments: { meetingId: HEADS_MEETING_ID, question: 'Friday?', idempotencyKey: 'call-1' } })).resolves.toEqual({ content: [{ type: 'text', text: 'Only the moderator may open a call' }], isError: true });
+  });
+
+  it('reports the fleet refusal to answer a call', async () => {
+    const sendMessage: SendMessage = () => Promise.resolve(err({ kind: 'SEND_REFUSED', message: 'The fleet did not take your message: The call ended' }));
+    const mcp = await connected(personTools({ sendMessage }).deps);
+    await expect(mcp.callTool({ name: 'aeolus_send', arguments: { meeting: HEADS_MEETING_ID, callId: 'msg_01m5qa5j85mgd4z61d9c2k0001', contentType: 'text/plain', payload: 'Friday works' } })).resolves.toEqual({ content: [{ type: 'text', text: 'The fleet did not take your message: The call ended' }], isError: true });
+  });
+
+  it('reports the fleet refusal to request the mic with queued words', async () => {
+    const changeOwnMic: ChangeOwnMic = () => Promise.resolve(err({ kind: 'MIC_REFUSED', message: 'The fleet did not change the mic: The meeting ended' }));
+    const mcp = await connected(personTools({ changeOwnMic }).deps);
+    await expect(mcp.callTool({ name: 'aeolus_request_mic', arguments: { meetingId: HEADS_MEETING_ID, payload: 'I agree', contentType: 'text/plain' } })).resolves.toEqual({ content: [{ type: 'text', text: 'The fleet did not change the mic: The meeting ended' }], isError: true });
+  });
+
+  it('marks meeting contributions read through a message', async () => {
+    const asked: unknown[] = [];
+    const meetingCalls: PersonToolsDeps['meetingCalls'] = { open: unused, acknowledge: (input) => { asked.push(input); return Promise.resolve(ok({ acknowledged: 2 })); } };
+    const mcp = await connected(personTools({ meetingCalls }).deps);
+    const read = { meetingId: HEADS_MEETING_ID, messageId: 'msg_01m5qa5j85mgd4z61d9c2k0001' };
+    const result = await mcp.callTool({ name: 'aeolus_ack_meeting_up_to', arguments: read });
+    expect({ result, asked }).toEqual({ result: { content: [{ type: 'text', text: '{"acknowledged":2}' }] }, asked: [{ caller: CHARLOTTE_GRANT, read }] });
+  });
+
+  it('lists tools to open a call and mark contributions read', async () => {
+    const listed = await (await connected(personTools().deps)).listTools();
+    expect(listed.tools.map(({ name }) => name)).toEqual(expect.arrayContaining(['aeolus_open_call', 'aeolus_ack_meeting_up_to']));
+  });
+});
+
 describe("a person's MCP client takes part in a meeting", () => {
   it('reads a meeting, where the person stands on its mic and a page of contributions after the cursor, with aeolus_meeting', async () => {
     const asked: Parameters<ReadMeeting>[0][] = [];
@@ -279,7 +345,9 @@ describe("a person's tools say what each call does (chatgpt-plugin design, 7.4)"
       aeolus_done: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       aeolus_answer: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       aeolus_send: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-      aeolus_request_mic: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      aeolus_open_call: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      aeolus_ack_meeting_up_to: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      aeolus_request_mic: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       aeolus_withdraw_mic_request: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       aeolus_release_mic: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       aeolus_ask_for_server: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },

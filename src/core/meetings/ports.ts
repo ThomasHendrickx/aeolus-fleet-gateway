@@ -63,6 +63,8 @@ export interface MeetingRead {
 }
 
 /** A participant's own mic calls (M8, M10): to request it, withdraw its request, and release the mic it holds. */
+export type MicChangeResult = MicStanding | { readonly kind: 'said'; readonly messageId: MessageId };
+
 export type OwnMicChange = 'request' | 'withdraw' | 'release';
 
 /** Contribution and crew-progress cursors advance independently within a selected round. */
@@ -78,5 +80,5 @@ export interface PersonMeetingDoor {
   /** The meeting and bounded contribution and progress pages; core decides whether the person may read before joining. */
   meeting(crewToken: string, asked: MeetingReadInput): Promise<Result<MeetingRead, FleetRefusal>>;
   /** Makes one of the ship's own mic calls; the fleet refuses one the meeting does not allow now and says why. */
-  changeMic(crewToken: string, asked: { meetingId: MeetingId; change: OwnMicChange }): Promise<Result<MicStanding, FleetRefusal>>;
+  changeMic(crewToken: string, asked: { meetingId: MeetingId; change: OwnMicChange; payload?: string; contentType?: string }): Promise<Result<MicChangeResult, FleetRefusal>>;
 }

@@ -249,6 +249,7 @@ import { createReadRouting } from './core/people/read-routing.js';
 import { createReadSlackDroppedOut } from './core/slack/read-slack-dropped-out.js';
 import { createTurnRoute } from './core/people/turn-route.js';
 import type { PersonCrews, WakeChannel } from './core/people/ports.js';
+import { createMeetingCalls } from './core/meetings/meeting-calls.js';
 import { createChangeOwnMic } from './core/meetings/change-own-mic.js';
 import { createPrismaMeetingContributions } from './adapters/prisma/meeting-contributions.js';
 import { createRecordingMeetingDoor } from './core/meetings/recording-meeting-door.js';
@@ -975,6 +976,7 @@ export function createGatewayApp(options: GatewayAppOptions): GatewayApp {
       readUnseenMeetings: createReadUnseenMeetings({ ...asCrew, contributions: meetingContributions }),
       readUnseenContributions: createReadUnseenContributions({ ...asCrew, contributions: meetingContributions }),
       readMeeting: createReadMeeting({ ...asCrew, door: door.meetings, contributions: meetingContributions, changes: inboxChanges }),
+      meetingCalls: createMeetingCalls({ ...asCrew, door: door.meetingCalls }),
       changeOwnMic: createChangeOwnMic({ ...asCrew, door: door.meetings }),
       askForServer: createAskForServer({ grants, parties, openRequest, servesOutsideParties }),
       crewPersonShip: asCrew.crewPersonShip,

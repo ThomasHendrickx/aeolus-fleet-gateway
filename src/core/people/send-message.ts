@@ -17,6 +17,7 @@ export interface SendKeys {
 export type SendMessage = (input: {
   caller: PersonCaller;
   to: PersonSelector;
+  callId?: MessageId;
   contentType: string;
   payload: string;
   idempotencyKey?: string;
@@ -32,8 +33,8 @@ export type SendMessage = (input: {
  * stored, and sending again under the same key stores it once.
  */
 export function createSendMessage(deps: { crewPersonShip: CrewPersonShip; crews: PersonCrews; door: PersonShipDoor; keys: SendKeys }): SendMessage {
-  return async ({ caller, to, contentType, payload, idempotencyKey }) => {
-    const message = { to, contentType, payload, idempotencyKey: idempotencyKey ?? deps.keys.newIdempotencyKey() };
+  return async ({ caller, to, callId, contentType, payload, idempotencyKey }) => {
+    const message = { to, ...(callId === undefined ? {} : { callId }), contentType, payload, idempotencyKey: idempotencyKey ?? deps.keys.newIdempotencyKey() };
     const sent = await asPersonCrew(deps, { caller, run: (crew) => withOwnRefusal(deps.door.send(crew.crewToken, message)) });
     if (!sent.isOk) {
       return sent;

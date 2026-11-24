@@ -31,7 +31,8 @@ A question has numbered options, each with a label and a detail.
 
 A meeting shows in the inbox as a notice with its `meetingId`. `aeolus_meeting` reads its participants, the mic and the latest contributions, newest first. Reading confirms nothing.
 
-- Only the moderator and the holder of the mic may contribute.
-- `aeolus_request_mic` joins the line and keeps its place. A message of `application/vnd.aeolus.meeting.mic+json` in the inbox says the mic is the person's.
+- The moderator, a present person and the holder of the mic may contribute.
+- `aeolus_request_mic` joins the line and keeps its place; give `payload` and `contentType` to queue words for the mic. A message of `application/vnd.aeolus.meeting.mic+json` in the inbox says the mic is the person's.
 - Then `aeolus_send` with the `meeting`, and `aeolus_release_mic` when done: the mic never frees itself.
 - `aeolus_withdraw_mic_request` leaves the line.
+- `aeolus_open_call` opens a call; answer with `aeolus_send` naming the meeting and `callId`. `aeolus_ack_meeting_up_to` marks contributions read through a message.

@@ -10,7 +10,7 @@ import { runningVersion } from '../http/version.js';
 
 export type { VersionFetch };
 
-/** Core/common 0.46.0: agent meeting reads, person joins and closeCall. */
+/** Core/common 0.46.0: meeting lists, person joins and meeting calls. */
 export const MINIMUM_CORE_VERSION = '0.46.0';
 
 /** Stops the start when the fleet's core is older than the gateway needs, or does not say its version. */

@@ -24,6 +24,8 @@ import {
   idSchema,
   inboxOutputSchema,
   meetingOutputSchema,
+  openCallOutputSchema,
+  ackMeetingUpToOutputSchema,
   requestMicOutputSchema,
   meetingsOutputSchema,
   openMeetingOutputSchema,
@@ -54,6 +56,7 @@ import { z } from 'zod';
 
 import type { FleetDoor, FleetRefusal, GatewayInbox } from '../../core/connection/ports.js';
 import type { CallSender, Discovery, ReplyReceiver, SentMessages } from '../../core/mcp-in/ports.js';
+import type { MeetingCallDoor } from '../../core/meetings/meeting-calls.js';
 import type { MeetingControls } from '../../core/meetings/control-ports.js';
 import type { MeetingRead, MeetingShip, OwnMicChange, PersonMeetingDoor } from '../../core/meetings/ports.js';
 import type { ProxyShipCrew } from '../../core/mcp-out/hand-call.js';
@@ -260,7 +263,7 @@ function parsedOf<T>(schema: z.ZodType<T>, payload: string): T | undefined {
 export function createRestFleetDoor(
   fleetUrl: string,
   options: { busyWaitsMs?: readonly number[]; random?: () => number; wait?: (waitMs: number) => Promise<void> } = {},
-): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & ReplyReceiver & SentMessages & AccountDoor & Owners & { person: PersonShipDoor; meetings: PersonMeetingDoor; meetingControls: MeetingControls; gatewayInbox: GatewayInbox } {
+): FleetDoor & ProxyShipDoor & StatementDoor & ProxyShipCrew & Discovery & CallSender & ReplyReceiver & SentMessages & AccountDoor & Owners & { person: PersonShipDoor; meetings: PersonMeetingDoor; meetingControls: MeetingControls; meetingCalls: MeetingCallDoor; gatewayInbox: GatewayInbox } {
   const door = { fleetUrl, busyWaitsMs: options.busyWaitsMs ?? FLEET_BUSY_WAITS_MS, random: options.random ?? Math.random, wait: options.wait ?? ((waitMs: number) => wait(waitMs)) };
   const call = <T>(request: FleetCall<T>) => callFleet(door, request);
   const done = async (crewToken: string, request: { path: string; body: unknown }) => {
@@ -433,8 +436,12 @@ export function createRestFleetDoor(
         const found = await call({ path: '/ship/discover', method: 'GET', crewToken, answers: discoverOutputSchema });
         return found.isOk ? ok({ ships: found.value.ships.map(({ id, name, type, kind, statement }) => ({ id, name, type, kind, statement })), types: found.value.types }) : found;
       },
-      send: (crewToken, { to, contentType, payload, idempotencyKey }) =>
-        call({ path: '/ship/send', method: 'POST', crewToken, body: { selector: to, contentType, payload, idempotencyKey }, answers: sendOutputSchema }),
+      send: (crewToken, { to, callId, contentType, payload, idempotencyKey }) =>
+        call({ path: '/ship/send', method: 'POST', crewToken, body: { selector: to, ...(callId === undefined ? {} : { callId }), contentType, payload, idempotencyKey }, answers: sendOutputSchema }),
+    },
+    meetingCalls: {
+      openCall: (crewToken, input) => call({ path: '/ship/openCall', method: 'POST', crewToken, body: input, answers: openCallOutputSchema }),
+      ackMeetingUpTo: (crewToken, input) => call({ path: '/ship/ackMeetingUpTo', method: 'POST', crewToken, body: input, answers: ackMeetingUpToOutputSchema }),
     },
     meetingControls: {
       list: (crewToken, input) => call({ path: '/ship/meetings', method: 'POST', crewToken, body: input, answers: meetingsOutputSchema }),
@@ -448,14 +455,13 @@ export function createRestFleetDoor(
         const read = await call({ path: '/ship/meeting', method: 'POST', crewToken, body: { ...asked, limit: PERSON_MEETING_PAGE_SIZE, progressLimit: PERSON_MEETING_PAGE_SIZE }, answers: meetingOutputSchema });
         return read.isOk ? ok(meetingReadOf(read.value)) : read;
       },
-      changeMic: async (crewToken, { meetingId, change }) => {
+      changeMic: async (crewToken, { meetingId, change, payload, contentType }) => {
         if (change === 'request') {
-          const result = await call({ path: OWN_MIC_PATHS.request, method: 'POST', crewToken, body: { meetingId }, answers: requestMicOutputSchema });
+          const result = await call({ path: OWN_MIC_PATHS.request, method: 'POST', crewToken, body: { meetingId, ...(payload === undefined ? {} : { payload }), ...(contentType === undefined ? {} : { contentType }) }, answers: requestMicOutputSchema });
           if (!result.isOk) return result;
           const caller = result.value.caller;
-          // This person API requests only the mic, never queued words.
-          if (caller.kind === 'said') throw new Error('The fleet answered said to a mic request without words');
-          return ok(caller.kind === 'holding' ? { kind: 'holding' } : { kind: 'requested', place: caller.place });
+          if (caller.kind === 'said' && payload === undefined) throw new Error('The fleet answered said to a mic request without words');
+          return ok(caller.kind === 'said' ? caller : caller.kind === 'holding' ? { kind: 'holding' } : { kind: 'requested', place: caller.place });
         }
         const result = await done(crewToken, { path: OWN_MIC_PATHS[change], body: { meetingId } });
         return result.isOk ? ok({ kind: 'none' }) : result;

@@ -15,6 +15,7 @@ import { idSchema, PAYLOAD_MAX_BYTES } from '@aeolus-fleet/common';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
+import type { MeetingCalls } from '../../core/meetings/meeting-calls.js';
 import type { ChangeOwnMic } from '../../core/meetings/change-own-mic.js';
 import type { OwnMicChange } from '../../core/meetings/ports.js';
 import type { ReadMeeting } from '../../core/meetings/read-meeting.js';
@@ -48,6 +49,7 @@ export interface PersonToolsDeps {
   sendMessage: SendMessage;
   readMeeting: ReadMeeting;
   changeOwnMic: ChangeOwnMic;
+  meetingCalls: MeetingCalls;
   askForServer: AskForServer;
 }
 
@@ -141,14 +143,15 @@ const SEND_TOOL = {
   title: 'Send a message',
   description: [
     'Sends a message as your person ship to one ship by its name, or to any ship of a type, as aeolus_ships lists them,',
-    'or contributes to a meeting you take part in by its meetingId: every other participant gets it, and the fleet takes it only while you hold the mic or moderate.',
+    'or contributes to a meeting you take part in by its meetingId: every other participant gets it, and the fleet takes it as core allows.',
     'Give one of ship, type or meeting, the payload and its content type, such as text/plain. To ask a question with numbered options, send application/vnd.aeolus.question+json with the payload',
     `{"id":"<a new uuid>","title":"...","context":"...","options":[{"key":1,"label":"...","detail":"..."}]}. At most ${PAYLOAD_LIMIT_KB} KB.`,
+    'For an answer to a call in a meeting, give its callId.',
     'Give an idempotencyKey of your own to send it once when you try again. The fleet decides whether it may go and says why when it may not.',
   ].join(' '),
   inputSchema: {
     type: 'object' as const,
-    properties: { ship: { type: 'string' }, type: { type: 'string' }, meeting: { type: 'string' }, contentType: { type: 'string' }, payload: { type: 'string' }, idempotencyKey: { type: 'string' } },
+    properties: { ship: { type: 'string' }, type: { type: 'string' }, meeting: { type: 'string' }, callId: { type: 'string' }, contentType: { type: 'string' }, payload: { type: 'string' }, idempotencyKey: { type: 'string' } },
     required: ['contentType', 'payload'],
   },
   annotations: REACHES_OTHERS,
@@ -169,16 +172,28 @@ const MEETING_TOOL = {
   annotations: READS,
 };
 
+const OPEN_CALL_TOOL = {
+  name: 'aeolus_open_call', title: 'Open a meeting call',
+  description: 'Open a call in a meeting you moderate. Participants answer with aeolus_send and the callId. The fleet decides who may open it.',
+  inputSchema: { type: 'object' as const, properties: { meetingId: { type: 'string' }, question: { type: 'string' }, idempotencyKey: { type: 'string' }, excludedShipIds: { type: 'array', items: { type: 'string' } }, deadline: { type: 'string' } }, required: ['meetingId', 'question', 'idempotencyKey'] }, annotations: REACHES_OTHERS,
+};
+const ACK_MEETING_TOOL = {
+  name: 'aeolus_ack_meeting_up_to', title: 'Mark meeting contributions read',
+  description: 'Mark contributions read up to and including a contribution messageId in a meeting.',
+  inputSchema: { type: 'object' as const, properties: { meetingId: { type: 'string' }, messageId: { type: 'string' } }, required: ['meetingId', 'messageId'] }, annotations: CHANGES_OWN,
+};
+
 const REQUEST_MIC_TOOL = {
   name: 'aeolus_request_mic',
   title: 'Request the mic',
   description: [
-    'Requests the mic of a meeting you take part in, by its meetingId: only the moderator and the holder of the mic contribute.',
+    'Requests the mic of a meeting you take part in, by its meetingId: the moderator, a present person and the holder of the mic contribute.',
     'Your request keeps its place in line until the moderator gives you the mic or you withdraw it, so a person who reads slowly loses no place.',
-    'When you act for the person, you may request it again after each of their contributions. A message of application/vnd.aeolus.meeting.mic+json tells you when you hold it.',
+    'Optionally give payload and contentType to queue words for contribution when the mic arrives. Core may contribute them immediately and answer their messageId.',
+    'A message of application/vnd.aeolus.meeting.mic+json tells you when you hold it.',
   ].join(' '),
-  inputSchema: meetingInput,
-  annotations: CHANGES_OWN,
+  inputSchema: { type: 'object' as const, properties: { meetingId: { type: 'string' }, payload: { type: 'string' }, contentType: { type: 'string' } }, required: ['meetingId'] },
+  annotations: REACHES_OTHERS,
 };
 
 const WITHDRAW_MIC_REQUEST_TOOL = {
@@ -217,7 +232,7 @@ const ASK_FOR_SERVER_TOOL = {
 const SIGN_IN = [{ type: 'oauth2' as const }];
 
 /** The tools a signed-in person is served, in the order tools/list answers them; the plugin package names them in its review cases. */
-export const PERSON_TOOLS = [SETUP_TOOL, INBOX_TOOL, OPEN_TOOL, ANSWER_TOOL, DONE_TOOL, SHIPS_TOOL, SEND_TOOL, MEETING_TOOL, REQUEST_MIC_TOOL, WITHDRAW_MIC_REQUEST_TOOL, RELEASE_MIC_TOOL, ASK_FOR_SERVER_TOOL].map((tool) => ({ ...tool, securitySchemes: SIGN_IN }));
+export const PERSON_TOOLS = [SETUP_TOOL, INBOX_TOOL, OPEN_TOOL, ANSWER_TOOL, DONE_TOOL, SHIPS_TOOL, SEND_TOOL, MEETING_TOOL, OPEN_CALL_TOOL, ACK_MEETING_TOOL, REQUEST_MIC_TOOL, WITHDRAW_MIC_REQUEST_TOOL, RELEASE_MIC_TOOL, ASK_FOR_SERVER_TOOL].map((tool) => ({ ...tool, securitySchemes: SIGN_IN }));
 
 const setupArgumentsSchema = z.object({ client: z.enum(SETUP_CLIENTS) });
 const deliveryArgumentsSchema = z.object({ deliveryId: z.string() });
@@ -229,7 +244,7 @@ const message = { contentType: z.string(), payload: z.string(), idempotencyKey: 
 const sendArgumentsSchema = z.union([
   z.strictObject({ ship: z.string(), ...message }).transform(({ ship, ...rest }) => ({ to: { kind: 'ship' as const, name: ship }, ...rest })),
   z.strictObject({ type: z.string(), ...message }).transform(({ type, ...rest }) => ({ to: { kind: 'type' as const, type }, ...rest })),
-  z.strictObject({ meeting: idSchema('meeting'), ...message }).transform(({ meeting, ...rest }) => ({ to: { kind: 'meeting' as const, meetingId: meeting }, ...rest })),
+  z.strictObject({ meeting: idSchema('meeting'), callId: idSchema('message').optional(), ...message }).transform(({ meeting, ...rest }) => ({ to: { kind: 'meeting' as const, meetingId: meeting }, ...rest })),
 ]);
 const meetingArgumentsSchema = z.object({ meetingId: idSchema('meeting'), cursor: idSchema('message').optional() });
 
@@ -272,11 +287,11 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
   const mcp = new McpServer({ name: 'Aeolus', version: runningVersion() }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
   mcp.server.setRequestHandler('tools/list', () => ({ tools: PERSON_TOOLS }));
   const changeOwnMic = async (call: { name: string; change: OwnMicChange; args: unknown }) => {
-    const sent = meetingArgumentsSchema.omit({ cursor: true }).safeParse(call.args);
+    const sent = meetingArgumentsSchema.omit({ cursor: true }).extend({ payload: z.string().optional(), contentType: z.string().optional() }).safeParse(call.args);
     if (!sent.success) {
       return meetingIdRefusal(call.name);
     }
-    const changed = await deps.changeOwnMic({ caller, meetingId: sent.data.meetingId, change: call.change });
+    const changed = await deps.changeOwnMic({ caller, meetingId: sent.data.meetingId, change: call.change, ...(sent.data.payload === undefined ? {} : { payload: sent.data.payload }), ...(sent.data.contentType === undefined ? {} : { contentType: sent.data.contentType }) });
     return changed.isOk ? told(standingWords(changed.value)) : refused(changed.error);
   };
   mcp.server.setRequestHandler('tools/call', async (request) => {
@@ -333,6 +348,18 @@ export function personServerFor(served: PersonServed, deps: PersonToolsDeps): Mc
         const { idempotencyKey, ...rest } = sent.data;
         const taken = await deps.sendMessage({ caller, ...rest, ...(idempotencyKey === undefined ? {} : { idempotencyKey }) });
         return taken.isOk ? answered(taken.value) : refused(taken.error);
+      }
+      case OPEN_CALL_TOOL.name: {
+        const parsed = z.object({ meetingId: idSchema('meeting'), question: z.string(), idempotencyKey: z.string(), excludedShipIds: z.array(idSchema('ship')).optional(), deadline: z.string().optional() }).safeParse(params.arguments);
+        if (!parsed.success) return toolError('aeolus_open_call takes a meetingId, question and idempotencyKey');
+        const result = await deps.meetingCalls.open({ caller, call: parsed.data });
+        return result.isOk ? answered(result.value) : refused(result.error);
+      }
+      case ACK_MEETING_TOOL.name: {
+        const parsed = z.object({ meetingId: idSchema('meeting'), messageId: idSchema('message') }).safeParse(params.arguments);
+        if (!parsed.success) return toolError('aeolus_ack_meeting_up_to takes a meetingId and contribution messageId');
+        const result = await deps.meetingCalls.acknowledge({ caller, read: parsed.data });
+        return result.isOk ? answered(result.value) : refused(result.error);
       }
       case MEETING_TOOL.name: {
         const sent = meetingArgumentsSchema.safeParse(params.arguments);

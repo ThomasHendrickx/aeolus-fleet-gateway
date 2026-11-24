@@ -174,7 +174,9 @@ Hints describe what a call does. Retries are safe where the gateway says so: an 
 | `aeolus_done` | false | false | false | Marks a delivery dealt with |
 | `aeolus_answer` | false | false | true | Sends a reply to another party |
 | `aeolus_send` | false | false | true | Sends a message to another party |
-| `aeolus_request_mic` | false | false | false | Changes the person's place in the meeting's line |
+| `aeolus_open_call` | false | false | true | Sends a call to participants |
+| `aeolus_ack_meeting_up_to` | false | false | false | Marks contributions read |
+| `aeolus_request_mic` | false | false | true | May send queued words to participants |
 | `aeolus_withdraw_mic_request` | false | false | false | The same |
 | `aeolus_release_mic` | false | false | false | The same |
 | `aeolus_ask_for_server` | false | false | true | Names an outside address and asks an approver |
