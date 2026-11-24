@@ -11,7 +11,7 @@ import { A2aClientForm } from './a2a-client-form';
  */
 export async function AddA2aClient({ page }: { page: SignedInPage }) {
   const { api, fleetId, scopes } = page;
-  const owners = await readOf(api.parties.ownerChoices.query());
+  const [owners, listed] = await Promise.all([readOf(api.parties.ownerChoices.query()), readOf(api.parties.listedScopes.query())]);
   const grantable = scopes.filter((scope) => !EVERY_APP_SHIP_SCOPES.includes(scope));
-  return <A2aClientForm fleetId={fleetId} requestId={randomUUID()} owners={owners} scopes={grantable} />;
+  return <A2aClientForm fleetId={fleetId} requestId={randomUUID()} owners={owners} scopes={grantable} listed={listed.isOk ? listed.value.scopes : []} scopeRefusal={listed.isOk ? undefined : listed.refusal} />;
 }

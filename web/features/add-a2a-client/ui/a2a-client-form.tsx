@@ -2,7 +2,7 @@
 
 import { useId, useActionState } from 'react';
 
-import { Input, Label } from '@aeolus-fleet/ui';
+import { Input, Label, InlineError, type ListedScope } from '@aeolus-fleet/ui';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
 import { FLEET_FIELD } from '../../forms/form-state';
@@ -36,7 +36,7 @@ function Added({ name, bearer, fleetId }: { name: string; bearer: string; fleetI
 }
 
 /** The form that adds an A2A client: its name, owner and the approver's own scopes to tick; then its bearer. */
-export function A2aClientForm({ fleetId, requestId, owners, scopes }: { fleetId: string; requestId: string; owners: OwnerChoices; scopes: readonly string[] }) {
+export function A2aClientForm({ fleetId, requestId, owners, scopes, listed, scopeRefusal }: { fleetId: string; requestId: string; owners: OwnerChoices; scopes: readonly string[]; listed: readonly ListedScope[]; scopeRefusal?: string | undefined }) {
   const fieldId = useId();
   const [state, action] = useActionState(addA2aClient, IDLE);
   if (state.kind === 'added') {
@@ -54,11 +54,12 @@ export function A2aClientForm({ fleetId, requestId, owners, scopes }: { fleetId:
       <OwnerField choices={owners.isOk ? owners.value : []} current={null} help="A person ship or argo. It answers for this client." refusal={owners.isOk ? undefined : owners.refusal} />
       {scopes.length === 0 ? null : (
         <fieldset className="grid gap-2">
+          {scopeRefusal === undefined ? null : <InlineError title={scopeRefusal} variant="section" />}
           <legend className="font-medium">Scopes, beside sending and receiving</legend>
           {scopes.map((scope) => (
             <Label htmlFor={fieldId + '-1' + "-" + (scope)} key={scope} className="flex items-center gap-2">
               <FormCheckbox id={fieldId + '-1' + "-" + (scope)} name={`${SCOPE_FIELD_PREFIX}${scope}`} />
-              <span className="font-mono text-code">{scope}</span>
+              <span className="grid gap-0.5"><span className="font-mono text-code">{scope}</span><span className="text-caption text-muted-foreground">{listed.find((item) => item.scope === scope)?.description ?? "Description unavailable"}</span></span>
             </Label>
           ))}
         </fieldset>

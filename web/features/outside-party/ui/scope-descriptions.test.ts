@@ -23,7 +23,7 @@ async function withGateway(run: (url: string) => Promise<void>) {
   try {
     await run(`http://127.0.0.1:${String(address.port)}`);
   } finally {
-    await new Promise<void>((resolve, reject) => server.close((error) => error === undefined ? resolve() : reject(error)));
+    await new Promise<void>((resolve, reject) => server.close((error) => { if (error === undefined) resolve(); else reject(error); }));
   }
 }
 

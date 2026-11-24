@@ -1,7 +1,5 @@
 import { InlineError, LoadingSkeleton } from '@aeolus-fleet/ui';
 
-import { CORE_SCOPE_DESCRIPTIONS } from '@aeolus-fleet/common';
-
 import { Suspense } from 'react';
 
 import { inFleet } from '../../../lib/gateway-api/page-account';
@@ -97,7 +95,7 @@ export async function OutsideParty({ page, name, outcome }: { page: SignedInPage
     isSignIn ? readOwnSignIn({ api, fleetId, name }) : undefined,
     isApprover ? readOf(api.parties.listedScopes.query()) : undefined,
   ]);
-  const descriptions = new Map<string, string>([...Object.entries(CORE_SCOPE_DESCRIPTIONS), ...(listedScopes?.isOk === true ? listedScopes.value.scopes.map(({ scope, description }): [string, string] => [scope, description]) : [])]);
+  const descriptions = new Map<string, string>(listedScopes?.isOk === true ? listedScopes.value.scopes.map(({ scope, description }): [string, string] => [scope, description]) : []);
   const change = (
     <a href={inFleet(partyPath(party.name, 'change'), fleetId)} className="text-primary hover:underline" data-testid="outside-party-change">
       Change
