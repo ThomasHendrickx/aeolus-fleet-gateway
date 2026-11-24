@@ -10,6 +10,7 @@ function aMeeting(overrides: Partial<MeetingView> = {}): MeetingView {
     personShipId: CHIEF.shipId,
     meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4mtg',
     title: 'Weekly heads',
+    goal: null, endsAt: null, endAfterCalls: null, call: null,
     owner: CHIEF,
     moderator: CHIEF,
     openedAt: '2026-10-24T09:00:00.000Z',

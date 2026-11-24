@@ -13,7 +13,7 @@ import type { ReadUnseenContributions } from '../../core/meetings/read-unseen-co
  */
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
-import { addToMeetingInputSchema, openMeetingInputSchema, meetingsCursorSchema, setMicPatternInputSchema, idempotencyKeySchema, idSchema, payloadSchema, scopeNameSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
+import { closeCallInputSchema, addToMeetingInputSchema, openMeetingInputSchema, meetingsCursorSchema, setMicPatternInputSchema, idempotencyKeySchema, idSchema, payloadSchema, scopeNameSchema, shipHandleSchema, type FleetId } from '@aeolus-fleet/common';
 import { initTRPC, TRPCError } from '@trpc/server';
 import { TRPC_ERROR_CODES_BY_KEY } from '@trpc/server/rpc';
 import { z } from 'zod';
@@ -1520,6 +1520,10 @@ export const gatewayRouter = t.router({
     rejoinMeeting: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting') }))
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'rejoinMeeting', input } }))),
+    /** A present person closes this call; core delivers one collected round to its moderator. */
+    closeCall: personProcedure
+      .input(closeCallInputSchema.strict())
+      .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'closeCall', input } }))),
     openMeeting: personProcedure
       .input(openMeetingInputSchema.pick({ title: true, idempotencyKey: true }).extend({ ships: z.array(z.strictObject({ name: shipHandleSchema })).optional() }).strict())
       .mutation(async ({ ctx, input }) => personAnswerOf(await ctx.person.controlMeetings.change({ caller: ctx.caller, command: { call: 'openMeeting', input } }))),
@@ -1553,10 +1557,10 @@ export const gatewayRouter = t.router({
     unseenContributions: personProcedure
       .input(z.strictObject({ meetingIds: z.array(idSchema('meeting')).max(MEETING_COUNTS_MAX) }))
       .query(async ({ ctx, input }) => personAnswerOf(await ctx.person.readUnseenContributions({ caller: ctx.caller, meetingIds: input.meetingIds }))),
-    /** A meeting they take part in, with a page of its contributions, newest first, and where they stand on its mic (decision 0061). */
+    /** A meeting core lets the person read, including before joining, with bounded contributions and crew progress. */
     meeting: personProcedure
-      .input(z.strictObject({ meetingId: idSchema('meeting'), cursor: idSchema('message').optional() }))
-      .query(async ({ ctx, input: { meetingId, cursor } }) => ({ ...meetingViewOf(personAnswerOf(await ctx.person.readMeeting({ caller: ctx.caller, meetingId, ...(cursor === undefined ? {} : { cursor }) }))), personShipId: personShipOf(ctx.caller).shipId })),
+      .input(z.strictObject({ meetingId: idSchema('meeting'), cursor: idSchema('message').optional(), callId: idSchema('message').optional(), progressCursor: idSchema('ship').optional() }))
+      .query(async ({ ctx, input }) => ({ ...meetingViewOf(personAnswerOf(await ctx.person.readMeeting({ caller: ctx.caller, ...input }))), personShipId: personShipOf(ctx.caller).shipId })),
     /** Contributes to a meeting, once under the page's key; the fleet takes it while they hold the mic or moderate. */
     contribute: personProcedure
       .input(z.strictObject({ meetingId: idSchema('meeting'), payload: payloadSchema.min(1), idempotencyKey: z.string().min(1) }))

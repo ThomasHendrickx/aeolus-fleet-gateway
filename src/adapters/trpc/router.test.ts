@@ -1466,6 +1466,21 @@ describe("a person takes part in a meeting through the gateway's API, signed in 
     });
   });
 
+  it('reads a selected round and the next crew progress page as the signed-in person before joining', async () => {
+    // Given a person who has not joined the meeting, and core permits the read.
+    const { context } = aContext(PERSON_COOKIE);
+    if (context.person === undefined) throw new Error('Person API is required');
+    const asked: unknown[] = [];
+    context.person.readMeeting = (input) => { asked.push(input); return Promise.resolve(ok({ meeting: aMeetingRead({ participants: [] }), mic: { kind: 'none' } })); };
+    const callId = 'msg_01m5qa5j85mgd4z61d9c2k0004';
+
+    // When the person reads a particular round and advances its crew progress page.
+    await gatewayRouter.createCaller(context).people.meeting({ meetingId: HEADS_MEETING_ID, callId, progressCursor: OWNER });
+
+    // Then the authenticated person and both cursors reach core without a participation gate.
+    expect(asked).toEqual([{ caller: { fleetId: FLEET_ID, signedIn: { accountToken: PERSON_TOKEN, personShipId: OWNER } }, meetingId: HEADS_MEETING_ID, callId, progressCursor: OWNER }]);
+  });
+
   it('says a meeting they take no part in is not found', async () => {
     const { context } = aContext(PERSON_COOKIE);
 
@@ -2080,6 +2095,7 @@ describe('the person API meeting controls', () => {
   const commands = [
     { call: 'leaveMeeting', input: { meetingId } },
     { call: 'rejoinMeeting', input: { meetingId } },
+    { call: 'closeCall', input: { meetingId, callId: 'msg_01m5qa5j85mgd4z61d9c2k0004' } },
     { call: 'openMeeting', input: { ships: [{ name: 'charlotte' }], title: 'Weekly heads', idempotencyKey: 'open-1' } },
     { call: 'addToMeeting', input: { meetingId, ships: [{ name: 'charlotte' }] } },
     { call: 'revokeFromMeeting', input: { meetingId, shipId } },
@@ -2095,6 +2111,7 @@ describe('the person API meeting controls', () => {
     switch (call) {
       case 'leaveMeeting': return caller.people.leaveMeeting(input);
       case 'rejoinMeeting': return caller.people.rejoinMeeting(input);
+      case 'closeCall': return caller.people.closeCall(input);
       case 'openMeeting': return caller.people.openMeeting({ ...input, ships: [...input.ships] });
       case 'addToMeeting': return caller.people.addToMeeting({ ...input, ships: [...input.ships] });
       case 'revokeFromMeeting': return caller.people.revokeFromMeeting(input);
@@ -2141,6 +2158,32 @@ describe('the person API meeting controls', () => {
 
   it.each(commands)('refuses $call without a person', async (command) => {
     await expect(invokeMeeting(gatewayRouter.createCaller(aContext(ARGO_COOKIE).context), command)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('refuses closeCall without a signed-in person', async () => {
+    // Given a caller with no person session.
+    const caller = gatewayRouter.createCaller(aContext(undefined).context);
+    // When it tries to close a call.
+    const closed = caller.people.closeCall({ meetingId, callId: 'msg_01m5qa5j85mgd4z61d9c2k0004' });
+    // Then the person API refuses it.
+    await expect(closed).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it.each([
+    { meetingId, callId: 'not-a-message' },
+    { meetingId: 'not-a-meeting', callId: 'msg_01m5qa5j85mgd4z61d9c2k0004' },
+    { meetingId, callId: 'msg_01m5qa5j85mgd4z61d9c2k0004', shipId },
+  ])('refuses invalid closeCall input before making a change', async (input) => {
+    // Given a signed-in person and invalid ids or an attempted caller override.
+    const { context } = aContext(PERSON_COOKIE);
+    if (context.person === undefined) throw new Error('Person API is required');
+    const changes: unknown[] = [];
+    context.person.controlMeetings.change = (asked) => { changes.push(asked); return Promise.resolve(ok({})); };
+    // When the person tries to close the call.
+    const closed = gatewayRouter.createCaller(context).people.closeCall(input);
+    // Then invalid input never reaches core.
+    await expect(closed).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(changes).toEqual([]);
   });
 
   it('allows opening without an invitee list as core does', async () => {

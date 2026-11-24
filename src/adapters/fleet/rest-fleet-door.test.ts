@@ -600,6 +600,10 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
       body: {
         meetingId: MEETING,
         title: 'Weekly heads',
+        goal: null,
+        endsAt: null,
+        endAfterCalls: null,
+        call: null,
         owner: CHIEF,
         moderator: CHIEF,
         openedAt: '2026-10-24T09:00:00.000Z',
@@ -610,7 +614,7 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
         ],
         mic: { holder: CHARLOTTE, pattern: 'fifo', requests: [{ ship: CHIEF, requestedAt: '2026-10-24T09:02:00.000Z' }] },
         contributions: {
-          items: [{ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0002', sender: CHIEF, senderLeaseId: null, payload: 'Marketing first', isPayloadUnreadable: false, contentType: 'text/plain', model: 'claude-opus-5-5', sentAt: '2026-10-24T09:01:00.000Z' }],
+          items: [{ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0002', sender: CHIEF, senderLeaseId: null, callId: null, isLate: false, payload: 'Marketing first', isPayloadUnreadable: false, contentType: 'text/plain', model: 'claude-opus-5-5', sentAt: '2026-10-24T09:01:00.000Z' }],
           nextCursor: 'msg_01m5qa5j85mgd4z61d9c2k0002',
         },
       },
@@ -623,6 +627,7 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
       value: {
         meetingId: MEETING,
         title: 'Weekly heads',
+        goal: null, endsAt: null, endAfterCalls: null, call: null,
         owner: { shipId: CHIEF.id, name: 'chief-of-staff' },
         moderator: { shipId: CHIEF.id, name: 'chief-of-staff' },
         openedAt: new Date('2026-10-24T09:00:00.000Z'),
@@ -638,7 +643,27 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
         },
       },
     });
-    expect(sent()).toEqual([{ url: '/api/v1/ship/meeting', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { meetingId: MEETING, cursor: 'msg_01m5qa5j85mgd4z61d9c2k0003' } }]);
+    expect(sent()).toEqual([{ url: '/api/v1/ship/meeting', authorization: 'Bearer aeolus_ct_v1_charlotte', accountToken: undefined, body: { meetingId: MEETING, cursor: 'msg_01m5qa5j85mgd4z61d9c2k0003', limit: 20, progressLimit: 20 } }]);
+  });
+
+  it('carries the goal, end condition, round answers and bounded crew progress in one meeting read', async () => {
+    // Given core has a round with one answered ship and a next progress page.
+    const call = {
+      callId: 'msg_01m5qa5j85mgd4z61d9c2k0004',
+      expectedShipIds: [CHIEF.id], silentShipIds: [], notAskedShipIds: [],
+      deadline: '2026-10-24T09:10:00.000Z', openedAt: '2026-10-24T09:05:00.000Z', closedAt: null,
+      answers: [{ messageId: 'msg_01m5qa5j85mgd4z61d9c2k0005', sender: CHIEF, senderLeaseId: null, callId: 'msg_01m5qa5j85mgd4z61d9c2k0004', isLate: false, payload: 'Ready', isPayloadUnreadable: false, contentType: 'text/plain', model: 'gpt-6.1-sol', sentAt: '2026-10-24T09:06:00.000Z' }],
+      lateAnswers: [],
+      progress: { items: [{ ship: CHIEF, progress: 'answered', status: 'crewed', turn: 'busy', deliveredAt: '2026-10-24T09:05:00.000Z', acknowledgedAt: '2026-10-24T09:06:00.000Z' }], nextCursor: CHIEF.id },
+    };
+    answer = { status: 200, body: { meetingId: MEETING, title: 'Weekly heads', goal: 'Choose the launch date', endsAt: '2026-10-24T10:00:00.000Z', endAfterCalls: 3, call, owner: CHIEF, moderator: CHIEF, openedAt: '2026-10-24T09:00:00.000Z', endedAt: null, participants: [], mic: { holder: null, pattern: 'moderator', requests: [] }, contributions: { items: [], nextCursor: null } } };
+
+    // When a person reads a selected round and progress page before joining.
+    const read = await createRestFleetDoor(base).meetings.meeting('person-crew', { meetingId: MEETING, callId: 'msg_01m5qa5j85mgd4z61d9c2k0004', progressCursor: PERSON_SHIP });
+
+    // Then every round field survives, and no separate ship read is needed.
+    expect(read).toMatchObject({ isOk: true, value: { goal: 'Choose the launch date', endsAt: '2026-10-24T10:00:00.000Z', endAfterCalls: 3, call } });
+    expect(sent()).toEqual([{ url: '/api/v1/ship/meeting', authorization: 'Bearer person-crew', accountToken: undefined, body: { meetingId: MEETING, callId: call.callId, progressCursor: PERSON_SHIP, limit: 20, progressLimit: 20 } }]);
   });
 
   it.each([
@@ -647,6 +672,15 @@ describe("the meeting calls the gateway makes as the crew of a person's ship (de
   ] as const)('returns the caller standing answered by requestMic', async (caller, standing) => {
     answer = { status: 200, body: { mic: { holder: null, pattern: 'moderator', requests: [] }, caller } };
     await expect(createRestFleetDoor(base).meetings.changeMic('aeolus_ct_v1_charlotte', { meetingId: MEETING, change: 'request' })).resolves.toEqual({ isOk: true, value: standing });
+  });
+
+  it('rejects a contribution result for a mic request that submitted no words', async () => {
+    // Given core answers the new said variant despite no submitted words.
+    answer = { status: 200, body: { mic: { holder: null, pattern: 'moderator', requests: [] }, caller: { kind: 'said', messageId: 'msg_01m5qa5j85mgd4z61d9c2k0005' } } };
+    // When a person requests only the mic.
+    const requested = createRestFleetDoor(base).meetings.changeMic('person-crew', { meetingId: MEETING, change: 'request' });
+    // Then a protocol mismatch cannot become a waiting position with no place.
+    await expect(requested).rejects.toThrow('The fleet answered said to a mic request without words');
   });
 
   it.each(['withdraw', 'release'] as const)('answers no standing after %s', async (change) => {
@@ -751,6 +785,7 @@ describe('person meeting controls', () => {
   const commands = [
     { call: 'leaveMeeting', input: { meetingId } },
     { call: 'rejoinMeeting', input: { meetingId } },
+    { call: 'closeCall', input: { meetingId, callId: 'msg_01m5qa5j85mgd4z61d9c2k0004' } },
     { call: 'openMeeting', input: { ships: [{ name: 'charlotte' }], title: 'Weekly heads', idempotencyKey: 'open-1' } },
     { call: 'addToMeeting', input: { meetingId, ships: [{ name: 'charlotte' }] } },
     { call: 'revokeFromMeeting', input: { meetingId, shipId } },

@@ -10,8 +10,8 @@ import { runningVersion } from '../http/version.js';
 
 export type { VersionFetch };
 
-/** Core/common 0.45.0: ship.meetings and its shared meeting-list schemas (aeolus-fleet docs/compatibility.md). */
-export const MINIMUM_CORE_VERSION = '0.45.0';
+/** Core/common 0.46.0: agent meeting reads, person joins and closeCall. */
+export const MINIMUM_CORE_VERSION = '0.46.0';
 
 /** Stops the start when the fleet's core is older than the gateway needs, or does not say its version. */
 export async function requireCoreVersion(fleetUrl: string, fetch: VersionFetch = globalThis.fetch): Promise<void> {

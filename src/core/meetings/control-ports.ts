@@ -1,11 +1,12 @@
 /** Calls core offers a person for running and finding their meetings (0061). */
-import type { MeetingId, ShipId, MeetingsOutput, MicPattern } from '@aeolus-fleet/common';
+import type { MeetingId, MessageId, ShipId, MeetingsOutput, MicPattern } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
 
 export type MeetingCommand =
   | { readonly call: 'openMeeting'; readonly input: { readonly ships?: readonly { readonly name: string }[]; readonly title?: string; readonly idempotencyKey: string } }
+  | { readonly call: 'closeCall'; readonly input: { readonly meetingId: MeetingId; readonly callId: MessageId } }
   | { readonly call: 'addToMeeting'; readonly input: { readonly meetingId: MeetingId; readonly ships?: readonly { readonly name: string }[] } }
   | { readonly call: 'leaveMeeting' | 'rejoinMeeting' | 'takeMic' | 'endMeeting'; readonly input: { readonly meetingId: MeetingId } }
   | { readonly call: 'revokeFromMeeting' | 'transferMeeting' | 'nameModerator' | 'giveMic'; readonly input: { readonly meetingId: MeetingId; readonly shipId: ShipId } }
