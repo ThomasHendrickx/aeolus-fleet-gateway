@@ -18,6 +18,7 @@ export function aMeetingRead(overrides: Partial<MeetingRead> = {}): MeetingRead 
   return {
     meetingId: HEADS_MEETING_ID,
     title: 'Weekly heads',
+    goal: null, endsAt: null, endAfterCalls: null, call: null,
     owner: CHIEF_OF_STAFF,
     moderator: CHIEF_OF_STAFF,
     openedAt: new Date('2026-10-24T09:00:00.000Z'),

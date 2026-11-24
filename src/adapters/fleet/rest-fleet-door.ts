@@ -170,6 +170,9 @@ function personDeliveryOf({ deliveryId, messageId, senderShipId, senderName, con
 /** The fleet's call for each of a participant's own mic changes (decision 0061). */
 const OWN_MIC_PATHS = { request: '/ship/requestMic', withdraw: '/ship/withdrawMicRequest', release: '/ship/releaseMic' } as const satisfies Record<OwnMicChange, string>;
 
+/** The person meeting page reads twenty contributions and twenty expected ships. */
+const PERSON_MEETING_PAGE_SIZE = 20;
+
 function meetingShipOf({ id, name }: Party): MeetingShip {
   return { shipId: id, name };
 }
@@ -179,6 +182,10 @@ function meetingReadOf(read: MeetingOutput): MeetingRead {
   return {
     meetingId: read.meetingId,
     title: read.title,
+    goal: read.goal,
+    endsAt: read.endsAt,
+    endAfterCalls: read.endAfterCalls,
+    call: read.call,
     owner: meetingShipOf(read.owner),
     moderator: meetingShipOf(read.moderator),
     openedAt: new Date(read.openedAt),
@@ -445,7 +452,7 @@ export function createRestFleetDoor(
     // The meeting calls a person ship's crew makes for the person (decision 0061, M19).
     meetings: {
       meeting: async (crewToken, asked) => {
-        const read = await call({ path: '/ship/meeting', method: 'POST', crewToken, body: asked, answers: meetingOutputSchema });
+        const read = await call({ path: '/ship/meeting', method: 'POST', crewToken, body: { ...asked, limit: PERSON_MEETING_PAGE_SIZE, progressLimit: PERSON_MEETING_PAGE_SIZE }, answers: meetingOutputSchema });
         return read.isOk ? ok(meetingReadOf(read.value)) : read;
       },
       changeMic: async (crewToken, { meetingId, change, payload, contentType }) => {
@@ -453,6 +460,7 @@ export function createRestFleetDoor(
           const result = await call({ path: OWN_MIC_PATHS.request, method: 'POST', crewToken, body: { meetingId, ...(payload === undefined ? {} : { payload }), ...(contentType === undefined ? {} : { contentType }) }, answers: requestMicOutputSchema });
           if (!result.isOk) return result;
           const caller = result.value.caller;
+          if (caller.kind === 'said' && payload === undefined) throw new Error('The fleet answered said to a mic request without words');
           return ok(caller.kind === 'said' ? caller : caller.kind === 'holding' ? { kind: 'holding' } : { kind: 'requested', place: caller.place });
         }
         const result = await done(crewToken, { path: OWN_MIC_PATHS[change], body: { meetingId } });

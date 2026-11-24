@@ -25,14 +25,23 @@ describe('the gateway starts only against a core it runs with (decision 0049)', 
     await expect(requireCoreVersion(FLEET_URL, aCoreAt('0.46.0'))).resolves.toBeUndefined();
   });
 
-  it('refuses core 0.45.0, before meeting calls can complete', async () => {
-    // Given a released core that has no agent meeting calls.
+  it('refuses core 0.45.0 before serving agent meeting reads and closeCall', async () => {
+    // Given core before agent meeting calls.
     const core = aCoreAt('0.45.0');
+    // When the gateway checks whether it can start.
+    const start = requireCoreVersion(FLEET_URL, core);
+    // Then it requires the release that carries person meeting calls.
+    await expect(start).rejects.toThrow('needs core 0.46.0 or later');
+  });
+
+  it('refuses core 0.44.0, before the person meeting list can complete', async () => {
+    // Given a released core that has no ship.meetings call.
+    const core = aCoreAt('0.44.0');
 
     // When the gateway checks whether it can start.
     const start = requireCoreVersion(FLEET_URL, core);
 
-    // Then it refuses before serving meeting calls.
+    // Then it refuses before serving the person meeting list.
     await expect(start).rejects.toThrow('needs core 0.46.0 or later');
   });
 

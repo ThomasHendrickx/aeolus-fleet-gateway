@@ -3,7 +3,7 @@
  * M19): the fleet's meeting calls the gateway makes as the ship's crew. Core
  * holds the meeting and decides every call; the gateway reads and asks.
  */
-import type { MeetingId, MessageId, ShipId, ShipKind, ShipStatus } from '@aeolus-fleet/common';
+import type { MeetingId, MessageId, ShipId, ShipKind, ShipStatus, MeetingOutput } from '@aeolus-fleet/common';
 
 import type { FleetRefusal } from '../connection/ports.js';
 import type { Result } from '../shared/result.js';
@@ -48,6 +48,11 @@ export interface Contribution {
 export interface MeetingRead {
   readonly meetingId: MeetingId;
   readonly title: string | null;
+  readonly goal: string | null;
+  readonly endsAt: string | null;
+  readonly endAfterCalls: number | null;
+  /** Core's complete round, with ISO times and one bounded progress page. */
+  readonly call: MeetingOutput['call'];
   readonly owner: MeetingShip;
   readonly moderator: MeetingShip;
   readonly openedAt: Date;
@@ -62,10 +67,18 @@ export type MicChangeResult = MicStanding | { readonly kind: 'said'; readonly me
 
 export type OwnMicChange = 'request' | 'withdraw' | 'release';
 
+/** Contribution and crew-progress cursors advance independently within a selected round. */
+export interface MeetingReadInput {
+  readonly meetingId: MeetingId;
+  readonly cursor?: MessageId;
+  readonly callId?: MessageId;
+  readonly progressCursor?: ShipId;
+}
+
 /** Outbound port: the fleet's meeting calls as the crew of a person ship. */
 export interface PersonMeetingDoor {
-  /** The meeting and a page of its contributions after the cursor, newest first; refused for a meeting the ship takes no part in. */
-  meeting(crewToken: string, asked: { meetingId: MeetingId; cursor?: MessageId }): Promise<Result<MeetingRead, FleetRefusal>>;
+  /** The meeting and bounded contribution and progress pages; core decides whether the person may read before joining. */
+  meeting(crewToken: string, asked: MeetingReadInput): Promise<Result<MeetingRead, FleetRefusal>>;
   /** Makes one of the ship's own mic calls; the fleet refuses one the meeting does not allow now and says why. */
   changeMic(crewToken: string, asked: { meetingId: MeetingId; change: OwnMicChange; payload?: string; contentType?: string }): Promise<Result<MicChangeResult, FleetRefusal>>;
 }

@@ -10,7 +10,17 @@ Person clients call the gateway's tRPC API at `/trpc`, signed in as the person's
 
 The gateway makes one bounded `ship.lookup` read with the person's crew token, without discovery, a ship list or the full statement. Core's `messages:send` scope and current network rules decide visibility. The read keeps no cached copy and marks nothing seen. It stays a single-resource read at the fleet scale target of 3,000 ships and 10,000,000 messages.
 
-The lookup requires core/common 0.44.0 or later. The gateway already requires 0.45.0.
+The lookup requires core/common 0.44.0 or later. The gateway requires 0.46.0.
+
+## Agent meetings
+
+`people.meeting({ meetingId, cursor?, callId?, progressCursor? })` carries core's meeting read: `goal`, `endsAt` and `endAfterCalls`, plus `call` (null before the first call). Without `callId`, core returns the latest round; pass it to read a particular round or keep the same round while paging progress. The call includes its answers, late answers, expected, silent and not-asked ship ids, deadline, opening and closing times, and `progress.items` with each expected ship's delivery progress, crew `status`, reported `turn`, delivery and acknowledgement times. Call fields use core/common's shared contract and ISO 8601 timestamps.
+
+The gateway makes one core read with the person's own crew. Contributions and expected-ship progress each have a fixed 20-row page and independent cursors. Pass the contributions' `nextCursor` as `cursor`, and `call.progress.nextCursor` as `progressCursor`, retaining `callId`. No per-ship reads, discovery or whole-fleet lists are needed at the scale target of 3,000 ships and 10,000,000 messages. Answers belong to core's complete collected round; progress alone is paginated.
+
+Core allows a person reached by the owner to read before joining. `people.rejoinMeeting({ meetingId })` joins for the first time as well as rejoins after leaving, on the owner's reach. Reading and joining leave the moderator and open call in place. The gateway adds no participation or reach policy.
+
+`people.closeCall({ meetingId, callId })` closes the named call as the signed-in person. Core requires that person to be present, preserves answers and recorded silence, marks pending ships in `notAskedShipIds`, and delivers one collected round to the moderator. Success is `{}`; read the meeting with that `callId` for the resulting round. A repeated close succeeds without another collected round. Core's refusal code and reason pass through as API errors. These calls require core/common 0.46.0.
 
 ## Person record
 
