@@ -4,7 +4,7 @@ import { ActionForm } from '../../forms/ui/action-form';
 import { BUTTONS, CARD } from '../../forms/ui/look';
 import { partyPath } from '../../outside-parties/paths';
 import { retireParty } from '../actions';
-import { Refusal } from './outside-party';
+import { Refusal } from '../../../../bridge/outside-party/ui/outside-party';
 
 /** Retiring a party, after one confirm that lists what happens (decision 0056). */
 export async function RetireParty({ page, name }: { page: SignedInPage; name: string }) {

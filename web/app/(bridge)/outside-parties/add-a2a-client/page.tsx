@@ -1,4 +1,4 @@
-import { AddA2aClient } from '../../../../features/add-a2a-client/ui/add-a2a-client';
+import { AddA2aClient } from '../../../../../bridge/add-a2a-client/ui/add-a2a-client';
 import { ADD_A2A_CLIENT_PATH, OUTSIDE_PARTIES_PATH } from '../../../../features/outside-parties/paths';
 import { BridgeNoSignIn, BridgeShell } from '../../../../features/bridge/state/bridge-shell';
 import { inFleet } from '../../../../lib/gateway-api/page-account';

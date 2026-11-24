@@ -1,5 +1,5 @@
 import { signInOutcomeOf } from '../../../../features/outside-party/own-sign-in';
-import { OutsideParty } from '../../../../features/outside-party/ui/outside-party';
+import { OutsideParty } from '../../../../../bridge/outside-party/ui/outside-party';
 import { OUTSIDE_PARTIES_PATH, partyPath } from '../../../../features/outside-parties/paths';
 import { BridgeNoSignIn, BridgeShell } from '../../../../features/bridge/state/bridge-shell';
 import { inFleet } from '../../../../lib/gateway-api/page-account';

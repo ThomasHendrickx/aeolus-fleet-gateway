@@ -2,14 +2,14 @@ import { createServer } from 'node:http';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { gatewayApi } from '../../../lib/gateway-api/gateway-api';
+import { gatewayApi } from '../../../web/lib/gateway-api/gateway-api';
 import { AddA2aClient } from '../../add-a2a-client/ui/add-a2a-client';
 import { OutsideParty } from './outside-party';
 
 /** A gateway API answering with descriptions that differ from the static core copy. */
-async function withGateway(run: (url: string) => Promise<void>, refuseList = false) {
+async function withGateway(run: (url: string) => Promise<void>, isListRefused = false) {
   const server = createServer((request, response) => {
-    if (refuseList && request.url?.includes('parties.listedScopes')) {
+    if (isListRefused && request.url?.includes('parties.listedScopes')) {
       response.statusCode = 403;
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ error: { message: 'List refused', code: -32003, data: { code: 'FORBIDDEN', httpStatus: 403 } } }));

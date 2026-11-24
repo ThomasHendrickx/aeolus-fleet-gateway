@@ -2,20 +2,22 @@
 
 import { useId, useActionState } from 'react';
 
-import { Input, Label, InlineError, type ListedScope } from '@aeolus-fleet/ui';
+import { CORE_SCOPE_DESCRIPTIONS } from '@aeolus-fleet/common';
+import { Input, Label, type ListedScope } from '@aeolus-fleet/ui';
 
-import { inFleet } from '../../../lib/gateway-api/page-account';
-import { FLEET_FIELD } from '../../forms/form-state';
-import { FormCheckbox } from '../../forms/ui/form-checkbox';
-import { CARD, INPUT, LABEL } from '../../forms/ui/look';
-import { Outcome } from '../../forms/ui/outcome';
-import { OwnerField, type OwnerChoices } from '../../forms/ui/owner-field';
-import { SubmitButton } from '../../forms/ui/submit-button';
-import { partyPath } from '../../outside-parties/paths';
-import { SCOPE_FIELD_PREFIX } from '../../outside-party/scope-changes';
-import { addA2aClient, type AddA2aClientState } from '../actions';
+import { inFleet } from '../../../web/lib/gateway-api/page-account';
+import { FLEET_FIELD } from '../../../web/features/forms/form-state';
+import { FormCheckbox } from '../../../web/features/forms/ui/form-checkbox';
+import { CARD, INPUT, LABEL } from '../../../web/features/forms/ui/look';
+import { Outcome } from '../../../web/features/forms/ui/outcome';
+import { OwnerField, type OwnerChoices } from '../../../web/features/forms/ui/owner-field';
+import { SubmitButton } from '../../../web/features/forms/ui/submit-button';
+import { partyPath } from '../../../web/features/outside-parties/paths';
+import { SCOPE_FIELD_PREFIX } from '../../../web/features/outside-party/scope-changes';
+import { addA2aClient, type AddA2aClientState } from '../../../web/features/add-a2a-client/actions';
 
 const IDLE: AddA2aClientState = { kind: 'idle' };
+const STATIC_DESCRIPTIONS = new Map<string, string>(Object.entries(CORE_SCOPE_DESCRIPTIONS));
 
 /** The bearer, shown this once: the gateway keeps only its hash. */
 function Added({ name, bearer, fleetId }: { name: string; bearer: string; fleetId: string }) {
@@ -36,7 +38,7 @@ function Added({ name, bearer, fleetId }: { name: string; bearer: string; fleetI
 }
 
 /** The form that adds an A2A client: its name, owner and the approver's own scopes to tick; then its bearer. */
-export function A2aClientForm({ fleetId, requestId, owners, scopes, listed, scopeRefusal }: { fleetId: string; requestId: string; owners: OwnerChoices; scopes: readonly string[]; listed: readonly ListedScope[]; scopeRefusal?: string | undefined }) {
+export function A2aClientForm({ fleetId, requestId, owners, scopes, listed }: { fleetId: string; requestId: string; owners: OwnerChoices; scopes: readonly string[]; listed: readonly ListedScope[] }) {
   const fieldId = useId();
   const [state, action] = useActionState(addA2aClient, IDLE);
   if (state.kind === 'added') {
@@ -54,12 +56,11 @@ export function A2aClientForm({ fleetId, requestId, owners, scopes, listed, scop
       <OwnerField choices={owners.isOk ? owners.value : []} current={null} help="A person ship or argo. It answers for this client." refusal={owners.isOk ? undefined : owners.refusal} />
       {scopes.length === 0 ? null : (
         <fieldset className="grid gap-2">
-          {scopeRefusal === undefined ? null : <InlineError title={scopeRefusal} variant="section" />}
           <legend className="font-medium">Scopes, beside sending and receiving</legend>
           {scopes.map((scope) => (
             <Label htmlFor={fieldId + '-1' + "-" + (scope)} key={scope} className="flex items-center gap-2">
               <FormCheckbox id={fieldId + '-1' + "-" + (scope)} name={`${SCOPE_FIELD_PREFIX}${scope}`} />
-              <span className="grid gap-0.5"><span className="font-mono text-code">{scope}</span><span className="text-caption text-muted-foreground">{listed.find((item) => item.scope === scope)?.description ?? "Description unavailable"}</span></span>
+              <span className="grid gap-0.5"><span className="font-mono text-code">{scope}</span><span className="text-caption text-muted-foreground">{listed.find((item) => item.scope === scope)?.description ?? STATIC_DESCRIPTIONS.get(scope)}</span></span>
             </Label>
           ))}
         </fieldset>
