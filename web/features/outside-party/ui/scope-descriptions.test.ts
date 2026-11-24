@@ -7,8 +7,14 @@ import { AddA2aClient } from '../../add-a2a-client/ui/add-a2a-client';
 import { OutsideParty } from './outside-party';
 
 /** A gateway API answering with descriptions that differ from the static core copy. */
-async function withGateway(run: (url: string) => Promise<void>) {
+async function withGateway(run: (url: string) => Promise<void>, refuseList = false) {
   const server = createServer((request, response) => {
+    if (refuseList && request.url?.includes('parties.listedScopes')) {
+      response.statusCode = 403;
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ error: { message: 'List refused', code: -32003, data: { code: 'FORBIDDEN', httpStatus: 403 } } }));
+      return;
+    }
     const data = request.url?.includes('parties.get')
       ? { kind: 'mcpClient', name: 'client', state: 'crewed', clientId: 'client-id', proxyShipName: 'client', ownerName: 'argo', scopes: ['fleet:read', 'fleet:manage', 'custom:unknown'] }
       : request.url?.includes('parties.ownerChoices')
@@ -42,8 +48,45 @@ describe('fleet scope descriptions', () => {
       const page = { kind: 'signedIn' as const, api: gatewayApi({ url, cookie: undefined, fleetId: 'fleet' }), fleetId: 'fleet', scopes: ['gateway:approve'] };
       const markup = renderToStaticMarkup(await OutsideParty({ page, name: 'client', outcome: null }));
       expect(markup).toContain('Fleet supplied description');
-      expect(markup).toContain('fleet:manage');
+      expect(markup).toContain('Rename, release, recrew and retire the ships it manages');
       expect(markup).toContain('custom:unknown');
     });
   });
+  it('shows static descriptions on the client form for a reader without approval', async () => {
+    await withGateway(async (url) => {
+      const page = { kind: 'signedIn' as const, api: gatewayApi({ url, cookie: undefined, fleetId: 'fleet' }), fleetId: 'fleet', scopes: ['fleet:read'] };
+      const markup = renderToStaticMarkup(await AddA2aClient({ page }));
+      expect(markup).toContain('Read ships, timelines, messages, labels, events and fleet-wide views');
+      expect(markup).not.toContain('List refused');
+    }, true);
+  });
+
+  it('shows static descriptions on the client form when the list is refused', async () => {
+    await withGateway(async (url) => {
+      const page = { kind: 'signedIn' as const, api: gatewayApi({ url, cookie: undefined, fleetId: 'fleet' }), fleetId: 'fleet', scopes: ['fleet:read', 'custom:unknown', 'gateway:approve'] };
+      const markup = renderToStaticMarkup(await AddA2aClient({ page }));
+      expect(markup).toContain('Read ships, timelines, messages, labels, events and fleet-wide views');
+      expect(markup).toContain('custom:unknown');
+      expect(markup).not.toContain('Description unavailable');
+      expect(markup).not.toContain('List refused');
+    }, true);
+  });
+
+  it('shows static descriptions on an outside party for a reader without approval', async () => {
+    await withGateway(async (url) => {
+      const page = { kind: 'signedIn' as const, api: gatewayApi({ url, cookie: undefined, fleetId: 'fleet' }), fleetId: 'fleet', scopes: ['fleet:read'] };
+      const markup = renderToStaticMarkup(await OutsideParty({ page, name: 'client', outcome: null }));
+      expect(markup).toContain('Read ships, timelines, messages, labels, events and fleet-wide views');
+      expect(markup).toContain('custom:unknown');
+    }, true);
+  });
+
+  it('shows static descriptions on an outside party when the list is refused', async () => {
+    await withGateway(async (url) => {
+      const page = { kind: 'signedIn' as const, api: gatewayApi({ url, cookie: undefined, fleetId: 'fleet' }), fleetId: 'fleet', scopes: ['gateway:approve'] };
+      const markup = renderToStaticMarkup(await OutsideParty({ page, name: 'client', outcome: null }));
+      expect(markup).toContain('Read ships, timelines, messages, labels, events and fleet-wide views');
+    }, true);
+  });
+
 });
