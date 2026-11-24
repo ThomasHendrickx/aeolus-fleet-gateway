@@ -9,7 +9,7 @@ import { OwnerField } from '../../forms/ui/owner-field';
 import { partyPath } from '../../outside-parties/paths';
 import { changeParty } from '../actions';
 import { EVERY_APP_SHIP_SCOPES, SCOPE_FIELD_PREFIX, SCOPES_SHOWN_FIELD } from '../scope-changes';
-import { GRANTING_SCOPE, OWNING_SCOPE, Refusal } from './outside-party';
+import { GRANTING_SCOPE, OWNING_SCOPE, Refusal } from '../../../../bridge/outside-party/ui/outside-party';
 
 /** A scope's plain label, beside the scope itself. */
 const SCOPE_LABELS: Record<string, string> = {

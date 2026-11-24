@@ -1,27 +1,26 @@
-import { InlineError, LoadingSkeleton } from '@aeolus-fleet/ui';
-
 import { CORE_SCOPE_DESCRIPTIONS } from '@aeolus-fleet/common';
+import { InlineError, LoadingSkeleton } from '@aeolus-fleet/ui';
 
 import { Suspense } from 'react';
 
-import { inFleet } from '../../../lib/gateway-api/page-account';
-import { readOf, type SignedInPage } from '../../../lib/gateway-api/page-api';
-import { ADDED_CREDENTIAL_KINDS, SIGN_IN_CREDENTIAL } from '../../forms/server-credential';
-import { BUTTONS, CARD } from '../../forms/ui/look';
-import { outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } from '../../outside-parties/party-kinds';
-import { OUTSIDE_PARTIES_PATH, partyPath } from '../../outside-parties/paths';
+import { inFleet } from '../../../web/lib/gateway-api/page-account';
+import { readOf, type SignedInPage } from '../../../web/lib/gateway-api/page-api';
+import { ADDED_CREDENTIAL_KINDS, SIGN_IN_CREDENTIAL } from '../../../web/features/forms/server-credential';
+import { BUTTONS, CARD } from '../../../web/features/forms/ui/look';
+import { outsideAddressOf, PARTY_KINDS, PARTY_STATES, SIDES, type ListedParty } from '../../../web/features/outside-parties/party-kinds';
+import { OUTSIDE_PARTIES_PATH, partyPath } from '../../../web/features/outside-parties/paths';
 import { StatusBadge } from '@aeolus-fleet/ui';
-import { toneIcon } from '../../../lib/tone-icons';
-import { Tag } from '../../outside-parties/ui/tag';
-import { AgentNeeds } from '../tools-table/ui/agent-needs';
-import { approvalOf, ToolsSection } from '../tools-table/ui/tools-section';
-import { readOwnSignIn } from '../hooks/read-own-sign-in';
-import type { SignInOutcome } from '../own-sign-in';
-import { EveryonesSignInsSkeleton } from './everyones-sign-ins';
-import { EveryonesSignInsSection } from './everyones-sign-ins-section';
-import { Fact } from './fact';
-import { OwnSignInCard } from './own-sign-in-card';
-import { RepeatableSwitch } from './repeatable-switch';
+import { toneIcon } from '../../../web/lib/tone-icons';
+import { Tag } from '../../../web/features/outside-parties/ui/tag';
+import { AgentNeeds } from '../../../web/features/outside-party/tools-table/ui/agent-needs';
+import { approvalOf, ToolsSection } from '../../../web/features/outside-party/tools-table/ui/tools-section';
+import { readOwnSignIn } from '../../../web/features/outside-party/hooks/read-own-sign-in';
+import type { SignInOutcome } from '../../../web/features/outside-party/own-sign-in';
+import { EveryonesSignInsSkeleton } from '../../../web/features/outside-party/ui/everyones-sign-ins';
+import { EveryonesSignInsSection } from '../../../web/features/outside-party/ui/everyones-sign-ins-section';
+import { Fact } from '../../../web/features/outside-party/ui/fact';
+import { OwnSignInCard } from '../../../web/features/outside-party/ui/own-sign-in-card';
+import { RepeatableSwitch } from '../../../web/features/outside-party/ui/repeatable-switch';
 
 /** The scopes that change a party's owner, its scopes, and retire it (0056). */
 export const OWNING_SCOPE = 'fleet:owner';
