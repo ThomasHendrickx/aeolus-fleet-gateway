@@ -1,4 +1,4 @@
-import { idSchema, inboxOutputSchema, openMeetingOutputSchema, receiveOutputSchema, type MeetingId, type ShipId } from '@aeolus-fleet/common';
+import { idSchema, MEETING_ROUND_CONTENT_TYPE, meetingRoundSchema, openCallOutputSchema, openMeetingOutputSchema, receiveOutputSchema, type MeetingId, type ShipId } from '@aeolus-fleet/common';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 
 import { createRestFleetDoor } from '../src/adapters/fleet/rest-fleet-door.js';
@@ -16,11 +16,11 @@ import { createWakePerson } from '../src/core/people/wake-person.js';
 import { routingDefaultsOf } from '../src/core/people/routing.js';
 import { memoryShipWakeups } from './support/ship-wakeups.js';
 import { migratedDatabase } from './support/database.js';
-import { commission, register, signIn } from './support/argo.js';
+import { applyEmptyOwnRules, commission, register, signIn } from './support/argo.js';
 import { startFleetServer, type FleetServer } from './support/fleet-server.js';
 
 // A person takes part in a meeting as their person ship, against a real core
-// 0.31.0 (decision 0061, M19): the chief of staff opens it and moderates, and
+// 0.46.0 (decision 0061, M19): the chief of staff opens it and moderates, and
 // the gateway, as the person ship's crew, reads it, requests the mic,
 // contributes and releases the mic. Core decides every call.
 
@@ -196,12 +196,11 @@ describe('a person ship takes part in a meeting', () => {
     });
   });
 
-  it('is refused a contribution without the mic, storing nothing', async () => {
+  it('a present person contributes without the mic', async () => {
     const sent = await person.send(charlotte, { to: { kind: 'meeting', meetingId }, contentType: 'text/plain', payload: 'Marketing is on track', idempotencyKey: 'charlotte-1' });
 
-    expect(sent.isOk).toBe(false);
-    expect(!sent.isOk && sent.error.message).toMatch(/mic/i);
-    expect(inboxOutputSchema.parse(await chiefCalls('inbox', {})).waiting).toBe(0);
+    expect(sent.isOk).toBe(true);
+    await expect(chiefReceives()).resolves.toEqual([{ senderName: 'charlotte', payload: 'Marketing is on track', meetingId }]);
   });
 
   it('requests the mic, gets it first in line, contributes to every other participant and releases it', async () => {
@@ -240,7 +239,7 @@ describe('a person ship takes part in a meeting', () => {
     expect(!again.isOk && again.error.message).not.toBe('');
   });
 
-  it('is refused a meeting it takes no part in', async () => {
+  it('is refused a meeting that does not exist', async () => {
     const read = await meetings.meeting(charlotte, { meetingId: 'mtg_01m5qa5j85mgd4z61d9c2k4zzz' });
 
     expect(read.isOk).toBe(false);
@@ -335,5 +334,58 @@ describe('the person meeting controls against core main', () => {
       const ended = await controls.change(owner, { call: 'takeMic', input: { meetingId: owned } });
       expect(!ended.isOk && ended.error.message).toMatch(/ended/i);
     });
+  });
+});
+
+
+describe('agent meetings through the person API against core 0.46.0', () => {
+  async function anAgentMeeting() {
+    const cookie = await signIn(fleet);
+    const worker = await commission(fleet, { cookie, ship: { name: 'launch-worker', type: 'agent', scopes: ['messages:send', 'messages:receive'] } });
+    await register(fleet, worker);
+    const opened = openMeetingOutputSchema.parse(await chiefCalls('openMeeting', { ships: [{ name: 'launch-worker' }], title: 'Launch', goal: 'Choose the launch date', endAfterCalls: 3, endsAt: new Date(Date.now() + 3_600_000).toISOString(), idempotencyKey: 'agent-meeting', model: 'gpt-6.1-sol' }));
+    return { cookie, worker, meetingId: opened.meetingId };
+  }
+
+  it('a person reads before joining, joins on owner reach and closes a call with one collected round', async () => {
+    // Given an agent meeting with one answer and another crewed ship still pending.
+    const agentMeeting = await anAgentMeeting();
+    const asked = { meetingId: agentMeeting.meetingId };
+    const { callId } = openCallOutputSchema.parse(await chiefCalls('openCall', { ...asked, question: 'Ready to launch?', idempotencyKey: 'launch-call', model: 'gpt-6.1-sol' }));
+    await chiefCalls('send', { selector: { kind: 'meeting', ...asked }, callId, payload: 'Ready', idempotencyKey: 'launch-answer', model: 'gpt-6.1-sol' });
+
+    // When the person reads before joining, joins and closes that call.
+    const preview = await meetings.meeting(charlotte, { ...asked, callId });
+    expect(preview).toMatchObject({ isOk: true, value: { goal: 'Choose the launch date', endAfterCalls: 3, participants: [{ name: 'chief-of-staff' }, { name: 'launch-worker' }], call: { callId, closedAt: null, answers: [{ payload: 'Ready' }], progress: { items: expect.any(Array), nextCursor: null } } } });
+    await expect(controls.change(charlotte, { call: 'rejoinMeeting', input: asked })).resolves.toEqual({ isOk: true, value: {} });
+    const joined = await meetings.meeting(charlotte, { ...asked, callId });
+    expect(joined).toMatchObject({ isOk: true, value: { moderator: { name: 'chief-of-staff' }, call: { closedAt: null } } });
+    expect(joined.isOk && joined.value.participants.some(({ name, state }) => name === 'charlotte' && state === 'present')).toBe(true);
+    await expect(controls.change(charlotte, { call: 'closeCall', input: { ...asked, callId } })).resolves.toEqual({ isOk: true, value: {} });
+
+    // Then the pending ship is not asked and one collected round reaches the unchanged moderator.
+    const closed = await meetings.meeting(charlotte, { ...asked, callId });
+    expect(closed).toMatchObject({ isOk: true, value: { moderator: { name: 'chief-of-staff' }, call: { callId, closedAt: expect.any(String), answers: [{ payload: 'Ready' }], silentShipIds: [], notAskedShipIds: [agentMeeting.worker.shipId] } } });
+    const received = receiveOutputSchema.parse(await chiefCalls('receive', { max: 10 }));
+    const rounds = received.deliveries.filter(({ contentType }) => contentType === MEETING_ROUND_CONTENT_TYPE);
+    expect(rounds).toHaveLength(1);
+    expect(rounds.map(({ payload }) => meetingRoundSchema.parse(JSON.parse(payload)))).toMatchObject([{ meetingId: asked.meetingId, callId, isRoundReference: false, notAskedShipIds: [agentMeeting.worker.shipId], answers: [{ payload: 'Ready' }] }]);
+    for (const delivery of received.deliveries) await chiefCalls('ack', { deliveryId: delivery.deliveryId });
+    await expect(controls.change(charlotte, { call: 'closeCall', input: { ...asked, callId } })).resolves.toEqual({ isOk: true, value: {} });
+    const repeated = receiveOutputSchema.parse(await chiefCalls('receive', { max: 10 }));
+    expect(repeated.deliveries.filter(({ contentType }) => contentType === MEETING_ROUND_CONTENT_TYPE)).toEqual([]);
+  });
+
+  it('core refuses a person read and first join outside owner reach', async () => {
+    // Given a person outside the meeting owner send reach.
+    const agentMeeting = await anAgentMeeting();
+    await applyEmptyOwnRules(fleet, agentMeeting.cookie);
+    const asked = { meetingId: agentMeeting.meetingId };
+    // When the person reads and attempts a first join.
+    const preview = await meetings.meeting(charlotte, asked);
+    const joined = await controls.change(charlotte, { call: 'rejoinMeeting', input: asked });
+    // Then the gateway carries core's refusals and adds no reach of its own.
+    expect(preview).toMatchObject({ isOk: false, error: { code: 'NOT_FOUND' } });
+    expect(joined).toMatchObject({ isOk: false, error: { code: 'FORBIDDEN' } });
   });
 });

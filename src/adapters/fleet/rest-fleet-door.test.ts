@@ -785,6 +785,7 @@ describe('person meeting controls', () => {
   const commands = [
     { call: 'leaveMeeting', input: { meetingId } },
     { call: 'rejoinMeeting', input: { meetingId } },
+    { call: 'closeCall', input: { meetingId, callId: 'msg_01m5qa5j85mgd4z61d9c2k0004' } },
     { call: 'openMeeting', input: { ships: [{ name: 'charlotte' }], title: 'Weekly heads', idempotencyKey: 'open-1' } },
     { call: 'addToMeeting', input: { meetingId, ships: [{ name: 'charlotte' }] } },
     { call: 'revokeFromMeeting', input: { meetingId, shipId } },
